@@ -431,6 +431,7 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
     'components/onboarding/OnboardingOverlay.tsx': { count: 1, why: 'the onboarding panel, focused on open: a ring only from the keyboard (GM r37)' },
     'components/proposals/AssetProposalStrip.tsx': { count: 2, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },
     'components/asset-move/AssetMoveMenu.tsx': { count: 1, why: 'menu items, moved through with the arrow keys' },
+    'components/panels/Inspector.tsx': { count: 1, why: 'the palette\'s "Extracting colors…" line, focused from code: its own :focus rule draws no ring (#208, panels.css)' },
     'lib/noticeLeave.ts': { count: 1, why: 'a notice with no ×, or the start of the page: a notice is a status or alert line; the start draws no ring (data-focus-start, GM r38 3d)' },
   };
 

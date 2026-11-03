@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CommonsReview } from '../src/components/commons/CommonsReview';
 import type { ReviewBatch } from '../src/lib/commonsReviewTypes';
+import { withFocusFixup } from './helpers/focusFixup';
+import { lockPlacementProblems } from '../src/lib/lockPlacement';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), propose: vi.fn(), accept: vi.fn(), image: vi.fn(), close: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsReviewApi: api, commonsEvaluationApi: { image: api.image, close: api.close } }));
@@ -15,6 +17,7 @@ const batch = (): ReviewBatch => ({ mode: 'assisted_review', independent_ground_
       fields: { summary: { value: 'An agent proposal', why: 'A visible feature' }, composition_notes: { value: 'Open space', why: 'A margin' },
         type_style: { value: 'none', why: 'No text is visible.' }, axes: { quiet_loud: { value: 0.25, why: 'A bright focal point.' } } } } }] });
 
+const fixup = withFocusFixup();
 beforeEach(() => {
   vi.clearAllMocks(); api.get.mockResolvedValue(batch()); api.image.mockResolvedValue(new Blob(['fixture']));
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture'); vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -219,4 +222,43 @@ it('does not start generation while an explicit human acceptance is still pendin
   await act(async () => pending.resolve(saved));
   expect(screen.getByText('Generate remaining grades')).toBeEnabled();
   expect(api.propose).not.toHaveBeenCalled();
+});
+
+it('round 18m (GM r44 1): unsaved corrections lock the opener in place, its line under it; live again once discarded', async () => {
+  render(<CommonsReview />);
+  await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
+  const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+  act(() => opener.focus());
+  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  act(() => fixup.current().flush());
+  expect(opener.disabled).toBe(false);
+  expect(opener.getAttribute('aria-disabled')).toBe('true');
+  const line = document.getElementById(opener.getAttribute('aria-describedby')!)!;
+  expect(line.textContent).toBe('Save or discard your corrections to close this batch.');
+  expect(opener.nextElementSibling).toBe(line);
+  expect(lockPlacementProblems()).toEqual([]);
+  expect(document.activeElement).toBe(opener);
+  fireEvent.click(opener);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  fireEvent.click(screen.getByText('Discard changes'));
+  await waitFor(() => expect(opener.getAttribute('aria-disabled')).toBeNull());
+  expect(screen.queryByText('Save or discard your corrections to close this batch.')).toBeNull();
+  fireEvent.click(opener);
+  expect(screen.getByRole('alertdialog')).toBeTruthy();
+});
+
+it('round 18m: while corrections save, the opener is natively disabled for that moment, with no line', async () => {
+  let finish: (value: ReviewBatch) => void = () => {};
+  api.accept.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  render(<CommonsReview />);
+  await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
+  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
+  const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+  expect(opener.disabled).toBe(true);
+  expect(opener.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Save or discard your corrections to close this batch.')).toBeNull();
+  const saved = batch(); saved.items[0].reviewed_at = '2026-11-03'; saved.items[0].revision++;
+  await act(async () => { finish(saved); });
+  await waitFor(() => expect(opener.disabled).toBe(false));
 });

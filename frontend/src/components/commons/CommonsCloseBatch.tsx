@@ -5,6 +5,7 @@ import { isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, STUDIO_OFFLINE_LINE_ID, useBackendOffline, useOfflineRowShown } from '../../lib/useBackendOffline';
 import { CLOSE_GRADE_RUNNING, CLOSE_NO_RESPONSE, closeBatchFailedLine, closeLineRetries } from '../../lib/errorCopy';
 import { CommonsErrorLine } from './CommonsErrorLine';
+import { LineText } from '../LineText';
 import { useCommonsLine } from './useCommonsLine';
 
 /** While a grade runs, how often a dialog with no pane poll checks whether it has finished. */
@@ -14,12 +15,13 @@ export const CLOSING_LABEL_MS = 300;
 /** GM r43 Q1: how long the close may take before the dialog reads the batch to see what happened. */
 export const CLOSE_TIMEOUT_MS = 30_000;
 /**
- * GM r43 Q2: the lock line while label edits are unsaved. GM's words name the controls "Save" and
- * "Discard"; Blind labeling's are "Save labels" (and "Save accents & reveal labels") and "Discard
- * unsaved changes", Agent review's "Save corrections & next" and "Discard changes", so the line
- * waits for GM's adjusted wording. Until then the lock has no line.
+ * GM r44 1: the lock line while edits are unsaved, one per pane. It names the controls by their
+ * verbs (save, discard), which fits both panes' real labels. It locks the opener (aria-disabled,
+ * focusable, the line under it); inside the dialog it is tested-only, since the opener can't open
+ * the dialog while edits are unsaved.
  */
-export const EDITS_LOCK_LINE: string | null = null;
+export const EDITS_LINE_LABELING = 'Save or discard your label changes to close this batch.';
+export const EDITS_LINE_REVIEW = 'Save or discard your corrections to close this batch.';
 
 /**
  * The parent's busy state while the dialog is open (round 18l, review 17 MEDIUM-2): it locks the
@@ -33,12 +35,16 @@ export type CloseLock = 'grade' | 'edits' | null;
  * first: the batch becomes an assisted-review record (or an abandoned blind
  * batch) and library analysis may start. Quarantine stays in force.
  */
-export function CommonsCloseBatch({ revision, assisted, reviewed, total, disabled, lock = null, gradePoll, onClosed }: {
+export function CommonsCloseBatch({ revision, assisted, reviewed, total, disabled, lock = null, editsLine, gradePoll, onClosed }: {
   revision: number; assisted: boolean; reviewed?: number; total?: number;
-  /** The opener's own disabled state, outside the dialog (native). */
+  /** The parent is busy (a save, a grade): the opener is natively disabled for that moment; inside
+   * the dialog it is an aria lock. */
   disabled: boolean;
-  /** The parent's busy state, inside the dialog (an aria lock). */
+  /** The parent's state that locks the close, with its line: inside the dialog, and for `edits`
+   * the opener too (GM r44 1). */
   lock?: CloseLock;
+  /** The pane's unsaved-edits line (EDITS_LINE_LABELING or EDITS_LINE_REVIEW). */
+  editsLine: string;
   /** GM r43 Q7: the pane's own poll (Agent review): whether it sees a grade running, and how many
    * reads it has made. The grade wait follows it; without it the dialog checks by itself. */
   gradePoll?: { running: boolean; reads: number };
@@ -55,6 +61,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
   const cancel = useRef<HTMLButtonElement>(null);
   const backToOpener = useRef(false);
   const titleId = useId();
+  const openerLineId = useId();
   const lineId = useId();
   const closeId = useId();
   // Round 16 (L4): closing the batch is a write, so offline it's off.
@@ -107,11 +114,11 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
   // Round 18k (GM r41): a line whose step isn't "Try again." or "Try again in a moment." (Reload,
   // open the link, wait, restart) locks the close: aria-disabled, focusable, its reason the line.
   // Round 18l (review 17 MEDIUM-2): the parent's busy state locks it the same way, with its line.
-  const parentLine = lock === 'grade' ? CLOSE_GRADE_RUNNING : lock === 'edits' ? EDITS_LOCK_LINE : null;
+  const parentLine = lock === 'grade' ? CLOSE_GRADE_RUNNING : lock === 'edits' ? editsLine : null;
   const errorLocks = Boolean(error) && !closeLineRetries(error);
   const lockLine = errorLocks ? error : parentLine;
-  // A lock with no line yet (EDITS_LOCK_LINE) hides an older retry line: the close can't retry.
-  const shownLine = lockLine ?? (lock ? '' : error);
+  // A parent lock hides an older retry line: the close can't retry (`disabled` locks with no line).
+  const shownLine = lockLine ?? (lock || disabled ? '' : error);
   // The opener's `disabled` still holds inside the dialog, as an aria lock (a parent that passes no
   // `lock` never leaves a live close behind a disabled opener).
   const locked = errorLocks || lock !== null || disabled || readOnly;
@@ -156,7 +163,16 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
     onClosed(closed);
   }
   if (!confirming) {
-    return <button type="button" ref={opener} className="commons-button" disabled={disabled || readOnly} {...offlineMark(readOnly)} onClick={() => setConfirming(true)}>{label}…</button>;
+    // GM r44 1: unsaved edits lock the opener in place (aria-disabled, focusable, presses ignored)
+    // with the pane's line under it; it says what unlocks it. Natively disabled only while the
+    // parent is busy (a save or a grade in flight) or offline.
+    const openerLocked = lock === 'edits' && !disabled && !readOnly;
+    return <>
+      <button type="button" ref={opener} className="commons-button" disabled={disabled || readOnly} {...offlineMark(readOnly)}
+        aria-disabled={openerLocked || undefined} aria-describedby={openerLocked ? openerLineId : undefined}
+        onClick={() => { if (!openerLocked) setConfirming(true); }}>{label}…</button>
+      {openerLocked && <p id={openerLineId} className="person-lock-line" data-lock-place="control"><LineText text={editsLine} /></p>}
+    </>;
   }
   const onKeyDown = (event: KeyboardEvent) => {
     // GM r43 Q6: Escape is Cancel, and inactive while a close is out.
@@ -172,7 +188,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
       {assisted && <li>You can keep agreeing with or correcting grades after closing.{total ? ` You’ve reviewed ${reviewed ?? 0} of ${total} so far.` : ''} No new grades will be requested.</li>}
       <li>Library analysis of imported references can start. This can’t be undone.</li>
     </ul>
-    <CommonsErrorLine line={shownLine} id={lineId} />
+    <CommonsErrorLine line={shownLine} id={lineId} neutral={lock === 'edits' && shownLine === editsLine} />
     {/* GM r40 1: one row, Cancel then the close, which keeps its look. GM r43 Q1: while the close
         is out, neither is natively disabled (Chrome would drop focus to the page). */}
     <div className="review-actions">

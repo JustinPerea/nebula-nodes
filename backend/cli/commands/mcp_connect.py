@@ -208,7 +208,7 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
         payload = None
     if response.status_code != 200 or not isinstance(payload, dict) or "budget" not in payload:
         print(f"error: {url} answered (HTTP {response.status_code}) but isn't a Nebula backend that knows this "
-              "token. Pass Nebula's address with --url (or NEBULA_URL_FILE for the desktop app).", file=sys.stderr)
+              "token. Pass Nebula's address with --url; for the desktop app, set NEBULA_URL_FILE instead.", file=sys.stderr)
         sys.exit(1)
     if payload.get("budget") != "app":
         print("error: that isn't an app token from Settings > Connect your agent.", file=sys.stderr)
@@ -334,8 +334,8 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
               f"(pick {client.label}{', name it ' + args.name if args.name else ''}"
               f"{', daily limit $' + format(args.daily_usd, 'g') if args.daily_usd else ''}), then run the command "
               "it shows, with --token-file and the file Nebula saved the token to. The CLI can't make tokens: only "
-              "the Nebula canvas you opened from the launch link can. (A token made before token files: set "
-              "NEBULA_APP_TOKEN or pass --paste-token.)", file=sys.stderr)
+              "the Nebula canvas you opened from the launch link can. For a token made before token files, set "
+              "NEBULA_APP_TOKEN or pass --paste-token.", file=sys.stderr)
         return 1
 
     # args.url is None when the desktop app's backend-url file failed its
@@ -348,8 +348,8 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
             # A config written blind can point at nothing (the desktop app's
             # port changes every launch) or at another Nebula.
             print(f"error: couldn't reach Nebula at {where} to check the token, so nothing was written. "
-                  "Start Nebula, or pass its address with --url (the desktop app: set NEBULA_URL_FILE to the "
-                  "file Settings > Connect your agent names). --print shows the config without checking.",
+                  "Start Nebula, or pass its address with --url; for the desktop app, set NEBULA_URL_FILE to the "
+                  "file Settings > Connect your agent names. --print shows the config without checking.",
                   file=sys.stderr)
             return 1
         print(f"warning: couldn't reach Nebula at {where} to check the token.", file=sys.stderr)

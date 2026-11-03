@@ -51,7 +51,14 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   fireEvent.click(screen.getByText('Save labels'));
   await screen.findByRole('alert');
   expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
-  expect((screen.getByText('Review batch · 0 / 15') as HTMLButtonElement).disabled).toBe(true);
+  // Round 18m (GM r44 1): unsaved labels lock the toggle in place, its reason the form's status line.
+  const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toBe('Save before changing reference');
+  fireEvent.click(toggle);
+  expect(screen.queryByText('Close without sealing…')).toBeNull();
+  expect(screen.getByText('Save labels')).toBeTruthy();
 });
 
 // GM (commons-leave): "UNSAVED" beside Save gives the state, so the status

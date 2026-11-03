@@ -44,7 +44,7 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
  * Its words register (components/LineText), so a because line sends the general notice away
  * while it shows.
  */
-export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry, elementRef, id }: {
+export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry, elementRef, id, neutral: lockLine = false }: {
   line: string | null | undefined; className?: string;
   /** Round 18: `span` where a block can't go (inside a tile or a phrase). */
   as?: 'p' | 'span';
@@ -55,6 +55,8 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   elementRef?: Ref<HTMLElement>;
   /** Round 18k: its id, for a control it locks (aria-describedby: the close-batch dialog). */
   id?: string;
+  /** Round 18m: a lock line that says what unlocks it (unsaved edits), not a failure: neutral. */
+  neutral?: boolean;
 }) {
   const line = useOfflineFirstBecause(given);
   const offline = useBackendOffline();
@@ -70,7 +72,7 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   // Round 18c (GM r30 1): and a because line, so the two share one look, the bare rail.
   // Round 18j (GM r40): and an action's line in the because form ("Nebula couldn’t close the
   // batch because …"): it says nothing was lost.
-  const neutral = person || isLoadLine(line) || isBecauseFailure(line);
+  const neutral = lockLine || person || isLoadLine(line) || isBecauseFailure(line);
   const stem = onRetry ? retryStem(line) : null;
   // Round 18i (GM r39 1c): "Try again." always means a button. A load's line given no way to
   // read again (media inside a tile, which reads again by itself) ends at its reason.

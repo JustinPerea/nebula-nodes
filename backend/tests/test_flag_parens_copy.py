@@ -16,11 +16,14 @@ BACKEND = Path(__file__).resolve().parents[1]
 # Round 18l (review 17 logic NIT-2): anywhere inside the parens, not only first.
 FLAG_IN_PARENS = re.compile(r"\([^)]*\bNEBULA_[A-Z0-9_]+")
 SKIP_DIRS = {".venv", "tests", "__pycache__", "node_modules"}
-# Round 18l: the terminal's own text, for whoever runs the CLI, the dev server or the MCP server by
-# hand, where "(default: $NEBULA_URL)" is the usual way to name an environment default. The wider
-# pattern finds 17 such strings there and none in what the app shows a person; GM decides whether
-# the terminal follows the rule too (a separate copy pass), so they are set aside, by file.
-TERMINAL_COPY = ("cli/", "devserver.py", "mcp_server.py")
+# Round 18m (GM r44 3): terminal help text is exempt by SURFACE, not by file: "(default:
+# $NEBULA_URL)" is that medium's convention. A string is help text when it is (part of) the value
+# of one of these keywords in any call: argparse's help, description, epilog and usage (CLI help
+# and usage), and the description of an MCP tool or parameter (Field(description=...), a tool's
+# description=). A tool's docstring is its description too, and docstrings are skipped already.
+# Everything else is checked: the CLI's own messages, and the startup lines Nebula prints for the
+# person (the sign-in link and its startup errors), which follow the person-copy rules.
+HELP_KEYWORDS = frozenset({"help", "description", "epilog", "usage"})
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -33,12 +36,23 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return ids
 
 
+def _help_text(tree: ast.AST) -> set[int]:
+    """The string constants that are CLI help or usage, or an MCP tool or parameter description."""
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg in HELP_KEYWORDS:
+                    ids.update(id(inner) for inner in ast.walk(keyword.value) if isinstance(inner, ast.Constant))
+    return ids
+
+
 def offenders(source: str, name: str) -> list[str]:
     tree = ast.parse(source)
-    docs = _docstrings(tree)
+    skipped = _docstrings(tree) | _help_text(tree)
     found = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped:
             if FLAG_IN_PARENS.search(node.value):
                 found.append(f"{name}:{node.lineno}: {node.value!r}")
     return found
@@ -48,8 +62,6 @@ def test_no_backend_string_puts_a_flag_in_parens():
     found = []
     for path in sorted(BACKEND.rglob("*.py")):
         if SKIP_DIRS & set(path.relative_to(BACKEND).parts):
-            continue
-        if path.relative_to(BACKEND).as_posix().startswith(TERMINAL_COPY):
             continue
         found += offenders(path.read_text(encoding="utf-8"), str(path.relative_to(BACKEND)))
     assert found == []
@@ -65,3 +77,34 @@ def test_the_scan_catches_a_flag_in_parens():
     assert offenders("z = 'Start it (set NEBULA_X=1), then try again.'\n", "m.py")
     assert offenders("z = 'Start it (the budget, NEBULA_X) now.'\n", "m.py")
     assert not offenders("z = 'Start it (now). Restart with NEBULA_X=1.'\n", "m.py")
+
+
+def test_help_text_is_exempt_by_surface_and_nothing_else():
+    # CLI help and usage, in any file: a new help file needs no entry.
+    assert not offenders("p.add_argument('--url', help='Backend URL (default: $NEBULA_URL)')\n", "new_cli.py")
+    assert not offenders("p = argparse.ArgumentParser(description='Runs it (set NEBULA_X)', epilog='(NEBULA_Y)', usage='x (NEBULA_Z)')\n", "n.py")
+    assert not offenders("p.add_argument('--u', help=f'URL (default: $NEBULA_URL, else {x})')\n", "n.py")
+    # MCP tool and parameter descriptions.
+    assert not offenders("def t(x: Annotated[str, Field(description='The URL (default: $NEBULA_URL)')]): ...\n", "n.py")
+    assert not offenders("@_tool(description='Reads it (needs NEBULA_X)')\ndef t(): ...\n", "n.py")
+    # Not help: a message printed or logged, an error, an assignment.
+    assert offenders("print('error: pass --url (or NEBULA_URL_FILE for the desktop app).')\n", "n.py")
+    assert offenders("log.warning('Person link unavailable (set NEBULA_DEV_UI_ORIGIN)')\n", "n.py")
+    assert offenders("raise SystemExit('Start it (NEBULA_X=1).')\n", "n.py")
+
+
+def test_the_startup_lines_for_the_person_are_checked():
+    """The sign-in link line and its startup errors (services/person_session, devserver) are what the
+    app's lines point to ("Open the link Nebula printed..."): the scan reads them, and none is help."""
+    expected = {
+        "services/person_session.py": ["Open Nebula as you: ", "Person session unavailable", "Person link unavailable"],
+        "devserver.py": ["Nebula: no person link", "Nebula: open the canvas as you: ", "Nebula: no terminal to show the person link",
+                         "Nebula: opened the canvas as you in your browser.", "Nebula: ignoring "],
+    }
+    for name, starts in expected.items():
+        tree = ast.parse((BACKEND / name).read_text(encoding="utf-8"))
+        skipped = _docstrings(tree) | _help_text(tree)
+        checked = [node.value for node in ast.walk(tree)
+                   if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped]
+        for start in starts:
+            assert any(text.startswith(start) for text in checked), f"{name}: {start!r} is not scanned"

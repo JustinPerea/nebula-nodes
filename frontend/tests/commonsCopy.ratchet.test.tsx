@@ -34,11 +34,11 @@ const api = vi.hoisted(() => ({ close: vi.fn(), get: vi.fn() }));
 const reviewApi = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: reviewApi }));
 
-const { CommonsCloseBatch, GRADE_WAIT_MS, CLOSING_LABEL_MS, CLOSE_TIMEOUT_MS, EDITS_LOCK_LINE } = await import('../src/components/commons/CommonsCloseBatch');
+const { CommonsCloseBatch, GRADE_WAIT_MS, CLOSING_LABEL_MS, CLOSE_TIMEOUT_MS, EDITS_LINE_LABELING, EDITS_LINE_REVIEW } = await import('../src/components/commons/CommonsCloseBatch');
 const { StudioOfflineRow } = await import('../src/components/StudioOfflineRow');
 const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { CommonsRequestError } = await import('../src/lib/commonsRequestError');
-const { copyForStatus, closeBatchFailedLine, CLOSE_GRADE_RUNNING, CLOSE_NO_RESPONSE } = await import('../src/lib/errorCopy');
+const { copyForStatus, closeBatchFailedLine, closeLineRetries, CLOSE_GRADE_RUNNING, CLOSE_NO_RESPONSE } = await import('../src/lib/errorCopy');
 const { STUDIO_OFFLINE_LINE_ID } = await import('../src/lib/useBackendOffline');
 const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
@@ -91,7 +91,9 @@ export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'li
 const SIGNED_OUT = 'Nebula couldn’t close the batch because you’re signed out. Open the link Nebula printed when it started.';
 const HELD = 'Nebula couldn’t close the batch because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 export const CLOSE_401_LINES: Array<[string, boolean, string]> = [
-  ['401, a held tab (not connected as you)', true, HELD],
+  // Tested-only (GM r44 2): in the app a held tab's Commons pane is replaced by its held view, dialog
+  // and all, within the hold's 150 ms; the row keeps the string right if that swap ever changes.
+  ['401, a held tab (not connected as you; tested-only)', true, HELD],
   ['401, a tab not held (signed out)', false, SIGNED_OUT],
 ];
 
@@ -138,8 +140,9 @@ describe('a failed close, in either pane: the because form, curly, neutral (GM r
         expect(box.hasAttribute('data-line-neutral'), why).toBe(true);
         expect(lineLook(box), why).toEqual(NEUTRAL);
         expectState(close, box, state, why);
-        // The ratchet's rule (GM r41): live only for a line ending in a retry.
-        expect(state === 'live', why).toBe(/ Try again(?: in a moment)?\.$/.test(line));
+        // The lock rule (GM r41): live only for a line whose step is a retry (closeLineRetries). The
+        // "Try again." ending itself is the shared ratchet's (tests/tryAgainLines.ratchet).
+        expect(state === 'live', why).toBe(closeLineRetries(line));
         cleanup(); resetLinesForTests();
       }
     });
@@ -533,7 +536,8 @@ describe('Escape and Cancel (GM r43 Q6, review 17 LOW-4)', () => {
 });
 
 describe('the parent\'s busy state inside the dialog is an aria lock with its line (review 17 MEDIUM-2)', () => {
-  const view = (lock: 'grade' | 'edits' | null) => <CommonsCloseBatch revision={1} assisted disabled={false} lock={lock} onClosed={vi.fn()} />;
+  const view = (lock: 'grade' | 'edits' | null) => <CommonsCloseBatch revision={1} assisted disabled={false} lock={lock}
+    editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />;
 
   it('Agent review, a grade running: the grade line, the close locked, focusable, focus kept; live again after', () => {
     const { rerender } = render(view(null));
@@ -550,23 +554,19 @@ describe('the parent\'s busy state inside the dialog is an aria lock with its li
     expect(document.activeElement).toBe(close);
   });
 
-  it('unsaved or saving label edits: locked, focusable, focus kept; no line until GM words it (the controls are not "Save" and "Discard")', () => {
-    expect(EDITS_LOCK_LINE).toBeNull();
+  it('unsaved edits inside the dialog (tested-only, GM r44 1: the opener locks first): the pane\'s line, locked, focusable, focus kept', () => {
     const { rerender } = render(view(null));
     fireEvent.click(screen.getByText('Close review & resume library analysis…'));
     const close = screen.getByText('Close as assisted review');
     close.focus();
     rerender(view('edits'));
-    act(() => fixup.current().flush());
-    expect(close.getAttribute('aria-disabled')).toBe('true');
-    expect(close.hasAttribute('disabled')).toBe(false);
-    expect(document.activeElement).toBe(close);
-    expect(screen.queryByRole('alert')).toBeNull();
-    fireEvent.click(close);
-    expect(api.close).not.toHaveBeenCalled();
+    const box = screen.getByRole('alert');
+    expect(box.textContent).toBe(EDITS_LINE_REVIEW);
+    // A lock line, not a failure: neutral.
+    expect(box.hasAttribute('data-line-neutral')).toBe(true);
+    expect(lineLook(box)).toEqual(NEUTRAL);
+    expectState(close, box, 'locked', 'edits');
   });
-
-  it.todo('unsaved label edits: the close\'s lock line, once GM words it for "Save labels" and "Discard unsaved changes"');
 
   it('a retry line gives way to a parent lock (the close can\'t retry), a lock line stays', async () => {
     api.close.mockRejectedValue(failed(503));
@@ -575,9 +575,64 @@ describe('the parent\'s busy state inside the dialog is an aria lock with its li
     fireEvent.click(screen.getByText('Close as assisted review'));
     await screen.findByRole('alert');
     rerender(view('edits'));
+    expect(screen.getByRole('alert').textContent).toBe(EDITS_LINE_REVIEW);
+    // Busy (a save or a grade in flight): locked with no line, so the retry line goes too.
+    rerender(<CommonsCloseBatch revision={1} assisted disabled lock={null} editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
     expect(screen.queryByRole('alert')).toBeNull();
     rerender(view('grade'));
     expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+  });
+});
+
+describe('the opener, outside the dialog (GM r44 1)', () => {
+  const PANE_LINES = [
+    { pane: 'Blind labeling', assisted: false, open: 'Close without sealing…', line: EDITS_LINE_LABELING },
+    { pane: 'Agent review', assisted: true, open: 'Close review & resume library analysis…', line: EDITS_LINE_REVIEW },
+  ] as const;
+
+  it('the lines, as GM wrote them', () => {
+    expect(EDITS_LINE_LABELING).toBe('Save or discard your label changes to close this batch.');
+    expect(EDITS_LINE_REVIEW).toBe('Save or discard your corrections to close this batch.');
+  });
+
+  for (const { pane, assisted, open, line } of PANE_LINES) {
+    it(`${pane}: unsaved edits lock it in place, its line right under it; focusable, presses ignored; live again after`, async () => {
+      const { lockPlacementProblems } = await import('../src/lib/lockPlacement');
+      const view = (lock: 'edits' | null) => <CommonsCloseBatch revision={1} assisted={assisted} disabled={false} lock={lock}
+        editsLine={line} onClosed={vi.fn()} />;
+      const { rerender } = render(view(null));
+      const opener = screen.getByText(open) as HTMLButtonElement;
+      opener.focus();
+      rerender(view('edits'));
+      act(() => fixup.current().flush());
+      expect(opener.disabled, pane).toBe(false);
+      expect(opener.getAttribute('aria-disabled'), pane).toBe('true');
+      const reason = document.getElementById(opener.getAttribute('aria-describedby')!)!;
+      expect(reason.textContent, pane).toBe(line);
+      expect(opener.nextElementSibling, pane).toBe(reason);
+      expect(lockPlacementProblems(), pane).toEqual([]);
+      expect(document.activeElement, pane).toBe(opener);
+      expect(cascaded(opener).get('|opacity')?.value, pane).toBe('var(--sr-disabled-opacity)');
+      fireEvent.click(opener);
+      expect(screen.queryByRole('alertdialog'), pane).toBeNull();
+      rerender(view(null));
+      expect(opener.getAttribute('aria-disabled'), pane).toBeNull();
+      expect(screen.queryByText(line), pane).toBeNull();
+      fireEvent.click(opener);
+      expect(screen.getByRole('alertdialog'), pane).toBeTruthy();
+    });
+  }
+
+  it('busy (a save or a grade in flight) or offline: natively disabled for that moment, no line', () => {
+    const { rerender } = render(<CommonsCloseBatch revision={1} assisted disabled lock="edits" editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
+    const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+    expect(opener.disabled).toBe(true);
+    expect(opener.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText(EDITS_LINE_REVIEW)).toBeNull();
+    rerender(<CommonsCloseBatch revision={1} assisted disabled={false} lock="edits" editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
+    act(() => noteBackendConnection('offline'));
+    expect(opener.disabled).toBe(true);
+    expect(screen.queryByText(EDITS_LINE_REVIEW)).toBeNull();
   });
 });
 

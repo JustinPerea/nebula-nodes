@@ -214,6 +214,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 /** Text children that read a failure-named value but can never hold a not-connected line. */
 const EXEMPT: Record<string, string> = {
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
+  'components/commons/CommonsDetail.tsx: analysisFailureReason(asset.last_error_kind)': 'a too-transparent reference\'s muted reason (#208): from the asset\'s own analysis, never a request\'s refusal',
 };
 
 const markerSites = (): string[] => {

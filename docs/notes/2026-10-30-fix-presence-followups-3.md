@@ -3556,3 +3556,81 @@ Review 17 (two MEDIUMs, LOWs, NITs) and GM r42/r43.
   - Backend named tests (test_commons_evaluation_close, test_flag_parens_copy,
     test_commons_review), isolated: 21 of 21.
   - Build: 474,749 B raw / 147,176 B gzip.
+
+## Round 18m
+
+GM r44: the unsaved-edits line and the opener's lock, the held row tested-only, the flag ratchet's
+exemption by surface, and the close lines in the shared Try-again ratchet.
+
+- **Merge.** origin/main (26bdd988, #208) is merged and staged, not committed. Six files
+  conflicted, and each was resolved to keep both sides:
+  - CommonsDetail: #208's muted too-transparent reason, plus #204's `data-line-box` on the
+    error box. failureMessage stays dropped.
+  - CommonsGrid: #208's badges and tile names, plus #204's `dropLocked` and `inControl` media.
+  - Inspector: #208's palette imports and "Extract" label, plus #204's person-lock imports.
+  - commonsFormat imports, commons.css (#204's retry rules and #208's muted notice), and
+    focusRingCss's allow-list.
+  - Two #204 ratchets then caught #208 code:
+    - the palette's "Extracting colors…" line (tabindex -1, no ring by its own :focus rule) is
+      listed in focusRingCss;
+    - CommonsDetail's muted reason is exempt in lineRegistration: it comes from the asset's own
+      analysis, never a refusal.
+- **1. The unsaved-edits line (GM r44 1).**
+  - `EDITS_LINE_LABELING` "Save or discard your label changes to close this batch." and
+    `EDITS_LINE_REVIEW` "Save or discard your corrections to close this batch."
+    (CommonsCloseBatch). Each pane passes its own (`editsLine`).
+  - The opener, while edits are unsaved: aria-disabled, focusable, presses ignored, the line right
+    under it as its aria-describedby (a `person-lock-line`, `data-lock-place="control"`, so
+    lib/lockPlacement checks it).
+  - Native `disabled` stays for the busy moment: a save in flight, and in Agent review a grade
+    running, plus offline. Making that aria too would need a line for it, and GM gave none, so it
+    stays native.
+  - Inside the dialog the edits line shows neutral (`CommonsErrorLine neutral`). It is
+    tested-only: the opener locks first.
+  - In Blind labeling the opener sits in review mode, which can't be entered with unsaved labels,
+    so its edits lock is unreachable too. The panes pass `disabled={busy}` and
+    `lock={dirty ? 'edits' : …}`, and the M20 mutant (Blind labeling passing dirty as busy)
+    survives as equivalent for that reason.
+  - The "Review batch" toggle was natively disabled for the same reason. It is now aria-disabled
+    while labels are unsaved, its aria-describedby the form's own status line ("Save before
+    changing reference", now with an id); natively disabled only while a save runs. GM may want
+    its own line for it.
+  - A busy lock hides an older retry line in the dialog (`shownLine`), since the close can't retry.
+- **2.** The held 401 row is marked tested-only and kept.
+- **3. Flag ratchet by surface.** `_help_text` exempts any string under a `help`, `description`,
+  `epilog` or `usage` keyword in any call: argparse help and usage, and MCP tool and parameter
+  descriptions (docstrings were already skipped). Nothing is exempt by file.
+  - Now checked: the CLI's own messages and the startup lines for the person (person_session's
+    "Open Nebula as you: …" and its warnings, devserver's announce lines and "ignoring …").
+    `test_the_startup_lines_for_the_person_are_checked` pins that they are scanned.
+  - Changed for GM (cli/commands/mcp_connect.py; none are startup lines):
+    - "Pass Nebula's address with --url (or NEBULA_URL_FILE for the desktop app)." →
+      "Pass Nebula's address with --url; for the desktop app, set NEBULA_URL_FILE instead."
+    - "(A token made before token files: set NEBULA_APP_TOKEN or pass --paste-token.)" →
+      "For a token made before token files, set NEBULA_APP_TOKEN or pass --paste-token."
+    - "…pass its address with --url (the desktop app: set NEBULA_URL_FILE to the file Settings >
+      Connect your agent names)." → "…pass its address with --url; for the desktop app, set
+      NEBULA_URL_FILE to the file Settings > Connect your agent names."
+  - The startup lines needed no change for this rule. They still use straight apostrophes
+    ("isn't loopback"); that is outside this ratchet, for GM.
+- **4. Shared Try-again ratchet.** tryAgainLines.ratchet has 11 close rows, built from
+  `closeBatchFailedLine` and `CLOSE_NO_RESPONSE` (503, 502, 504, 408, 500, 501, no answer, an
+  unlisted 409, 422, 415, the 30 s timeout), each checked with `expectTryAgainLine` and as a retry
+  by `closeLineRetries`. #204's own "ends in a retry" regex is gone; the lock rule (live ⇔
+  `closeLineRetries`) stays in commonsCopy.ratchet. The 429 line ends "Try again in a moment.",
+  outside the house form, so it isn't a shared row; it stays pinned in commonsCopy.ratchet.
+- **Tests.** commonsCopy.ratchet: both panes' opener lock (line under, focus kept with the fixup,
+  presses ignored, placement clean, dims), the busy and offline native moment, the in-dialog
+  edits line neutral. commonsReview: unsaved corrections lock the opener and Discard frees it; a
+  save in flight is native with no line. commonsEvaluation: the toggle's lock.
+- **Mutations.** Frontend 19 of 20 killed (M1–M20; M20 equivalent, above). Backend 4 of 4 (a CLI
+  message back in parens, a startup line with a flag in parens in person_session and in devserver,
+  a startup line dropping out of the scan).
+- **Live** (installed Chrome, throwaway profile, 8951/5951, canaries refused): 8 of 8. Agent
+  review with a correction made: the opener aria-disabled (not native), reached by Tab, GM's line
+  right under it as its reason, dimmed; Enter and Space open nothing; lockPlacementProblems
+  empty; Discard frees it. Shot: fu3r/shots-r18m/opener-locked-with-line-1440.png.
+- **Gates.** tsc -b and npm run lint clean. vitest on an explicit list of 497 files: 6,505 passed
+  and 2 failed on the first run (the two #208 interactions above); both fixed and their files
+  re-run, 58 of 58. Backend isolated: test_flag_parens_copy, test_agent_connect,
+  test_commons_evaluation_close, 88 of 88. Build 474,722 B raw / 147,190 B gzip.

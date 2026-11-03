@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi as api } from '../../lib/commonsApi';
 import { evaluationComplete } from '../../lib/commonsEvaluationTypes';
 import type { AccentPoint, EvaluationBatch, EvaluationItem, EvaluationLabels } from '../../lib/commonsEvaluationTypes';
-import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { CommonsCloseBatch, EDITS_LINE_LABELING } from './CommonsCloseBatch';
 import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave';
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
@@ -83,6 +83,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   }, []);
   const [notice, setNotice] = useState('');
   const headingId = useId();
+  const statusId = useId();
   /** A scan still running (or settled unseen) when this panel mounted. */
   const [resumed] = useState(() => scan);
   const [loading, setLoading] = useState(resumed === null);
@@ -205,7 +206,11 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">
       {intro}
-      {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
+      {/* GM r44 1: unsaved labels lock the toggle in place, its reason the form's own status line
+          ("Save before changing reference"); natively disabled only while a save runs. */}
+      {batch && <button className="commons-button" disabled={busy} aria-disabled={dirty && !busy ? true : undefined}
+        aria-describedby={dirty && !busy ? statusId : undefined}
+        onClick={() => { if (!dirty) setReview(!review); }}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
     <CommonsErrorLine line={error} onRetry={loadAgain} />
@@ -236,7 +241,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
         {batch.state === 'open' ? <>{batch.assisted_reviews > 0
           ? <p className="commons-notice" role="status">The agent graded these references before blind labels were sealed, so they can no longer be sealed as blind labels. Close them as assisted review to resume library analysis.</p>
           : <button className="commons-button commons-button--primary" disabled={busy || count !== 15 || readOnly} {...offlineMark(readOnly)} onClick={() => void run(() => api.seal(batch.revision))}>Seal all 15 labels</button>}
-          <CommonsCloseBatch revision={batch.revision} assisted={batch.assisted_reviews > 0} disabled={busy || dirty} lock={busy || dirty ? 'edits' : null} onClosed={(value) => { setBatch(value); setDirty(false); }} /></>
+          <CommonsCloseBatch revision={batch.revision} assisted={batch.assisted_reviews > 0} disabled={busy} lock={dirty ? 'edits' : null}
+            editsLine={EDITS_LINE_LABELING} onClosed={(value) => { setBatch(value); setDirty(false); }} /></>
           : batch.state === 'closed' ? <p className="evaluation-hash">Closed · SHA-256: {batch.close_hash}</p>
           : <><p className="evaluation-hash">SHA-256: {batch.seal_hash}</p><button className="commons-button" onClick={() => {
             const url = URL.createObjectURL(new Blob([JSON.stringify({ payload: batch.sealed, sha256: batch.seal_hash }, null, 2)], { type: 'application/json' }));
@@ -246,14 +252,14 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       </div> : <div className="evaluation-workspace">
         <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy || dirty} aria-current={index === n ? 'true' : undefined}
           onClick={() => setIndex(n)}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
-        <ReferenceForm key={`${index}:${formEpoch}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} />
+        <ReferenceForm key={`${index}:${formEpoch}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} statusId={statusId} />
       </div>}
     </>}
   </section>;
 }
 
-function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
-  batch: EvaluationBatch; item: EvaluationItem; busy: boolean; dirty: boolean;
+function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statusId }: {
+  batch: EvaluationBatch; item: EvaluationItem; busy: boolean; dirty: boolean; statusId: string;
   onDirty: (value: boolean) => void; run: (action: () => Promise<EvaluationBatch>) => Promise<SaveResult>;
   draftRef: { current: DraftActions | null };
 }) {
@@ -358,7 +364,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty || offline} {...offlineMark(offline)} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
       {dirty && !busy && <button className="commons-button commons-button--danger" onClick={discard}>Discard unsaved changes</button>}
-      <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>
+      <p role="status" id={statusId}>{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>
     </div>
   </>;
 }
