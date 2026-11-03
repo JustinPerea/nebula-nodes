@@ -844,3 +844,41 @@ GM r19 approved the say-back strip, made one fix (the log labels), added one rul
     The least step was 42, with members at most 3.6 px per frame.
   - **A say that never clears** went to the log, and nothing moved (0 px over 70 frames).
   - **Shot 2:** the log reads "Pair · 6 — Reading the brief" over the Pair lines, and the header status reads "pair · 6".
+
+## Round 4h
+
+GM r20 (signing off 4g): the Agent log's colour matches the cursor's shade, for both the dot and the name, with a 4.5:1 guard on the name text.
+
+### The log in each cursor's own shade
+
+- The session shades and contrast maths moved to `src/lib/agentCursorColor.ts`, and `agentCursorLook` re-exports them. That means `sessionFill`, `sessionLightness`, the ramp constants, `hexToOklch`, `luminance` and `contrastRatio`.
+  - The canvas and the log now call the same `sessionFill`; the ramp isn't duplicated.
+  - The module is small, so the log (loaded with the app) gets it without the cursor geometry.
+- `agentActionEntry` keeps two colours on a line, from `agentLogTones(color, session)`:
+  - `color`: the cursor's shade, which the dot draws in;
+  - `ink`: the name's tone.
+  
+  `AgentLog` sets both as CSS variables, and the name reads `--agent-log-name-color`, falling back to the dot's.
+- **The guard** (`readableTone`, one helper). The name text keeps the shade when it reads at least 4.5:1 on the log's surface. Otherwise it steps to the nearest tone of the same hue that does: OKLCH lightness in 0.005 steps either way, with chroma lowered only as far as sRGB needs. The dot always keeps the shade.
+- **The surface** (`AGENT_LOG_SURFACE`, `#0f0f10`) is Restraint's panel glass over the black canvas. A test re-derives it from the stylesheet.
+- **One appearance only.** Restraint is the app's only appearance, and it's dark (`lib/skins`); there's no light theme. The test also walks a white surface, so the guard holds in both directions for a light appearance added later.
+- **Shades that step.** 10 of the 45 shade × colour pairs in the app's palette miss 4.5:1 on the log, all darker sessions (4 or 5). Examples:
+  - Pair's orange `#FF9F43` session 4: `#b46500` (4.38:1) → `#b76808` (4.56:1);
+  - session 5: `#8c4d00` (2.90:1) → `#ad6c2e` (4.53:1);
+  - Claude's `#E8825A` session 4: `#a4451b` (3.14:1) → `#c05f37` (4.50:1).
+- **Behind the log.** The panel glass is 66% opaque. Over a bright node behind the log, every line's contrast drops, the log's own inks included. The guard measures against the surface as designed (over the canvas).
+
+### Checks (round 4h)
+
+- `tsc -b` exit 0; `npm run lint` exit 0.
+- **New test:** `tests/agentLogTones.test.ts`, 6 tests. It walks every agent colour the app hands out × every shade the ramp can produce × both surfaces. It asserts the dot equals `sessionFill`, the name reads ≥ 4.5:1, and only a missing shade steps, keeping its hue. Then it checks the log line itself (`agentActionEntry`) and 300 random colours.
+  - The colours come from the backend's known agents and palette, the settings picker and the log's fallback, read from the source files.
+- **With the helper broken, it fails:**
+  - returns the shade unchanged: 5 of 6 fail;
+  - the dot takes the base colour: 5 fail;
+  - a 3:1 guard: 5 fail;
+  - a coarse 0.05 step: 1 fails;
+  - the step changes hue: 2 fail.
+- **Related tests:** the log, label, cursor, session and planner files, plus the new one: 634 passed. The 39 files that read the changed stylesheets, the look module or the log: 696 passed.
+- **Build budget.** Pass: 447,007 B raw and 137,923 gzip. That's 2,654 B more, for the colour maths now in the entry with the log, still under 512,000 B. The cursor chunk went down to 33,328 B.
+- **Live at 1440, Restraint, on 8780 and 5780.** Four Pair sessions, apart on the canvas, each with a log line. Every row's dot computed equal to its cursor's fill: `#ff9f43`, `#dd7f16`, `#ffcea7` and `#b46500`. "Pair · 4" is the stepped row: its dot is `#b46500` (4.38:1) and its name text `#b76808` (4.56:1). The shots have no md5 duplicates, and I opened each one.

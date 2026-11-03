@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { normalizeAgentEventSource, type AgentEventSource } from '../lib/agentEvents';
 import { cleanSession, cursorLabel } from '../lib/agentCursorLabel';
+import { agentLogTones } from '../lib/agentCursorColor';
 
 /** The Agent log keeps this many entries, oldest dropped first. Memory only. */
 export const AGENT_LOG_MAX_ENTRIES = 50;
@@ -11,8 +12,9 @@ export interface AgentLogEntry {
   /** Wall-clock ms: the backend's for an agent's action, arrival for a chat line. */
   ts: number;
   source: AgentEventSource;
-  /** Who acted, as their cursor's pill names them (cursorLabel). Absent on the chat's thinking lines. */
-  agent?: { id: string; name: string; color: string };
+  /** Who acted, as their cursor's pill names them (cursorLabel), in their cursor's shade (`color`,
+   *  the dot) and that shade's readable tone (`ink`, the name text). Absent on the chat's thinking lines. */
+  agent?: { id: string; name: string; color: string; ink?: string };
   message: string;
 }
 
@@ -51,13 +53,17 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
   const said = typeof event.say === 'string' ? event.say.trim() : '';
   const message = (typeof event.log === 'string' ? event.log.trim() : '') || said;
   if (!message) return null;
+  const session = cleanSession(event.session);
+  const tones = agentLogTones(SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR, session);
   return {
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,
     source: 'agent',
     // Named as its cursor's pill names it ("Pair · 3"), from the same
     // helper, so two sessions of one agent read apart (GM - Design, PR #211
     // r19). Person UI only.
-    agent: { id: agent.id, name: cursorLabel(agent.name, cleanSession(event.session)), color: SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR },
+    // In its cursor's own shade, the dot exactly and the name readable on
+    // the log (GM - Design, PR #211 r20).
+    agent: { id: agent.id, name: cursorLabel(agent.name, session), color: tones.dot, ink: tones.name },
     message,
   };
 }
