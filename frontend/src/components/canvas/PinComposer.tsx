@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
-  pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
+  onPinTextLoaded, pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
 import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
 import { useCurrentProjectId } from '../../lib/currentProject';
@@ -84,6 +84,14 @@ export function PinComposer() {
     void pinTextSettling().then(() => { if (live) setTextReady(true); });
     return () => { live = false; };
   }, [textReady]);
+  // PR #218 review 1 LOW-1: the data can land after the dialog is up: a
+  // failed chunk loaded again (compose retries it), with textReady already
+  // true from the failure. Everything here that reads the data is worked out
+  // as it draws ("N left" and Send note's empty check over the draft, each
+  // kept note's text), so one more render shows it all in the full form at
+  // once, not at the next keystroke or store change.
+  const [, setTextLoads] = useState(0);
+  useEffect(() => onPinTextLoaded(() => setTextLoads((loads) => loads + 1)), []);
   // GM r23 item 2: the node the dialog is for left the canvas (the person
   // or an agent removed it): Send note is disabled with the line as its
   // reason, and the line shows once; Cancel and the typed text stay.
