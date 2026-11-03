@@ -3,6 +3,7 @@ import { emptyAssetStudioEntry, useAssetStudioDraftStore, type AssetStudioDraftE
 import type { MoodboardOp } from '../../lib/moodboardEdits';
 import { dropKeptEdit, isUnsavedBoardKey, keepUnsavedDrafts, keptEditOf, keptEditsWaiting, replayKeptFields, resetUnsavedDrafts,
   restoreUnsavedDrafts, takeKeptEdit, unsavedWouldBeLost, type KeptEdit } from './unsavedDrafts';
+import { takeWaitingSend } from './boardAdds';
 
 // Round 6g (GM r15 3): an unsaved board's draft lives through a reload of
 // its tab, in session storage, as the waiting sends do.
@@ -332,6 +333,31 @@ describe('a saved board\'s kept edit', () => {
     set(entries);
     expect(edits().map((it) => it.board)).toEqual(Array.from({ length: 12 }, (_, index) => `b${index}`));
     expect(unsavedWouldBeLost()).toBe(false);
+  });
+
+  // Round 6m (GM r53 Q2): a waiting send (boardAdds.ts) lives as long as its board's kept edit, not a fixed day.
+  it('a waiting send older than a day stays while its board holds a kept edit; with none, it ages out', () => {
+    const WAITING = 'nebula:moodboard-sends-waiting';
+    const old = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    const send = (board: string) => ({ board, ops: [{ op: 'weight', image: 'i1', value: 0.5 }], fields: {}, page: 'before', at: old });
+    window.sessionStorage.setItem(WAITING, JSON.stringify([send('t1'), send('t2')]));
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ board: 't1', fields: { name: 'Dusk' }, base: {}, ops: [], at: old }]));
+    // t1's send is kept (its board's kept edit lives on); t2's has nothing behind it, so a day ends it.
+    expect(takeWaitingSend('t2')).toBeNull();
+    expect(takeWaitingSend('t1')).toEqual({ ops: [{ op: 'weight', image: 'i1', value: 0.5 }], fields: {} });
+    // Held in a draft here counts too: the kept edit this page writes.
+    window.sessionStorage.removeItem(EDITS);
+    window.sessionStorage.setItem(WAITING, JSON.stringify([send('b1')]));
+    set({ [JSON.stringify(['moodboard', 'global', 'b1'])]: saved({ name: 'Dusk' }, { savedId: 'b1' }) });
+    expect(edits().map((it) => it.board)).toEqual(['b1']);
+    expect(takeWaitingSend('b1')).not.toBeNull();
+    // Once the kept edit goes (its board deleted for good, and said), the send ages out again.
+    set({});
+    window.sessionStorage.setItem(WAITING, JSON.stringify([send('t1')]));
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ board: 't1', fields: { name: 'Dusk' }, base: {}, ops: [], at: old }]));
+    dropKeptEdit('t1');
+    expect(takeWaitingSend('t1')).toBeNull();
+    window.sessionStorage.removeItem(WAITING);
   });
 
   // Round 6l (review 10 MEDIUM-1, GM r21 Q1): each queued image change keeps when it was made and what it changed from.

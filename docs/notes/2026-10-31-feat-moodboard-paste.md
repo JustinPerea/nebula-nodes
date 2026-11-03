@@ -820,11 +820,11 @@ Main had moved to bee7ebe0 (#208's colour extract and #220's pins), so it is mer
   - It restores the project without opening it, then `replayAway` replays the kept edit into that board's draft and sends it.
   - Nothing confirms it: the line goes. That's a question for GM. A failure shows "Couldn't restore the project." in red, and the line stays.
 - **r21 expiry.** The day was `UNSAVED_MAX_AGE`, shared with unsaved new-board drafts: a kept edit was dropped a day after its last write. A cap of 10 (`slice(-10)`) also dropped the oldest silently.
-  - Both are gone for kept edits. A kept edit now lives while its board or project can be restored (Recently deleted keeps 30 days). After that, the lookup finds the board gone and the red line shows.
+  - Both are gone for kept edits. A kept edit now lives while its board or project can be restored (boards stay until deleted for good; projects 30 days, round 6m). After that, the lookup finds the board gone and the red line shows.
   - No hard cap stays. A failed write still sets `lastEditsWriteFailed`, and the unload warning covers it.
   - Still on a day:
     - Unsaved new-board drafts (`UNSAVED_MAX_AGE`, cap 10): they have no board to restore.
-    - `boardAdds.ts`'s adds on their way and waiting sends (`PENDING_MAX_AGE`, cap 50). A waiting send older than a day, for a board whose kept edit lives on, is still dropped silently. That is outside this brief; flagged.
+    - `boardAdds.ts`'s adds on their way and waiting sends (`PENDING_MAX_AGE`, cap 50). A waiting send older than a day, for a board whose kept edit lives on, is still dropped silently. That is outside this brief; flagged. (Round 6m: fixed, GM r53 Q2.)
 - **Review no-ruling fixes.**
   - Purged while the trashed line is up: the re-check turns it red.
   - A purged board's edit is dropped once its red line has mounted (`DropOnShow`), never before (logic LOW-1).
@@ -860,6 +860,49 @@ Main had moved to bee7ebe0 (#208's colour extract and #220's pins), so it is mer
   - Q8: the project line with "Restore project". Pressing it restored Coast (the open project stays the same) and replayed Shore's rename (Cliff); the line went and the edit was spent.
   - No request left the lane. Shots: scratchpad `paste/shots6l/` (5), each opened at 1000 px, no md5 repeats.
 
+## Round 6m (GM r53)
+
+GM passed 6l's Q2 confirm, the Q3 in-tab line, the Q8 line and the C hover answer, and asked for one label change, one fact check, then Q1 and Q2. Main was already in the branch (bee7ebe0), so nothing was merged.
+
+- **The image label (GM r53).**
+  - A kept image change is named by the label the person sees on the board, "Reference #N" (the side panel's title and each card's name, its place in the board + 1), never the private note. A note is private text, and a status line can end up in a screen share or a demo.
+  - "Kept the changes to Reference #3 from the board." / "Kept the name “Tide” and the changes to Reference #3 from the board." The cover stays "the cover"; four items or more still count.
+  - No 40-character clip and no title for an image. A shown name keeps its clip, and its title is the name alone.
+  - `KeptImage` is `{ n }` only, so a note can't reach the line. A ratchet in `boardSaveLine.test.ts` feeds images carrying a private note and a label and checks neither shows.
+- **The 30 days (GM's check).** Nothing purges deleted boards on a timer, so the helper stays: "Deleted boards stay here until you delete them for good."
+  - Boards (and characters and Styles): `backend/services/asset_trash.py:23` says "Nothing is purged on a timer". `docs/MCP-SETUP.md:3169-3170` says the same.
+  - The 30 days are projects' only: `backend/services/project_store.py:25-26` (`TRASH_RETENTION = timedelta(days=30)`), applied by `purge_expired_trash` (`project_store.py:155`) on `GET /api/projects` (`main.py:16964`), before a project restore (`main.py:17885`) and on `GET /api/trash` (`main.py:20134`). Project home says it: "Deleted projects stay here for 30 days." (`ProjectHome.tsx:331`).
+  - Round 6l's notes said "Recently deleted keeps 30 days" for kept edits. That was wrong for boards and is corrected above.
+- **Q1: Restore project.**
+  - Success: the line goes, and the confirmation shows in a board Restore's slot (`data-restored`), naming the project: "Restored “Shore”. Your change is saved." With nothing replayed, "Restored “Shore”." alone. It waits for the replayed edits to save (`projectRestoring`), as a board's Restore does.
+  - "Shore" is the project in GM's examples (the purged line restores “Shore” and loses the change to “Rivers”), so every Restore project line names the project. The name comes from the project list's Recently deleted entry (`ProjectGoneBoard.projectName`).
+  - Focus follows r21 Q7: `focusAfterLine`, so the next notice control, else `<main>`, never body, with no ring from the pointer.
+  - Another tab restored it first: a 409 counts as success, and so does a 404 when the project list then shows the project live. The backend answers 404 for a project no longer in Recently deleted, so that is the real "restored elsewhere" case. The edit replays and the same confirmation shows.
+  - Failures, in the because form, from the error's kind and status, never its words:
+    - "Nebula couldn’t restore “Shore” because the server isn’t answering. Try again." (neutral, status, a real Try again; in `tryAgainLines.ratchet.test.ts`). It's any no-answer or gateway error (`isBackendUnreachable`).
+    - "Nebula couldn’t restore “Shore” because it was deleted for good. Your change to “Rivers” can’t be kept." (red, status, × "Dismiss", inserted empty and filled a frame later so it's announced once, like the 6k red line). It's a 404 with the project in neither list. Several boards: "Your changes to “Rivers” and “Harbor”", then "to 4 boards". Focus moves to its ×, since the button pressed is gone. The kept edits go once it has shown (`DropOnShow`).
+    - "Nebula couldn’t restore “Shore” because the server didn’t accept the request. Try again." (neutral, Try again): anything else, a 404 with the project still in Recently deleted included.
+  - The failure takes the project's line in place, and its button becomes Try again: the same element, so focus stays on it. A project's other boards' lines wait under it.
+  - The old red "Couldn't restore the project." (straight apostrophe, role alert) is gone.
+- **The straight-apostrophe check.** None existed, so the namedLine copy ratchet (`tests/lib/errorCopy.namedLine.test.ts`) gains one.
+  - It reads src/ with the TypeScript parser: string literals, template text and JSX text where a straight apostrophe sits inside a word.
+  - Exempt by surface: tests (`*.test.*`, `src/test/`), comments, module specifiers, console calls and RegExp sources.
+  - Most older copy is straight still (534 in 130 files, the app's "Couldn't …" headings among them), so each file's count is pinned in `tests/lib/straightApostrophes.baseline.json`. A file over its count fails, naming the strings; a file under it fails until the count is lowered. `NEBULA_WRITE_APOSTROPHE_BASELINE=1` rewrites the file.
+  - This PR's own lines are curly. Its two older failure headings, "Couldn't restore the board." and "Couldn't load Recently deleted.", follow the app-wide straight headings in `lib/trash.ts` and the error-copy sweep, and stay pinned. Sweeping the headings is its own change.
+- **Q2: a waiting send lives with its board's kept edit.** `boardAdds.ts`'s `readWaiting` keeps a send past the day while its board holds a kept edit, waiting or in a draft here (`keepWaitingWhile`, registered by `unsavedDrafts.ts`, which imports `boardAdds.ts`, so there's no import cycle). A send with no kept edit behind it still ages out after a day, and the adds on their way keep their day.
+  - In today's code a board's kept edit holds every op its waiting send does, and the board's load takes the kept edit and drops the send. So the send no longer vanishes while its board can come back, and on restore the add lands once.
+- **MCP and CLI.** Nothing new for agents: restoring a project is `restore_from_trash` (MCP) and `nebula trash restore`, unchanged. Kept edits, waiting sends and these lines are the person's tab's own state, so there's no agent action to add.
+- **Tests.**
+  - `boardSaveLine.test.ts`: the image-label cases rewritten (2), the no-note ratchet (new), and Restore project's lines and kinds (3 new).
+  - Paste: K1 and the label test now expect "Reference #N" with no image title and no note anywhere; the Q8 success test expects the confirmation; the old red-failure test is replaced by six: success with focus on `<main>` and the confirmation waiting for the save, nothing replayed, another tab first (409 and 404), no answer with the same button as Try again, anything else, and deleted for good (red, inserted once, × focused, edit dropped). Q2: a two-day-old send on a board in Recently deleted survives a rewrite of the list, then lands once on Restore.
+  - `unsavedDrafts.test.ts` +1 (a send kept by a waiting or held kept edit, aged out without one). `tryAgainLines.ratchet.test.ts` +2 rows and a pin. The namedLine file +2 (the scanner's own cases, the baseline).
+- **Mutants:** 34 (scratchpad `paste/mutate-r6m.py`, log `paste/mutate-r6m.log`), all killed: the label (4), the line kinds and copy (5, one a straight apostrophe the new ratchet catches), the Studio's outcomes, confirmation, focus and red line (19), the waiting send's life (4, one through the Studio), and the apostrophe baseline both ways (2).
+- **Gates.** tsc 0; lint 0; the build budget 447,881 B raw, 138,296 B gzip (unchanged: the Studio is deferred; dist deleted); focused vitest over 197 files (every test that reads src/ or styles/ from disk included): 3724 of 3724; isolated pytest over 34 backend files (the PR's and every trash or moodboard file): 1811 passed; `person_gate.py` byte-identical to origin/main. No backend change this round.
+- **Live (8797/5797, the installed Chrome with a throwaway profile, a fresh home and token per scenario, canary first, 1440):** 23 of 23 over 2 scenarios.
+  - Q1: image 2 with the private note "sunset.jpg", a kept rename and weight, then an agent's rename to Tide and weight 0.5. The reload showed "Kept the name “Tide” and the changes to Reference #2 from the board.", titled "Tide"; "sunset" nowhere on screen or in any title; the card's own name "Reference #2"; nothing sent over the agent's values.
+  - Q8: Shore's kept rename in project Coast, Coast in Recently deleted. Restore project, pressed with the pointer: Coast restored (not opened), Shore renamed Cliff, the line gone, then "Restored “Coast”. Your change is saved." in the confirmation slot (neutral, status). Focus on `<main>`, no ring.
+  - No request left the lane. Shots: scratchpad `paste/shots6m/` (2), each opened at 1000 px, distinct md5s.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -884,6 +927,7 @@ Main had moved to bee7ebe0 (#208's colour extract and #220's pins), so it is mer
 - Round 6j: `boardSaveLine.ts` (`deletedBoardsLine`), `unsavedDrafts.ts` (the kept edit's `name`, `keptEditsWaiting`, `dropKeptEdit`), `MoodboardStudioView.tsx` (the lookup, the two lines, Restore, `trashRequest`), `asset-trash/AssetTrash.tsx` (`openRequest`), `styles/moodboard-studio.css` (the Restore line), and their tests; `tests/test_moodboard_create_request_id.py` (the broadcast stand-in's `**_`).
 - Round 6k: `boardSaveLine.ts` (`restoredBoardsLine`, `namedBoards`), `MoodboardStudioView.tsx` (the open board's one line, the red line's × and board-change clear, `restoring` and the confirmation, `boardRestored`, `openBoard`, the keyboard flag and focus ids), `asset-trash/AssetTrash.tsx` (`TrashOpenRequest`, the focus, load and action lines apart), `styles/moodboard-studio.css` (the ×), and their tests.
 - Round 6l: `boardSaveLine.ts` (`boardGoneKind`, the gone save line, `restoredBoardsLine`'s two sentences, `projectDeletedLine`, `UNDO_DROPPED_LINE`, `lostTooLine`, `keptFromBoardLine`'s image items), `unsavedDrafts.ts` (`opMeta`, `stampNewOps`, `opTarget`, `valueOnBoard`, `valueOfOp`, `keptEditBoards`, no day or cap for kept edits), `store/assetStudioDraftStore.ts` (`saveGone`), `MoodboardStudioView.tsx` (the per-op replay, `undoDropped`, `markGone` and the held line, `LiveText`, `DropOnShow`, `focusAfterLine`, `railFocus`, the re-checks, `forgetEdits`, `unsavedAtStake`, the project line and `restoreGoneProject`), `asset-trash/AssetTrash.tsx` (`defaultOpen`, `atStake`, `onPurged`, the refusal cleared on `where`), and their tests; `tests/lib/trash.empty.test.ts` (new), `tests/lib/errorCopy.namedLine.test.ts` (a constant opening read as its text), backend `tests/test_asset_trash.py`.
+- Round 6m: `boardSaveLine.ts` (`KeptImage` as `{ n }`, `projectRestoreFailure`, `projectRestoreFailedLine`), `MoodboardStudioView.tsx` (Reference #N, `ProjectGoneBoard.projectName`, `restoreGoneProject`'s outcomes, `projectRestoring`, `projectFailures`, `projectsPurged`, the × focus, `replayAway`'s `sends`), `boardAdds.ts` (`keepWaitingWhile`), `unsavedDrafts.ts` (its registration), and their tests; `tests/lib/errorCopy.namedLine.test.ts` (the straight-apostrophe ratchet) with `tests/lib/straightApostrophes.baseline.json` (new), `tests/tryAgainLines.ratchet.test.ts`.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

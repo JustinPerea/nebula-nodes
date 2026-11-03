@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -229,4 +229,97 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     const stale = HAND_BUILT.filter((entry) => !handBuilt(readFileSync(join(root, entry.file), 'utf8')).includes(entry.text));
     expect(stale.map((entry) => `${entry.file}: ${entry.text}`)).toEqual([]);
   });
+});
+
+/**
+ * #210 round 6m (GM r53 Q1): person copy uses the curly apostrophe (’), never
+ * the straight one ("Couldn't" slipped through on the Restore project line).
+ * The house lines GM writes are curly; most older lines are straight still,
+ * so this is a ratchet: each source file's count of straight apostrophes in
+ * person copy is pinned in `straightApostrophes.baseline.json` and may only
+ * go down (lower the count when you fix one; a file not listed has none).
+ *
+ * Person copy, read with the TypeScript parser across src/: string literals,
+ * template text and JSX text where a straight apostrophe sits inside a word
+ * ("couldn't", "board's"). Exempt by surface:
+ * - tests (`*.test.*`, src/test/), which aren't shown;
+ * - code: module specifiers, console calls (the console is for developers),
+ *   and RegExp sources (a pattern may match either apostrophe), and comments.
+ */
+const BASELINE_PATH = join(__dirname, 'straightApostrophes.baseline.json');
+const STRAIGHT_IN_WORD = /[A-Za-z]'[A-Za-z]/;
+
+/** The person copy in `text` that holds a straight apostrophe inside a word, as the literal's text. */
+function straightApostrophes(text: string): string[] {
+  const file = ts.createSourceFile('x.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const isCodeCall = (node: ts.Node) => {
+    if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
+    const callee = node.expression;
+    if (ts.isIdentifier(callee) && callee.text === 'RegExp') return true;
+    if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) return true;
+    return ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'console';
+  };
+  const hits: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isCodeCall(node)) return;
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
+      ts.forEachChild(node, (child) => { if (child !== node.moduleSpecifier) visit(child); });
+      return;
+    }
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)
+      || ts.isTemplateMiddle(node) || ts.isTemplateTail(node) || ts.isJsxText(node)) && STRAIGHT_IN_WORD.test(node.text)) {
+      hits.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return hits;
+}
+
+/** Each src/ file's count of straight apostrophes in person copy (files with none left out). */
+function straightCounts(): Record<string, number> {
+  const root = join(__dirname, '../../src');
+  const counts: Record<string, number> = {};
+  for (const path of sources(root)) {
+    const name = relative(root, path);
+    if (name.startsWith('test/') || name.endsWith('.d.ts')) continue;
+    const text = readFileSync(path, 'utf8');
+    if (!text.includes("'")) continue;
+    const found = straightApostrophes(text).length;
+    if (found) counts[name] = found;
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
+  it('the scanner sees person copy, and skips code and comments', () => {
+    expect(straightApostrophes("const a = \"Couldn't restore the project.\";")).toHaveLength(1);
+    expect(straightApostrophes("const a = 'Nebula couldn\\'t restore it.';")).toHaveLength(1);
+    expect(straightApostrophes('const a = `The board\'s ${name} is gone.`;')).toHaveLength(1);
+    expect(straightApostrophes('const a = `${name} isn\'t answering.`;')).toHaveLength(1);
+    expect(straightApostrophes("const a = <p>Deleted boards aren't kept.</p>;")).toHaveLength(1);
+    expect(straightApostrophes('const a = <button aria-label="Don\'t save">x</button>;')).toHaveLength(1);
+    // Curly is the house form.
+    expect(straightApostrophes('const a = "Nebula couldn’t restore “Shore”.";')).toHaveLength(0);
+    // Code: a comment, a pattern, the console, a module, a quote that isn't inside a word.
+    expect(straightApostrophes("// the board's line\n/* it's */ const a = 1;")).toHaveLength(0);
+    expect(straightApostrophes("const a = new RegExp(\"couldn't\");")).toHaveLength(0);
+    expect(straightApostrophes("console.warn(\"couldn't parse\");")).toHaveLength(0);
+    expect(straightApostrophes("import x from \"./it's\";")).toHaveLength(0);
+    expect(straightApostrophes("const a = \"[data-id='x']\";")).toHaveLength(0);
+  });
+
+  it('each file holds no more straight apostrophes in person copy than its pinned count (and a fixed one lowers it)',
+    { timeout: 30_000 }, () => {
+      const counts = straightCounts();
+      if (process.env.NEBULA_WRITE_APOSTROPHE_BASELINE === '1') writeFileSync(BASELINE_PATH, `${JSON.stringify(counts, null, 2)}\n`);
+      const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, number>;
+      const root = join(__dirname, '../../src');
+      const over = Object.entries(counts).filter(([name, count]) => count > (baseline[name] ?? 0))
+        .map(([name, count]) => `${name}: ${count} (pinned ${baseline[name] ?? 0}): ${straightApostrophes(readFileSync(join(root, name), 'utf8')).join(' | ')}`);
+      expect(over, 'new straight apostrophes in person copy: use ’').toEqual([]);
+      const under = Object.entries(baseline).filter(([name, count]) => (counts[name] ?? 0) < count)
+        .map(([name, count]) => `${name}: ${counts[name] ?? 0} (pinned ${count}): lower its count`);
+      expect(under).toEqual([]);
+    });
 });

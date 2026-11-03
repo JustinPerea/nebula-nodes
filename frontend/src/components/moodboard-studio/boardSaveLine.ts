@@ -212,6 +212,39 @@ export function projectDeletedLine(name: string): { text: string; title: string 
   return { text: `Nebula couldn’t save your change to ${what} because its project was deleted. Restore the project to keep the change.`, title };
 }
 
+/** Why a Restore project failed (round 6m, GM r53 Q1): the server isn't answering, the project was deleted for good,
+ *  or anything else. A project another tab restored first isn't a failure. */
+export type ProjectRestoreFailure = 'noAnswer' | 'purged' | 'refused';
+
+/** Which failure a Restore project's error is, from its kind and status, never its words (a 404 is decided by a
+ *  look at the project list, so it isn't one of these). */
+export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFailure, 'purged'> {
+  return isBackendUnreachable(error) ? 'noAnswer' : 'refused';
+}
+
+/**
+ * The line when Restore project fails (round 6m, GM r53 Q1), in the because
+ * form, naming the project:
+ * - "Nebula couldn’t restore “Shore” because the server isn’t answering.
+ *   Try again." (neutral, with Try again);
+ * - "Nebula couldn’t restore “Shore” because it was deleted for good. Your
+ *   change to “Rivers” can’t be kept." (red, with ×; "Your changes to
+ *   “Rivers” and “Harbor”" or "to 4 boards" for several);
+ * - "Nebula couldn’t restore “Shore” because the server didn’t accept the
+ *   request. Try again." (neutral, with Try again).
+ */
+export function projectRestoreFailedLine(project: string, failure: ProjectRestoreFailure, boards: readonly string[] = []):
+  { text: string; title: string } {
+  const { what, title } = namedBoards([project]);
+  // Each form spelled out whole.
+  if (failure === 'noAnswer') return { text: `Nebula couldn’t restore ${what} because the server isn’t answering. Try again.`, title };
+  if (failure === 'refused') return { text: `Nebula couldn’t restore ${what} because the server didn’t accept the request. Try again.`, title };
+  const lost = namedBoards(boards.length ? boards : ['']);
+  const text = lost.one ? `Nebula couldn’t restore ${what} because it was deleted for good. Your change to ${lost.what} can’t be kept.`
+    : `Nebula couldn’t restore ${what} because it was deleted for good. Your changes to ${lost.what} can’t be kept.`;
+  return { text, title: `${title}: ${lost.title}` };
+}
+
 /** A kept Undo that was dropped because the board changed after it (round 6l, GM r21 Q1): neutral, no button. */
 export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the board changed after it.';
 
@@ -238,9 +271,10 @@ function namedBoards(names: readonly string[]): { one: boolean; what: string; ti
 /** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
 export const KEPT_NAME_MAX = 40;
 
-/** An image a "Kept …" line names (round 6l, GM r21 Q1): by the label the board shows for it (its private
- *  note, "A label for you"), else by its number on the board ("image 3"). */
-export type KeptImage = { label: string } | { n: number };
+/** An image a "Kept …" line names (round 6m, GM r53): by the label the board shows for every image, its
+ *  number on the board ("Reference #3", as the side panel and each card's name say). Never its private note:
+ *  that is the person's own text, and a status line can end up in a screen share or a demo. */
+export type KeptImage = { n: number };
 
 /**
  * The neutral line when the board kept its own later change over a draft
@@ -254,12 +288,11 @@ export type KeptImage = { label: string } | { n: number };
  * from the board."). GM r16, r17.
  *
  * Round 6l (GM r21 Q1): a kept image change the board changed later is named
- * per image, one item each, "the changes to “sunset.jpg”" (the label clipped
- * past KEPT_NAME_MAX, the full one in the title), or "the changes to image
- * 3" for an image with no label. With images, each item takes its own "the"
- * ("Kept the name “Rivers” and the changes to “sunset.jpg” from the
- * board."); the cover is a board field ("the cover"). From four items, the
- * count.
+ * per image, one item each. Round 6m (GM r53): by the label the person sees,
+ * "the changes to Reference #3", never the private note, so no clip and no
+ * title for it. With images, each item takes its own "the" ("Kept the name
+ * “Tide” and the changes to Reference #3 from the board."); the cover is a
+ * board field ("the cover"). From four items, the count.
  */
 export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}, images: readonly KeptImage[] = []): StudioNotice | null {
   const count = fields.length + images.length;
@@ -274,8 +307,9 @@ export function keptFromBoardLine(fields: readonly string[], board: { name?: str
   }
   const items = [
     ...(showName ? [`the name “${clip(name)}”`] : fields.map((field) => `the ${KEPT_FIELD_NAMES[field] ?? field}`)),
-    ...images.map((image) => ('label' in image ? `the changes to “${clip(image.label)}”` : `the changes to image ${image.n}`)),
+    ...images.map((image) => `the changes to Reference #${image.n}`),
   ];
-  const full = [...(showName ? [`“${name}”`] : []), ...images.map((image) => ('label' in image ? `“${image.label}”` : `image ${image.n}`))];
-  return { text: `Kept ${joinWithAnd(items)} from the board.`, title: joinWithAnd(full) };
+  const text = `Kept ${joinWithAnd(items)} from the board.`;
+  // The name keeps its title (it may be clipped); an image's label never needs one.
+  return showName ? { text, title: name } : text;
 }

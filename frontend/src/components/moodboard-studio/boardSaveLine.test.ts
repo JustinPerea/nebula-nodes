@@ -3,7 +3,8 @@ import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine,
-  isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine } from './boardSaveLine';
+  isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectRestoreFailedLine,
+  projectRestoreFailure } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
   new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
@@ -245,6 +246,36 @@ describe('a kept edit whose board\'s project was deleted (GM r21 Q8)', () => {
   });
 });
 
+// Round 6m (GM r53 Q1): Restore project's failure lines, verbatim, in the because form.
+describe('a Restore project that failed (GM r53 Q1)', () => {
+  it('the server isn\'t answering, or didn\'t accept it: neutral, ending in Try again', () => {
+    expect(projectRestoreFailedLine('Shore', 'noAnswer')).toEqual({ title: '“Shore”',
+      text: 'Nebula couldn’t restore “Shore” because the server isn’t answering. Try again.' });
+    expect(projectRestoreFailedLine('Shore', 'refused')).toEqual({ title: '“Shore”',
+      text: 'Nebula couldn’t restore “Shore” because the server didn’t accept the request. Try again.' });
+  });
+
+  it('deleted for good: names the boards whose change can\'t be kept, one, up to three, then a count', () => {
+    expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers'])).toEqual({ title: '“Shore”: “Rivers”',
+      text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your change to “Rivers” can’t be kept.' });
+    expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Harbor']).text)
+      .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers” and “Harbor” can’t be kept.');
+    expect(projectRestoreFailedLine('Shore', 'purged', ['a', 'b', 'c', 'd']).text)
+      .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 4 boards can’t be kept.');
+    const long = 'An exceptionally long project name that keeps going past forty';
+    expect(projectRestoreFailedLine(long, 'noAnswer').text).toContain(`“${long.slice(0, 39)}…”`);
+    expect(projectRestoreFailedLine(long, 'noAnswer').title).toBe(`“${long}”`);
+  });
+
+  it('which failure, from the kind and status, never the words', () => {
+    expect(projectRestoreFailure(offline())).toBe('noAnswer');
+    expect(projectRestoreFailure(failed(502, { detail: '' }))).toBe('noAnswer');
+    expect(projectRestoreFailure(failed(503))).toBe('noAnswer');
+    for (const status of [400, 403, 422, 500]) expect(projectRestoreFailure(failed(status, { detail: 'isn’t answering' }))).toBe('refused');
+    expect(projectRestoreFailure(new Error('Failed to fetch'))).toBe('refused');
+  });
+});
+
 describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
   it('adds one sentence: one, up to three, then a count', () => {
     expect(lostTooLine([])).toBeNull();
@@ -292,25 +323,40 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
     expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the notes setting and strength from the board.');
   });
 
-  // Round 6l (GM r21 Q1): kept image changes, one item per image.
-  it('names each image by its label, else its number, and joins them with the board fields', () => {
-    expect(keptFromBoardLine([], {}, [{ label: 'sunset.jpg' }])).toEqual({ text: 'Kept the changes to “sunset.jpg” from the board.', title: '“sunset.jpg”' });
-    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ label: 'sunset.jpg' }])).toEqual({
-      text: 'Kept the name “Rivers” and the changes to “sunset.jpg” from the board.', title: '“Rivers” and “sunset.jpg”' });
-    expect(keptFromBoardLine([], {}, [{ n: 3 }])).toEqual({ text: 'Kept the changes to image 3 from the board.', title: 'image 3' });
-    expect((keptFromBoardLine(['name', 'notes'], { name: 'Rivers' }, [{ n: 2 }]) as { text: string }).text)
-      .toBe('Kept the name, the notes and the changes to image 2 from the board.');
-    expect((keptFromBoardLine([], {}, [{ label: 'a' }, { n: 2 }, { label: 'c' }]) as { text: string }).text)
-      .toBe('Kept the changes to “a”, the changes to image 2 and the changes to “c” from the board.');
-    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ label: 'a' }, { n: 2 }, { label: 'c' }])).toBe('Kept 4 changes from the board.');
+  // Round 6l (GM r21 Q1): kept image changes, one item per image. Round 6m (GM r53): by the label the person sees.
+  it('names each image by its visible label, "Reference #N", and joins them with the board fields', () => {
+    expect(keptFromBoardLine([], {}, [{ n: 3 }])).toBe('Kept the changes to Reference #3 from the board.');
+    expect(keptFromBoardLine(['name'], { name: 'Tide' }, [{ n: 3 }])).toEqual({
+      text: 'Kept the name “Tide” and the changes to Reference #3 from the board.', title: 'Tide' });
+    expect(keptFromBoardLine(['name', 'notes'], { name: 'Rivers' }, [{ n: 2 }]))
+      .toBe('Kept the name, the notes and the changes to Reference #2 from the board.');
+    expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }]))
+      .toBe('Kept the changes to Reference #1, the changes to Reference #2 and the changes to Reference #3 from the board.');
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ n: 1 }, { n: 2 }, { n: 3 }])).toBe('Kept 4 changes from the board.');
     expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }])).toBe('Kept 4 changes from the board.');
   });
 
-  it('the cover is a board item; a label is clipped past 40 with the full one in the title', () => {
+  it('the cover is a board item, "the cover"; an image\'s label is never clipped and has no title', () => {
     expect(keptFromBoardLine(['cover'])).toBe('Kept the cover from the board.');
     expect(keptFromBoardLine(['name', 'cover'])).toBe('Kept the name and cover from the board.');
-    expect((keptFromBoardLine(['cover'], {}, [{ n: 1 }]) as { text: string }).text).toBe('Kept the cover and the changes to image 1 from the board.');
-    const long = 'A label for this reference that keeps going well past forty';
-    expect(keptFromBoardLine([], {}, [{ label: long }])).toEqual({ text: `Kept the changes to “${long.slice(0, 39)}…” from the board.`, title: `“${long}”` });
+    expect(keptFromBoardLine(['cover'], {}, [{ n: 1 }])).toBe('Kept the cover and the changes to Reference #1 from the board.');
+    expect(keptFromBoardLine([], {}, [{ n: 1234 }])).toBe('Kept the changes to Reference #1234 from the board.');
+    // A long name keeps its clip and its title (GM r17), beside an image.
+    const long = 'A board name for this reference set that keeps going well past forty';
+    expect(keptFromBoardLine(['name'], { name: long }, [{ n: 2 }])).toEqual({
+      text: `Kept the name “${long.slice(0, 39)}…” and the changes to Reference #2 from the board.`, title: long });
+  });
+
+  // GM r53: a private note is the person's own text, and a status line can end up in a screen share.
+  it('ratchet: a Kept line never carries anything of an image but its number', () => {
+    const shapes = [[], ['name'], ['cover'], ['name', 'notes']] as const;
+    for (const fields of shapes) {
+      for (const count of [1, 2, 3]) {
+        const images = Array.from({ length: count }, (_, index) => ({ n: index + 1, privateNote: 'SENTINEL-NOTE', label: 'SENTINEL-LABEL' }));
+        const line = keptFromBoardLine(fields, { name: 'Rivers' }, images);
+        expect(JSON.stringify(line)).not.toMatch(/SENTINEL/);
+        if (fields.length + count <= 3) expect(typeof line === 'string' ? line : line?.text).toMatch(/Reference #\d/);
+      }
+    }
   });
 });

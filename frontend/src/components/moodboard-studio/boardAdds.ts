@@ -206,8 +206,17 @@ export function takeReloadLost(board: string): string[] {
  * board's next open in this tab takes it back into its draft, which sends
  * it. An image only this page holds (not uploaded yet) can't be kept: the
  * reload line names it, as for an upload a reload cut short.
+ *
+ * Round 6m (GM r53 Q2): a waiting send lives as long as its board's kept
+ * edit (unsavedDrafts.ts), not a fixed day: while its board, or the board's
+ * project, can be restored, the send stays and lands when the board comes
+ * back. Only a send whose board holds no kept edit ages out after a day.
  */
 const WAITING_KEY = 'nebula:moodboard-sends-waiting';
+/** Whether a board still holds a kept edit (unsavedDrafts.ts registers it; that module imports this one). */
+let boardKeepsEdit: (board: string) => boolean = () => false;
+/** unsavedDrafts.ts's check for a board's kept edit, which keeps the board's waiting send past a day. */
+export function keepWaitingWhile(check: (board: string) => boolean) { boardKeepsEdit = check; }
 interface WaitingSend { board: string; ops: MoodboardOp[]; fields: Record<string, unknown>; page: string; at: number }
 function readWaiting(): WaitingSend[] {
   try {
@@ -216,7 +225,7 @@ function readWaiting(): WaitingSend[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((it): it is WaitingSend => typeof it?.board === 'string' && Array.isArray(it?.ops)
       && typeof it?.fields === 'object' && it.fields !== null && !Array.isArray(it.fields) && typeof it?.page === 'string'
-      && typeof it?.at === 'number' && now - it.at < PENDING_MAX_AGE)
+      && typeof it?.at === 'number' && (now - it.at < PENDING_MAX_AGE || boardKeepsEdit(it.board)))
       // Each op is checked too (review 8, NIT-4): one that isn't an op Nebula
       // makes is dropped, never applied and sent; a record left with nothing goes.
       .map((it) => ({ ...it, ops: it.ops.filter(isOpShape) }))

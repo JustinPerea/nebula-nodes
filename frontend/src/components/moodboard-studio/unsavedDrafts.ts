@@ -1,7 +1,7 @@
 import { emptyAssetStudioEntry, useAssetStudioDraftStore, type AssetStudioDraftEntry, type CreateAttempt,
   type StudioFailure, type StudioRetry } from '../../store/assetStudioDraftStore';
 import { BOARD_FIELD_KEYS, sameValue, type MoodboardOp } from '../../lib/moodboardEdits';
-import { isOpShape } from './boardAdds';
+import { isOpShape, keepWaitingWhile } from './boardAdds';
 
 /**
  * An unsaved board's draft, kept in this tab's session storage so a reload
@@ -418,6 +418,9 @@ export function keptEditsWaiting(): KeptEdit[] {
 export function keptEditBoards(): Set<string> {
   return new Set([...readEdits().map((it) => it.board), ...[...writtenEdits.values()].map((it) => it.board)]);
 }
+
+// A board's waiting send (boardAdds.ts) lives as long as its kept edit (round 6m, GM r53 Q2).
+keepWaitingWhile((board) => keptEditBoards().has(board));
 
 /** Forget the kept edit for `board` an earlier page load left (its board is gone for good, and the person has been told). */
 export function dropKeptEdit(board: string): void {
