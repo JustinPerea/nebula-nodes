@@ -5475,6 +5475,7 @@ async def _show_agent(
     did: dict[str, Any] | None = None,
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
+    person_say: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5490,7 +5491,9 @@ async def _show_agent(
 
     ``shows`` is what the edit really was on the person's tabs (``type`` for
     a param edit, ``run``, ``propose``, ``error``); ``action`` stays the
-    value agents read in the snapshot and on /ws, as before.
+    value agents read in the snapshot and on /ws, as before. ``person_say``
+    is the same for the words: the person's tabs (the bubble, the Agent log
+    and a reload's replay) show it, and agents read ``say`` as before.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -5509,6 +5512,10 @@ async def _show_agent(
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         person = _person_form(event, identity, headers, shown=shows)
+        if person is not None and person is not event and person_say:
+            # In place: the slot keeps this dict for the replay.
+            person["say"] = clean_say(person_say)
+            person.pop("log", None)
         await _broadcast_presence(event, person)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -13859,6 +13866,23 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     return {"status": "updated", "count": len(normalized)}
 
 
+def _edit_say(parts: list[tuple[Any, ...]]) -> str:
+    """An edit's counts as person copy: each with what it counts, in the
+    singular or plural, one verb per run ("Added 2 nodes and 1 connection,
+    moved 1 node"). Parts are (verb, count, noun[, after the noun])."""
+    said: list[tuple[str, list[str]]] = []
+    for verb, count, noun, *after in parts:
+        if not count:
+            continue
+        phrase = f"{count} {noun}{'' if count == 1 else 's'}{after[0] if after else ''}"
+        if said and said[-1][0] == verb:
+            said[-1][1].append(phrase)
+        else:
+            said.append((verb, [phrase]))
+    text = ", ".join(f"{verb} {' and '.join(phrases)}" for verb, phrases in said) or "no change"
+    return text[:1].upper() + text[1:]
+
+
 async def _carry_cursors() -> None:
     """The session cursors on nodes a graph sync moved (a drag, an arrange,
     `nebula move`, an apply or edit_canvas move, an undo or redo): one
@@ -14607,6 +14631,15 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         f"made {len(made_ready)} ready" if made_ready else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
+    # The person's copy of it, on the agent's cursor and in the Agent log:
+    # what each count is of ("Moved 1 node"). Agents keep reading `summary`.
+    said = _edit_say([
+        ("added", len(added), "node"), ("added", len(edge_ids), "connection"),
+        ("changed", len(changed), "node"), ("renamed", len(renamed), "node"),
+        ("moved", len(moves), "node"), ("removed", len(removed), "node"),
+        ("removed", len(spec.unwire), "connection"),
+        ("made", len(made_pending), "placeholder"), ("made", len(made_ready), "node", " ready"),
+    ])
     if made_pending:
         _schedule_pending_expiry()
     publish_action(f"{identity.name} edited the canvas: {summary}")
@@ -14617,6 +14650,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # A param value change is typing, as through PUT (GM - Design, PR
         # #211 r2): the person's tabs show `type`; agents still read `click`.
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          person_say=None if note else said,
                           shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)

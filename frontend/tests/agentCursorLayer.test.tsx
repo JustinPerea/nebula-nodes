@@ -47,7 +47,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   useStoreApi: () => pane.api,
 }));
 
-import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
+import { AgentCursorLayer, CARRY_PREVIEW_HOLD_MS } from '../src/components/canvas/AgentCursorLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, cursorsMeet, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
 
@@ -910,7 +910,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     expect(where().aaaaaaaaaaaa).toEqual({ x: 320, y: 300 });
   });
 
-  it('a node dragged slowly under a landed cursor: the tab keeps both places until the backend\'s arrival, then the carried one steps aside (review 2, L2; r24 Q2)', () => {
+  it('a node dragged slowly under a landed cursor: the carried one is drawn after it at once, and the backend\'s arrival moves nothing (review 2, L2; r47 Q1)', () => {
     render(<AgentCursorLayer />);
     const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, since: 1000 };
     const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, since: 2000 };
@@ -930,13 +930,14 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     }
     flush();
     const spots = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    // The tab never decides a carry is an arrival: A keeps its earlier
-    // arrival, and heads the column it was carried into.
-    expect(spots().aaaaaaaaaaaa).toEqual({ x: 800, y: 344 });
-    expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 + S });
-    // The drop's write reaches the backend: A's target chain changed, so it
-    // arrives now, in every tab (agentPresenceArrival). B, there before it,
-    // takes the spot back, and A steps aside.
+    // A's target chain changed: the tab previews the arrival the backend
+    // will count, so B keeps the spot and A is drawn under it (r47 Q1).
+    // (On the way, while A's arrow meets B's label but their targets are
+    // still over 16 apart, the column joins in this tab only, A first: an
+    // overlap join is no arrival, r24 Q2.)
+    expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
+    expect(spots().aaaaaaaaaaaa).toEqual({ x: 800, y: 344 + S });
+    // The backend's arrival agrees: nothing moves.
     act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'aaaaaaaaaaaa', ordinal: 1, since: 3000 }]); });
     flush();
     expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
@@ -2851,31 +2852,136 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   };
 
-  it('a cursor carried by its node onto a column keeps its place in this tab until the backend\'s arrival, then comes after the column (r24 Q2)', () => {
-    render(<AgentCursorLayer />);
-    send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
-    flush();
+  // GM r47 Q1: while a node is dragged, the tab previews a carry the
+  // backend will count (the target chain changes): the carried cursor is
+  // drawn last in the column it passes. Display only; the backend's arrival
+  // governs at the drop.
+  const dragHeld = (id: string, to: { x: number; y: number }, steps = 10) => {
+    const node = lookupRef.current.get(id) as Entry;
+    const from = node.internals.positionAbsolute;
+    for (let i = 1; i <= steps; i += 1) {
+      const next = new Map(lookupRef.current) as Map<string, Entry>;
+      next.set(id, { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: {
+        x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps } } });
+      lookupRef.current = next as never;
+      notifyStore();
+      frame();
+    }
+  };
+  const drop = (id: string) => {
+    const next = new Map(lookupRef.current) as Map<string, Entry>;
+    next.set(id, { ...(next.get(id) as Entry), dragging: false });
+    lookupRef.current = next as never;
+    notifyStore();
+    frame();
+  };
+  const settle = (ms: number) => { for (let t = 0; t < ms; t += 1000 / 60) frame(); };
+  const intoColumn = (carried: [string, number][] = [['a', 500]]) => {
+    for (const [k, since] of carried) {
+      send(event({ ...session(k, k === 'a' ? 3 : 4), target: { nodeId: 'n2' }, since }));
+      flush();
+    }
     for (const [k, o] of [['d', 1], ['e', 2]] as const) {
       send(event({ ...session(k, o), target: { x: 500, y: 344 }, since: 1000 * o }));
       flush();
     }
-    dragNode('n2', { x: 400, y: 300 });
-    flush();
-    // A pan wakes every cursor, so each is drawn at its place in the column
-    // as this tab now orders it, not where the drop left it.
-    pane.transform = [5, 0, 1];
-    notifyStore();
-    flush();
-    pane.transform = [0, 0, 1];
-    notifyStore();
-    flush();
-    // No arrival of the tab's own: a still holds its backend arrival (500),
-    // the earliest, so it heads the column it was carried into.
-    expect(where()).toEqual({ a: { x: 500, y: 344 }, d: { x: 500, y: 344 + S }, e: { x: 500, y: 344 + 2 * S } });
-    // The backend saw its target chain change: a arrives now, in every tab.
-    act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 3, since: 9000 }]); });
-    flush();
-    expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+  };
+  const arrive = (k: string, ordinal: number, since: number) => act(() => {
+    useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: k.repeat(12), ordinal, since }]);
+  });
+
+  it('a drag into a column draws the carry last while it passes, and nothing moves at the drop when the backend agrees (r47 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      expect(where()).toEqual({ a: { x: 1000, y: 344 }, d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S } });
+      dragHeld('n2', { x: 400, y: 300 });
+      // Held still over the column, longer than the preview's hold: the
+      // drag keeps it.
+      settle(CARRY_PREVIEW_HOLD_MS + 1000);
+      // Mid-drag: a arrived first (500), but its chain changed, so it is
+      // drawn last; the column's members never move for it.
+      const last = { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } };
+      expect(where()).toEqual(last);
+      // The drop, then the backend's arrival a moment later: nothing moves.
+      drop('n2');
+      for (let i = 0; i < 6; i += 1) { frame(); expect(where()).toEqual(last); }
+      arrive('a', 3, 9000);
+      for (let i = 0; i < 150; i += 1) { frame(); expect(where()).toEqual(last); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a drag back out of the column puts the carried cursor back in its old slot (r47 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(800);
+      expect(where().a).toEqual({ x: 500, y: 344 + 2 * S });
+      dragHeld('n2', { x: 900, y: 300 });
+      settle(800);
+      const home = { a: { x: 1000, y: 344 }, d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S } };
+      expect(where()).toEqual(home);
+      // Dropped where it started: no arrival comes, and nothing moves.
+      drop('n2');
+      settle(2500);
+      expect(where()).toEqual(home);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a backend that disagrees at the drop wins: the carried cursor glides back to its place on the layout spring (r47 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(800);
+      drop('n2');
+      // No arrival comes (forced: the backend counted no carry).
+      settle(CARRY_PREVIEW_HOLD_MS - 200);
+      expect(where().a).toEqual({ x: 500, y: 344 + 2 * S });
+      const path: number[] = [];
+      for (let i = 0; i < 200; i += 1) { frame(); path.push(where().a.y); }
+      // a is the earliest arrival again: it heads the column, d and e under it.
+      expect(where()).toEqual({ a: { x: 500, y: 344 }, d: { x: 500, y: 344 + S }, e: { x: 500, y: 344 + 2 * S } });
+      // A glide, not a jump: many frames between, none over 20 px.
+      expect(path.filter((y) => y > 345 && y < 344 + 2 * S - 1).length).toBeGreaterThan(8);
+      for (let i = 1; i < path.length; i += 1) expect(Math.abs(path[i] - path[i - 1])).toBeLessThan(20);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two cursors on one dragged node keep their order between themselves in the preview and after (rule 101, r47 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      // b arrived first, a second: their keys sort the other way, so only
+      // their arrivals keep this order.
+      send(event({ ...session('b', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('a', 4), target: { nodeId: 'n2' }, since: 600 }));
+      flush();
+      send(event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000 }));
+      flush();
+      expect(where()).toEqual({ b: { x: 1000, y: 344 }, a: { x: 1000, y: 344 + S }, d: { x: 500, y: 344 } });
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(800);
+      const order = { d: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } };
+      expect(where()).toEqual(order);
+      drop('n2');
+      arrive('b', 3, 9000);
+      arrive('a', 4, 9001);
+      for (let i = 0; i < 120; i += 1) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a carry with no backend arrival is no arrival: the cursor keeps its place (r24 Q2)', () => {

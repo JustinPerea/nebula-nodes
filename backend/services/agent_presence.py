@@ -352,6 +352,14 @@ ARRIVAL_RADIUS = 16.0
 NODE_POINT_DOWN = 44.0
 
 
+def _header_point(x: float, y: float, width: float, height: float) -> tuple[float, float]:
+    """Where a cursor aimed at a node (no handle) points, as the tab draws it
+    (agentCursorMotion.nodeHeaderPoint): across its middle, NODE_POINT_DOWN
+    into its header, or half its height. The shared fixture
+    tests/fixtures/cursor_chains.json holds both to it."""
+    return x + width / 2, y + min(NODE_POINT_DOWN, height / 2)
+
+
 def _target_chains(points: Mapping[str, tuple[float, float]]) -> dict[str, frozenset[str]]:
     """Each cursor's target chain: the other cursors linked to it through
     targets ARRIVAL_RADIUS apart or less, one link after another."""
@@ -639,7 +647,7 @@ class AgentPresence:
         seen = ((self._view or {}).get("nodes") or {}).get(node_id) or {}
         width = float(seen.get("width") or 0.0)
         height = float(seen.get("height") or 0.0)
-        return box["x"] + width / 2, box["y"] + min(NODE_POINT_DOWN, height / 2)
+        return _header_point(box["x"], box["y"], width, height)
 
     def carry_nodes(self, positions: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, Any]]:
         """Every graph sync (main._carry_cursors, whatever moved the nodes:

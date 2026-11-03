@@ -38,6 +38,8 @@ import {
   cursorsMeet,
   sayPillBox,
   stackStepPx,
+  targetChains,
+  sameChain,
   inkFor,
   labelWidths,
   labelLayout,
@@ -156,6 +158,17 @@ class CursorField {
    *  not the column's head, so a head leaving in the same moment can't
    *  release it (#211 review 9, NIT-2). */
   readonly exitingCounts = new Map<string, readonly string[]>();
+  /** Cursors a node move is carrying, each with its target before the
+   *  carry: while its target chain differs from the one it had there, it is
+   *  drawn last in the column it is passing (a preview, GM - Design, #219
+   *  r47 Q1). Display only: the backend's arrival (agentPresenceArrival)
+   *  governs, and ends it; with no arrival CARRY_PREVIEW_HOLD_MS after the
+   *  drop, the backend disagreed, and the cursor glides back. */
+  readonly carriedFrom = new Map<string, Point>();
+  /** Nodes the person is dragging now (React Flow's `dragging`). */
+  private readonly draggedNodes = new Set<string>();
+  private lastCarryAt = 0;
+  private carryTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Whether a count cursor on its way out still holds the slot this one
    *  (a member it stood for) would take. */
@@ -189,11 +202,22 @@ class CursorField {
 
   /** A cursor's resolved target, its node and event, and where that node
    *  is now (`nodeAt`, its drawn position), read this frame. */
-  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false): void {
+  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false, dragging = false): void {
     this.purge();
+    if (node !== null) {
+      if (dragging) this.draggedNodes.add(node);
+      else if (this.draggedNodes.delete(node)) {
+        // The drop: the backend's arrival follows its write, so the wait
+        // for it starts here.
+        this.lastCarryAt = performance.now();
+        this.settleCarries();
+      }
+    }
     let before = this.targets.get(key);
     let changed = false;
     if (before && (before.rank !== rank || before.known !== known)) {
+      // The backend's word on a carry, if one was previewed: it governs now.
+      this.carriedFrom.delete(key);
       // The backend's arrival moved (it went somewhere new, or a node move
       // changed its target chain: agentPresenceArrival): its place in the
       // column follows it, in every tab alike.
@@ -207,7 +231,11 @@ class CursorField {
         this.targets.set(key, { ...before, node, seq, nodeAt });
       }
     } else {
-      this.place(key, before, target, zoom, node, seq, rank, known);
+      // Carried only when its node itself moved: a node measured or resized
+      // (after a reload, the graph measures its nodes after the replay)
+      // moves the point on it, and that is no carry (live r4i).
+      const moved = Boolean(before?.nodeAt && nodeAt && !samePoint(before.nodeAt, nodeAt));
+      this.place(key, before, target, zoom, node, seq, rank, known, moved);
       this.targets.set(key, { ...this.targets.get(key)!, nodeAt });
       changed = true;
     }
@@ -222,7 +250,7 @@ class CursorField {
         const dx = nodeAt.x - o.nodeAt.x;
         const dy = nodeAt.y - o.nodeAt.y;
         if (dx === 0 && dy === 0) continue;
-        this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq, o.rank);
+        this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq, o.rank, o.known, true);
         this.targets.set(other, { ...this.targets.get(other)!, nodeAt });
         changed = true;
       }
@@ -230,7 +258,7 @@ class CursorField {
     if (changed) for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
-  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, known = before?.known ?? false): void {
+  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, known = before?.known ?? false, moved = false): void {
     this.version += 1;
     const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
     if (before && node !== null && before.node === node && before.seq === seq) {
@@ -245,8 +273,15 @@ class CursorField {
       const dx = target.x - before.target.x;
       const dy = target.y - before.target.y;
       this.targets.set(key, { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
+      if (moved) {
+        if (!this.carriedFrom.has(key)) this.carriedFrom.set(key, { ...before.target });
+        this.lastCarryAt = performance.now();
+        this.settleCarries();
+      }
       return;
     }
+    // An event of its own: no carry to preview.
+    this.carriedFrom.delete(key);
     // Its target moved by an event of its own, not carried: the cursors
     // stacked under it glide to their new spots (review 7, MEDIUM-1).
     this.revs.set(key, (this.revs.get(key) ?? 0) + 1);
@@ -297,10 +332,13 @@ class CursorField {
       // Cursors still on their way come after every landed one, the one due
       // to land soonest first.
       const order = new Map(due.map((d, i) => [d.k, i]));
+      // A carry the backend would count as an arrival: last in its column
+      // for now, in its own order among the cursors one node carries (r47).
+      const preview = this.previewed();
       const entries = [...this.targets].map(([k, v]) => ({
         key: k,
         target: v.target,
-        since: v.since !== Infinity ? v.since : UNLANDED + order.get(k)!,
+        since: v.since !== Infinity ? (preview.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
         // A backend arrival never ties (it strictly increases), and when
         // two did, the key breaks it in every tab alike; this tab's landing
         // order only for events with no backend arrival (review 9, LOW-2).
@@ -505,7 +543,41 @@ class CursorField {
     this.released.clear();
   }
 
+  /** Ends the carry previews no drag holds any more, CARRY_PREVIEW_HOLD_MS
+   *  after the last carry: by then the backend's arrival has come for every
+   *  carry it counts (it follows the drop's graph sync), so one still
+   *  previewed is one it didn't, and its cursor glides back to its place. */
+  private settleCarries(): void {
+    if (this.carryTimer !== null) clearTimeout(this.carryTimer);
+    this.carryTimer = null;
+    if (this.carriedFrom.size === 0) return;
+    const wait = this.lastCarryAt + CARRY_PREVIEW_HOLD_MS - performance.now();
+    const held = [...this.carriedFrom.keys()].some((k) => {
+      const node = this.targets.get(k)?.node;
+      return node != null && this.draggedNodes.has(node);
+    });
+    if (held || wait > 0) {
+      this.carryTimer = setTimeout(() => this.settleCarries(), Math.max(wait, 50));
+      return;
+    }
+    this.carriedFrom.clear();
+    this.version += 1;
+    this.wakeAll();
+  }
+
+  /** The carried cursors whose target chain differs from the one they had
+   *  before the carry: the backend would count each as arriving now. */
+  private previewed(): Set<string> {
+    if (this.carriedFrom.size === 0) return new Set();
+    const now = new Map([...this.targets].map(([k, v]) => [k, v.target]));
+    const was = new Map([...this.targets].map(([k, v]) => [k, this.carriedFrom.get(k) ?? v.target]));
+    const before = targetChains(was);
+    const after = targetChains(now);
+    return new Set([...this.carriedFrom.keys()].filter((k) => this.targets.has(k) && !sameChain(before.get(k), after.get(k))));
+  }
+
   forget(key: string): void {
+    this.carriedFrom.delete(key);
     this.targets.delete(key);
     this.pendingSay.delete(key);
     this.motions.delete(key);
@@ -530,6 +602,12 @@ const SAY_WAIT_MAX_MS = 600;
 /** De-stacking order for cursors still on their way: after every landed one. */
 // Past any backend arrival (wall-clock ms).
 const UNLANDED = 1e15;
+/** A previewed carry's place: after every landed cursor, before any still
+ *  on its way (r47 Q1). */
+const CARRY_PREVIEW = 1e14;
+/** How long a carry's preview waits after the drop for the backend's
+ *  arrival before it lets go (r47 Q1). */
+export const CARRY_PREVIEW_HOLD_MS = 1500;
 
 function overlaps(rect: DOMRect, x: number, y: number): boolean {
   return rect.width > 0 && x >= rect.left - HOVER_SLOP_PX && x <= rect.right + HOVER_SLOP_PX
@@ -1013,7 +1091,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const nodeAt = nodeId !== null
         ? (lookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined)?.internals?.positionAbsolute ?? null
         : null;
-      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current);
+      const nodeDragged = nodeId !== null && Boolean((lookup.get(nodeId) as { dragging?: boolean } | undefined)?.dragging);
+      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it

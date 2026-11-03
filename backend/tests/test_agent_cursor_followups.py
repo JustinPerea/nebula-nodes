@@ -344,3 +344,55 @@ def test_each_person_form_has_its_own_id_the_replay_keeps_it_and_agents_never_se
         assert "eventId" not in json.loads(text)
     # Two boots never share an id.
     assert AgentPresence(Clock())._event_id() != AgentPresence(Clock())._event_id()
+
+
+# -- #219 r47 copy: an apply's say on the person's tabs ------------------------
+
+def test_an_edits_say_names_what_each_count_is_of():
+    from main import _edit_say
+
+    assert _edit_say([("moved", 1, "node")]) == "Moved 1 node"
+    assert _edit_say([("moved", 3, "node")]) == "Moved 3 nodes"
+    assert _edit_say([("added", 2, "node"), ("added", 1, "connection"), ("moved", 1, "node"),
+                      ("removed", 0, "node"), ("removed", 2, "connection")]) == \
+        "Added 2 nodes and 1 connection, moved 1 node, removed 2 connections"
+    assert _edit_say([("made", 1, "placeholder"), ("made", 2, "node", " ready")]) == "Made 1 placeholder and 2 nodes ready"
+    assert _edit_say([("moved", 0, "node")]) == "No change"
+
+
+def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(sockets):
+    """GM r47's copy check: the bubble after an agent's apply is Nebula's
+    own words, so the person's tabs (and a reload) get person copy. Agents
+    still read the apply's summary, word for word."""
+    api = sockets
+    n1 = api.graph.add_node("text-input", {"value": "hi"})
+    api.person_socket.sent.clear()
+    api.listener.sent.clear()
+    reply = api.client.post("/api/graph/apply", headers=CLAUDE, json={"move": {n1: {"x": 300, "y": 40}}})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["summary"] == "moved 1"
+    (person,) = [json.loads(t) for t in _presence_frames(api.person_socket)]
+    (agent,) = [json.loads(t) for t in _presence_frames(api.listener)]
+    assert person["say"] == "Moved 1 node" and "log" not in person
+    assert agent["say"] == "moved 1"
+    (replayed,) = api.main.agent_presence.replay()
+    assert replayed["say"] == "Moved 1 node"
+
+
+def test_the_shared_chain_fixture_backend_side():
+    """GM r47: one chain definition. The same cases run through the tab's
+    targetChains (frontend/tests/agentCursorLook.test.ts)."""
+    from pathlib import Path
+
+    from services.agent_presence import _header_point, _target_chains
+
+    cases = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["cases"]
+    assert len(cases) >= 8
+    for case in cases:
+        points = {}
+        for key, target in case["targets"].items():
+            node = target.get("node")
+            points[key] = (_header_point(node["x"], node["y"], node["width"], node["height"]) if node
+                           else (float(target["x"]), float(target["y"])))
+        chains = {key: sorted(chain) for key, chain in _target_chains(points).items()}
+        assert chains == case["chains"], case["name"]

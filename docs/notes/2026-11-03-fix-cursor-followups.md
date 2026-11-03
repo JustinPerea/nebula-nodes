@@ -98,9 +98,53 @@ however far it goes.
     rank.
   - Joins (16 screen px, arrow and label overlaps) stay the tab's. The chain
     decides arrival only.
-  - One visible effect: during a drag, the backend hears of the move only at
-    the drop. Until then a carried cursor that arrived first heads the column
-    it is dragged into. It steps aside when the arrival comes.
+  - The tab previews a carry instead (round 3, below).
+
+## 2b. The carry preview (round 3, GM - Design r47 Q1)
+
+While a node moves, the tab runs the same chain test on the live positions.
+That means the person's drag, or any carry it sees.
+
+- **The preview.** A carried cursor whose chain would change is drawn last in
+  the column it is passing: a display-only place after every landed cursor,
+  plus its own `since`. So two cursors on one node keep their order (rule
+  101). When the chain is back to the one it had (dragged back), the cursor
+  is back in its old slot.
+  - `CursorField.carriedFrom` holds each carried cursor's target from before
+    the carry; `previewed()` compares the two chains in `layout()`.
+  - Only a real node move counts. A node measured or resized is no carry
+    (the r4i rule, back in `report`).
+- **The tab never writes or decides arrival.** At the drop, the backend's
+  `agentPresenceArrival` governs and ends the preview. When it agrees (the
+  usual case), nothing moves.
+  - With no arrival `CARRY_PREVIEW_HOLD_MS` (1.5 s) after the drop, the
+    backend disagreed. The preview ends, and the slot glides back on the
+    layout spring.
+- **One chain definition.** The tab's `targetChains` (agentCursorLook.ts) and
+  the backend's `_target_chains` both run the shared fixture
+  `backend/tests/fixtures/cursor_chains.json`. It covers exactly 16, 16.01, a
+  diagonal 16, transitive chains, a gap that splits a chain, the header
+  middle, a short node, and two cursors on one node. The node point is one
+  formula on each side: `nodeHeaderPoint`, used by `resolveAnchor`, and
+  `_header_point`.
+- **Other tabs.** There is no live drag stream: a tab sends node positions
+  only at the drop (PUT /api/graph/layout). Other tabs see the move in that
+  sync, so the preview runs only in the dragging tab.
+- **One band remains.** On the way in, the dragged cursor's arrow can meet a
+  member's label while their targets are still over 16 apart. In that band
+  the column joins in this tab only, with the earlier arrival first: an
+  overlap join is no arrival (r24 Q2). Once the targets come within 16, the
+  preview puts the carried cursor last.
+
+## 2c. Copy: an apply's say (r47)
+
+"moved 1" in round 2's shot was Nebula's own text: the apply's summary,
+shown on the agent's cursor. The person's tabs now get person copy, built by
+`main._edit_say`. Examples: "Moved 1 node", "Moved 3 nodes", "Added 2 nodes
+and 1 connection, moved 1 node". It goes in the person form only
+(`_show_agent(person_say=...)`), so it also reaches the Agent log and the
+replay. Agents still read the summary ("moved 1") word for word, in the reply,
+in `publish_action` and in the agent form's `say`.
 
 ## 3. Low findings
 

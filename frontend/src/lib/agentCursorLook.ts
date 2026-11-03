@@ -383,6 +383,50 @@ export interface StackSpot {
   collapsedInto?: string;
 }
 
+/**
+ * Each cursor's target chain: the other cursors linked to it through
+ * targets AGENT_CURSOR_STACK.radiusPx apart or less, one link after another,
+ * from targets alone, in canvas units at zoom 1 (GM - Design, #219 r24 Q2).
+ * The backend's own (agent_presence._target_chains) decides when a carry is
+ * an arrival; this one only previews it while a node is dragged (r47 Q1).
+ * Both run the shared fixture (backend/tests/fixtures/cursor_chains.json),
+ * so they can't drift. It decides no join: joins are deStackLayout's.
+ */
+export function targetChains(points: ReadonlyMap<string, Point>): Map<string, ReadonlySet<string>> {
+  const keys = [...points.keys()];
+  const parent = new Map(keys.map((k) => [k, k]));
+  const find = (k: string): string => {
+    while (parent.get(k) !== k) {
+      const up = parent.get(parent.get(k)!)!;
+      parent.set(k, up);
+      k = up;
+    }
+    return k;
+  };
+  for (let i = 0; i < keys.length; i += 1) {
+    const a = points.get(keys[i])!;
+    for (let j = i + 1; j < keys.length; j += 1) {
+      const b = points.get(keys[j])!;
+      if (Math.hypot(a.x - b.x, a.y - b.y) <= AGENT_CURSOR_STACK.radiusPx + 1e-9) parent.set(find(keys[i]), find(keys[j]));
+    }
+  }
+  const groups = new Map<string, string[]>();
+  for (const k of keys) {
+    const r = find(k);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r)!.push(k);
+  }
+  return new Map(keys.map((k) => [k, new Set(groups.get(find(k))!.filter((o) => o !== k))]));
+}
+
+/** Whether two chains hold the same cursors. */
+export function sameChain(a: ReadonlySet<string> | undefined, b: ReadonlySet<string> | undefined): boolean {
+  if (!a || !b) return a === b;
+  if (a.size !== b.size) return false;
+  for (const k of a) if (!b.has(k)) return false;
+  return true;
+}
+
 /** A column draws at most this many cursors: from the next member on, the
  *  last slot is one count cursor ("2 more") for all of them (r17 item 1). */
 export const AGENT_CURSOR_COLUMN_DRAWN = 3;

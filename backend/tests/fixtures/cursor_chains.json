@@ -1,0 +1,29 @@
+{
+  "about": "Target chains (GM - Design, #219 r24 Q2 and r47 Q1): the same cases run through backend services/agent_presence._target_chains (tests/test_agent_cursor_followups.py) and the tab's targetChains (frontend/tests/agentCursorLook.test.ts), so the two can't drift. A target is a point {x, y} or a node box {node: {x, y, width, height}}, which points at its header middle. chains lists each cursor's linked cursors, sorted.",
+  "cases": [
+    {"name": "exactly 16 apart links",
+     "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 16, "y": 0}},
+     "chains": {"a": ["b"], "b": ["a"]}},
+    {"name": "16.01 apart does not",
+     "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 16.01, "y": 0}},
+     "chains": {"a": [], "b": []}},
+    {"name": "16 on a diagonal links (3-4-5 scaled)",
+     "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 9.6, "y": 12.8}},
+     "chains": {"a": ["b"], "b": ["a"]}},
+    {"name": "transitive: a-b and b-c link a and c, 30 apart",
+     "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 15, "y": 0}, "c": {"x": 30, "y": 0}, "d": {"x": 47, "y": 0}},
+     "chains": {"a": ["b", "c"], "b": ["a", "c"], "c": ["a", "b"], "d": []}},
+    {"name": "a long chain, and a gap of 16.01 splits it",
+     "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 0, "y": 16}, "c": {"x": 0, "y": 32}, "d": {"x": 0, "y": 48.01}},
+     "chains": {"a": ["b", "c"], "b": ["a", "c"], "c": ["a", "b"], "d": []}},
+    {"name": "the header middle: a 200x120 node at (100, 50) points at (200, 94)",
+     "targets": {"n": {"node": {"x": 100, "y": 50, "width": 200, "height": 120}}, "p": {"x": 200, "y": 110}, "q": {"x": 216.01, "y": 94}},
+     "chains": {"n": ["p"], "p": ["n"], "q": []}},
+    {"name": "a short node points half its height down",
+     "targets": {"n": {"node": {"x": 0, "y": 0, "width": 100, "height": 40}}, "p": {"x": 50, "y": 36}},
+     "chains": {"n": ["p"], "p": ["n"]}},
+    {"name": "two cursors on one node always link",
+     "targets": {"a": {"node": {"x": 0, "y": 0, "width": 280, "height": 180}}, "b": {"node": {"x": 0, "y": 0, "width": 280, "height": 180}}, "c": {"x": 140, "y": 61}},
+     "chains": {"a": ["b"], "b": ["a"], "c": []}}
+  ]
+}

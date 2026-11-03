@@ -38,8 +38,11 @@ import {
   sayPillBox,
   targetsMeet,
   pillEdge,
+  targetChains,
+  sameChain,
   type StackSpot,
 } from '../src/lib/agentCursorLook';
+import { nodeHeaderPoint } from '../src/lib/agentCursorMotion';
 
 /** GM - Design's agent cursor spec, §1 (the name's ink) and §4 (names, say, several agents). */
 
@@ -1182,5 +1185,28 @@ describe('the name pill edge (GM - Design, PR #211 r9 item 4)', () => {
       ".agent-cursor[data-edge='both'] .agent-cursor__name",
       "body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor__name",
     ]);
+  });
+});
+
+describe('the target chain (GM - Design, #219 r24 Q2, r47 Q1)', () => {
+  it('runs the shared fixture the backend runs too, with the same chains', () => {
+    type T = { x: number; y: number } | { node: { x: number; y: number; width: number; height: number } };
+    const fixture = JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/fixtures/cursor_chains.json'), 'utf8')) as {
+      cases: { name: string; targets: Record<string, T>; chains: Record<string, string[]> }[];
+    };
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(8);
+    for (const c of fixture.cases) {
+      const points = new Map(Object.entries(c.targets).map(([k, t]) => [k,
+        'node' in t ? nodeHeaderPoint(t.node.x, t.node.y, t.node.width, t.node.height) : { x: t.x, y: t.y }]));
+      const chains = Object.fromEntries([...targetChains(points)].map(([k, v]) => [k, [...v].sort()]));
+      expect(chains, c.name).toEqual(c.chains);
+    }
+  });
+
+  it('tells chains apart by who is in them', () => {
+    expect(sameChain(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(true);
+    expect(sameChain(new Set(['a']), new Set(['a', 'b']))).toBe(false);
+    expect(sameChain(new Set(['a', 'c']), new Set(['a', 'b']))).toBe(false);
+    expect(sameChain(new Set(), new Set())).toBe(true);
   });
 });
