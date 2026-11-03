@@ -13,7 +13,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pin } from '../src/lib/wsClient';
 
 const flow = vi.hoisted(() => ({ state: { transform: [0, 0, 1] as [number, number, number], nodeLookup: new Map<string, unknown>() } }));
@@ -25,7 +25,9 @@ vi.mock('@xyflow/react', () => ({
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
 
 const { LEAVE_SLACK_MS, STALL_FADE_MS, STALL_LIMIT_MS, useLeave } = await import('../src/lib/noticeLeave');
-const { keptNoteDisplay, pinDisplayText } = await import('../src/lib/canvasPins');
+const { keptNoteDisplay, pinDisplayText, pinTextReady } = await import('../src/lib/canvasPins');
+// The text rules read the lazy Unicode data: check them with it in, never in a race with its import.
+beforeAll(() => pinTextReady);
 const { PinLayer } = await import('../src/components/canvas/PinLayer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 

@@ -3,14 +3,16 @@
 // the backend's services/canvas_pins.text_length (its test,
 // backend/tests/test_pin_text_as_typed.py, has the same cases), so the dialog's
 // limit and the backend's refusal never disagree.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pin } from '../src/lib/wsClient';
 
 const api = vi.hoisted(() => ({ fetchPins: vi.fn(), createPin: vi.fn(), deletePin: vi.fn() }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
 vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api }));
 
-const { fitNote, noteLength, textLength, MAX_PIN_TEXT } = await import('../src/lib/canvasPins');
+const { fitNote, noteLength, textLength, MAX_PIN_TEXT, pinTextReady } = await import('../src/lib/canvasPins');
+// The text rules read the lazy Unicode data: check them with it in, never in a race with its import.
+beforeAll(() => pinTextReady);
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const FLAG = '\u{1F1EB}\u{1F1F7}';
