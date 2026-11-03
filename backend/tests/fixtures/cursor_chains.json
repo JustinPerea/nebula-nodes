@@ -1,5 +1,5 @@
 {
-  "about": "Target chains (GM - Design, #219 r24 Q2 and r47 Q1): the same cases run through backend services/agent_presence._target_chains (tests/test_agent_cursor_followups.py) and the tab's targetChains (frontend/tests/agentCursorLook.test.ts), so the two can't drift. A target is a point {x, y} or a node box {node: {x, y, width, height}}, which points at its header middle. chains lists each cursor's linked cursors, sorted.",
+  "about": "Target chains (GM - Design, #219 r24 Q2, r47 Q1 and r62): the same cases run through the backend's AgentPresence._target_point and _target_chains (tests/test_agent_cursor_followups.py) and the tab's chainPoint and targetChains (frontend/tests/agentCursorLook.test.ts), so the two can't drift. A target is a point {x, y}, a node box {node: {x, y, width, height}}, which points at its header middle, or a port on one {node, handle, port: {x, y, width, height}} (port bounds relative to the node): the tab draws it on the port, and it counts as its node's header middle for the chain on both sides. zoom, when given, is the view's zoom: the chain is in canvas units at any zoom, so it changes no chain, and the tab's column insert compares in the same canvas units (r62). chains lists each cursor's linked cursors, sorted.",
   "cases": [
     {"name": "exactly 16 apart links",
      "targets": {"a": {"x": 0, "y": 0}, "b": {"x": 16, "y": 0}},
@@ -24,6 +24,18 @@
      "chains": {"n": ["p"], "p": ["n"]}},
     {"name": "two cursors on one node always link",
      "targets": {"a": {"node": {"x": 0, "y": 0, "width": 280, "height": 180}}, "b": {"node": {"x": 0, "y": 0, "width": 280, "height": 180}}, "c": {"x": 140, "y": 61}},
-     "chains": {"a": ["b"], "b": ["a"], "c": []}}
+     "chains": {"a": ["b"], "b": ["a"], "c": []}},
+    {"name": "a port counts as its node's header middle, not where it is drawn (r62)",
+     "targets": {"h": {"node": {"x": 0, "y": 0, "width": 280, "height": 180}, "handle": "text", "port": {"x": 225, "y": 150, "width": 16, "height": 16}},
+                 "p": {"x": 140, "y": 56}, "q": {"x": 233, "y": 160}},
+     "chains": {"h": ["p"], "p": ["h"], "q": []}},
+    {"name": "zoom 2: 12 canvas units apart (24 screen px) still link",
+     "zoom": 2,
+     "targets": {"a": {"x": 0, "y": 12}, "b": {"x": 0, "y": 0}},
+     "chains": {"a": ["b"], "b": ["a"]}},
+    {"name": "zoom 0.5: 20 canvas units apart (10 screen px) do not",
+     "zoom": 0.5,
+     "targets": {"a": {"x": 0, "y": 20}, "b": {"x": 0, "y": 0}},
+     "chains": {"a": [], "b": []}}
   ]
 }

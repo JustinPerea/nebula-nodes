@@ -90,10 +90,10 @@ export interface AgentPresenceEvent {
   eventId?: string;
 }
 
-/** Person tabs only: node moves carried these session cursors past their
- *  arrival radius, so they arrive now (backend agent_presence.carry_nodes,
- *  GM - Design #211 follow-up r23 item 2). Every tab, and a reload, stack
- *  them by these. */
+/** Person tabs only: a node move changed these session cursors' target
+ *  chains (the other cursors linked to each through targets 16 canvas units
+ *  apart), so they arrive now (backend agent_presence.carry_nodes, GM -
+ *  Design #219 r24 Q2). Every tab, and a reload, stack them by these. */
 export interface AgentPresenceArrivalEvent {
   type: 'agentPresenceArrival';
   cursors: { agentId: string; key: string; ordinal: number; since: number }[];

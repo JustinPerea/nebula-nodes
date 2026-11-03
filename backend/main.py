@@ -13897,8 +13897,13 @@ async def _carry_cursors() -> None:
     to compare. Person tabs only: no agent reads it. Decoration: it never
     fails the write that synced."""
     try:
-        positions = _display_positions(list(cli_graph.nodes.values()))
-        updates = agent_presence.carry_nodes(positions)
+        nodes = list(cli_graph.nodes.values())
+        positions = _display_positions(nodes)
+        # Nodes with no stored position keep their last box: their computed
+        # spot shifts with their siblings, and an open canvas doesn't move
+        # them for it (#219 review 2, LOW-3).
+        placed = {n["id"] for n in nodes if isinstance(n.get("position"), dict)}
+        updates = agent_presence.carry_nodes(positions, placed)
         if updates:
             await manager.broadcast_browser({"type": "agentPresenceArrival", "cursors": updates})
     except Exception:  # noqa: BLE001 - decoration must not break a graph sync

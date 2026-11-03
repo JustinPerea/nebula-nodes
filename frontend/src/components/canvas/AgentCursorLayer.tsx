@@ -9,7 +9,7 @@ import {
   type AgentCursor,
 } from '../../store/agentPresenceStore';
 import type { AgentCursorAction } from '../../lib/wsClient';
-import { resolveAnchor, type Point } from '../../lib/agentCursorMotion';
+import { chainPoint, resolveAnchor, type Point } from '../../lib/agentCursorMotion';
 import {
   AGENT_CURSOR_ENTRANCE_PX,
   AGENT_CURSOR_FADE_SPRING,
@@ -110,6 +110,11 @@ interface FieldEntry {
   sayW?: number;
   /** Where its node was drawn when `target` was read (null off a node). */
   nodeAt?: Point | null;
+  /** From `target` to the point it counts as for its target chain
+   *  (chainPoint): zero, except on a handle, which counts as its node's
+   *  header point, as the backend counts it (#219 r62). A carry moves the
+   *  node whole, so the offset holds through it. */
+  chainOff?: Point;
 }
 
 interface Label { say: boolean; nameW?: number; sayW?: number }
@@ -162,8 +167,9 @@ class CursorField {
    *  carry: while its target chain differs from the one it had there, it is
    *  laid out as the newest arrival (r24 insert) in the column it is passing
    *  (a preview, GM - Design, #219 r47 Q1). Not the literal bottom slot: the
-   *  insert puts it above a member aimed over 16 below its target, as the
-   *  backend does at the drop, so nothing moves there (r52). Display only: the backend's arrival (agentPresenceArrival)
+   *  insert puts it above a member aimed over 16 canvas units below its
+   *  target, as the backend does at the drop, so nothing moves there (r52,
+   *  r62). Display only: the backend's arrival (agentPresenceArrival)
    *  governs, and ends it; with no arrival CARRY_PREVIEW_HOLD_MS after the
    *  drop, the backend disagreed, and the cursor glides back. */
   readonly carriedFrom = new Map<string, Point>();
@@ -204,9 +210,10 @@ class CursorField {
 
   /** A cursor's resolved target, its node and event, and where that node
    *  is now (`nodeAt`, its drawn position), read this frame. */
-  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false, dragging = false): void {
+  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false, dragging = false, chain: Point = target): void {
     this.purge();
     let changed = false;
+    const chainOff = { x: chain.x - target.x, y: chain.y - target.y };
     if (node !== null) {
       if (dragging) {
         if (!this.draggedNodes.has(node)) {
@@ -216,7 +223,7 @@ class CursorField {
       } else if (this.draggedNodes.delete(node)) {
         // The drop: the backend's arrival follows its write, so the wait
         // for it starts here. An overlap join's preview ends now: the
-        // backend counts no arrival for it (r52 Q1).
+        // backend counts no arrival for it (r52 Q1, r62).
         this.version += 1;
         changed = true;
         this.lastCarryAt = performance.now();
@@ -236,8 +243,9 @@ class CursorField {
       changed = true;
     }
     if (before && before.target.x === target.x && before.target.y === target.y) {
-      if (before.node !== node || before.seq !== seq || !samePoint(before.nodeAt, nodeAt)) {
-        this.targets.set(key, { ...before, node, seq, nodeAt });
+      if (before.node !== node || before.seq !== seq || !samePoint(before.nodeAt, nodeAt) || !samePoint(before.chainOff, chainOff)) {
+        this.targets.set(key, { ...before, node, seq, nodeAt, chainOff });
+        if (!samePoint(before.chainOff, chainOff)) this.version += 1;
       }
     } else {
       // Carried only when its node itself moved: a node measured or resized
@@ -245,7 +253,7 @@ class CursorField {
       // moves the point on it, and that is no carry (live r4i).
       const moved = Boolean(before?.nodeAt && nodeAt && !samePoint(before.nodeAt, nodeAt));
       this.place(key, before, target, zoom, node, seq, rank, known, moved);
-      this.targets.set(key, { ...this.targets.get(key)!, nodeAt });
+      this.targets.set(key, { ...this.targets.get(key)!, nodeAt, chainOff });
       changed = true;
     }
     if (node !== null && nodeAt) {
@@ -345,11 +353,10 @@ class CursorField {
       // newest arrival (r24 insert) for now, in its own order among the
       // cursors one node carries (r47). Not the literal bottom slot (r52).
       const preview = this.previewed();
-      const entries = (later: ReadonlySet<string>, bottom: ReadonlySet<string> = new Set(), was = false) => [...this.targets].map(([k, v]) => ({
+      const entries = (later: ReadonlySet<string>, was = false) => [...this.targets].map(([k, v]) => ({
         key: k,
         target: was ? this.carriedFrom.get(k) ?? v.target : v.target,
-        since: v.since !== Infinity ? (later.has(k) || bottom.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
-        last: bottom.has(k) && v.since !== Infinity,
+        since: v.since !== Infinity ? (later.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
         // A backend arrival never ties (it strictly increases), and when
         // two did, the key breaks it in every tab alike; this tab's landing
         // order only for events with no backend arrival (review 9, LOW-2).
@@ -359,31 +366,34 @@ class CursorField {
         sayW: v.sayW,
       }));
       // During a live drag, a carried cursor that joins a column by overlap
-      // alone (arrow meets label, targets still over 16 apart) takes the
-      // column's literal bottom slot, the only case that does, so passing through that band on the way in never flips it from
-      // top to bottom. Display only, and it ends at the drop: the backend
-      // counts no arrival for it, so it glides once to its arrival-order
-      // slot (GM - Design, #219 r52 Q1).
+      // alone (arrow meets label, targets still over 16 apart) is laid out
+      // as the newest arrival too, the slot the r24 insert gives it: the
+      // bottom, unless a member aims more than 16 canvas units below its
+      // target, then above that member. So the overlap band and chain range
+      // agree, and a straight drag moves the carry's slot one way only
+      // (GM - Design, #219 r62; r52 Q1's "drawn last" meant this). Display
+      // only, and it ends at the drop: the backend counts no arrival for it,
+      // so its slot follows its arrival order, with one glide if that
+      // differs (r52 Q1's one accepted motion).
       const dragged = [...this.carriedFrom.keys()].filter((k) => {
         const node = this.targets.get(k)?.node;
         return !preview.has(k) && node != null && this.draggedNodes.has(node);
       });
-      if (dragged.length === 0) {
-        spots = deStackLayout(entries(preview), zoom);
-      } else {
-        // Read each one's column with it in the bottom slot, against its column
-        // before the carry: any new member is a join.
-        const probed = deStackLayout(entries(preview, new Set(dragged)), zoom);
-        const before = deStackLayout(entries(new Set(), new Set(), true), zoom);
-        const members = (spots: Map<string, StackSpot>, k: string) =>
-          [...spots].filter(([, s]) => s.column === spots.get(k)!.column).map(([o]) => o);
+      spots = deStackLayout(entries(preview), zoom);
+      if (dragged.length > 0) {
+        // Read each one's column where the carry has put it, at its own
+        // arrival, against its column before the carry: any new member is
+        // a join. Not read with it as the newest arrival: that slot moves
+        // it down the column, and could make the join it then previews.
+        const before = deStackLayout(entries(new Set(), true), zoom);
+        const members = (laid: Map<string, StackSpot>, k: string) =>
+          [...laid].filter(([, s]) => s.column === laid.get(k)!.column).map(([o]) => o);
+        const now = spots;
         const joined = dragged.filter((k) => {
           const had = new Set(members(before, k));
-          return members(probed, k).some((o) => !had.has(o));
+          return members(now, k).some((o) => !had.has(o));
         });
-        spots = joined.length === dragged.length
-          ? probed
-          : deStackLayout(entries(preview, new Set(joined)), zoom);
+        if (joined.length > 0) spots = deStackLayout(entries(new Set([...preview, ...joined])), zoom);
       }
     }
     // A cursor no longer folded opens out of its count cursor (hold).
@@ -580,6 +590,23 @@ class CursorField {
     this.released.clear();
   }
 
+  /** A node a drag holds is gone (deleted mid-drag): no drop will come for
+   *  it, so its drag ends here, as a drop does. Its carries' previews then
+   *  end CARRY_PREVIEW_HOLD_MS on unless the backend says otherwise, and the
+   *  wait's timer stops with them (#219 review 2, NIT-1). */
+  nodeGone(node: string): void {
+    if (!this.draggedNodes.delete(node)) return;
+    this.version += 1;
+    this.lastCarryAt = performance.now();
+    this.settleCarries();
+  }
+
+  /** The layer unmounted: no timer outlives it. */
+  dispose(): void {
+    if (this.carryTimer !== null) clearTimeout(this.carryTimer);
+    this.carryTimer = null;
+  }
+
   /** Ends the carry previews no drag holds any more, CARRY_PREVIEW_HOLD_MS
    *  after the last carry: by then the backend's arrival has come for every
    *  carry it counts (it follows the drop's graph sync), so one still
@@ -603,11 +630,14 @@ class CursorField {
   }
 
   /** The carried cursors whose target chain differs from the one they had
-   *  before the carry: the backend would count each as arriving now. */
+   *  before the carry: the backend would count each as arriving now. Each
+   *  at its chain point (chainOff: a handle counts as its node's header
+   *  point, as the backend counts it, r62), in canvas units. */
   private previewed(): Set<string> {
     if (this.carriedFrom.size === 0) return new Set();
-    const now = new Map([...this.targets].map(([k, v]) => [k, v.target]));
-    const was = new Map([...this.targets].map(([k, v]) => [k, this.carriedFrom.get(k) ?? v.target]));
+    const at = (p: Point, v: FieldEntry) => ({ x: p.x + (v.chainOff?.x ?? 0), y: p.y + (v.chainOff?.y ?? 0) });
+    const now = new Map([...this.targets].map(([k, v]) => [k, at(v.target, v)]));
+    const was = new Map([...this.targets].map(([k, v]) => [k, at(this.carriedFrom.get(k) ?? v.target, v)]));
     const before = targetChains(was);
     const after = targetChains(now);
     return new Set([...this.carriedFrom.keys()].filter((k) => this.targets.has(k) && !sameChain(before.get(k), after.get(k))));
@@ -1119,7 +1149,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const lookup = store.getState().nodeLookup;
       const resolved = resolveAnchor(cursor.target, lookup);
       const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
-      if (!resolved) return; // Node not drawn yet; the store subscription wakes us.
+      if (!resolved) {
+        // Its node deleted mid-drag: that drag ends here (field.nodeGone).
+        if ('nodeId' in cursor.target) field.nodeGone(cursor.target.nodeId);
+        return; // Node not drawn yet; the store subscription wakes us.
+      }
       // The zoom this frame, from the store: a zoom in progress carries the
       // column at its screen-px steps on this very frame (review 6, item 5).
       const z = store.getState().transform?.[2] ?? zoomRef.current;
@@ -1129,7 +1163,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         ? (lookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined)?.internals?.positionAbsolute ?? null
         : null;
       const nodeDragged = nodeId !== null && Boolean((lookup.get(nodeId) as { dragging?: boolean } | undefined)?.dragging);
-      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged);
+      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged,
+        chainPoint(cursor.target, lookup) ?? resolved);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -1464,6 +1499,7 @@ export function AgentCursorLayer() {
   const prune = useAgentPresenceStore((s) => s.prune);
   const zoom = useStore((s) => s.transform[2]);
   const [field] = useState(() => new CursorField());
+  useEffect(() => () => field.dispose(), [field]);
   // Fonts that finish loading can widen a pill measured with the fallback:
   // every cursor measures again (review 7, MEDIUM-4).
   const [fontVersion, setFontVersion] = useState(0);

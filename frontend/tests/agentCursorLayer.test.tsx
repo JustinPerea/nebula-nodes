@@ -2984,10 +2984,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r52 Q1: on the way in, a's arrow meets d's label while their targets
-  // are still over 16 apart (a's target 304 to 327, d's 344): the column
-  // joins by overlap alone. During the drag the carry is drawn last there
-  // too, so it never heads the column and then drops to the bottom.
+  // GM r52 Q1, as r62 rules it: on the way in, a's arrow meets d's label
+  // while their targets are still over 16 apart (a's target 304 to 327,
+  // d's 344): the column joins by overlap alone. During the drag the carry
+  // takes the slot the r24 insert gives it as the newest arrival there too,
+  // the same rule as in chain range, so its slot only ever moves one way.
   const dragFrames = (id: string, path: { x: number; y: number }[], each: () => void) => {
     const node = lookupRef.current.get(id) as Entry;
     for (const p of path) {
@@ -2999,8 +3000,72 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       each();
     }
   };
+  /** How many of `others` are drawn above `k`: its slot in their column. */
+  const slotOf = (k: string, others: string[]) => {
+    const w = where();
+    return others.filter((o) => w[o].y < w[k].y - 1e-9).length;
+  };
+  /** n2 drawn somewhere else from the start (before any cursor reports). */
+  const n2At = (p: { x: number; y: number }, extra: Record<string, unknown> = {}) => {
+    const n2 = lookup.get('n2') as unknown as Entry;
+    lookupRef.current = new Map(lookup).set('n2', { ...n2, ...extra, internals: { ...n2.internals, positionAbsolute: p } } as never) as never;
+  };
 
-  it('a drag through the overlap band into a column keeps the carry last, with no flip (r52 Q1)', () => {
+  // Review 2's trace (pr219r2-repro.txt): d aimed at 344, e at 384 (more
+  // than 16 below), a carried straight down through both. Before r62, a went
+  // to the bottom in the band (430.7), up past e in d's chain (397.3), and
+  // down again past it (439.2). Now the band and chain range give one slot:
+  // a's slot only moves down the column, at any zoom.
+  it.each([1, 0.5, 2])('a straight drag through the band and two chains at zoom %s: the carry\'s slot moves one way only, with no flip (r62)', (z) => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, z];
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000 }));
+      flush();
+      send(event({ ...session('e', 2), target: { x: 500, y: 384 }, since: 2000 }));
+      flush();
+      // Above the column, clear of it (a's target 344 - 160 / zoom).
+      const start = 344 - 160 / z;
+      dragHeld('n2', { x: 400, y: start - 44 });
+      settle(800);
+      expect(where().a).toEqual({ x: 500, y: start });
+      expect(slotOf('a', ['d', 'e'])).toBe(0);
+      // Down 2 canvas units a frame to 424, every frame checked.
+      const path = Array.from({ length: Math.round((424 - start) / 2) }, (_, i) => ({ x: 400, y: start - 44 + 2 * (i + 1) }));
+      const slots: number[] = [];
+      dragFrames('n2', path, () => {
+        const slot = slotOf('a', ['d', 'e']);
+        if (slots.length > 0) expect(slot).toBeGreaterThanOrEqual(slots[slots.length - 1]);
+        if (slots[slots.length - 1] !== slot) slots.push(slot);
+      });
+      settle(800);
+      expect(slotOf('a', ['d', 'e'])).toBe(2);
+      if (z !== 1) return;
+      // At zoom 1, review 2's geometry: the head of the column in the band,
+      // the middle slot in d's chain (e aims over 16 below a), the bottom in
+      // e's: one way.
+      expect(slots).toEqual([0, 1, 2]);
+      const last = { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } };
+      expect(where()).toEqual(last);
+      // Dropped at 424, out of every chain (40 from e), as it started: the
+      // backend counts no arrival, and its arrival order lays it out the
+      // same way, so nothing moves through the hold.
+      drop('n2');
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(last); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Round 3b's band test, updated to r62: it encoded the literal bottom slot
+  // in the band (d and e never moved). As the newest arrival, a carry from
+  // above aims more than 16 over d and e, so the insert puts it at the head
+  // in the band, and at the bottom once it is within 16 of them (r24 insert,
+  // as the backend does at the drop). One way: it never comes back up.
+  it('a drag through the overlap band into a column: the carry heads it in the band, then goes to the bottom in chain range, never back (r62, was r52 Q1)', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3012,35 +3077,37 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       // Down 2 px a frame through the band (304 to 327) and into the chain
       // (328 on), every frame checked.
       const path = Array.from({ length: 30 }, (_, i) => ({ x: 400, y: 242 + 2 * i }));
-      let prevA = where().a.y;
-      let under = false;
+      let lowest = where().a.y;
+      let slot = 0;
+      let headed = false;
       const check = () => {
         const w = where();
-        // The column's members never move for it: a never heads it.
-        expect(w.d).toEqual({ x: 500, y: 344 });
-        expect(w.e).toEqual({ x: 500, y: 344 + S });
-        // a only ever goes down, and once under e it stays under.
-        expect(w.a.y).toBeGreaterThanOrEqual(prevA - 1e-9);
-        if (under) expect(w.a.y).toBeGreaterThan(w.e.y);
-        under ||= w.a.y > w.e.y;
-        prevA = w.a.y;
+        // a only ever goes down (back up by no more than the layout
+        // spring's overshoot), and its slot only down the column.
+        expect(w.a.y).toBeGreaterThanOrEqual(lowest - 3);
+        const now = slotOf('a', ['d', 'e']);
+        expect(now).toBeGreaterThanOrEqual(slot);
+        slot = now;
+        lowest = Math.max(lowest, w.a.y);
+        // In the band, a heads the column on its own target: d steps under it.
+        if (w.d.y > 344 + 1e-9) headed = true;
+        // Never above their own slots, past the spring's overshoot.
+        expect(w.d.y).toBeGreaterThanOrEqual(344 - 1);
+        expect(w.e.y).toBeGreaterThanOrEqual(344 + S - 1);
       };
       dragFrames('n2', path, check);
-      expect(under).toBe(true);
-      for (let i = 0; i < 60; i += 1) {
-        frame();
-        const w = where();
-        expect(w.d).toEqual({ x: 500, y: 344 });
-        expect(w.e).toEqual({ x: 500, y: 344 + S });
-        expect(w.a.y).toBeGreaterThan(w.e.y);
-      }
+      expect(headed).toBe(true);
+      for (let i = 0; i < 60; i += 1) { frame(); check(); }
       expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('a drop inside the overlap band glides once to the backend\'s arrival order, on the layout spring (r52 Q1)', () => {
+  // Round 3b's band drop test, updated to r62: the band slot is now the
+  // newest arrival's, which for a carry aimed more than 16 over every member
+  // is the head, its arrival-order slot too. So the drop moves nothing.
+  it('a drop inside the overlap band: the backend\'s arrival order is the slot it already has, so nothing moves (r62, was r52 Q1)', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3049,40 +3116,247 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       // backend sends no arrival for the drop (r24).
       dragHeld('n2', { x: 400, y: 270 });
       settle(800);
-      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
-      drop('n2');
-      const path: { a: number; d: number; e: number }[] = [];
-      for (let i = 0; i < 200; i += 1) {
-        frame();
-        const w = where();
-        path.push({ a: w.a.y, d: w.d.y, e: w.e.y });
-      }
-      // a arrived first (500): it heads the column on its own target, d and
-      // e under it at their steps.
       const order = { a: { x: 500, y: 314 }, d: { x: 500, y: 314 + S }, e: { x: 500, y: 314 + 2 * S } };
       expect(where()).toEqual(order);
-      // It starts at the drop: no wait for an arrival that won't come.
-      expect(path[20].a).toBeLessThan(344 + 2 * S - 40);
-      // A glide, not a jump: many frames between, none over 20 px.
-      expect(path.filter((p) => p.a < 344 + 2 * S - 1 && p.a > 315).length).toBeGreaterThan(8);
-      for (let i = 1; i < path.length; i += 1) {
-        for (const k of ['a', 'd', 'e'] as const) expect(Math.abs(path[i][k] - path[i - 1][k])).toBeLessThan(20);
-      }
-      // Once: a heads up the whole way, past its slot by at most the
-      // spring's overshoot, and never down the column again.
-      let turns = 0;
-      for (let i = 2; i < path.length; i += 1) {
-        const v0 = path[i - 1].a - path[i - 2].a;
-        const v1 = path[i].a - path[i - 1].a;
-        if (Math.abs(v1) > 1e-6 && Math.abs(v0) > 1e-6 && Math.sign(v0) !== Math.sign(v1)) turns += 1;
-      }
-      expect(turns).toBeLessThanOrEqual(1);
-      expect(Math.max(...path.map((p) => p.a))).toBeLessThanOrEqual(344 + 2 * S + 1e-9);
-      // The preview's hold runs out with no arrival: nothing moves again.
+      drop('n2');
       for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // r52 Q1's one accepted motion, still there under r62: a's chain holds f
+  // (both aimed at 290 to 300) and doesn't change, but the drag pushes f
+  // onto d, so d joins the column. As the newest arrival, a goes under f;
+  // at the drop the backend counts no arrival, and a's own (the earliest)
+  // puts it back at the head, with one glide at once, not after the hold.
+  it('a drop inside the band where the arrival order differs: one glide at the drop to the backend\'s order (r52 Q1, r62)', () => {
+    fakeTimers();
+    try {
+      n2At({ x: 400, y: 246 }); // a's target (500, 290)
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('d', 1), target: { x: 500, y: 380 }, since: 1000 }));
+      flush();
+      send(event({ ...session('f', 2), target: { x: 500, y: 300 }, since: 1500 }));
+      flush();
+      expect(where()).toEqual({ a: { x: 500, y: 290 }, f: { x: 500, y: 290 + S }, d: { x: 500, y: 380 } });
+      // 4 down: f comes no closer to d than a step, so no join, no swap.
+      dragHeld('n2', { x: 400, y: 250 }, 4);
+      settle(800);
+      expect(where()).toEqual({ a: { x: 500, y: 294 }, f: { x: 500, y: 294 + S }, d: { x: 500, y: 380 } });
+      // 10 down: f meets d; a, carried, is laid out as the newest arrival.
+      dragHeld('n2', { x: 400, y: 256 }, 6);
+      settle(800);
+      expect(where()).toEqual({ f: { x: 500, y: 300 }, a: { x: 500, y: 300 + S }, d: { x: 500, y: 300 + 2 * S } });
+      drop('n2');
+      const path: { a: number; f: number }[] = [];
+      for (let i = 0; i < 60; i += 1) { frame(); path.push({ a: where().a.y, f: where().f.y }); }
+      const order = { a: { x: 500, y: 300 }, f: { x: 500, y: 300 + S }, d: { x: 500, y: 300 + 2 * S } };
+      // Within a second of the drop, well before the hold ends.
+      expect(where()).toEqual(order);
+      expect(path.filter((p) => p.a > 301 && p.a < 300 + S - 1).length).toBeGreaterThan(4);
+      for (let i = 1; i < path.length; i += 1) expect(Math.abs(path[i].a - path[i - 1].a)).toBeLessThan(20);
+      // The hold runs out with no arrival: nothing moves again.
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Rule 101 in the band (review 2, LOW-2 F4): two carries on one dragged
+  // node that join a column by overlap keep their order between themselves.
+  it('two carries on one node through the overlap band keep their order between themselves, and nothing moves at the drop (rule 101, r62)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      // b arrived first, a second: their keys sort the other way.
+      send(event({ ...session('b', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('a', 4), target: { nodeId: 'n2' }, since: 600 }));
+      flush();
+      send(event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000 }));
+      flush();
+      dragHeld('n2', { x: 400, y: 270 }); // both at 314: d is 30 below, no chain change
+      settle(800);
+      const order = { b: { x: 500, y: 314 }, a: { x: 500, y: 314 + S }, d: { x: 500, y: 314 + 2 * S } };
+      expect(where()).toEqual(order);
+      drop('n2');
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2, LOW-1 (r62 units): the chain is canvas units, and so is the
+  // insert's 16. At zoom 2, a at 332 is 12 from d (in d's chain) but 24
+  // screen px above it; at zoom 0.5, a at 358 is 26 above e but 13 screen
+  // px. Either way a sits between d and e, as the backend will order it.
+  it.each([[2, 332], [0.5, 358]])('at zoom %s a carry held at %s, in d\'s chain, goes in after d and before e: the insert compares in canvas units like the chain (r62)', (z, aT) => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, z];
+      render(<AgentCursorLayer />);
+      intoColumn();
+      send(event({ ...session('e', 2), target: { x: 500, y: 384 }, since: 2000 }));
+      flush();
+      dragHeld('n2', { x: 400, y: aT - 44 });
+      settle(800);
+      const w = where();
+      expect(w.a.x).toBe(500);
+      expect(w.d.y).toBe(344);
+      expect(w.a.y).toBeGreaterThan(w.d.y);
+      expect(w.e.y).toBeGreaterThan(w.a.y);
+      // The drop and the backend's arrival (the chain changed): nothing moves.
+      drop('n2');
+      arrive('a', 3, 9000);
+      for (let i = 0; i < 120; i += 1) { frame(); expect(where()).toEqual(w); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2, MEDIUM (r62): a cursor on a port is drawn on the port, and
+  // counts as its node's header point for the chain, on both sides. a is
+  // carried to 2 px above c's drawn point: their drawn targets join one
+  // column, but a's chain (c at n1's header, 107 away) doesn't change, so
+  // the backend sends no arrival. The tab doesn't wait 1.5 s for one: a
+  // takes its arrival-order slot at the drop, with the band's one glide.
+  it('a carry onto a port cursor\'s drawn point: no chain preview (the port counts at its node\'s header), so the drop needs no arrival (r62)', () => {
+    fakeTimers();
+    try {
+      const n1 = lookup.get('n1') as unknown as Entry & { internals: { handleBounds: unknown } };
+      lookupRef.current = new Map(lookup).set('n1', { ...n1, internals: { ...n1.internals,
+        handleBounds: { source: [{ id: 'text', x: 185, y: 100, width: 10, height: 10 }], target: [] } } } as never) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: 'text' }, since: 1000 }));
+      flush();
+      expect(where()).toEqual({ a: { x: 1000, y: 344 }, c: { x: 590, y: 405 } });
+      dragHeld('n2', { x: 490, y: 359 }); // a at (590, 403)
+      settle(800);
+      expect(where()).toEqual({ c: { x: 590, y: 405 }, a: { x: 590, y: 405 + S } });
+      drop('n2');
+      for (let i = 0; i < 45; i += 1) frame();
+      // Three quarters of a second on, before the hold ends: a's own slot.
+      const order = { a: { x: 590, y: 403 }, c: { x: 590, y: 403 + S } };
+      expect(where()).toEqual(order);
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2, LOW-2 F6: an event of the carried cursor's own, at the same
+  // spot, ends the preview at once: the backend's arrival for it stands.
+  it('the carried cursor\'s own event during the hold ends the preview at once (review 2, F6)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(800);
+      expect(where().a).toEqual({ x: 500, y: 344 + 2 * S });
+      drop('n2');
+      settle(200);
+      // A nudge of its own, inside its stamp radius: it keeps its arrival
+      // (500), so it heads the column again, before the hold ends.
+      send(event({ ...session('a', 3), target: { x: 504, y: 344 }, since: 500, action: 'look' }));
+      settle(700); // still inside the 1.5 s hold
+      expect(where()).toEqual({ a: { x: 504, y: 344 }, d: { x: 504, y: 344 + S }, e: { x: 504, y: 344 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** The carry preview's wait timers set from now on (settleCarries). */
+  const settleTimers = () => {
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    return () => spy.mock.calls.filter(([fn]) => String(fn).includes('settleCarries')).length;
+  };
+
+  // Review 2, LOW-2 F7: a carried cursor forgotten mid-drag takes its
+  // preview with it: nothing is left to settle, so no cursor is woken for
+  // it when the hold runs out.
+  it('a carried cursor that goes mid-drag leaves no preview to settle (review 2, F7)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(200);
+      act(() => {
+        const st = useAgentPresenceStore;
+        const agents = { ...st.getState().agents };
+        for (const k of Object.keys(agents)) if (agents[k].session?.key === 'a'.repeat(12)) delete agents[k];
+        st.setState({ agents });
+      });
+      flush(); // a's exit, then every cursor at rest
+      expect(frames.length).toBe(0);
+      // Past the hold: no wake, no frame asked for.
+      act(() => { vi.advanceTimersByTime(CARRY_PREVIEW_HOLD_MS + 500); });
+      expect(frames.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2, NIT-1: a node deleted mid-drag ends that drag (no drop will
+  // come), so its preview ends after the hold and its timer stops; and no
+  // timer outlives the layer.
+  it('a node deleted mid-drag ends its drag: the preview\'s timer stops after the hold (review 2, NIT-1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(200);
+      const settles = settleTimers();
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      settle(CARRY_PREVIEW_HOLD_MS + 300);
+      const base = settles();
+      settle(1000);
+      expect(settles()).toBe(base);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('no carry timer outlives the layer (review 2, NIT-1)', () => {
+    fakeTimers();
+    try {
+      const view = render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(200);
+      const settles = settleTimers();
+      view.unmount();
+      act(() => { vi.advanceTimersByTime(3 * CARRY_PREVIEW_HOLD_MS); });
+      expect(settles()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2, LOW-2 F11: the backend's word that an arrival is its own, at
+  // the same number, changes the tie-break to the key, in every tab alike.
+  it('an arrival that becomes the backend\'s own at the same number re-sorts a tie by key (review 2, F11)', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('b', 2), target: { x: 300, y: 300 } }));
+    flush();
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 } }));
+    flush();
+    // No backend arrival: this tab's landing order, b first.
+    expect(where()).toEqual({ b: { x: 300, y: 300 }, a: { x: 300, y: 300 + S } });
+    arrive('a', 1, 0);
+    arrive('b', 2, 0);
+    flush();
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S } });
   });
 
   it('a carry with no backend arrival is no arrival: the cursor keeps its place (r24 Q2)', () => {

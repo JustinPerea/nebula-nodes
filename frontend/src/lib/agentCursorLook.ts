@@ -31,9 +31,10 @@ export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 
  *  straight below it, never to the right. Its arrow's painted top sits
  *  `gapPx` under the earlier label block; `clearPx` is the least painted
  *  gap between any two cursors (GM - Design, PR #211 r14 and review 6;
- *  stackStepPx, deStackLayout). All screen px, at any zoom. The backend's
- *  target chain uses the same 16 in canvas units at zoom 1
- *  (agent_presence.ARRIVAL_RADIUS), and it decides arrival only, never
+ *  stackStepPx, deStackLayout). Joins and steps are screen px, at any zoom.
+ *  The target chain (targetChains; the backend's agent_presence.ARRIVAL_RADIUS)
+ *  and the column insert's comparison use the same 16 in canvas units, so
+ *  they agree at any zoom (#219 r62). The chain decides arrival only, never
  *  joining: joins stay this tab's, by screen px (GM - Design, #219 r24 Q2). */
 export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2, gapPx: 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
@@ -123,11 +124,6 @@ interface StackEntry {
   /** Its pills' widths in screen px (labelWidths); a default when unknown. */
   nameW?: number;
   sayW?: number;
-  /** Drawn at the bottom of its column, under the stable insert: a carry
-   *  that joins a column by overlap during a live drag (GM - Design, #219
-   *  r52 Q1). Display only; it may sit further below its target than the
-   *  insert allows. Folding still goes by arrival. */
-  last?: boolean;
 }
 
 /** Pill widths assumed when a caller doesn't know them. */
@@ -459,7 +455,8 @@ export function countLabel(count: number): string {
  * step under the last full cursor, standing for every later arrival
  * (StackSpot.group). The full cursors go down the column in a stable
  * insert, in arrival order: each just before the first one placed that
- * aims more than radiusPx below it, else last (GM - Design, #219 r24 Q1).
+ * aims more than radiusPx canvas units below it, else last (GM - Design,
+ * #219 r24 Q1; canvas units, like the target chain, r62).
  * The top one sits on its own target; each next one at the lower of a
  * stackStepPx under the one above (its label block, say included) and its
  * own target, so it is never above its target (r23 item 1) nor more than
@@ -467,7 +464,8 @@ export function countLabel(count: number): string {
  * columns merge or split glides there on the layout spring (its `sig`
  * changes). Only live cursors are passed in: a leaving one doesn't count.
  * Arrival is `since`, then `seq`, then the key. Targets and results are in
- * flow coordinates; every distance and step is in screen px at `zoom`.
+ * flow coordinates; joins and steps are in screen px at `zoom`, the
+ * insert's comparison in canvas units (r62).
  */
 export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
   const { radiusPx } = AGENT_CURSOR_STACK;
@@ -511,23 +509,19 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
       const shown = full ? members.slice(0, AGENT_CURSOR_COLUMN_DRAWN - 1) : members;
       // Their order down the column: a stable insert in arrival order. Each
       // goes in just before the first member already placed whose target is
-      // more than radiusPx below its own, else last; those placed keep their
-      // order. So every member above one aims at most radiusPx lower than it,
-      // and no full cursor is drawn more than 2 steps + 2 radii below its own
+      // more than radiusPx canvas units below its own, else last; those
+      // placed keep their order. So every member above one aims at most
+      // radiusPx canvas units (radiusPx * zoom screen px) lower than it, and
+      // no full cursor is drawn more than 2 steps + 2 radii below its own
       // target. Cursors aimed near one point keep arrival order (GM - Design,
-      // #219 r24 Q1).
+      // #219 r24 Q1). Canvas units, as the target chain is, so the insert and
+      // the chain agree at any zoom (r62); the steps stay screen px.
       const order: number[] = [];
-      const bottom: number[] = [];
       for (const m of shown) {
-        if (ordered[m].last) {
-          bottom.push(m); // after every inserted member, in arrival order (r52 Q1)
-          continue;
-        }
-        const at = order.findIndex((o) => targets[o].y > targets[m].y + radiusPx + 1e-9);
+        const at = order.findIndex((o) => ordered[o].target.y > ordered[m].target.y + radiusPx + 1e-9);
         if (at === -1) order.push(m);
         else order.splice(at, 0, m);
       }
-      order.push(...bottom);
       const x = targets[head].x;
       let prev: number | null = null;
       const place = (m: number, tip: Point) => {
