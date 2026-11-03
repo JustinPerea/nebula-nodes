@@ -174,9 +174,8 @@ describe('r70: the handle is a focusable separator', () => {
     expect(Number(h.getAttribute('aria-valuemin'))).toBeGreaterThan(0);
     expect(h.getAttribute('aria-valuemax')).toBe(String(820 - 154));
     expect(h.getAttribute('title')).toBe(RESIZE_HANDLE_TITLE);
-    expect(RESIZE_HANDLE_TITLE.startsWith('Drag to resize. Double-click to fit the content.')).toBe(true);
-    expect(RESIZE_HANDLE_TITLE).toMatch(/Arrow keys/);
-    expect(RESIZE_HANDLE_TITLE).toMatch(/Enter/);
+    // GM r73, verbatim.
+    expect(RESIZE_HANDLE_TITLE).toBe('Drag or use the arrow keys to resize. Double-click or press Enter to fit the content.');
   });
 
   it('the arrows move it 24 px; Enter fits the content, as a double-click does', () => {

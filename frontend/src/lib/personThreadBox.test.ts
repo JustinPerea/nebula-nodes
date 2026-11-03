@@ -118,7 +118,7 @@ describe('r61 A: the run', () => {
     expect(marked[1]).toMatchObject({ kind: 'run', id: 'actions-e1', entries: [{ id: 'e1' }, { id: 'e2' }] });
     // The reply lands: the same id, now a plain fold above it.
     const after = foldActions([run, reply(2_000)], [entry('e1', 1_500), entry('e2', 1_600)]);
-    expect(after.map((item) => (item.kind === 'row' ? item.row.id : item.id))).toEqual(['m1', 'actions-e1', 'r2000']);
+    expect(after.map((item) => (item.kind === 'row' ? item.row.id : item.kind === 'answer' ? item.answer.id : item.id))).toEqual(['m1', 'actions-e1', 'r2000']);
     expect(withRun(foldActions([run], []), run)).toEqual([{ kind: 'row', row: run }, { kind: 'run', id: 'run-m1', message: run, entries: [] }]);
     expect(withRun(items, null)).toEqual(items);
   });

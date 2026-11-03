@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ScrollFade } from '../ScrollFade';
@@ -35,6 +35,7 @@ import {
   SENDING_LINE,
   SERVER_FAILED_LINE,
   actionsLabel,
+  answerRows,
   answeredLine,
   answeredQuote,
   availability,
@@ -42,6 +43,7 @@ import {
   contextRemoveLabel,
   counterAnnouncement,
   counterLine,
+  cutAtWord,
   foldActions,
   listenerDroppedLine,
   messageStatus,
@@ -53,6 +55,7 @@ import {
   stoppedListeningLine,
   unreadLabel,
   withRun,
+  type AnswerRow,
   type Availability,
   type StatusLine,
 } from '../../lib/personThreadBox';
@@ -120,6 +123,79 @@ function useNodeName(): (id: string) => string {
   return (id: string) => cardTitle(nodes, id);
 }
 
+/** GM r73 item 2: the person's typed answers, derived in this tab from the
+ * question sets it holds (never a thread row: lib/personThreadBox answerRows). */
+function useAnswerRows(rows: readonly ThreadRow[]): AnswerRow[] {
+  const sets = useAgentQuestionsStore((s) => s.sets);
+  return useMemo(() => answerRows(rows, sets), [rows, sets]);
+}
+
+/**
+ * GM r73 item 3: words cut at a word boundary to their element's one line
+ * (cutAtWord, the one cut the "Answering “…”" chip and "You answered “…”."
+ * share). The element is a flex item that may shrink (min-width 0, overflow
+ * hidden): with every word in it, its box is as wide as the line lets it be.
+ * Each candidate's words are then written into its text node and measured
+ * with a Range (fractional px: whole-px scroll widths round a fitting cut
+ * out), and the text put back before the paint. The ellipsis renders after
+ * the element, not in it (cutParts): Chrome lays out "s…" 0.42 px narrower
+ * than it paints, so inside the element its own CSS ellipsis would take the
+ * last letter; the room is the element's with every word in it plus that
+ * ellipsis, if one shows. Measured again when `container` changes size
+ * (the observer's first call too). Where nothing lays out (no widths), the
+ * words show whole.
+ */
+function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, container: string): string {
+  const [shown, setShown] = useState(() => oneLine(text));
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const whole = oneLine(text);
+      const node = element.firstChild;
+      const range = typeof document.createRange === 'function' ? document.createRange() : null;
+      if (!(node instanceof Text) || !range || typeof range.getBoundingClientRect !== 'function') {
+        setShown(whole);
+        return;
+      }
+      // A cut shown now has its ellipsis after the element: that space is the cut's too.
+      const tail = element.nextSibling;
+      let tailWidth = 0;
+      if (tail instanceof Text && tail.nodeValue === '…') {
+        range.selectNodeContents(tail);
+        tailWidth = range.getBoundingClientRect().width;
+      }
+      const before = node.nodeValue;
+      node.nodeValue = whole;
+      const room = element.getBoundingClientRect().width + tailWidth;
+      const width = (candidate: string) => {
+        node.nodeValue = candidate;
+        range.selectNodeContents(node);
+        return range.getBoundingClientRect().width;
+      };
+      const ellipsis = width('…');
+      // A cut's words in the element, its ellipsis beside it: the two together within the room.
+      const fits = (candidate: string) => (candidate.endsWith('…') && candidate !== whole
+        ? width(candidate.slice(0, -1)) + ellipsis : width(candidate)) <= room + 0.01;
+      const cut = room > 0 ? cutAtWord(whole, fits) : whole;
+      node.nodeValue = before;
+      setShown(cut);
+    };
+    measure();
+    const box = element.closest(container) ?? element.parentElement;
+    if (!box || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [ref, text, container]);
+  return shown;
+}
+
+/** A cut's words (in the measured element) and its ellipsis (after it); see useWordCut. */
+function cutParts(shown: string, text: string): { words: string; ellipsis: string } {
+  return shown.endsWith('…') && shown !== oneLine(text) ? { words: shown.slice(0, -1), ellipsis: '…' } : { words: shown, ellipsis: '' };
+}
+
 // -- the collapsed bar's preview line ------------------------------------------------
 
 export function MessagePreview() {
@@ -127,12 +203,16 @@ export function MessagePreview() {
   const unread = usePersonThreadStore((s) => s.unread);
   const pending = usePersonThreadStore((s) => s.pending);
   const nodeName = useNodeName();
+  const answers = useAnswerRows(rows);
   const latest = rows[rows.length - 1];
-  if (pending) {
+  const latestAnswer = answers[answers.length - 1];
+  // A typed answer after the last row is the latest thing (r73).
+  const answerLast = latestAnswer && (!latest || latestAnswer.at >= latest.at) ? latestAnswer : null;
+  if (pending || answerLast) {
     return (
       <div className="message-box__preview" data-person="">
         <span className="message-box__preview-name">You</span>
-        <span className="message-box__preview-text">{pending.text}</span>
+        <span className="message-box__preview-text">{pending ? pending.text : answerLast?.text}</span>
         {unread > 0 && <span className="message-box__badge" aria-label={unreadLabel(unread)} role="img">{unread}</span>}
       </div>
     );
@@ -251,11 +331,7 @@ function QuestionRow({ row }: { row: ThreadRow }) {
         );
       })}
       {answered && (typed
-        ? (
-          <p className="message-box__answered message-box__answered--typed">
-            {typed.before}<span className="message-box__answered-words">{typed.words}</span>{typed.after}
-          </p>
-        )
+        ? <TypedAnswerLine before={typed.before} words={typed.words} after={typed.after} />
         : <p className="message-box__answered">{answered}</p>)}
       {open && fromComposer && (
         <button type="button" className="message-box__show" aria-pressed={answeringHere}
@@ -280,6 +356,27 @@ function QuestionRow({ row }: { row: ThreadRow }) {
         </button>
       )}
       {error && <p className="message-box__line message-box__line--failed">{error}</p>}
+    </div>
+  );
+}
+
+/** GM r70/r73: "You answered “…”." on one line, the words cut at a word inside the quotes. */
+function TypedAnswerLine({ before, words, after }: { before: string; words: string; after: string }) {
+  const wordsRef = useRef<HTMLSpanElement | null>(null);
+  const cut = cutParts(useWordCut(wordsRef, words, '.message-box__answered--typed'), words);
+  return (
+    <p className="message-box__answered message-box__answered--typed">
+      {before}<span ref={wordsRef} className="message-box__answered-words">{cut.words}</span>{cut.ellipsis}{after}
+    </p>
+  );
+}
+
+/** GM r73 item 2: the person's typed answer as a You row (display only; see answerRows). */
+function AnswerRowView({ answer }: { answer: AnswerRow }) {
+  return (
+    <div className="message-box__row message-box__row--you" data-answer="">
+      <div className="message-box__who">You</div>
+      <p className="message-box__text">{answer.text}</p>
     </div>
   );
 }
@@ -405,8 +502,9 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   // The same, for the resize observer below (it reads it outside render).
   const pinned = useRef(true);
   const [pill, setPill] = useState(false);
+  const answers = useAnswerRows(rows);
   // Rows here when the panel opened just are; later ones enter on the spring.
-  const [firstIds] = useState(() => new Set(rows.map((row) => row.id)));
+  const [firstIds] = useState(() => new Set([...rows.map((row) => row.id), ...answers.map((answer) => answer.id)]));
   // The tab's own send shows as its pending row until it settles.
   const shownRows = useMemo(() => rows.filter((row) => !(pending && row.clientId === pending.clientId)), [rows, pending]);
   const run = useMemo(() => runMessage(shownRows), [shownRows]);
@@ -415,15 +513,19 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   // its status leads the run's fold at the end, so the newest thing is last.
   const leads = statusLeadsRun(runStatus);
   const items = useMemo(() => {
-    const folded = foldActions(shownRows, entries.filter((entry) => entry.source === 'agent'));
+    const folded = foldActions(shownRows, entries.filter((entry) => entry.source === 'agent'), answers);
     return withRun(folded, leads ? run : null);
-  }, [shownRows, entries, run, leads]);
-  const lastId = shownRows[shownRows.length - 1]?.id ?? '';
+  }, [shownRows, entries, run, leads, answers]);
+  const lastRow = shownRows[shownRows.length - 1];
+  const lastAnswer = answers[answers.length - 1];
+  // The person's own answer last: it scrolls into view like a row, but is never "New reply".
+  const answerIsLast = Boolean(lastAnswer && (!lastRow || lastAnswer.at >= lastRow.at));
+  const lastId = answerIsLast ? lastAnswer.id : lastRow?.id ?? '';
   // r50: a new row while the person reads further up shows "New reply" instead of scrolling.
   const [seenLastId, setSeenLastId] = useState(lastId);
   if (seenLastId !== lastId) {
     setSeenLastId(lastId);
-    if (!atBottom && lastId) setPill(true);
+    if (!atBottom && lastId && !answerIsLast) setPill(true);
   }
 
   useLayoutEffect(() => {
@@ -475,13 +577,16 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
       <ScrollFade ref={scroller} className="agent-log__body message-box__thread" onScroll={onScroll}>
         <ol ref={list} className="message-box__rows" aria-label="Messages with Claude">
           {items.map((item) => (
-            <li key={item.kind === 'row' ? item.row.id : item.id}
-              className={item.kind === 'row' && !firstIds.has(item.row.id) ? 'message-box__item message-box__row--enter' : 'message-box__item'}>
+            <li key={item.kind === 'row' ? item.row.id : item.kind === 'answer' ? item.answer.id : item.id}
+              className={(item.kind === 'row' && !firstIds.has(item.row.id)) || (item.kind === 'answer' && !firstIds.has(item.answer.id))
+                ? 'message-box__item message-box__row--enter' : 'message-box__item'}>
               {item.kind === 'row'
                 ? <RowView row={item.row} rows={shownRows} nodeName={nodeName} inRun={leads && item.row.id === run?.id} />
-                : item.kind === 'run'
-                  ? <ActionsFold entries={item.entries} status={runStatus} row={item.message} />
-                  : <ActionsFold entries={item.entries} />}
+                : item.kind === 'answer'
+                  ? <AnswerRowView answer={item.answer} />
+                  : item.kind === 'run'
+                    ? <ActionsFold entries={item.entries} status={runStatus} row={item.message} />
+                    : <ActionsFold entries={item.entries} />}
             </li>
           ))}
           {pending && <li className="message-box__item"><PendingRow key={pending.clientId} pending={pending} /></li>}
@@ -580,10 +685,13 @@ function listenerLabel(listeners: readonly ChannelListener[], listenerId: string
 
 /** r61 answer 4: "Answering “<the question on one line>”", with × Remove. */
 function AnsweringChip({ answering }: { answering: AnsweringState }) {
+  // GM r73: cut at a word, the ellipsis inside the quotes (the shared cut).
+  const quoteRef = useRef<HTMLSpanElement | null>(null);
+  const cut = cutParts(useWordCut(quoteRef, answering.question, '.message-box__composer'), answering.question);
   return (
     <div className="message-box__context message-box__context--answering">
       <span className="message-box__context-label">
-        {ANSWERING_PREFIX} “<span className="message-box__context-quote">{oneLine(answering.question)}</span>”
+        {ANSWERING_PREFIX} “<span ref={quoteRef} className="message-box__context-quote">{cut.words}</span>{cut.ellipsis}”
       </span>
       <button type="button" className="message-box__context-remove" aria-label={ANSWERING_REMOVE_LABEL}
         onClick={() => usePersonThreadStore.getState().stopAnswering()}>

@@ -260,7 +260,9 @@
 
 /* GM r70: "You answered “…”." on one line; the words are cut, and the
    ellipsis sits inside the curly quotes (the closing quote and the full
-   stop always show). */
+   stop always show). GM r73: the cut is at a word (MessageBox's
+   useWordCut, the chip's cut too); the ellipsis below only catches one
+   word too long for the line. */
 .message-box__answered--typed {
   display: flex;
   min-width: 0;
@@ -455,8 +457,8 @@
   white-space: nowrap;
 }
 
-/* "Answering “<the question>”": the question is cut to the chip's one line,
-   and its closing quote stays. */
+/* "Answering “<the question>”": the question is cut to the chip's one line
+   at a word (GM r73, MessageBox's useWordCut), and its closing quote stays. */
 .message-box__context--answering .message-box__context-label {
   display: inline-flex;
   min-width: 0;

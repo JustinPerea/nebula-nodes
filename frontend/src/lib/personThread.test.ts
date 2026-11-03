@@ -243,7 +243,7 @@ describe('rows', () => {
     const rows = [message({ at: 10 }), { id: 'r1', kind: 'reply' as const, at: 40, agent: CLAUDE }];
     const entries = [{ id: 'e1', ts: 5 }, { id: 'e2', ts: 20 }, { id: 'e3', ts: 30 }, { id: 'e4', ts: 50 }];
     const items = foldActions(rows, entries);
-    expect(items.map((item) => (item.kind === 'row' ? item.row.id : item.entries.map((e) => e.id).join('+'))))
+    expect(items.map((item) => (item.kind === 'row' ? item.row.id : item.kind === 'actions' ? item.entries.map((e) => e.id).join('+') : item.answer.id)))
       .toEqual(['e1', 'm1', 'e2+e3', 'r1', 'e4']);
   });
 });

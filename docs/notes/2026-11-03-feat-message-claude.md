@@ -225,3 +225,62 @@ new regionNoticesReady ratchet flagged #216's
   reader reads them whole), but a sighted person can't see the rest. A
   `title` with the full answer would fix that if GM wants one.
 
+
+## Round 2c (GM r73)
+
+Neither origin/main (c892dca2) nor #216 (f6f077b4) had moved, so there
+was nothing to merge.
+
+- **1, the tooltip:** the handle's title is now GM's sentence, word for
+  word: "Drag or use the arrow keys to resize. Double-click or press Enter
+  to fit the content."
+- **2, the You row:** the boundary rule is Justin's and stays as it is.
+  Every connected agent reads the thread, and an answer goes only to the
+  agent that asked. So the row is never a thread row, a message, a journal
+  field, an MCP or CLI field, or a socket field. `answerRows`
+  (lib/personThreadBox.ts) derives it in the person's tab. It comes from
+  each thread question row whose set the questions store holds as
+  answered, with typed words and no option picked, and it sits at the
+  set's `closedAt`. `foldActions` places it among the rows after its
+  question. After a reload, `questionsSync` (closed sets are kept 30
+  minutes, the same as the card's "You answered" line) brings the set
+  back, so the row comes back too. Option picks get no row. The card keeps
+  "You answered “…”.". When the answer is the last thing in the thread,
+  it scrolls into view the way a row does, but it never raises "New
+  reply". The collapsed preview shows it when it is the latest.
+- **3, the cut:** `cutAtWord(text, fits)` is the one cut for the chip and
+  "You answered". It returns the whole text if it fits. Otherwise it
+  returns the longest run of whole words that fits with its ellipsis,
+  after dropping any trailing space or punctuation (`\p{P}`), and it
+  searches the word boundaries by halving. `useWordCut` in MessageBox
+  measures the element. With every word in it, the flex item's box is as
+  wide as its line allows. Each candidate is then measured with a Range,
+  in fractional px.
+
+### Surprises
+
+- Chrome lays out "shots…" (an s followed by an ellipsis) 0.42 px
+  narrower than it paints it (range 246.77, box 246.34). Other endings
+  match exactly. With the ellipsis inside the clipped span, the span's
+  CSS ellipsis took the final "s" ("…three shot… ”"). The ellipsis now
+  renders as its own text after the span (`cutParts`). `fits` measures
+  the words plus the ellipsis's own width.
+- A ResizeObserver delivers a first call on `observe()`. That second
+  measure ran with the "…" sibling already taking space, and it shrank
+  the cut to "three…". The room now adds the width of a shown "…"
+  sibling, and a test runs the observer twice.
+- Whole-px `scrollWidth <= clientWidth` gave the same wrong answer
+  (247 vs 246) for a cut that fits, so it measures with a Range instead.
+- The r2b open point (no You row) is resolved by item 2.
+
+### Checks
+
+- tsc and lint are clean.
+- vitest: 145 files, 4,059 of 4,060 passed. The one failure was a timing
+  test in agentCursorLayer (22 ms) under load, and it passed when run alone.
+- Backend, isolated: 13 files, 512 passed. `person_gate.py` is
+  byte-identical to main.
+- Mutations: 12 of 12 killed. One survived until the test's line width
+  was tightened to 276 px, so that dropping the "…" sibling's width
+  changes the cut.
+- The entry is 468,192 B raw, unchanged.

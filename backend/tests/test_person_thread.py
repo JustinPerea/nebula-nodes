@@ -31,7 +31,7 @@ import mcp_channel
 import mcp_server
 from services import channel_listeners, krea_agent_mcp, person_thread
 from tests.conftest import PERSON
-from tests.test_canvas_proposals import CLAUDE, CODEX, Clock, api  # noqa: F401 - fixture
+from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, Clock, api  # noqa: F401 - fixture
 
 SESSION_A = {**CLAUDE, "X-Nebula-Agent-Session": "sess-a"}
 SESSION_B = {**CLAUDE, "X-Nebula-Agent-Session": "sess-b"}
@@ -371,6 +371,69 @@ def test_opening_a_project_sends_its_thread(thread):
     thread.browser.clear()
     asyncio.run(thread.main._broadcast_projects_changed("renamed", thread.project_id))
     assert not [m for m in thread.browser if m.get("type") == "personThread"]
+
+# -- a typed answer stays the asking agent's (GM r73 item 2, Justin's boundary rule) ------
+
+TYPED_ANSWER = "Keep the warm one only for the hero, please"
+
+
+def test_a_typed_answer_is_one_question_answered_and_never_a_thread_row_post_or_wake(thread):
+    """The person's You row for a typed answer is drawn by their own tab from
+    the answered set (frontend answerRows): every connected agent reads the
+    thread, so the answer is never a row, a person.message, a socket field or
+    a second wake. Only the asking agent reads it, through question.answered."""
+    a = _listen(thread, SESSION_A)
+    asked = thread.client.post("/api/canvas/questions", headers=SESSION_A, json={"questions": [
+        {"text": "Use the same palette on the other three shots, or keep the warm one only for the hero?",
+         "allowText": True}]})
+    assert asked.status_code == 201, asked.text
+    set_id = asked.json()["questions"]["id"]
+    key = next(m["answerKey"] for m in thread.browser if m.get("type") == "questionsOpened")
+    rows_before = thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]
+    assert [r["kind"] for r in rows_before] == ["question"]
+    seq_before = max((e["seq"] for e in thread.journal._events), default=0)
+    browser_before, others_before, raw_before = len(thread.browser), len(thread.others), len(thread.raw_others)
+
+    answered = thread.client.post(f"/api/canvas/questions/{set_id}/answer", headers={**PERSON, KEY: key},
+                                  json={"answers": [{"questionId": "q1", "text": TYPED_ANSWER}]})
+    assert answered.status_code == 200, answered.text
+
+    # Exactly one event: question.answered, without the words.
+    new = [e for e in thread.journal._events if e["seq"] > seq_before]
+    assert [e["kind"] for e in new] == [mcp_channel.ANSWERED_KIND]
+    assert TYPED_ANSWER not in _journal_text(thread)
+    # No thread row, no thread post to any tab or agent, nothing in an inbox.
+    assert thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"] == rows_before
+    later = thread.browser[browser_before:]
+    assert not [m for m in later if m.get("type") == "personThread"]
+    # Only the person's sockets got the answer (the questionsClosed that draws their row).
+    assert [m["type"] for m in later if TYPED_ANSWER in json.dumps(m)] == ["questionsClosed"]
+    assert TYPED_ANSWER not in json.dumps(thread.others[others_before:] + thread.raw_others[raw_before:])
+    assert thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()["messages"] == []
+    # An agent's thread read (MCP read_thread and `nebula thread` call this route) never has it.
+    for headers in (SESSION_A, SESSION_B, CODEX):
+        read = thread.client.get("/api/canvas/thread", headers=headers)
+        assert read.status_code == 200 and TYPED_ANSWER not in read.text
+    stored = thread.main.project_store.read()["projects"][thread.project_id][person_thread.FIELD]
+    assert TYPED_ANSWER not in json.dumps(stored)
+    # The asking agent reads it, as its own set.
+    own = thread.client.get(f"/api/canvas/questions/{set_id}", headers=SESSION_A).json()
+    assert own["questions"]["answers"][0]["text"] == TYPED_ANSWER
+
+    # The listener sees those events and wakes once, with the answer.
+    events = thread.client.get("/api/canvas/events", headers=SESSION_A, params={"after": seq_before}).json()
+    state = mcp_channel.ChannelState(limits=mcp_channel.Limits(), now=0.0)
+    state.listener_id = a
+    state.tool_started("ask_person", {"questions": []}, 1.0)
+    state.tool_finished("ask_person", {"questions": []}, {"questions": {"id": set_id, "status": "open"}}, 1.0)
+    state.observe(events, now=20.0)
+    assert not state.inbox_to_fetch()  # no message to read: no message wake
+    assert state.answers_to_fetch() == [set_id]
+    state.answer_fetched(set_id, own["questions"])
+    pushes = [p for p in (state.take_push(20.0 + n * 0.5) for n in range(240)) if p is not None]
+    assert [p.wake for p in pushes] == ["answer"]
+    assert TYPED_ANSWER in pushes[0].content
+
 
 # -- the MCP and CLI surface -------------------------------------------------------------
 

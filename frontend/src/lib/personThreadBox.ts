@@ -199,9 +199,91 @@ export function answeredQuote(answers: readonly { choices: readonly string[]; te
   return { before: 'You answered “', words: joined.slice(1, -1), after: '”.' };
 }
 
-/** The question on one line, for the composer's "Answering “…”" chip (CSS cuts it to the width). */
+/** The question on one line, for the composer's "Answering “…”" chip (cutAtWord cuts it to the width). */
 export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** What a cut drops before its ellipsis: a trailing comma, space or other punctuation. */
+const CUT_TAIL = /[\s\p{P}]+$/u;
+
+/**
+ * GM r73: THE word-boundary cut, shared by the "Answering “…”" chip and
+ * "You answered “…”.". The whole text when it fits; else the longest run of
+ * whole words that fits with its ellipsis, less any trailing comma, space or
+ * punctuation (“Use the same palette on the other three shots…”, never
+ * “…shots, …”). The caller puts it inside the curly quotes, so the ellipsis
+ * sits inside them. `fits` says whether a candidate fits (the box measures
+ * the element; tests count characters); widths only grow with the words, so
+ * the boundaries are searched by halving. When not even the first word fits,
+ * the first word and its ellipsis; the CSS cut takes the rest.
+ */
+export function cutAtWord(text: string, fits: (candidate: string) => boolean): string {
+  const whole = oneLine(text);
+  if (whole === '' || fits(whole)) return whole;
+  const candidates: string[] = [];
+  for (const match of whole.matchAll(/\s/g)) {
+    const words = whole.slice(0, match.index).replace(CUT_TAIL, '');
+    if (words && words !== candidates[candidates.length - 1]) candidates.push(words);
+  }
+  // One long word: as it is (the CSS cut takes it).
+  if (candidates.length === 0) return whole;
+  let low = 0;
+  let high = candidates.length - 1;
+  let best = 0;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    if (fits(`${candidates[middle]}…`)) {
+      best = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return `${candidates[best]}…`;
+}
+
+// -- the typed answer's You row (GM r73 item 2) --------------------------------------
+
+/**
+ * A typed (no-option) answer, shown in the person's thread as a You row. It
+ * is never a thread row: Justin's boundary rule (2026-11-03) lets every
+ * connected agent read the thread, while an answer goes only to the agent
+ * that asked (question.answered). So nothing stores or sends it: the person's
+ * own tab derives it from the answered question set its questions store
+ * already holds (questionsSync after a reload), placed at the set's
+ * closedAt among the thread rows.
+ */
+export interface AnswerRow {
+  id: string;
+  questionId: string;
+  at: number;
+  text: string;
+}
+
+interface AnsweredSetLike {
+  view: {
+    status: string;
+    closedAt: number | null;
+    answers: readonly { choices: readonly string[]; text: string | null }[] | null;
+  };
+}
+
+/** The You rows for the thread's question rows answered with words only (option picks get none). */
+export function answerRows(rows: readonly ThreadRow[], sets: Readonly<Record<string, AnsweredSetLike | undefined>>): AnswerRow[] {
+  const out: AnswerRow[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.kind !== 'question' || !row.questionId || seen.has(row.questionId)) continue;
+    seen.add(row.questionId);
+    const view = sets[row.questionId]?.view;
+    if (!view || view.status !== 'answered' || !view.answers || typeof view.closedAt !== 'number') continue;
+    if (view.answers.some((answer) => answer.choices.length > 0)) continue;
+    const typed = view.answers.map((answer) => (answer.text ?? '').trim()).filter(Boolean);
+    if (typed.length === 0) continue;
+    out.push({ id: `answer-${row.questionId}`, questionId: row.questionId, at: Math.max(view.closedAt, row.at), text: typed.join('\n\n') });
+  }
+  return out.sort((a, b) => a.at - b.at);
 }
 
 /** The counter's words, past MESSAGE_COUNTER_FROM left only. */
@@ -235,22 +317,38 @@ export function runMessage(rows: readonly ThreadRow[]): ThreadRow | null {
   return null;
 }
 
-/** The thread with the Agent log's actions folded between its rows (r50: "3 actions"). */
-export type ThreadItem<E> = { kind: 'row'; row: ThreadRow } | { kind: 'actions'; id: string; entries: E[] };
+/** The thread with the Agent log's actions folded between its rows (r50: "3 actions"),
+ * and the person's typed answers (r73) placed by time among them. */
+export type ThreadItem<E> =
+  | { kind: 'row'; row: ThreadRow }
+  | { kind: 'answer'; answer: AnswerRow }
+  | { kind: 'actions'; id: string; entries: E[] };
 
-export function foldActions<E extends { id: string; ts: number }>(rows: readonly ThreadRow[], entries: readonly E[]): ThreadItem<E>[] {
+export function foldActions<E extends { id: string; ts: number }>(rows: readonly ThreadRow[], entries: readonly E[],
+  answers: readonly AnswerRow[] = []): ThreadItem<E>[] {
   const sorted = [...entries].sort((a, b) => a.ts - b.ts);
   const items: ThreadItem<E>[] = [];
   let next = 0;
+  let nextAnswer = 0;
   const flush = (before: number) => {
     const group: E[] = [];
     while (next < sorted.length && sorted[next].ts < before) group.push(sorted[next++]);
     if (group.length) items.push({ kind: 'actions', id: `actions-${group[0].id}`, entries: group });
   };
+  // An answer goes after every row at or before its time (its question first).
+  const answersBefore = (before: number) => {
+    while (nextAnswer < answers.length && answers[nextAnswer].at < before) {
+      const answer = answers[nextAnswer++];
+      flush(answer.at);
+      items.push({ kind: 'answer', answer });
+    }
+  };
   for (const row of rows) {
+    answersBefore(row.at);
     flush(row.at);
     items.push({ kind: 'row', row });
   }
+  answersBefore(Infinity);
   flush(Infinity);
   return items;
 }
