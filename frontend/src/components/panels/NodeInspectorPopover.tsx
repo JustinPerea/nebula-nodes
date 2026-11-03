@@ -248,6 +248,11 @@ export function NodeInspectorPopover() {
   const [paletteResizing, setPaletteResizing] = useState(false);
   const swatchesRef = useRef<{ nodeId: string; count: number | null } | null>(null);
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // GM r22 Q5 on #208: rigid wins. A pan or drag that starts mid-spring
+  // ends the spring at its end layout at once (the transition goes with the
+  // attribute, so the panel jumps to where it was going), then tracks 1:1.
+  const resizingRef = useRef(false);
+  const anchorAtRef = useRef<string | null>(null);
   useEffect(() => () => {
     if (resizeTimer.current) clearTimeout(resizeTimer.current);
   }, []);
@@ -258,6 +263,7 @@ export function NodeInspectorPopover() {
     if (!visible || !selectedNodeId) {
       frameRef.current = null;
       swatchesRef.current = null;
+      anchorAtRef.current = null;
       return;
     }
 
@@ -286,6 +292,15 @@ export function NodeInspectorPopover() {
       } else {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
+          const box = anchor.getBoundingClientRect();
+          const at = `${selectedNodeId}:${box.left}:${box.top}:${box.width}:${box.height}`;
+          if (resizingRef.current && anchorAtRef.current !== null && at !== anchorAtRef.current) {
+            if (resizeTimer.current) clearTimeout(resizeTimer.current);
+            resizeTimer.current = null;
+            resizingRef.current = false;
+            setPaletteResizing(false);
+          }
+          anchorAtRef.current = at;
           // What the body lacks at the height it has now. While the body fits,
           // the panel keeps the height it has (the spare line too, once taken),
           // so it settles in one frame and never goes back and forth; a new
@@ -311,8 +326,10 @@ export function NodeInspectorPopover() {
             if (resizeTimer.current) clearTimeout(resizeTimer.current);
             resizeTimer.current = setTimeout(() => {
               resizeTimer.current = null;
+              resizingRef.current = false;
               setPaletteResizing(false);
             }, PALETTE_RESIZE_MS);
+            resizingRef.current = true;
             setPaletteResizing(true);
           }
           swatchesRef.current = { nodeId: selectedNodeId, count };

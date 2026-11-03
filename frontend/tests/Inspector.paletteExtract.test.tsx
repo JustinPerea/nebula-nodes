@@ -22,6 +22,8 @@ vi.mock('../src/lib/paletteWorkerClient', async (original) => ({
 }));
 
 import { Inspector, PALETTE_LINE_MIN_MS, PALETTE_PENDING_DELAY_MS } from '../src/components/panels/Inspector';
+import { resetPaletteFocusForTests } from '../src/components/panels/paletteFocus';
+import { resetPaletteExtractsForTests } from '../src/components/panels/usePaletteExtracts';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 
@@ -63,6 +65,10 @@ beforeEach(() => {
   api.fetch.mockReset();
   palette.extract.mockReset();
   palette.keys.length = 0;
+  // Round 8e: Extract's state is the module's (one per project, graph and
+  // node), so each test starts with none.
+  resetPaletteExtractsForTests();
+  resetPaletteFocusForTests();
   answer(uploaded);
   useUIStore.setState(initialUI, true);
 });
@@ -138,7 +144,21 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     expect(pending(container)).toBeNull();
     expect(add(container)?.disabled).toBe(false);
     expect(extractInput(container)?.disabled).toBe(false);
-    for (const input of [...hexInputs(container), ...colors(container), ...removes(container)]) expect(input.disabled).toBe(false);
+    for (const input of [...hexInputs(container), ...colors(container), ...removes(container)]) {
+      expect(input.disabled).toBe(false);
+      expect(input.getAttribute('aria-disabled')).toBeNull();
+    }
+  };
+  /** GM r22 Q3: read-only with focus kept: aria-disabled (not disabled),
+   *  described by the line; the hex fields read-only. */
+  const held = (container: HTMLElement) => {
+    const line = pending(container)!;
+    for (const input of [...hexInputs(container), ...colors(container), ...removes(container)]) {
+      expect(input.disabled).toBe(false);
+      expect(input.getAttribute('aria-disabled')).toBe('true');
+      expect(input.getAttribute('aria-describedby')).toBe(line.id);
+    }
+    for (const input of hexInputs(container)) expect(input.readOnly).toBe(true);
   };
 
   it('pins GM\'s numbers: the line after 300 ms, then for at least 400 ms', () => {
@@ -158,8 +178,9 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     expect(pending(container)?.textContent).toBe('Extracting colors…');
     expect(container.querySelector('.inspector__palette-actions')).toBeNull();
     expect(hexes(container)).toEqual(['#aaaaaa', '#bbbbbb']);
-    // GM r17: the old swatches' ×, hex and colour fields are read-only.
-    for (const input of [...hexInputs(container), ...colors(container), ...removes(container)]) expect(input.disabled).toBe(true);
+    // GM r17: the old swatches' ×, hex and colour fields are read-only
+    // (GM r22 Q3: aria-disabled, so a focused one keeps focus).
+    held(container);
     await land({ ok: true, colors: ['#112233', '#445566', '#778899'] });
     await wait(PALETTE_LINE_MIN_MS);
     expect(hexes(container)).toEqual(['#112233', '#445566', '#778899']);
@@ -173,7 +194,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     await wait(PALETTE_PENDING_DELAY_MS + 100);
     expect(pending(container)).not.toBeNull();
     const chips = colors(container);
-    expect(chips.map((c) => c.disabled)).toEqual([true, true]);
+    expect(chips.map((c) => c.getAttribute('aria-disabled'))).toEqual(['true', 'true']);
     expect(chips.map((c) => getComputedStyle(c).backgroundColor)).toEqual(['rgb(255, 40, 90)', 'rgb(55, 89, 199)']);
     expect(chips.map((c) => getComputedStyle(c).opacity)).not.toContain('0.45');
   });
@@ -261,6 +282,9 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     await land({ ok: true, colors: ['#112233'] });
     expect(swatches()).toEqual(['#aaaaaa']);
     unmount();
+    // Round 8e: the extract isn't the Inspector's, so it lands when its
+    // hold is up, closed or not.
+    await wait(PALETTE_LINE_MIN_MS);
     expect(swatches()).toEqual(['#112233']);
   });
 });
@@ -346,7 +370,8 @@ describe("Extract's state belongs to one node (review 7 L1)", () => {
     useUIStore.getState().selectNode('n1');
     const { container } = render(<Inspector embedded />);
     await extractFrom(container, png());
-    expect(palette.keys).toEqual(['n1:palette']);
+    expect(palette.keys).toHaveLength(1);
+    expect(palette.keys[0]).toMatch(/^\|\d+\|n1:palette$/);
     await wait(PALETTE_PENDING_DELAY_MS + 100);
     expect(container.querySelector('.inspector__palette-pending')).not.toBeNull();
     act(() => useUIStore.getState().selectNode('n2'));

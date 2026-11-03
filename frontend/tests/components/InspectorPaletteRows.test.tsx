@@ -221,6 +221,40 @@ describe('the floating Inspector takes the whole palette before its body scrolls
     }
   });
 
+  it('a pan or drag that starts mid-spring ends it at once, then the panel tracks 1:1 (GM r22 Q5)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      contentHeight = 420;
+      open(1400);
+      const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
+      contentHeight = 500;
+      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10) } }));
+      frames(1);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
+      const given = bounds();
+      // 100 ms into the spring the node moves: the spring ends (no
+      // transition, so the panel is at its end layout), in the same frame.
+      act(() => { vi.advanceTimersByTime(100); });
+      const anchor = document.querySelector<HTMLElement>('[data-node-inspector-anchor="n1"]')!;
+      anchor.getBoundingClientRect = () => new DOMRect(500, 260, 300, 200);
+      frames(1);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+      expect(bounds().height).toBe(given.height);
+      const moved = bounds().top;
+      expect(moved).toBe(given.top + 60);
+      // Then it tracks the node, 1:1, with no spring.
+      anchor.getBoundingClientRect = () => new DOMRect(500, 300, 300, 200);
+      frames(1);
+      expect(bounds().top).toBe(moved + 40);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+      // The old timer going off later changes nothing.
+      act(() => { vi.advanceTimersByTime(400); });
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps 300 px and the spare-line rule for a body with no palette', () => {
     useGraphStore.setState({ nodes: [{ ...colorNode([]), data: { ...colorNode([]).data, definitionId: 'text-input', label: 'Text Input', params: {} } }] });
     contentHeight = 420;
@@ -243,9 +277,45 @@ describe("the layout spring's CSS (review 7 L4)", () => {
     expect(moving[0].body).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);
   });
 
+  it('cancels a running spring once the attribute goes, so a pan or drag starts from the end layout (GM r22 Q5)', () => {
+    const rigid = rules(outside).filter((r) => r.selector === '.node-inspector-popover:not([data-palette-resizing])');
+    expect(rigid).toHaveLength(1);
+    expect(rigid[0].body).toMatch(/transition:\s*none/);
+  });
+
   it('turns it off for reduced motion', () => {
     const off = rules(reduced).filter((r) => r.selector === '.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned)');
     expect(off).toHaveLength(1);
     expect(off[0].body).toMatch(/transition:\s*none/);
+  });
+});
+
+describe("the palette's read-only × and Extract (GM r22, folded)", () => {
+  const css = (name: string) => readFileSync(resolve(__dirname, `../../src/styles/${name}`), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = (text: string) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
+
+  it('gives the read-only × the default cursor and no fade', () => {
+    const disabled = rules(css('disabled-buttons.css'));
+    const cursor = disabled.find((r) => r.selector.includes(":is(.inspector__palette-remove)[aria-disabled='true']") && /cursor:\s*default/.test(r.body));
+    expect(cursor).toBeDefined();
+    const fade = disabled.find((r) => r.selector.includes(":is(.inspector__palette-remove):is(:disabled, [aria-disabled='true'])") && /transition:\s*none\s*!important/.test(r.body));
+    expect(fade).toBeDefined();
+    // Its hovers skip the read-only one.
+    for (const name of ['panels.css', 'slava-restraint.css']) {
+      const hovers = rules(css(name)).filter((r) => /\.inspector__palette-remove:hover/.test(r.selector));
+      expect(hovers.length).toBeGreaterThan(0);
+      for (const hover of hovers) expect(hover.selector).toContain("[aria-disabled='true']");
+    }
+  });
+
+  it('keeps Extract on one line and its input in the Tab order', () => {
+    const panels = rules(css('panels.css'));
+    const row = panels.find((r) => r.selector.includes('.inspector__palette-actions .inspector__file-button') && /white-space:\s*nowrap/.test(r.body));
+    expect(row).toBeDefined();
+    const input = panels.find((r) => r.selector === ".inspector__file-input[data-palette-part='extract']");
+    expect(input?.body).toMatch(/display:\s*block/);
+    expect(input?.body).not.toMatch(/visibility:\s*hidden/);
+    const ring = panels.find((r) => r.selector.includes(':has(.inspector__file-input:focus-visible)'));
+    expect(ring?.body).toMatch(/outline:/);
   });
 });

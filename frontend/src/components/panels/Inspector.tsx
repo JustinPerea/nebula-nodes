@@ -1,9 +1,9 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
 import { StoredAssetPicker } from './StoredAssetPicker';
-import { sceneDeleteDisabledTitle, useGraphStore } from '../../store/graphStore';
+import { canvasGeneration, sceneDeleteDisabledTitle, useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -34,11 +34,16 @@ import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
-import { PALETTE_CANT_RUN, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
+import { PALETTE_CANT_RUN, PALETTE_OFFLINE_DROPPED, PALETTE_PROJECT_CHANGED, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
 import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
-import { usePaletteExtracts } from './usePaletteExtracts';
+import {
+  paletteDropNote, paletteExtractView, paletteNoteKey, paletteRunKey, setPaletteCantRun, setPaletteDropNote,
+  startPaletteExtract, usePaletteExtracts, type PaletteDropNote,
+} from './usePaletteExtracts';
+import { getProjectContext } from '../../lib/projectContext';
+import { applyPaletteFocus, notePaletteFocus, planPaletteFocus, scrollPaletteSlot, setPaletteScrollKey } from './paletteFocus';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -110,12 +115,49 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const [schemaLoading, setSchemaLoading] = useState(false);
 
   // Extract from reference, per palette control on each node (a node may
-  // have more than one 'palette' control): the line, its timing, and the
-  // status region (usePaletteExtracts).
-  const paletteExtracts = usePaletteExtracts();
-  // GM r20 on #208: when Extract can't run at all (its own code didn't
-  // load), the file it was given, kept for Try again; by node:param.
-  const [paletteCantRun, setPaletteCantRun] = useState<Record<string, File>>({});
+  // have more than one 'palette' control): the line, its timing, the status
+  // region, the can't-run line and a dropped palette's line, kept outside
+  // this Inspector, one per project, graph and node (usePaletteExtracts;
+  // GM r22 Q2 on #208). This re-renders on each change.
+  usePaletteExtracts();
+  // GM r22 Q1: a dropped palette's line is said once. The notes this
+  // Inspector showed for its node go when it leaves the node.
+  // By note key, the node it was shown on and the note itself (a newer
+  // note for the key since is the next one, not this).
+  const shownPaletteNotes = useRef(new Map<string, { node: string; note: PaletteDropNote }>());
+  // The clearing waits for the next run of this effect, so StrictMode's
+  // re-run (the same node, still open) keeps a note the person hasn't left;
+  // a run for another node, or closed, clears it then (or a task later, when
+  // the Inspector itself went).
+  const notesClearing = useRef<{ node: string | null; run: () => void; timer: ReturnType<typeof setTimeout> } | null>(null);
+  useEffect(() => {
+    const shown = shownPaletteNotes.current;
+    const node = selectedNodeId;
+    const open = visible;
+    const clearing = notesClearing.current;
+    if (clearing) {
+      clearTimeout(clearing.timer);
+      notesClearing.current = null;
+      if (!open || clearing.node !== node) clearing.run();
+    }
+    return () => {
+      if (!open) return;
+      const run = () => {
+        for (const [key, seen] of [...shown]) {
+          if (seen.node !== node) continue;
+          shown.delete(key);
+          if (paletteDropNote(key) === seen.note) setPaletteDropNote(key, null);
+        }
+      };
+      const timer = setTimeout(() => {
+        if (notesClearing.current?.timer === timer) notesClearing.current = null;
+        run();
+      }, 0);
+      notesClearing.current = { node, run, timer };
+    };
+  }, [selectedNodeId, visible]);
+  // GM r22 Q3/Q4 on #208: focus kept across an extract (see paletteFocus).
+  useLayoutEffect(() => { applyPaletteFocus(); scrollPaletteSlot(); });
 
   // Quiver Arrow dynamic model list (cached for the session). Loaded on
   // first selection of any Quiver node so the `model` enum reflects
@@ -425,36 +467,72 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // client's business: the page does it, and nothing new shows. Only when
   // the extraction's own code can't load does a line say so, with Try again
   // (GM r20 on #208).
-  function extractPalette(nodeId: string, paramKey: string, extractKey: string, file: File) {
+  //
+  // Review 8 MEDIUM-1 / GM r22 Q1: the palette is written only to the canvas
+  // it was made for. The project, the graph generation and the node's
+  // definition are read now; when it lands, a change to any of them, or a
+  // locked canvas, drops the write. A palette dropped for a switch (the
+  // person's or a follow) or a lock is said on the node when the person is
+  // back on it; a node deleted or redefined meanwhile hears nothing.
+  function extractPalette(nodeId: string, paramKey: string, file: File, retry = false) {
+    const project = getProjectContext()?.id ?? null;
+    const generation = canvasGeneration();
+    const definitionId = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.definitionId;
+    if (!definitionId) return;
+    const runKey = paletteRunKey(project, generation, nodeId, paramKey);
+    const noteKey = paletteNoteKey(project, nodeId, paramKey);
     const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
-    setPaletteCantRun((prev) => {
-      if (!(extractKey in prev)) return prev;
-      const next = { ...prev };
-      delete next[extractKey];
-      return next;
-    });
-    paletteExtracts.start(
-      extractKey,
+    setPaletteDropNote(noteKey, null);
+    // A retry keeps the can't-run line and Try again, mounted, until it
+    // lands (GM r22 Q4).
+    if (!retry) setPaletteCantRun(runKey, null);
+    startPaletteExtract(
+      runKey,
       () => import('../../lib/paletteWorkerClient').then(
-        ({ extractPaletteLatest }) => extractPaletteLatest(extractKey, file)
+        ({ extractPaletteLatest }) => extractPaletteLatest(runKey, file)
           .catch(() => ({ ok: false as const, reason: 'other' as const })),
         () => 'unloaded' as const,
       ),
       (extracted) => {
+        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+        const sameCanvas = (getProjectContext()?.id ?? null) === project && canvasGeneration() === generation;
+        const colors = extracted !== 'unloaded' && extracted.ok && extracted.colors.length > 0 ? extracted.colors : null;
+        if (!sameCanvas || !node || node.data.definitionId !== definitionId) {
+          setPaletteCantRun(runKey, null);
+          // Another project or graph is open: a palette is said on its node
+          // when the person is back (nothing else is: no toast, no status,
+          // in a project it wasn't for). Deleted or redefined: nothing.
+          if (!sameCanvas && colors) setPaletteDropNote(noteKey, { text: PALETTE_PROJECT_CHANGED, definitionId });
+          return '';
+        }
         if (extracted === 'unloaded') {
-          setPaletteCantRun((prev) => ({ ...prev, [extractKey]: file }));
+          setPaletteCantRun(runKey, file);
+          setPaletteScrollKey(runKey);
+          planPaletteFocus(runKey, null, true);
           return PALETTE_CANT_RUN;
         }
-        if (extracted.ok && extracted.colors.length > 0) {
+        setPaletteCantRun(runKey, null);
+        if (colors) {
+          const lock = canvasLockNow();
+          if (lock.locked) {
+            // A follow switch is the project changing (GM r22 Q1); offline,
+            // the lock's own reason and what unlocks it.
+            setPaletteDropNote(noteKey, { text: lock.following ? PALETTE_PROJECT_CHANGED : PALETTE_OFFLINE_DROPPED, definitionId });
+            planPaletteFocus(runKey, null);
+            return '';
+          }
+          planPaletteFocus(runKey, colors.length);
           // Only the palette, over the node's params as they are when it
           // lands (review 7 M1).
-          writeParamNow(nodeId, paramKey, extracted.colors);
-          return paletteStatus(extracted.colors.length);
+          writeParamNow(nodeId, paramKey, colors);
+          return paletteStatus(colors.length);
         }
+        planPaletteFocus(runKey, null);
         const text = paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason);
         notify(text);
         return text.replace('\n', ' ');
       },
+      { retry },
     );
   }
 
@@ -708,17 +786,44 @@ export function Inspector({ embedded = false }: InspectorProps) {
       const swatches: string[] = Array.isArray(raw)
         ? raw.filter((s): s is string => typeof s === 'string')
         : [];
-      const extractKey = `${activeNode.id}:${param.key}`;
+      // GM r22 Q2 on #208: one extract per project, graph and node, so an
+      // Inspector opened again shows the one running.
+      const project = getProjectContext()?.id ?? null;
+      const extractKey = paletteRunKey(project, canvasGeneration(), activeNode.id, param.key);
+      const noteKey = paletteNoteKey(project, activeNode.id, param.key);
       // GM r17/r18 on #208: nothing changes for a quick extract; once the
       // line shows, the old swatches are read-only (Strength and Method
       // stay live) and the Add / Extract row waits under the line.
-      const { shown: pendingShown, status: extractStatus } = paletteExtracts.view(extractKey);
-      const cantRunFile = paletteCantRun[extractKey];
+      const { working, shown, status: extractStatus, cantRun: cantRunFile } = paletteExtractView(extractKey);
+      // GM r22 Q4: a retry keeps the can't-run line (never the pending one).
+      const pendingShown = shown && !cantRunFile;
+      const retrying = working && Boolean(cantRunFile);
+      // GM r22 Q1: a palette dropped while away, said once on this node
+      // (not on a node redefined since), until the next Extract or edit.
+      const storedNote = paletteDropNote(noteKey);
+      const dropNote = storedNote && storedNote.definitionId === activeNodeData.definitionId
+        && !working && !cantRunFile ? storedNote.text : null;
+      if (dropNote && storedNote) shownPaletteNotes.current.set(noteKey, { node: activeNode.id, note: storedNote });
+      const pendingId = `palette-pending-${activeNode.id}-${param.key}`;
+      // GM r22 Q3: read-only while the line shows, focus kept (aria-disabled,
+      // the house pattern); the lock still disables outright.
+      const held = pendingShown && !readOnly;
+      const heldProps = held ? { 'aria-disabled': true as const, 'aria-describedby': pendingId } : {};
 
-      const writeSwatches = (next: string[]) => onParamChange(param.key, next);
+      const writeSwatches = (next: string[]) => {
+        if (held) return;
+        setPaletteDropNote(noteKey, null);
+        onParamChange(param.key, next);
+      };
+      // A held colour chip mustn't open its picker.
+      const holdPicker = (e: { preventDefault: () => void }) => { if (held) e.preventDefault(); };
 
       return (
-        <div className="inspector__control-stack inspector__palette">
+        <div
+          className="inspector__control-stack inspector__palette"
+          data-palette-key={extractKey}
+          onFocusCapture={(e) => notePaletteFocus(extractKey, e.target)}
+        >
           {swatches.length === 0 ? (
             <div className="inspector__palette-empty">No swatches yet</div>
           ) : (
@@ -730,12 +835,16 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <input
                       type="color"
                       className="inspector__palette-color"
+                      data-swatch-part="color"
+                      data-swatch-index={idx}
                       value={safeHex}
                       // GM r20 on #208: the chip is the content, always at
                       // its full colour, disabled too; only its edge dims.
                       style={{ backgroundColor: safeHex }}
-                      disabled={readOnly || pendingShown} {...lock.mark}
+                      disabled={readOnly} {...lock.mark} {...heldProps}
                       aria-label={`Swatch ${idx + 1} color`}
+                      onClick={holdPicker}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') holdPicker(e); }}
                       onChange={(e) => {
                         const next = [...swatches];
                         next[idx] = e.target.value;
@@ -745,8 +854,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <input
                       type="text"
                       className="inspector__field inspector__palette-hex"
+                      data-swatch-part="hex"
+                      data-swatch-index={idx}
                       value={hex}
-                      disabled={readOnly || pendingShown} {...lock.mark}
+                      disabled={readOnly} {...lock.mark} {...heldProps}
+                      readOnly={held}
                       spellCheck={false}
                       aria-label={`Swatch ${idx + 1} hex`}
                       onChange={(e) => {
@@ -766,11 +878,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <button
                       type="button"
                       className="inspector__palette-remove"
+                      data-swatch-part="remove"
+                      data-swatch-index={idx}
                       aria-label={`Remove swatch ${idx + 1}`}
                       // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
                       // lock's own tooltip, the follow reason first, then
                       // offline's verb; "Remove swatch" when live.
-                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches', disabled: pendingShown })}
+                      {...lock.act({ title: held ? undefined : 'Remove swatch', offline: 'remove swatches' })}
+                      {...heldProps}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -786,15 +901,29 @@ export function Inspector({ embedded = false }: InspectorProps) {
               })}
             </div>
           )}
+          {dropNote && (
+            // GM r22 Q1: neutral, in the line's slot, above the row.
+            <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
+          )}
+          {cantRunFile && (
+            // GM r20/r22 Q6 on #208: only when Extract can't run at all;
+            // neutral, the because form, in the line's slot, then the row
+            // with Try again where Extract is.
+            <p className="inspector__palette-cant-run" aria-hidden="true">{PALETTE_CANT_RUN}</p>
+          )}
           {pendingShown ? (
             // GM r16 on #208: one plain line in the Add / Extract row's place;
             // the swatches above stay until the new palette replaces them.
-            <p className="inspector__palette-pending" aria-hidden="true">Extracting colors…</p>
+            // Focus moves here from the row it replaced (GM r22 Q3).
+            <p id={pendingId} className="inspector__palette-pending" aria-hidden="true" tabIndex={-1} data-palette-part="pending">
+              Extracting colors…
+            </p>
           ) : (
           <div className="inspector__palette-actions">
             <button
               type="button"
               className="inspector__action-button"
+              data-palette-part="add"
               // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
               // reason, not "Add a swatch", while it can't add.
               // While the line shows, Add waits under it with Extract.
@@ -810,9 +939,28 @@ export function Inspector({ embedded = false }: InspectorProps) {
               />
               <span>Add</span>
             </button>
-            {/* A <label> can't be disabled: locked, it says so itself (the
+            {cantRunFile ? (
+              // GM r22 Q4: mounted through a retry, aria-disabled while it
+              // runs (focus stays), the same element after a second failure.
+              <button
+                type="button"
+                className="inspector__action-button"
+                data-palette-part="try"
+                {...lock.act({ title: undefined, offline: 'extract a palette' })}
+                aria-disabled={retrying || undefined}
+                onClick={() => {
+                  if (retrying || refuseCanvasEdit()) return;
+                  extractPalette(activeNode.id, param.key, cantRunFile, true);
+                }}
+              >
+                {TRY_AGAIN}
+              </button>
+            ) : (
+            /* A <label> can't be disabled: locked, it says so itself (the
                 shared grey, the lock's reason, no hover; fix round 6 of PR
-                #200, review 6 LOW-1, GM r9 answer 3). */}
+                #200, review 6 LOW-1, GM r9 answer 3). Its input is visually
+                hidden, not display: none, so Extract is in the Tab order
+                (GM r22, folded). */
             <label className="inspector__file-button" {...lockedPicker('Extract a palette from an image', 'extract a palette')}>
               <Upload
                 className="inspector__action-icon"
@@ -826,6 +974,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 type="file"
                 accept="image/*"
                 className="inspector__file-input"
+                data-palette-part="extract"
                 disabled={readOnly}
                 {...lock.mark}
                 onChange={(e) => {
@@ -837,31 +986,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   if (!file) return;
                   // Reset the input so the same file can be picked again later.
                   e.target.value = '';
-                  extractPalette(activeNode.id, param.key, extractKey, file);
+                  extractPalette(activeNode.id, param.key, file);
                 }}
               />
             </label>
+            )}
           </div>
           )}
           {/* GM r18 4 on #208: always mounted, so a screen reader hears each
               change: "Extracting colors…", then "Extracted N colors." or the
               failure's own line. The visible line is the same words. */}
-          {cantRunFile && !pendingShown && (
-            // GM r20 on #208: only when Extract can't run at all; neutral,
-            // the because form, with Try again (the same file).
-            <p className="inspector__palette-cant-run">
-              <span aria-hidden="true">{PALETTE_CANT_RUN}</span>
-              <button
-                type="button"
-                className="inspector__action-button"
-                {...lock.act({ title: undefined, offline: 'extract a palette' })}
-                onClick={() => extractPalette(activeNode.id, param.key, extractKey, cantRunFile)}
-              >
-                {TRY_AGAIN}
-              </button>
-            </p>
-          )}
-          <span className="inspector__palette-status" role="status" aria-live="polite">{extractStatus}</span>
+          <span className="inspector__palette-status" role="status" aria-live="polite">{extractStatus || dropNote || ''}</span>
         </div>
       );
     }

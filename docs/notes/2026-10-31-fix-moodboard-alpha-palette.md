@@ -2230,3 +2230,139 @@ centre equal the hex.
     swatches kept; Try again with the chunk back lands the palette
     ("Extracted 7 colors."), the line gone.
   - Shots in `shots8d/` (4, md5-distinct, each opened).
+
+## Round 8e (base bed954f4): review 8, GM r22
+
+### A palette lands only on the canvas it was made for (review 8 MEDIUM-1, GM r22 Q1)
+
+Extract read the node by id alone when its palette landed, so a project
+switch mid-extract could write it to the other project's node with the same
+id. Extract now reads the project (`getProjectContext`), the graph
+generation (graphStore's new `canvasGeneration()`, the count every canvas
+replacement bumps) and the node's `definitionId` when it starts. When it
+lands:
+
+- a node deleted or redefined on the same canvas: nothing, no write, no
+  status, no toast (review 8 LOW-2: no "Extracted N colors.");
+- another project or graph open: no write, no toast; a palette found is
+  said on that node when the person is back on it (below);
+- the canvas locked (`canvasLockNow()`): no write. A follow switch says the
+  project line (GM: the same line for a person's switch and a follow);
+  offline says the lock's reason and what unlocks it in place of the
+  project clause: "Nebula couldn’t add the extracted colors because Nebula
+  was offline when they were ready. Extract again when Nebula reconnects."
+
+The line ("Nebula couldn’t add the extracted colors because the project
+changed before they were ready. Extract again.") shows in the pending line's
+slot, above the Add / Extract row, neutral, no button; the status region
+reads it. It is keyed on project + node + param (not the generation:
+coming back loads the graph afresh), kept in this tab's memory only, shown
+only when the node's definition is the one it was made for, and goes on the
+next Extract, on any swatch edit, or once the Inspector leaves the node
+after showing it. The swap-nodes probe from review 8 is a test.
+
+Found live: in dev, StrictMode runs the Inspector's effects twice on mount,
+and the "leave the node" cleanup cleared the line the moment the popover
+opened. The clearing now waits for the effect's next run (a run for the
+same node keeps it; another node, or closed, clears it), and a test renders
+the Inspector under StrictMode.
+
+### One extract per project, graph and node (review 8 LOW-1, GM r22 Q2)
+
+`usePaletteExtracts` is now a module store keyed `project|generation|node:param`
+(`paletteRunKey`); the Inspector subscribes (`useSyncExternalStore`). An
+Inspector closed and opened again shows "Extracting colors…" with the same
+300 ms / 400 ms rules, the swatches read-only at full colour, Strength and
+Method live. Its hold timer no longer depends on the Inspector being open,
+so the old "land at once on unmount" path is gone. The landing merge is
+unchanged (only the palette, over the node's params as they are); a test
+edits Strength in the reopened Inspector and keeps it. The can't-run file
+lives there too, per key.
+
+### Focus (GM r22 Q3/Q4)
+
+- Under the line, the chip, hex and × are `aria-disabled` (the hex
+  `readOnly`), described by the line (`aria-describedby`), not `disabled`,
+  so a focused swatch keeps focus and its ring; presses and edits do
+  nothing, and the chip doesn't open its picker. The lock still disables
+  them outright.
+- On landing, focus stays at the same swatch part and index, clamped to the
+  last swatch; from the line, Try again or with no swatches, it goes to
+  Extract (`paletteFocus.ts`, module state so a reopened Inspector gets it).
+- Focus on Add or Extract when the line replaces the row moves to the line
+  (`tabIndex -1`), and back to Extract when it lands. (GM's answer covered
+  the swatches; without this, focus fell to the body.)
+- Try again: the same element through the retry, `aria-disabled` while it
+  runs (a press then does nothing), the can't-run line unchanged (a retry
+  never shows the pending line), and it holds at least 400 ms from its
+  start. A second failure: the same element, focus kept, and the status
+  region says the line again (it is cleared when the retry starts). Success:
+  the normal row, focus to Extract, "Extracted N colors."
+
+### Rigid pan and drag (GM r22 Q5)
+
+The popover watches its anchor's box each frame; a move while
+`data-palette-resizing` is on clears it at once. Removing the attribute
+alone left Chrome running the transition to its end (with `transition: all
+0s` a running transition with the same end value carries on), so the
+popover now has `transition: none` whenever the attribute is off, which
+cancels it: the panel is at its end layout in the same frame and tracks the
+node 1:1.
+
+### The can't-run slot (GM r22 Q6)
+
+The line takes the pending line's slot, then one row: Add, and Try again
+where Extract is. When the slot runs past the Inspector's scroll area, it
+scrolls by the least that shows the line and the row, in one `scrollBy`
+(smooth; a jump under reduced motion). Two `scrollIntoView` calls cancelled
+each other's smooth scroll (found live at 1024 x 640).
+
+### Folded and NITs
+
+- The read-only × has the default cursor and snaps (no 120 ms colour fade);
+  its hovers skip `aria-disabled`.
+- Extract stays on one line, and its input is visually hidden over the
+  label (not `display: none`), so it is in the Tab order; the label shows
+  the keyboard ring.
+- The worker client's dead `task.unreadable` is gone; `extractPaletteLatest`
+  forgets a key once its Extract is done.
+- Tests for the two untested guards: the store's ticket (an earlier
+  Extract's non-null result after a later one started) and the client's
+  `worker !== made` (a let-go worker's late ready hands the new one nothing).
+
+### Gates and checks, round 8e
+
+- tsc and lint clean.
+- **Vitest** `--maxWorkers=2`, 203 files (8d's 201 plus
+  `Inspector.paletteLanding` and `paletteExtractStore`): 3033 of 3033. The
+  first pass found one: `focusRingCss` rejects `outline: none` on focus, so
+  the pending line keeps the default ring.
+- **Backend** `test_colour_alpha.py`, isolated: 72 passed.
+- **Build budget:** 447,632 bytes raw, the same as 8d (0 added).
+- **Mutants:** 39 on this round's branches (each guard of the landing, the
+  line and its clearing, StrictMode, held swatches, focus plan and clamp,
+  Try again's hold, re-announce and inert press, the scroll, the store's
+  ticket and retry, the client's guard and key forgetting, the rigid spring
+  in code and CSS, the × and Extract CSS): 39 killed (4 survived a first
+  pass and got tests: a deleted node's kept status, a note cleared only by
+  running, a press during retry, StrictMode on mount; and the spring CSS).
+- **Live**, 8792/5792, backend through `serve_isolated.py`, the installed
+  Chrome on a throwaway profile, canaries blocked, nothing off the lane but
+  the blocked canaries. The palette chunk was held a few seconds on its
+  first load so an Extract ran long enough to show the line:
+  - reopened mid-extract: the line, every swatch `aria-disabled`, full-colour
+    chips, the × default cursor and 0 s transition; it landed after
+    ("Extracted 7 colors.");
+  - project switch: Lane r4 → Lane B mid-extract; nothing said in Lane B,
+    the palette not written; back on Lane r4 the line on Cinema Color; gone
+    after closing and reopening;
+  - the 5th hex focused (keyboard ring) stays focused and `aria-disabled`
+    under the line; a 2-colour palette lands and focus is on the 2nd hex;
+  - chunk refused: Try again focused, Enter: `aria-disabled`, held 410 ms,
+    failed again, the same button focused, the status re-read; chunk back,
+    Enter: "Extracted 7 colors.", focus on Extract's input;
+  - 1024 x 640: the slot (line 369 to row 441) inside the body (200 to 441);
+  - 1440 x 1400, Add mid-spring then a middle-button pan: the panel at
+    568 of 600 px mid-spring, then 600 px at once, its gap to the node -8 px
+    in both drag frames.
+  - Shots in `shots8e/` (10, md5-distinct, each opened).

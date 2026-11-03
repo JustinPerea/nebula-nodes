@@ -22,6 +22,7 @@ import {
   JOB_DEADLINE_MS,
   paletteOfFile,
   resetPaletteWorkerForTests,
+  runningPaletteKeysForTests,
   transferOf,
   WORKER_READY_MS,
   type PaletteReply,
@@ -213,6 +214,25 @@ describe('a later Extract wins (round 8b)', () => {
     expect(await first).toBeNull();
   });
 
+  it('forgets a key once its Extract is done (review 8 NIT)', async () => {
+    useWorker();
+    const file = new Blob([]);
+    const first = extractPaletteLatest('n1:palette', file);
+    const second = extractPaletteLatest('n1:palette', file);
+    const other = extractPaletteLatest('n2:palette', file);
+    expect(runningPaletteKeysForTests().sort()).toEqual(['n1:palette', 'n2:palette']);
+    await settle();
+    reads.next[0](result('#111111'));
+    expect(await first).toBeNull();
+    // The later one still runs for n1.
+    expect(runningPaletteKeysForTests().sort()).toEqual(['n1:palette', 'n2:palette']);
+    reads.next[1](result('#222222'));
+    reads.next[2](result('#333333'));
+    await second;
+    await other;
+    expect(runningPaletteKeysForTests()).toEqual([]);
+  });
+
   it('keeps extracts for two controls apart', async () => {
     useWorker();
     const file = new Blob([]);
@@ -310,6 +330,30 @@ describe('the hand-off holds (review 7 L2, round 8c)', () => {
     expect(await second).toEqual(runPaletteJob(opaqueJob()));
     expect(await computePalette(opaqueJob())).toEqual(runPaletteJob(opaqueJob()));
     expect(FakeWorker.made).toBe(2);
+  });
+
+  it("ignores the first worker once it was let go (worker !== made): its late ready doesn't hand the second its job", async () => {
+    vi.useFakeTimers();
+    const made: FakeWorker[] = [];
+    FakeWorker.made = 0;
+    resetPaletteWorkerForTests(() => { const w = new FakeWorker({ ready: false }); made.push(w); return (worker = w); });
+    const first = computePalette(opaqueJob());
+    await vi.advanceTimersByTimeAsync(WORKER_READY_MS);
+    await first;
+    // A second worker starts and isn't ready yet; the job waits for it.
+    const second = computePalette(opaqueJob());
+    expect(made).toHaveLength(2);
+    // The first, let go for its slow start, says ready late, and answers.
+    made[0].reply({ ready: true, reads: true });
+    made[0].reply({ id: 1, result: { ok: true, colors: ['#000001'] } });
+    await vi.advanceTimersByTimeAsync(0);
+    // Nothing went to the second before it said ready itself.
+    expect(made[1].transfers).toEqual([]);
+    made[1].reply({ ready: true, reads: false });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(made[1].transfers).toHaveLength(1);
+    made[1].reply({ id: 1, result: runPaletteJob(opaqueJob()) });
+    expect(await second).toEqual(runPaletteJob(opaqueJob()));
   });
 
   it('a slow start then a ready worker: the second worker does the work', async () => {

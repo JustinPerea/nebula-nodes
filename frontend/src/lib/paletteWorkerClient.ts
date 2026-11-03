@@ -54,7 +54,6 @@ type Task = {
   file: Blob | null;
   k: number;
   job: PaletteJob | null;
-  unreadable: boolean;
   resolve: (result: PaletteResult) => void;
 };
 
@@ -135,7 +134,8 @@ function place(task: Task): void {
   if (status === 'none') start();
   if (status === 'broken') void fallback(task);
   else if (status === 'starting') waiting.push(task);
-  else if (task.job || (reads && !task.unreadable)) post(task);
+  // A file the worker sent back unread comes here again with its job.
+  else if (task.job || reads) post(task);
   else void readOnPage(task);
 }
 
@@ -192,7 +192,6 @@ function start(): void {
     pending.delete(reply.id);
     clearTimeout(entry.deadline);
     if ('unread' in reply) {
-      entry.task.unreadable = true;
       void readOnPage(entry.task);
       return;
     }
@@ -204,25 +203,35 @@ function start(): void {
  *  when there is none). The job's buffers are transferred: don't read them
  *  after. */
 export function computePalette(job: PaletteJob): Promise<PaletteResult> {
-  return new Promise((resolve) => place({ file: null, k: job.k, job, unreadable: false, resolve }));
+  return new Promise((resolve) => place({ file: null, k: job.k, job, resolve }));
 }
 
 /** The palette of a picked file, read and worked out in the worker where it
  *  can, on the page where it can't. */
 export function paletteOfFile(file: Blob, k = 6): Promise<PaletteResult> {
-  return new Promise((resolve) => place({ file, k, job: null, unreadable: false, resolve }));
+  return new Promise((resolve) => place({ file, k, job: null, resolve }));
 }
 
+/** The newest Extract per key, while it runs (review 8 NIT: a finished
+ *  key is forgotten, so the map holds only running ones). */
 const latest = new Map<string, number>();
+let latestSeq = 0;
 
 /** Extract ``file``'s palette for ``key`` (one palette control on one
  *  node). A later Extract for the same key wins: an earlier one still
  *  running resolves null, and its result is dropped. */
 export async function extractPaletteLatest(key: string, file: Blob, k = 6): Promise<PaletteResult | null> {
-  const ticket = (latest.get(key) ?? 0) + 1;
+  const ticket = ++latestSeq;
   latest.set(key, ticket);
   const result = await paletteOfFile(file, k);
-  return latest.get(key) === ticket ? result : null;
+  if (latest.get(key) !== ticket) return null;
+  latest.delete(key);
+  return result;
+}
+
+/** Tests only: the keys with an Extract running. */
+export function runningPaletteKeysForTests(): string[] {
+  return [...latest.keys()];
 }
 
 /** Tests only: use ``factory`` for the next worker, and forget the last. */
