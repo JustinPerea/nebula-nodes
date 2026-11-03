@@ -52,7 +52,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)

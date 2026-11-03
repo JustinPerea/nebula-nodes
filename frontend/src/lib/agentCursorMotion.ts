@@ -3,11 +3,13 @@ import type { NodeData } from '../types';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
- * Spring motion for agent cursors, integrated per animation frame.
+ * The shared agent-motion spring, integrated per animation frame: pins,
+ * proposal ghosts, the camera and the offline spring-back run on it. The
+ * cursor itself travels on its own springs (agentCursorPlanner.ts).
  *
  * Tuned under critical damping (ζ ≈ 0.69). Measured at 60 fps over a 300 px
  * move: about 6 px of overshoot and at rest in under half a second, so a
- * cursor arrives with a small, readable settle instead of an ease-out slide.
+ * pin or ghost arrives with a small, readable settle instead of an ease-out slide.
  */
 export interface SpringConfig {
   stiffness: number;
@@ -16,8 +18,6 @@ export interface SpringConfig {
 }
 
 export const AGENT_CURSOR_SPRING: SpringConfig = { stiffness: 300, damping: 24, mass: 1 };
-/** Pulling a wire is a touch slower so the gesture reads as deliberate. */
-export const AGENT_DRAG_SPRING: SpringConfig = { stiffness: 120, damping: 20, mass: 1 };
 
 export interface Point {
   x: number;

@@ -275,4 +275,10 @@ export const DEFERRED_MODULES: readonly string[] = [
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
+  // The agent cursor's motion and look, only in the cursor layer's chunk.
+  'lib/agentCursorPlanner.ts',
+  'lib/agentCursorLook.ts',
+  // Its store: the normalising and the replay load with their readers; the
+  // entry keeps only the socket feed (store/agentPresenceFeed.ts).
+  'store/agentPresenceStore.ts',
 ];

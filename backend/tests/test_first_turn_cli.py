@@ -62,7 +62,7 @@ def cli(tmp_path, monkeypatch, person):
         store.commit(catalog)
     browser: list[dict] = []
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     async def capture_browser(data):
