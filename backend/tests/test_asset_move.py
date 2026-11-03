@@ -43,7 +43,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "project_store", store)
     sent: list[dict] = []
 
-    async def record(data):
+    async def record(data, **_kw):
         sent.append(data)
 
     async def ignore(data):

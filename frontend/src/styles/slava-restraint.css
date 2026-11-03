@@ -2839,7 +2839,9 @@ body.app-slava-restraint .agent-log__time {
 
 body.app-slava-restraint .agent-log__source {
   overflow: hidden;
-  color: var(--agent-log-source-color);
+  /* An agent's name: its cursor's shade, or the nearest tone of it that
+   * reads 4.5:1 here (agentLogTones); the dot keeps the shade. */
+  color: var(--agent-log-name-color, var(--agent-log-source-color));
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;

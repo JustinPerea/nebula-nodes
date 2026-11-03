@@ -50,7 +50,7 @@ def api(tmp_path, monkeypatch):
         catalog["activeProjectId"] = project["id"]
         store.commit(catalog)
 
-    async def capture(data):
+    async def capture(data, **_kw):
         return None
 
     output_root = tmp_path / "output"

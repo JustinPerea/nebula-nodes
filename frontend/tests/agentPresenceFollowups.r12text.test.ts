@@ -3,12 +3,21 @@
 // over the shared corpus (backend/tests/fixtures/pin_text_cases.json: the
 // named cases GM asked for and a seeded fuzz; the backend's half is
 // test_pin_text_as_typed.py).
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import corpus from '../../backend/tests/fixtures/pin_text_cases.json';
-import { MAX_PIN_TEXT, noteLength, pinDisplayText, textLength } from '../src/lib/canvasPins';
+import { MAX_PIN_TEXT, noteLength, pinDisplayText, pinTextIsLoaded, pinTextReady, textLength } from '../src/lib/canvasPins';
 
 type Case = { name: string; typed: string; note: string; noteLength: number; reply: string; replyLength: number };
 const cases = (corpus as { cases: Case[] }).cases;
+
+// The Unicode data is a lazy chunk (review 13 L-2): until it lands every rule
+// errs toward hiding, so the corpus is checked only once it is in. Without
+// this wait the file raced its own import and failed whenever the chunk was
+// slower than the first test (alone, every time; in CI, now and then).
+beforeAll(async () => {
+  await pinTextReady;
+  expect(pinTextIsLoaded()).toBe(true);
+});
 
 describe('the shared pin-text corpus', () => {
   it('has the cases GM asked for and the fuzz', () => {

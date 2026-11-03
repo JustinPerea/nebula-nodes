@@ -446,7 +446,8 @@ newest read by any session of that name, your MCP looks included. An MCP
 look never refreshes a `nebula look`: after one, a `nebula set` built on an
 older `nebula look` is refused, so run `nebula look` and redo it. Set
 `NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
-work on the same canvas, and use it for both reading and writing. The person's canvas merges your change
+work on the same canvas, and use it for both reading and writing (it also
+gives each lane its own cursor on the person's canvas). The person's canvas merges your change
 into theirs and only asks them when you both changed the same thing. A shot run holds the
 scenes upstream of it too, until it ends. A saved project, a graph file you
 import (`nebula load`, also when you load it) and the person's own edits are
@@ -846,9 +847,37 @@ nebula pins                    # notes the person pinned for agents
 nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
 nebula point --say "Reading your board"   # no target: said where your cursor is, it doesn't move
+nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 ```
+
+`--action` on `nebula point` says what you are doing at your cursor: `move`
+(going there, the default), `look` (reading), `think`, `type` (a prompt or a
+field), `click`, `drag` (connecting, with `--from`), `run`, `propose`
+(waiting for the person's OK), `wait` (for their answer) or `error`
+(something failed). Any other value is refused. Your graph edits pick their
+own.
+
+**One cursor per session, and `NEBULA_AGENT_SESSION`.** Each of your
+sessions has its own cursor on the person's canvas: "Claude Code", then
+"Claude Code · 2" (the lowest number free among your live cursors; a cursor
+keeps its number until it leaves). `NEBULA_AGENT_SESSION` says which session
+a call is: up to 64 of `A-Z a-z 0-9 _ . : -`; anything else is ignored for
+the cursor, as if unset.
+
+- **Without it**, under Claude Code the CLI uses your Claude Code session.
+  Your subagents see the same one, so every subagent moves your cursor, and
+  the person sees one cursor jumping between lanes. Over MCP, your subagents
+  share your MCP server and so its cursor too.
+- **To give each subagent its own cursor**, the orchestrator picks a value
+  per lane and tells the subagent to put it on every `nebula` call it makes,
+  for example `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`.
+  Use the CLI for this: an MCP server has one session for all its callers.
+- The same value keys the lane's scene reads, so a lane reads and writes
+  with it (above).
+- Only the person sees sessions: `nebula look` and `nebula agents` show one
+  cursor per agent.
 
 A note keeps the lines the person wrote: `nebula pins` prints a note of
 several lines under its pin's line, every line indented the same, so a list

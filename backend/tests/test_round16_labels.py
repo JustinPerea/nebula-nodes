@@ -90,7 +90,7 @@ def api(monkeypatch):
     graph = CLIGraph()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):  # the person form; `others` is the agents'
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

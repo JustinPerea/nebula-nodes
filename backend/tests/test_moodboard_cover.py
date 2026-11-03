@@ -52,7 +52,7 @@ def sent(monkeypatch) -> list[dict]:
 
     messages: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         messages.append(data)
 
     monkeypatch.setattr(main_module, "agent_presence", AgentPresence())

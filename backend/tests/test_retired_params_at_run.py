@@ -101,7 +101,7 @@ def api(monkeypatch, person):
     monkeypatch.setattr(main_module, "selection_context", SelectionContextStore())
     monkeypatch.setattr(main_module, "canvas_events", CanvasEventJournal())
 
-    async def _ignore(_data):
+    async def _ignore(_data, **_kw):
         pass
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", _ignore)

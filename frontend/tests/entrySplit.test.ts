@@ -70,7 +70,7 @@ const STARTUP_STATE = [
   'store/agentLogStore.ts',
   'store/agentNotesStore.ts',
   'store/agentQuestionsStore.ts',
-  'store/agentPresenceStore.ts',
+  'store/agentPresenceFeed.ts',
   'store/canvasProposalsStore.ts',
   'store/canvasPinsStore.ts',
   'lib/heldIntents.ts',

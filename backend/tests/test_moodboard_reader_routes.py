@@ -54,7 +54,7 @@ def client(tmp_path, monkeypatch, person, google):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main.manager, "broadcast_raw", ignore)

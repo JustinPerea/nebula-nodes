@@ -20,6 +20,8 @@ don't pile up folders in /tmp (a run that is killed still leaves its one).
 from __future__ import annotations
 
 import atexit
+import contextlib
+import contextvars
 import os
 import shutil
 import tempfile
@@ -102,12 +104,17 @@ def pytest_configure(config):
     )
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
-    """Root ignores file permissions, so a test that makes a file unreadable or
+    """The cursor checks go in before any fixture runs (PR #211 review 5,
+    M3; see _install_cursor_route_check below).
+
+    Root ignores file permissions, so a test that makes a file unreadable or
     unwritable with chmod proves nothing as root, and Claude Code cloud
     sessions run as root (CI doesn't). Such tests carry
     @pytest.mark.unprivileged; tests/test_unprivileged_marker.py keeps every
     one of them marked."""
+    _install_cursor_route_check()
     if item.get_closest_marker("unprivileged") and hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root ignores file permissions; CI runs this as a normal user")
 
@@ -121,6 +128,8 @@ def pytest_runtest_teardown(item, nextitem):
     which falls back to the repo's real settings.json: every later test then
     read the person's keys and wrote their settings."""
     yield
+    # What the fixtures' undo left on main.manager (PR #211 review 5, M3).
+    _check_instance_senders()
     import sys
 
     module = sys.modules.get("services.settings")
@@ -374,3 +383,321 @@ async def asgi_get(app, path: str, query: str = "", headers: dict | None = None,
              "server": ("testserver", 80)}
     await app(scope, receive, send)
     return answer
+
+
+class BroadcastCapture:
+    """A stand-in for manager.broadcast_raw that takes what the real one
+    takes, ``others=`` included (presence sends the person form as ``data``
+    and the agent form as ``others``). ``sent`` is every call's ``data``;
+    ``others`` holds each call's ``others`` (None when there was one form)."""
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+        self.others: list[dict | None] = []
+
+    async def __call__(self, data, *, others=None, **_kw) -> None:
+        self.sent.append(data)
+        self.others.append(others)
+
+
+@pytest.fixture
+def broadcast_capture(monkeypatch) -> BroadcastCapture:
+    """Patch main.manager.broadcast_raw with a BroadcastCapture. Use it in
+    place of a hand-written fake (review 1 of PR #211, LOW-2)."""
+    import main
+
+    capture = BroadcastCapture()
+    monkeypatch.setattr(main.manager, "broadcast_raw", capture)
+    return capture
+
+
+# -- every broadcast_raw stand-in takes ``others=`` (PR #211 review 2, LOW-3) --
+#
+# A stand-in that can't take ``others=`` raises a TypeError that _show_agent
+# swallows, so presence events vanish from a test with no failure (review 1,
+# LOW-2). The old guard read the test files' syntax and missed
+# functools.partial, a class with __call__, string-path and keyword setattr
+# and direct assignment. This checks behaviour instead: whatever sits at
+# main.manager.broadcast_raw after any monkeypatch.setattr, and again when a
+# test's body ends, must bind ``(data, others=None)``.
+
+def broadcast_raw_takes_others(fake: object) -> bool:
+    import inspect
+
+    try:
+        inspect.signature(fake).bind({}, others=None)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+    except ValueError:  # no signature to read (a C builtin): nothing to check
+        return True
+    return True
+
+
+def _check_broadcast_raw(where: str) -> None:
+    import sys
+
+    manager = getattr(sys.modules.get("main"), "manager", None)
+    fake = getattr(manager, "broadcast_raw", None) if manager is not None else None
+    if fake is not None and not broadcast_raw_takes_others(fake):
+        raise TypeError(
+            f"{where}: main.manager.broadcast_raw is now {fake!r}, which can't take others=. "
+            "Use the broadcast_capture fixture, or give the stand-in `**kw` and forward it.")
+
+
+_monkeypatch_setattr = pytest.MonkeyPatch.setattr
+
+
+def _checked_setattr(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    # The cursor check goes in before anything is saved, so a fixture that
+    # patches a sender saves (and puts back) the checked one (review 5, M3).
+    _install_cursor_route_check()
+    result = _monkeypatch_setattr(self, *args, **kwargs)
+    _check_broadcast_raw("monkeypatch.setattr")
+    _check_instance_senders()
+    return result
+
+
+pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
+
+
+# -- a cursor event with a target goes out only through _broadcast_presence --
+#
+# PR #211 review 4, LOW-1: the person's tabs must get a cursor event in the
+# person form (its session and number), so every one is sent by
+# main._broadcast_presence. The AST guards in test_agent_cursor_round4.py read
+# the source; this checks behaviour, in every test, two ways (tests only: the
+# backend itself refuses nothing, which would change the boundary):
+#
+# - The route: while a test runs, the ConnectionManager's senders record any
+#   ``agentPresence`` with a target that reaches them from anywhere but
+#   _broadcast_presence.
+# - The content (review 5, LOW-1): no person-only frame (an ``agentPresence``
+#   carrying ``session``, its key and number, or an ``agentPresenceReplay``)
+#   may reach a socket that isn't the person's canvas. Checked on the real
+#   senders, on every instance-level stand-in a test puts on main.manager,
+#   and on the sockets themselves (Starlette's WebSocket.send_text,
+#   send_json and send_bytes), so the replay sent on a verified hello is
+#   checked too.
+#
+# Either one fails the test. The check is installed before any fixture runs
+# (pytest_runtest_setup, tryfirst, and every monkeypatch.setattr), and a
+# sender left on the manager instance by a fixture's undo is dropped before
+# and after each test, so a patched sender can't blind it (review 5, M3).
+# A stand-in, a Mock included, is wrapped in a proxy that checks each call
+# and forwards everything else to it (review 6, MEDIUM-1). It is a check for
+# the ways the suite patches senders (monkeypatch.setattr on the manager),
+# not a wall: a test that patches the class, uses mock.patch.object or
+# sends from a thread after the call phase can still go around it (review 6,
+# LOW-1); the AST guards read main.py for those.
+
+_PRESENCE_ROUTE: contextvars.ContextVar[bool] = contextvars.ContextVar("nebula_presence_route", default=False)
+# Where the checks record a stray event while a test runs; None between tests.
+_STRAY_CURSORS: list[str] | None = None
+_SENDERS = ("broadcast_raw", "broadcast_others", "broadcast_browser")
+
+
+def _targeted_cursor(data: object) -> bool:
+    return isinstance(data, Mapping) and data.get("type") == "agentPresence" and data.get("target") is not None
+
+
+def person_only_frame(data: object) -> bool:
+    """A frame only the person's canvas may get: a cursor event in the person
+    form (it carries ``session``) or the replay of the live cursors. Text or
+    bytes are read as JSON; bytes in any encoding json reads (UTF-8, -16 or
+    -32, a BOM included), else as UTF-8 with bad bytes replaced (review 7,
+    NIT-2)."""
+    import json
+
+    if isinstance(data, (bytes, bytearray)):
+        try:
+            data = json.loads(bytes(data))
+        except ValueError:
+            data = bytes(data).decode("utf-8", "replace")
+    if isinstance(data, str):
+        if "agentPresence" not in data:
+            return False
+        try:
+            data = json.loads(data)
+        except ValueError:
+            return False
+    if not isinstance(data, Mapping):
+        return False
+    kind = data.get("type")
+    return kind == "agentPresenceReplay" or (kind == "agentPresence" and "session" in data)
+
+
+def _record(line: str) -> None:
+    stray = _STRAY_CURSORS
+    if stray is not None:
+        stray.append(line)
+
+
+def _check_send(name: str, data: object, others: object, *, stand_in: bool = False) -> None:
+    """Both checks for one call to a sender (or a stand-in for one)."""
+    where = f"{name} (a stand-in)" if stand_in else name
+    if not _PRESENCE_ROUTE.get() and (_targeted_cursor(data) or _targeted_cursor(others)):
+        _record(f"{where}: {dict(data) if isinstance(data, Mapping) else data!r}")
+    # What every socket that isn't the person's canvas gets from this call.
+    to_others = None if name == "broadcast_browser" else (others if name == "broadcast_raw" and others is not None else data)
+    if person_only_frame(to_others):
+        _record(f"{where}: a person-only frame for the other sockets: {to_others!r}")
+
+
+def _socket_check(send):  # type: ignore[no-untyped-def]
+    import functools
+    import sys
+
+    @functools.wraps(send)
+    async def checked(self, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if _STRAY_CURSORS is not None and person_only_frame(data):
+            manager = getattr(sys.modules.get("main"), "manager", None)
+            if manager is None or self not in getattr(manager, "browser_connections", ()):
+                _record(f"{send.__name__}: a person-only frame to a socket that isn't the person's canvas: {data!r}")
+        return await send(self, data, *args, **kwargs)
+
+    checked._nebula_cursor_route = True  # type: ignore[attr-defined]
+    _CHECKED_CODES.add(checked.__code__)
+    return checked
+
+
+# The code of this file's own checked wrappers: a stand-in is left as it is
+# only if it is one of them (or a _CheckedStandIn), never because it says so
+# (review 7, NIT-1: a Mock given the marker by hand).
+_CHECKED_CODES: set[object] = set()
+
+
+def _install_cursor_route_check() -> None:
+    """Wrap main's senders and Starlette's socket sends once, for the rest of
+    the run (and again if main is reloaded). Installed for good, not per
+    test, so a monkeypatch that saves and restores a sender saves and
+    restores the checked one."""
+    import functools
+    import sys
+
+    from starlette.websockets import WebSocket
+
+    for send_name in ("send_text", "send_json", "send_bytes"):
+        send = WebSocket.__dict__.get(send_name)
+        if send is not None and getattr(send, "_nebula_cursor_route", False) is not True:
+            setattr(WebSocket, send_name, _socket_check(send))
+    main = sys.modules.get("main")
+    manager_class = getattr(main, "ConnectionManager", None)
+    route = getattr(main, "_broadcast_presence", None)
+    if manager_class is None or route is None:
+        return
+    if getattr(route, "_nebula_cursor_route", False) is not True:
+        @functools.wraps(route)
+        async def routed(*args, **kwargs):  # type: ignore[no-untyped-def]
+            token = _PRESENCE_ROUTE.set(True)
+            try:
+                return await route(*args, **kwargs)
+            finally:
+                _PRESENCE_ROUTE.reset(token)
+
+        routed._nebula_cursor_route = True  # type: ignore[attr-defined]
+        main._broadcast_presence = routed
+    for name in _SENDERS:
+        sender = manager_class.__dict__.get(name)
+        if sender is None or getattr(sender, "_nebula_cursor_route", False) is True:
+            continue
+
+        def checked(sender=sender, name=name):  # type: ignore[no-untyped-def]
+            @functools.wraps(sender)
+            async def send(self, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+                if _STRAY_CURSORS is not None:
+                    _check_send(name, data, kwargs.get("others"))
+                return await sender(self, data, *args, **kwargs)
+            send._nebula_cursor_route = True  # type: ignore[attr-defined]
+            _CHECKED_CODES.add(send.__code__)
+            return send
+
+        setattr(manager_class, name, checked())
+    _check_instance_senders()
+
+
+def _check_instance_senders() -> None:
+    """Senders on the manager instance itself (they shadow the class's):
+    a bound copy of the class's own sender, checked or not, which a
+    monkeypatch undo leaves behind, is dropped; any other stand-in is
+    wrapped so both checks see what it is sent."""
+    import sys
+
+    main = sys.modules.get("main")
+    manager = getattr(main, "manager", None)
+    manager_class = getattr(main, "ConnectionManager", None)
+    if manager is None or manager_class is None or not hasattr(manager, "__dict__"):
+        return
+    own = vars(manager)
+    for name in _SENDERS:
+        if name not in own:
+            continue
+        value = own[name]
+        func = getattr(value, "__func__", None)
+        real = manager_class.__dict__.get(name)
+        if getattr(value, "__self__", None) is manager and func is not None and (
+                func is real or func is getattr(real, "__wrapped__", None)):
+            del own[name]  # (a bound method reads its function's marker, so this goes first)
+            continue
+        # By what it is, not by the marker: a Mock makes up any attribute it
+        # is asked for (review 6, MEDIUM-1), and one can be given the marker
+        # by hand (review 7, NIT-1).
+        if type(value) is _CheckedStandIn or getattr(getattr(value, "__func__", value), "__code__", None) in _CHECKED_CODES:
+            continue
+        own[name] = _CheckedStandIn(value, name)
+
+
+class _CheckedStandIn:
+    """A stand-in for a sender, checked: each call goes through both checks,
+    then to the stand-in; every attribute is the stand-in's own, read when
+    asked (a Mock's ``await_args``, a capture's ``sent``), so the test reads
+    it as if nothing were in between (review 6, MEDIUM-1 and N4)."""
+
+    _nebula_cursor_route = True
+
+    def __init__(self, fake: object, name: str) -> None:
+        object.__setattr__(self, "_fake", fake)
+        object.__setattr__(self, "_name", name)
+
+    def __call__(self, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if _STRAY_CURSORS is not None:
+            _check_send(self._name, data, kwargs.get("others"), stand_in=True)
+        return self._fake(data, *args, **kwargs)  # type: ignore[operator]
+
+    def __getattr__(self, attr: str):  # type: ignore[no-untyped-def]
+        return getattr(object.__getattribute__(self, "_fake"), attr)
+
+    def __setattr__(self, attr: str, value: object) -> None:
+        setattr(self._fake, attr, value)
+
+    def __delattr__(self, attr: str) -> None:
+        delattr(self._fake, attr)
+
+    def __repr__(self) -> str:
+        return f"<checked {self._fake!r}>"
+
+
+@contextlib.contextmanager
+def watch_cursor_routes():  # type: ignore[no-untyped-def]
+    """Record, for the block, every cursor event with a target that reaches a
+    sender other than through main._broadcast_presence, and every
+    person-only frame bound for a socket that isn't the person's canvas."""
+    global _STRAY_CURSORS
+    _install_cursor_route_check()
+    outer, _STRAY_CURSORS = _STRAY_CURSORS, []
+    try:
+        yield _STRAY_CURSORS
+    finally:
+        _STRAY_CURSORS = outer
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):  # type: ignore[no-untyped-def]
+    with watch_cursor_routes() as stray:
+        result = yield
+    _check_broadcast_raw(item.nodeid)  # catches a direct assignment left in place
+    if stray:
+        raise AssertionError(
+            f"{item.nodeid}: a cursor event with a target went out other than through "
+            f"main._broadcast_presence, or a person-only frame reached another socket "
+            f"(PR #211 review 4 and review 5, LOW-1): {stray[0]}")
+    return result

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 from typing import Any, Callable
@@ -9,6 +10,23 @@ import httpx
 
 from nebula_api import NebulaAPI, NebulaAPIError, never_reached, offline_read_only
 from services.agent_params import internal_keys, internal_refusal
+from services.cursor_actions import session_ok
+
+
+def cursor_session(environ: Any = None) -> str | None:
+    """This agent session's own cursor on the person's canvas, for the CLI
+    run from Claude Code: a hash of CLAUDE_CODE_SESSION_ID (Claude Code sets
+    it in every Bash call; its subagents see their parent's, so they share
+    one cursor unless each sets NEBULA_AGENT_SESSION). Never the raw id.
+    It goes in X-Nebula-Cursor-Session, which the backend reads for the
+    cursor only: never X-Nebula-Agent-Session, which also keys scene reads
+    (services/scene_keys.py). None elsewhere: one cursor per agent name.
+    """
+    env = os.environ if environ is None else environ
+    raw = str(env.get("CLAUDE_CODE_SESSION_ID") or "").strip()
+    if not raw:
+        return None
+    return "cc-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 DEFAULT_BASE = "http://localhost:8000"
@@ -46,9 +64,17 @@ class NebulaClient:
             headers.setdefault("X-Nebula-Agent", agent_name)
         # One agent session's scene reads are its own (fix round 9, M-2):
         # set NEBULA_AGENT_SESSION when several sessions share a name.
+        # Sent as given, valid or not: the scene-read keys stay exactly as
+        # before. For the cursor, a value the backend ignores counts as unset
+        # (review 2, NIT-1), so under Claude Code the session's own cursor
+        # still applies through the cursor-only header.
         session = os.environ.get("NEBULA_AGENT_SESSION")
         if session:
             headers.setdefault("X-Nebula-Agent-Session", session)
+        if not session_ok(session):
+            cursor = cursor_session()
+            if cursor:
+                headers.setdefault("X-Nebula-Cursor-Session", cursor)
         return headers
 
     def _fail(self, exc: NebulaAPIError, what: str) -> None:

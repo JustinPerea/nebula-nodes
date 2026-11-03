@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch, canvas_project):
 
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
