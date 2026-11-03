@@ -184,13 +184,15 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   display: none;
 }
 
-/* GM r16 on #208: when a new palette changes the swatch count, the floating
-   Inspector grows or shrinks on the layout spring (a sampled spring, as
-   asset-move.css's), not in one jump. Only then (review 7 M2): the popover
-   carries data-palette-resizing while a swatch-count change settles
-   (NodeInspectorPopover.tsx), and otherwise moves with its node at once on
-   a pan, zoom, drag or resize. */
-.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+/* GM r68: the floating Inspector grows to fit its content, and when that
+   height changes (an upload landing, "No preview" collapsing, a section
+   opening) it grows or shrinks on the layout spring (a sampled spring, as
+   asset-move.css's; GM r16 on #208), anchored at the top: only its height
+   moves, and its top only when the bottom bar pushes it up, so a row under
+   the pointer stays put. Only then (review 7 M2): the popover carries
+   data-content-resizing while the change settles (NodeInspectorPopover.tsx),
+   and otherwise moves with its node at once on a pan, zoom, drag or resize. */
+.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned) {
   --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
   transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
 }
@@ -199,12 +201,12 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
    mid-spring, NodeInspectorPopover.tsx), no property is transitioned, so a
    running spring is cancelled and the panel is at its end layout at once
    (a 0s duration alone would let it run on to the same end value). */
-.node-inspector-popover:not([data-palette-resizing]) {
+.node-inspector-popover:not([data-content-resizing]) {
   transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+  .node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned) {
     transition: none;
   }
 }
@@ -280,6 +282,13 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
   padding: 10px;
   overscroll-behavior: contain;
   scroll-padding-bottom: var(--scroll-fade-size);
+}
+
+/* What the body holds, measured for the panel's content-fit height (GM r68,
+   NodeInspectorPopover.tsx): a flow root, so its sections' margins stay
+   inside its own height. */
+.node-inspector-popover__content {
+  display: flow-root;
 }
 
 .node-inspector-popover .inspector__actions {

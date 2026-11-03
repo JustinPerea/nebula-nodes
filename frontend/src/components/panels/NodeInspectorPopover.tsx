@@ -6,24 +6,21 @@ import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
-import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
+import { floatingBarLimit, floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
-const POPOVER_MAX_HEIGHT = 300;
+/** The floating Inspector's floor: a short body keeps this height (GM r68). */
+const POPOVER_MIN_HEIGHT = 300;
 /**
- * One more line of the body (GM - Design, 2026-10-23, round 3: "give the
- * body room for one more line before it scrolls"): when the body's content is
- * at most this much longer than a 300 px panel leaves room for, the panel
- * takes it, inside the top line and the band, so the body doesn't scroll and
- * no line sits under the fade. One body line (the State value: 16 px text,
- * 21 px tall) plus what follows the last line, the last section's 10 px margin
- * and the body's 12 px bottom padding (43 px, measured live in GM's cover
- * setup, where the body lacked 34). More than that scrolls under the fade, as
- * before.
+ * How far the floating Inspector keeps clear of the floating top chrome (the
+ * selection toolbar) and of the bottom bar when it grows to fit its content
+ * (GM r68: "up to the space between the floating top chrome and the bottom
+ * bar, with 12 px clear of each. At 1440x900 that's about 660 px."). Measured
+ * live there: the toolbar ends at 142 and the bar starts at 828, so 154-816.
  */
-const POPOVER_SPARE_LINE = 44;
+export const POPOVER_CHROME_CLEARANCE = 12;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
 const PINNED_MAX_HEIGHT = 440;
@@ -78,47 +75,46 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
  * pan, the toolbar coming or going, or the bar growing moves it at once.
  */
 /**
- * How much taller the body's content is than the body's viewport (scrollHeight
- * against clientHeight: exact, layout sizes only), 0 while it fits, or null
- * before the body is in the page.
+ * The height the panel needs to show its whole body (GM r68: "It grows to fit
+ * its content"), or null before it is laid out. What the panel holds besides
+ * its body's viewport (the header, the foot row, the borders: the panel's
+ * height less the viewport's) plus the body's padding and its content's own
+ * height. The content box (`__content`, a flow root, so its sections'
+ * margins stay inside it) has its own height whatever the panel's, so a body
+ * that gets shorter reads shorter, and the read holds while the layout spring
+ * runs the panel's height (both heights move together). Layout sizes only
+ * (offsetHeight, clientHeight), never a transformed box, so the panel's enter
+ * scale doesn't read as a change.
  */
-function bodyOverflow(popover: HTMLElement | null): number | null {
-  const body = popover?.querySelector<HTMLElement>('.node-inspector-popover__body');
-  if (!body) return null;
-  return Math.max(0, body.scrollHeight - body.clientHeight);
+function contentFitHeight(popover: HTMLElement | null): number | null {
+  if (!popover || popover.offsetHeight <= 0) return null;
+  const body = popover.querySelector<HTMLElement>('.node-inspector-popover__body');
+  const content = body?.querySelector<HTMLElement>('.node-inspector-popover__content');
+  if (!body || !content) return null;
+  const style = window.getComputedStyle(body);
+  const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+  return popover.offsetHeight - body.clientHeight + padding + content.offsetHeight;
 }
 
-/**
- * Whether the body holds a palette: every swatch and the Add / Extract row
- * after the last one show, so the panel takes the whole body's height up to
- * the room there is, and only then does the body scroll, as one (GM r12 on
- * #208: "The palette list shows every swatch, no scroll inside the list";
- * at 300 px the 4th swatch on and the Add row were below the cut).
- */
-function holdsPalette(popover: HTMLElement | null): boolean {
-  return Boolean(popover?.querySelector('.inspector__palette'));
-}
-
-/** How long the layout spring may run after a swatch-count change (its
+/** How long the layout spring may run after a content height change (its
  *  360 ms in panels.css, and a frame or two to settle). */
-export const PALETTE_RESIZE_MS = 400;
-
-/** The swatches the body shows, or null without a palette. */
-function swatchCount(popover: HTMLElement | null): number | null {
-  if (!holdsPalette(popover)) return null;
-  return popover!.querySelectorAll('.inspector__palette-row').length;
-}
+export const CONTENT_RESIZE_MS = 400;
 
 /**
- * `panelNeed`: the height the panel would need to show its whole body, or
- * null when not yet known. Within one spare line over 300 px, the panel takes
- * it (POPOVER_SPARE_LINE); with `fitsWhole` (a palette), all of it.
+ * `panelNeed`: the height the panel needs to show its whole body
+ * (contentFitHeight), or null when not yet known (300 px until then).
+ * `heldTop`: where its top stays while its content changes height (GM r68:
+ * "anchored at the top, so the file row doesn't move under the pointer"), or
+ * null to place it afresh beside its node.
  */
-function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null, fitsWhole = false): PopoverFrame {
+function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null,
+  heldTop: number | null = null): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const topLimit = floatingTopLimit(VIEWPORT_GUTTER);
+  // 12 px under the floating top chrome (the header and the selection
+  // toolbar, whichever is lower; lib/bottomBar.ts).
+  const topLimit = floatingTopLimit(VIEWPORT_GUTTER, POPOVER_CHROME_CLEARANCE);
   const rightSpace = viewportWidth - rect.right - POPOVER_GAP - VIEWPORT_GUTTER;
   const leftSpace = rect.left - POPOVER_GAP - VIEWPORT_GUTTER;
 
@@ -138,16 +134,29 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   }
   left = clamp(left, VIEWPORT_GUTTER, Math.max(VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER));
 
-  // Above the bar across the whole width, and above the Canvas actions panel
-  // only where it is over that panel (lib/bottomBar.ts).
-  const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width });
-  // Its own height (one spare line more when that is all the body lacks; the
-  // whole body when it holds a palette), or all the room there is: the body
-  // scrolls as one, the foot stays.
-  const grows = panelNeed !== null && panelNeed > POPOVER_MAX_HEIGHT && (fitsWhole || panelNeed <= POPOVER_MAX_HEIGHT + POPOVER_SPARE_LINE);
-  const own = grows ? Math.ceil(panelNeed) : POPOVER_MAX_HEIGHT;
+  // 12 px above the bar across the whole width, and above the Canvas actions
+  // panel only where it is over that panel (lib/bottomBar.ts). GM r68 bounds
+  // the panel by the bar, not by the notice region's reserved band (its
+  // "about 660 px at 1440x900" is the bar's line; the band's would be 612).
+  const bottomLimit = floatingBarLimit(VIEWPORT_GUTTER, POPOVER_CHROME_CLEARANCE, viewportHeight,
+    { left, right: left + width });
+  // Its whole body, never under 300 px, up to the room between the lines:
+  // only past that does the body scroll (as one; the foot stays).
+  const own = panelNeed === null ? POPOVER_MIN_HEIGHT : Math.max(POPOVER_MIN_HEIGHT, Math.ceil(panelNeed));
+  // Its content changed height while it stood still: the top stays, and only
+  // the bottom edge moves, as far as the bar's line (then the body scrolls).
+  // Placed afresh (opened, another node, the node moved), a node low on the
+  // screen shifts it up instead.
+  if (heldTop !== null && placement !== 'bottom') {
+    const top = clamp(heldTop, topLimit, bottomLimit);
+    const held = Math.max(0, Math.min(own, bottomLimit - top));
+    if (held >= Math.min(own, POPOVER_MIN_HEIGHT)) {
+      return { nodeId, placement, style: { left, top, width, height: held } };
+    }
+  }
   const height = Math.max(0, Math.min(own, bottomLimit - topLimit));
-  // Beside the node, level with its top, shifted up when that would cross the bottom.
+  // Beside the node, level with its top. Low on the screen it shifts up to
+  // fit before it gets shorter (the clamp below: up to the top line first).
   let top = rect.top - 8;
   if (placement === 'bottom') {
     top = rect.bottom + POPOVER_GAP;
@@ -243,34 +252,43 @@ export function NodeInspectorPopover() {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
-  // Review 7 M2: the layout spring runs only while a swatch-count change
-  // settles; a pan, zoom, drag or resize moves the panel with its node at once.
-  const [paletteResizing, setPaletteResizing] = useState(false);
-  const swatchesRef = useRef<{ nodeId: string; count: number | null } | null>(null);
+  // GM r68: a height change from the content (an upload landing, "No
+  // preview" collapsing, a section opening) runs on the layout spring, anchored
+  // at the top. Only then (review 7 M2 on #208): a pan, zoom, drag or resize
+  // moves the panel with its node at once.
+  const [contentResizing, setContentResizing] = useState(false);
+  const needRef = useRef<{ nodeId: string; need: number | null } | null>(null);
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // GM r22 Q5 on #208: rigid wins. A pan or drag that starts mid-spring
   // ends the spring at its end layout at once (the transition goes with the
   // attribute, so the panel jumps to where it was going), then tracks 1:1.
   const resizingRef = useRef(false);
   const anchorAtRef = useRef<string | null>(null);
+  // The top held while the content changes height, until the node moves.
+  const heldTopRef = useRef<{ nodeId: string; top: number } | null>(null);
+  // One measuring step, also run straight after each render (below), so the
+  // panel opens at its content's height in its first painted frame.
+  const stepRef = useRef<(() => void) | null>(null);
   useEffect(() => () => {
     if (resizeTimer.current) clearTimeout(resizeTimer.current);
   }, []);
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
-    // Closed: the next open measures afresh (at 300 px, before any spare line).
+    // Closed: the next open measures afresh.
     if (!visible || !selectedNodeId) {
       frameRef.current = null;
-      swatchesRef.current = null;
+      needRef.current = null;
       anchorAtRef.current = null;
+      heldTopRef.current = null;
+      stepRef.current = null;
       return;
     }
 
     let raf = 0;
     let stopped = false;
 
-    const tick = () => {
+    const step = () => {
       if (pinned) {
         const currentFrame = frameRef.current;
         const element = popoverRef.current;
@@ -293,46 +311,49 @@ export function NodeInspectorPopover() {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
           const box = anchor.getBoundingClientRect();
-          const at = `${selectedNodeId}:${box.left}:${box.top}:${box.width}:${box.height}`;
-          if (resizingRef.current && anchorAtRef.current !== null && at !== anchorAtRef.current) {
+          // Where the node is: its card growing (a preview landing) is not a move.
+          const at = `${selectedNodeId}:${box.left}:${box.top}`;
+          const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
+          if (resizingRef.current && moved) {
             if (resizeTimer.current) clearTimeout(resizeTimer.current);
             resizeTimer.current = null;
             resizingRef.current = false;
-            setPaletteResizing(false);
+            setContentResizing(false);
           }
           anchorAtRef.current = at;
-          // What the body lacks at the height it has now. While the body fits,
-          // the panel keeps the height it has (the spare line too, once taken),
-          // so it settles in one frame and never goes back and forth; a new
-          // node, or the Inspector opened again, starts from 300 px.
-          // The overflow is read against the height the panel has on screen
-          // while the layout spring (panels.css) runs it up to the height it
-          // was given: against the given one, a panel mid-grow would read
-          // the rest of its growth as more need and run on to all the room
-          // there is. Past it (the spring's overshoot), the given height
-          // stands (round 8b).
+          // Moved, or another node: placed afresh beside it.
+          if (moved || heldTopRef.current?.nodeId !== selectedNodeId) heldTopRef.current = null;
+          // The height its whole body needs (GM r68), read from the panel
+          // as it is on screen; it holds while the spring runs (see
+          // contentFitHeight), so the panel settles in one step and never
+          // runs on past its content.
+          const popover = popoverRef.current;
+          const need = popover && !popover.classList.contains('node-inspector-popover--pinned')
+            ? contentFitHeight(popover) : null;
+          // The content got taller or shorter on the same node, which hasn't
+          // moved: the top holds from here on (until the node moves), and the
+          // new height springs in the same render as that height. The first
+          // look at a node doesn't, nor a node that moved.
+          const seen = needRef.current;
           const shown = frameRef.current;
-          const overflow = bodyOverflow(popoverRef.current);
-          const shownHeight = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
-            ? Number(shown.style.height) : null;
-          const onScreen = shownHeight === null ? null : Math.min(shownHeight, popoverRef.current?.offsetHeight || shownHeight);
-          const panelNeed = onScreen !== null && overflow !== null ? onScreen + overflow : null;
-          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed, holdsPalette(popoverRef.current));
-          // A new count on the same node springs the size it brings, in the
-          // same render as that size; the first look at a node doesn't.
-          const count = swatchCount(popoverRef.current);
-          const seen = swatchesRef.current;
-          if (seen?.nodeId === selectedNodeId && seen.count !== null && count !== null && count !== seen.count) {
+          const contentChanged = !moved && seen?.nodeId === selectedNodeId && seen.need !== null && need !== null
+            && Math.ceil(need) !== Math.ceil(seen.need) && shown?.nodeId === selectedNodeId
+            && shown.placement !== 'pinned-left';
+          if (contentChanged && !heldTopRef.current) {
+            heldTopRef.current = { nodeId: selectedNodeId, top: Number(shown!.style.top) };
+          }
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null);
+          if (contentChanged && shown!.style.height !== nextFrame.style.height) {
             if (resizeTimer.current) clearTimeout(resizeTimer.current);
             resizeTimer.current = setTimeout(() => {
               resizeTimer.current = null;
               resizingRef.current = false;
-              setPaletteResizing(false);
-            }, PALETTE_RESIZE_MS);
+              setContentResizing(false);
+            }, CONTENT_RESIZE_MS);
             resizingRef.current = true;
-            setPaletteResizing(true);
+            setContentResizing(true);
           }
-          swatchesRef.current = { nodeId: selectedNodeId, count };
+          needRef.current = { nodeId: selectedNodeId, need };
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);
@@ -342,7 +363,11 @@ export function NodeInspectorPopover() {
           setFrame(null);
         }
       }
+    };
+    stepRef.current = step;
 
+    const tick = () => {
+      step();
       if (!stopped) {
         raf = window.requestAnimationFrame(tick);
       }
@@ -352,9 +377,17 @@ export function NodeInspectorPopover() {
 
     return () => {
       stopped = true;
+      if (stepRef.current === step) stepRef.current = null;
       window.cancelAnimationFrame(raf);
     };
   }, [pinned, selectedNodeId, visible]);
+
+  // After each new frame is in the page, measure once more before it is
+  // painted: a panel that just opened (at 300 px, its body not yet laid out)
+  // takes its content's height in the same frame. Stops once nothing changes.
+  useLayoutEffect(() => {
+    if (frame && !frame.suspended && frame.placement !== 'pinned-left') stepRef.current?.();
+  }, [frame]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -404,7 +437,7 @@ export function NodeInspectorPopover() {
       ref={popoverRef}
       className={`node-inspector-popover${pinned ? ' node-inspector-popover--pinned' : ''}`}
       data-placement={frame.placement}
-      data-palette-resizing={paletteResizing && !pinned ? '' : undefined}
+      data-content-resizing={contentResizing && !pinned ? '' : undefined}
       hidden={Boolean(frame.suspended)}
       inert={Boolean(frame.suspended)}
       style={frame.style}
@@ -462,7 +495,9 @@ export function NodeInspectorPopover() {
       </div>
       <InspectorFootContext.Provider value={foot}>
         <ScrollFade className="node-inspector-popover__body">
-          <Inspector embedded />
+          <div className="node-inspector-popover__content">
+            <Inspector embedded />
+          </div>
         </ScrollFade>
       </InspectorFootContext.Provider>
       <div ref={setFoot} className="node-inspector-popover__foot" />

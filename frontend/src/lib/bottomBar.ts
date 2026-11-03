@@ -81,6 +81,21 @@ export function floatingBottomLimit(gutter: number, viewportHeight = window.inne
 }
 
 /**
+ * The lowest the unpinned Inspector beside a node may go (GM r68: "up to the
+ * space between the floating top chrome and the bottom bar, with 12 px clear
+ * of each"): `gap` above the bar, and above the Canvas actions panel only
+ * where it overlaps `span`; with no bar on screen, `gutter` above the
+ * window's bottom edge. Unlike floatingBottomLimit, the notice region's
+ * reserved band doesn't count: r68 measures the room to the bar itself.
+ */
+export function floatingBarLimit(gutter: number, gap: number, viewportHeight = window.innerHeight,
+  span?: HorizontalSpan): number {
+  const edge = viewportHeight - gutter;
+  const bar = bottomBarTop(span);
+  return bar === null ? edge : Math.min(edge, bar - gap);
+}
+
+/**
  * The top line floating panels stop below (GM - Design, 2026-10-23: "Floating
  * panels stop below the workspace header and the selection toolbar, whichever
  * is lower, plus the same 8 px gap."). Each carries `data-top-bar`; measured
@@ -97,13 +112,13 @@ export function floatingBottomLimit(gutter: number, viewportHeight = window.inne
  */
 export const TOP_BAR_ATTR = 'data-top-bar';
 
-export function floatingTopLimit(gutter: number): number {
+export function floatingTopLimit(gutter: number, gap = BOTTOM_BAR_GAP): number {
   if (typeof document === 'undefined') return gutter;
   let line = gutter;
   for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]`)) {
     const box = part.getBoundingClientRect();
     if (box.height <= 0) continue;
-    line = Math.max(line, box.bottom + BOTTOM_BAR_GAP);
+    line = Math.max(line, box.bottom + gap);
   }
   return line;
 }

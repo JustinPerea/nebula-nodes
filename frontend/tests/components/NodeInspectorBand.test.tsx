@@ -12,6 +12,14 @@ import { useUIStore } from '../../src/store/uiStore';
  * 5. "Floating panels stop below the workspace header and the selection
  *    toolbar, whichever is lower, plus the same 8 px gap."
  *
+ * GM r68 (2026-11-03) then bounds the unpinned Inspector beside a node by
+ * the bar itself: "up to the space between the floating top chrome (the
+ * selection toolbar) and the bottom bar, with 12 px clear of each. At
+ * 1440x900 that's about 660 px." That is the bar's line (the band's would
+ * leave 612), so the unpinned panel keeps 12 px clear of the toolbar and of
+ * the bar, and the band no longer counts for it. The pinned Inspector keeps
+ * both rules above.
+ *
  * jsdom has no layout: the node's anchor, the bar, the band, the header and
  * the selection toolbar get the rects the live check measured at 1280x800.
  */
@@ -21,6 +29,8 @@ vi.mock('../../src/components/panels/Inspector', () => ({
 }));
 
 const GAP = 8;
+/** GM r68: the unpinned Inspector's clearance from the toolbar and the bar. */
+const CLEAR = 12;
 let callbacks: Map<number, FrameRequestCallback>;
 let nextRaf: number;
 let previousUi: ReturnType<typeof useUIStore.getState>;
@@ -110,21 +120,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the floating Inspector and the reserved notice band', () => {
-  it("GM's setup: it ends above the band, so a notice never covers its foot row", () => {
+describe('the floating Inspector and the bottom bar (GM r68: 12 px clear of the bar, not the band)', () => {
+  it("GM's setup: it ends 12 px clear of the bar", () => {
     viewport(1280, 800);
-    const { bandTop } = barAndBand(1280, 800);
+    const { barTop } = barAndBand(1280, 800);
     header(1280);
     selectionToolbar(1280);
     // The cover screenshot: a Text Input at 575-657 x 437-527.
     openBeside(rect(575, 437, 82, 90));
     expect(panel()).toHaveAttribute('data-placement', 'right');
-    expect(bounds().bottom).toBeLessThanOrEqual(bandTop);
+    expect(bounds().bottom).toBeLessThanOrEqual(barTop - CLEAR);
   });
 
-  it('never moves when a notice comes or goes: the band is reserved either way', () => {
+  it('never moves when a notice comes or goes', () => {
     viewport(1280, 800);
-    const { barTop, bandTop } = barAndBand(1280, 800);
+    const { barTop } = barAndBand(1280, 800);
     openBeside(rect(575, 437, 82, 90));
     const before = bounds();
     // A notice shows in the band: one line, 8 px above the bar.
@@ -134,14 +144,14 @@ describe('the floating Inspector and the reserved notice band', () => {
     notice.remove();
     advanceLayout();
     expect(bounds()).toEqual(before);
-    expect(before.bottom).toBeLessThanOrEqual(bandTop);
+    expect(before.bottom).toBeLessThanOrEqual(barTop - CLEAR);
   });
 
   it('at 1440x900 too', () => {
     viewport(1440, 900);
-    const { bandTop } = barAndBand(1440, 900);
+    const { barTop } = barAndBand(1440, 900);
     openBeside(rect(640, 560, 82, 90));
-    expect(bounds().bottom).toBeLessThanOrEqual(bandTop);
+    expect(bounds().bottom).toBeLessThanOrEqual(barTop - CLEAR);
   });
 
   it('the pinned Inspector stops above the band too', () => {
@@ -154,13 +164,13 @@ describe('the floating Inspector and the reserved notice band', () => {
 });
 
 describe('the measured top line', () => {
-  it('a node near the top: the Inspector opens below the selection toolbar, 8 px clear', () => {
+  it('a node near the top: the Inspector opens below the selection toolbar, 12 px clear (r68)', () => {
     viewport(1280, 800);
     barAndBand(1280, 800);
     header(1280);
     selectionToolbar(1280);
     openBeside(rect(575, 40, 82, 90));
-    expect(bounds().top).toBeGreaterThanOrEqual(92 + 49 + GAP);
+    expect(bounds().top).toBe(92 + 49 + CLEAR);
   });
 
   // GM - Design, 2026-10-23 (round 3, answer 5): "The Inspector jumping on
@@ -175,15 +185,15 @@ describe('the measured top line', () => {
     let showing = true;
     place({ 'data-top-bar': '' }, () => (showing ? rect(365, 92, 550, 50) : rect(640, 92, 0, 50)));
     openBeside(rect(575, 40, 82, 90));
-    expect(bounds().top).toBe(92 + 50 + GAP);
+    expect(bounds().top).toBe(92 + 50 + CLEAR);
     // Deselect: the toolbar goes, its Panel stays one toolbar tall.
     showing = false;
     advanceLayout();
-    expect(bounds().top).toBe(92 + 50 + GAP);
+    expect(bounds().top).toBe(92 + 50 + CLEAR);
     // Reselect: the toolbar comes back, nothing moves down.
     showing = true;
     advanceLayout();
-    expect(bounds().top).toBe(92 + 50 + GAP);
+    expect(bounds().top).toBe(92 + 50 + CLEAR);
   });
 
   it('opened while the toolbar is hidden, it already sits below the toolbar\'s line', () => {
@@ -193,10 +203,10 @@ describe('the measured top line', () => {
     let showing = false;
     place({ 'data-top-bar': '' }, () => (showing ? rect(365, 92, 550, 50) : rect(640, 92, 0, 50)));
     openBeside(rect(575, 40, 82, 90));
-    expect(bounds().top).toBe(92 + 50 + GAP);
+    expect(bounds().top).toBe(92 + 50 + CLEAR);
     showing = true;
     advanceLayout();
-    expect(bounds().top).toBe(92 + 50 + GAP);
+    expect(bounds().top).toBe(92 + 50 + CLEAR);
   });
 
   it('the pinned Inspector holds the line too', () => {
@@ -216,13 +226,13 @@ describe('the measured top line', () => {
 
   it('a short window: the room between the lines is less than the panel, so the panel gets shorter', () => {
     viewport(1280, 440);
-    const { bandTop } = barAndBand(1280, 440);
+    const { barTop } = barAndBand(1280, 440);
     header(1280);
     selectionToolbar(1280);
     openBeside(rect(575, 200, 82, 90));
     const box = bounds();
-    expect(box.top).toBe(92 + 49 + GAP);
-    expect(box.bottom).toBe(bandTop);
+    expect(box.top).toBe(92 + 49 + CLEAR);
+    expect(box.bottom).toBe(barTop - CLEAR);
     expect(box.height).toBeLessThan(300);
   });
 
@@ -234,13 +244,13 @@ describe('the measured top line', () => {
     openBeside(rect(640, 300, 82, 90));
     chrome.splice(0, 4).forEach((element) => element.remove());
     viewport(1280, 480);
-    const { bandTop } = barAndBand(1280, 480);
+    const { barTop } = barAndBand(1280, 480);
     header(1280);
     selectionToolbar(1280);
     advanceLayout();
     const box = bounds();
-    expect(box.top).toBeGreaterThanOrEqual(92 + 49 + GAP);
-    expect(box.bottom).toBeLessThanOrEqual(bandTop);
+    expect(box.top).toBeGreaterThanOrEqual(92 + 49 + CLEAR);
+    expect(box.bottom).toBeLessThanOrEqual(barTop - CLEAR);
   });
 
   it('the pinned Inspector keeps below the line too', () => {
