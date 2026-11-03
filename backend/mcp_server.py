@@ -596,19 +596,36 @@ def point_at(
     report or a suggestion goes in post_note, which the person reads in the
     Updates list, not at your cursor.
 
-    `action`, what you are doing there:
-    - `move`: going there, no gesture;
-    - `look`: reading or checking something;
-    - `think`: working something out at that spot;
-    - `type`: writing a prompt or changing a field;
-    - `click`: pressing something;
-    - `drag`: connecting, with `from_node_id`/`from_port`;
-    - `run`: starting a run;
-    - `propose`: you proposed a change and wait for the person's OK;
-    - `wait`: you asked the person something and wait for the answer;
-    - `error`: something you tried failed.
-    Graph edits through Nebula's API pick their own action. Any other value
-    is refused.
+    `action`, what you are doing there, how the cursor shows it, and the line
+    it shows when you give no `say` (your own `say` always wins):
+    - `move`: going there, no gesture; no line;
+    - `look`: reading or checking something; its glow dims and an arc sweeps
+      once around it; "Looking at “Brief”" ("Looking here" at a spot);
+    - `think`: working something out at that spot; its glow breathes while
+      you stay on it; "Thinking";
+    - `type`: writing a prompt or changing a field; a caret at the end of the
+      card's text field, or an underline under the port row you name
+      (`port`); "Writing the prompt for “FLUX.2”", or "Changing “Resolution”
+      on “FLUX.2”" with a port;
+    - `click`: pressing something; the arrow presses and a ring blooms; no
+      line;
+    - `drag`: connecting, with `from_node_id`/`from_port`; a connection is pulled
+      from the port; "Connecting “Brief” to “FLUX.2”" (no line for a drag
+      to a spot with no start: that is only a move);
+    - `run`: starting a run; a thin arc circles the arrow once; "Started
+      “FLUX.2”";
+    - `propose`: you proposed a change and wait for the person's OK; a
+      dashed glow and a small ghost card, the cursor still; "Waiting for
+      your OK" until the person acts;
+    - `wait`: you asked the person something and wait for the answer; a
+      dashed glow and a pin, the cursor still; "Waiting for your answer"
+      until the person acts;
+    - `error`: something you tried failed; one shake and a red flash;
+      "Couldn’t run “FLUX.2”" after your run there, "Couldn’t change
+      “FLUX.2”" after your edit or connection there, else "Couldn’t do
+      that".
+    A line shows for max(3 s, 60 ms per character), at most 8 s. Graph edits
+    through Nebula's API pick their own action. Any other value is refused.
 
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set

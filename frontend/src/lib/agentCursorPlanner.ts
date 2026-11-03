@@ -1,4 +1,14 @@
 import type { Point, SpringConfig } from './agentCursorMotion';
+import {
+  AGENT_CURSOR_BOW,
+  AGENT_CURSOR_DURATION,
+  AGENT_CURSOR_LAND_SPRING,
+  AGENT_CURSOR_LEAN,
+  AGENT_CURSOR_LEAN_SPRING,
+} from './agentCursorTuning';
+
+// The (t) numbers live in agentCursorTuning, one module GM retunes (r49).
+export { AGENT_CURSOR_BOW, AGENT_CURSOR_DURATION, AGENT_CURSOR_LAND_SPRING, AGENT_CURSOR_LEAN, AGENT_CURSOR_LEAN_SPRING };
 
 /**
  * How an agent cursor travels (GM - Design, agent cursor §3): one arc per
@@ -15,19 +25,10 @@ import type { Point, SpringConfig } from './agentCursorMotion';
  * `AGENT_CURSOR_SPRING` is not used here: pins, ghosts and the camera share it.
  */
 
-/** Takes over from the arc at the hand-off and lands the tip (ζ ≈ 0.8). */
-export const AGENT_CURSOR_LAND_SPRING: SpringConfig = { stiffness: 260, damping: 26, mass: 1 };
 /** Progress along the arc at which the land spring takes over. */
 export const AGENT_CURSOR_LAND_HANDOFF = 0.8;
 /** ω = 6.64 / T puts 99% of the progress spring at T. */
 export const AGENT_CURSOR_PROGRESS_K = 6.64;
-/** T = clamp(380 + 170·ln(1 + D/200), 380, 900) ms. */
-export const AGENT_CURSOR_DURATION = { baseMs: 380, gainMs: 170, scalePx: 200, minMs: 380, maxMs: 900 } as const;
-/** The arc bows 10% of the chord, at most 120 px, and is straight under 24 px. */
-export const AGENT_CURSOR_BOW = { fraction: 0.1, maxPx: 120, straightUnderPx: 24, pointerRadiusPx: 200 } as const;
-/** Lean: 14° × tanh(vx / 700) × min(1, speed / 250). */
-export const AGENT_CURSOR_LEAN = { maxDeg: 14, vxScale: 700, fullSpeed: 250 } as const;
-export const AGENT_CURSOR_LEAN_SPRING: SpringConfig = { stiffness: 180, damping: 22, mass: 1 };
 /**
  * Once the tip is at rest, a lean under `deg` turning slower than
  * `degPerSecond` snaps to 0 and the loop sleeps (GM - Design, PR #211 r1).

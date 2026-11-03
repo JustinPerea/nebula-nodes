@@ -564,7 +564,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(AGENT_CURSOR_ARROW_POINTS).toEqual(ARROW);
     expect(AGENT_CURSOR_ARROW_PATH).toBe(`M${ARROW.map((p) => `${p.x} ${p.y}`).join(' L')} Z`);
     const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
-    expect(layer).toMatch(/<path d=\{AGENT_CURSOR_ARROW_PATH\} \/>/);
+    expect(layer).toMatch(/<path className="agent-cursor__arrow" d=\{AGENT_CURSOR_ARROW_PATH\} \/>/);
   });
 
   it('lands a later cursor straight below an earlier one within 16 px, never to the right', () => {
