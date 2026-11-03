@@ -139,6 +139,38 @@ function sanitizeAll(raw: unknown): Pin[] {
   return Array.isArray(raw) ? raw.map(sanitize).filter((pin): pin is Pin => pin !== null) : [];
 }
 
+// PR #218 review 1 MEDIUM-1: one order for every whole-set listing, pushes
+// and hydrates alike. A push takes its number as it arrives, a hydrate as its
+// fetch starts; a listing is applied only if nothing later in the order has
+// been applied already. Without it, a hydrate's older listing that resolved
+// while the Unicode chunk was pending landed after a push that arrived later
+// (both waited on the chunk; the push's wait settled first) and hid its pins.
+let listingOrder = 0;
+let appliedOrder = 0;
+const nextListingOrder = () => { listingOrder += 1; return listingOrder; };
+
+function applyListing(event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>, order: number): void {
+  // Review 13 L-2: a listing that comes before the Unicode data waits for it,
+  // and is never shown unsanitized. It keeps the number it was given, so the
+  // order between listings holds whichever wait settles first; one overtaken
+  // by a later listing is dropped, never applied over it.
+  // Review 14 MEDIUM-1: it waits only while the import is pending. After a
+  // failed import it applies at once in the strict fallback form, and the
+  // chunk is tried once more.
+  retryPinText();
+  if (!pinTextSettled()) {
+    void pinTextSettling().then(() => applyListing(event, order));
+    return;
+  }
+  if (order < appliedOrder) return;
+  appliedOrder = order;
+  rawTexts.clear();  // the listing is the whole set: forget pins no longer in it
+  useCanvasPinsStore.setState((state) => ({
+    projectId: typeof event.projectId === 'string' ? event.projectId : null,
+    pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
+  }));
+}
+
 export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   projectId: null,
   pins: [],
@@ -158,30 +190,21 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     // Review 14 MEDIUM-1: a failed chunk is tried once more (here, or on the
     // next pins push, which every reconnect starts with).
     retryPinText();
+    // PR #218 review 1 MEDIUM-1: the listing takes its place in the order as
+    // the fetch starts. Any push that arrives after that is at least as new
+    // (every write pushes the whole set after it), so this listing is
+    // dropped if one was applied before it lands.
+    const order = nextListingOrder();
     try {
       // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.
       const [listing] = await Promise.all([fetchPins(), pinTextSettling()]);
-      get().apply(listing);
+      applyListing(listing, order);
     } catch {
       // The canvasPins push after graphSync heals this on the next connect.
     }
   },
-  apply: (event) => {
-    // Review 13 L-2: a listing pushed before the Unicode data is in waits for
-    // it (in arrival order), never dropped and never shown unsanitized.
-    // Review 14 MEDIUM-1: only while the import is pending; a failed one
-    // applies at once in the strict fallback form (and is tried once more).
-    retryPinText();
-    if (!pinTextSettled()) {
-      void pinTextSettling().then(() => get().apply(event));
-      return;
-    }
-    rawTexts.clear();  // the listing is the whole set: forget pins no longer in it
-    set((state) => ({
-      projectId: typeof event.projectId === 'string' ? event.projectId : null,
-      pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
-    }));
-  },
+  // A pushed listing (the canvasPins event): its place in the order is its arrival.
+  apply: (event) => applyListing(event, nextListingOrder()),
   // Round 23 (review 22, M-1): the dialog is part of the canvas's read-only
   // state (lib/canvasLock, the one source every surface reads): opening it,
   // sending it and deleting a note are refused while following an agent's
