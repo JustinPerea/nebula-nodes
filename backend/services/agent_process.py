@@ -180,9 +180,18 @@ async def _freeze_and_kill_posix_tree(root_pid: int) -> set[int]:
     reparented to PID 1.
     """
     discovered = {root_pid}
+    own_group = _leads_own_group(root_pid)
     try:
         # Freeze the root before the first snapshot so it cannot add another
         # direct child while the existing descendant closure is discovered.
+        # When the root leads its own group (spawn_agent_process starts every
+        # agent in a new session), freeze that whole group in one signal first:
+        # a `ps` snapshot can take a second on a loaded machine, and a
+        # descendant left running meanwhile could finish what Stop was meant
+        # to prevent (the CI flake of 2026-11-02: the test's grandchild wrote
+        # its sentinel before the first snapshot returned).
+        if own_group:
+            _signal_group(root_pid, signal.SIGSTOP)
         _signal_processes({root_pid}, signal.SIGSTOP)
         initial_table = await _read_posix_process_table()
         discovered = _descendant_closure(discovered, initial_table)
@@ -209,6 +218,12 @@ async def _freeze_and_kill_posix_tree(root_pid: int) -> set[int]:
         # All captured processes are frozen, so none can fork or move into
         # another session while the individual-PID kill is applied.
         _signal_processes(discovered, signal.SIGKILL)
+        # A group member that is no longer a descendant by PPID (its parent
+        # exited and it was reparented) was frozen by the group stop above;
+        # never leave it stopped. The root is not reaped yet, so its group ID
+        # cannot have been reused.
+        if own_group:
+            _kill_group(root_pid)
     except BaseException:
         # Never leave a partially discovered tree frozen if inspection fails
         # or cleanup itself receives another cancellation.
@@ -216,8 +231,32 @@ async def _freeze_and_kill_posix_tree(root_pid: int) -> set[int]:
             _signal_processes(discovered, signal.SIGKILL)
         except Exception:
             pass
+        if own_group:
+            _kill_group(root_pid)
         raise
     return discovered
+
+
+def _leads_own_group(process_id: int) -> bool:
+    """Whether the process leads its own process group (and it is not ours)."""
+    try:
+        group = os.getpgid(process_id)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return group == process_id and group != os.getpgrp()
+
+
+def _signal_group(group_id: int, sig: signal.Signals) -> None:
+    """Signal a whole group; a group already gone, or one member we may not
+    signal, is left to the per-PID path, which reports what survives."""
+    try:
+        os.killpg(group_id, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _kill_group(group_id: int) -> None:
+    _signal_group(group_id, signal.SIGKILL)
 
 
 async def _verify_posix_processes_gone(process_ids: set[int]) -> None:
