@@ -160,8 +160,10 @@ class CursorField {
   readonly exitingCounts = new Map<string, readonly string[]>();
   /** Cursors a node move is carrying, each with its target before the
    *  carry: while its target chain differs from the one it had there, it is
-   *  drawn last in the column it is passing (a preview, GM - Design, #219
-   *  r47 Q1). Display only: the backend's arrival (agentPresenceArrival)
+   *  laid out as the newest arrival (r24 insert) in the column it is passing
+   *  (a preview, GM - Design, #219 r47 Q1). Not the literal bottom slot: the
+   *  insert puts it above a member aimed over 16 below its target, as the
+   *  backend does at the drop, so nothing moves there (r52). Display only: the backend's arrival (agentPresenceArrival)
    *  governs, and ends it; with no arrival CARRY_PREVIEW_HOLD_MS after the
    *  drop, the backend disagreed, and the cursor glides back. */
   readonly carriedFrom = new Map<string, Point>();
@@ -339,8 +341,9 @@ class CursorField {
       // Cursors still on their way come after every landed one, the one due
       // to land soonest first.
       const order = new Map(due.map((d, i) => [d.k, i]));
-      // A carry the backend would count as an arrival: last in its column
-      // for now, in its own order among the cursors one node carries (r47).
+      // A carry the backend would count as an arrival: laid out as the
+      // newest arrival (r24 insert) for now, in its own order among the
+      // cursors one node carries (r47). Not the literal bottom slot (r52).
       const preview = this.previewed();
       const entries = (later: ReadonlySet<string>, bottom: ReadonlySet<string> = new Set(), was = false) => [...this.targets].map(([k, v]) => ({
         key: k,
@@ -356,8 +359,8 @@ class CursorField {
         sayW: v.sayW,
       }));
       // During a live drag, a carried cursor that joins a column by overlap
-      // alone (arrow meets label, targets still over 16 apart) is drawn last
-      // too, so passing through that band on the way in never flips it from
+      // alone (arrow meets label, targets still over 16 apart) takes the
+      // column's literal bottom slot, the only case that does, so passing through that band on the way in never flips it from
       // top to bottom. Display only, and it ends at the drop: the backend
       // counts no arrival for it, so it glides once to its arrival-order
       // slot (GM - Design, #219 r52 Q1).
@@ -368,7 +371,7 @@ class CursorField {
       if (dragged.length === 0) {
         spots = deStackLayout(entries(preview), zoom);
       } else {
-        // Read each one's column with it drawn last, against its column
+        // Read each one's column with it in the bottom slot, against its column
         // before the carry: any new member is a join.
         const probed = deStackLayout(entries(preview, new Set(dragged)), zoom);
         const before = deStackLayout(entries(new Set(), new Set(), true), zoom);
