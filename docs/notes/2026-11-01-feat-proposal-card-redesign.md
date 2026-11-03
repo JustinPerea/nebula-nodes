@@ -290,3 +290,42 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 
 - Live glide, under → above at 420×700: the card `translateY(-54px)` → 0 and the older notice `translateY(270px)` → 0, 420 ms on the stack's `linear(…)` spring. The new notice keeps its own entrance.
 - Found while live: the Chrome for Testing 150 build the harness used is gone from `~/.cache/puppeteer` (removed outside this session), so the shots ran on the cached 131 build.
+
+## Round 3d (GM - Design's r6, 2026-11-02)
+
+**Short heights: the docked log's body gives way (GM r6 1).** `placeNoticeStack` keeps its pure shape; two steps follow the fold:
+- 4, `squeeze`: when the card's header, kept lines and footer don't fit above the docked, open log, the log's body gives way by the shortfall, capped at `logSpare` (its own height less its floor). The region writes it as `--agent-log-squeeze` on the root; layouts.css turns it into `max-height: max(floor, natural - squeeze)` on `.agent-log--open[data-docked]`, on `--agent-log-spring` (420 ms; none with reduced motion). The log is a flex column held at its foot: the header and collapse control stay whole and come down with the body's top, and the body shrinks and scrolls. When the card leaves, the squeeze var goes and the body springs back.
+- 5, `underFade`: only with the log at its floor does the card's body go under its kept lines, down to one line; past that `over` (the foot crossing the log's line) is left only for cells that can't hold header, one line and footer.
+- The floor is "2 rows" read as the log's header plus two text lines of its body, with its padding and borders (`logFloor`, AgentLog.tsx): 91 px live.
+- AgentLog writes `--agent-log-top` from the log's height with no give (`--agent-log-natural-h`: the person's inline resize, else `--agent-log-h` read off a probe), so the squeeze never moves the line the region measures. Live, the top line stayed at 268 with squeeze 0, 24, 78 and 89: no feedback loop. `--agent-log-floor` is written beside it, and all three are cleared when the log isn't docked.
+- **Not (c), and the rise is gone.** Round 3c's last resort let the stack rise into the empty selection toolbar Panel's room (`topFloor`, `noticeTopLimit(…, true)`, `rise`). GM r6 rules out counting that room in a way that makes the card jump when a selection appears, so it's removed; the empty Panel counts as covered at all times, and a selection appearing doesn't move the card (pinned).
+- Floating and closed logs are unchanged (no squeeze; `logSpare` is gated on `aboveLog`).
+
+**The card's minimum body (GM r6 2)** is the plan line plus the first ⚠ (not-ready) line when there is one: ProposalBar marks that first `li` with `KEEP_ATTR` too, `measureNoticeStack` spans every kept element (min top, max bottom), and `applyNoticeStack` pins the lowest kept line's foot just over the bottom fade. The body is whole lines: a partial line sits under the 16 px fade, never hard-cut. Pinned with and without the ⚠ line.
+
+**The fold button (GM r6 3)** reads "1 more notice" / "N more notices" folded and "Show less" unfolded (`SHOW_LESS`), with `aria-expanded`. Pinned.
+
+**The grid, on the live top lines.** The 210 cells now use the measured top lines: 116 at 420 wide and 150 at 768 and up (the top bars' bottom + 8); with the offline banner, its bottom + 16: 214 at 420 (it wraps to two lines) and 199 at 768 and up. Every cell holds the never-covered invariants (the card's header and footer, the docked log's header, no overlaps, nothing off screen or past the top line).
+- **Physically impossible (3 cells):** 420×560, log open, the banner, 2, 3 or 4 notices. 78 px from the top line to the log's line, plus 89 from the log at its floor, is 167; header, one line and footer with the "more" row and the newest notice need 203. There the card's foot crosses the log's line. Pinned as `IMPOSSIBLE` with those numbers.
+- **The body under its kept lines (`underFade`), pinned per class:**
+  - log open (the log always at its floor there, asserted per cell): 420×560 with 2–4 notices, and with the banner 0–4; 420×640 with the banner and 2–4; 768×600 with 2–4, and with the banner 1–4;
+  - log closed (nothing to give): 420×560 with the banner and 2–4;
+  - log floating (round 3c's placement, unchanged): 420×560 and 420×640 with 0–4, 420×760 with 2–4, 768×600 and 1024×640 with 0–4, with or without the banner. **For GM:** a floating log in the card's column at those heights still leaves the card less than its kept lines; r6 didn't touch floating logs, so this is unchanged.
+
+**Checks (round 3d).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, the round 3c list of 160 files (focusRingCss and the copy sweep `pr198Fix6Copy` included): 2974 passed; then the three files touched by the pins, 292 passed.
+- Backend unchanged this round; pytest not rerun.
+- Entry: 452,080 B raw, 139,044 B gzip.
+- Mutation checks: 25 run. 22 caught at first; the ⚠ line's keep mark and the log's floor survived and are pinned now (ProposalBar.test.tsx, pr198Fix7Ui.test.tsx), and the third, the card's height `max(min(room4, max(cap, keep)), least)`, was equivalent to `max(room4, least)` (the squeeze only ever brings the room up to the kept lines), so the line is simplified and its mutant caught. Runner `scratchpad/proposal-card/mut3d/run.py`, results `out.txt`.
+- **Live** (Restraint; isolated backend on 8798, Vite on 5798; canaries blocked; nothing accepted or run; offline by blocking `/api/health`). Shots in `scratchpad/proposal-card/shots3d/`, `md5 | uniq -d` empty:
+
+| Shot | Result |
+|---|---|
+| 01, 420×560, log open, 2 notices | Folded ("1 more notice" 116–148, newest 156–202), card 210–381, the log squeezed 89 to its floor (389–480), its header 390–427 whole. Body 82 < 97: under its kept lines, as allowed at the floor. |
+| 02, 768×600, offline banner, 4 notices | Banner 150–183, "3 more notices" 199–231, newest 239–285, card 293–421, log at its floor (429–520), header 430–467 whole. The ⚠ line shows whole; the plan line is behind the top fade (the body is 39 px). |
+| 03, 420×640, log open, 2 notices | Squeeze 24; the plan line 245–278 and the ⚠ line 284–310 whole above the bottom fade (footer at 342). |
+| 04, 03 unfolded | "Show less", `aria-expanded="true"`, both notices above, card 264–450, squeeze 78, log header 459–496 whole. |
+| 05, frames 1–3 | The card withdrawn: the log springs back from 91 to 180 px in about 200 ms (top 389 → 357 → 300), the notices glide down. |
+
+- Found while live: proposals left open by earlier crashed driver runs kept a card on screen after a withdraw; the driver now withdraws every open proposal first. The harness's intermittent "Promise was collected" in the offline scene needed one or two reruns.

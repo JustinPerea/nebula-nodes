@@ -33,6 +33,36 @@ function chatLauncherRect(): Rect | null {
 }
 
 /** The log's layout size, ignoring the transform its entry spring applies. */
+/** The open log's height with no give: the person's resize (inline), else
+ * the state's --agent-log-h, read off a probe since it is a clamp(). */
+let heightProbe: HTMLDivElement | null = null;
+function naturalLogHeight(log: HTMLElement): number {
+  const inline = Number.parseFloat(log.style.height);
+  if (Number.isFinite(inline) && inline > 0) return inline;
+  if (!heightProbe) {
+    heightProbe = document.createElement('div');
+    heightProbe.setAttribute('aria-hidden', 'true');
+    heightProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:var(--agent-log-h)';
+  }
+  if (!heightProbe.isConnected) document.body.appendChild(heightProbe);
+  return Math.min(heightProbe.offsetHeight, window.innerHeight * 0.8);
+}
+
+/** The floor it gives way to (GM r6): its header and 2 rows of the body,
+ * with the body's padding and the log's borders. */
+function logFloor(log: HTMLElement): number {
+  const head = log.querySelector<HTMLElement>('.agent-log__drag-row');
+  const body = log.querySelector<HTMLElement>('.agent-log__body');
+  if (!head || !body) return log.offsetHeight;
+  const style = getComputedStyle(body);
+  const row = log.querySelector<HTMLElement>('.agent-log__msg') ?? body;
+  const rowStyle = getComputedStyle(row);
+  const line = Number.parseFloat(rowStyle.lineHeight) || (Number.parseFloat(rowStyle.fontSize) || 12) * 1.4;
+  const borders = log.offsetHeight - log.clientHeight;
+  return head.offsetHeight + (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
+    + 2 * line + Math.max(0, borders);
+}
+
 function layoutSize(el: HTMLElement | null): { width: number; height: number } | null {
   if (!el) return null;
   return { width: el.offsetWidth, height: el.offsetHeight };
@@ -233,15 +263,25 @@ export function AgentLog() {
   // and resized. --agent-log-top is how far its top edge (plus the gap)
   // sits above the window's bottom: a proposal card too narrow beside the
   // log sits above it instead (GM - Design, PR #216 r1; canvasProposals.css).
-  // The log itself never moves for the card.
+  // The log never moves for the card; at short heights its body gives way
+  // (GM r6, below).
   // Dragged off the dock, its box goes on the root as --agent-log-float-*
   // (window px): the proposal card clears it when it sits in the card's
   // column (GM - Design, PR #216 r4 6; lib/noticeStackPlace.ts).
+  // GM - Design, PR #216 r6: at short heights the docked, open log's body
+  // gives way to a proposal card, down to a floor of its header and 2 rows
+  // (the notice region writes --agent-log-squeeze; layouts.css). So that
+  // giving way never moves the line the region measures, --agent-log-top is
+  // the top the log has with no give (its own height, --agent-log-natural-h),
+  // and --agent-log-floor is how short it may get.
   useEffect(() => {
     const root = document.documentElement;
     const log = logRef.current;
     const clear = (names: string[]) => names.forEach((name) => root.style.removeProperty(name));
-    const DOCK = ['--agent-log-clearance', '--agent-log-top'];
+    const set = (name: string, value: string) => {
+      if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+    };
+    const DOCK = ['--agent-log-clearance', '--agent-log-top', '--agent-log-natural-h', '--agent-log-floor'];
     const FLOAT = ['--agent-log-float-top', '--agent-log-float-bottom', '--agent-log-float-left', '--agent-log-float-right'];
     if (!visible || !log) {
       clear([...DOCK, ...FLOAT]);
@@ -253,9 +293,14 @@ export function AgentLog() {
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
       if (docked) {
         clear(FLOAT);
-        root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
-        root.style.setProperty('--agent-log-top', `${Math.ceil(window.innerHeight - rect.top + AGENT_LOG_GAP_PX)}px`);
+        log.dataset.docked = 'true';
+        const natural = open ? naturalLogHeight(log) || rect.height : rect.height;
+        set('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
+        set('--agent-log-top', `${Math.ceil(window.innerHeight - (rect.bottom - natural) + AGENT_LOG_GAP_PX)}px`);
+        set('--agent-log-natural-h', `${Math.ceil(natural)}px`);
+        set('--agent-log-floor', `${Math.ceil(open ? Math.min(natural, logFloor(log)) : natural)}px`);
       } else {
+        delete log.dataset.docked;
         clear(DOCK);
         if (rect.width > 0 && rect.height > 0) {
           root.style.setProperty('--agent-log-float-top', `${Math.floor(rect.top)}px`);

@@ -97,12 +97,12 @@ export function floatingBottomLimit(gutter: number, viewportHeight = window.inne
  */
 export const TOP_BAR_ATTR = 'data-top-bar';
 
-export function floatingTopLimit(gutter: number, shownOnly = false): number {
+export function floatingTopLimit(gutter: number): number {
   if (typeof document === 'undefined') return gutter;
   let line = gutter;
   for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]`)) {
     const box = part.getBoundingClientRect();
-    if (box.height <= 0 || (shownOnly && box.width <= 0)) continue;
+    if (box.height <= 0) continue;
     line = Math.max(line, box.bottom + BOTTOM_BAR_GAP);
   }
   return line;
@@ -116,12 +116,9 @@ export const NOTICE_TOP_LINE_ATTR = 'data-notice-top-line';
  * stack again when it comes or goes (NoticeRegion's root watch). */
 export const BANNER_SHOWN_ATTR = 'data-offline-banner';
 
-/** floatingTopLimit, and below the offline banner while it shows.
- * `shownOnly`: only the parts that show, so the selection toolbar's empty
- * Panel (no width) doesn't count; the notice stack's last resort may rise
- * into that room (lib/noticeStackPlace.ts `topFloor`). */
-export function noticeTopLimit(gutter: number, shownOnly = false): number {
-  let line = floatingTopLimit(gutter, shownOnly);
+/** floatingTopLimit, and below the offline banner while it shows. */
+export function noticeTopLimit(gutter: number): number {
+  let line = floatingTopLimit(gutter);
   if (typeof document === 'undefined') return line;
   for (const part of document.querySelectorAll<HTMLElement>(`[${NOTICE_TOP_LINE_ATTR}]`)) {
     const box = part.getBoundingClientRect();

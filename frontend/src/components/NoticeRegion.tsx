@@ -73,7 +73,7 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       // A top bar mounted since (the selection toolbar's panel) joins the watch.
       document.querySelectorAll(`[${TOP_BAR_ATTR}]`).forEach(watch);
       stack.querySelectorAll('[data-notice-shrinks], [data-notice-shrinks] [data-notice-shrink-body] > *').forEach(watch);
-      const measured = measureNoticeStack(region, stack, noticeTopLimit(TOP_GUTTER), noticeTopLimit(TOP_GUTTER, true));
+      const measured = measureNoticeStack(region, stack, noticeTopLimit(TOP_GUTTER));
       const next = {
         place: placeNoticeStack(measured, { expanded: expanded.current }),
         logTop: measured.logTop, floatTop: measured.floating?.top ?? 0,

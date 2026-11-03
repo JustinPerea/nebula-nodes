@@ -7,7 +7,7 @@
  *   noticeRegion.css). While that leaves at least BESIDE_LOG_MIN_W, the stack
  *   sits beside the log. Below it, the whole stack goes above the log: the
  *   region stops clearing the log (`data-above-log`) and the stack is lifted
- *   over the log's top edge (`--notice-stack-lift`). The log never moves.
+ *   over the log's top edge (`--notice-stack-lift`). The log never moves (its body may give, step 4).
  * - A log dragged off the dock that sits in the card's column is cleared too
  *   (GM r4 6): the card stays under it when there is room, else above it.
  * - The room is the stack's line up to the top line (the app's top bars, the
@@ -32,11 +32,21 @@
  * 3. `folded`: no room above for them all: the older notices fold into one
  *    row, "1 more notice" / "2 more notices", which unfolds on click; the
  *    newest stays whole with its Undo. Unfolded, the stack is step 2's.
- * 4. Last resort, only when even header, plan line, footer and step 3's rows
- *    can't fit between the top line and the log: the stack first rises into
- *    the room the selection toolbar's empty Panel keeps (`topFloor`: free
- *    canvas until a selection shows its toolbar), and only past that does
- *    the card's foot come down over the log's top edge by the rest (`over`).
+ * 4. GM r6: only when even header, kept lines, footer and step 3's rows
+ *    can't fit, the docked log's body gives way: it shrinks on the layout
+ *    spring (`squeeze`, written as --agent-log-squeeze), down to its floor of
+ *    header and 2 rows (AgentLog's --agent-log-floor), its header moving down
+ *    with its top, whole and clear. It grows back when the card leaves.
+ * 5. Only below that floor does the card's body go under its kept lines,
+ *    down to one line, the plan line scrolling behind the fade
+ *    (`underFade`). Past that the window is too short for header, one line
+ *    and footer: the card's foot comes down over the log by the rest
+ *    (`over`; the grid test lists those cells with their numbers).
+ *
+ * The kept lines (`KEEP_ATTR`): the plan line, and the first not-ready ⚠
+ * row when there is one (GM r6). The body shows whole lines: the region
+ * scrolls the last kept line to sit just over the bottom fade, so a line cut
+ * by either edge is one under a fade.
  *
  * A move between steps glides on the layout spring (glideStack): no jump.
  */
@@ -69,6 +79,10 @@ export const FOLD_ATTR = 'data-notice-folded';
 /** The "N more notices" row, and the region's mark while it shows. */
 export const MORE_ATTR = 'data-notice-more';
 export const MORE_SHOWN_ATTR = 'data-notice-more-shown';
+/** The unfolded row's words (as the note's Show all / Show less). */
+export const SHOW_LESS = 'Show less';
+/** On the root: how far the docked log's body gives way (layouts.css). */
+export const LOG_SQUEEZE_VAR = '--agent-log-squeeze';
 
 export type StackMode = 'under' | 'above' | 'folded';
 
@@ -83,7 +97,8 @@ export interface CardMeasure {
   /** The notices in the stack, top to bottom, and the stack's gap. */
   items?: number[];
   gap?: number;
-  /** The plan line, in the body's content (from its top, unscrolled). */
+  /** The kept lines (the plan line, and the first ⚠ row), in the body's
+   * content: the first one's top and the last one's foot, unscrolled. */
   plan?: { top: number; bottom: number } | null;
 }
 
@@ -101,9 +116,9 @@ export interface StackMeasure {
   logTop: number;
   /** noticeTopLimit(TOP_GUTTER): the line the stack's top stays under. */
   topLine: number;
-  /** The same line from the parts that show (the selection toolbar's empty
-   * Panel left out): the last resort's stack may rise to it (step 4). */
-  topFloor?: number;
+  /** How far a docked, open log's body may give way: its height less its
+   * floor of header and 2 rows (0 for a closed or floating log). */
+  logSpare?: number;
   /** The card, when one shows. */
   card: CardMeasure | null;
   /** An undocked Agent log's box (window coordinates), when one shows. */
@@ -128,9 +143,11 @@ export interface StackPlace {
   expanded: boolean;
   /** The body is shorter than note and plan line: scroll the plan line in. */
   keepPlan: boolean;
-  /** Last resort: how far the stack's top rises over the top line (to
-   * topFloor at most), and how far the card's foot then crosses its line. */
-  rise: number;
+  /** Step 4: how far the docked log's body gives way. */
+  squeeze: number;
+  /** Step 5: the body is shorter than its kept lines (they scroll behind
+   * the fade), and how far the card's foot then crosses the log's line. */
+  underFade: boolean;
   over: number;
   /** The line the stack's top stays under (a floating log's foot may lower it). */
   topLine?: number;
@@ -165,7 +182,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const beside = m.viewportW - Math.max(m.gutter, m.logClearance) - m.regionLeft;
   const aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, more: 0, expanded: false, keepPlan: false, rise: 0, over: 0 };
+  const none = { folded: 0, more: 0, expanded: false, keepPlan: false, squeeze: 0, underFade: false, over: 0 };
   if (!m.card) return { aboveLog, lift: base, cap: null, mode: null, ...none };
   const card = m.card;
   const gap = card.gap ?? 8;
@@ -179,9 +196,6 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const floors = bodyFloors(card);
   let topLine = m.topLine;
 
-  // The room over the top line the last resort may rise into (step 4).
-  let spare = Math.max(0, topLine - Math.min(topLine, m.topFloor ?? topLine));
-
   // A floating log in the card's column (GM r4 6): under it when the stack
   // fits between its foot and the stack's line, else above it when it fits
   // there. When neither fits, under it: the stack's top then crosses the
@@ -192,10 +206,9 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     const line0 = m.viewportH - m.regionBottom - base;
     const needs = card.chrome + floors.min + foldedRows;
     const under = line0 - (float.bottom + FLOAT_GAP_PX);
-    const over = float.top - FLOAT_GAP_PX - topLine + spare;
+    const over = float.top - FLOAT_GAP_PX - topLine;
     if (under >= needs || over < needs) {
       topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
-      spare = 0;
     } else {
       base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
     }
@@ -203,18 +216,26 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
 
   // The room from the stack's line up to the top line.
   const room = m.viewportH - m.regionBottom - base - topLine;
+  // Only a docked log the stack sits above gives way.
+  const logSpare = aboveLog ? Math.max(0, Math.floor(m.logSpare ?? 0)) : 0;
   const place = (mode: StackMode, rows: number, more = 0, expanded = false): StackPlace => {
     const cap = Math.floor(room - rows);
-    const least = card.chrome + floors.min;
-    // Step 4: the card keeps header, plan line and footer: the stack rises
-    // into the spare room, then the card's foot comes down.
-    const short = Math.max(0, Math.ceil(least - cap));
-    const rise = Math.min(short, Math.floor(spare));
-    const lift = Math.max(0, base - (short - rise));
+    const keep = card.chrome + floors.min;
+    const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body);
+    // Step 4: the log's body gives way, down to its floor.
+    const squeeze = Math.min(Math.max(0, Math.ceil(keep - cap)), logSpare);
+    const room4 = cap + squeeze;
+    // Step 5: the body under its kept lines, down to one line; then the foot.
+    const over = Math.max(0, Math.ceil(least - room4));
+    const lift = Math.max(0, base - squeeze - over);
+    // The squeeze only ever brings the room up to the kept lines, so the
+    // room is the body's height; the body never goes under one line.
+    const height = Math.max(room4, least);
     return {
-      aboveLog, lift, cap: Math.max(cap, least), mode, topLine, rise, over: base - lift,
+      aboveLog, lift, cap: height, mode, topLine, squeeze, over: Math.max(0, base - squeeze - lift),
+      underFade: height - card.chrome < floors.min,
       folded: mode === 'folded' ? count - 1 : 0, more, expanded,
-      keepPlan: Math.max(cap, least) - card.chrome < floors.full,
+      keepPlan: height - card.chrome < floors.full,
     };
   };
 
@@ -310,7 +331,7 @@ function scrollerOf(card: HTMLElement): HTMLElement | null {
 /** Reads the live layout for placeNoticeStack. Read from the items' own
  * layout heights, never their places or their boxes on screen, so neither
  * the step in force nor a scale or glide in flight changes it. */
-export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topLine: number, topFloor = topLine): StackMeasure {
+export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topLine: number): StackMeasure {
   const root = getComputedStyle(document.documentElement);
   const rect = region.getBoundingClientRect();
   const card = stack.querySelector<HTMLElement>(`[${SHRINK_ATTR}]`);
@@ -324,14 +345,14 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
     const scale = card.offsetHeight > 0 && cardRect.height > 0 ? cardRect.height / card.offsetHeight : 1;
     const scroller = scrollerOf(card) ?? body;
     const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
-    const keep = card.querySelector<HTMLElement>(`[${KEEP_ATTR}]`);
+    const kept = [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)];
     let plan: CardMeasure['plan'] = null;
-    if (keep) {
+    if (kept.length) {
       const from = scroller.getBoundingClientRect().top;
-      const keepRect = keep.getBoundingClientRect();
+      const boxes = kept.map((element) => element.getBoundingClientRect());
       plan = {
-        top: Math.round((keepRect.top - from) / scale + scroller.scrollTop),
-        bottom: Math.round((keepRect.bottom - from) / scale + scroller.scrollTop),
+        top: Math.round((Math.min(...boxes.map((b) => b.top)) - from) / scale + scroller.scrollTop),
+        bottom: Math.round((Math.max(...boxes.map((b) => b.bottom)) - from) / scale + scroller.scrollTop),
       };
     }
     shrink = {
@@ -357,7 +378,8 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
     logClearance: px(root.getPropertyValue('--agent-log-clearance')),
     logTop: px(root.getPropertyValue('--agent-log-top')),
     topLine,
-    topFloor: Math.min(topLine, topFloor),
+    // AgentLog writes the docked log's height without any give, and its floor.
+    logSpare: Math.max(0, px(root.getPropertyValue('--agent-log-natural-h')) - px(root.getPropertyValue('--agent-log-floor'))),
     card: shrink,
     floating: floatBottom > 0 ? {
       top: floatTop, bottom: floatBottom,
@@ -461,17 +483,27 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   else region.removeAttribute(MORE_SHOWN_ATTR);
   if (more) {
     more.hidden = !place.more;
-    more.textContent = place.more ? moreLabel(place.more) : '';
+    more.textContent = !place.more ? '' : place.expanded ? SHOW_LESS : moreLabel(place.more);
     more.setAttribute('aria-expanded', String(place.expanded));
   }
   // The spring is off for this frame: read the layout so the jump lands now.
   void stack.offsetHeight;
   // GM r5 2: the body keeps its plan line; the note scrolls behind its fade.
   const scroller = card ? scrollerOf(card) : null;
-  const keep = card?.querySelector<HTMLElement>(`[${KEEP_ATTR}]`);
-  if (place.keepPlan && scroller && keep) {
-    const short = keep.getBoundingClientRect().bottom - (scroller.getBoundingClientRect().bottom - FADE_PX);
+  const kept = card ? [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)] : [];
+  if (place.keepPlan && scroller && kept.length) {
+    // The last kept line's foot just over the bottom fade: whole, and any
+    // line the edge cuts sits under a fade (GM r6).
+    const foot = Math.max(...kept.map((element) => element.getBoundingClientRect().bottom));
+    const short = foot - (scroller.getBoundingClientRect().bottom - FADE_PX);
     if (short > 0) scroller.scrollTop += Math.ceil(short);
+  }
+  // Step 4: the docked log's body gives way by the squeeze, or grows back.
+  const root = document.documentElement;
+  const squeeze = place.squeeze > 0 ? `${place.squeeze}px` : '';
+  if (root.style.getPropertyValue(LOG_SQUEEZE_VAR) !== squeeze) {
+    if (squeeze) root.style.setProperty(LOG_SQUEEZE_VAR, squeeze);
+    else root.style.removeProperty(LOG_SQUEEZE_VAR);
   }
   // Where each now rests in the layout, whatever it draws with.
   moving.forEach((element) => { if (!element.hasAttribute(FOLD_ATTR)) resting.set(element, layoutBox(element)); });

@@ -146,7 +146,7 @@
 /* Under 400 px of room beside a docked Agent log, the whole stack sits above
    the log at the region's full width (the card up to 600 px), card on top,
    notices under it, never a sliver beside it (GM - Design, PR #216 r3). The
-   log never moves. */
+   log never moves; at short heights its body gives way (GM r6). */
 .notice-region[data-above-log='true'] {
   right: var(--page-gutter, 16px);
 }

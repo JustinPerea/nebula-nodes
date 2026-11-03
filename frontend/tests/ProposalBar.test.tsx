@@ -457,6 +457,9 @@ describe('ProposalBar', () => {
     const list = screen.getByRole('list', { name: "Can't run here" });
     expect(list.querySelectorAll('li')).toHaveLength(4);
     expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
+    // The first ⚠ line is kept in view with the plan line (GM r6); the rest scroll.
+    const kept = [...list.querySelectorAll('li')].map((li) => li.hasAttribute('data-notice-keep'));
+    expect(kept).toEqual([true, false, false, false]);
     expect(list.textContent).toContain('and 1 more in the details');
     fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
     expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');

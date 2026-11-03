@@ -335,8 +335,9 @@ export function ProposalBar() {
                 // Accept stays as the Run button does for a node without its
                 // key: the run is refused at that node, before anything is spent.
                 <ul className="proposal-bar__readiness" aria-label="Can't run here">
-                  {notReady.slice(0, READINESS_LINES).map((row) => (
-                    <li key={row.ref} className="proposal-bar__not-ready">
+                  {notReady.slice(0, READINESS_LINES).map((row, index) => (
+                    // The first ⚠ row is kept in view with the plan line (GM r6).
+                    <li key={row.ref} className="proposal-bar__not-ready" {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}>
                       <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
                       {notReadyLine(row)}
                     </li>
