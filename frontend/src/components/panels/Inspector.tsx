@@ -47,6 +47,12 @@ import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvas
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
+// The newest file picked into each node's file param ("node\nparam" to its
+// ticket): an upload that answers after a newer pick into the same param is
+// dropped, so it never lands over the newer file.
+const fileUploadTickets = new Map<string, number>();
+let lastFileUploadTicket = 0;
+
 type InspectorProps = {
   embedded?: boolean;
 };
@@ -421,17 +427,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // the shown provider, at a value another provider would honor (rule H),
   // goes back to its default with one card note (lib/providerSwitch.ts
   // snapHidden): "Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2".
-  // Returns the params it wrote.
-  function writeEdit(params: Record<string, unknown>, key: string): Record<string, unknown> {
+  // Returns the params it wrote. `nodeId` is the node's own when the write
+  // lands after an await (writeParamsNow): this render may show another node.
+  function writeEdit(params: Record<string, unknown>, key: string, nodeId = activeNode.id): Record<string, unknown> {
     if (!definition || !switchable) {
-      updateNodeData(activeNode.id, { params });
+      updateNodeData(nodeId, { params });
       return params;
     }
     const routed = withWiredBlockers(definition, params, wiredKey ? wiredKey.split('\n') : []);
     const routeId = shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {});
     const snapped = snapHidden(definition, params, routeId, key);
-    updateNodeData(activeNode.id, { params: snapped.params });
-    if (snapped.notes.length) useProviderNoteStore.getState().show(activeNode.id, snapped.notes);
+    updateNodeData(nodeId, { params: snapped.params });
+    if (snapped.notes.length) useProviderNoteStore.getState().show(nodeId, snapped.notes);
     return snapped.params;
   }
 
@@ -448,16 +455,66 @@ export function Inspector({ embedded = false }: InspectorProps) {
     });
   }
 
-  // One param written over the node's params as they are now, not as this
+  // Params written over the node's params as they are now, not as this
   // render saw them: for a write that lands after an await (Extract's
-  // palette), so an edit made meanwhile, by the person or an agent, stays
-  // (review 7 M1). The node's own definition and provider snap, as any edit.
-  function writeParamNow(nodeId: string, key: string, value: unknown) {
+  // palette, a file upload), so an edit made meanwhile, by the person or an
+  // agent, stays (review 7 M1). `key` is the param the person edited; the
+  // node's own definition and provider snap run as on any edit. One store
+  // update, so one undo step. A node that is gone gets nothing.
+  function writeParamsNow(nodeId: string, key: string, patch: Record<string, unknown>) {
     const current = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.params;
     if (!current) return;
-    const next = { ...current, [key]: value };
+    const next = { ...current, ...patch };
     const snap = definition ? snapParamDefaults(definition, current, next) : { params: next };
-    writeEdit(snap.params, key);
+    writeEdit(snap.params, key, nodeId);
+  }
+
+  function writeParamNow(nodeId: string, key: string, value: unknown) {
+    writeParamsNow(nodeId, key, { [key]: value });
+  }
+
+  // A file picked into a file param (#208 round 8c): the upload's answer
+  // lands over the node's params as they are then (writeParamsNow), so an
+  // edit made while it uploaded, the person's or an agent's, stays, and the
+  // provider snap runs as on any edit. Like Extract's palette, it lands only
+  // on the canvas it was picked on (the project and the graph generation read
+  // now) and on the same node (its definition unchanged); and only when it is
+  // the newest pick into that param. Anything else is dropped, unsaid.
+  function uploadIntoParam(nodeId: string, paramKey: string, file: File) {
+    const project = getProjectContext()?.id ?? null;
+    const generation = canvasGeneration();
+    const definitionId = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.definitionId;
+    if (!definitionId) return;
+    const slot = `${nodeId}\n${paramKey}`;
+    const ticket = ++lastFileUploadTicket;
+    fileUploadTickets.set(slot, ticket);
+    const newest = () => fileUploadTickets.get(slot) === ticket;
+    const formData = new FormData();
+    formData.append('file', file);
+    // GM, error-copy round 2: "Couldn't upload {filename}." then the
+    // reason, in the canvas notice (as a canvas drop says it).
+    const heading = `Couldn't upload ${quoted(file.name)}.`;
+    apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
+      .then((r) => r.json())
+      .then((data: { filePath: string; url: string }) => {
+        if (!newest()) return;
+        fileUploadTickets.delete(slot);
+        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+        const sameCanvas = (getProjectContext()?.id ?? null) === project && canvasGeneration() === generation;
+        if (!sameCanvas || !node || node.data.definitionId !== definitionId) return;
+        // filePath's card names the file (lib/fileName.ts), as
+        // /api/uploads keeps it for a node it creates.
+        const kept = paramKey === 'filePath' ? fileNameParam(data.filePath, file.name) : null;
+        writeParamsNow(nodeId, paramKey, {
+          [paramKey]: data.filePath, _previewUrl: backendAssetUrlSync(data.url), ...(kept ? { _fileName: kept } : {}),
+        });
+      })
+      .catch((err) => {
+        // A pick replaced since says nothing of the file it replaced.
+        if (!newest()) return;
+        fileUploadTickets.delete(slot);
+        useGraphStore.getState().notify(failureMessage(err, heading), 'error');
+      });
   }
 
   // Extract from reference for one palette control: worked out in the
@@ -1039,23 +1096,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
                 if (!file) return;
-                const formData = new FormData();
-                formData.append('file', file);
-                // GM, error-copy round 2: "Couldn't upload {filename}." then the
-                // reason, in the canvas notice (as a canvas drop says it).
-                const heading = `Couldn't upload ${quoted(file.name)}.`;
-                apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
-                  .then((r) => r.json())
-                  .then((data: { filePath: string; url: string }) => {
-                    // filePath's card names the file (lib/fileName.ts), as
-                    // /api/uploads keeps it for a node it creates.
-                    const kept = param.key === 'filePath' ? fileNameParam(data.filePath, file.name) : null;
-                    updateNodeData(activeNode.id, {
-                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url),
-                        ...(kept ? { _fileName: kept } : {}) },
-                    });
-                  })
-                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error'));
+                uploadIntoParam(activeNode.id, param.key, file);
               }}
             />
           </label>
