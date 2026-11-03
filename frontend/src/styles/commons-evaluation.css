@@ -106,7 +106,10 @@
   background:#3b4b2e;
   border-color:#afcc85;
 }
-.evaluation-workspace button:disabled {
+.evaluation-workspace button:disabled,
+/* PR #204 round 18o (GM r51 Q3): a reference button locked by unsaved edits stays focusable
+ * (aria-disabled, the status line its reason) and dims as the natively disabled ones do. */
+.evaluation-workspace nav button[aria-disabled='true'] {
   opacity:.45;
   cursor:not-allowed;
 }

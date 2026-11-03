@@ -85,6 +85,10 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const [notice, setNotice] = useState('');
   const headingId = useId();
   const toggleLineId = useId();
+  const statusLineId = useId();
+  /** Round 18o (GM r51 Q4): Save labels was pressed with focus on it; the form remounts from the
+   * saved batch, and the new Save labels takes focus back. Cleared if the save fails (no remount). */
+  const refocusSaveRef = useRef(false);
   /** A scan still running (or settled unseen) when this panel mounted. */
   const [resumed] = useState(() => scan);
   const [loading, setLoading] = useState(resumed === null);
@@ -254,18 +258,25 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           }}>Download sealed labels</button></>}
       </div> : <div className="evaluation-workspace">
-        <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy || dirty} aria-current={index === n ? 'true' : undefined}
-          onClick={() => setIndex(n)}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
-        <ReferenceForm key={`${index}:${formEpoch}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} />
+        {/* Round 18o (GM r51 Q3): unsaved labels lock the reference buttons in place, the form's
+            status line ("…to change the reference.") their reason; native only while a save runs. */}
+        <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy}
+          aria-disabled={toggleLocked || undefined} aria-describedby={toggleLocked ? statusLineId : undefined} aria-current={index === n ? 'true' : undefined}
+          onClick={() => { if (!toggleLocked) setIndex(n); }}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
+        <ReferenceForm key={`${index}:${formEpoch}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft}
+          statusLineId={statusLineId} refocusSaveRef={refocusSaveRef} />
       </div>}
     </>}
   </section>;
 }
 
-function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
+function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statusLineId, refocusSaveRef }: {
   batch: EvaluationBatch; item: EvaluationItem; busy: boolean; dirty: boolean;
   onDirty: (value: boolean) => void; run: (action: () => Promise<EvaluationBatch>) => Promise<SaveResult>;
   draftRef: { current: DraftActions | null };
+  /** The status line's id: the reference buttons' reason while labels are unsaved. */
+  statusLineId: string;
+  refocusSaveRef: { current: boolean };
 }) {
   const [points, setPoints] = useState<AccentPoint[]>(item.accents ?? []);
   const [noAccents, setNoAccents] = useState(item.no_accents ?? false);
@@ -281,6 +292,21 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   const canvas = useRef<HTMLCanvasElement>(null);
   const readonly = batch.state !== 'open' || busy;
   const offline = useBackendOffline();
+  // Round 18o (GM r51 Q4): Discard hands focus to this reference's heading (tabindex -1, no ring by
+  // slava-restraint's code-focus rule); Save labels keeps it, through the remount after the save.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const headingFocus = useRef(false);
+  useEffect(() => {
+    if (!headingFocus.current) return;
+    headingFocus.current = false;
+    heading.current?.focus();
+  });
+  useEffect(() => {
+    if (!refocusSaveRef.current) return;
+    refocusSaveRef.current = false;
+    saveButton.current?.focus();
+  }, [refocusSaveRef]);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
     api.image(item.position, controller.signal).then((blob) => {
@@ -312,7 +338,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   };
   return <>
     <div className="evaluation-image">
-      <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
+      <h3 className="evaluation-step" ref={heading} tabIndex={-1}>Reference {String(item.position + 1).padStart(2, '0')}</h3>
       {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
       {shownImageError && <CommonsErrorLine line={shownImageError} onRetry={imageAgain} />}
       {!url && !imageError && <p>Loading original image…</p>}
@@ -365,10 +391,20 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div>
         <label><input type="checkbox" checked={labels.no_keywords} onChange={(e) => change({ no_keywords: e.target.checked, keywords: [] })} /> No applicable keywords</label>
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
-        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty || offline} {...offlineMark(offline)} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
-      {dirty && !busy && <button className="commons-button commons-button--danger" onClick={discard}>Discard unsaved changes</button>}
-      <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? CHANGE_REFERENCE_LINE_LABELING : 'Saved on this computer'}</p>
+      {/* Round 18o (GM r51 Q4): Save labels sits outside the fieldset the save disables, so it keeps
+          focus: aria-busy and aria-disabled while saving, aria-disabled with nothing to save; natively
+          disabled only offline or once the batch is sealed or closed. */}
+      {item.accent_locked && <div className="evaluation-save"><button ref={saveButton} className="commons-button commons-button--primary"
+        disabled={batch.state !== 'open' || offline} {...offlineMark(offline)}
+        aria-busy={busy || undefined} aria-disabled={busy || !dirty || undefined}
+        onClick={(e) => {
+          if (busy || !dirty) return;
+          refocusSaveRef.current = document.activeElement === e.currentTarget;
+          void saveLabels().then((result) => { if (!result.ok) refocusSaveRef.current = false; });
+        }}>Save labels</button>{unsavedMark}</div>}
+      {dirty && !busy && <button className="commons-button commons-button--danger" onClick={() => { headingFocus.current = true; discard(); }}>Discard unsaved changes</button>}
+      <p role="status" id={statusLineId}>{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? CHANGE_REFERENCE_LINE_LABELING : 'Saved on this computer'}</p>
     </div>
   </>;
 }

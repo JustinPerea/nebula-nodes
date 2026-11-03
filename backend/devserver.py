@@ -95,7 +95,7 @@ def announce(token: str, backend_origin: str, *, ui: str | None, open_browser: b
     stdout = sys.stdout if stdout is None else stdout
     link = person_session.person_link(token, backend_origin, ui)
     if link is None:
-        print("Nebula: no person link (the canvas or backend address isn’t loopback). "
+        print("Nebula: no person link, because the canvas or backend address isn’t loopback. "
               "The canvas will run unverified.", file=stdout, flush=True)
         return None
     if open_browser:
@@ -107,8 +107,8 @@ def announce(token: str, backend_origin: str, *, ui: str | None, open_browser: b
     if stdout.isatty():
         print(f"Nebula: open the canvas as you: {link}", file=stdout, flush=True)
         return link
-    print("Nebula: no terminal to show the person link, so the canvas will run unverified "
-          "(Settings, proposals and chats stay locked). Restart with --open, or from a terminal.",
+    print("Nebula: no terminal to show the person link, so the canvas will run unverified. "
+          "Settings, proposals and chats stay locked. Restart with --open, or from a terminal.",
           file=stdout, flush=True)
     return None
 
@@ -125,8 +125,8 @@ def main(argv: list[str] | None = None) -> None:
     # Before any worker exists: reload workers copy this process's environment.
     removed = scrub_inherited_credentials(os.environ)
     if removed:
-        print(f"Nebula: ignoring {', '.join(removed)} from this shell; "
-              "provider keys come from Settings.", flush=True)
+        print(f"Nebula: ignoring {', '.join(removed)} from this shell. "
+              "Provider keys come from Settings.", flush=True)
     token = person_session.new_token()
     # uvicorn.Config has no app_dir: BACKEND_DIR is on sys.path (above), and
     # each reload worker re-runs this module's top level, so it is there too.

@@ -11,3 +11,6 @@ export const REVIEW_BATCH_LINE = 'Save or discard your label changes to review t
 /** The form's status line while edits are unsaved: the reference buttons wait for it. */
 export const CHANGE_REFERENCE_LINE_LABELING = 'Save or discard your label changes to change the reference.';
 export const CHANGE_REFERENCE_LINE_REVIEW = 'Save or discard your corrections to change the reference.';
+/** Round 18o (GM r51 Q3): Agent review's "Generate remaining grades", which sits in the header, not
+ * in the opener's row, so it has its own line under it. */
+export const GENERATE_LINE_REVIEW = 'Save or discard your corrections to grade the rest.';

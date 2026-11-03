@@ -3685,3 +3685,92 @@ GM r45, on top of 005cc58d.
   6,510. Backend isolated: test_flag_parens_copy, test_agent_connect, test_person_session,
   test_commons_evaluation_close, 122 passed. Build 474,722 B raw / 147,176 B gzip.
   person_gate.py identical to main.
+
+## Round 18o
+
+GM r51 (review 18's rulings), on top of 7d7c15fb. origin/main had nothing new (bee7ebe0), so
+there was nothing to merge.
+
+- **Q1. Agent review keeps its last read offline.** The 5 s poll is a GET, and the offline gate
+  never refuses a GET, so going offline reaches the poll as no answer (or the dev proxy's 502).
+  "An offline refusal never counts as a failed read" is built as: once a read has answered, a
+  failure while the app is offline (or a refused write) is not a failed read
+  (CommonsReview `offlineFailure`). The last read stays, read-only, and an open close dialog
+  stays. Online, a failed read still shows its line alone (GM r39 Fix B). For a read that
+  fails just before the probe marks the app offline, the collapse is skipped while offline, and
+  useLoadLineQuietOnReconnect reads again on reconnect. A reference image that failed meanwhile
+  now reads again quietly on reconnect too (the pane no longer remounts it). Found live: before
+  that, a stale "isn’t answering" image line stayed after the reconnect.
+- **Q2. A running grade locks the opener in place.** It is aria-disabled with
+  OPENER_GRADE_LINE "You can close this batch when the grade finishes." under it as its reason.
+  The lock clears through the pane's poll. Focus on the opener stays as the grade starts and
+  as it ends. Inside the dialog, CLOSE_GRADE_RUNNING is unchanged. R6 is updated on purpose:
+  commonsReview's "does not offer closing while a grade is running" now pins the aria lock.
+  Agent review now passes `disabled={!!saving}`: native only while a save is in flight.
+- **Q3. What unsaved edits lock.**
+  - The reference buttons, in both panes: aria-disabled, the form's status line their
+    describedby, presses ignored. They are native only while a save runs, or while Agent
+    review's own grading runs. They dim like the disabled ones (commons-evaluation.css).
+  - Generate remaining grades sits in the header's progress block, not in the opener's footer
+    row. So it gets its own line under it: GENERATE_LINE_REVIEW "Save or discard your
+    corrections to grade the rest." The opener's line is unchanged.
+  - Download review record has no lock.
+- **Q4. Focus after Discard and Save.**
+  - Discard, in both panes: focus goes to the reference's heading (h3, tabindex -1, no ring by
+    the code-focus rule).
+  - Save corrections & next: aria-busy and aria-disabled while saving, not native. After the
+    save, focus goes to the next reference's heading, or to this one when none is left. Only
+    when pressed from the button; the leave popover's save moves nothing.
+  - Save labels moved out of the fieldset that the save disables (no layout change: the
+    fieldset has no margin or padding). While saving it is aria-busy and aria-disabled. With
+    nothing to save it is aria-disabled, not native. After the save, the form remounts and the
+    new Save labels takes focus back. A failed save clears that flag.
+  - All four are asserted under the focus fixup.
+- **Q5.** Offline, a locked opener (edits or a grade) keeps its line and aria lock. Its
+  describedby is the lock line first, then the offline row once it shows. The component's
+  doc comment says not to make it natively disabled offline. Generate follows the same rule.
+- **Q6. mcp_connect and the person-read check.**
+  - GM's three lines, as written:
+    - "{path} isn’t valid JSON. Fix it by hand, Nebula won’t overwrite it.", then "The parser
+      said {exc}." on its own line.
+    - "error: an in-app agent can’t connect other apps to Nebula. Only the person can run
+      this." (and "disconnect … from Nebula").
+    - "error: Nebula doesn’t recognize this token. It was revoked, or it’s from another
+      Nebula. Make a new one in Settings > Connect your agent."
+  - The check now fails on a semicolon or a parenthesis in a person-read string in
+    person_session.py, devserver.py and mcp_connect.py. Help, description, epilog and usage
+    stay exempt by surface. 22 more strings in those files had one, so each is reworded the
+    same way. The list is in the report to GM.
+- **Review 18's LOWs.**
+  - Logic LOW-1: the fixup ratchet counts `toHaveFocus(`, `<App/>` rendered at #commons, and a
+    comment saying a browser or Chrome blurs, near a `.focus()` or `.blur()`.
+    round16OfflineUi and presenceRound18f.commonsReconnect install the helper. round16's hand
+    move is gone, and the fixup blurs the disabled rename field.
+  - Logic LOW-6: #204's close table moved to tests/helpers/commonsCloseLines. tryAgainLines
+    derives its close rows from the table's live rows, minus the 429, plus CLOSE_NO_RESPONSE.
+  - Live NIT-2 is explained, not changed. Every Commons call re-resolves authority once on a
+    401 and sends again (lib/commonsApi call), because a restarted backend has a new person
+    token. A 401 is refused before any write, and the close is idempotent, so two sends can't
+    close twice. Changing it would touch the token path, which this round leaves alone.
+- **Tests.** New: presenceRound18o.commonsLocks (14). Updated: commonsCopy.ratchet (Q2, Q5,
+  the lines list), commonsReview (R6, the reference lock), tryAgainLines, focusFixup.ratchet,
+  round16OfflineUi, presenceRound18f.commonsReconnect. Backend: test_flag_parens_copy (the
+  semicolon and parens check and its probes), test_agent_connect (GM's three lines).
+- **Mutations.** Frontend: 28 of 29 killed. M9 (Generate's own press guard removed) survives
+  as equivalent, because generate() already returns while a draft is being edited. Backend: 7
+  of 7 killed.
+- **Live** (installed Chrome, throwaway profile, 8951/5951, the backend really stopped and
+  restarted through serve_isolated, canaries refused, no blocked hosts): 27 of 27. Shots at
+  1440: fu3r/shots-r18o/review-offline-no-draft, opener-grade-running-lock and
+  reference-buttons-locked (distinct md5s). The reference image line in the shots is the
+  harness backend's own 409: it has no held-out set, and the image route isn't staged.
+- **Gates.**
+  - tsc -b and lint are clean.
+  - vitest, an explicit list of 358 files: 4,629 of 4,636 passed on the first run, at a load
+    average of 20 to 30. All 7 failures were timeouts. Their 5 files, rerun alone, passed 126
+    of 126.
+  - After the image and CSS changes, 83 Commons, CSS and ratchet files: 784 of 784.
+  - Backend, isolated: test_flag_parens_copy, test_agent_connect, test_person_session and
+    test_commons_evaluation_close, 125 passed.
+  - Build: 474,879 B raw / 147,244 B gzip.
+  - person_gate.py is identical to main.

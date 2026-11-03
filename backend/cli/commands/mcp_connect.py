@@ -72,12 +72,14 @@ def _load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8") or "{}")
     except ValueError as exc:
-        raise MergeError(f"{path} isn’t valid JSON ({exc}); fix it by hand, Nebula won’t overwrite it.") from exc
+        # GM r51 Q6: the parser's words on their own line, after the sentence the person acts on.
+        raise MergeError(f"{path} isn’t valid JSON. Fix it by hand, Nebula won’t overwrite it.\n"
+                         f"The parser said {exc}.") from exc
     if not isinstance(data, dict):
-        raise MergeError(f"{path} doesn’t hold a JSON object; Nebula won’t overwrite it.")
+        raise MergeError(f"{path} doesn’t hold a JSON object. Nebula won’t overwrite it.")
     servers = data.get("mcpServers")
     if servers is not None and not isinstance(servers, dict):
-        raise MergeError(f"mcpServers in {path} isn’t an object; Nebula won’t overwrite it.")
+        raise MergeError(f"mcpServers in {path} isn’t an object. Nebula won’t overwrite it.")
     return data
 
 
@@ -145,7 +147,7 @@ def _confirm(question: str, yes: bool, ask: Callable[[str], str]) -> bool:
     if yes:
         return True
     if not sys.stdin.isatty():
-        print("error: not a terminal; rerun with --yes to apply", file=sys.stderr)
+        print("error: not a terminal. Rerun with --yes to apply.", file=sys.stderr)
         return False
     return ask(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
@@ -181,7 +183,7 @@ def _token(args: Any) -> tuple[str | None, str | None]:
     if not sys.stdin.isatty():
         line = sys.stdin.readline().strip()
         return line or None, None
-    return getpass.getpass("Token from Settings > Connect your agent (hidden): ").strip() or None, None
+    return getpass.getpass("Token from Settings > Connect your agent, hidden as you paste: ").strip() or None, None
 
 
 def check_token(url: str, token: str) -> dict[str, Any] | None:
@@ -195,11 +197,11 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
     except (httpx.ConnectError, httpx.TimeoutException):
         return None
     except httpx.HTTPError as exc:
-        print(f"error: couldn’t talk to {url} ({type(exc).__name__}). Pass Nebula’s address with --url.",
-              file=sys.stderr)
+        print(f"error: couldn’t talk to {url}. Pass Nebula’s address with --url.\n"
+              f"The request said {type(exc).__name__}.", file=sys.stderr)
         sys.exit(1)
     if response.status_code == 401:
-        print("error: Nebula doesn’t recognize this token (revoked, or from another Nebula). "
+        print("error: Nebula doesn’t recognize this token. It was revoked, or it’s from another Nebula. "
               "Make a new one in Settings > Connect your agent.", file=sys.stderr)
         sys.exit(1)
     try:
@@ -207,7 +209,7 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
     except ValueError:
         payload = None
     if response.status_code != 200 or not isinstance(payload, dict) or "budget" not in payload:
-        print(f"error: {url} answered (HTTP {response.status_code}) but isn’t a Nebula backend that knows this "
+        print(f"error: {url} answered with HTTP {response.status_code} but isn’t a Nebula backend that knows this "
               "token. Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead.", file=sys.stderr)
         sys.exit(1)
     if payload.get("budget") != "app":
@@ -308,14 +310,14 @@ def _entry_token(entry: Any) -> str | None:
 def _backup_note(backup: Path | None, redacted: str | None) -> str:
     if backup is None:
         return ""
-    return f" Backup: {backup}" + (" (the old Nebula token is blanked out in it)." if redacted else "")
+    return f" Backup, with the old Nebula token blanked out: {backup}" if redacted else f" Backup: {backup}"
 
 
 def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str] = input,
                 runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
                 backend_dir: Path | None = None) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can’t connect other apps to Nebula; the person runs this.", file=sys.stderr)
+        print("error: an in-app agent can’t connect other apps to Nebula. Only the person can run this.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)
@@ -330,9 +332,9 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if token is None and not print_only:
-        print("error: no token. Make one in Settings > Connect your agent "
-              f"(pick {client.label}{', name it ' + args.name if args.name else ''}"
-              f"{', daily limit $' + format(args.daily_usd, 'g') if args.daily_usd else ''}), then run the command "
+        print("error: no token. Make one in Settings > Connect your agent: "
+              f"pick {client.label}{', name it ' + args.name if args.name else ''}"
+              f"{', set a daily limit of $' + format(args.daily_usd, 'g') if args.daily_usd else ''}. Then run the command "
               "it shows, with --token-file and the file Nebula saved the token to. The CLI can’t make tokens: only "
               "the Nebula canvas you opened from the launch link can. For a token made before token files, set "
               "NEBULA_APP_TOKEN or pass --paste-token.", file=sys.stderr)
@@ -355,7 +357,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"warning: couldn’t reach Nebula at {where} to check the token.", file=sys.stderr)
     app_name = (status or {}).get("agent") or args.name or client.label
     if status and args.name and args.name != app_name:
-        print(f"note: this token belongs to {app_name!r}, not {args.name!r}; the canvas will show {app_name!r}.",
+        print(f"note: this token belongs to {app_name!r}, not {args.name!r}. The canvas will show {app_name!r}.",
               file=sys.stderr)
     daily = _limit(status) if status else args.daily_usd
 
@@ -388,7 +390,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         if "shell history" not in warning:
             print(f"! {warning}")
     if client.id == "claude-code" and legacy:
-        print("! While `claude mcp add` runs (about a second), any program of yours can see the token in the "
+        print("! For about a second, while `claude mcp add` runs, any program of yours can see the token in the "
               "process list: Claude Code has no other way to take it.")
     entry = agent_connect.server_entry(paths, url, url_file=url_file, **credential)
     if client.kind == "command":
@@ -431,7 +433,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
                                else fill_codex_token(toml_path, None, token_file, TOKEN_FILE_ENV))
             except MergeError as exc:
                 runner(agent_connect.remove_argv(client.id), capture_output=True, text=True)
-                print(f"error: {exc}; removed the half-made entry. Paste the config.toml block from "
+                print(f"error: {exc}. Nebula removed the half-made entry. Paste the config.toml block from "
                       f"`nebula mcp connect codex --print` instead.", file=sys.stderr)
                 return 1
             if timeout_set:
@@ -455,12 +457,12 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
     existing = (before.get("mcpServers") or {}).get(SERVER_NAME)
     old_token = _entry_token(existing)
     if existing is not None:
-        print(f"note: {path} already has a server named nebula; this replaces only that entry.")
+        print(f"note: {path} already has a server named nebula. This replaces only that entry.")
     print(_mask(diff(path, before, after, token), old_token))
     if not _confirm(f"Write {path}?", args.yes, ask):
         return 1
     backup = write_private(path, after, redact=old_token)
-    print(f"Wrote {path} (mode 600)." + _backup_note(backup, old_token))
+    print(f"Wrote {path} with mode 600." + _backup_note(backup, old_token))
     for step in setup["steps"][2:] if client.id == "claude-desktop" else setup["steps"][1:]:
         print(f"- {step}")
     return 0
@@ -469,7 +471,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
 def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], str] = input,
                    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can’t disconnect other apps from Nebula; the person runs this.", file=sys.stderr)
+        print("error: an in-app agent can’t disconnect other apps from Nebula. Only the person can run this.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)
@@ -485,7 +487,7 @@ def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], 
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if SERVER_NAME not in (before.get("mcpServers") or {}):
-            print(f"{path} has no nebula entry; nothing to remove.")
+            print(f"{path} has no nebula entry. There’s nothing to remove.")
             print(revoke)
             return 0
         after = merged(before, None)
@@ -509,7 +511,7 @@ def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], 
         print(revoke)
         return 0
     if argv:
-        print(f"Run: {' '.join(argv)}" + (" (with the OpenClaw Gateway stopped)" if client.id == "openclaw" else ""))
+        print(("Stop the OpenClaw Gateway, then run: " if client.id == "openclaw" else "Run: ") + " ".join(argv))
     else:
         print(f"Remove the nebula server from {client.stored_in}.")
     if client.id == "hermes":

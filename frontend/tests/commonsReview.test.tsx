@@ -42,7 +42,11 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
-  expect((screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement).disabled).toBe(true);
+  // Round 18o (GM r51 Q3): the reference buttons lock in place, the status line their reason.
+  const reference = screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement;
+  expect(reference.disabled).toBe(false);
+  expect(reference.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(reference.getAttribute('aria-describedby')!)?.textContent).toBe('Save or discard your corrections to change the reference.');
   expect(screen.getByText('Save or discard your corrections to change the reference.')).toBeTruthy();
   expect(screen.queryByText(/Unsaved corrections ·/)).toBeNull();
   fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
@@ -82,12 +86,18 @@ it('shows the committed close even when the reload fails, and stops offering new
   expect(screen.queryByText('Generate remaining grades')).toBeNull();
 });
 
+// Round 18o (GM r51 Q2, R6 updated on purpose): a running grade locks the opener in place (aria,
+// focusable, presses ignored) with its own line, no longer natively.
 it('does not offer closing while a grade is running', async () => {
   const value = batch(); value.items[0].status = 'running'; value.items[0].proposal = null;
   api.get.mockResolvedValue(value);
   render(<CommonsReview />);
   const button = await screen.findByText('Close review & resume library analysis…');
-  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect((button as HTMLButtonElement).disabled).toBe(false);
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('You can close this batch when the grade finishes.');
+  fireEvent.click(button);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
 });
 
 function deferred<T>() {

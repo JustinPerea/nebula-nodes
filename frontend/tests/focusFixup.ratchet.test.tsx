@@ -7,10 +7,12 @@
  * no control is disabled in place. Requiring the helper there adds noise without catching the bug
  * class. The bug class is a control disabled (or put under [inert]) while it holds focus, which in
  * this app happens in the Commons panes, the focus handover (useFocusHandover) and the Settings
- * sections that use it. So the rule: a test file that asserts document.activeElement and renders
- * from src/components/commons/, uses useFocusHandover, renders AgentSpendSection or
- * PersonalAgentsSection, or speaks of the focus fixup installs the helper. No file blurs by hand
- * "as Chrome would": the helper does it.
+ * sections that use it. So the rule: a test file that asserts focus (document.activeElement, or
+ * toHaveFocus) and renders from src/components/commons/, uses useFocusHandover, renders
+ * AgentSpendSection or PersonalAgentsSection, renders <App/> at the Commons' hash, or speaks of the
+ * focus fixup installs the helper. No file blurs, or moves focus away, by hand "as Chrome (or a
+ * browser) would": the helper does it. Round 18o (review 18 logic LOW-1): toHaveFocus, <App/> at
+ * #commons, and a comment saying a browser blurs and jsdom doesn't near a .focus() or .blur().
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -27,9 +29,17 @@ const source = (name: string) => readFileSync(join(TESTS, name), 'utf8');
 
 /** Where a control can be disabled or made inert while it holds focus. */
 const NEEDS_FIXUP = /src\/components\/commons\/|useFocusHandover|AgentSpendSection|PersonalAgentsSection|focus fixup/;
-const ASSERTS_FOCUS = /document\.activeElement/;
+/** The whole app at the Commons' hash: CommonsView's handover runs. */
+const APP_AT_COMMONS = (text: string) => /render\(\s*<App\b/.test(text) && /#\/?commons\b/.test(text);
+const needsFixup = (text: string) => NEEDS_FIXUP.test(text) || APP_AT_COMMONS(text);
+const ASSERTS_FOCUS = /document\.activeElement|\.toHaveFocus\(/;
 const INSTALLS = /\b(?:withFocusFixup|installFocusFixup)\(/;
-const BY_HAND = /\.blur\(\)\);?\s*\/\/[^\n]*(?:Chrome|fixup)/;
+/** A blur after a comment naming Chrome or the fixup, on the same line. */
+const BLUR_AS_CHROME = /\.blur\(\)\);?\s*\/\/[^\n]*(?:Chrome|fixup)/;
+/** A comment saying a browser (or Chrome) blurs and jsdom doesn't, with a .focus() or .blur() within
+ * the next few lines: focus moved away by hand in its place. */
+const BLUR_BY_HAND_NOTE = /\/\/[^\n]*\b(?:browser|Chrome)\b[^\n]*\bblurs?\b[^\n]*(?:\n[^\n]*){0,5}?\.(?:focus|blur)\(\)/i;
+const BY_HAND = { test: (text: string) => BLUR_AS_CHROME.test(text) || BLUR_BY_HAND_NOTE.test(text) };
 
 function Toggle({ inert = false }: { inert?: boolean }) {
   const [off, setOff] = useState(false);
@@ -94,7 +104,7 @@ describe('the helper copies Chrome', () => {
 
 describe('ratchet: focus tests where a control can be disabled in place install the fixup', () => {
   const covered = testFiles.filter((name) => name !== 'focusFixup.ratchet.test.tsx'
-    && ASSERTS_FOCUS.test(source(name)) && NEEDS_FIXUP.test(source(name)));
+    && ASSERTS_FOCUS.test(source(name)) && needsFixup(source(name)));
 
   it('the rule finds the files it is about (the Commons close, the handover tests)', () => {
     expect(covered.length).toBeGreaterThanOrEqual(18);
@@ -119,5 +129,14 @@ describe('ratchet: focus tests where a control can be disabled in place install 
     expect(INSTALLS.test('withFocusFixup();')).toBe(true);
     expect(INSTALLS.test("import { withFocusFixup } from './helpers/focusFixup';")).toBe(false);
     expect(NEEDS_FIXUP.test("from '../src/components/commons/CommonsCloseBatch'")).toBe(true);
+    // Round 18o (review 18 logic LOW-1).
+    expect(ASSERTS_FOCUS.test('expect(input).toHaveFocus();')).toBe(true);
+    expect(ASSERTS_FOCUS.test('expect(input).not.toHaveFocus();')).toBe(true);
+    expect(BY_HAND.test("// A browser blurs a field as it becomes disabled; jsdom doesn't, so the\n// focus moves away by hand.\nconst x = 1;\nact(() => elsewhere.focus());")).toBe(true);
+    expect(BY_HAND.test("// Chrome blurs it; jsdom doesn't.\nact(() => field.blur());")).toBe(true);
+    expect(BY_HAND.test("// A browser blurs it.\n\n\n\n\n\n\nact(() => elsewhere.focus());")).toBe(false);
+    expect(BY_HAND.test("// The input keeps its value.\nact(() => input.focus());")).toBe(false);
+    expect(needsFixup("render(<App />);\nhistory.replaceState({}, '', '/#commons');")).toBe(true);
+    expect(needsFixup("render(<App />);")).toBe(false);
   });
 });

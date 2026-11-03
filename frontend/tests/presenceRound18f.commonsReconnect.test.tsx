@@ -44,6 +44,7 @@ vi.mock('../src/components/panels/Settings', () => ({ Settings: () => null }));
 vi.mock('../src/components/panels/ChatPanel', () => ({ ChatPanel: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => <span>Updates</span> }));
 import App from '../src/App';
+import { withFocusFixup } from './helpers/focusFixup';
 import { useUIStore } from '../src/store/uiStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { noteCommonsAnswered } from '../src/lib/commonsOff';
@@ -70,6 +71,8 @@ function answer(path: string): Promise<Response> {
   return Promise.resolve(json({}));
 }
 
+// Round 18o (review 18 logic LOW-1): Chrome's focus fixup (CommonsView's handover runs here).
+withFocusFixup();
 beforeEach(() => {
   useUIStore.setState(initialUI, true);
   // A reload: the Projects home, with the project this tab loaded (loadWorkspace) not shown yet.

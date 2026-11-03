@@ -115,22 +115,41 @@ def test_the_startup_lines_for_the_person_are_checked():
 # and `disconnect`, which the person runs. Help, description, epilog and usage stay exempt by
 # surface. Agents may read the mcp messages too (an agent running the command for the person);
 # the words mean the same either way.
+# Round 18o (GM r51 Q6): the same lines carry no semicolon and no aside in parentheses either: a
+# second clause is its own sentence, and a detail such as the parser's words gets its own line.
 PERSON_READ = ("services/person_session.py", "devserver.py", "cli/commands/mcp_connect.py")
 STRAIGHT_APOSTROPHE = re.compile(r"\w'\w|^'\w")
+SEMICOLON_OR_PARENS = re.compile(r"[;()]")
+
+
+def _person_read_constants(source: str) -> list[ast.Constant]:
+    tree = ast.parse(source)
+    skipped = _docstrings(tree) | _help_text(tree)
+    return [node for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped]
 
 
 def straight_apostrophes(source: str, name: str) -> list[str]:
-    tree = ast.parse(source)
-    skipped = _docstrings(tree) | _help_text(tree)
-    return [f"{name}:{node.lineno}: {node.value!r}" for node in ast.walk(tree)
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped
-            and STRAIGHT_APOSTROPHE.search(node.value)]
+    return [f"{name}:{node.lineno}: {node.value!r}" for node in _person_read_constants(source)
+            if STRAIGHT_APOSTROPHE.search(node.value)]
+
+
+def semicolons_or_parens(source: str, name: str) -> list[str]:
+    return [f"{name}:{node.lineno}: {node.value!r}" for node in _person_read_constants(source)
+            if SEMICOLON_OR_PARENS.search(node.value)]
 
 
 def test_person_read_terminal_lines_use_curly_apostrophes():
     found = []
     for name in PERSON_READ:
         found += straight_apostrophes((BACKEND / name).read_text(encoding="utf-8"), name)
+    assert found == []
+
+
+def test_person_read_terminal_lines_have_no_semicolon_or_parens():
+    found = []
+    for name in PERSON_READ:
+        found += semicolons_or_parens((BACKEND / name).read_text(encoding="utf-8"), name)
     assert found == []
 
 
@@ -142,3 +161,18 @@ def test_the_apostrophe_check_catches_what_it_is_for():
     # Help text is exempt by surface; code inside an f-string's braces isn't text.
     assert not straight_apostrophes("p.add_argument('--x', help=\"it doesn't\")\n", "m.py")
     assert not straight_apostrophes("raise E(f\"{'token' if k else 'file'} in place\")\n", "m.py")
+
+
+def test_the_semicolon_and_parens_check_catches_what_it_is_for():
+    # The old lines GM r51 reworded.
+    assert semicolons_or_parens("print(\"error: an in-app agent can’t connect other apps to Nebula; the person runs this.\")\n", "m.py")
+    assert semicolons_or_parens("print(\"error: Nebula doesn’t recognize this token (revoked, or from another Nebula).\")\n", "m.py")
+    assert semicolons_or_parens("raise E(f\"{path} isn’t valid JSON ({exc}); fix it by hand.\")\n", "m.py")
+    assert semicolons_or_parens("log.warning(\"Person link unavailable (no terminal)\")\n", "m.py")
+    assert semicolons_or_parens("print(\"x\" + (\" (mode 600)\" if y else \"\"))\n", "m.py")
+    assert not semicolons_or_parens("print(\"error: Nebula doesn’t recognize this token. It was revoked.\")\n", "m.py")
+    # Help, description, epilog and usage stay exempt by surface; code in an f-string's braces isn't text.
+    assert not semicolons_or_parens("p.add_argument('--url', help='Backend URL (default: $NEBULA_URL); or a file')\n", "m.py")
+    assert not semicolons_or_parens("p = argparse.ArgumentParser(description='a (b); c', epilog='(d)', usage='e (f)')\n", "m.py")
+    assert not semicolons_or_parens("print(f\"Wrote {', '.join(sorted(names))}.\")\n", "m.py")
+    assert not semicolons_or_parens('"""A docstring (with an aside); and more."""\n', "m.py")

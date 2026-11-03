@@ -1014,3 +1014,30 @@ def test_check_token_says_where_to_point_it_in_two_sentences(monkeypatch, capsys
     assert "isn’t a Nebula backend that knows this token. Pass Nebula’s address with --url. For the desktop app, " \
            "set NEBULA_URL_FILE instead." in err
     assert ";" not in err.split("token. ", 1)[1]
+
+
+def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
+    """GM r51 Q6: no semicolon and no aside in parens, each its own sentence; the parser's words on their own line."""
+    import httpx
+
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn-token")
+    mcp_connect.run_connect(args("cursor"), home=tmp_path)
+    mcp_connect.run_disconnect(args("cursor"), home=tmp_path)
+    err = capsys.readouterr().err.splitlines()
+    assert err == ["error: an in-app agent can’t connect other apps to Nebula. Only the person can run this.",
+                   "error: an in-app agent can’t disconnect other apps from Nebula. Only the person can run this."]
+    monkeypatch.delenv("NEBULA_AGENT_TOKEN")
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(401, json={"detail": "invalid"}))
+    with pytest.raises(SystemExit):
+        mcp_connect.check_token(URL, TOKEN)
+    assert capsys.readouterr().err == ("error: Nebula doesn’t recognize this token. It was revoked, or it’s from another "
+                                       "Nebula. Make a new one in Settings > Connect your agent.\n")
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    with pytest.raises(mcp_connect.MergeError) as raised:
+        mcp_connect._load(broken)
+    first, second = str(raised.value).split("\n")
+    assert first == f"{broken} isn’t valid JSON. Fix it by hand, Nebula won’t overwrite it."
+    assert second.startswith("The parser said Expecting property name") and second.endswith(".")

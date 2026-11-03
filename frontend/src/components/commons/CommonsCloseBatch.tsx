@@ -20,6 +20,12 @@ export const CLOSE_TIMEOUT_MS = 30_000;
  * since the opener can't open the dialog while edits are unsaved.
  */
 export { EDITS_LINE_LABELING, EDITS_LINE_REVIEW } from '../../lib/commonsEditLines';
+/**
+ * Round 18o (GM r51 Q2): the opener's line while Agent review sees a grade running. A lock line,
+ * neutral, under the opener as its reason; it goes when the pane's poll sees the grade finish. Inside
+ * the dialog the close keeps CLOSE_GRADE_RUNNING, its because line.
+ */
+export const OPENER_GRADE_LINE = 'You can close this batch when the grade finishes.';
 
 /**
  * The parent's busy state while the dialog is open (round 18l, review 17 MEDIUM-2): it locks the
@@ -32,14 +38,20 @@ export type CloseLock = 'grade' | 'edits' | null;
  * Ends the held-out batch without sealing it. Irreversible, so it always asks
  * first: the batch becomes an assisted-review record (or an abandoned blind
  * batch) and library analysis may start. Quarantine stays in force.
+ *
+ * The opener: unsaved edits or a running grade lock it in place (aria-disabled, focusable, presses
+ * ignored) with its line under it; natively disabled only while a save is in flight, or offline
+ * with no lock. Offline, a locked opener keeps its lock line and aria lock, its reasons the lock
+ * line first and then the offline row (GM r43, r51 Q5), as Blind labeling's Review batch toggle
+ * does: a later sweep must not turn it natively disabled offline.
  */
 export function CommonsCloseBatch({ revision, assisted, reviewed, total, disabled, lock = null, editsLine, gradePoll, onClosed }: {
   revision: number; assisted: boolean; reviewed?: number; total?: number;
-  /** The parent is busy (a save, a grade): the opener is natively disabled for that moment; inside
+  /** The parent is busy (a save in flight): the opener is natively disabled for that moment; inside
    * the dialog it is an aria lock. */
   disabled: boolean;
-  /** The parent's state that locks the close, with its line: inside the dialog, and for `edits`
-   * the opener too (GM r44 1). */
+  /** The parent's state that locks the close, with its line: inside the dialog, and the opener too
+   * (GM r44 1; a grade, GM r51 Q2, with OPENER_GRADE_LINE). */
   lock?: CloseLock;
   /** The pane's unsaved-edits line (EDITS_LINE_LABELING or EDITS_LINE_REVIEW). */
   editsLine: string;
@@ -162,14 +174,19 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
   }
   if (!confirming) {
     // GM r44 1: unsaved edits lock the opener in place (aria-disabled, focusable, presses ignored)
-    // with the pane's line under it; it says what unlocks it. Natively disabled only while the
-    // parent is busy (a save or a grade in flight) or offline.
-    const openerLocked = lock === 'edits' && !disabled && !readOnly;
+    // with the pane's line under it; it says what unlocks it. GM r51 Q2: so does a running grade,
+    // with its own line, so focus on the opener stays when the grade starts and when it finishes.
+    // Natively disabled only while the parent is busy (a save in flight), or offline with no lock.
+    // GM r51 Q5: offline, a lock keeps its line and aria lock, the offline row a second reason.
+    const openerLine = lock === 'grade' ? OPENER_GRADE_LINE : lock === 'edits' ? editsLine : null;
+    const openerLocked = openerLine !== null && !disabled;
+    const openerReasons = [openerLineId, readOnly && rowShown ? STUDIO_OFFLINE_LINE_ID : undefined].filter(Boolean).join(' ');
     return <>
-      <button type="button" ref={opener} className="commons-button" disabled={disabled || readOnly} {...offlineMark(readOnly)}
-        aria-disabled={openerLocked || undefined} aria-describedby={openerLocked ? openerLineId : undefined}
+      <button type="button" ref={opener} className="commons-button" disabled={disabled || (readOnly && !openerLocked)}
+        {...offlineMark(readOnly && !openerLocked)}
+        aria-disabled={openerLocked || undefined} aria-describedby={openerLocked ? openerReasons : undefined}
         onClick={() => { if (!openerLocked) setConfirming(true); }}>{label}…</button>
-      {openerLocked && <p id={openerLineId} className="person-lock-line" data-lock-place="control"><LineText text={editsLine} /></p>}
+      {openerLocked && <p id={openerLineId} className="person-lock-line" data-lock-place="control"><LineText text={openerLine} /></p>}
     </>;
   }
   const onKeyDown = (event: KeyboardEvent) => {

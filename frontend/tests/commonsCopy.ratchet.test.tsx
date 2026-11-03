@@ -29,12 +29,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineLook, NEUTRAL } from './helpers/lineLook';
 import { cascaded } from './helpers/cssCascade';
+import { CLOSE_LINES } from './helpers/commonsCloseLines';
 
 const api = vi.hoisted(() => ({ close: vi.fn(), get: vi.fn() }));
 const reviewApi = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: reviewApi }));
 
-const { CommonsCloseBatch, GRADE_WAIT_MS, CLOSING_LABEL_MS, CLOSE_TIMEOUT_MS, EDITS_LINE_LABELING, EDITS_LINE_REVIEW } = await import('../src/components/commons/CommonsCloseBatch');
+const { CommonsCloseBatch, GRADE_WAIT_MS, CLOSING_LABEL_MS, CLOSE_TIMEOUT_MS, EDITS_LINE_LABELING, EDITS_LINE_REVIEW, OPENER_GRADE_LINE } = await import('../src/components/commons/CommonsCloseBatch');
 const { StudioOfflineRow } = await import('../src/components/StudioOfflineRow');
 const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { CommonsRequestError } = await import('../src/lib/commonsRequestError');
@@ -48,43 +49,9 @@ const failed = (status: number, detail?: string) => new CommonsRequestError(
   status === 0 ? "Nebula's server isn't answering. Make sure it's running, then try again." : copyForStatus(status, detail), status,
   { detail, heading: 'Couldn’t close the batch.' });
 
-/** Every close failure: its line, verbatim (GM r41), and whether the close button stays live
- * (GM r41: only a line ending "Try again." or "Try again in a moment." leaves it live). */
-export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'live' | 'locked']> = [
-  ['503, no answer in time', 503, undefined, 'Nebula couldn’t close the batch because the server didn’t respond. Try again.', 'live'],
-  ['502, a gateway', 502, undefined, 'Nebula couldn’t close the batch because the server didn’t respond. Try again.', 'live'],
-  ['504, a gateway timeout', 504, undefined, 'Nebula couldn’t close the batch because the server didn’t respond. Try again.', 'live'],
-  ['408, a request timeout', 408, undefined, 'Nebula couldn’t close the batch because the server didn’t respond. Try again.', 'live'],
-  ['500, the server\'s own error', 500, 'Internal Server Error', 'Nebula couldn’t close the batch because the server hit an error. Try again.', 'live'],
-  ['501', 501, undefined, 'Nebula couldn’t close the batch because the server hit an error. Try again.', 'live'],
-  ['429, a rate limit', 429, undefined, 'Nebula couldn’t close the batch because the server is busy. Try again in a moment.', 'live'],
-  ['no answer at all', 0, undefined, 'Nebula couldn’t close the batch because the server isn’t answering. Try again.', 'live'],
-  ['409, a grade still running', 409, 'A grading attempt is still running. Close after it finishes.',
-    'Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.', 'locked'],
-  ['409, sealed meanwhile', 409, "These labels are sealed as blind ground truth, so there's nothing to close.",
-    'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.', 'locked'],
-  ['409, changed somewhere else', 409, 'Labels changed in another window. Reload before saving.',
-    'Nebula couldn’t close the batch because it changed somewhere else. Reload, then close the batch again.', 'locked'],
-  ['409, no set anymore', 409, "There's no held-out set yet. Prepare a folder first.",
-    'Nebula couldn’t close the batch because its held-out set no longer exists. Reload to get the latest references.', 'locked'],
-  ['409, the integrity check', 409, "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing.",
-    'Nebula couldn’t close the batch because the held-out set doesn’t match what was saved. Nothing was changed. Reload to check it again.', 'locked'],
-  ['409, a reason not listed (its words to the console)', 409, 'Try again, or reload if it keeps happening.',
-    'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],
-  ['422, another 4xx', 422, undefined, 'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],
-  ['415, another 4xx', 415, 'Content-Type must be application/json', 'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],
-  ['403, a request without the person\'s token (human_dep)', 403, 'only the human UI session can do this',
-    'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
-  ['403, a foreign Origin (local_guard)', 403, 'Origin not allowed',
-    'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
-  ['403, a foreign Host (local_guard)', 403, 'Host not allowed',
-    'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
-  // Tested-only (GM r43 Q5): in the app a 404 "Commons is disabled" switches the Commons to its off
-  // view and the dialog unmounts with the pane (tests/presenceRound18l.closeOff), so this line
-  // shows only where the dialog renders alone.
-  ['Commons off (tested-only)', 404, 'Commons is disabled',
-    'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to close this batch.', 'locked'],
-];
+// Round 18o (review 18 logic LOW-6): the table lives in tests/helpers/commonsCloseLines, so the
+// shared Try-again ratchet derives its close rows from it.
+
 /** 401: the Commons API turns every 401 into a refusal for this tab (lib/commonsApi sessionLost).
  * GM r42: the line follows the tab's held state, not the status: a held tab isn't connected as you
  * (it clears on the promote), any other is signed out. Both lock the close. */
@@ -623,16 +590,71 @@ describe('the opener, outside the dialog (GM r44 1)', () => {
     });
   }
 
-  it('busy (a save or a grade in flight) or offline: natively disabled for that moment, no line', () => {
+  it('a save in flight: natively disabled for that moment, no line; offline with no lock: natively disabled', () => {
     const { rerender } = render(<CommonsCloseBatch revision={1} assisted disabled lock="edits" editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
     const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
     expect(opener.disabled).toBe(true);
     expect(opener.getAttribute('aria-disabled')).toBeNull();
     expect(screen.queryByText(EDITS_LINE_REVIEW)).toBeNull();
-    rerender(<CommonsCloseBatch revision={1} assisted disabled={false} lock="edits" editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
+    rerender(<CommonsCloseBatch revision={1} assisted disabled={false} lock={null} editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />);
     act(() => noteBackendConnection('offline'));
     expect(opener.disabled).toBe(true);
-    expect(screen.queryByText(EDITS_LINE_REVIEW)).toBeNull();
+    expect(opener.hasAttribute('data-offline-disabled')).toBe(true);
+  });
+
+  for (const [why, lock, line] of [['unsaved edits', 'edits', EDITS_LINE_REVIEW], ['a running grade', 'grade', OPENER_GRADE_LINE]] as const) {
+    it(`round 18o (GM r51 Q5): offline, ${why} keep the lock line and the aria lock, the line first, then the offline row once it shows`, async () => {
+      vi.useFakeTimers();
+      render(<><StudioOfflineRow /><CommonsCloseBatch revision={1} assisted disabled={false} lock={lock} editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} /></>);
+      const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+      opener.focus();
+      const lineId = opener.getAttribute('aria-describedby')!;
+      expect(document.getElementById(lineId)?.textContent).toBe(line);
+      act(() => noteBackendConnection('offline'));
+      act(() => fixup.current().flush());
+      expect(opener.disabled).toBe(false);
+      expect(opener.hasAttribute('data-offline-disabled')).toBe(false);
+      expect(opener.getAttribute('aria-disabled')).toBe('true');
+      expect(opener.getAttribute('aria-describedby')).toBe(lineId);
+      await settle(STUDIO_ROW_MS);
+      expect(opener.getAttribute('aria-describedby')).toBe(`${lineId} ${STUDIO_OFFLINE_LINE_ID}`);
+      for (const id of opener.getAttribute('aria-describedby')!.split(' ')) expect(document.getElementById(id), id).not.toBeNull();
+      expect(document.activeElement).toBe(opener);
+      fireEvent.click(opener);
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      act(() => resetBackendConnectionForTests());
+      expect(opener.getAttribute('aria-describedby')).toBe(lineId);
+      expect(opener.getAttribute('aria-disabled')).toBe('true');
+    });
+  }
+
+  it('round 18o (GM r51 Q2): a running grade locks it in place with its own line; focus stays as the grade starts and ends', async () => {
+    const { lockPlacementProblems } = await import('../src/lib/lockPlacement');
+    expect(OPENER_GRADE_LINE).toBe('You can close this batch when the grade finishes.');
+    const view = (lock: 'grade' | null) => <CommonsCloseBatch revision={1} assisted disabled={false} lock={lock}
+      editsLine={EDITS_LINE_REVIEW} onClosed={vi.fn()} />;
+    const { rerender } = render(view(null));
+    const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+    opener.focus();
+    rerender(view('grade'));
+    act(() => fixup.current().flush());
+    expect(opener.disabled).toBe(false);
+    expect(opener.getAttribute('aria-disabled')).toBe('true');
+    const reason = document.getElementById(opener.getAttribute('aria-describedby')!)!;
+    expect(reason.textContent).toBe(OPENER_GRADE_LINE);
+    expect(reason.classList.contains('person-lock-line')).toBe(true);
+    expect(opener.nextElementSibling).toBe(reason);
+    expect(lockPlacementProblems()).toEqual([]);
+    expect(document.activeElement).toBe(opener);
+    fireEvent.click(opener);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    rerender(view(null));
+    act(() => fixup.current().flush());
+    expect(opener.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText(OPENER_GRADE_LINE)).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    fireEvent.click(opener);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
   });
 });
 
@@ -645,6 +667,7 @@ describe('every unsaved-edits line is in the house lock form (GM r44 1, r45 Q1)'
       REVIEW_BATCH_LINE: 'Save or discard your label changes to review the batch.',
       CHANGE_REFERENCE_LINE_LABELING: 'Save or discard your label changes to change the reference.',
       CHANGE_REFERENCE_LINE_REVIEW: 'Save or discard your corrections to change the reference.',
+      GENERATE_LINE_REVIEW: 'Save or discard your corrections to grade the rest.',
     });
     for (const line of Object.values(lines)) expect(line).toMatch(/^Save or discard your (?:label changes|corrections) to [^.]+\.$/);
   });
