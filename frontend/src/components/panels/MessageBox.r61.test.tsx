@@ -230,7 +230,7 @@ describe('r61 answer 4: questions', () => {
     expect(document.activeElement).toBe(box);
     const chip = box.closest('.message-box__composer')!.querySelector('.message-box__context--answering')!;
     expect(chip.textContent).toBe(`Answering “${question.text}”`);
-    expect(within(chip as HTMLElement).getByRole('button', { name: 'Remove' })).toBeTruthy();
+    expect(within(chip as HTMLElement).getByRole('button', { name: 'Stop answering' })).toBeTruthy();
     expect(box.getAttribute('aria-disabled')).toBeNull();
     fireEvent.change(box, { target: { value: 'Keep the warm one' } });
     await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); });
@@ -239,7 +239,7 @@ describe('r61 answer 4: questions', () => {
     expect(String(apiRequest.mock.calls[0][1])).not.toContain('/thread/messages');
     expect(JSON.parse(apiRequest.mock.calls[0][2].body)).toMatchObject({ answers: [{ questionId: 'x', text: 'Keep the warm one' }] });
     expect(usePersonThreadStore.getState()).toMatchObject({ draft: '', answering: null });
-    expect(screen.getByText('You answered “Keep the warm one”.')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.classList.contains('message-box__answered') === true && el.textContent === 'You answered “Keep the warm one”.')).toBeTruthy();
   });
 
   it('Remove drops the chip and keeps the draft; the composer messages Claude again', () => {
@@ -249,7 +249,7 @@ describe('r61 answer 4: questions', () => {
     render(<AgentLog />);
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
     fireEvent.change(field(), { target: { value: 'Square' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop answering' }));
     expect(screen.queryByText(/^Answering/)).toBeNull();
     expect(usePersonThreadStore.getState()).toMatchObject({ draft: 'Square', answering: null });
   });

@@ -2,22 +2,15 @@ import { create } from 'zustand';
 import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { cursorLabel } from '../lib/agentCursorLabel';
 import {
-  MESSAGE_MAX,
-  otherFailureLine,
-  mergeMissing,
   mergeRows,
-  newClientId,
-  postMessage,
   sanitizeListener,
   sanitizeRow,
-  sendFailure,
-  sendingSettleDelay,
   sessionKeyOf,
   type ChannelListener,
-  type SendFailure,
   type SessionActivity,
   type ThreadRow,
 } from '../lib/personThread';
+import type { SendFailure } from '../lib/personThreadCompose';
 import { useUIStore } from './uiStore';
 
 /**
@@ -25,7 +18,9 @@ import { useUIStore } from './uiStore';
  * reply, listener change or session event is missed before the deferred box
  * (components/panels/MessageBox.tsx, in the Agent log's chunk) arrives.
  * The thread itself lives on the backend per project (services/person_thread.py):
- * this is the tab's copy, its draft and its one send in flight.
+ * this is the tab's copy, its draft and its one send in flight. Only what
+ * the socket's events need is here (GM r70's budget): the draft's and the
+ * send's code is lib/personThreadCompose.ts's, in the box's chunk.
  */
 
 export interface PendingSend {
@@ -77,11 +72,9 @@ interface PersonThreadState {
   pending: PendingSend | null;
   failure: SendFailureState | null;
   answering: AnsweringState | null;
-  setDraft: (text: string, selectedIds?: () => string[]) => void;
   removeContext: () => void;
   choose: (listenerId: string | null) => void;
   markRead: () => void;
-  send: (to: string) => Promise<boolean>;
   clearFailure: () => void;
   answer: (target: AnsweringState) => void;
   stopAnswering: () => void;
@@ -89,7 +82,6 @@ interface PersonThreadState {
 }
 
 const now = () => Date.now();
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function initial() {
   return {
@@ -108,17 +100,8 @@ function initial() {
   };
 }
 
-export const usePersonThreadStore = create<PersonThreadState>((set, get) => ({
+export const usePersonThreadStore = create<PersonThreadState>((set) => ({
   ...initial(),
-
-  setDraft: (text, selectedIds) => set((state) => {
-    const draft = text.slice(0, MESSAGE_MAX);
-    // r50: nodes selected when typing starts ride along; an emptied draft lets them go.
-    let contextIds = state.contextIds;
-    if (!draft.trim()) contextIds = [];
-    else if (!state.draft.trim() && contextIds.length === 0 && selectedIds) contextIds = selectedIds().slice(0, 20);
-    return { draft, contextIds };
-  }),
 
   removeContext: () => set({ contextIds: [] }),
 
@@ -131,34 +114,6 @@ export const usePersonThreadStore = create<PersonThreadState>((set, get) => ({
   answer: (target) => set({ answering: target }),
 
   stopAnswering: () => set({ answering: null }),
-
-  send: async (to) => {
-    const state = get();
-    if (state.pending) return false;
-    const text = state.draft.trim();
-    if (!text || text.length > MESSAGE_MAX) return false;
-    const clientId = state.failure && state.failure.text === text ? state.failure.clientId : newClientId();
-    const pending: PendingSend = { clientId, text, to, nodeIds: state.contextIds, startedAt: now() };
-    set({ pending, failure: null, draft: '', contextIds: [] });
-    let row: ThreadRow;
-    try {
-      row = await postMessage({ text, to, nodeIds: pending.nodeIds, clientId });
-    } catch (error) {
-      const kind = sendFailure(error);
-      // The draft comes back (r50: kept across failures), unless they began another.
-      set((current) => ({
-        pending: null,
-        failure: { kind, line: kind === 'other' ? otherFailureLine(error) : null, clientId, text, to },
-        draft: current.draft.trim() ? current.draft : text,
-        contextIds: current.draft.trim() ? current.contextIds : pending.nodeIds,
-      }));
-      return false;
-    }
-    const wait = sendingSettleDelay(pending.startedAt, now());
-    if (wait > 0) await sleep(wait);
-    set((current) => ({ pending: null, rows: mergeMissing(current.rows, [row]) }));
-    return true;
-  },
 
   reset: () => set(initial()),
 }));

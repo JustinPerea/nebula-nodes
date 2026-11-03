@@ -7,6 +7,7 @@ import { noteActivity, receiveRows, receiveSync, replyAnnouncement, terminalList
 import { useUIStore } from './uiStore';
 import { RequestFailedError } from '../lib/errorCopy';
 import type { ThreadRow } from '../lib/personThread';
+import { sendMessage, setDraft } from '../lib/personThreadCompose';
 import type { AgentPresenceEvent } from '../lib/wsClient';
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
@@ -33,11 +34,10 @@ afterEach(() => {
 describe('sending', () => {
   it('posts the draft with its nodes and one client id, clears the draft, and adds the row', async () => {
     apiRequest.mockResolvedValue(answer({ id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent', clientId: 'c-x' }));
-    const store = usePersonThreadStore.getState();
-    store.setDraft('W', () => ['n1', 'n2']);
-    store.setDraft('Warmer ', () => ['n9']);
+    setDraft('W', () => ['n1', 'n2']);
+    setDraft('Warmer ', () => ['n9']);
     expect(usePersonThreadStore.getState().contextIds).toEqual(['n1', 'n2']);
-    const sent = usePersonThreadStore.getState().send('ch_1');
+    const sent = sendMessage('ch_1');
     expect(usePersonThreadStore.getState().draft).toBe('');
     expect(usePersonThreadStore.getState().pending?.text).toBe('Warmer');
     expect(await sent).toBe(true);
@@ -52,26 +52,24 @@ describe('sending', () => {
   });
 
   it('an emptied draft lets its nodes go', () => {
-    const store = usePersonThreadStore.getState();
-    store.setDraft('a', () => ['n1']);
-    store.setDraft('', () => ['n1']);
+    setDraft('a', () => ['n1']);
+    setDraft('', () => ['n1']);
     expect(usePersonThreadStore.getState().contextIds).toEqual([]);
   });
 
   it('sends nothing empty, nothing over the limit, nothing while a send is in flight', async () => {
-    const store = usePersonThreadStore.getState();
-    expect(await store.send('ch_1')).toBe(false);
+    expect(await sendMessage('ch_1')).toBe(false);
     usePersonThreadStore.setState({ draft: 'x'.repeat(2001) });
-    expect(await usePersonThreadStore.getState().send('ch_1')).toBe(false);
+    expect(await sendMessage('ch_1')).toBe(false);
     usePersonThreadStore.setState({ draft: 'hi', pending: { clientId: 'c', text: 't', to: 'ch_1', nodeIds: [], startedAt: 0 } });
-    expect(await usePersonThreadStore.getState().send('ch_1')).toBe(false);
+    expect(await sendMessage('ch_1')).toBe(false);
     expect(apiRequest).not.toHaveBeenCalled();
   });
 
   it('keeps the draft on a failure, and Try again reuses the client id', async () => {
     apiRequest.mockRejectedValueOnce(new RequestFailedError("Couldn't send your message.", 503));
-    usePersonThreadStore.getState().setDraft('Warmer', () => ['n1']);
-    expect(await usePersonThreadStore.getState().send('ch_1')).toBe(false);
+    setDraft('Warmer', () => ['n1']);
+    expect(await sendMessage('ch_1')).toBe(false);
     const state = usePersonThreadStore.getState();
     expect(state.draft).toBe('Warmer');
     expect(state.contextIds).toEqual(['n1']);
@@ -79,15 +77,15 @@ describe('sending', () => {
     expect(state.failure).toMatchObject({ kind: 'server', line: null, to: 'ch_1' });
     const first = JSON.parse(apiRequest.mock.calls[0][2].body).clientId;
     apiRequest.mockResolvedValueOnce(answer({ id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent' }));
-    expect(await usePersonThreadStore.getState().send('ch_1')).toBe(true);
+    expect(await sendMessage('ch_1')).toBe(true);
     expect(JSON.parse(apiRequest.mock.calls[1][2].body).clientId).toBe(first);
     expect(usePersonThreadStore.getState().failure).toBeNull();
   });
 
   it('reads a listener that dropped at send as its own line', async () => {
     apiRequest.mockRejectedValueOnce(new RequestFailedError("Couldn't send your message.", 409, { code: 'listener_stopped' }));
-    usePersonThreadStore.getState().setDraft('Warmer');
-    await usePersonThreadStore.getState().send('ch_1');
+    setDraft('Warmer');
+    await sendMessage('ch_1');
     expect(usePersonThreadStore.getState().failure).toMatchObject({ kind: 'stopped', line: null, to: 'ch_1' });
   });
 
@@ -95,8 +93,8 @@ describe('sending', () => {
     vi.useFakeTimers();
     let resolve: (value: unknown) => void = () => {};
     apiRequest.mockReturnValue(new Promise((r) => { resolve = r; }));
-    usePersonThreadStore.getState().setDraft('Warmer');
-    const sent = usePersonThreadStore.getState().send('ch_1');
+    setDraft('Warmer');
+    const sent = sendMessage('ch_1');
     await vi.advanceTimersByTimeAsync(350);
     resolve(answer({ id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent' }));
     await vi.advanceTimersByTimeAsync(300);

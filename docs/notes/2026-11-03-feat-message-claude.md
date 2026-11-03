@@ -172,3 +172,56 @@ preview and the composer, as r50 asked.
   the maximum.
 - At full height (top at 72 px), the resized log covers the right end of the
   selection toolbar at 1440. GM may want a lower ceiling.
+
+## Round 2b (GM r70)
+
+#216 had no newer head than f6f077b4. I merged main at c892dca2 (#221). Its
+new regionNoticesReady ratchet flagged #216's
+`tests/noticeRegionDrag.round3k.test.tsx`, which now loads the chunk first.
+
+- **1, the fold:** the working header now uses the settled chip's class,
+  so the two look the same. Settling keeps the element, the class, the
+  left edge, the height and the gap to the row above. The fold does rise
+  on screen, by the reply's height, because the reply arrives below it and
+  the thread stays scrolled to the bottom. With no actions yet, the status
+  still stands alone as a plain line, not a chip, since there is nothing
+  to open.
+- **2, the ceiling:** `lib/bottomBar.ts`. `floatingTopLimit(gutter, gap =
+  BOTTOM_BAR_GAP)` has #226's signature, as the coordinator asked, so the
+  two PRs merge cleanly. `chromeTopLimit(span, gap = CHROME_CLEARANCE,
+  floor)` adds the overlap rule on top of it. Over the slot, or with no
+  span, it returns floatingTopLimit's line. Otherwise it returns the other
+  top bars' line. The toolbar's Panel carries `data-toolbar-slot` and
+  reserves `--selection-toolbar-slot-w: 960px`, centred on the Panel: the
+  empty Panel is 0 px wide, and the widest toolbar I measured is 896 px (a
+  model node at 1440). `--agent-log-top-chrome` (the Updates row) is now
+  + 12 px, and acts as the floor. A stored height is clamped when the log
+  opens.
+- **3, strings:** `answeredQuote` splits the line so the CSS cuts only the
+  words. I added "Arrow keys resize; Enter fits the content." to the
+  tooltip, because house tooltips list keys ("Select shot. Arrow keys
+  change shots; Alt + arrow keys reorder.").
+- **4, the handle:** `describeHandle` writes aria-valuenow, -valuemin and
+  -valuemax (px) on each measure, since the height follows the content
+  until the person sets it. React doesn't render those attributes.
+- **5, the budget:** `lib/personThreadCompose.ts` holds SEND_HEADING, the
+  Sending… timings, sendFailure, postMessage, newClientId,
+  sendingSettleDelay, mergeMissing, otherFailureLine, `setDraft` and
+  `sendMessage`. They were the store's `setDraft` and `send`. The entry
+  went from 469,727 B to 468,192 B. What stays, by declaration (B):
+  sanitizeRow 1,260, sanitizeListener 392, cleanAgent 184, mergeRows 151,
+  sessionKeyOf 124, KINDS 82 (lib/personThread.ts, 2,300). The store adds
+  the socket handler 444, receiveRows 356, noteActivity 296, the store 232,
+  initial 173, replyAnnouncement 106, receiveSync 105, the open-clears-
+  unread subscription 104 and terminalListening 65 (1,955). All of it is
+  the wake path. `tests/personThreadEntry.r70.test.ts` keeps the eager
+  modules from importing the compose half or the API.
+- **6:** `.agent-log__status--name` overrides the telemetry's lowercase.
+
+### Open for GM
+
+- There is no You row after a typed answer: an answer goes to the
+  questions API, not the thread. The cut words are in the DOM (a screen
+  reader reads them whole), but a sighted person can't see the rest. A
+  `title` with the full answer would fix that if GM wants one.
+

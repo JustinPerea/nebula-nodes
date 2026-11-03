@@ -258,6 +258,22 @@
   line-height: var(--sr-line-body, 1.45);
 }
 
+/* GM r70: "You answered “…”." on one line; the words are cut, and the
+   ellipsis sits inside the curly quotes (the closing quote and the full
+   stop always show). */
+.message-box__answered--typed {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.message-box__answered-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-box__status {
   display: flex;
   align-items: center;
@@ -290,6 +306,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
   height: 22px;
   padding: 0 8px 0 6px;
   border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
@@ -306,16 +323,10 @@
   transition: transform 220ms var(--agent-log-spring);
 }
 
-/* r61 A: the run's status leads its fold ("› Claude is working · …"): the
-   status line's look, the breathing dot in the session's shade. */
-.message-box__fold--working,
-.message-box__fold--waiting {
-  max-width: 100%;
-  border-color: transparent;
-  padding-left: 0;
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
-}
-
+/* r61 A, GM r70: the run's status leads its fold ("› Claude is working ·
+   …") in the same bordered chip the settled "› 2 actions" is: only the
+   words and the breathing dot (in the session's shade) change, so the row
+   doesn't move when the reply lands. No rule here may tell the two apart. */
 .message-box__fold .message-box__breath {
   flex: 0 0 auto;
   margin: 0 2px;
@@ -570,6 +581,8 @@
   color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
   font-size: var(--sr-type-body, 12px);
   line-height: var(--sr-line-body, 1.45);
+  /* GM r70: the field's describedby lines never end on one word ("here."). */
+  text-wrap: pretty;
 }
 
 .message-box__line--failed {
@@ -583,6 +596,7 @@
 
 .message-box__counter {
   display: block;
+  text-wrap: pretty;
   margin-top: 4px;
   color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
   font-family: var(--sr-mono, monospace);
@@ -675,4 +689,11 @@
   .message-box__breath {
     animation: none;
   }
+}
+
+/* GM r70: the header's meta names the latest agent by its cursor label
+   ("Claude", "Claude · 2") in its own case; the telemetry's state words
+   ("standby", "streaming") stay lowercase (slava-restraint.css). */
+.agent-log__telemetry .agent-log__status--name {
+  text-transform: none;
 }

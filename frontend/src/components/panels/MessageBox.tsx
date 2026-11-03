@@ -5,6 +5,7 @@ import { ScrollFade } from '../ScrollFade';
 import { AgentLogEntryRow } from './AgentLogEntryRow';
 import { OFFLINE_LINE_ID } from '../BackendConnectionStatus';
 import { usePersonThreadStore, type AnsweringState, type PendingSend } from '../../store/personThreadStore';
+import { SENDING_AFTER_MS, sendMessage, setDraft } from '../../lib/personThreadCompose';
 import { ANSWER_TEXT_MAX, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -17,7 +18,6 @@ import { isCanvasShortcutTarget } from '../../lib/canvasShortcutScope';
 import {
   MESSAGE_MAX,
   PIN_SHOW_EVENT,
-  SENDING_AFTER_MS,
   UPDATES_OPEN_EVENT,
   type ChannelListener,
   type ThreadAgent,
@@ -36,6 +36,7 @@ import {
   SERVER_FAILED_LINE,
   actionsLabel,
   answeredLine,
+  answeredQuote,
   availability,
   contextChipLabel,
   contextRemoveLabel,
@@ -211,6 +212,8 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   const open = entry?.view.status === 'open' && Boolean(entry.answerKey);
   // r61 answer 4: once answered, the row drops its buttons for a quiet line.
   const answered = entry?.view.status === 'answered' ? answeredLine(entry.view.answers ?? []) : null;
+  // GM r70: typed words on one line, cut inside their curly quotes.
+  const typed = entry?.view.status === 'answered' ? answeredQuote(entry.view.answers ?? []) : null;
   // One single-choice question: a click is the answer (r50's mock). Anything
   // more keeps its picks until Send, as the Agents panel's form does.
   const oneClick = questions.length === 1 && !questions[0].multiple && questions[0].options.length > 0;
@@ -247,7 +250,13 @@ function QuestionRow({ row }: { row: ThreadRow }) {
           </div>
         );
       })}
-      {answered && <p className="message-box__answered">{answered}</p>}
+      {answered && (typed
+        ? (
+          <p className="message-box__answered message-box__answered--typed">
+            {typed.before}<span className="message-box__answered-words">{typed.words}</span>{typed.after}
+          </p>
+        )
+        : <p className="message-box__answered">{answered}</p>)}
       {open && fromComposer && (
         <button type="button" className="message-box__show" aria-pressed={answeringHere}
           onClick={() => usePersonThreadStore.getState().answer({ setId, questionId: questions[0].id, question: questions[0].text })}>
@@ -350,7 +359,9 @@ function ActionsFold({ entries, status, row }: { entries: AgentLogEntry[]; statu
   }
   return (
     <div className="message-box__actions">
-      <button type="button" className={`message-box__fold${lead ? ` message-box__fold--${lead.kind}` : ''}`}
+      {/* GM r70: the same bordered chip working and settled; only its words
+          and the breathing dot change, so settling never moves the row. */}
+      <button type="button" className="message-box__fold"
         aria-expanded={open} aria-controls={listId} style={lead && row ? shade(row.to?.agent, row.to?.session) : undefined}
         onClick={() => setOpen((value) => !value)}>
         <ChevronRight className="message-box__fold-icon" size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
@@ -682,7 +693,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
       return;
     }
     if (state.kind !== 'ready') return;
-    void usePersonThreadStore.getState().send(state.recipient.listenerId);
+    void sendMessage(state.recipient.listenerId);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -732,7 +743,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           aria-describedby={described}
           maxLength={max}
           readOnly={false}
-          onChange={(event) => usePersonThreadStore.getState().setDraft(event.target.value, answeringNow ? undefined : selectedIds)}
+          onChange={(event) => setDraft(event.target.value, answeringNow ? undefined : selectedIds)}
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

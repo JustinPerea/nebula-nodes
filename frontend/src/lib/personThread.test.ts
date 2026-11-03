@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SENDING_AFTER_MS,
-  SENDING_HOLD_MS,
-  mergeMissing,
   mergeRows,
-  otherFailureLine,
   sanitizeListener,
   sanitizeRow,
-  sendFailure,
-  sendingSettleDelay,
   type ChannelListener,
   type ThreadRow,
 } from './personThread';
+import {
+  SENDING_AFTER_MS,
+  SENDING_HOLD_MS,
+  mergeMissing,
+  otherFailureLine,
+  sendFailure,
+  sendingSettleDelay,
+} from './personThreadCompose';
 import {
   HELD_LINE,
   LISTENER_DROPPED_LINE,

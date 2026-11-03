@@ -37,7 +37,8 @@ export const NEW_REPLY_PILL = 'New reply';
 /** r61 answer 4: a question with no options is answered from the composer. */
 export const ANSWER_LABEL = 'Answer';
 export const ANSWERING_PREFIX = 'Answering';
-export const ANSWERING_REMOVE_LABEL = 'Remove';
+/** The × on the "Answering “…”" chip (GM r70): the words then go as a plain message. */
+export const ANSWERING_REMOVE_LABEL = 'Stop answering';
 
 /** "Waiting for Claude · 2" (r61: the session's cursor label). */
 export function waitingLine(label: string = DEFAULT_SESSION_LABEL): string {
@@ -174,8 +175,28 @@ export function joinQuoted(words: readonly string[]): string {
 export function answeredLine(answers: readonly { choices: readonly string[]; text: string | null }[]): string | null {
   const choices = answers.flatMap((answer) => answer.choices);
   if (choices.length > 0) return `You chose ${joinQuoted(choices)}.`;
-  const typed = answers.map((answer) => answer.text?.trim() ?? '').filter(Boolean);
+  const typed = typedAnswers(answers);
   return typed.length > 0 ? `You answered ${joinQuoted(typed)}.` : null;
+}
+
+function typedAnswers(answers: readonly { text: string | null }[]): string[] {
+  return answers.map((answer) => oneLine(answer.text ?? '')).filter(Boolean);
+}
+
+/**
+ * GM r70: "You answered “…”." on one line, the words cut with the ellipsis
+ * inside the curly quotes: the line in three parts, the middle one the part
+ * the CSS cuts (the closing quote and the full stop always show). Null for
+ * a chosen answer, whose line is answeredLine's as it is.
+ */
+export function answeredQuote(answers: readonly { choices: readonly string[]; text: string | null }[]):
+  { before: string; words: string; after: string } | null {
+  if (answers.some((answer) => answer.choices.length > 0)) return null;
+  const typed = typedAnswers(answers);
+  if (typed.length === 0) return null;
+  // “A”, “B” and “C”, less its outer quotes.
+  const joined = joinQuoted(typed);
+  return { before: 'You answered “', words: joined.slice(1, -1), after: '”.' };
 }
 
 /** The question on one line, for the composer's "Answering “…”" chip (CSS cuts it to the width). */

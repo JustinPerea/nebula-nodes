@@ -96,10 +96,10 @@ describe('the pure parts', () => {
     expect(readStoredHeight(null)).toBeNull();
   });
 
-  it('the top chrome is the Updates chip’s row and the gap under it', () => {
+  it('the top chrome is the Updates chip’s row and 12 px under it (GM r70)', () => {
     const probe = document.createElement('div');
     document.body.appendChild(probe);
-    expect(css.px(probe, 'var(--agent-log-top-chrome)')).toBe(24 + 40 + 8);
+    expect(css.px(probe, 'var(--agent-log-top-chrome)')).toBe(24 + 40 + 12);
     probe.remove();
   });
 });
@@ -129,8 +129,9 @@ describe('r61 answer 1: the person’s height beats the content’s', () => {
   it('stays within the viewport less the top chrome', () => {
     const { log, handle } = mount();
     act(() => drag(handle()!, 600, -2000));
-    // The log's bottom is at 784; the chrome takes 72.
-    expect(log.style.height).toBe(`${784 - 72}px`);
+    // The log's bottom is at 784; the chrome takes 76 (r70: the top bar + 12;
+    // no selection toolbar slot here: tests/messageBoxLog.r70.test.tsx).
+    expect(log.style.height).toBe(`${784 - 76}px`);
   });
 
   it('a press with no move changes nothing (the first half of a double-click)', () => {
@@ -155,10 +156,11 @@ describe('r61 answer 1: the person’s height beats the content’s', () => {
   it('the arrow keys move the handle; the height is kept across a remount', () => {
     const first = mount();
     act(() => { fireEvent.keyDown(first.handle()!, { key: 'ArrowUp' }); });
-    expect(first.log.style.height).toBe('216px');
+    // r70: 24 px a key.
+    expect(first.log.style.height).toBe('224px');
     cleanup();
     const second = mount();
-    expect(second.log.style.height).toBe('216px');
+    expect(second.log.style.height).toBe('224px');
   });
 });
 

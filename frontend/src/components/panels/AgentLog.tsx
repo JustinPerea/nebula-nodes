@@ -7,10 +7,13 @@ import { ScrollFade } from '../ScrollFade';
 import { usePersonThreadStore } from '../../store/personThreadStore';
 import { AgentLogEntryRow } from './AgentLogEntryRow';
 import { MessageComposer, MessagePreview, MessageThread } from './MessageBox';
+import { CHROME_CLEARANCE, chromeTopLimit } from '../../lib/bottomBar';
 import { LOG_CARD_FOLD_DESCRIPTION, LOG_COLLAPSE_VAR, LOG_HELD_ATTR, LOG_HOLD_ATTR } from '../../lib/noticeStackPlace';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   HEIGHT_STORAGE_KEY,
+  RESIZE_HANDLE_LABEL,
+  RESIZE_HANDLE_TITLE,
   RESIZE_KEY_STEP,
   clamp,
   clampLogHeight,
@@ -103,8 +106,11 @@ function logFloor(log: HTMLElement): number {
 }
 
 /** GM r61 answer 1: the person's height stays at least the header, one row
- * and the composer, and at most the viewport less the top chrome (the
- * Updates chip's row), from the edge the log is pinned by. */
+ * and the composer, and at most the viewport less the top chrome, from the
+ * edge the log is pinned by. GM r70: the top chrome's line is the selection
+ * toolbar slot's bottom + 12 px when the log's span overlaps the slot,
+ * shown or not (selecting a node never moves the log); otherwise the top
+ * bar's + 12 px (the Updates chip's row, --agent-log-top-chrome). */
 function resizeBounds(log: HTMLElement, edge: 'top' | 'bottom'): HeightBounds {
   const head = log.querySelector<HTMLElement>('.agent-log__drag-row');
   const body = log.querySelector<HTMLElement>('.agent-log__body');
@@ -114,11 +120,28 @@ function resizeBounds(log: HTMLElement, edge: 'top' | 'bottom'): HeightBounds {
   const borders = Math.max(0, log.offsetHeight - log.clientHeight);
   const min = (head?.offsetHeight ?? 0) + (body ? verticalPadding(body) : 0) + row + (composer?.offsetHeight ?? 0) + borders;
   const rect = log.getBoundingClientRect();
-  const chrome = probeHeight('--agent-log-top-chrome');
+  const chrome = chromeTopLimit({ left: rect.left, right: rect.right }, CHROME_CLEARANCE, probeHeight('--agent-log-top-chrome'));
   const max = edge === 'top'
     ? rect.bottom - chrome
     : window.innerHeight - Math.max(rect.top, chrome) - probeHeight('--page-gutter');
   return { min: Math.ceil(min), max: Math.floor(max) };
+}
+
+/** GM r70: the handle is a focusable separator; it reads the log's height
+ * in px between its bounds (written on each measure: the height follows
+ * the content until the person sets it). */
+function describeHandle(log: HTMLElement, edge: 'top' | 'bottom'): void {
+  const handle = log.querySelector<HTMLElement>(':scope > .agent-log__resize');
+  if (!handle) return;
+  const bounds = resizeBounds(log, edge);
+  const values: [string, number][] = [
+    ['aria-valuenow', Math.round(log.offsetHeight)],
+    ['aria-valuemin', bounds.min],
+    ['aria-valuemax', Math.max(bounds.min, bounds.max)],
+  ];
+  for (const [name, value] of values) {
+    if (handle.getAttribute(name) !== String(value)) handle.setAttribute(name, String(value));
+  }
 }
 
 function readPersonHeight(): number | null {
@@ -445,6 +468,7 @@ export function AgentLog() {
           clear(FLOAT);
         }
       }
+      if (open) describeHandle(log, resizeEdge(position));
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -459,7 +483,8 @@ export function AgentLog() {
   }, [visible, open, position, cardHold, personHeight]);
 
   // A smaller window keeps the person's height within it (r61: at most the
-  // viewport less the top chrome).
+  // viewport less the top chrome), and so does opening it: a height kept from
+  // before the r70 ceiling, or from a taller window, comes down to it.
   useEffect(() => {
     if (!visible || personHeight === null) return undefined;
     function handleResize() {
@@ -471,9 +496,10 @@ export function AgentLog() {
         persistPersonHeight(next);
       }
     }
+    if (open) handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [visible, personHeight, position]);
+  }, [visible, open, personHeight, position]);
 
   // The notice leaves after a few seconds unless it is hovered or focused;
   // Settings > Preferences stays the way back after that.
@@ -634,7 +660,14 @@ export function AgentLog() {
 
   function handleResizeKey(e: React.KeyboardEvent<HTMLDivElement>) {
     const log = logRef.current;
-    if (!log || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    if (!log) return;
+    // GM r70: Enter does what a double-click does.
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleResizeReset();
+      return;
+    }
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
     const up = e.key === 'ArrowUp';
     // The handle moves with the arrow: up on the top edge is taller.
@@ -661,6 +694,9 @@ export function AgentLog() {
   const noticeStyle: React.CSSProperties = position ? { ...edgeStyle(position) } : {};
   const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.agent?.name ?? latestEntry.source : 'standby';
+  // GM r70: an agent's name is its cursor label ("Claude", "Claude · 2"), in
+  // its own case; the state words stay the telemetry's lowercase.
+  const statusIsName = !isExecuting && Boolean(latestEntry?.agent?.name);
   const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
 
   if (!visible) {
@@ -730,10 +766,10 @@ export function AgentLog() {
           data-edge={edge}
           role="separator"
           aria-orientation="horizontal"
-          aria-label="Resize agent log"
-          aria-valuenow={personHeight ?? undefined}
+          aria-label={RESIZE_HANDLE_LABEL}
+          // aria-valuenow, -valuemin and -valuemax: describeHandle, on each measure.
           tabIndex={0}
-          title="Drag to resize. Double-click to fit the content."
+          title={RESIZE_HANDLE_TITLE}
           onPointerDown={handleResizeDown}
           onPointerMove={handleResizeMove}
           onPointerUp={handleResizeUp}
@@ -781,7 +817,7 @@ export function AgentLog() {
               <span className="agent-log__signal-cell" />
             </span>
             <span className="agent-log__count">{countLabel}</span>
-            <span className="agent-log__status">{statusLabel}</span>
+            <span className={'agent-log__status' + (statusIsName ? ' agent-log__status--name' : '')}>{statusLabel}</span>
           </span>
           <ChevronUp
             className={'agent-log__chevron' + (open ? ' agent-log__chevron--open' : '')}
