@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 18 (review 16, GM r27), on graphStore.fix17's harness:
@@ -29,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -351,7 +355,8 @@ describe('review 16 LOW-1 (GM r27 answer 1): while a clash waits, Codex’s edit
     await clashOnS1(h);
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(clashes16().n1?.line).toBe(CLASH16), { timeout: 3000, interval: 5 });
     await sleep(60);

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 21, on graphStore.fix20's keyed backend:
@@ -29,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -301,8 +305,10 @@ describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM
       await vi.waitFor(() => expect(h.putsOf('n1').length).toBe(p0 + 1), { timeout: 3000, interval: 5 });
       useGraphStore.getState().deleteNode('n1');
       await sleep(60);
+      // The try's PUT stays held while the delete goes out; once it fails,
+      // Undo waits for the delete's answer, never a fixed sleep (PR #221 review 1).
       release();
-      await sleep(100);
+      await deleteLanded(useGraphStore);
       stillFailing(h, 'n1', cause);
       const p1 = h.putsOf('n1').length;
       const before = said.length;

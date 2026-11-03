@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -40,10 +40,14 @@ vi.mock('../src/components/panels/ChatPanel', () => ({ ChatPanel: () => <button>
 vi.mock('../src/components/create-studio/CreateView', () => ({ CreateView: () => <div data-testid="creator-studio">Studio fixture</div> }));
 
 import App from '../src/App';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { usePricingStore } from '../src/store/pricingStore';
+
+// App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
 const initialProjects = useProjectStore.getState();

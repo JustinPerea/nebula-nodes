@@ -65,6 +65,7 @@ function cinemaRecord(): RunRecord {
     }, outputs: {} }], edges: [] } };
 }
 
+// scene-edits-reset: off, every test loads a fresh graph store (vi.resetModules in reloadStore and beforeEach), so no per-node state reaches the next test.
 async function reloadStore(): Promise<Store> {
   vi.resetModules();
   const { useGraphStore } = await import('../src/store/graphStore');

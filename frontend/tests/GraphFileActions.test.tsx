@@ -31,13 +31,16 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 
 import { GraphFileActions } from '../src/components/GraphFileActions';
 import { CommandPalette } from '../src/components/CommandPalette';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { requestGraphLoad, requestGraphSave } from '../src/lib/graphFileActions';
 import { CANVAS_NOTICE_EVENT } from '../src/lib/canvasNotice';
 import * as api from '../src/lib/api';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUI = { ...useUIStore.getState() };

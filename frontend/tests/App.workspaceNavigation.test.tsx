@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ViewMode } from '../src/store/uiStore';
 
@@ -48,10 +48,14 @@ vi.mock('../src/components/video-editor/RemotionEditorView', () => ({ RemotionEd
 vi.mock('../src/components/editor/EditorView', () => ({ EditorView: () => <div data-testid="studio">Video editor fixture</div> }));
 vi.mock('../src/components/commons/CommonsView', () => ({ CommonsView: () => <div data-testid="studio">Commons fixture</div> }));
 import App from '../src/App';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { usePricingStore } from '../src/store/pricingStore';
+
+// App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
