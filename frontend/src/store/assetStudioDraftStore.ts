@@ -5,8 +5,10 @@ export type AssetStudioKind = 'character' | 'moodboard';
 export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
 export type StudioFailure = string | FailureCopy;
 /** What the toolbar's Retry runs again for `saveError` (GM, error-copy round
- * 3: "Make Retry redo the failed action, never a different one."). */
-export type StudioRetry = 'save' | 'analyze' | 'undo' | 'redo';
+ * 3: "Make Retry redo the failed action, never a different one."). 'reload'
+ * is a failed save no button redoes: its line's step is a reload (signed
+ * out, or the board changed somewhere else; GM r16), so no Retry shows. */
+export type StudioRetry = 'save' | 'analyze' | 'undo' | 'redo' | 'reload';
 
 export interface AssetStudioDraftEntry<D = unknown> {
   draft: D;
@@ -88,7 +90,7 @@ interface AssetStudioDraftState {
    * (the default), or an undo or redo of `step`, sent as an edit. Only a
    * save leaves the draft dirty: an undo that didn't land changed nothing. */
   failSave: (key: string, id: string, message: StudioFailure,
-    options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo'>; step?: string }) => void;
+    options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo' | 'reload'>; step?: string }) => void;
   copyTo: (key: string, destination: string) => void;
   /** As copyTo, but when `destination` already holds a loaded draft (the
    * board was opened from the rail while this one was unsaved), that draft

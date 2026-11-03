@@ -10,7 +10,6 @@ import {
   fetchMoodboards,
   keepMoodboardBriefOverride,
   lookupStoredAsset,
-  SAVE_BOARD,
   updateMoodboard,
 } from '../../lib/api';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
@@ -19,7 +18,8 @@ import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, isBackendUnreachable } from '../../lib/errorCopy';
 import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { useBackendOffline } from '../../lib/useBackendOffline';
-import { boardSaveFailure, isBoardNotSavedLine, isCreateIdRefusal, keptFromBoardLine } from './boardSaveLine';
+import { placeholderLabel } from './boardPlaceholder';
+import { boardSaveLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
 import { keepUnsavedDrafts } from './unsavedDrafts';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
@@ -239,7 +239,7 @@ async function saveAway(key: string, away: 'background' | 'resend' | null = null
       const draft = withBriefFields(now.draft as MoodboardDraft);
       if (result.repeated) {
         const repeat = repeatOnBoard(at, draft, result);
-        store.patch(at, { draft: repeat.draft, thumbnail: result.thumbnail, notice: keptFromBoardLine(repeat.kept, result) });
+        store.patch(at, { draft: repeat.draft, thumbnail: result.thumbnail, notice: keptFromBoardLine(repeat.kept) });
       } else store.patch(at, { draft: draftOnBoard(draft, result, sent, asSentOf(sending)), thumbnail: result.thumbnail });
     }
     createsWaited.delete(at);
@@ -263,7 +263,7 @@ async function saveAway(key: string, away: 'background' | 'resend' | null = null
     }
     // Nothing is lost: the draft keeps it and Retry sends it again (GM r14).
     if (isCreateIdRefusal(err)) store.patch(at, { createRequestId: null });
-    store.failSave(at, attempt.id, boardSaveFailure(err));
+    failBoardSave(at, attempt.id, err);
     return null;
   }
 }
@@ -590,7 +590,7 @@ async function sendQueued(key: string, savedId: string, resend: SendOwns | null 
   } catch (err) {
     if (await notSentYet(err, resend ? 'resend' : 'background')) waitToResend(key, savedId, attempt.id, owns);
     // Sent again on reconnect and failed: the board says why (GM r11 4).
-    else store.failSave(key, attempt.id, boardSaveFailure(err));
+    else failBoardSave(key, attempt.id, err);
   }
 }
 
@@ -682,16 +682,24 @@ async function landAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   }
 }
 
+/** A board save failed: its line (boardSaveLine, GM r16) and what the
+ *  header offers for it, a Retry or (the line says Reload) none. */
+function failBoardSave(key: string, id: string, err: unknown) {
+  const line = boardSaveLine(err);
+  useAssetStudioDraftStore.getState().failSave(key, id, line.failure, { retry: line.retry });
+}
+
 /** A failed away write keeps the image (review 5, LOW-4): its add waits in
  *  that board's draft, which the next save sends, and the board says why. */
-function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>, err: unknown) {
+function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>, err: unknown, names: readonly string[]) {
   const store = useAssetStudioDraftStore.getState();
   const key = resolveAssetStudioDraftKey(store, board.key);
   const entry = store.entries[key];
   if (!entry || !(entry.epoch === board.epoch || (board.savedId && entry.savedId === board.savedId))) return;
   const savedId = board.savedId;
   const failed = () => {
-    store.patch(key, { saveState: 'error', saveError: boardSaveFailure(err), retry: 'save' });
+    const line = boardSaveLine(err);
+    store.patch(key, { saveState: 'error', saveError: line.failure, retry: line.retry });
   };
   if (entry.loaded && savedId) {
     store.edit(key, (draft) => {
@@ -719,9 +727,9 @@ function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   }
   if (err === null || isOfflineRefusal(err)) return;
   // A saved board whose draft isn't loaded never took the add (review 9
-  // NIT-2): it is lost, so not the neutral "nothing is lost" line; the save
-  // failure in the error look, with no Retry (nothing is left to send).
-  if (savedId) store.patch(key, { saveState: 'error', saveError: failureCopy(err, { heading: SAVE_BOARD }), retry: null });
+  // NIT-2): it is lost, so not the neutral "nothing is lost" line; GM r16's
+  // red line naming its files, with no Retry (nothing is left to send).
+  if (savedId) store.patch(key, { saveState: 'error', saveError: lostAddLine(names), retry: null });
   // An unsaved board's draft holds the add (landAway): its line.
   else failed();
 }
@@ -952,7 +960,14 @@ export function MoodboardStudioView() {
     let cancelled = false;
     const current = () => !cancelled && isCurrent()
       && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
-    patch({ loadError: null, saveError: null });
+    // An add lost while the board wasn't loaded (keepFailedAway) says so on
+    // this load, the first time the person sees the board since: its red
+    // line stays through it (round 6h; the load used to clear it unseen).
+    const lostAdd = () => {
+      const failure = useAssetStudioDraftStore.getState().entries[key]?.saveError;
+      return isLostAddLine(failure) ? failure : null;
+    };
+    patch({ loadError: null, saveError: lostAdd() });
     if (isDraftId || !moodboardEditorId) {
       initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
     } else {
@@ -979,7 +994,9 @@ export function MoodboardStudioView() {
         }
         setRailScope(scope);
         rememberBrief(found);
+        const lost = lostAdd();
         initialize(moodboardToDraft(found), found.id, found.thumbnail);
+        if (lost) patch({ saveState: 'error', saveError: lost, retry: null });
       }).catch((err) => {
         if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
       });
@@ -1131,7 +1148,7 @@ export function MoodboardStudioView() {
           const current = draftNow();
           if (current) {
             const repeat = repeatOnBoard(key, current, made);
-            store.patch(key, { draft: repeat.draft, thumbnail: made.thumbnail, notice: keptFromBoardLine(repeat.kept, made) });
+            store.patch(key, { draft: repeat.draft, thumbnail: made.thumbnail, notice: keptFromBoardLine(repeat.kept) });
           }
           rememberBrief(made);
         } else {
@@ -1234,7 +1251,7 @@ export function MoodboardStudioView() {
       // a saved board's own save as a new board's create, so both say r12's
       // neutral line (GM r14; round 6g, brief 7a).
       if (!attempt.entry.savedId && isCreateIdRefusal(err)) store.patch(key, { createRequestId: null });
-      store.failSave(key, attempt.id, boardSaveFailure(err));
+      failBoardSave(key, attempt.id, err);
       return null;
     }
   }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps, chipMovedAdds,
@@ -1488,7 +1505,7 @@ export function MoodboardStudioView() {
           if (!await landAway(board, ops, aspectsOf)) return;
         } catch (err) {
           if (!(err instanceof AwayWriteFailed)) throw err;
-          keepFailedAway(board, ops, aspectsOf, err.failure);
+          keepFailedAway(board, ops, aspectsOf, err.failure, placed.map((item) => placeholderLabel(item.holder.source)));
           return;
         }
         // Landed: its spots wait, filled, for the person to come back to the

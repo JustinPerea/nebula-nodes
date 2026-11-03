@@ -588,6 +588,38 @@ Main had nothing new (still 53318ca6), so nothing to merge.
   - No request left the lane.
   - Shots: scratchpad `paste/shots6g/` (7), each opened, no md5 repeats.
 
+## Round 6h (GM r16)
+
+Main had nothing new (still 53318ca6), so nothing to merge.
+
+- **Each failed board save says its own cause and the step that works (GM r16 7a, 7b).** `boardSaveLine(err)` returns the line and what the header offers. It reads only the answer's status and structured fields (`code`, `storage: "full"`), never its words, so no backend wording reaches the person.
+  - The server isn't answering, is busy, didn't respond, hit an error: ". Try again.", with Retry.
+  - The disk is full (a 507 with `storage: "full"`): ". Free up some space, then try again.", with Retry.
+  - Too large (413): ". Remove some images, then try again.", with Retry.
+  - Signed out (401/403): ". Reload to sign in again." Changed somewhere else (a conflict the rebase gave up on after three tries, or a 409 `version_conflict`): ". Reload to get the latest version." Neither has a Retry: a new `StudioRetry`, `'reload'`, which `canRetry` and `saveOwed` both leave out.
+  - Any other refusal, the create id's 422 and its 409 `request_id_scope` included: "…because the server didn’t accept this save. Try again." (7(b)). `CREATE_ID_REFUSED_LINE` and its pending flag are gone; the Studio still drops a refused id, so Retry creates without it.
+  - All of them are neutral with "Not saved", since the edit stays in the draft. `isBoardNotSavedLine` now checks only the opening.
+  - The ratchet (`boardSaveLine.test.ts`) sends every status from 400 to 599, with 9 codes, storage full or not, and a sentinel detail and reason. Every line must be one of GM's, with none of the sentinel.
+- **"Being moved": not built.** The 6g list took it from a frontend test fixture ("This board is locked while it is being moved."), not from the backend. No board save is refused for a move: there is no move lock, `store.move` keeps the version, the PUT addresses the board by id wherever it lives, and the Studio's own move holds the draft's save slot (`beginSave`), so a save waits for it rather than failing. There is no refusal to map the line from, so I flagged it instead of inventing a code. The fixture's words now read "The store refused this write.".
+- **The red lost add (GM r16 7a).** `lostAddLine(names)`: "Nebula couldn’t add “river.png” and “dune.png” because the board hadn’t loaded. Add them again." Up to three names (each the placeholder's label, clipped as the tile shows it), joined like the Kept line, then "4 images". The ending is "Add it again." for one file and "Add them again." for two or more, the count form included ("Add it again." after "4 images" reads wrong). No Retry: nothing is left to send.
+- **The lost add was never seen.** The live run found that `keepFailedAway` set the line on the board's entry while its draft wasn't loaded, and the board's own load (`patch({ saveError: null })`, then `initialize`) wiped it the moment the person opened the board. That has been true since 6g's NIT-2. The load now keeps a lost-add line (`isLostAddLine`) through both, so the person sees it when they open the board. The next edit clears it, as with any line.
+- **Kept lines (GM r16).** "Kept the name from the board.", "Kept the name and notes from the board.", "Kept the name, notes and mode from the board.", then from four fields "Kept 4 changes from the board.". The join is "and" with no serial comma (`joinWithAnd`, shared with the lost add). The field names are nouns after one "the": name, notes, mode, strength, direction, avoid list, pinned colors, brief, clash setting, color choices, notes setting, analysis. The board's name is no longer quoted, per GM's examples. `KEPT_FIELD_PENDING_GM` is gone.
+- **One board per Retry scenario, on a clean rail (GM's check).** Each live scenario ran on its own backend home and token, made and deleted per scenario, with its own browser profile. Every home was empty before its seed (checked). The server's boards after each:
+  - rename: "Rivers" (1 image) and the seeded board;
+  - name and notes: "Rivers" (1) and the seed;
+  - reload-restore: one "Untitled Moodboard" (2) and the seed;
+  - network drop: one "Untitled Moodboard" (1) and the seed;
+  - 7(b): one "Untitled Moodboard" (1) and the seed; signed out: the seed only; lost add: the seed and a second seeded board.
+
+  So 6g's duplicate rail rows came from run 1 sharing its home, not from a second board per Retry.
+- **For GM.**
+  - "Reload" drops a saved board's kept edit. Only unsaved boards are kept for a reload (session storage), and nothing asks before unload for a saved board. That fits "Reload to get the latest version"; it may not be what GM wants for "signed out".
+  - On the signed-out shot, the app's own banner says "This tab isn't connected as you. Open the link Nebula printed when it started." With a stale token, that link is the real fix, and a plain reload keeps the stale token. GM may want the board line's step to match the banner.
+- **Tests.** `boardSaveLine.test.ts` rewritten (17 causes with each one's Retry or none, the ratchet, lost add 0-4, Kept 0-4 and every field, the join). ErrorCopy: each refusal through the real lib/api, its chip and Retry; both id refusals on 7(b). Paste: the signed-out create and save; "Kept the name and notes"; the lost add named, and shown once the board loads; an away write signed out. View: the Move test's 409 shows 7(b)'s line and not its words.
+- **Mutants:** 32 (scratchpad `paste/mutate-r6h.py`), all killed. H25 (an away failure always offering Retry) survived the first pass and is killed by the signed-out away test.
+- **Gates:** tsc 0 (the build's `tsc -b`); lint 0; focused vitest over 153 files, two workers: 2632 of 2632; the build budget 444,797 B raw of 512,000 (the Studio is a deferred chunk; dist deleted). No backend change, so no pytest.
+- **Live (8797/5797, the installed Chrome 156 with a throwaway profile per scenario, canary first, 1440):** 68 of 68 over 7 scenarios, after the lost-add fix (the first lost-add run was 4 of 5). The 7(b) line came from the real server's 422 for a malformed id (the page rewrote the id), and the signed-out line from its real 403 `person_required` for a stale token while turning on "Send these notes to generators". The lost add came from the real server's 422 for an edit body it refuses, with the draft let go as the NIT-2 test does. No request left the lane. Shots: scratchpad `paste/shots6h/` (6), each opened, no md5 repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -607,6 +639,7 @@ Main had nothing new (still 53318ca6), so nothing to merge.
 - Round 6e: `backend/services/moodboard_store.py` (`create_once`, the `.creates` side folder), `backend/main.py` (`requestId` on the create, `repeated`), `backend/moodboard_client.py`, `backend/mcp_server.py`, `backend/cli/commands/moodboard.py`, `backend/tests/test_moodboard_create_request_id.py` (new); `frontend/src/lib/api.ts`, `store/assetStudioDraftStore.ts` (`createRequestId`), `MoodboardStudioView.tsx` (`createRequestIdFor`, the repeat rebase, `markLeftToSend`, the chip rule at every site), `lib/boardPlacement.ts` (`visibleShare`, `outsideForChip`), `outsideChipText.ts` (`placeChip`), `OutsideChip.tsx`, `styles/moodboard-board.css`, and their tests.
 - Round 6f: `boardSaveLine.ts` (`boardSaveFailure`, `isCreateIdRefusal`), `MoodboardStudioView.tsx` (every create and background write through it; `seen` kept and used at the chip sites), `lib/api.ts` (the create's heading), `BoardCanvas.tsx` (`seenRect`, `seen` on every target, the chip's `viewOf`), `lib/boardPlacement.ts` (`seen`), and their tests; `MoodboardStudioErrorCopy.test.tsx` (the create through the real lib/api).
 - Round 6g: `unsavedDrafts.ts` (new, with a test), `MoodboardStudioView.tsx` (`createAttemptFor`, `repeatOnBoard`, `handOverDraft`, `createWaits`, the kept line, 7a), `store/assetStudioDraftStore.ts` (`createAttempts`, `fieldEditedAt`, `notice`, `handOver`), `boardSaveLine.ts` (`CREATE_ID_REFUSED_LINE`, `keptFromBoardLine`), `boardAdds.ts` (`createsWaited`, `isOpShape` exported), `lib/boardPlacement.ts` (`SeenArea`, `unionArea`), `BoardCanvas.tsx` (`seenArea`), `OutsideChip.tsx` (`seenOf`), `lib/api.ts`, and their tests; backend `services/moodboard_store.py`, `main.py`, `moodboard_client.py`, `mcp_server.py`, `cli/commands/moodboard.py`, `tests/test_moodboard_create_request_id.py`.
+- Round 6h: `boardSaveLine.ts` (`boardSaveLine`, `lostAddLine`, `isLostAddLine`, `joinWithAnd`, `keptFromBoardLine`), `MoodboardStudioView.tsx` (`failBoardSave`, the lost add's names, the load keeping its line), `store/assetStudioDraftStore.ts` (`'reload'`), and their tests.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

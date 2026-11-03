@@ -441,8 +441,9 @@ describe('Moodboard Studio Move', () => {
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Unsaved' } });
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    // A saved board's own failed save keeps the edit for Retry: the neutral line (round 6g, brief 7a).
-    await waitFor(() => expect(document.body.textContent).toContain('Nebula couldn’t save the board because the server didn’t accept it. Try again.'));
+    // A saved board's own failed save keeps the edit for Retry: the neutral line (round 6g, brief 7a), never the server's words (GM r16).
+    await waitFor(() => expect(document.body.textContent).toContain('Nebula couldn’t save the board because the server didn’t accept this save. Try again.'));
+    expect(document.body.textContent).not.toContain('The disk is full.');
     expect(api.moveStoredAsset).not.toHaveBeenCalled();
 
     api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move the board.", 404, { detail: 'No project has the id' }));

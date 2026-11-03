@@ -87,7 +87,6 @@ import { resetUnsavedDrafts, restoreUnsavedDrafts } from './unsavedDrafts';
 import { OfflineRefusal, isBackendOffline, noteBackendConnection, noteProbeAnswer, startHealthProbe,
   subscribeHealthProbeRequests } from '../../lib/backendConnection';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
-import { CREATE_ID_REFUSED_LINE } from './boardSaveLine';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, reloadLostLine, uriListLinks, webLinks } from './pasteImages';
@@ -1905,13 +1904,27 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await uploads.open();
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
     // Nothing is lost (the image stays in the draft): the neutral save line (round 6f, GM r14).
-    expect(store().entries[g1Key].saveError).toEqual({ heading: '', reason: 'Nebula couldn’t save the board because the server didn’t accept it. Try again.' });
+    expect(store().entries[g1Key].saveError).toEqual({ heading: '', reason: 'Nebula couldn’t save the board because the server didn’t accept this save. Try again.' });
     expect(store().entries[g1Key].retry).toBe('save');
     expect(urlsOf(g1Key)).toContain(river);
     expect(((store().entries[g1Key].draft as { pendingOps?: MoodboardOp[] }).pendingOps ?? []).some((op) => op.op === 'add')).toBe(true);
   });
 
-  it('a failed write while away for a saved board whose draft isn\'t loaded: the add is in no draft, so the red save line, no Retry (review 9 NIT-2)', async () => {
+  it('a failed write while away, signed out: its line says Reload and the board offers no Retry (GM r16 7a)', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    api.editMoodboard.mockRejectedValue(new RequestFailedError("Couldn't save the board.", 403, { detail: 'Not yours', code: 'person_required' }));
+    await uploads.open();
+    await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
+    expect(store().entries[g1Key]).toMatchObject({ retry: 'reload',
+      saveError: { heading: '', reason: 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.' } });
+    expect(urlsOf(g1Key)).toContain(river);
+  });
+
+  it('a failed write while away for a saved board whose draft isn\'t loaded: the add is in no draft, so GM r16\'s red line naming it, no Retry (review 9 NIT-2)', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1923,8 +1936,15 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await uploads.open();
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
     expect(store().entries[g1Key]).toMatchObject({ saveState: 'error', retry: null,
-      saveError: expect.objectContaining({ heading: "Couldn't save the board." }) });
+      saveError: { heading: '', reason: 'Nebula couldn’t add “river.png” because the board hadn’t loaded. Add it again.' } });
     expect(urlsOf(g1Key)).not.toContain(river);
+    // The person sees it when they open the board: its load keeps the red line, with no Retry (round 6h, live).
+    await toBoard('g1');
+    const line = await screen.findByText('Nebula couldn’t add “river.png” because the board hadn’t loaded. Add it again.');
+    expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--error');
+    expect(store().entries[g1Key]).toMatchObject({ loaded: true, saveState: 'error', retry: null });
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('LOW-5: away, the spot check reads the board from the server, so a tile added meanwhile moves the add off it', async () => {
@@ -2293,7 +2313,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     api.editMoodboard.mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }));
     await create.open();
     await waitFor(() => expect(store().entries[madeKey]?.saveError).toBeTruthy());
-    expect(store().entries[madeKey].saveError).toEqual({ heading: '', reason: 'Nebula couldn’t save the board because the server didn’t accept it. Try again.' });
+    expect(store().entries[madeKey].saveError).toEqual({ heading: '', reason: 'Nebula couldn’t save the board because the server didn’t accept this save. Try again.' });
     expect(store().entries[madeKey]).toMatchObject({ retry: 'save', dirty: true, pendingSaveId: null });
     expect(urlsOf(madeKey)).toEqual([river]);
     expect(store().entries[newKey].saveError ?? null).toBeNull();
@@ -4195,13 +4215,28 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(made.board?.name).toBe('Rivers');
       expect(made.puts.some((put) => put.name === 'Dusk')).toBe(false);
       expect((store().entries[madeKey].draft as { name: string }).name).toBe('Rivers');
-      const line = await screen.findByText('Kept the name “Rivers” from the board.');
+      const line = await screen.findByText('Kept the name from the board.');
       const notice = line.closest('.moodboard-studio__notice')!;
       expect(notice.className).toContain('moodboard-studio__notice--neutral');
       expect(notice.getAttribute('role')).toBe('status');
       // The next edit takes the line away.
       act(() => { store().edit(madeKey, (draft) => ({ ...(draft as object), notes: 'river light' })); });
-      await waitFor(() => expect(screen.queryByText('Kept the name “Rivers” from the board.')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('Kept the name from the board.')).toBeNull());
+    });
+
+    it('name and notes changed on both, the board later: one line names both, joined with "and" (GM r16)', async () => {
+      const made = madeServer();
+      const state = await lostThenBusy(made);
+      act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk', notes: 'draft light' })); });
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
+      made.board = { ...made.board!, name: 'Rivers', notes: 'board light', version: made.board!.version + 1,
+        updatedAt: new Date(Date.now() + 60_000).toISOString() } as Moodboard;
+      state.busy = false;
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', pendingSaveId: null }), { timeout: 4000 });
+      const line = await screen.findByText('Kept the name and notes from the board.');
+      expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--neutral');
+      expect(made.board).toMatchObject({ name: 'Rivers', notes: 'board light' });
     });
 
     it('both renamed, the draft later: the draft\'s name goes on and nothing is said', async () => {
@@ -4315,22 +4350,23 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
           && notice.hasAttribute('data-line-neutral') && notice.getAttribute('role') === 'status',
         chip: chip.textContent ?? '',
         notSaved: chip.className.includes('moodboard-studio-toolbar__state--not-saved') && !chip.className.includes('--error'),
-        retries: screen.getAllByRole('button', { name: 'Retry' }).length,
+        retries: screen.queryAllByRole('button', { name: 'Retry' }).length,
         inLine: notice.querySelectorAll('button').length,
         error: store().entries[key].saveError,
       };
     };
     /** New's own save (a create) refused with `cause`: the line on the unsaved board. */
-    const createLook = async (cause: () => unknown, line: string) => {
+    const createLook = async (cause: () => unknown, line: string, retry: 'save' | 'reload' = 'save') => {
       madeServer();
       api.createMoodboard.mockImplementation(async () => { throw cause(); });
       await openNew();
       paste(clipboard({ files: [png('river.png')] }));
       await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
       clickNew();
-      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error', retry: 'save', savedId: null }));
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error', retry, savedId: null }));
       expect(urlsOf(newKey)).toEqual([river]);
       const first = await lookOf(newKey, line);
+      if (retry === 'reload') return first;
       // Its Retry is the board's own save (persist's create): the same line again.
       const sends = api.createMoodboard.mock.calls.length;
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -4340,7 +4376,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       return first;
     };
     /** made1's background save (the resend on reconnect, r12's line) refused with `cause`. */
-    const saveLook = async (cause: () => unknown, line: string) => {
+    const saveLook = async (cause: () => unknown, line: string, retry: 'save' | 'reload' = 'save') => {
       const create = gate();
       const made = madeServer(create.held);
       await newWithAdd(made);
@@ -4349,7 +4385,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true }));
       made.fail = cause();
       await online();
-      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error', retry: 'save' }));
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error', retry }));
       await toBoard('made1');
       return lookOf(madeKey, line);
     };
@@ -4368,11 +4404,26 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       ['503 with words', () => new RequestFailedError(SAVE, 503, { detail: 'Busy' }), 'the server didn’t respond'],
       ['504 with words', () => new RequestFailedError(SAVE, 504, { detail: 'Timed out upstream' }), 'the server didn’t respond'],
       ['500', () => new RequestFailedError(SAVE, 500, { detail: 'boom' }), 'the server hit an error'],
-      ['400', () => new RequestFailedError(SAVE, 400, { detail: 'Bad board' }), 'the server didn’t accept it'],
-      ['a 422 on the content (not the id)', () => new RequestFailedError(SAVE, 422, { detail: 'name must be a string' }), 'the server didn’t accept it'],
-      ['401', () => new RequestFailedError(SAVE, 401, { detail: 'Connect again' }), 'you don’t have access to this anymore'],
-      ['403', () => new RequestFailedError(SAVE, 403, { detail: 'Not yours' }), 'you don’t have access to this anymore'],
+      ['400', () => new RequestFailedError(SAVE, 400, { detail: 'Bad board' }), 'the server didn’t accept this save'],
+      ['a 422 on the content (not the id)', () => new RequestFailedError(SAVE, 422, { detail: 'name must be a string' }), 'the server didn’t accept this save'],
     ];
+    // GM r16 7a: signed out, the step is a reload, so no Retry anywhere.
+    it.each([
+      ['401', () => new RequestFailedError(SAVE, 401, { detail: 'Connect again' })],
+      ['403', () => new RequestFailedError(SAVE, 403, { detail: 'Not yours', code: 'person_required' })],
+    ] as const)('%s: the create and the save say the signed-out line, neutral, with no Retry', async (_name, cause) => {
+      const line = 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.';
+      const probe = probeAnswers('online');
+      try {
+        const created = await createLook(cause, line, 'reload');
+        fresh6f();
+        const saved = await saveLook(cause, line, 'reload');
+        expect(created).toEqual(saved);
+        expect(created).toEqual({ line, neutral: true, chip: 'Not saved', notSaved: true, retries: 0, inLine: 0,
+          error: { heading: '', reason: line } });
+        expect(created.line).not.toMatch(/Connect again|Not yours/);
+      } finally { probe.stop(); }
+    });
 
     it.each(causes)('%s: the create and the save give the same line and the same chip', async (_name, cause, because) => {
       const line = `Nebula couldn’t save the board because ${because}. Try again.`;
@@ -4461,7 +4512,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(window.sessionStorage.getItem('nebula:moodboard-unsaved-drafts')).toBeNull());
     });
 
-    it('the one destructive refusal, a 422 for the create\'s id, keeps the error look; its Retry goes without the id and saves (round 6g, 7b)', async () => {
+    it('a 422 for the create\'s id says 7(b)\'s neutral line; its Retry goes without the id and saves (round 6g; GM r16 7b)', async () => {
       const made = madeServer();
       const create = api.createMoodboard.getMockImplementation()!;
       // The server refuses this id however often it is sent; a create without one it takes.
@@ -4472,13 +4523,13 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await openNew();
       paste(clipboard({ files: [png('river.png')] }));
       // The autosave's create is refused.
-      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error',
-        saveError: { heading: '', reason: CREATE_ID_REFUSED_LINE }, createRequestId: null }));
-      expect(document.querySelector('.moodboard-studio__notice--error')).not.toBeNull();
-      expect(document.querySelector('.moodboard-studio__notice--neutral')).toBeNull();
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error', retry: 'save',
+        saveError: { heading: '', reason: 'Nebula couldn’t save the board because the server didn’t accept this save. Try again.' }, createRequestId: null }));
+      expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull();
+      expect(document.querySelector('.moodboard-studio__notice--neutral')).not.toBeNull();
       const chip = document.querySelector('.moodboard-studio-toolbar__state')!;
-      expect(chip.textContent).toBe('Error');
-      expect(document.querySelector('.moodboard-studio__notice--error')!.textContent).not.toMatch(/creat/i);
+      expect(chip.textContent).toBe('Not saved');
+      expect(document.querySelector('.moodboard-studio__notice--neutral')!.textContent).not.toMatch(/creat|requestId/i);
       expect(api.createMoodboard).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', saveError: null }));
