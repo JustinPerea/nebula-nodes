@@ -26,6 +26,7 @@ import {
 } from '../../lib/agentCursorPlanner';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
+  AGENT_CURSOR_ARRIVAL_RADIUS,
   AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
@@ -90,8 +91,16 @@ interface FieldEntry {
   since: number;
   /** The backend's arrival for its cursor (AgentCursor.arrivedAt). */
   rank: number;
-  /** Ties in `since` (events with no backend arrival): this tab's landing order. */
+  /** Whether `rank` is the backend's own arrival: ties then go by the
+   *  cursor's key, the same in every tab (#211 review 9, LOW-2). */
+  known: boolean;
+  /** Ties in `since` with no backend arrival (an older event): this tab's
+   *  landing order. */
   landedSeq: number;
+  /** Where it arrived (its target when it landed), not moved by a carry: a
+   *  carry is an arrival only past AGENT_CURSOR_ARRIVAL_RADIUS from here,
+   *  as the backend counts it (agent_presence.carry_nodes). */
+  anchor?: Point | null;
   /** Carried onto a cursor its node doesn't carry: it arrives after every
    *  cursor already there, whatever its backend arrival (review 2, L2). */
   arrivesNow?: boolean;
@@ -149,16 +158,18 @@ class CursorField {
   /** Cursors a merge put under a member they are drawn above: they glide
    *  past it to their slot, not floored, until they come to rest (hold). */
   readonly crossing = new Set<string>();
-  /** Count cursors on their way out, by key, with their column: the count
-   *  that takes their slot waits, unseen, until they are gone, so a column
-   *  never shows more than three (review 8, MEDIUM-2; spec, exit keeps its
-   *  layout). */
-  readonly exitingCounts = new Map<string, string>();
+  /** Count cursors on their way out, by key, with the members they stood
+   *  for: the count that takes their slot (one of those members) waits,
+   *  unseen, until they are gone, so a column never shows more than three
+   *  (review 8, MEDIUM-2; spec, exit keeps its layout). Keyed by the group,
+   *  not the column's head, so a head leaving in the same moment can't
+   *  release it (#211 review 9, NIT-2). */
+  readonly exitingCounts = new Map<string, readonly string[]>();
 
-  /** Whether a count cursor on its way out still holds this column's slot. */
-  countExiting(column: string | null, key: string): boolean {
-    if (column === null) return false;
-    for (const [other, c] of this.exitingCounts) if (other !== key && c === column) return true;
+  /** Whether a count cursor on its way out still holds the slot this one
+   *  (a member it stood for) would take. */
+  countExiting(key: string): boolean {
+    for (const [other, group] of this.exitingCounts) if (other !== key && group.includes(key)) return true;
     return false;
   }
 
@@ -187,14 +198,15 @@ class CursorField {
 
   /** A cursor's resolved target, its node and event, and where that node
    *  is now (`nodeAt`, its drawn position), read this frame. */
-  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0): void {
+  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false): void {
     this.purge();
     let before = this.targets.get(key);
     let changed = false;
-    if (before && before.rank !== rank) {
-      // The backend's arrival moved (it went somewhere new, or a nudge past
-      // its radius): its place in the column follows it.
-      before = { ...before, rank, since: before.since === Infinity ? Infinity : rank, arrivesNow: false };
+    if (before && (before.rank !== rank || before.known !== known)) {
+      // The backend's arrival moved (it went somewhere new, or a node move
+      // carried it past its radius: agentPresenceArrival): its place in the
+      // column follows it, in every tab alike.
+      before = { ...before, rank, known, since: before.since === Infinity ? Infinity : rank, arrivesNow: false };
       this.targets.set(key, before);
       this.version += 1;
       changed = true;
@@ -208,7 +220,7 @@ class CursorField {
       // (after a reload, the graph measures its nodes after the replay)
       // moves the point on it, and that is no carry (live r4i).
       const carried = Boolean(before?.nodeAt && nodeAt && !samePoint(before.nodeAt, nodeAt));
-      this.place(key, before, target, zoom, node, seq, rank, carried);
+      this.place(key, before, target, zoom, node, seq, rank, carried, known);
       this.targets.set(key, { ...this.targets.get(key)!, nodeAt });
       changed = true;
     }
@@ -231,7 +243,7 @@ class CursorField {
     if (changed) for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
-  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, carried = false): void {
+  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, carried = false, known = before?.known ?? false): void {
     this.version += 1;
     const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
     if (before && node !== null && before.node === node && before.seq === seq) {
@@ -244,12 +256,16 @@ class CursorField {
       const as = (o: FieldEntry, at: Point) => ({ key: '', since: 0, target: at, say: o.say, nameW: o.nameW, sayW: o.sayW });
       // A node measured or resized (not moved) carries nothing: it keeps
       // its place, the backend's arrival (r21).
-      const meets = carried && [...this.targets].some(([other, o]) => other !== key && o.node !== node
+      // And only past the arrival radius from where it arrived, as the
+      // backend counts a carry (agent_presence.carry_nodes): this tab then
+      // agrees with the arrival the backend sends every tab (r23 item 2).
+      const far = !before.anchor || Math.hypot(target.x - before.anchor.x, target.y - before.anchor.y) > AGENT_CURSOR_ARRIVAL_RADIUS;
+      const meets = carried && far && [...this.targets].some(([other, o]) => other !== key && o.node !== node
         && targetsMeet(as(o, o.target), as(before, target), zoom) && !targetsMeet(as(o, o.target), as(before, before.target), zoom));
       const dx = target.x - before.target.x;
       const dy = target.y - before.target.y;
       this.targets.set(key, meets
-        ? { target, since: Infinity, rank: before.rank, landedSeq: 0, arrivesNow: true, at: null, node, seq, say: before.say, nameW: before.nameW, sayW: before.sayW }
+        ? { target, since: Infinity, rank: before.rank, known: before.known, landedSeq: 0, arrivesNow: true, at: null, node, seq, say: before.say, nameW: before.nameW, sayW: before.sayW }
         : { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
       return;
     }
@@ -264,8 +280,8 @@ class CursorField {
     this.targets.set(key, stays
       ? { ...before, target, node, seq }
       : before
-        ? { target, since: Infinity, rank, landedSeq: 0, at: null, node, seq, say: before.say, nameW: before.nameW, sayW: before.sayW }
-        : { target, since: Infinity, rank, landedSeq: 0, at: null, node, seq, say: false, ...this.pendingSay.get(key) });
+        ? { target, since: Infinity, rank, known, landedSeq: 0, at: null, node, seq, say: before.say, nameW: before.nameW, sayW: before.sayW }
+        : { target, since: Infinity, rank, known, landedSeq: 0, at: null, node, seq, say: false, ...this.pendingSay.get(key) });
     this.pendingSay.delete(key);
   }
 
@@ -280,9 +296,12 @@ class CursorField {
     // reload, r21); one carried onto a cursor already there comes after it.
     let since = entry.rank;
     if (entry.arrivesNow) {
-      for (const [other, o] of this.targets) if (other !== key && o.since !== Infinity) since = Math.max(since, o.since);
+      // After every cursor already there: half a millisecond past the
+      // latest, never a tie (the backend's own arrival, sent to every tab,
+      // replaces it, and is later still).
+      for (const [other, o] of this.targets) if (other !== key && o.since !== Infinity) since = Math.max(since, o.since + 0.5);
     }
-    this.targets.set(key, { ...entry, since, landedSeq: (this.arrivals += 1), arrivesNow: false, at: { ...entry.target } });
+    this.targets.set(key, { ...entry, since, landedSeq: (this.arrivals += 1), arrivesNow: false, at: { ...entry.target }, anchor: { ...entry.target } });
     this.version += 1;
   }
 
@@ -311,7 +330,10 @@ class CursorField {
         key: k,
         target: v.target,
         since: v.since !== Infinity ? v.since : UNLANDED + order.get(k)!,
-        seq: v.landedSeq,
+        // A backend arrival never ties (it strictly increases), and when
+        // two did, the key breaks it in every tab alike; this tab's landing
+        // order only for events with no backend arrival (review 9, LOW-2).
+        seq: v.known ? undefined : v.landedSeq,
         say: v.say,
         nameW: v.nameW,
         sayW: v.sayW,
@@ -422,7 +444,7 @@ class CursorField {
    * (r17 item 3). Folded cursors aren't
    * drawn and don't count.
    */
-  sayRoom(key: string, side: 'right' | 'left', at: Point, zoom: number): { wait: boolean; foreign: boolean } {
+  sayRoom(key: string, side: 'right' | 'left', at: Point, zoom: number, strict = false): { wait: boolean; foreign: boolean } {
     this.purge();
     const out = { wait: false, foreign: false };
     const own = this.targets.get(key);
@@ -443,7 +465,10 @@ class CursorField {
       const under = spot?.above.includes(key) ?? false;
       // A flyer: on its arc, or still landing at speed (its last frames
       // after the arc hands off are part of the same pass).
-      if (isMoving(m, zoom)) {
+      // `strict` (a say whose wait is capped, about to show): a moving
+      // cursor is in the way like any other, so the say never lands on one
+      // carried at speed, or a flyer still passing (#211 review 9, LOW-6).
+      if (!strict && isMoving(m, zoom)) {
         // Its whole drawn block, arrow and name pill: two labels on top of
         // each other are as unreadable as a say over an arrow (GM r22).
         const box = theirs.bounds;
@@ -614,8 +639,9 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   // new event, which runs the loop's effect again anyway).
   const arrivedRef = useRef(cursor.arrivedAt);
   arrivedRef.current = cursor.arrivedAt;
+  const knownRef = useRef(cursor.arrivalKnown);
+  knownRef.current = cursor.arrivalKnown;
   // Its column (StackSpot.column), as last laid out.
-  const columnRef = useRef<string | null>(null);
   const exited = useRef(onExited);
   const [arrivedSeq, setArrivedSeq] = useState(0);
   // Each holds the event seq whose timer ran out, so a new event resets both.
@@ -774,7 +800,20 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       return;
     }
     if (!capped) return;
-    setSay.current(right.foreign ? 'left' : 'right');
+    // Capped: it shows now, on a side where nothing is drawn, moving
+    // cursors included (LOW-6); with neither side clear it holds again,
+    // and from there goes to the Agent log (the cap, unchanged).
+    const strictRight = field.sayRoom(cursor.key, 'right', m.pos, z, true);
+    if (!strictRight.foreign) {
+      setSay.current('right');
+      return;
+    }
+    if (!field.sayRoom(cursor.key, 'left', m.pos, z, true).foreign) {
+      setSay.current('left');
+      return;
+    }
+    sayWaitSince.current = performance.now();
+    setSay.current('hold');
   };
   // A say that replaces one still drawn: does its side still have room?
   const sayFits = useRef<() => boolean>(() => false);
@@ -836,7 +875,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // A new count cursor waits unseen while the one it replaces exits from
     // the same slot (review 8, MEDIUM-2).
     const opacityTarget = () => (collapsedRef.current
-      || (countingRef.current && field.countExiting(columnRef.current, cursor.key))
+      || (countingRef.current && field.countExiting(cursor.key))
       ? 0 : idleRef.current ? AGENT_CURSOR_IDLE_OPACITY : 1);
     const sayPending = () => sayState.current === 'hold' || sayState.current === 'wait' || sayState.current === 'log';
     // The person's pointer in flow coordinates, or null off the canvas. The
@@ -987,7 +1026,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const nodeAt = nodeId !== null
         ? (lookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined)?.internals?.positionAbsolute ?? null
         : null;
-      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current);
+      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -1000,7 +1039,6 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const shifted = laid !== undefined && layoutSig.current !== null
         && (laid.sig !== layoutSig.current || revs !== layoutRevs.current);
       if (laid) {
-        columnRef.current = laid.column ?? null;
         layoutSig.current = laid.sig;
         layoutRevs.current = revs;
       }
@@ -1233,15 +1271,21 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   useEffect(() => {
     wake.current();
   }, [idle, drawsSay]);
+  // A new backend arrival with no new event (a node move carried it,
+  // agentPresenceArrival): the loop reads it and takes its new place.
+  useEffect(() => {
+    wake.current();
+  }, [cursor.arrivedAt, cursor.arrivalKnown]);
   // A count cursor on its way out holds its slot until it is gone (its exit
   // ends in the loop, above), or until it comes back.
+  const exitGroup = leaving && counting ? shownFold.group : null;
   useLayoutEffect(() => {
-    if (!leaving || !counting || columnRef.current === null) return undefined;
-    field.exitingCounts.set(cursor.key, columnRef.current);
+    if (!exitGroup) return undefined;
+    field.exitingCounts.set(cursor.key, exitGroup);
     return () => {
       if (field.exitingCounts.delete(cursor.key)) field.wakeAll();
     };
-  }, [leaving, counting, field, cursor.key]);
+  }, [exitGroup, field, cursor.key]);
   useLayoutEffect(() => {
     updateLabel.current();
   });

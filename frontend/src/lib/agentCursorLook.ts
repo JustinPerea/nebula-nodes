@@ -379,6 +379,11 @@ export interface StackSpot {
   collapsedInto?: string;
 }
 
+/** A carry is an arrival only this far (flow px) from where the cursor
+ *  arrived: the backend's ARRIVAL_RADIUS (services/agent_presence.py), so a
+ *  tab and the backend count the same carries (#211 follow-up, r23 item 2). */
+export const AGENT_CURSOR_ARRIVAL_RADIUS = 16;
+
 /** A column draws at most this many cursors: from the next member on, the
  *  last slot is one count cursor ("2 more") for all of them (r17 item 1). */
 export const AGENT_CURSOR_COLUMN_DRAWN = 3;
@@ -451,7 +456,11 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
       const x = targets[head].x;
       let prev: number | null = null;
       for (const m of drawn) {
-        const tip = prev === null ? targets[m] : { x, y: out[prev].tip.y + stackStepPx(says[prev]) };
+        // A step under the one before, never above its own target: a member
+        // whose slot would sit above the point it aims at is drawn at that
+        // point instead, and the slots under it shift down (a gap is fine).
+        // GM - Design, #211 follow-up r23 item 1.
+        const tip = prev === null ? targets[m] : { x, y: Math.max(out[prev].tip.y + stackStepPx(says[prev]), targets[m].y) };
         out[m] = {
           tip,
           shape: cursorShape(tip, false, nameW[m]),
@@ -480,6 +489,9 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
   // laid out as they are then): its target near an earlier one's, or its
   // arrow and name at its target meeting an earlier one where it is drawn.
   // Then, while any drawn cursor meets another column, those columns join.
+  // The first check's meeting is not redundant with the loop since members
+  // keep to their own targets (r23 item 1): without it, 739 of 50,000
+  // random sets lay out differently (#211 review 9, NIT-1, checked).
   let laid: Laid[] = [];
   for (let i = 0; i < n; i += 1) {
     const before = lay(i);

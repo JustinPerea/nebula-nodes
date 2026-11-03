@@ -84,6 +84,19 @@ export interface AgentPresenceEvent {
    * it, so every tab, before and after a reload, draws the same cursors in
    * full (GM - Design, PR #211 r21). */
   since?: number;
+  /** Person tabs only: this event's own id, so the Agent log lists an action
+   *  once, a live event and its replay alike, and never drops a real repeat
+   *  (#211 follow-up, LOW-5). */
+  eventId?: string;
+}
+
+/** Person tabs only: node moves carried these session cursors past their
+ *  arrival radius, so they arrive now (backend agent_presence.carry_nodes,
+ *  GM - Design #211 follow-up r23 item 2). Every tab, and a reload, stack
+ *  them by these. */
+export interface AgentPresenceArrivalEvent {
+  type: 'agentPresenceArrival';
+  cursors: { agentId: string; key: string; ordinal: number; since: number }[];
 }
 
 /** Person tabs only, right after a verified hello: every live cursor, so a
@@ -376,6 +389,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | AgentPresenceReplayEvent
+  | AgentPresenceArrivalEvent
   | SocketDemotedEvent
   | AgentStatusEvent
   | AgentRunEvent

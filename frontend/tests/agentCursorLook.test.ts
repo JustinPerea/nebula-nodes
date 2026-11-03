@@ -24,6 +24,7 @@ import {
   sessionName,
   AGENT_CURSOR_PILL,
   AGENT_CURSOR_PILL_EDGE,
+  AGENT_CURSOR_ARRIVAL_RADIUS,
   AGENT_CURSOR_STACK,
   AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_ARROW_POINTS,
@@ -56,7 +57,9 @@ const BUILT_IN = [CLAUDE, CODEX, ...PALETTE];
  * arrival is the count cursor, in the last slot, standing for every later
  * arrival; nothing else is drawn in a column of four or more.
  */
-function expectColumnsCapped(list: readonly { key: string; target: { x: number; y: number }; since: number }[], laid: Map<string, StackSpot>) {
+type Listed = { key: string; target: { x: number; y: number }; since: number; say?: boolean; nameW?: number };
+
+function expectColumnsCapped(list: readonly Listed[], laid: Map<string, StackSpot>, zoom = 1) {
   const columns = new Map<string, { key: string; since: number }[]>();
   for (const e of list) {
     const id = laid.get(e.key)!.column!;
@@ -74,6 +77,21 @@ function expectColumnsCapped(list: readonly { key: string; target: { x: number; 
     const ys = drawn.map((m) => laid.get(m.key)!.at.y);
     // Drawn top to bottom in arrival order.
     for (let i = 1; i < ys.length; i += 1) expect(ys[i]).toBeGreaterThan(ys[i - 1]);
+    // Never above its own target, and never more than its steps plus gaps
+    // below it (GM r23 item 1): the steps of the drawn members above it,
+    // plus how far above its target the highest of their targets is.
+    let steps = 0;
+    let highest = -Infinity;
+    for (const [k, m] of drawn.entries()) {
+      const own = list.find((e) => e.key === m.key)!;
+      const tip = laid.get(m.key)!.at.y;
+      expect(tip).toBeGreaterThanOrEqual(own.target.y - 1e-6);
+      const gap = Math.max(0, highest - own.target.y);
+      expect(tip - own.target.y).toBeLessThanOrEqual(steps + gap + 1e-6);
+      if (k > 0) expect(steps).toBeLessThanOrEqual((k * stackStepPx(true)) / zoom + 1e-6);
+      steps += stackStepPx(Boolean(own.say)) / zoom;
+      highest = Math.max(highest, tip);
+    }
     if (members.length > AGENT_CURSOR_COLUMN_DRAWN) {
       const slot = members[AGENT_CURSOR_COLUMN_DRAWN - 1];
       expect(drawn.map((m) => m.key)).toEqual(members.slice(0, AGENT_CURSOR_COLUMN_DRAWN).map((m) => m.key));
@@ -87,6 +105,56 @@ function expectColumnsCapped(list: readonly { key: string; target: { x: number; 
     }
   }
   return columns;
+}
+
+/**
+ * Review 9, LOW-4: no column is bigger than its joins make it. A cursor is
+ * drawn somewhere from its own target down to where it ends up (a column
+ * growing down pushes it one slot at a time), so its reach is the box its
+ * arrow and name own over that sweep. Two cursors are linked when their
+ * targets are within radiusPx or their reaches touch (clearPx). In each
+ * column the links over its members connect them all, and a cursor linked
+ * to no other cursor is a column of one. Screen px at `zoom`.
+ */
+function expectColumnsJustified(list: readonly Listed[], laid: Map<string, StackSpot>, zoom: number) {
+  const { radiusPx, clearPx } = AGENT_CURSOR_STACK;
+  const screen = (p: { x: number; y: number }) => ({ x: p.x * zoom, y: p.y * zoom });
+  const reach = new Map(list.map((e) => {
+    const from = cursorShape(screen(e.target), false, e.nameW);
+    const to = cursorShape(screen(laid.get(e.key)!.at), false, e.nameW);
+    return [e.key, {
+      left: Math.min(from.bounds.left, from.unit.left, to.bounds.left, to.unit.left),
+      right: Math.max(from.bounds.right, from.unit.right, to.bounds.right, to.unit.right),
+      top: Math.min(from.bounds.top, from.unit.top, to.bounds.top, to.unit.top),
+      bottom: Math.max(from.bounds.bottom, from.unit.bottom, to.bounds.bottom, to.unit.bottom),
+    }];
+  }));
+  const linked = (a: Listed, b: Listed) => {
+    const ta = screen(a.target);
+    const tb = screen(b.target);
+    if (Math.hypot(ta.x - tb.x, ta.y - tb.y) <= radiusPx + 1e-9) return true;
+    const ra = reach.get(a.key)!;
+    const rb = reach.get(b.key)!;
+    return ra.left < rb.right + clearPx && rb.left < ra.right + clearPx && ra.top < rb.bottom + clearPx && rb.top < ra.bottom + clearPx;
+  };
+  const columns = new Map<string, Listed[]>();
+  for (const e of list) {
+    const id = laid.get(e.key)!.column!;
+    if (!columns.has(id)) columns.set(id, []);
+    columns.get(id)!.push(e);
+  }
+  for (const members of columns.values()) {
+    const seen = new Set([members[0].key]);
+    const queue = [members[0]];
+    while (queue.length) {
+      const a = queue.pop()!;
+      for (const b of members) if (!seen.has(b.key) && linked(a, b)) { seen.add(b.key); queue.push(b); }
+    }
+    expect(seen.size).toBe(members.length);
+  }
+  for (const e of list) {
+    if (list.every((o) => o.key === e.key || !linked(e, o))) expect(columns.get(laid.get(e.key)!.column!)!.length).toBe(1);
+  }
 }
 
 function seeded(seed: number) {
@@ -605,13 +673,14 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }]);
   });
 
-  it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in and steps on past it', () => {
+  it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in; it stays on its own target and the next steps on under it (r23)', () => {
     const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 60, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)], 1);
     // b is past a's label (60 > 42), so it rests on its target; c would land
     // at 42, over b's arrow, so b's column joins a's. The joined column is
-    // laid out in arrival order (GM r21): a, then b a step under it, then c
-    // in the last slot, with d folded into its count cursor.
-    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }, { x: 0, y: 2 * S }]);
+    // laid out in arrival order (GM r21), never above a member's own target
+    // (r23 item 1): a, then b at its own target 60 (its slot, 42, is above
+    // it: a gap), then c a step under b, the count, with d folded into it.
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + S }]);
   });
 
   // Review 8, MEDIUM-1: joins first, then each final column in arrival
@@ -622,7 +691,8 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expectColumnsCapped(list, laid);
     expect(laid.get('A1')!.at).toEqual({ x: 0, y: 0 });
     expect(laid.get('A2')!.at).toEqual({ x: 0, y: S });
-    expect(laid.get('B1')!.at).toEqual({ x: 0, y: 2 * S });
+    // Its slot (2S) or its own target, whichever is lower (r23 item 1).
+    expect(laid.get('B1')!.at).toEqual({ x: 0, y: Math.max(2 * S, by) });
     expect(laid.get('B1')!.group).toEqual(['B1', 'B2', 'C']);
     expect(laid.get('B2')!.collapsedInto).toBe('B1');
     expect(laid.get('C')!.collapsedInto).toBe('B1');
@@ -681,7 +751,8 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
         rand() < 0.3,
       ));
       const laid = deStackLayout(list, zoom);
-      const columns = expectColumnsCapped(list, laid);
+      const columns = expectColumnsCapped(list, laid, zoom);
+      expectColumnsJustified(list, laid, zoom);
       for (const members of columns.values()) {
         if (members.length > AGENT_CURSOR_COLUMN_DRAWN) counted += 1;
         // A column of members whose own targets are far apart: a merge.
@@ -700,6 +771,58 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(merged).toBeGreaterThan(300);
     expect(counted).toBeGreaterThan(300);
   }, 120_000);
+
+  // Review 9, MEDIUM-1 and GM r23 item 1: review 9's own fuzz (20,000 sets
+  // found 4,184 drawn cursors above their targets, the worst by 157 px).
+  it('property (review 9\'s fuzz): 20,000 sets of 2 to 8, says on 30%: no drawn cursor above its own target, none more than its steps plus gaps below it, every column justified', () => {
+    const rand = seeded(9911);
+    let gapped = 0;
+    let joined = 0;
+    for (let round = 0; round < 20_000; round += 1) {
+      const count = 2 + Math.floor(rand() * 7);
+      const list = Array.from({ length: count }, (_, i) => entry(
+        String.fromCharCode(97 + i), [0, 4, 8][Math.floor(rand() * 3)], rand() * 220, i + 1, rand() < 0.3));
+      const laid = deStackLayout(list, 1);
+      const columns = expectColumnsCapped(list, laid, 1);
+      expectColumnsJustified(list, laid, 1);
+      for (const members of columns.values()) {
+        if (members.length > 1) joined += 1;
+        // A member drawn on its own target below a full step: a gap.
+        const drawn = members.filter((m) => !laid.get(m.key)!.collapsedInto);
+        for (let k = 1; k < drawn.length; k += 1) {
+          const step = laid.get(drawn[k].key)!.at.y - laid.get(drawn[k - 1].key)!.at.y;
+          if (step > stackStepPx(true) + 1e-6) gapped += 1;
+        }
+      }
+    }
+    expect(joined).toBeGreaterThan(10_000);
+    expect(gapped).toBeGreaterThan(1_000);
+  }, 120_000);
+
+  // Review 9, NIT-1, checked: the first pass's meeting at a newcomer's own
+  // target is a rule of its own, not redundant. c's arrow at its target
+  // sits under a's label; c is also within 16 px of b. Without the check c
+  // joins only b, is pushed a step under it, and a's label is never seen.
+  it('a newcomer whose arrow at its own target meets a cursor joins its column, even when it also joins another (review 9 NIT-1)', () => {
+    const list = [entry('a', 38, 114, 1), entry('b', 57, 157, 2), entry('c', 50, 155, 3)];
+    const laid = deStackLayout(list, 1);
+    expectColumnsCapped(list, laid, 1);
+    expect([...laid].map(([k, v]) => [k, v.at.x, v.at.y, v.column])).toEqual([
+      ['a', 38, 114, 'a'], ['b', 38, 157, 'a'], ['c', 38, 199, 'a'],
+    ]);
+  });
+
+  it('the tab counts a carry as an arrival past the backend\'s own radius (r23 item 2)', () => {
+    const backend = readFileSync(resolve(__dirname, '../../backend/services/agent_presence.py'), 'utf8');
+    expect(Number(backend.match(/^ARRIVAL_RADIUS = ([\d.]+)$/m)![1])).toBe(AGENT_CURSOR_ARRIVAL_RADIUS);
+  });
+
+  it('review 9\'s minimal example: b stays on its node at 120 when d\'s arrival joins the columns (r23 item 1)', () => {
+    const list = [entry('a', 0, 0, 1), entry('b', 0, 120, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)];
+    const laid = deStackLayout(list, 1);
+    expectColumnsCapped(list, laid, 1);
+    expect(laid.get('b')!.at).toEqual({ x: 0, y: 120 });
+  });
 
   it('ex4 (review 8\'s fuzz): the head of a joined stack is never the count cursor', () => {
     const rows = [['a', 8, 93.6], ['b', 0, 205.7], ['c', 0, 194.2], ['d', 4, 211.3], ['e', 4, 97.1], ['f', 4, 129.6]] as const;
@@ -775,7 +898,8 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
           pairs += 1;
         }
       }
-      expectColumnsCapped(list, laid);
+      expectColumnsCapped(list, laid, zoom);
+      expectColumnsJustified(list, laid, zoom);
     }
     expect(pairs).toBeGreaterThan(300);
     expect(columnPairs).toBeGreaterThan(100);

@@ -2795,6 +2795,175 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(where()).toEqual({ d: { x: 500, y: 344 }, a: { x: 500, y: 344 + S }, b: { x: 500, y: 344 + 2 * S } });
   });
 
+  // #211 follow-up (review 9, LOW-3; GM r23 item 2): the backend's new
+  // arrival for a cursor a node move carried (agentPresenceArrival) moves
+  // it in the column, in every tab alike, with a glide.
+  it('a new backend arrival with no event moves the cursor to its place in the column, gliding (r23 item 2, the rank-change branch)', () => {
+    render(<AgentCursorLayer />);
+    for (const [k, o] of [['a', 1], ['b', 2], ['c', 3]] as const) {
+      send(event({ ...session(k, o), target: { x: 300, y: 300 }, since: 1000 * o }));
+      flush();
+    }
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S } });
+    act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 1, since: 4000 }]); });
+    const seq = byKey('a').dataset;
+    let prev = where();
+    let maxStep = 0;
+    for (let i = 0; i < 150; i += 1) {
+      tickFrames(1);
+      const w = where();
+      for (const k of ['a', 'b', 'c']) maxStep = Math.max(maxStep, Math.abs(w[k].y - prev[k].y));
+      prev = w;
+    }
+    flush();
+    // b heads now, c under it, a last: it arrived now.
+    expect(where()).toEqual({ b: { x: 300, y: 300 }, c: { x: 300, y: 300 + S }, a: { x: 300, y: 300 + 2 * S } });
+    expect(maxStep).toBeLessThan(20);
+    expect(byKey('a').dataset).toBe(seq);
+    // The same arrival again changes nothing.
+    act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 1, since: 4000 }]); });
+    flush();
+    expect(where().a).toEqual({ x: 300, y: 300 + 2 * S });
+  });
+
+  // The node is dragged, then dropped: the carried cursor lands on the
+  // column and comes after its members, though it arrived first and its key
+  // sorts first (so neither its old arrival nor a tie puts it ahead).
+  const dragNode = (id: string, to: { x: number; y: number }, steps = 10) => {
+    const node = lookupRef.current.get(id) as Entry;
+    const from = node.internals.positionAbsolute;
+    for (let i = 1; i <= steps; i += 1) {
+      const next = new Map(lookupRef.current) as Map<string, Entry>;
+      next.set(id, { ...node, dragging: i < steps, internals: { ...node.internals, positionAbsolute: {
+        x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps } } });
+      lookupRef.current = next as never;
+      notifyStore();
+      tickFrames(1);
+    }
+  };
+
+  it('a cursor carried by its node onto a column past its arrival radius comes after it at once, in this tab (r23 item 2, arrivesNow)', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+    flush();
+    for (const [k, o] of [['d', 1], ['e', 2]] as const) {
+      send(event({ ...session(k, o), target: { x: 500, y: 344 }, since: 1000 * o }));
+      flush();
+    }
+    dragNode('n2', { x: 400, y: 300 });
+    flush();
+    // A pan wakes every cursor, so each is drawn at its place in the column
+    // as this tab now orders it, not where the drop left it.
+    pane.transform = [5, 0, 1];
+    notifyStore();
+    flush();
+    pane.transform = [0, 0, 1];
+    notifyStore();
+    flush();
+    // Before the backend's arrival comes: a is under d and e, not their head.
+    expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+    // The backend's arrival (later than both) agrees: nothing moves.
+    act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 3, since: 9000 }]); });
+    flush();
+    expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+  });
+
+  it('a carry within the arrival radius is no arrival: the cursor keeps its place, as the backend counts it', () => {
+    render(<AgentCursorLayer />);
+    // e on n1 arrived first; a came later to a point just clear under it.
+    send(event({ ...session('e', 3), target: { nodeId: 'n1' }, since: 500 }));
+    flush();
+    send(event({ ...session('a', 1), target: { x: 500, y: 394 }, since: 1000 }));
+    flush();
+    expect(where()).toEqual({ e: { x: 500, y: 344 }, a: { x: 500, y: 394 } });
+    // n1 dropped 12 px lower: e now meets a, but a 12 px carry is no
+    // arrival: e still heads, and a steps under it.
+    dragNode('n1', { x: 400, y: 312 });
+    flush();
+    expect(where()).toEqual({ e: { x: 500, y: 356 }, a: { x: 500, y: 356 + S } });
+  });
+
+  // Review 9, LOW-2: equal arrivals tie-break by the cursor's key, the same
+  // in every tab, never by which landed first here.
+  it('two cursors with the same backend arrival stack by key in every tab, whichever lands first', () => {
+    const order = () => Object.entries(where()).sort((p, q) => p[1].y - q[1].y).map(([k]) => k);
+    const first = render(<AgentCursorLayer />);
+    send(event({ ...session('b', 2), target: { x: 300, y: 300 }, since: 7000 }));
+    flush();
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, since: 7000 }));
+    flush();
+    const one = order();
+    first.unmount();
+    act(() => { useAgentPresenceStore.getState().clear(); });
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, since: 7000 }));
+    flush();
+    send(event({ ...session('b', 2), target: { x: 300, y: 300 }, since: 7000 }));
+    flush();
+    expect(order()).toEqual(one);
+    expect(one).toEqual(['a', 'b']);
+  });
+
+  // Review 9, NIT-2: the head and the count's member leave together; the
+  // new count still waits for the old one's exit (keyed by its group).
+  it('the head and the count cursor\'s member leave in one moment: never more than 3 shown (review 9 NIT-2)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(byKey('c').dataset.count).toBe('4');
+    act(() => {
+      const st = useAgentPresenceStore;
+      const agents = { ...st.getState().agents };
+      for (const k of Object.keys(agents)) if (['a', 'c'].some((g) => agents[k].session?.key === g.repeat(12))) delete agents[k];
+      st.setState({ agents });
+    });
+    let exitFrames = 0;
+    for (let i = 0; i < 120; i += 1) {
+      tickFrames(1);
+      const live = cursors().filter((el) => el.dataset.session !== 'a'.repeat(12));
+      const shown = live.filter((el) => Number(el.style.opacity) > 0.05);
+      expect(shown.length).toBeLessThanOrEqual(3);
+      if (cursors().some((el) => el.dataset.session === 'c'.repeat(12) && Number(el.style.opacity) > 0.05)) exitFrames += 1;
+    }
+    flush();
+    expect(exitFrames).toBeGreaterThan(2);
+    expect(byKey('e').dataset.count).toBe('2');
+  });
+
+  // Review 9, LOW-6: a say capped while a cursor keeps moving through its
+  // room shows where nothing is drawn, moving cursors included: never on
+  // top of it.
+  it('a say capped while another cursor keeps moving through its room shows on the free side, never over it (review 9 LOW-6)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      blocker('a', 1, 300, 300);
+      blocker('e', 2, 400, 318);
+      // e takes off along the say's row and never stops: it turns back
+      // every 6 frames.
+      send(event({ ...session('e', 2), target: { x: 470, y: 318 } }));
+      frame();
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const a = byKey('a');
+      let flip = true;
+      let shownAt = -1;
+      for (let i = 0; i < 90; i += 1) {
+        if (i % 6 === 5) {
+          flip = !flip;
+          send(event({ ...session('e', 2), target: { x: flip ? 470 : 400, y: 318 } }));
+        }
+        frame();
+        if (painted(a)) {
+          if (shownAt < 0) shownAt = i;
+          expect(a.dataset.saySide).toBe('left');
+          expect(anyMeet()).toBe(false);
+        }
+      }
+      expect(shownAt).toBeGreaterThan(30);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the count cursor never draws its own say; its member\'s say is in the log only (r18, review 8 V2)', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd']);

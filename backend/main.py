@@ -13828,6 +13828,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
     else:
         await _broadcast_graph_sync(edit=True, moved=normalized)
+    await _carry_cursors(previous, normalized)
     publish_action(f"Updated layout for {len(normalized)} node(s)")
     if moved:
         if arrange is None:
@@ -13838,6 +13839,23 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
+
+
+async def _carry_cursors(previous: dict[str, Any], positions: dict[str, dict[str, float]]) -> None:
+    """The session cursors on nodes this write moved: one carried past its
+    arrival radius arrives now (agent_presence.carry_nodes, GM - Design,
+    #211 follow-up r23 item 2), and the person's tabs get its new arrival
+    so they, and a reload, stack it the same way. Person tabs only: no
+    agent reads it. Decoration: it never fails the move."""
+    try:
+        deltas = {node_id: (position["x"] - before["x"], position["y"] - before["y"])
+                  for node_id, position in positions.items()
+                  if isinstance(before := previous.get(node_id), dict) and "x" in before and "y" in before}
+        updates = agent_presence.carry_nodes(deltas) if deltas else []
+        if updates:
+            await manager.broadcast_browser({"type": "agentPresenceArrival", "cursors": updates})
+    except Exception:  # noqa: BLE001 - decoration must not break a layout write
+        logging.getLogger("nebula.presence").exception("cursor carry failed")
 
 
 def _require_clear_intent(force: bool) -> None:
