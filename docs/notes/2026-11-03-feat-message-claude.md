@@ -103,3 +103,72 @@ rule).
 - In a background tab, ResizeObserver and rAF are throttled, so a measured
   height is stale until the tab is in front. This only affected the live
   harness.
+
+## Round 2 (GM r61)
+
+Merged #216's round 3k (f6f077b4) first. The only text conflict was
+AgentLog's imports. #216's rules hold for the box's log: folded for the card,
+the log is its header's height. Only while a give is in force does the shown
+height bound it. A collapse by the person still shows the header, the
+preview and the composer, as r50 asked.
+
+- **A, the run's fold:** the run is the latest message with no reply yet.
+  While its session works on it, or Nebula waits on it, the status row is the
+  header of the fold that holds the run's actions ("› Claude is working ·
+  Cooler sky"). It is always the last row. With nothing folded yet, the status
+  row stands alone at the end. The fold keeps its id when the reply lands, so
+  it stays where it is and stays open or shut, and it reads "› 2 actions"
+  above the reply. "Sent" and the held line stay under the message, since
+  they are settled lines, not news.
+- **B, the locked look:** the field row's border is drawn on a `::before`
+  layer at `--sr-disabled-opacity` (0.48). The placeholder and the "/" key
+  get the same opacity. The lock line sits outside the row and is never
+  dimmed. The field stays focusable and aria-disabled.
+- **1, resize:** the handle sits on the edge away from the one the log is
+  pinned by (the top edge when docked). It is a focusable separator, and the
+  arrow keys move it 16 px. A drag writes an inline height (`data-sized`,
+  kept in `localStorage` as `nebula:agentLog:h`), clamped to at least the
+  header, one row and the composer, and at most the log's bottom less
+  `--agent-log-top-chrome` (the Updates chip row: 72 px). A double-click or
+  the toolbar's layout reset gives the height back to the content. The
+  measure the card and the docked chat read is the height with no give: the
+  person's height, or the box's own height while `--agent-log-give` is 0,
+  otherwise the last one. `--agent-log-h` on `<body>` now comes from that
+  measure, not from a separate observer. The give's floor now includes the
+  composer, so a squeeze never clips it.
+- **3, names:** waiting, working, stopped and dropped-at-send lines use the
+  session's cursor label. The stopped line names the session that stopped
+  most recently. "Connect Claude Code…" stays literal.
+- **4, questions:** an answered set drops its buttons and shows "You chose
+  “…”." (every choice named, joined with commas and "and"). A set of one
+  question with no options is answered from the composer: Answer sets an
+  "Answering “…”" chip with × Remove and focuses the field. The answer takes
+  the questions API's 1,000-character limit. Sending calls the questions
+  store's send, which is `question.answered`, never a thread message. Only
+  offline locks it, since no listener is needed. A set that mixes such a
+  question with others keeps the Agents panel's form. A typed answer's quiet
+  line, "You answered “…”.", is my wording: GM gave only "You chose".
+- **Budget:** round 1's 6,647 B entry growth was `lib/personThread.ts`
+  (5,628 B: Rollup can't split a module the eager store shares with the
+  deferred box), `store/personThreadStore.ts` (2,690 B) and small change.
+  The box-only half moved to `lib/personThreadBox.ts` (the Agent log's
+  chunk). In the entry, `lib/personThread.ts` is now 3,047 B and holds only
+  what the store needs. The entry went from 472,411 B to 469,727 B.
+- **CI ratchets (round 1's failures):** the `{e.message}` allowance moved
+  with the row to `AgentLogEntryRow.tsx`. An "other" send failure now reads
+  `failureMessage` (`otherFailureLine`). The store keeps the failure's kind
+  and recipient, and the box writes r50's lines with the label. The field's
+  ring is drawn on its row (`:has(.message-box__field:focus-visible)`),
+  which is registered in `focusRingCss`'s CLEARED list.
+
+### Surprises
+
+- jsdom has no layout. The resize tests use a cascade model over
+  `layouts.css` then `messageBox.css` (`tests/helpers/logCascade.ts`,
+  generalized from #216's round-3k test). They mock the log's
+  offsetHeight/clientHeight and resolve token probes.
+- The sized rule's `100vh` term doesn't matter in practice: with no give,
+  `max(shown-h, …)` is the person's height already, and the JS clamp sets
+  the maximum.
+- At full height (top at 72 px), the resized log covers the right end of the
+  selection toolbar at 1440. GM may want a lower ceiling.

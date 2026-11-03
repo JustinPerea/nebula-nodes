@@ -15,17 +15,19 @@ import { noteBackendConnection } from '../../lib/backendConnection';
 import { OFFLINE_LINE_ID } from '../BackendConnectionStatus';
 import { RequestFailedError } from '../../lib/errorCopy';
 import {
-  COPY_COMMAND,
-  HELD_LINE,
-  LISTENER_DROPPED_LINE,
-  NOT_CONNECTED_LINE,
   PIN_SHOW_EVENT,
-  SERVER_FAILED_LINE,
-  STOPPED_LISTENING_LINE,
   UPDATES_OPEN_EVENT,
   type ChannelListener,
   type ThreadRow,
 } from '../../lib/personThread';
+import {
+  COPY_COMMAND,
+  HELD_LINE,
+  LISTENER_DROPPED_LINE,
+  NOT_CONNECTED_LINE,
+  SERVER_FAILED_LINE,
+  STOPPED_LISTENING_LINE,
+} from '../../lib/personThreadBox';
 import { expectEveryTryAgainLine } from '../../../tests/helpers/tryAgainLine';
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };

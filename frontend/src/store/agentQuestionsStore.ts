@@ -25,6 +25,9 @@ import { failureMessage } from '../lib/errorCopy';
  * keeps its draft and an open form.
  */
 
+/** The most words one answer takes (the backend's limit). */
+export const ANSWER_TEXT_MAX = 1000;
+
 export interface QuestionSetEntry {
   view: QuestionSetView;
   /** This tab's key to answer it: only on an open set, only on the person's socket. */
@@ -189,7 +192,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
     setText: (setId, questionId, text) => {
       const question = get().sets[setId]?.view.questions.find((q) => q.id === questionId);
       if (!question?.allowText) return;
-      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, 1000) }));
+      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, ANSWER_TEXT_MAX) }));
     },
 
     send: async (setId) => {

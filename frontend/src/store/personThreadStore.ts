@@ -3,7 +3,7 @@ import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { cursorLabel } from '../lib/agentCursorLabel';
 import {
   MESSAGE_MAX,
-  failureLine,
+  otherFailureLine,
   mergeMissing,
   mergeRows,
   newClientId,
@@ -38,10 +38,23 @@ export interface PendingSend {
 
 export interface SendFailureState {
   kind: SendFailure;
-  line: string;
+  /** Only for a failure that is neither the server's nor the listener's
+   * (failureMessage's words). Those two get r50's lines, which the box
+   * writes with the recipient's cursor label (r61 answer 3). */
+  line: string | null;
   /** The failed send's id: Try again with the same words reuses it, so the server keeps one row. */
   clientId: string;
   text: string;
+  /** The listener it was for. */
+  to: string;
+}
+
+/** r61 answer 4: a question with no options, answered from the composer.
+ * Sending answers it (question.answered), never a thread message. */
+export interface AnsweringState {
+  setId: string;
+  questionId: string;
+  question: string;
 }
 
 interface PersonThreadState {
@@ -63,12 +76,15 @@ interface PersonThreadState {
   announcement: { id: string; text: string } | null;
   pending: PendingSend | null;
   failure: SendFailureState | null;
+  answering: AnsweringState | null;
   setDraft: (text: string, selectedIds?: () => string[]) => void;
   removeContext: () => void;
   choose: (listenerId: string | null) => void;
   markRead: () => void;
   send: (to: string) => Promise<boolean>;
   clearFailure: () => void;
+  answer: (target: AnsweringState) => void;
+  stopAnswering: () => void;
   reset: () => void;
 }
 
@@ -88,6 +104,7 @@ function initial() {
     announcement: null as { id: string; text: string } | null,
     pending: null as PendingSend | null,
     failure: null as SendFailureState | null,
+    answering: null as AnsweringState | null,
   };
 }
 
@@ -111,6 +128,10 @@ export const usePersonThreadStore = create<PersonThreadState>((set, get) => ({
 
   clearFailure: () => set({ failure: null }),
 
+  answer: (target) => set({ answering: target }),
+
+  stopAnswering: () => set({ answering: null }),
+
   send: async (to) => {
     const state = get();
     if (state.pending) return false;
@@ -127,7 +148,7 @@ export const usePersonThreadStore = create<PersonThreadState>((set, get) => ({
       // The draft comes back (r50: kept across failures), unless they began another.
       set((current) => ({
         pending: null,
-        failure: { kind, line: failureLine(kind, error), clientId, text },
+        failure: { kind, line: kind === 'other' ? otherFailureLine(error) : null, clientId, text, to },
         draft: current.draft.trim() ? current.draft : text,
         contextIds: current.draft.trim() ? current.contextIds : pending.nodeIds,
       }));

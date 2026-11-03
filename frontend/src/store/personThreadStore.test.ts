@@ -6,7 +6,7 @@ vi.mock('../lib/apiRequest', () => ({ apiRequest }));
 import { noteActivity, receiveRows, receiveSync, replyAnnouncement, terminalListening, usePersonThreadStore } from './personThreadStore';
 import { useUIStore } from './uiStore';
 import { RequestFailedError } from '../lib/errorCopy';
-import { LISTENER_DROPPED_LINE, SERVER_FAILED_LINE, type ThreadRow } from '../lib/personThread';
+import type { ThreadRow } from '../lib/personThread';
 import type { AgentPresenceEvent } from '../lib/wsClient';
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
@@ -75,7 +75,8 @@ describe('sending', () => {
     const state = usePersonThreadStore.getState();
     expect(state.draft).toBe('Warmer');
     expect(state.contextIds).toEqual(['n1']);
-    expect(state.failure).toMatchObject({ kind: 'server', line: SERVER_FAILED_LINE });
+    // The box writes r50's line for it (with the recipient's label): the store keeps the kind.
+    expect(state.failure).toMatchObject({ kind: 'server', line: null, to: 'ch_1' });
     const first = JSON.parse(apiRequest.mock.calls[0][2].body).clientId;
     apiRequest.mockResolvedValueOnce(answer({ id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent' }));
     expect(await usePersonThreadStore.getState().send('ch_1')).toBe(true);
@@ -87,7 +88,7 @@ describe('sending', () => {
     apiRequest.mockRejectedValueOnce(new RequestFailedError("Couldn't send your message.", 409, { code: 'listener_stopped' }));
     usePersonThreadStore.getState().setDraft('Warmer');
     await usePersonThreadStore.getState().send('ch_1');
-    expect(usePersonThreadStore.getState().failure).toMatchObject({ kind: 'stopped', line: LISTENER_DROPPED_LINE });
+    expect(usePersonThreadStore.getState().failure).toMatchObject({ kind: 'stopped', line: null, to: 'ch_1' });
   });
 
   it('holds "Sending…" 400 ms once it showed', async () => {

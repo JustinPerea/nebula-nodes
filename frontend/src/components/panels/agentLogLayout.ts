@@ -116,3 +116,39 @@ export function samePosition(a: Position, b: Position) {
     && a.offsetX === b.offsetX
     && a.offsetY === b.offsetY;
 }
+
+// -- the person's height (GM - Design r61 answer 1) ---------------------------
+
+/** Where the person's height is kept, as the log's drag position is. */
+export const HEIGHT_STORAGE_KEY = 'nebula:agentLog:h';
+/** One arrow key moves the resize handle this far. */
+export const RESIZE_KEY_STEP = 16;
+
+export interface HeightBounds {
+  /** The header, one row and the composer. */
+  min: number;
+  /** The viewport, less the top chrome. */
+  max: number;
+}
+
+/** The edge the handle sits on: the one away from the edge the log is
+ * pinned by (docked, or dragged and pinned by its bottom: the top edge). */
+export function resizeEdge(position: Position | null): 'top' | 'bottom' {
+  return !position || position.anchorY === 'bottom' ? 'top' : 'bottom';
+}
+
+/** A drag of the handle from `startY` to `y`, from a log `start` px tall. */
+export function resizedHeight(start: number, startY: number, y: number, edge: 'top' | 'bottom'): number {
+  return edge === 'top' ? start + (startY - y) : start + (y - startY);
+}
+
+/** The person's height within its bounds; a window too short for the min gives the min. */
+export function clampLogHeight(height: number, bounds: HeightBounds): number {
+  return Math.round(Math.max(bounds.min, Math.min(height, Math.max(bounds.min, bounds.max))));
+}
+
+/** A saved height, or null for none (the log follows its content). */
+export function readStoredHeight(raw: string | null): number | null {
+  const value = raw === null ? Number.NaN : Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+}

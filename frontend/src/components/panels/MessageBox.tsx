@@ -4,8 +4,8 @@ import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ScrollFade } from '../ScrollFade';
 import { AgentLogEntryRow } from './AgentLogEntryRow';
 import { OFFLINE_LINE_ID } from '../BackendConnectionStatus';
-import { usePersonThreadStore, type PendingSend } from '../../store/personThreadStore';
-import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { usePersonThreadStore, type AnsweringState, type PendingSend } from '../../store/personThreadStore';
+import { ANSWER_TEXT_MAX, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import type { AgentLogEntry } from '../../store/agentLogStore';
@@ -15,33 +15,46 @@ import { AGENT_FALLBACK_COLOR, agentLogTones } from '../../lib/agentCursorColor'
 import { cardTitle } from '../../lib/worldLabsWaiting';
 import { isCanvasShortcutTarget } from '../../lib/canvasShortcutScope';
 import {
+  MESSAGE_MAX,
+  PIN_SHOW_EVENT,
+  SENDING_AFTER_MS,
+  UPDATES_OPEN_EVENT,
+  type ChannelListener,
+  type ThreadAgent,
+  type ThreadRow,
+} from '../../lib/personThread';
+import {
+  ANSWERING_PREFIX,
+  ANSWERING_REMOVE_LABEL,
+  ANSWER_LABEL,
   COPIED_LINE,
   COPY_COMMAND,
   COPY_LABEL,
-  MESSAGE_MAX,
   NEW_REPLY_PILL,
   NOT_CONNECTED_LINE,
-  PIN_SHOW_EVENT,
-  UPDATES_OPEN_EVENT,
-  SENDING_AFTER_MS,
   SENDING_LINE,
-  STOPPED_LISTENING_LINE,
+  SERVER_FAILED_LINE,
   actionsLabel,
+  answeredLine,
   availability,
   contextChipLabel,
   contextRemoveLabel,
   counterAnnouncement,
   counterLine,
   foldActions,
+  listenerDroppedLine,
   messageStatus,
   nextStatusChange,
+  oneLine,
   repliedAfter,
+  runMessage,
+  statusLeadsRun,
+  stoppedListeningLine,
   unreadLabel,
+  withRun,
   type Availability,
-  type ChannelListener,
-  type ThreadAgent,
-  type ThreadRow,
-} from '../../lib/personThread';
+  type StatusLine,
+} from '../../lib/personThreadBox';
 import '../../styles/messageBox.css';
 
 
@@ -149,15 +162,23 @@ function useNow(until: number | null): number {
   return now;
 }
 
-function MessageStatus({ row, rows }: { row: ThreadRow; rows: readonly ThreadRow[] }) {
-  const key = row.to?.sessionKey ?? null;
+/** A message's state line (r50's table) under its recipient's cursor label (r61). */
+function useMessageStatus(row: ThreadRow | null, rows: readonly ThreadRow[]): StatusLine {
+  const key = row?.to?.sessionKey ?? null;
   const activity = usePersonThreadStore((s) => (key ? s.activity[key] ?? null : null));
   const [until, setUntil] = useState<number | null>(null);
   const now = useNow(until);
+  if (!row) {
+    if (until !== null) setUntil(null);
+    return null;
+  }
   const replied = repliedAfter(row, rows);
-  const status = messageStatus(row, now, { replied, activity });
   const next = replied ? null : nextStatusChange(row, now, activity);
   if (next !== until) setUntil(next);
+  return messageStatus(row, now, { replied, activity, label: agentLabel(row.to?.agent, row.to?.session) });
+}
+
+function StatusView({ status, row }: { status: StatusLine; row: ThreadRow }) {
   if (!status) return null;
   return (
     <div className={`message-box__status message-box__status--${status.kind}`} style={shade(row.to?.agent, row.to?.session)}>
@@ -165,6 +186,10 @@ function MessageStatus({ row, rows }: { row: ThreadRow; rows: readonly ThreadRow
       <span>{status.text}</span>
     </div>
   );
+}
+
+function MessageStatus({ row, rows }: { row: ThreadRow; rows: readonly ThreadRow[] }) {
+  return <StatusView status={useMessageStatus(row, rows)} row={row} />;
 }
 
 function ShowButton({ onShow, label = 'Show', disabled = false }: { onShow: () => void; label?: string; disabled?: boolean }) {
@@ -181,14 +206,18 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   const drafts = useAgentQuestionsStore((s) => (row.questionId ? s.drafts[row.questionId] : undefined));
   const busy = useAgentQuestionsStore((s) => (row.questionId ? s.busy[row.questionId] : false));
   const error = useAgentQuestionsStore((s) => (row.questionId ? s.errors[row.questionId] : undefined));
+  const answeringHere = usePersonThreadStore((s) => Boolean(row.questionId && s.answering?.setId === row.questionId));
   const questions = entry?.view.questions ?? row.questions ?? [];
   const open = entry?.view.status === 'open' && Boolean(entry.answerKey);
-  const answers = entry?.view.answers ?? null;
+  // r61 answer 4: once answered, the row drops its buttons for a quiet line.
+  const answered = entry?.view.status === 'answered' ? answeredLine(entry.view.answers ?? []) : null;
   // One single-choice question: a click is the answer (r50's mock). Anything
   // more keeps its picks until Send, as the Agents panel's form does.
-  // (A question that also takes words keeps them for the Agents panel's form.)
   const oneClick = questions.length === 1 && !questions[0].multiple && questions[0].options.length > 0;
-  const needsForm = questions.some((question) => question.options.length === 0);
+  // r61 answer 4: one question with no options is answered from the composer.
+  // A set that mixes one with others keeps the Agents panel's form.
+  const fromComposer = questions.length === 1 && questions[0].options.length === 0;
+  const needsForm = !fromComposer && questions.some((question) => question.options.length === 0);
   const setId = row.questionId ?? '';
   function pick(questionId: string, option: string) {
     if (!open || busy) return;
@@ -200,11 +229,11 @@ function QuestionRow({ row }: { row: ThreadRow }) {
     <div className="message-box__card" style={shade(row.agent, row.session)}>
       <div className="message-box__who"><span className="message-box__dot" aria-hidden="true" />{agentLabel(row.agent, row.session)} asks</div>
       {questions.map((question) => {
-        const picked = open ? drafts?.[question.id]?.choices ?? [] : answers?.find((a) => a.questionId === question.id)?.choices ?? [];
+        const picked = open ? drafts?.[question.id]?.choices ?? [] : entry?.view.answers?.find((a) => a.questionId === question.id)?.choices ?? [];
         return (
           <div key={question.id} className="message-box__question" role="group" aria-label={question.text}>
             <p className="message-box__text">{question.text}</p>
-            {question.options.length > 0 && (
+            {!answered && question.options.length > 0 && (
               <div className="message-box__options">
                 {question.options.map((option) => (
                   <button key={option} type="button" className="message-box__option"
@@ -218,17 +247,24 @@ function QuestionRow({ row }: { row: ThreadRow }) {
           </div>
         );
       })}
+      {answered && <p className="message-box__answered">{answered}</p>}
+      {open && fromComposer && (
+        <button type="button" className="message-box__show" aria-pressed={answeringHere}
+          onClick={() => usePersonThreadStore.getState().answer({ setId, questionId: questions[0].id, question: questions[0].text })}>
+          {ANSWER_LABEL}
+        </button>
+      )}
       {open && needsForm && (
         <button type="button" className="message-box__show"
           onClick={() => {
-            // Words only: the Agents panel's form takes them (the Updates list holds it).
+            // Words beside choices: the Agents panel's form takes them (the Updates list holds it).
             window.dispatchEvent(new CustomEvent(UPDATES_OPEN_EVENT));
             useAgentQuestionsStore.getState().openForm(setId);
           }}>
-          Answer
+          {ANSWER_LABEL}
         </button>
       )}
-      {open && !oneClick && !needsForm && (
+      {open && !oneClick && !needsForm && !fromComposer && (
         <button type="button" className="message-box__show" aria-disabled={busy || undefined}
           onClick={() => { if (!busy) void useAgentQuestionsStore.getState().send(setId); }}>
           Send answers
@@ -239,7 +275,13 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   );
 }
 
-function RowView({ row, rows, nodeName }: { row: ThreadRow; rows: readonly ThreadRow[]; nodeName: (id: string) => string }) {
+function RowView({ row, rows, nodeName, inRun }: {
+  row: ThreadRow;
+  rows: readonly ThreadRow[];
+  nodeName: (id: string) => string;
+  /** The run's status leads its fold at the end of the thread (r61 A). */
+  inRun: boolean;
+}) {
   const proposalOpen = useCanvasProposalsStore((s) => Boolean(row.proposalId && s.proposals[row.proposalId]));
   const name = agentLabel(row.agent, row.session);
   switch (row.kind) {
@@ -248,7 +290,7 @@ function RowView({ row, rows, nodeName }: { row: ThreadRow; rows: readonly Threa
         <div className="message-box__row message-box__row--you">
           <div className="message-box__who">You</div>
           <p className="message-box__text">{row.text}</p>
-          <MessageStatus row={row} rows={rows} />
+          {!inRun && <MessageStatus row={row} rows={rows} />}
         </div>
       );
     case 'reply':
@@ -292,15 +334,28 @@ function RowView({ row, rows, nodeName }: { row: ThreadRow; rows: readonly Threa
   }
 }
 
-function ActionsRow({ entries }: { entries: AgentLogEntry[] }) {
+/**
+ * The actions between two rows, folded: "3 actions" (r50). r61 A: the run
+ * going on now leads with its status ("› Claude is working · Cooler sky"),
+ * which opens to that run's actions; when the reply lands it settles to
+ * "› 1 action" above the reply, keeping its place and whether it was open.
+ */
+function ActionsFold({ entries, status, row }: { entries: AgentLogEntry[]; status?: StatusLine; row?: ThreadRow }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
+  const lead = status && statusLeadsRun(status) ? status : null;
+  if (entries.length === 0) {
+    // The run's status with nothing to fold yet: the last row on its own.
+    return lead && row ? <StatusView status={lead} row={row} /> : null;
+  }
   return (
     <div className="message-box__actions">
-      <button type="button" className="message-box__fold" aria-expanded={open} aria-controls={listId}
+      <button type="button" className={`message-box__fold${lead ? ` message-box__fold--${lead.kind}` : ''}`}
+        aria-expanded={open} aria-controls={listId} style={lead && row ? shade(row.to?.agent, row.to?.session) : undefined}
         onClick={() => setOpen((value) => !value)}>
         <ChevronRight className="message-box__fold-icon" size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
-        {actionsLabel(entries.length)}
+        {lead && <span className="message-box__breath" aria-hidden="true" />}
+        <span className="message-box__fold-text">{lead ? lead.text : actionsLabel(entries.length)}</span>
       </button>
       {open && (
         <ul id={listId} className="agent-log__list message-box__action-list">
@@ -343,7 +398,15 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   const [firstIds] = useState(() => new Set(rows.map((row) => row.id)));
   // The tab's own send shows as its pending row until it settles.
   const shownRows = useMemo(() => rows.filter((row) => !(pending && row.clientId === pending.clientId)), [rows, pending]);
-  const items = useMemo(() => foldActions(shownRows, entries.filter((entry) => entry.source === 'agent')), [shownRows, entries]);
+  const run = useMemo(() => runMessage(shownRows), [shownRows]);
+  const runStatus = useMessageStatus(run, shownRows);
+  // r61 A: while the run's session works on the message (or it waits on it),
+  // its status leads the run's fold at the end, so the newest thing is last.
+  const leads = statusLeadsRun(runStatus);
+  const items = useMemo(() => {
+    const folded = foldActions(shownRows, entries.filter((entry) => entry.source === 'agent'));
+    return withRun(folded, leads ? run : null);
+  }, [shownRows, entries, run, leads]);
   const lastId = shownRows[shownRows.length - 1]?.id ?? '';
   // r50: a new row while the person reads further up shows "New reply" instead of scrolling.
   const [seenLastId, setSeenLastId] = useState(lastId);
@@ -404,8 +467,10 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
             <li key={item.kind === 'row' ? item.row.id : item.id}
               className={item.kind === 'row' && !firstIds.has(item.row.id) ? 'message-box__item message-box__row--enter' : 'message-box__item'}>
               {item.kind === 'row'
-                ? <RowView row={item.row} rows={shownRows} nodeName={nodeName} />
-                : <ActionsRow entries={item.entries} />}
+                ? <RowView row={item.row} rows={shownRows} nodeName={nodeName} inRun={leads && item.row.id === run?.id} />
+                : item.kind === 'run'
+                  ? <ActionsFold entries={item.entries} status={runStatus} row={item.message} />
+                  : <ActionsFold entries={item.entries} />}
             </li>
           ))}
           {pending && <li className="message-box__item"><PendingRow key={pending.clientId} pending={pending} /></li>}
@@ -496,11 +561,40 @@ function ReplyAnnouncer() {
   return <div className="message-box__announce" aria-live="polite" aria-atomic="true">{spoken?.text ?? ''}</div>;
 }
 
+/** The listener's cursor label, by id (a send's recipient may have gone). */
+function listenerLabel(listeners: readonly ChannelListener[], listenerId: string | null | undefined): string {
+  const entry = listenerId ? listeners.find((one) => one.listenerId === listenerId) : undefined;
+  return entry ? agentLabel(entry.agent, entry.session) : 'Claude';
+}
+
+/** r61 answer 4: "Answering “<the question on one line>”", with × Remove. */
+function AnsweringChip({ answering }: { answering: AnsweringState }) {
+  return (
+    <div className="message-box__context message-box__context--answering">
+      <span className="message-box__context-label">
+        {ANSWERING_PREFIX} “<span className="message-box__context-quote">{oneLine(answering.question)}</span>”
+      </span>
+      <button type="button" className="message-box__context-remove" aria-label={ANSWERING_REMOVE_LABEL}
+        onClick={() => usePersonThreadStore.getState().stopAnswering()}>
+        <X size={11} strokeWidth={1.75} aria-hidden="true" focusable="false" />
+      </button>
+    </div>
+  );
+}
+
 export function MessageComposer({ expanded }: { expanded: boolean }) {
   const draft = usePersonThreadStore((s) => s.draft);
   const contextIds = usePersonThreadStore((s) => s.contextIds);
   const pending = usePersonThreadStore((s) => s.pending);
   const failure = usePersonThreadStore((s) => s.failure);
+  const listeners = usePersonThreadStore((s) => s.listeners);
+  const answering = usePersonThreadStore((s) => s.answering);
+  // The question still open here (answered elsewhere, the chip goes).
+  const answerOpen = useAgentQuestionsStore((s) => {
+    const entry = answering ? s.sets[answering.setId] : undefined;
+    return Boolean(entry && entry.view.status === 'open' && entry.answerKey);
+  });
+  const answerBusy = useAgentQuestionsStore((s) => Boolean(answering && s.busy[answering.setId]));
   const state = useAvailability();
   const names = useNodeNames(contextIds);
   const field = useRef<HTMLTextAreaElement | null>(null);
@@ -510,22 +604,52 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   const [focused, setFocused] = useState(false);
   const [announced, setAnnounced] = useState('');
   const [lengthBefore, setLengthBefore] = useState(draft.length);
+  // Answering a question takes its own limit (an answer's words), not a message's.
+  const answeringNow = answering && answerOpen ? answering : null;
+  const max = answeringNow ? ANSWER_TEXT_MAX : MESSAGE_MAX;
   if (lengthBefore !== draft.length) {
     setLengthBefore(draft.length);
-    const words = counterAnnouncement(lengthBefore, draft.length);
+    const words = counterAnnouncement(lengthBefore, draft.length, max);
     if (words) setAnnounced(words);
-    else if (counterLine(draft.length) === null && announced) setAnnounced('');
+    else if (counterLine(draft.length, max) === null && announced) setAnnounced('');
   }
 
+  // Answered here or in the Agents panel, or closed: the chip goes, the draft stays.
+  useEffect(() => {
+    if (answering && !answerOpen) usePersonThreadStore.getState().stopAnswering();
+  }, [answering, answerOpen]);
+
+  // "Answer" on a question row brings the person here (r61 answer 4).
+  const answeringId = answeringNow?.questionId ?? null;
+  useEffect(() => {
+    if (!answeringId) return;
+    returnTo.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement : null;
+    field.current?.focus();
+  }, [answeringId]);
+
+  const { offline } = useCanvasLock();
   const ready = state.kind === 'ready';
+  // An answer goes to the question, not to a listener: only offline locks it.
+  const live = answeringNow ? !offline : ready;
   const recipientName = ready ? agentLabel(state.recipient.agent, state.recipient.session) : 'Claude';
   const label = `Message ${recipientName}`;
-  const counter = counterLine(draft.length);
-  const lockLine = state.kind === 'notConnected' ? NOT_CONNECTED_LINE : state.kind === 'stopped' ? STOPPED_LISTENING_LINE : null;
+  const counter = counterLine(draft.length, max);
+  // r61 answer 3: the product by name, a session by its cursor label.
+  const lockLine = answeringNow ? null
+    : state.kind === 'notConnected' ? NOT_CONNECTED_LINE
+      : state.kind === 'stopped' ? stoppedListeningLine(agentLabel(state.listener.agent, state.listener.session)) : null;
+  const failureText = answeringNow || !failure ? null
+    : failure.kind === 'server' ? SERVER_FAILED_LINE
+      : failure.kind === 'stopped' ? listenerDroppedLine(listenerLabel(listeners, failure.to))
+        : failure.line ?? SERVER_FAILED_LINE;
+  const lineText = lockLine ?? failureText;
   // Offline: the app's own row says it (the house pattern), no line here.
-  const described = [state.kind === 'offline' ? OFFLINE_LINE_ID : lockLine || failure ? lineId : null, counter ? counterId : null]
+  const described = [state.kind === 'offline' ? OFFLINE_LINE_ID : lineText ? lineId : null, counter ? counterId : null]
     .filter(Boolean).join(' ') || undefined;
-  const canSend = ready && !pending && draft.trim().length > 0 && draft.length <= MESSAGE_MAX;
+  const canSend = answeringNow
+    ? live && !answerBusy && draft.trim().length > 0 && draft.length <= max
+    : ready && !pending && draft.trim().length > 0 && draft.length <= MESSAGE_MAX;
 
   // r50: "/" focuses the composer from anywhere on the canvas, unless a text field has focus.
   useEffect(() => {
@@ -541,8 +665,23 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  async function sendAnswer(target: AnsweringState) {
+    const text = usePersonThreadStore.getState().draft.trim();
+    const questions = useAgentQuestionsStore.getState();
+    questions.setText(target.setId, target.questionId, text);
+    // A failure shows on the question's row (its own line); the words stay here.
+    if (await questions.send(target.setId)) {
+      usePersonThreadStore.setState((current) => (current.draft.trim() === text ? { draft: '', contextIds: [], answering: null } : { answering: null }));
+    }
+  }
+
   function send() {
-    if (!canSend || state.kind !== 'ready') return;
+    if (!canSend) return;
+    if (answeringNow) {
+      void sendAnswer(answeringNow);
+      return;
+    }
+    if (state.kind !== 'ready') return;
     void usePersonThreadStore.getState().send(state.recipient.listenerId);
   }
 
@@ -569,7 +708,8 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
 
   return (
     <div className={`message-box__composer${expanded ? ' message-box__composer--expanded' : ''}`}>
-      {contextIds.length > 0 && (
+      {answeringNow && <AnsweringChip answering={answeringNow} />}
+      {!answeringNow && contextIds.length > 0 && (
         <div className="message-box__context">
           <span className="message-box__context-label">{contextChipLabel(names)}</span>
           <button type="button" className="message-box__context-remove" aria-label={contextRemoveLabel(names)}
@@ -578,8 +718,9 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           </button>
         </div>
       )}
-      <div className="message-box__field-row" data-locked={!ready || undefined}>
-        {ready && state.listening.length >= 2 && <RecipientChip state={state} />}
+      {/* r61 B: locked, its chrome dims as the locked opener's does (messageBox.css). */}
+      <div className="message-box__field-row" data-locked={!live || undefined}>
+        {!answeringNow && ready && state.listening.length >= 2 && <RecipientChip state={state} />}
         <AutoGrowTextarea
           textareaRef={field}
           className="message-box__field"
@@ -587,11 +728,11 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           value={draft}
           placeholder={label}
           aria-label={label}
-          aria-disabled={!ready || undefined}
+          aria-disabled={!live || undefined}
           aria-describedby={described}
-          maxLength={MESSAGE_MAX}
+          maxLength={max}
           readOnly={false}
-          onChange={(event) => usePersonThreadStore.getState().setDraft(event.target.value, selectedIds)}
+          onChange={(event) => usePersonThreadStore.getState().setDraft(event.target.value, answeringNow ? undefined : selectedIds)}
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -602,10 +743,10 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           <kbd className="message-box__key" aria-hidden="true">/</kbd>
         )}
       </div>
-      {(lockLine || failure) && state.kind !== 'offline' && (
-        <div className={`message-box__line${failure && !lockLine ? ' message-box__line--failed' : ''}`}>
-          <span id={lineId}>{lockLine ?? failure?.line}</span>
-          {state.kind === 'notConnected' && <CopyCommand />}
+      {lineText && state.kind !== 'offline' && (
+        <div className={`message-box__line${failureText && !lockLine ? ' message-box__line--failed' : ''}`}>
+          <span id={lineId}>{lineText}</span>
+          {state.kind === 'notConnected' && !answeringNow && <CopyCommand />}
           {!lockLine && failure?.kind === 'server' && (
             <button type="button" className="message-box__show" aria-disabled={!canSend || undefined} onClick={send}>Try again</button>
           )}

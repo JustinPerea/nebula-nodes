@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PALETTE_CANT_RUN } from '../src/lib/paletteNotice';
-import { SERVER_FAILED_LINE } from '../src/lib/personThread';
+import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
 // GM r23 on #208: a line shown with a [Try again] button ends in "Try

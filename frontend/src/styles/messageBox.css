@@ -1,10 +1,14 @@
 /*
- * The Message box in the Agent log (GM - Design r50, r55): the collapsed
- * bar's preview and composer, and the expanded thread with the composer at
- * its foot. The log's height follows its content here (AgentLog writes the
- * measured height to --agent-log-h for the docked chat above it), growing to
- * at most half the viewport. Motion: the layout spring (--agent-log-spring)
- * only; reduced motion jumps.
+ * The Message box in the Agent log (GM - Design r50, r55, r61): the
+ * collapsed bar's preview and composer, and the expanded thread with the
+ * composer at its foot. The log's height follows its content here, growing
+ * to at most half the viewport, until the person drags its handle (r61
+ * answer 1); then their height (inline, data-sized) wins until a
+ * double-click. AgentLog writes the height it has with no give to
+ * --agent-log-h for the docked chat above it. #216's rules hold: folded for
+ * the proposal card it is its header's height, and it is bounded by the
+ * shown height only while a give is in force (layouts.css). Motion: the
+ * layout spring (--agent-log-spring) only; reduced motion jumps.
  */
 
 .agent-log.agent-log--messaging {
@@ -19,8 +23,88 @@
   transition: height 420ms var(--agent-log-spring);
 }
 
-.agent-log.agent-log--messaging.agent-log--open {
-  min-height: var(--agent-h-open);
+/* Collapsed by the person, it is its header, the preview and the composer
+   (r50), whatever height the person gave it open; folded for the card it
+   stays its header's height (layouts.css, #216 review 3 MEDIUM-1). */
+.agent-log.agent-log--messaging:not(.agent-log--open):not([data-card-collapsed]) {
+  height: auto !important;
+}
+
+/* Folded for the card, what the header covers is out of reach too: no tab
+   stop on a composer the person can't see. */
+.agent-log.agent-log--messaging[data-card-collapsed] > :not(.agent-log__drag-row) {
+  visibility: hidden;
+}
+
+/* Following its content, open: no shorter than the open log's token, unless
+   a give takes it lower (#216 r6), and no taller than half the viewport;
+   while a give is in force, the shown height bounds it. */
+.agent-log.agent-log--messaging.agent-log--open:not([data-sized]) {
+  min-height: min(var(--agent-h-open), var(--agent-log-shown-h, var(--agent-h-open)));
+}
+
+.agent-log.agent-log--messaging.agent-log--open[data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-floating] {
+  max-height: min(50vh, max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 100000)));
+  transition: --agent-log-give 420ms var(--agent-log-spring), height 420ms var(--agent-log-spring);
+}
+
+/* The person's height wins over the content's (r61 answer 1): up to the
+   viewport less the top chrome (AgentLog clamps it), bounded by the shown
+   height only while a give is in force. */
+.agent-log.agent-log--messaging.agent-log--open[data-sized][data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-sized][data-floating] {
+  max-height: max(var(--agent-log-shown-h), calc(100vh - var(--agent-log-top-chrome, 0px) - var(--agent-log-give) * 100000));
+}
+
+.agent-log.agent-log--messaging.agent-log--open[data-sized]:not([data-docked]):not([data-floating]) {
+  max-height: calc(100vh - var(--agent-log-top-chrome, 0px));
+}
+
+/* While the hand moves the handle, the box follows it with no spring. */
+.agent-log.agent-log--messaging[data-resizing] {
+  transition: none;
+}
+
+/* -- the resize handle (r61 answer 1) ---------------------------------------- */
+
+.agent-log__resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.agent-log__resize[data-edge='top'] {
+  top: 0;
+}
+
+.agent-log__resize[data-edge='bottom'] {
+  bottom: 0;
+}
+
+.agent-log__resize-grip {
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  transition: background-color 220ms var(--agent-log-spring);
+}
+
+.agent-log__resize:hover .agent-log__resize-grip,
+.agent-log[data-resizing] .agent-log__resize-grip {
+  background: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.agent-log__resize:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: -2px;
 }
 
 .agent-log--messaging .agent-log__drag-row {
@@ -166,6 +250,14 @@
   margin-top: 8px;
 }
 
+/* r61 answer 4: an answered question's quiet line. */
+.message-box__answered {
+  margin: 8px 0 0;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-size: var(--sr-type-label, 11px);
+  line-height: var(--sr-line-body, 1.45);
+}
+
 .message-box__status {
   display: flex;
   align-items: center;
@@ -210,7 +302,30 @@
 }
 
 .message-box__fold-icon {
+  flex: 0 0 auto;
   transition: transform 220ms var(--agent-log-spring);
+}
+
+/* r61 A: the run's status leads its fold ("› Claude is working · …"): the
+   status line's look, the breathing dot in the session's shade. */
+.message-box__fold--working,
+.message-box__fold--waiting {
+  max-width: 100%;
+  border-color: transparent;
+  padding-left: 0;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.message-box__fold .message-box__breath {
+  flex: 0 0 auto;
+  margin: 0 2px;
+}
+
+.message-box__fold-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-box__fold[aria-expanded='true'] .message-box__fold-icon {
@@ -329,6 +444,20 @@
   white-space: nowrap;
 }
 
+/* "Answering “<the question>”": the question is cut to the chip's one line,
+   and its closing quote stays. */
+.message-box__context--answering .message-box__context-label {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.message-box__context-quote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-box__context-remove {
   display: inline-flex;
   align-items: center;
@@ -380,6 +509,41 @@
 
 .message-box__field-row[data-locked] .message-box__field {
   color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+}
+
+/* r61 B: locked, the composer looks locked: its chrome (the border and the
+   placeholder, and the "/" key) dims as the locked opener's does, at the
+   disabled opacity; the lock line under it stays at full strength, and the
+   field stays focusable (aria-disabled, described by the line). The border
+   is drawn on a layer of its own so only it dims. */
+.message-box__field-row {
+  position: relative;
+}
+
+.message-box__field-row[data-locked] {
+  border-color: transparent;
+}
+
+.message-box__field-row[data-locked]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: inherit;
+  opacity: var(--sr-disabled-opacity);
+  pointer-events: none;
+}
+
+.message-box__field-row[data-locked] .message-box__field::placeholder,
+.message-box__field-row[data-locked] .message-box__key {
+  opacity: var(--sr-disabled-opacity);
+}
+
+/* The field clears its own outline: the row it sits in draws the token
+   ring while it has keyboard focus (the house focus rule). */
+.message-box__field-row:has(.message-box__field:focus-visible) {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: 1px;
 }
 
 .message-box__key {
@@ -495,6 +659,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-log.agent-log--messaging,
+  .agent-log.agent-log--messaging.agent-log--open[data-docked],
+  .agent-log.agent-log--messaging.agent-log--open[data-floating],
+  .agent-log__resize-grip,
   .message-box__fold-icon,
   .message-box__show,
   .message-box__option,

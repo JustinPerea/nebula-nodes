@@ -1,37 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SENDING_AFTER_MS,
+  SENDING_HOLD_MS,
+  mergeMissing,
+  mergeRows,
+  otherFailureLine,
+  sanitizeListener,
+  sanitizeRow,
+  sendFailure,
+  sendingSettleDelay,
+  type ChannelListener,
+  type ThreadRow,
+} from './personThread';
+import {
   HELD_LINE,
   LISTENER_DROPPED_LINE,
   NOT_CONNECTED_LINE,
-  QUIET_SENT_MS,
-  SENDING_AFTER_MS,
-  SENDING_HOLD_MS,
   SERVER_FAILED_LINE,
+  QUIET_SENT_MS,
   STOPPED_LISTENING_LINE,
   WAITING_LINE,
   WORKING_SETTLE_MS,
+  actionsLabel,
   availability,
   contextChipLabel,
   contextRemoveLabel,
   counterAnnouncement,
   counterLine,
-  failureLine,
   foldActions,
-  mergeMissing,
-  mergeRows,
   messageStatus,
   nextStatusChange,
   repliedAfter,
-  sanitizeListener,
-  sanitizeRow,
-  sendFailure,
-  sendingSettleDelay,
   unreadLabel,
-  actionsLabel,
-  type ChannelListener,
-  type ThreadRow,
-} from './personThread';
-import { RequestFailedError } from './errorCopy';
+} from './personThreadBox';
+import { RequestFailedError, failureMessage } from './errorCopy';
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -202,13 +204,12 @@ describe('failures', () => {
   it('tells the listener dropping from the server not answering', () => {
     const stopped = new RequestFailedError("Couldn't send your message.", 409, { code: 'listener_stopped' });
     expect(sendFailure(stopped)).toBe('stopped');
-    expect(failureLine('stopped', stopped)).toBe(LISTENER_DROPPED_LINE);
     expect(sendFailure(new RequestFailedError('x', 503))).toBe('server');
     expect(sendFailure(new TypeError('Failed to fetch'))).toBe('server');
-    expect(failureLine('server', null)).toBe(SERVER_FAILED_LINE);
     const refused = new RequestFailedError("Couldn't send your message.", 422, { detail: 'too long' });
     expect(sendFailure(refused)).toBe('other');
-    expect(failureLine('other', refused)).toBe(refused.message);
+    // failureMessage's words under the send's heading, never the Error's raw message.
+    expect(otherFailureLine(refused)).toBe(failureMessage(refused, "Couldn't send your message."));
   });
 });
 

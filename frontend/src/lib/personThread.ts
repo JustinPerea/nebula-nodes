@@ -3,14 +3,14 @@
  * the person messages a Claude Code session that listens through the Nebula
  * channel, from the composer in the Agent log, and reads its replies there.
  *
- * Pure parts and the one API call, shared by the eager store
- * (store/personThreadStore.ts) and the deferred box (components/panels/MessageBox.tsx).
- * Every state comes from something Nebula saw (the request in flight, the
- * listener's push or hold, an event from that session, a reply, a timer),
- * never from a read receipt.
+ * The eager part: the rows, the listeners and the one API call, which the
+ * store (store/personThreadStore.ts, loaded with the app) needs. Everything
+ * only the deferred box reads (its words, states and folds) lives in
+ * lib/personThreadBox.ts, in the Agent log's chunk (GM r61's budget: only
+ * the thread store belongs in the entry).
  */
 import { apiRequest } from './apiRequest';
-import { RequestFailedError, quotedNames } from './errorCopy';
+import { RequestFailedError, failureMessage } from './errorCopy';
 import { cleanSession } from './agentCursorLabel';
 import type { AgentPresenceSession } from './wsClient';
 
@@ -31,25 +31,8 @@ export interface ChannelListenersEvent {
 }
 
 export const MESSAGE_MAX = 2000;
-/** "N left" shows from here (the composer's counter, PromptDialog's form). */
-export const MESSAGE_COUNTER_FROM = 200;
-/** Spoken past these only (GM r23 item 4, the PromptDialog rule). */
-export const MESSAGE_ANNOUNCE_AT = [30, 10, 0] as const;
-export const COPY_COMMAND = 'nebula mcp connect claude-code --channel';
-
-// GM r50 and r55, verbatim (curly quotes and apostrophes, the single …).
-export const SENDING_LINE = 'Sending…';
-export const WAITING_LINE = 'Waiting for Claude';
-export const WORKING_LINE = 'Claude is working';
-export const SENT_LINE = 'Sent';
-export const HELD_LINE = 'Sends in a few minutes because you’ve sent 200 this hour.';
-export const NOT_CONNECTED_LINE = 'Connect Claude Code with the Nebula channel to message it here.';
-export const STOPPED_LISTENING_LINE = 'Claude stopped listening. Reconnect nebula-listen with /mcp in its terminal to message it here.';
-export const SERVER_FAILED_LINE = 'Nebula couldn’t send your message because the server isn’t answering. Try again.';
-export const LISTENER_DROPPED_LINE = 'Nebula couldn’t send your message because Claude stopped listening. Reconnect it in the terminal, then send it again.';
-export const COPY_LABEL = 'Copy command';
-export const COPIED_LINE = 'Copied the command';
-export const NEW_REPLY_PILL = 'New reply';
+/** The heading a failed send is read under (apiRequest's, failureMessage's). */
+export const SEND_HEADING = "Couldn't send your message.";
 
 /** Window events the thread's Show buttons send: PinLayer pans to the pin
  * and opens it (detail {pinId}); the Updates corner opens its list. */
@@ -59,10 +42,6 @@ export const UPDATES_OPEN_EVENT = 'nebula:updates-open';
 /** The Sending… threshold and hold (r50: after 300 ms, held at least 400 ms). */
 export const SENDING_AFTER_MS = 300;
 export const SENDING_HOLD_MS = 400;
-/** "Working" settles back to "Waiting" after this with no event (the cursor's dim). */
-export const WORKING_SETTLE_MS = 20_000;
-/** "Sent" after this with nothing back. */
-export const QUIET_SENT_MS = 60_000;
 
 export interface ThreadAgent { id: string; name: string; color: string; verified: boolean }
 
@@ -190,88 +169,8 @@ export function mergeRows(current: readonly ThreadRow[], incoming: readonly Thre
   return [...byId.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
 
-// -- availability ----------------------------------------------------------------
-
-export type Availability =
-  | { kind: 'ready'; recipient: ChannelListener; listening: ChannelListener[] }
-  | { kind: 'notConnected' }
-  | { kind: 'stopped' }
-  | { kind: 'offline' };
-
-/** Which line locks the composer, if any. Offline wins (the app's row says it). */
-export function availability(listeners: readonly ChannelListener[], offline: boolean,
-  chosen: string | null, lastSeen: Readonly<Record<string, number>>): Availability {
-  if (offline) return { kind: 'offline' };
-  const listening = listeners.filter((entry) => entry.state === 'listening');
-  if (listening.length === 0) return listeners.length === 0 ? { kind: 'notConnected' } : { kind: 'stopped' };
-  const picked = chosen ? listening.find((entry) => entry.listenerId === chosen) : undefined;
-  return { kind: 'ready', recipient: picked ?? mostRecent(listening, lastSeen), listening };
-}
-
-/** The listening session that was active most recently: its last cursor event, else when it started listening. */
-export function mostRecent(listening: readonly ChannelListener[], lastSeen: Readonly<Record<string, number>>): ChannelListener {
-  const active = (entry: ChannelListener) => Math.max(entry.since, entry.sessionKey ? lastSeen[entry.sessionKey] ?? 0 : 0);
-  return [...listening].sort((a, b) => active(b) - active(a) || b.since - a.since)[0];
-}
-
-// -- a message's state ------------------------------------------------------------
-
+/** The last event of an agent session (by cursor key): when, and its action line. */
 export interface SessionActivity { at: number; line: string | null }
-
-export type StatusLine =
-  | { kind: 'held'; text: string }
-  | { kind: 'waiting'; text: string }
-  | { kind: 'working'; text: string }
-  | { kind: 'sent'; text: string }
-  | null;
-
-/**
- * What shows under a message (r50's table, r55's held row), from what Nebula
- * saw. `reply`: a reply from that agent after it (the row clears). `activity`:
- * the last event from the recipient's session (a cursor move, a say, an edit).
- */
-export function messageStatus(row: ThreadRow, now: number, options: {
-  replied: boolean;
-  activity: SessionActivity | null;
-}): StatusLine {
-  if (row.kind !== 'message' || options.replied) return null;
-  if (row.state === 'held') return { kind: 'held', text: HELD_LINE };
-  const event = options.activity && options.activity.at >= row.at ? options.activity : null;
-  if (event && now - event.at < WORKING_SETTLE_MS) {
-    return { kind: 'working', text: event.line ? `${WORKING_LINE} · ${event.line}` : WORKING_LINE };
-  }
-  const since = Math.max(row.at, event?.at ?? 0);
-  if (now - since >= QUIET_SENT_MS) return { kind: 'sent', text: SENT_LINE };
-  if (row.state === 'accepted') return { kind: 'waiting', text: WAITING_LINE };
-  return null;
-}
-
-/** When the line above may next change by itself (a timer, never polling the server). */
-export function nextStatusChange(row: ThreadRow, now: number, activity: SessionActivity | null): number | null {
-  if (row.kind !== 'message' || row.state === 'held') return null;
-  const event = activity && activity.at >= row.at ? activity : null;
-  const times = [Math.max(row.at, event?.at ?? 0) + QUIET_SENT_MS];
-  if (event) times.push(event.at + WORKING_SETTLE_MS);
-  const later = times.filter((t) => t > now);
-  return later.length ? Math.min(...later) : null;
-}
-
-/** "About “Hero shot”", "… and “Sky”", "About 4 nodes" (r50, quotedNames' rule). */
-export function contextChipLabel(names: readonly string[]): string {
-  return `About ${quotedNames(names, 'nodes')}`;
-}
-
-export function contextRemoveLabel(names: readonly string[]): string {
-  return names.length >= 2 ? 'Remove the nodes' : `Remove ${quotedNames(names, 'nodes')}`;
-}
-
-export function unreadLabel(count: number): string {
-  return count === 1 ? '1 unread reply' : `${count} unread replies`;
-}
-
-export function actionsLabel(count: number): string {
-  return count === 1 ? '1 action' : `${count} actions`;
-}
 
 // -- the API -------------------------------------------------------------------------
 
@@ -289,14 +188,14 @@ export function sendFailure(error: unknown): SendFailure {
 }
 
 export async function postMessage(body: { text: string; to: string; nodeIds: string[]; clientId: string }): Promise<ThreadRow> {
-  const response = await apiRequest("Couldn't send your message.", '/api/canvas/thread/messages', {
+  const response = await apiRequest(SEND_HEADING, '/api/canvas/thread/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const payload = await response.json() as { row?: unknown };
   const row = sanitizeRow(payload.row);
-  if (!row) throw new RequestFailedError("Couldn't send your message.", 500, { detail: 'invalid answer' });
+  if (!row) throw new RequestFailedError(SEND_HEADING, 500, { detail: 'invalid answer' });
   return row;
 }
 
@@ -323,51 +222,9 @@ export function mergeMissing(current: readonly ThreadRow[], incoming: readonly T
   return added.length ? mergeRows(current, added) : [...current];
 }
 
-/** The composer's line for a failed send (r50's because form). */
-export function failureLine(kind: SendFailure, error: unknown): string {
-  if (kind === 'server') return SERVER_FAILED_LINE;
-  if (kind === 'stopped') return LISTENER_DROPPED_LINE;
-  return error instanceof Error && error.message ? error.message : SERVER_FAILED_LINE;
-}
-
-/** Whether a reply from this message's agent (and session, when both name one) came after it. */
-export function repliedAfter(row: ThreadRow, rows: readonly ThreadRow[]): boolean {
-  if (row.kind !== 'message' || !row.to) return false;
-  const to = row.to;
-  return rows.some((other) => other.kind === 'reply' && other.at >= row.at && other.agent?.id === to.agent.id
-    && (!to.sessionKey || !other.sessionKey || other.sessionKey === to.sessionKey));
-}
-
-/** The counter's words, past MESSAGE_COUNTER_FROM left only. */
-export function counterLine(length: number): string | null {
-  const left = Math.max(0, MESSAGE_MAX - length);
-  return left <= MESSAGE_COUNTER_FROM ? `${left} left` : null;
-}
-
-/** Spoken once as the draft reaches 30, 10 and 0 left (never each key). */
-export function counterAnnouncement(lengthBefore: number, length: number): string | null {
-  const before = MESSAGE_MAX - lengthBefore;
-  const left = Math.max(0, MESSAGE_MAX - length);
-  if (left >= before || !MESSAGE_ANNOUNCE_AT.some((mark) => before > mark && left <= mark)) return null;
-  return `${left} ${left === 1 ? 'character' : 'characters'} left`;
-}
-
-/** The thread with the Agent log's actions folded between its rows (r50: "3 actions"). */
-export type ThreadItem<E> = { kind: 'row'; row: ThreadRow } | { kind: 'actions'; id: string; entries: E[] };
-
-export function foldActions<E extends { id: string; ts: number }>(rows: readonly ThreadRow[], entries: readonly E[]): ThreadItem<E>[] {
-  const sorted = [...entries].sort((a, b) => a.ts - b.ts);
-  const items: ThreadItem<E>[] = [];
-  let next = 0;
-  const flush = (before: number) => {
-    const group: E[] = [];
-    while (next < sorted.length && sorted[next].ts < before) group.push(sorted[next++]);
-    if (group.length) items.push({ kind: 'actions', id: `actions-${group[0].id}`, entries: group });
-  };
-  for (const row of rows) {
-    flush(row.at);
-    items.push({ kind: 'row', row });
-  }
-  flush(Infinity);
-  return items;
+/** A failed send's own words, for a failure that is neither the server's
+ * nor the listener's (those two have r50's lines, which the box writes with
+ * the session's label): failureMessage's, never an Error's raw message. */
+export function otherFailureLine(error: unknown): string {
+  return failureMessage(error, SEND_HEADING);
 }

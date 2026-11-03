@@ -1178,7 +1178,9 @@ reload and every tab show the same rows.
   reads its messages back (`GET /api/agent/thread/inbox`, answered for that
   agent session only), pushes them at once (wake `message`, a deliberate
   send) and then says so (`POST /api/agent/thread/accepted`), which the box
-  shows as "Waiting for Claude". Nebula never claims Claude read a message.
+  shows as "Waiting for Claude" ("Waiting for Claude · 2" for a second
+  session: a session is named by its cursor label). Nebula never claims
+  Claude read a message.
 - Claude answers with **MCP `reply_to_person(text, node_id?)`** or **`nebula
   reply "<text>" [--node nX]`** (2,000 characters). With a node, its cursor
   flies there and shows the reply's first sentence (140 characters). Only
@@ -1196,7 +1198,9 @@ reload and every tab show the same rows.
 - While a session listens, its `ask_person` questions, proposals, Updates and
   pin replies, and the person's new pins, also add a row to the thread that
   points at them (the card stays the only place to Accept; a question is
-  never a spend approval).
+  never a spend approval). A question with no options is answered from the
+  box's composer; the answer reaches the agent as `question.answered`, the
+  same as an answer from the Agents panel, never as a thread message.
 
 **Stop** by restarting Claude Code without the flag.
 
