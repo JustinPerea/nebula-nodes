@@ -592,10 +592,13 @@ body:not(.app-slava-restraint) .agent-log__chevron {
 .agent-log.agent-log--open[data-docked],
 .agent-log.agent-log--open[data-floating] {
   --agent-log-give: var(--agent-log-squeeze, 0px);
-  --agent-log-shown-h: clamp(var(--agent-log-floor, 0px), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-give)), var(--agent-log-natural-h, 80vh));
+  --agent-log-shown-h: clamp(var(--agent-h-closed), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-give)), var(--agent-log-natural-h, 80vh));
   display: flex;
   flex-direction: column;
   max-height: var(--agent-log-shown-h);
+  /* The resize floor of 80 px gives way only while it springs back up from
+     its header (GM r11), so the reopen starts at the header, not at 80. */
+  min-height: min(80px, var(--agent-log-shown-h));
   transition: --agent-log-give 420ms var(--agent-log-spring);
 }
 
@@ -610,16 +613,35 @@ body:not(.app-slava-restraint) .agent-log__chevron {
   min-height: 0;
 }
 
-/* A floating log the person pinned by its top edge: moved down by exactly
-   what its height gives, read from the same value, so its bottom edge stays
-   where they put it (GM r7, r8). Collapsed for the card (step 4), its
-   header sits on that bottom edge too. */
-.agent-log.agent-log--open[data-floating="top"] {
+/* Collapsed for the card (step 4), it has given all but its header: when
+   the card leaves and it reopens, the give springs back from there, from
+   the held edge, on the same spring (GM r11). The squeeze never passes the
+   floor (lib/noticeStackPlace.ts caps it), so the height's lower clamp is
+   the header. */
+.agent-log[data-card-collapsed] {
+  --agent-log-give: calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
+}
+
+/* The held edge (GM r7, r8, r11) is the one away from the card: the bottom
+   with the card above the log (the root's data-agent-log-hold is "bottom",
+   or not yet written), the top with the card under a floating log. A log
+   the person pinned by the other edge is moved by exactly what its height
+   gives, read from the same value, so the held edge stays where it is.
+   Collapsed for the card, its header sits on that edge too. */
+:root:not([data-agent-log-hold="top"]) .agent-log.agent-log--open[data-floating="top"] {
   translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-log-shown-h));
 }
 
-.agent-log[data-card-collapsed][data-floating="top"] {
+:root:not([data-agent-log-hold="top"]) .agent-log[data-card-collapsed][data-floating="top"] {
   translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
+}
+
+:root[data-agent-log-hold="top"] .agent-log.agent-log--open[data-floating="bottom"] {
+  translate: 0 calc(var(--agent-log-shown-h) - var(--agent-log-natural-h, 0px));
+}
+
+:root[data-agent-log-hold="top"] .agent-log[data-card-collapsed][data-floating="bottom"] {
+  translate: 0 calc(var(--agent-h-closed) - var(--agent-log-natural-h, 0px));
 }
 
 @media (prefers-reduced-motion: reduce) {

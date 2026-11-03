@@ -249,7 +249,7 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(block).toMatch(/--agent-log-give: var\(--agent-log-squeeze, 0px\);/);
-    expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
+    expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
     expect(block).toMatch(/max-height:\s*var\(--agent-log-shown-h\)/);
     expect(block).toMatch(/transition:\s*--agent-log-give 420ms var\(--agent-log-spring\)/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);

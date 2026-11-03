@@ -52,18 +52,20 @@ import { setNoticeMore } from './noticeMore';
  * 1. Beside it, when there is at least BESIDE_LOG_MIN_W of room on one side
  *    of it (r1's rule, `besideRoom`, the docked log's own test): the region
  *    stops short of the log on that side (`inset`), the more room first.
- * 2. Else the side of it, under or above, that holds the card: under it
- *    first (the log gives nothing there), else above it with its give
- *    (steps 3-4, its bottom edge held); with neither, the side with more
- *    room. The collapse orders here, after 1, because beside needs nothing
- *    from the log and it only ever frees room above the log.
- * 3. Else a named shortfall: step 5 on that side (the grid lists them).
+ *    Down to the card's narrow layout (GM r10, `besideCard`).
+ * 2. Else under it (GM r11), its body giving way first when the card would
+ *    fall short there (steps 3-4: header and 2 rows, then its header), held
+ *    at its top edge, so its bottom comes up.
+ * 3. Else above it, with the same give, held at its bottom edge.
+ * 4. Else a named shortfall on the side with more room, the plan line
+ *    first. A step counts only when the card's header, kept lines and
+ *    footer show there; the card never crosses the log.
  * A change of side, or of the inset, glides (`stepChanged`).
  *
  * Steps 3 and 4 are the docked log's when the stack sits above it, and a
- * floating log's in the card's column when the stack sits above it (GM r7:
- * "it gives way the same way", anchored at its bottom edge; where the person
- * put it never changes).
+ * floating log's in the card's column (GM r7, r11): held at the edge away
+ * from the card (`hold`, the root's data-agent-log-hold), so where the
+ * person put it never changes, and it springs back from that edge.
  *
  * The kept lines (`KEEP_ATTR`): the plan line, and the first not-ready ⚠
  * row when there is one (GM r6). The body shows whole lines: the region
@@ -234,7 +236,21 @@ export interface StackPlace {
   /** Beside a log at the card's narrow layout (GM r10): the card's width
    * there (its `probes` entry), or null in its normal layout. */
   narrow?: number | null;
+  /** The log's edge held fixed while it gives way (GM r11): the one away
+   * from the card. 'top' with the card under a floating log (its bottom
+   * comes up), 'bottom' with the card above a log; null when it gives
+   * nothing. */
+  hold?: LogHold | null;
 }
+
+export type LogHold = 'top' | 'bottom';
+/** On the root, the log's held edge (applyNoticeStack; layouts.css,
+ * AgentLog). It stays after the give ends, so the log springs back from
+ * the edge it gave way from. */
+export const LOG_HOLD_ATTR = 'data-agent-log-hold';
+/** The log header's accessible description while the card has folded it
+ * (GM r11): the fold is the card's, never the person's collapse. */
+export const LOG_CARD_FOLD_DESCRIPTION = 'Folded for the proposal card. It reopens when the card closes.';
 
 export type FloatSide = 'left' | 'right' | 'under' | 'above';
 
@@ -322,7 +338,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   // layout (GM r10, besideCard, below).
   let aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: null, inset: null, narrow: null };
+  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: null, inset: null, narrow: null, hold: null };
   if (!m.card) {
     // The notices alone clear a floating log in their column too (GM r8):
     // under it when they fit between its foot and the line, else above it,
@@ -411,21 +427,26 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
         : { left: Math.ceil(float.right + FLOAT_GAP_PX), right: Math.floor(regionRight) };
     }
   }
+  // GM r11: 2, under it, the log's body giving way first (header and 2
+  // rows, then its header), held at its top edge; 3, above it with the same
+  // give, held at its bottom edge; 4, a named shortfall on the side with
+  // more room. A step counts only when the card's header, kept lines and
+  // footer show there; the card never crosses the log.
   if (float && !floatSide && m.column && float.left < m.column.right && float.right > m.column.left
       && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
     const line0 = m.viewportH - m.regionBottom - base;
     const needs = card.chrome + floors.min + compact.rows;
-    const under = line0 - (float.bottom + FLOAT_GAP_PX);
-    const over = float.top - FLOAT_GAP_PX - topLine + spare + collapseGive;
-    const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body) + compact.rows;
-    if (under >= needs || (over < needs && (under >= over || over < least))) {
+    const give = spare + collapseGive;
+    const under = line0 - (float.bottom + FLOAT_GAP_PX) + give;
+    const over = float.top - FLOAT_GAP_PX - topLine + give;
+    if (under >= needs || (over < needs && under >= over)) {
       topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
       floatSide = 'under';
     } else {
       base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
-      gives = true;
       floatSide = 'above';
     }
+    gives = true;
   }
 
   // The room from the stack's line up to the top line.
@@ -445,10 +466,19 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     const room4 = cap + give;
     // Step 5: the body under its kept lines, down to one line; then the foot.
     const over = Math.max(0, Math.ceil(least - room4));
-    const lift = Math.max(0, base - give - over);
+    // Under a floating log its bottom comes up by the give, and the stack's
+    // top with it (its line is the region's: base is 0 there); above a log
+    // the stack comes down by it. Past one line the card's foot comes down
+    // over a docked log's top edge (`over`); never into a floating log (GM
+    // r11): the card stands taller than its room, up past the top line.
+    const underLog = floatSide === 'under';
+    const floatingLog = underLog || floatSide === 'above';
+    const lift = Math.max(0, base - give - (floatingLog ? 0 : over));
     const height = Math.max(room4, least);
     return {
-      aboveLog, lift, cap: height, mode, topLine, squeeze, collapse, over: Math.max(0, base - give - lift),
+      aboveLog, lift, cap: height, mode, topLine: underLog ? topLine - give : topLine, squeeze, collapse,
+      over: Math.max(0, base - give - lift),
+      hold: give > 0 ? (underLog ? 'top' : 'bottom') : null,
       underFade: height - card.chrome < floors.min,
       folded: more, fold, more, moreHost: host, expanded,
       keepPlan: height - card.chrome < floors.full,
@@ -1006,6 +1036,9 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
     if (squeeze) root.style.setProperty(LOG_SQUEEZE_VAR, squeeze);
     else root.style.removeProperty(LOG_SQUEEZE_VAR);
   }
+  // The edge it holds while it gives (GM r11), kept after, so it springs
+  // back from that edge too.
+  if (place.hold && root.getAttribute(LOG_HOLD_ATTR) !== place.hold) root.setAttribute(LOG_HOLD_ATTR, place.hold);
   // Where each now rests in the layout, whatever it draws with.
   moving.forEach((element) => { if (!element.hasAttribute(FOLD_ATTR)) resting.set(element, layoutBox(element)); });
   if (animate) {

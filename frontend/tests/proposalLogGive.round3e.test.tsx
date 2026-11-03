@@ -195,13 +195,13 @@ describe('the give, in CSS (GM r7-r8)', () => {
 
   it('a floating log gives way as the docked one, on the spring, down to its floor (one registered length, GM r8)', () => {
     expect(css).toMatch(/@property --agent-log-give \{\s*syntax: '<length>';\s*inherits: false;\s*initial-value: 0px;\s*\}/);
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: var\(--agent-log-shown-h\);\s*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: var\(--agent-log-shown-h\);[^}]*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating\] \.agent-log__body \{\s*flex: 0 1 auto;\s*min-height: 0;/);
   });
 
   it('one pinned by its top edge moves down by what its height gives, read from the same value; collapsed for the card too', () => {
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-log-shown-h\)\);\s*\}/);
-    expect(css).toMatch(/\.agent-log\[data-card-collapsed\]\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-h-closed\)\);\s*\}/);
+    expect(css).toMatch(/:root:not\(\[data-agent-log-hold="top"\]\) \.agent-log\.agent-log--open\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-log-shown-h\)\);\s*\}/);
+    expect(css).toMatch(/:root:not\(\[data-agent-log-hold="top"\]\) \.agent-log\[data-card-collapsed\]\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-h-closed\)\);\s*\}/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*transition: none;/);
     // Nothing else springs the edge: no transition on max-height or translate.
     expect(css).not.toMatch(/transition:[^;]*(max-height|translate) 420ms var\(--agent-log-spring\)/);

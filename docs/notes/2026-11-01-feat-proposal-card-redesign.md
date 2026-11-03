@@ -558,3 +558,79 @@ Merged origin/main (062fb370, #218 and #211) first, staged with `--no-commit`. O
 - Focused vitest, `--maxWorkers=2`, the round 3f list: 162 files, 3322 passed.
 - The backend is unchanged since 3g.
 - Entry: 463,498 B raw, 143,562 B gzip.
+
+## Round 3i (GM - Design's r11, 2026-11-03)
+
+origin/main was still at 062fb370, so there was nothing to merge.
+
+**A new placement order for a floating log** (`placeNoticeStack`). The log never moves; only its body shrinks.
+1. Beside it, as built, down to the narrow layout.
+2. Under it. If the card would fall short there, the log's body gives way first: steps 3 and 4, header and 2 rows, then its header. The log is held at its top edge, so its bottom comes up and the stack's top line (`topLine - give`) with it.
+3. Above it, with the same give, held at its bottom edge, as before.
+4. A named shortfall on the side with more room, the plan line first.
+
+A step counts only when the card's header, kept lines (`floors.min`) and footer fit there with the most the log can give: `under` and `over` both include `logSpare + logCollapse`.
+
+**The card never crosses a floating log.** Past one line, a docked log still takes the card's foot over its top edge (`over`). A floating log never does: the stack stands up past the top line instead. No grid cell reaches that point, but the unit test does.
+
+**The held edge.**
+- Each place carries `hold`: 'top' when the card is under a floating log and the log gives, 'bottom' when the card is above a log, null with no give.
+- `applyNoticeStack` writes it on the root as `data-agent-log-hold`. It stays after the give ends, so the log springs back from the same edge.
+- layouts.css moves a log pinned by the other edge by exactly what it gives:
+  - a top-pinned log held at the bottom (as before);
+  - a bottom-pinned log held at the top (new), open or collapsed for the card.
+- AgentLog reads the box the log has with no give from the held edge: `box.top` held at the top, `box.bottom - natural` held at the bottom. This way the box the region tests against never moves while the log gives.
+
+**The leave.**
+- Collapsed for the card, the log carries `--agent-log-give: natural - header`. When the card leaves and it reopens, the give springs to 0 on `--agent-log-spring` (the tuned `linear()` with its 1.022 overshoot) from the held edge.
+- Two changes make it start at the header:
+  - the height's lower clamp is now the header, not the floor; the squeeze is still capped at the floor by the placement;
+  - the 80 px resize floor is `min(80px, shown)`.
+- Before these, the first live run showed a 36 px jump to 80 px at the start of the reopen.
+- Live, slowed to a tenth: the log's top held at 190 in all 345 frames, and its bottom went 234 → 370 through 120 distinct values.
+
+**The person's collapse wins (uiStore, unchanged rules, now pinned):**
+- A log the person collapsed while it was giving way stays collapsed after the card leaves.
+- A log the card folded (`agentLogCardHold: 'card'`) never counts as theirs and reopens.
+- Once they collapse it again, it's theirs.
+
+**Fold state, MCP and agents.** I searched the backend, MCP tools, the CLI, contracts, skills and the websocket client:
+- The log's open or folded state (`agentLogOpen`, `agentLogCardHold`) lives only in the frontend's uiStore. It isn't persisted, isn't sent over the websocket (the client sends only `hello`), and no MCP tool or CLI command reads it.
+- The one place an agent can see it is the accessibility tree, for an agent driving the app through it. There the header's `aria-expanded="false"` and its "Expand agent log" title read the same for both collapses.
+- The header now carries `aria-description="Folded for the proposal card. It reopens when the card closes."` while the card holds the log folded, and nothing when the person collapsed it. The text is new copy for GM to check.
+
+**The grid** (504 cells; 252 with a floating log).
+- Round 3f's 71 cells:
+  - log at its own width: beside 36, under 35, above 0, short 0;
+  - log at the column's width: beside 18, under 53, above 0, short 0.
+- **768×600:**
+  - its own width: all 18 beside the log at the narrow width (339 px), as in 3h;
+  - column width: all 18 under the log as it gives way, with the kept lines whole, `768x600 floating wide 0` among them. It had been a plan-line shortfall in 3h.
+- All 252 floating cells: beside 90, under 162, above 0, short 0.
+- No floating cell is a shortfall anymore, at either width. The test that pinned 3h's 24 crossing cells is replaced by a per-cell check, at both widths: every card, notice and row clears the log as it shows (its top or bottom moved by the give), by the gap.
+- `EXPECTED_SHORT` is down to the 16 docked 420×560 banner cells, and `EXPECTED_PLAN_SHORT` to their 8 with an Undo. The docked log is unchanged.
+- The grid's logs sit at 30 % of the height, so with the same give "under" always holds. Step 3 is pinned by unit tests and shot 18.
+
+**Flag for GM, step order taken literally.** Under with the log's give comes before above with none. So a low floating log can fold under the card even when there's room above it with no give. The unit test pins one such case: a 900 px window with the log at 500–760 collapses the log, though 376 px are free above it. If that isn't intended, the fix is one condition: take a side that needs no give first.
+
+**Note in 13b.** At 800×640, under the log as it gives (squeezed 32 px) with two notices in the pill, the note doesn't fit whole. It scrolls to its last line, the plan line and ⚠ line stay whole, and the stop is on a line boundary.
+
+**Mutation checks (round 3i).**
+- 23 mutants: 21 caught, one of them after a new pin (under wins a tie of the shortfall rooms).
+- 2 were equivalent: under a floating log the stack's base is always 0, so subtracting the give from it there changed nothing. Those two lines are simplified.
+- Runner: `scratchpad/proposal-card/mut3i/run.py`, results in `out-first.txt` and `out-pins.txt`.
+
+**Checks (round 3i).**
+- tsc 0, and lint 0 after removing a constant the old crossing check had left unused.
+- Focused vitest, `--maxWorkers=2`, the 3h list plus `proposalLogHold.round3i`: 163 files, 3330 passed.
+- The backend is unchanged.
+- Entry: 463,728 B raw, 143,708 B gzip.
+
+**Live (round 3i).** Restraint. Isolated backend on 8798, Vite on 5798, isolated home. Installed Chrome with a throwaway profile, removed afterwards. Canaries blocked; nothing accepted or run. Shots are in `scratchpad/proposal-card/shots3i/`, and every md5 is distinct.
+
+| Shot | Result |
+|---|---|
+| 13b, 800×640, log at 200–540 × 192 | The card under the log, which gave 32 px with its top held at 192 (bottom 340). The pill shows "2 notices". The note is scrolled to its last line, and the plan and ⚠ lines are whole. |
+| 18, 800×640, log at 200–540 × 330–510 | Short under it even with its give, so the card goes above it. The log gave 40 px with its bottom held at 510 (top 371). |
+| 19, 800×540, log at 200–540 × 190 | The card under the log, which is collapsed to its header for it (`aria-description` set), its top at 190. |
+| 20a / 20b | The card withdrawn: the log reopens on the spring (frame 1 at 94 px, frame 2 at 180), with its top at 190 in every one of 345 frames. |

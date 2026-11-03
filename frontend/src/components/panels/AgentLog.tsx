@@ -4,7 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
-import { LOG_COLLAPSE_VAR } from '../../lib/noticeStackPlace';
+import { LOG_CARD_FOLD_DESCRIPTION, LOG_COLLAPSE_VAR, LOG_HOLD_ATTR } from '../../lib/noticeStackPlace';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   clamp,
@@ -334,14 +334,17 @@ export function AgentLog() {
       } else {
         delete log.dataset.docked;
         clear(DOCK);
-        // A floating log gives way held at its bottom edge too (GM r7): one
-        // pinned by its top edge is moved down by what it gives.
+        // A floating log gives way held at the edge away from the card (GM
+        // r7, r11; the region writes which on the root): layouts.css moves a
+        // log pinned by the other edge by exactly what it gives.
         log.dataset.floating = position?.anchorY === 'bottom' && typeof position.offsetY === 'number' ? 'bottom' : 'top';
         const box = log.getBoundingClientRect();
         if (box.width > 0 && box.height > 0) {
-          // Its box with no give: the bottom edge stays where it is.
-          root.style.setProperty('--agent-log-float-top', `${Math.floor(box.bottom - natural)}px`);
-          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(box.bottom)}px`);
+          // Its box with no give: the held edge stays where it is.
+          const heldTop = root.getAttribute(LOG_HOLD_ATTR) === 'top';
+          const top = heldTop ? box.top : box.bottom - natural;
+          root.style.setProperty('--agent-log-float-top', `${Math.floor(top)}px`);
+          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(top + natural)}px`);
           root.style.setProperty('--agent-log-float-left', `${Math.floor(box.left)}px`);
           root.style.setProperty('--agent-log-float-right', `${Math.ceil(box.right)}px`);
         } else {
@@ -554,6 +557,10 @@ export function AgentLog() {
           onClick={handleToggleClick}
           title={open ? 'Collapse agent log' : 'Expand agent log'}
           aria-expanded={open}
+          // GM r11: folded for the proposal card is not the person's collapse,
+          // and doesn't read as one to a screen reader or an agent reading
+          // the accessibility tree.
+          {...(cardHold === 'card' && !open ? { 'aria-description': LOG_CARD_FOLD_DESCRIPTION } : {})}
         >
           <span className="agent-log__title">
             <Activity
