@@ -1153,7 +1153,7 @@ def test_the_reader_routes_work_out_clear_references_off_the_loop(tmp_path, monk
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
     monkeypatch.setattr(main, "_moodboard_reader_transport", httpx.MockTransport(RouteGoogle().handler))
 
-    async def ignore(data):
+    async def ignore(data, **kwargs):
         return None
 
     monkeypatch.setattr(main.manager, "broadcast_raw", ignore)
