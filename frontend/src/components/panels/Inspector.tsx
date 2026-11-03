@@ -1167,15 +1167,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
               }}
             />
           </label>
+          {dropNote && (
+            // GM r46 Q1: neutral, no button. GM r67: directly under the row
+            // it describes, above the preview (under it, the sticky footer
+            // hid it).
+            <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
+          )}
           {showsPreview && fileValue && !previewUrl && !inFlight && (
             // GM r46 Q2: neutral, nothing failed (the run reads the file).
             <span className="inspector__file-no-preview">{NO_PREVIEW}</span>
           )}
           {showsPreview && <FilePreviewFrame src={previewUrl} />}
-          {dropNote && (
-            // GM r46 Q1: neutral, under the control it asks for; no button.
-            <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
-          )}
           <span className="inspector__palette-status" role="status" aria-live="polite">{dropNote || ''}</span>
         </div>
       );

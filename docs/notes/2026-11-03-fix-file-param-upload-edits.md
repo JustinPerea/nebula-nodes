@@ -208,3 +208,22 @@ and its name, in both orders.
   `# stand-in-ok: <reason>` on the line or above. It reads 20+ live stand-ins
   today with no faults. Mutation: the fence test's update_params stand-in
   without `**kwargs` fails as `stand-in lacks drop`.
+
+## Round 3b (GM r67)
+
+- **The dropped line moved under the row.** It rendered after the preview
+  frame (row, "No preview", preview, line), so at the popover's 300 px the
+  sticky footer covered it. It now sits directly under the row it describes:
+  row, line, then "No preview" or the preview. A test pins that order, and
+  fails with the old order.
+- **The Inspector's height is main's, not the fixture's.** The shots use the
+  node-anchored popover (not pinned, a fresh Chrome profile, no stored
+  layout), at 1440×900 and devicePixelRatio 1. It measured 300 px tall, with
+  a 185 px body scrolling 596 px of content. The "about 208 px" is the shot
+  shown at 1,000 px wide (300 × 1000/1440). The cap is
+  `POPOVER_MAX_HEIGHT = 300` in `NodeInspectorPopover.tsx:14`. The panel grows
+  past it only when the body lacks at most one spare line
+  (`POPOVER_SPARE_LINE = 44`, `:26`) or holds a palette
+  (`measurePopoverFrame`, `:144-149`). Pinned, it starts at 440 px
+  (`PINNED_MAX_HEIGHT`, `:29`). This PR doesn't touch that file or those
+  rules.

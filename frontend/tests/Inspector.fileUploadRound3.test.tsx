@@ -199,6 +199,23 @@ describe('bug 2: the dropped line goes on any change to its param', () => {
     expect(paletteDropNote(NOTE_KEY)).toBeNull();
   });
 
+  it('sits directly under the row it describes: row, then line, then preview (GM r67)', () => {
+    const value = '/out/chat-uploads/harbour.png';
+    act(() => dropLine(value));
+    const view = show([styleRef(D, { filePath: value, _previewUrl: '/api/outputs/chat-uploads/harbour.png' })], D);
+    const stack = view.container.querySelector('.inspector__control-stack') as HTMLElement;
+    expect([...stack.children].map((c) => c.className)).toEqual([
+      'inspector__file-button', 'inspector__palette-note', 'inspector__file-preview-frame', 'inspector__palette-status']);
+    cleanup();
+    // With no preview: row, line, then "No preview". (The node is shown
+    // first: changing its file after the line would rightly clear it.)
+    const bare = show([styleRef(D, { filePath: '/elsewhere/harbour.png' })], D);
+    act(() => dropLine('/elsewhere/harbour.png'));
+    const stack2 = bare.container.querySelector('.inspector__control-stack') as HTMLElement;
+    expect([...stack2.children].map((c) => c.className)).toEqual([
+      'inspector__file-button', 'inspector__palette-note', 'inspector__file-no-preview', 'inspector__palette-status']);
+  });
+
   it('a value changed while the person was in another project: never shown over it', () => {
     act(() => dropLine(''));
     const view = show([styleRef(D, { filePath: '/out/chat-uploads/harbour.png' })], D);
