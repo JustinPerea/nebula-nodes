@@ -1,3 +1,5 @@
+import { setNoticeMore } from './noticeMore';
+
 /**
  * Where the notice region's stack sits, and how tall the proposal card may be
  * (GM - Design, PR #216 r3: "the notice region is one stack, moves as one;
@@ -95,6 +97,10 @@ export const LOG_SQUEEZE_VAR = '--agent-log-squeeze';
 /** A notice that offers Undo or Redo marks itself so (else its button's
  * words are read): it never folds (GM r7). */
 export const UNDO_ATTR = 'data-notice-undo';
+/** A notice that can carry the fold's count in its own row marks where
+ * (NoticeMoreInline); the one carrying it is marked `MORE_HOST_ATTR`. */
+export const MORE_SLOT_ATTR = 'data-notice-more-slot';
+export const MORE_HOST_ATTR = 'data-notice-more-host';
 /** On the root, from AgentLog: what the log's collapse to its header frees
  * beyond its floor, while it may collapse (GM r7). */
 export const LOG_COLLAPSE_VAR = '--agent-log-collapse';
@@ -122,6 +128,9 @@ export interface CardMeasure {
   first?: { top: number; bottom: number } | null;
   /** Which notices offer Undo or Redo, top to bottom: they never fold. */
   undo?: boolean[];
+  /** Which of them can carry the fold in their own row ("Undo · 3 more",
+   * GM r8): they hold a `MORE_SLOT_ATTR` mark. */
+  host?: boolean[];
 }
 
 export interface StackMeasure {
@@ -148,8 +157,11 @@ export interface StackMeasure {
   card: CardMeasure | null;
   /** An undocked Agent log's box (window coordinates), when one shows. */
   floating?: { top: number; bottom: number; left: number; right: number } | null;
-  /** The card's column (window x), for the floating log's test. */
+  /** The card's column (window x), for the floating log's test; with no
+   * card, the notices' own column. */
   column?: { left: number; right: number } | null;
+  /** With no card, the notices alone (GM r8: they clear the log too). */
+  notices?: { items: number[]; gap: number } | null;
 }
 
 export interface StackPlace {
@@ -165,6 +177,9 @@ export interface StackPlace {
   fold: boolean[];
   /** The "more" row's count, 0 while it is hidden. */
   more: number;
+  /** The notice whose own row carries the count ("Moved “Hero shot” · Undo
+   * · 3 more", GM r8), or -1: the fold's own row shows instead. */
+  moreHost: number;
   /** The person unfolded the row: it shows, aria-expanded. */
   expanded: boolean;
   /** The body is shorter than note and plan line: scroll the plan line in. */
@@ -218,21 +233,42 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const beside = m.viewportW - Math.max(m.gutter, m.logClearance) - m.regionLeft;
   const aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, fold: [], more: 0, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0 };
-  if (!m.card) return { aboveLog, lift: base, cap: null, mode: null, ...none };
+  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0 };
+  if (!m.card) {
+    // The notices alone clear a floating log in their column too (GM r8):
+    // under it when they fit between its foot and the line, else above it,
+    // else on the side with more room.
+    const float = docked ? null : m.floating;
+    const alone = m.notices;
+    if (float && alone && alone.items.length && m.column && float.left < m.column.right && float.right > m.column.left) {
+      const line0 = m.viewportH - m.regionBottom - base;
+      const needs = sum(alone.items) + alone.gap * (alone.items.length - 1);
+      const under = line0 - (float.bottom + FLOAT_GAP_PX);
+      const over = float.top - FLOAT_GAP_PX - m.topLine;
+      if (float.top < line0 && under < needs && (over >= needs || over > under)) {
+        base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
+      }
+    }
+    return { aboveLog, lift: base, cap: null, mode: null, ...none };
+  }
   const card = m.card;
   const gap = card.gap ?? 8;
   const items = card.items ?? [];
   const count = items.length;
   const undo = items.map((_, index) => Boolean(card.undo?.[index]));
+  // The newest notice that can carry the fold's count in its own row.
+  const hostAt = items.reduce((at, _, index) => (undo[index] && card.host?.[index] ? index : at), -1);
   // Each notice and the gap over it.
   const below = sum(items) + gap * count;
   // The ways the notices can stand above the card, least folded first.
-  type Rows = { mode: StackMode; fold: boolean[]; rows: number; more: number };
+  type Rows = { mode: StackMode; fold: boolean[]; rows: number; more: number; host: number };
   const rowsOf = (mode: StackMode, fold: boolean[]): Rows => {
     const more = fold.filter(Boolean).length;
     const shown = items.reduce((total, h, index) => total + (fold[index] ? 0 : h + gap), 0);
-    return { mode, fold, more, rows: shown + (more ? MORE_ROW_PX + gap : 0) };
+    // An Undo notice showing carries the count in its own row: no row of its own.
+    // A notice with an Undo never folds, so the host always shows.
+    const host = more && hostAt >= 0 ? hostAt : -1;
+    return { mode, fold, more, host, rows: shown + (more && host < 0 ? MORE_ROW_PX + gap : 0) };
   };
   const ladder: Rows[] = [rowsOf('above', items.map(() => false))];
   // Step 1: the older ones without an Undo fold under "N more notices".
@@ -277,7 +313,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const room = m.viewportH - m.regionBottom - base - topLine;
   const logSpare = gives ? spare : 0;
   const logCollapse = gives ? collapseGive : 0;
-  const place = ({ mode, fold, rows, more }: Rows, expanded = false): StackPlace => {
+  const place = ({ mode, fold, rows, more, host }: Rows, expanded = false): StackPlace => {
     const cap = Math.floor(room - rows);
     const keep = card.chrome + floors.min;
     const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body);
@@ -295,17 +331,20 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     return {
       aboveLog, lift, cap: height, mode, topLine, squeeze, collapse, over: Math.max(0, base - give - lift),
       underFade: height - card.chrome < floors.min,
-      folded: more, fold, more, expanded,
+      folded: more, fold, more, moreHost: host, expanded,
       keepPlan: height - card.chrome < floors.full,
     };
   };
 
   // Step 0: the notices under the card, note and plan line whole.
-  if (count === 0) return place({ mode: 'under', fold: [], rows: 0, more: 0 });
-  if (room - below - card.chrome >= floors.full) return place({ mode: 'under', fold: items.map(() => false), rows: below, more: 0 });
-  // Unfolded by the person: all of them above, the row on top ("Show less").
+  if (count === 0) return place({ mode: 'under', fold: [], rows: 0, more: 0, host: -1 });
+  if (room - below - card.chrome >= floors.full) return place({ mode: 'under', fold: items.map(() => false), rows: below, more: 0, host: -1 });
+  // Unfolded by the person: all of them above, the row on top ("Show less"),
+  // or "Show less" in the Undo notice's row.
   if (options.expanded && compact.more) {
-    return place({ mode: 'above', fold: items.map(() => false), rows: MORE_ROW_PX + gap + below, more: compact.more }, true);
+    return place({
+      mode: 'above', fold: items.map(() => false), rows: (hostAt >= 0 ? 0 : MORE_ROW_PX + gap) + below, more: compact.more, host: hostAt,
+    }, true);
   }
   // Steps 1 and 2: the first way the kept lines fit with no give.
   const fits = ladder.find((rows) => room - rows.rows - card.chrome >= floors.min);
@@ -337,7 +376,7 @@ export function stackGeometry(m: StackMeasure, place: StackPlace): StackGeometry
   const foot = card.foot ?? 0;
   // The rows outside the card, top to bottom.
   const shown: Array<{ h: number; kind: 'notice' | 'more' }> = [];
-  if (place.more) shown.push({ h: MORE_ROW_PX, kind: 'more' });
+  if (place.more && place.moreHost < 0) shown.push({ h: MORE_ROW_PX, kind: 'more' });
   items.forEach((h, index) => { if (!place.fold[index]) shown.push({ h, kind: 'notice' }); });
   const rows: StackGeometry['rows'] = [];
   let cardBottom: number;
@@ -390,7 +429,8 @@ export function stackJumps(prev: { place: StackPlace; logTop: number; floatTop: 
 /** Whether the give-way step changed: the order, the fold or the row. */
 export function stepChanged(prev: StackPlace | null, next: StackPlace): boolean {
   if (!prev) return false;
-  return prev.mode !== next.mode || prev.folded !== next.folded || prev.more !== next.more || prev.collapse !== next.collapse;
+  return prev.mode !== next.mode || prev.folded !== next.folded || prev.more !== next.more || prev.collapse !== next.collapse
+    || prev.moreHost !== next.moreHost;
 }
 
 function px(value: string): number {
@@ -449,11 +489,23 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
       line: px(getComputedStyle(scroller).lineHeight) || ONE_LINE_PX,
       items: noticeItems(stack).map((item) => item.offsetHeight),
       undo: noticeItems(stack).map(offersUndo),
+      host: noticeItems(stack).map((item) => item.querySelector(`[${MORE_SLOT_ATTR}]`) !== null),
       gap: px(getComputedStyle(stack).rowGap) || 8,
       plan,
       first,
     };
     column = { left: cardRect.left, right: cardRect.right };
+  }
+  // With no card, the notices alone and their column (GM r8: they clear a
+  // floating log too).
+  let notices: StackMeasure['notices'] = null;
+  if (!shrink) {
+    const items = noticeItems(stack).filter((item) => !item.hasAttribute(FOLD_ATTR) && item.offsetHeight > 0);
+    if (items.length) {
+      notices = { items: items.map((item) => item.offsetHeight), gap: px(getComputedStyle(stack).rowGap) || 8 };
+      const boxes = items.map((item) => item.getBoundingClientRect());
+      column = { left: Math.min(...boxes.map((b) => b.left)), right: Math.max(...boxes.map((b) => b.right)) };
+    }
   }
   const floatTop = px(root.getPropertyValue('--agent-log-float-top'));
   const floatBottom = px(root.getPropertyValue('--agent-log-float-bottom'));
@@ -477,6 +529,7 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
       left: px(root.getPropertyValue('--agent-log-float-left')), right: px(root.getPropertyValue('--agent-log-float-right')),
     } : null,
     column,
+    notices,
   };
 }
 
@@ -570,11 +623,19 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
       item.removeAttribute('inert');
     }
   });
-  if (place.more) region.setAttribute(MORE_SHOWN_ATTR, '');
+  // GM r8: with an Undo notice showing, the count rides in its row.
+  const host = place.more && place.moreHost >= 0 ? items[place.moreHost] ?? null : null;
+  items.forEach((item) => {
+    if (item === host) item.setAttribute(MORE_HOST_ATTR, '');
+    else item.removeAttribute(MORE_HOST_ATTR);
+  });
+  setNoticeMore({ host, count: place.more, expanded: place.expanded });
+  const ownRow = place.more > 0 && !host;
+  if (ownRow) region.setAttribute(MORE_SHOWN_ATTR, '');
   else region.removeAttribute(MORE_SHOWN_ATTR);
   if (more) {
-    more.hidden = !place.more;
-    more.textContent = !place.more ? '' : place.expanded ? SHOW_LESS : place.mode === 'pill' ? pillLabel(place.more) : moreLabel(place.more);
+    more.hidden = !ownRow;
+    more.textContent = !ownRow ? '' : place.expanded ? SHOW_LESS : place.mode === 'pill' ? pillLabel(place.more) : moreLabel(place.more);
     more.setAttribute('aria-expanded', String(place.expanded));
   }
   // The spring is off for this frame: read the layout so the jump lands now.

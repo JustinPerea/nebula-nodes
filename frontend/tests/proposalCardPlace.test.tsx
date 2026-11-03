@@ -10,8 +10,10 @@ import {
   GLIDE_MS,
   JUMP_ATTR,
   MIN_BODY_PX,
+  MORE_HOST_ATTR,
   MORE_ROW_PX,
   MORE_SHOWN_ATTR,
+  MORE_SLOT_ATTR,
   LOG_SQUEEZE_VAR,
   SHOW_LESS,
   applyNoticeStack,
@@ -29,6 +31,7 @@ import {
   type StackMeasure,
   type StackPlace,
 } from '../src/lib/noticeStackPlace';
+import { getNoticeMore } from '../src/lib/noticeMore';
 import { NOTICE_TOP_LINE_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../src/lib/bottomBar';
 
 /**
@@ -237,6 +240,44 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack(older, { expanded: true })).toMatchObject({ mode: 'above', fold: [false, false, false], more: 2, expanded: true });
   });
 
+  it('with an Undo notice showing, the fold\'s count rides in its own row: no 40 px row of its own (GM r8)', () => {
+    // 420x640, 3 notices, the newest with an Undo that can carry "2 more".
+    const plain = at(640, 3, {}, [false, false, true]);
+    const hosted: StackMeasure = { ...plain, card: { ...plain.card!, host: [false, false, true] } };
+    const before = placeNoticeStack(plain);
+    const place = placeNoticeStack(hosted);
+    expect(place).toMatchObject({ mode: 'pill', fold: [true, true, false], more: 2, moreHost: 2, squeeze: 0 });
+    // The row's 40 px go to the card.
+    expect(place.cap! - before.cap!).toBeGreaterThanOrEqual(MORE_ROW_PX + 8 - before.squeeze - 1);
+    expect(before.moreHost).toBe(-1);
+    const { card, rows } = stackGeometry(hosted, place);
+    expect(rows.map((row) => row.kind)).toEqual(['notice']);
+    expect(rows[0].bottom + 8).toBe(card!.top);
+    // Unfolded it still rides there ("Show less"), every notice shown.
+    const open = placeNoticeStack(hosted, { expanded: true });
+    expect(open).toMatchObject({ mode: 'above', fold: [false, false, false], more: 2, moreHost: 2, expanded: true });
+    expect(stackGeometry(hosted, open).rows.map((row) => row.kind)).toEqual(['notice', 'notice', 'notice']);
+    // Unfolded too, the row's room goes to the card.
+    const openPlain = placeNoticeStack(plain, { expanded: true });
+    expect(openPlain.moreHost).toBe(-1);
+    expect(open.cap! - openPlain.cap!).toBe(MORE_ROW_PX + 8);
+    // Only a notice with an Undo hosts it, the newest such.
+    const two = { ...plain, card: { ...plain.card!, undo: [false, true, true], host: [false, true, true] } };
+    expect(placeNoticeStack(two)).toMatchObject({ moreHost: 2 });
+    const notUndo = { ...plain, card: { ...plain.card!, undo: [false, false, false], host: [false, false, true] } };
+    expect(placeNoticeStack(notUndo).moreHost).toBe(-1);
+    // An older one with an Undo never folds, so it carries the count.
+    const folded = { ...plain, card: { ...plain.card!, undo: [false, true, false], host: [false, true, false] } };
+    const older = placeNoticeStack(folded);
+    expect(older.moreHost).toBe(1);
+    expect(older.fold[1]).toBe(false);
+    // Above with nothing folded: no host.
+    const roomy = { ...hosted, viewportH: 760 };
+    expect(placeNoticeStack(roomy)).toMatchObject({ mode: 'above', more: 0, moreHost: -1 });
+    // Nothing folded: no host either.
+    expect(placeNoticeStack({ ...hosted, viewportH: 1400 })).toMatchObject({ more: 0, moreHost: -1 });
+  });
+
   it('unfolded on click: every notice above the card under the row, until it folds again', () => {
     const m = at(670, 3);
     const place = placeNoticeStack(m, { expanded: true });
@@ -334,6 +375,40 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(under).toMatchObject({ squeeze: 0, collapse: false, topLine: 300 + FLOAT_GAP_PX });
   });
 
+  it('past its floor a floating log collapses to its header too, as the docked one (GM r8 3)', () => {
+    // 420x560, a floating log at 240-480: above it 116 px, short of the card
+    // and the pill by 110, more than its body's 89.
+    const m: StackMeasure = {
+      ...at(560, 2), logClearance: 0, logTop: 0, column: { left: 64, right: 404 },
+      floating: { top: 240, bottom: 480, left: 65, right: 403 },
+    };
+    const place = placeNoticeStack(m);
+    expect(place).toMatchObject({ mode: 'pill', aboveLog: false, squeeze: LIVE.logSpare, collapse: true, underFade: false });
+    expect(place.lift).toBe(Math.ceil(560 - 240 + FLOAT_GAP_PX - LIVE.regionBottom) - LIVE.logSpare - LIVE.logCollapse);
+    // Off the card's column it never gives.
+    expect(placeNoticeStack({ ...m, floating: { top: 240, bottom: 480, left: 600, right: 900 } })).toMatchObject({ squeeze: 0, collapse: false });
+  });
+
+  it('with no card, the notices alone clear a floating log in their column (GM r8 4)', () => {
+    const base: StackMeasure = { ...LIVE, viewportH: 640, logClearance: 0, logTop: 0, card: null, column: { left: 64, right: 404 } };
+    const notices = { items: [46, 46], gap: 8 };
+    // Under the log's foot there are 640 - 81 - 528 = 31 px, short of 100;
+    // above it, 300 - 8 - 116 = 176: they go above.
+    const low = placeNoticeStack({ ...base, notices, floating: { top: 300, bottom: 520, left: 65, right: 403 } });
+    expect(low).toMatchObject({ mode: null, lift: 640 - 300 + FLOAT_GAP_PX - LIVE.regionBottom, squeeze: 0, collapse: false });
+    // Room under it: they stay.
+    expect(placeNoticeStack({ ...base, notices, floating: { top: 120, bottom: 300, left: 65, right: 403 } }).lift).toBe(0);
+    // Off their column, or no notices, or a docked log: nothing moves.
+    expect(placeNoticeStack({ ...base, notices, floating: { top: 300, bottom: 520, left: 600, right: 900 } }).lift).toBe(0);
+    expect(placeNoticeStack({ ...base, notices: null, floating: { top: 300, bottom: 520, left: 65, right: 403 } }).lift).toBe(0);
+    // Neither side holds them: the side with more room.
+    const tall = { ...base, notices: { items: [46, 46, 46, 46], gap: 8 }, floating: { top: 200, bottom: 520, left: 65, right: 403 } };
+    // 208 px: 31 under it, 76 above, so above.
+    expect(placeNoticeStack(tall).lift).toBe(640 - 200 + FLOAT_GAP_PX - LIVE.regionBottom);
+    // 171 under it, 16 above: they stay under.
+    expect(placeNoticeStack({ ...tall, floating: { top: 140, bottom: 380, left: 65, right: 403 } }).lift).toBe(0);
+  });
+
   it('a floating log with no room on either side: the stack stays under it, crossing its body, never its header', () => {
     const m: StackMeasure = {
       ...at(560, 2), logClearance: 0, logTop: 0, logCollapse: 0, column: { left: 64, right: 404 },
@@ -347,7 +422,7 @@ describe('the give-way order (GM r5-r7)', () => {
 
   it('a layout switch lands with no spring for its frame; a give-way step glides; a notice coming or going keeps the spring', () => {
     const place = (aboveLog: boolean, mode: StackPlace['mode'] = 'under', folded = 0, more = 0): StackPlace => ({
-      aboveLog, lift: 0, cap: null, mode, folded, fold: [], more, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0,
+      aboveLog, lift: 0, cap: null, mode, folded, fold: [], more, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0,
     });
     expect(stackJumps(null, { place: place(true), logTop: 206, floatTop: 0 })).toBe(false);
     expect(stackJumps({ place: place(false), logTop: 206, floatTop: 0 }, { place: place(true), logTop: 206, floatTop: 0 })).toBe(true);
@@ -361,6 +436,8 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(stepChanged(place(true, 'folded', 1, 1), place(true, 'folded', 2, 2))).toBe(true);
     expect(stepChanged(place(true, 'folded', 1, 1), place(true, 'above', 0, 1))).toBe(true);
     expect(stepChanged(place(true, 'above', 0, 1), place(true, 'above', 0, 0))).toBe(true);
+    // The count moving into the Undo notice's row is a step (GM r8).
+    expect(stepChanged(place(true, 'pill', 2, 2), { ...place(true, 'pill', 2, 2), moreHost: 2 })).toBe(true);
     expect(stepChanged(place(true, 'folded', 2, 2), place(true, 'pill', 2, 2))).toBe(true);
     expect(stepChanged(place(true, 'pill', 2, 2), { ...place(true, 'pill', 2, 2), collapse: true })).toBe(true);
     expect(stepChanged(place(true, 'above'), { ...place(true, 'above'), cap: 300 })).toBe(false);
@@ -382,27 +459,27 @@ describe('the give-way order (GM r5-r7)', () => {
 // Where even every step leaves the body short of its kept lines (65 + two
 // fades = 97), [the body it gets, 97]: the 420x560 window under the
 // two-line offline banner with the log docked (12 px short with no Undo
-// notice: 78 px of room, the log's 89 and its collapse's 47, the pill's 40);
-// with an Undo notice (it stays whole), 768x600 under the banner too; and a
+// notice: 78 px of room, the log's 89 and its collapse's 47, the pill's 40;
+// 26 short with one, whose row now carries the fold's count, GM r8); and a
 // floating log the person left mid-column (its bottom edge stays, so only
 // the room above it grows).
 const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x560 open 1 banner': [85, 97],
   '420x560 open 1 banner undo': [71, 97],
   '420x560 open 2 banner': [85, 97],
-  '420x560 open 2 banner undo': [31, 97],
+  '420x560 open 2 banner undo': [71, 97],
   '420x560 open 3 banner': [85, 97],
-  '420x560 open 3 banner undo': [31, 97],
+  '420x560 open 3 banner undo': [71, 97],
   '420x560 open 4 banner': [85, 97],
-  '420x560 open 4 banner undo': [31, 97],
+  '420x560 open 4 banner undo': [71, 97],
   '420x560 closed 1 banner': [85, 97],
   '420x560 closed 1 banner undo': [71, 97],
   '420x560 closed 2 banner': [85, 97],
-  '420x560 closed 2 banner undo': [31, 97],
+  '420x560 closed 2 banner undo': [71, 97],
   '420x560 closed 3 banner': [85, 97],
-  '420x560 closed 3 banner undo': [31, 97],
+  '420x560 closed 3 banner undo': [71, 97],
   '420x560 closed 4 banner': [85, 97],
-  '420x560 closed 4 banner undo': [31, 97],
+  '420x560 closed 4 banner undo': [71, 97],
   '420x560 floating 0': [91, 97],
   '420x560 floating 0 banner': [34, 97],
   '420x560 floating 1': [51, 97],
@@ -410,15 +487,15 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x560 floating 1 banner': [20, 97],
   '420x560 floating 1 banner undo': [20, 97],
   '420x560 floating 2': [51, 97],
-  '420x560 floating 2 undo': [20, 97],
+  '420x560 floating 2 undo': [37, 97],
   '420x560 floating 2 banner': [20, 97],
   '420x560 floating 2 banner undo': [20, 97],
   '420x560 floating 3': [51, 97],
-  '420x560 floating 3 undo': [20, 97],
+  '420x560 floating 3 undo': [37, 97],
   '420x560 floating 3 banner': [20, 97],
   '420x560 floating 3 banner undo': [20, 97],
   '420x560 floating 4': [51, 97],
-  '420x560 floating 4 undo': [20, 97],
+  '420x560 floating 4 undo': [37, 97],
   '420x560 floating 4 banner': [20, 97],
   '420x560 floating 4 banner undo': [20, 97],
   '420x640 floating 0 banner': [90, 97],
@@ -427,29 +504,17 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x640 floating 1 banner': [50, 97],
   '420x640 floating 1 banner undo': [36, 97],
   '420x640 floating 2': [75, 97],
-  '420x640 floating 2 undo': [21, 97],
+  '420x640 floating 2 undo': [61, 97],
   '420x640 floating 2 banner': [50, 97],
-  '420x640 floating 2 banner undo': [20, 97],
+  '420x640 floating 2 banner undo': [36, 97],
   '420x640 floating 3': [75, 97],
-  '420x640 floating 3 undo': [21, 97],
+  '420x640 floating 3 undo': [61, 97],
   '420x640 floating 3 banner': [50, 97],
-  '420x640 floating 3 banner undo': [20, 97],
+  '420x640 floating 3 banner undo': [36, 97],
   '420x640 floating 4': [75, 97],
-  '420x640 floating 4 undo': [21, 97],
+  '420x640 floating 4 undo': [61, 97],
   '420x640 floating 4 banner': [50, 97],
-  '420x640 floating 4 banner undo': [20, 97],
-  '420x760 floating 2 undo': [80, 97],
-  '420x760 floating 2 banner undo': [80, 97],
-  '420x760 floating 3 undo': [80, 97],
-  '420x760 floating 3 banner undo': [80, 97],
-  '420x760 floating 4 undo': [80, 97],
-  '420x760 floating 4 banner undo': [80, 97],
-  '768x600 open 2 banner undo': [86, 97],
-  '768x600 open 3 banner undo': [86, 97],
-  '768x600 open 4 banner undo': [86, 97],
-  '768x600 closed 2 banner undo': [86, 97],
-  '768x600 closed 3 banner undo': [86, 97],
-  '768x600 closed 4 banner undo': [86, 97],
+  '420x640 floating 4 banner undo': [36, 97],
   '768x600 floating 0': [69, 97],
   '768x600 floating 0 banner': [62, 97],
   '768x600 floating 1': [29, 97],
@@ -475,56 +540,50 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '1024x640 floating 1 banner': [50, 97],
   '1024x640 floating 1 banner undo': [36, 97],
   '1024x640 floating 2': [50, 97],
-  '1024x640 floating 2 undo': [20, 97],
+  '1024x640 floating 2 undo': [36, 97],
   '1024x640 floating 2 banner': [50, 97],
-  '1024x640 floating 2 banner undo': [20, 97],
+  '1024x640 floating 2 banner undo': [36, 97],
   '1024x640 floating 3': [50, 97],
-  '1024x640 floating 3 undo': [20, 97],
+  '1024x640 floating 3 undo': [36, 97],
   '1024x640 floating 3 banner': [50, 97],
-  '1024x640 floating 3 banner undo': [20, 97],
+  '1024x640 floating 3 banner undo': [36, 97],
   '1024x640 floating 4': [50, 97],
-  '1024x640 floating 4 undo': [20, 97],
+  '1024x640 floating 4 undo': [36, 97],
   '1024x640 floating 4 banner': [50, 97],
-  '1024x640 floating 4 banner undo': [20, 97],
+  '1024x640 floating 4 banner undo': [36, 97],
 };
 // Of those, where even the plan line alone (33 + two fades = 65) can't show
 // whole, [the body, 65]: it is centred between the fades.
 const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
-  '420x560 open 2 banner undo': [31, 65],
-  '420x560 open 3 banner undo': [31, 65],
-  '420x560 open 4 banner undo': [31, 65],
-  '420x560 closed 2 banner undo': [31, 65],
-  '420x560 closed 3 banner undo': [31, 65],
-  '420x560 closed 4 banner undo': [31, 65],
   '420x560 floating 0 banner': [34, 65],
   '420x560 floating 1': [51, 65],
   '420x560 floating 1 undo': [37, 65],
   '420x560 floating 1 banner': [20, 65],
   '420x560 floating 1 banner undo': [20, 65],
   '420x560 floating 2': [51, 65],
-  '420x560 floating 2 undo': [20, 65],
+  '420x560 floating 2 undo': [37, 65],
   '420x560 floating 2 banner': [20, 65],
   '420x560 floating 2 banner undo': [20, 65],
   '420x560 floating 3': [51, 65],
-  '420x560 floating 3 undo': [20, 65],
+  '420x560 floating 3 undo': [37, 65],
   '420x560 floating 3 banner': [20, 65],
   '420x560 floating 3 banner undo': [20, 65],
   '420x560 floating 4': [51, 65],
-  '420x560 floating 4 undo': [20, 65],
+  '420x560 floating 4 undo': [37, 65],
   '420x560 floating 4 banner': [20, 65],
   '420x560 floating 4 banner undo': [20, 65],
   '420x640 floating 1 undo': [61, 65],
   '420x640 floating 1 banner': [50, 65],
   '420x640 floating 1 banner undo': [36, 65],
-  '420x640 floating 2 undo': [21, 65],
+  '420x640 floating 2 undo': [61, 65],
   '420x640 floating 2 banner': [50, 65],
-  '420x640 floating 2 banner undo': [20, 65],
-  '420x640 floating 3 undo': [21, 65],
+  '420x640 floating 2 banner undo': [36, 65],
+  '420x640 floating 3 undo': [61, 65],
   '420x640 floating 3 banner': [50, 65],
-  '420x640 floating 3 banner undo': [20, 65],
-  '420x640 floating 4 undo': [21, 65],
+  '420x640 floating 3 banner undo': [36, 65],
+  '420x640 floating 4 undo': [61, 65],
   '420x640 floating 4 banner': [50, 65],
-  '420x640 floating 4 banner undo': [20, 65],
+  '420x640 floating 4 banner undo': [36, 65],
   '768x600 floating 0 banner': [62, 65],
   '768x600 floating 1': [29, 65],
   '768x600 floating 1 undo': [20, 65],
@@ -547,17 +606,17 @@ const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
   '1024x640 floating 1 banner': [50, 65],
   '1024x640 floating 1 banner undo': [36, 65],
   '1024x640 floating 2': [50, 65],
-  '1024x640 floating 2 undo': [20, 65],
+  '1024x640 floating 2 undo': [36, 65],
   '1024x640 floating 2 banner': [50, 65],
-  '1024x640 floating 2 banner undo': [20, 65],
+  '1024x640 floating 2 banner undo': [36, 65],
   '1024x640 floating 3': [50, 65],
-  '1024x640 floating 3 undo': [20, 65],
+  '1024x640 floating 3 undo': [36, 65],
   '1024x640 floating 3 banner': [50, 65],
-  '1024x640 floating 3 banner undo': [20, 65],
+  '1024x640 floating 3 banner undo': [36, 65],
   '1024x640 floating 4': [50, 65],
-  '1024x640 floating 4 undo': [20, 65],
+  '1024x640 floating 4 undo': [36, 65],
   '1024x640 floating 4 banner': [50, 65],
-  '1024x640 floating 4 banner undo': [20, 65],
+  '1024x640 floating 4 banner undo': [36, 65],
 };
 
 describe('the grid', () => {
@@ -582,7 +641,12 @@ describe('the grid', () => {
       logClearance: log === 'floating' ? 0 : 348, logTop: log === 'open' ? natural + 88 : log === 'closed' ? CLOSED_LOG + 88 : 0,
       logSpare: gives ? natural - FLOOR : 0, logCollapse: gives ? FLOOR - CLOSED_LOG : 0,
       topLine,
-      card: { ...LIVE_CARD, items: Array(count).fill(46), undo: Array(count).fill(false).map((_, i) => undo && i === count - 1) },
+      // The newest offers Undo, and carries the fold's count in its row (GM r8).
+      card: {
+        ...LIVE_CARD, items: Array(count).fill(46),
+        undo: Array(count).fill(false).map((_, i) => undo && i === count - 1),
+        host: Array(count).fill(false).map((_, i) => undo && i === count - 1),
+      },
       floating: log === 'floating' ? { top: Math.round(h * 0.3), bottom: Math.round(h * 0.3) + natural, left: column.left + 1, right: column.right - 1 } : null,
       column,
     };
@@ -627,7 +691,12 @@ describe('the grid', () => {
     const shownNotices = rows.filter((row) => row.kind === 'notice').length;
     if (count) expect(shownNotices).toBe(count - place.folded);
     if (undo) expect(place.fold[count - 1]).toBe(false);
-    if (place.folded) expect(rows[0].kind).toBe('more');
+    if (place.folded && place.moreHost < 0) expect(rows[0].kind).toBe('more');
+    // With an Undo notice showing, the count rides in its row: no row of its own.
+    if (place.folded && undo) {
+      expect(place.moreHost).toBe(count - 1);
+      expect(rows.some((row) => row.kind === 'more')).toBe(false);
+    }
     // A floating log: under it, above it (its top come down by its give),
     // or, with no room either side, under it crossing its body; never its header.
     let crossing = false;
@@ -729,7 +798,7 @@ function stackDom(count: number) {
 describe('the fold, the row and the glide, written to the stack', () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = ''; });
   const place = (over: Partial<StackPlace>): StackPlace => ({
-    aboveLog: true, lift: 188, cap: 154, mode: 'under', folded: 0, fold: [], more: 0, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, ...over,
+    aboveLog: true, lift: 188, cap: 154, mode: 'under', folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, ...over,
   });
 
   it('folds the older notices, names the row and its state, and marks the step', () => {
@@ -767,6 +836,29 @@ describe('the fold, the row and the glide, written to the stack', () => {
     toasts[2].setAttribute('inert', '');
     applyNoticeStack(region, stack, place({ mode: 'under' }));
     expect(toasts[2].hasAttribute('inert')).toBe(true);
+  });
+
+  it('a hosting Undo notice carries the count: the region\'s own row hides, the store names the host (GM r8)', () => {
+    const { region, stack, more, toasts } = stackDom(3);
+    applyNoticeStack(region, stack, place({ mode: 'pill', folded: 2, fold: [true, true, false], more: 2, moreHost: 2 }));
+    expect(toasts.map((toast) => toast.hasAttribute(MORE_HOST_ATTR))).toEqual([false, false, true]);
+    expect(region.hasAttribute(MORE_SHOWN_ATTR)).toBe(false);
+    expect(more.hidden).toBe(true);
+    expect(more.textContent).toBe('');
+    expect(getNoticeMore()).toEqual({ host: toasts[2], count: 2, expanded: false });
+    applyNoticeStack(region, stack, place({ mode: 'above', fold: [false, false, false], more: 2, moreHost: 2, expanded: true }));
+    expect(getNoticeMore()).toEqual({ host: toasts[2], count: 2, expanded: true });
+    expect(more.hidden).toBe(true);
+    // No host: the row stands on its own again, the mark gone.
+    applyNoticeStack(region, stack, place({ mode: 'pill', folded: 2, fold: [true, true, false], more: 2 }));
+    expect(toasts.some((toast) => toast.hasAttribute(MORE_HOST_ATTR))).toBe(false);
+    expect(more.hidden).toBe(false);
+    expect(more.textContent).toBe('2 notices');
+    expect(getNoticeMore().host).toBe(null);
+    // A host index with nothing folded writes nothing.
+    applyNoticeStack(region, stack, place({ mode: 'under', moreHost: 2 }));
+    expect(toasts.some((toast) => toast.hasAttribute(MORE_HOST_ATTR))).toBe(false);
+    expect(getNoticeMore().host).toBe(null);
   });
 
   it('scrolls the plan line into view when the body is shorter than note and plan', () => {
@@ -957,7 +1049,7 @@ describe('measured from the live stack', () => {
           <div class="foot" data-notice-shrink-foot=""></div>
         </div></div>
         <div data-notice-slot="late"><div class="toast"><button>×</button></div></div>
-        <div data-notice-slot="canvas"><div class="toast"><button>Undo</button></div></div>
+        <div data-notice-slot="canvas"><div class="toast"><button>Undo</button><span ${MORE_SLOT_ATTR}="" hidden></span></div></div>
       </div></div>`;
     // The card mid-entrance, at 0.96 of its layout size: what it reads is in
     // layout pixels all the same.
@@ -990,7 +1082,7 @@ describe('measured from the live stack', () => {
     // The kept lines: the plan line's top to the first ⚠ row's foot; the
     // plan line alone; which notices offer Undo (GM r7: they never fold).
     expect(m.card).toMatchObject({
-      chrome: 100, body: 700, foot: 54, items: [46, 46], plan: { top: 77, bottom: 142 }, first: { top: 77, bottom: 110 }, undo: [false, true],
+      chrome: 100, body: 700, foot: 54, items: [46, 46], plan: { top: 77, bottom: 142 }, first: { top: 77, bottom: 110 }, undo: [false, true], host: [false, true],
     });
     applyNoticeStack(region, stack, placeNoticeStack(m));
     expect(region.dataset.aboveLog).toBe('true');
@@ -999,6 +1091,42 @@ describe('measured from the live stack', () => {
     expect(document.querySelector<HTMLElement>('.card')!.style.getPropertyValue('--notice-card-cap'))
       .toBe(`${900 - 80 - 126 - 2 * 54 - 72}px`);
     document.documentElement.style.removeProperty('--agent-log-collapse');
+  });
+
+  it('with no card, reads the notices shown and their column, and the floating log (GM r8 4)', () => {
+    for (const [name, value] of Object.entries({ top: 300, bottom: 520, left: 65, right: 403 })) {
+      document.documentElement.style.setProperty(`--agent-log-float-${name}`, `${value}px`);
+    }
+    document.body.innerHTML = `
+      <div data-notice-region=""><div class="notice-region__stack">
+        <div data-notice-slot="a"><div class="toast a" ${FOLD_ATTR}=""></div></div>
+        <div data-notice-slot="b"><div class="toast b"></div></div>
+        <div data-notice-slot="c"><div class="toast c"></div></div>
+        <div data-notice-slot="d"><div class="toast d"></div></div>
+      </div></div>`;
+    const boxes: Record<string, Partial<DOMRect>> = {
+      '[data-notice-region]': { left: 64, bottom: 559 },
+      '.b': { left: 70, right: 380 }, '.c': { left: 64, right: 404 },
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const hit = Object.entries(boxes).find(([selector]) => this.matches(selector));
+      return { top: 0, bottom: 0, left: 0, right: 0, height: 0, width: 0, ...(hit?.[1] ?? {}) } as DOMRect;
+    });
+    // The folded one and an empty one take no room.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('.b, .c, .a') ? 46 : 0;
+    });
+    const region = document.querySelector<HTMLElement>('[data-notice-region]')!;
+    const stack = document.querySelector<HTMLElement>('.notice-region__stack')!;
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 640, configurable: true });
+    const m = measureNoticeStack(region, stack, 116);
+    expect(m).toMatchObject({ card: null, notices: { items: [46, 46], gap: 8 }, column: { left: 64, right: 404 }, floating: { top: 300, bottom: 520, left: 65, right: 403 } });
+    for (const name of ['top', 'bottom', 'left', 'right']) document.documentElement.style.removeProperty(`--agent-log-float-${name}`);
+    // No notices: nothing to clear.
+    document.body.innerHTML = '<div data-notice-region=""><div class="notice-region__stack"></div></div>';
+    expect(measureNoticeStack(document.querySelector<HTMLElement>('[data-notice-region]')!, document.querySelector<HTMLElement>('.notice-region__stack')!, 116))
+      .toMatchObject({ notices: null, column: null, floating: null });
   });
 
   it('the empty toolbar Panel keeps its room in the top line, so a selection never moves the card (GM r6: not (c))', () => {

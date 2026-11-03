@@ -395,3 +395,52 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 - Also live, with no shot:
   - The log the card collapsed at 420×560 (shot 06) reopened by itself once the window grew to 420×640 and the card no longer needed the room (`hold: 'none'`, open).
   - Collapsed by hand at 420×560, the card arrived (step 1, "2 more notices") and left, and the log stayed collapsed (`open: false`, `--agent-log-collapse: 0px`).
+
+## Round 3f (GM - Design's r8, 2026-11-02)
+
+**Accepted as ruled (GM r8 1):** the 420×560 banner cells with 2–4 notices and no Undo keep the plan line whole, with the ⚠ line's last 12 px under the fade and scrollable. The grid still lists them by name.
+
+**The fold's count rides in the Undo notice's row (GM r8 2).** Whenever an Undo notice and the fold both show, at any size, the row reads "Moved “Hero shot” · Undo · 3 more", and the separate 40 px row goes:
+- `placeNoticeStack` takes `card.host` (which notices can carry it: the measure reads a `data-notice-more-slot` mark that `NoticeMoreInline` renders inside the canvas notice when it offers Undo or Redo). The newest such notice that stays whole is `moreHost`, and the rows then count no row of its own. Unfolded ("Show less"), it stays in the same row.
+- `applyNoticeStack` marks the host (`data-notice-more-host`), hides the region's own row, and writes `{ host, count, expanded }` to a small store (`lib/noticeMore.ts`). `NoticeMoreInline` renders the "·" and the button only in the host, right after Undo, so the keyboard goes name, Undo, "3 more" (`aria-label` "3 more notices", `aria-expanded`). The click is the region's own toggle (`setNoticeMoreToggle`).
+- In the hosting row the name is one line with an ellipsis. That's a named exception in the "no toast cuts a sentence" sweep (`pr198Fix6Copy`), citing GM r8.
+- **Found live, fixed with a pin:** a long name's unbroken line widened the notice past the region (388 px in a 340 px column at 420, its right edge past the window), because the canvas notice's own max-width (`100vw - 32px`) overrides the region's cap and a nowrap line sets the min-content. The hosting notice is now held to its slot (`max-width: min(var(--notice-max-w), 100%)`), and a test pins the rule.
+- The grid's Undo cells now carry the count in their row. 420×560 with the banner and an Undo notice goes from 31 px to 71 px of body (live, shot 06: 71), with the plan line whole; 768×600 with the banner is no longer short.
+
+**The floating log collapses for the card too (GM r8 3).** The placement already gave a floating log's body and its collapse when the stack sits above it; the store's who-collapsed memory is the same one the docked log uses.
+- **Found live, fixed with a test:** the floating log collapsed and reopened in a loop. AgentLog read the log's box before writing `--agent-log-natural-h` and the rest, and a re-run of its effect clears those first, so a top-pinned log was read with no shift (its box at −16 px). The region then saw no floating log, released the collapse, and the log reopened. The box is now read after the values and the `data-floating` / `data-docked` marks are written. The new test reproduces the CSS's shift from the root values and fails on the old read.
+- **Still short (by name in the grid, as GM asked): 71 floating cells, 62 of them short of the plan line too.** The grid's floating log sits at 30% of the height, in the column. Collapsed to its header at its bottom edge, the room above it is the log's bottom less its 44 px header, 8 px clearance and the top line: at 1024×640, 372 − 44 − 8 − 150 = 170 px, against 186 for the card alone; under it, 640 − 81 − 380 = 179. The notices take 40–100 more. GM's "that frees the whole body" holds, and it covers the 6 cells it can; the rest need the log to move, which r8 rules out.
+
+**Notices clear the log with no card too (GM r8 4).** With no card, the measure reads the shown notices and their column, and the notices go above a floating log in their column when they don't fit under it and do above it (or have more room there). Live, shot 11: the two notices at 222–322 over a log at 330.
+
+**The anchored edge is fixed through the spring (GM r8 5).** One registered length, `--agent-log-give`, carries the spring; the height (`--agent-log-shown-h`, clamped between the floor and the natural height) and a top-pinned log's `translate` (natural − shown) both come from it, so the bottom is the same on every frame and the overshoot shows only at the free top edge. The overshoot past either end is cut by the clamp.
+- A model test reads the spring's `linear()` stops and the duration from layouts.css and walks the transition frame by frame both ways and to the floor: docked and floating, the bottom never moves; a top-pinned log's top rests exactly at the person's position when the give is 0; giving way, the top overshoots past its rest and comes back.
+- Live, every frame by `requestAnimationFrame`, the spring slowed to a tenth: giving way the top went 330 → 355.55 (overshoot) → 354.99, growing back 355 → 330, the bottom 509.99–510 throughout; collapsing 250 → 386 and reopening 386 → 250 with the bottom at 429.99–430. (The bottom moved once, 484 → 510, when the proposal's event added a row to a top-pinned log; that's its content, not the give.)
+- On the brief's "a top-anchored floating log's top edge likewise": GM's ruling is that the bottom is always the anchored edge, so I followed GM, and pinned instead that a top-pinned log's top returns exactly to where the person put it.
+
+**Spec:** GM r8 is appended verbatim to `.planning/private/proposal-card.md` under "Rulings from #216 round 3e".
+
+**Checks (round 3f).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, the round 3e list plus `tests/noticeMoreInline.round3f.test.tsx` and `tests/proposalLogGive.round3e.test.tsx` (focusRingCss and the copy sweeps among them): 162 files, 3176 passed.
+- Backend unchanged; pytest not rerun.
+- Entry: 454,984 B raw, 140,100 B gzip.
+- Mutation checks: 35 run, 31 caught at first. Of the 4 that survived:
+  - 3 are now pinned, and caught: the count's row counted while unfolded with a host, a host named with nothing folded, and `stepChanged` ignoring the host.
+  - 1 was equivalent (a host can't be folded, since a notice with an Undo never folds), so that check was removed from the code.
+
+  Runner `scratchpad/proposal-card/mut3f/run.py`; results in `out-first.txt` and `out-pins.txt`.
+- **Live** (Restraint; isolated backend on 8798, Vite on 5798; the installed Chrome with a throwaway profile, removed after; canaries blocked; nothing accepted or run; offline by blocking `/api/health`). Shots are in `scratchpad/proposal-card/shots3f/`, and `md5 | uniq -d` is empty:
+
+| Shot | Result |
+|---|---|
+| 02, 768×600, offline, 3 notices and an Undo notice | "Moved “Hero shot”. · Undo · 3 more" in one row (199–245; Undo greyed offline), no row of its own. Card 253–409; plan line 303–319 whole, the ⚠ line 325–338. |
+| 06, 420×560, offline, the same notices | The Undo row 214–260, the docked log collapsed for the card. Card body 71 px (was 31), plan line 319–352 whole. |
+| 07, 420×640 | The Undo row with "3 more" (116–162); card 170–372, body 113, both kept lines whole. |
+| 07b | Tab from Undo lands on "3 more" with the focus ring; the order is Undo, "3 more notices", Dismiss. |
+| 07c | Enter opens it: all four notices, the button reads "Show less" (`aria-expanded="true"`) and keeps focus; Enter again folds back. |
+| 07d, a long name | "Moved “Hero shot, chro…” · Undo · 3 more" on one line, the notice 64–404 inside the column. |
+| 10, 1024×640, a floating log pinned at 250 | Collapsed for the card to its header, 386–430, its bottom where it was (`agentLogCardHold: 'card'`); "2 notices" over the card. |
+| 10b | The card withdrawn: the log reopened at 250–430. |
+| 11, no card | The two notices (222–322) above a floating log at 330. |
+| 08, 09 frames 1–3 | Gives way 330 → 355, grows back 351 → 334 → 330, the bottom at 510 in every frame. |

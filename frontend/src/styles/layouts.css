@@ -571,19 +571,32 @@ body:not(.app-slava-restraint) .agent-log__chevron {
 }
 
 /* At short heights the open log's body gives way to a proposal card
-   (GM - Design, PR #216 r6, r7), docked or floating: the notice region
+   (GM - Design, PR #216 r6-r8), docked or floating: the notice region
    writes --agent-log-squeeze (lib/noticeStackPlace.ts), and the log's
    height comes down by it on the layout spring, never under its floor of
-   header and 2 rows (--agent-log-floor, AgentLog). It is held at its bottom
-   edge, so the header and its collapse control come down whole with the
-   body's top; the body shrinks and scrolls. With no squeeze the height is
-   the log's own, and it springs back to it when the card leaves. */
+   header and 2 rows (--agent-log-floor, AgentLog), never over its own
+   height. It is held at its bottom edge, so the header and its collapse
+   control come down whole with the body's top; the body shrinks and
+   scrolls. It springs back when the card leaves.
+   GM r8: the held edge stays exactly fixed, and the spring's overshoot
+   shows only at the free top edge. So one registered length,
+   --agent-log-give, carries the spring, and the height (and a top-pinned
+   log's shift) are both read from it, clamped, in the same frame: the
+   overshoot past either end is cut by the clamp, never by the edge. */
+@property --agent-log-give {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 .agent-log.agent-log--open[data-docked],
 .agent-log.agent-log--open[data-floating] {
+  --agent-log-give: var(--agent-log-squeeze, 0px);
+  --agent-log-shown-h: clamp(var(--agent-log-floor, 0px), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-give)), var(--agent-log-natural-h, 80vh));
   display: flex;
   flex-direction: column;
-  max-height: max(var(--agent-log-floor, 0px), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-squeeze, 0px)));
-  transition: max-height 420ms var(--agent-log-spring), translate 420ms var(--agent-log-spring);
+  max-height: var(--agent-log-shown-h);
+  transition: --agent-log-give 420ms var(--agent-log-spring);
 }
 
 .agent-log.agent-log--open[data-docked] > .agent-log__drag-row,
@@ -597,22 +610,21 @@ body:not(.app-slava-restraint) .agent-log__chevron {
   min-height: 0;
 }
 
-/* A floating log the person pinned by its top edge: moved down by what it
-   gives, so its bottom edge stays where they put it (GM r7). Collapsed for
-   the card (step 4), its header sits on that bottom edge too. */
+/* A floating log the person pinned by its top edge: moved down by exactly
+   what its height gives, read from the same value, so its bottom edge stays
+   where they put it (GM r7, r8). Collapsed for the card (step 4), its
+   header sits on that bottom edge too. */
 .agent-log.agent-log--open[data-floating="top"] {
-  translate: 0 calc(var(--agent-log-natural-h, 0px) - max(var(--agent-log-floor, 0px), calc(var(--agent-log-natural-h, 0px) - var(--agent-log-squeeze, 0px))));
+  translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-log-shown-h));
 }
 
 .agent-log[data-card-collapsed][data-floating="top"] {
   translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
-  transition: translate 420ms var(--agent-log-spring);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .agent-log.agent-log--open[data-docked],
-  .agent-log.agent-log--open[data-floating],
-  .agent-log[data-card-collapsed][data-floating="top"] {
+  .agent-log.agent-log--open[data-floating] {
     transition: none;
   }
 }

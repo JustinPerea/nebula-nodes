@@ -873,6 +873,47 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
    each take a line of their own (lib/canvasFileDrop.ts). Undo, Open copy
    and × sit vertically centred on the right (align-items above). */
 
+/* GM - Design, PR #216 r8: with the fold's count in this row ("Moved
+   “Hero shot” · Undo · 3 more"), the name gives way, cut with "…", so Undo
+   and "3 more" always fit on one line, even at 420. The one place a
+   notice's text is cut (pr198Fix6Copy names it). */
+/* Carrying the fold's count (GM r8), the name gives way on one line. Its
+   one unbroken line would otherwise widen the notice past the region (its
+   min-content), so the notice is held to its slot as every other row is. */
+.canvas-undo-notice[data-notice-more-host] {
+  max-width: min(var(--notice-max-w, 560px), 100%);
+}
+
+.canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.canvas-undo-notice__more-dot {
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 0.45);
+}
+
+/* A trailing text button: no fill, no border. */
+.canvas-undo-notice__more-button {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.85);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canvas-undo-notice__more-button:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
 .canvas-undo-notice__action,
 .canvas-undo-notice__close {
   flex-shrink: 0;

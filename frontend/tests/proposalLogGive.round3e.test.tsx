@@ -151,22 +151,118 @@ describe('the log, rendered, under the card\'s hold', () => {
   });
 });
 
-describe('the give, in CSS (GM r7)', () => {
+describe('a top-pinned floating log, collapsed for the card and back (round 3f)', () => {
+  // Its box as layouts.css draws it from the root's values: the person's
+  // top, moved down by natural - shown (collapsed: natural - its header).
+  // With them cleared, as a re-run of AgentLog's effect does first, the box
+  // is off: the measure must read it after writing them.
+  it('writes the same box, collapsed or open, so the card never reopens it in a loop', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
+    const TOP = 250, NATURAL = 180, HEADER = 44;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains('agent-log')) return rect(0, 0, 0, 0);
+      const natural = Number.parseFloat(root().getPropertyValue('--agent-log-natural-h')) || 0;
+      const open = this.classList.contains('agent-log--open');
+      const h = open ? NATURAL : HEADER;
+      const shift = this.dataset.floating === 'top' ? (open ? natural - h : this.hasAttribute('data-card-collapsed') ? natural - HEADER : 0) : 0;
+      return rect(300, 640, TOP + shift, TOP + shift + h);
+    });
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('agent-log') ? NATURAL : 0;
+    });
+    window.localStorage.setItem('nebula:agentLog:pos', JSON.stringify({ left: 300, top: TOP, anchorX: 'left', anchorY: 'top' }));
+    useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true, agentLogCardHold: 'none' } as never);
+    const { container } = render(<AgentLog />);
+    const log = container.querySelector<HTMLElement>('.agent-log')!;
+    act(() => { log.style.height = `${NATURAL}px`; window.dispatchEvent(new Event('resize')); });
+    const box = () => [root().getPropertyValue('--agent-log-float-top'), root().getPropertyValue('--agent-log-float-bottom')];
+    const open = box();
+    expect(open).toEqual([`${TOP}px`, `${TOP + NATURAL}px`]);
+    act(() => useUIStore.getState().holdAgentLogForCard(true, true));
+    expect(log.hasAttribute('data-card-collapsed')).toBe(true);
+    // Collapsed to its header at its bottom edge: the box it has with no give is the same.
+    expect(box()).toEqual(open);
+    act(() => useUIStore.getState().holdAgentLogForCard(false, false));
+    expect(log.classList.contains('agent-log--open')).toBe(true);
+    expect(box()).toEqual(open);
+    window.localStorage.removeItem('nebula:agentLog:pos');
+  });
+});
+
+describe('the give, in CSS (GM r7-r8)', () => {
   const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-  it('a floating log gives way as the docked one, on the spring, down to its floor', () => {
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{[^}]*max-height: max\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-squeeze, 0px\)\)\);[^}]*transition: max-height 420ms var\(--agent-log-spring\), translate 420ms var\(--agent-log-spring\);/);
+  it('a floating log gives way as the docked one, on the spring, down to its floor (one registered length, GM r8)', () => {
+    expect(css).toMatch(/@property --agent-log-give \{\s*syntax: '<length>';\s*inherits: false;\s*initial-value: 0px;\s*\}/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: var\(--agent-log-shown-h\);\s*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating\] \.agent-log__body \{\s*flex: 0 1 auto;\s*min-height: 0;/);
   });
 
-  it('one pinned by its top edge moves down by what it gives, so its bottom edge stays; collapsed for the card too', () => {
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - max\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-log-squeeze, 0px\)\)\)\);/);
-    expect(css).toMatch(/\.agent-log\[data-card-collapsed\]\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-h-closed\)\);/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\],\s*\.agent-log\[data-card-collapsed\]\[data-floating="top"\] \{\s*transition: none;/);
+  it('one pinned by its top edge moves down by what its height gives, read from the same value; collapsed for the card too', () => {
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-log-shown-h\)\);\s*\}/);
+    expect(css).toMatch(/\.agent-log\[data-card-collapsed\]\[data-floating="top"\] \{\s*translate: 0 calc\(var\(--agent-log-natural-h, 0px\) - var\(--agent-h-closed\)\);\s*\}/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*transition: none;/);
+    // Nothing else springs the edge: no transition on max-height or translate.
+    expect(css).not.toMatch(/transition:[^;]*(max-height|translate) 420ms var\(--agent-log-spring\)/);
   });
 
   it('the region asks the store each time it places, with the card or without it', () => {
     const region = readFileSync(resolve(__dirname, '../src/components/NoticeRegion.tsx'), 'utf8');
     expect(region).toMatch(/useUIStore\.getState\(\)\.holdAgentLogForCard\(next\.place\.collapse, next\.place\.mode !== null\)/);
   });
+});
+
+/**
+ * GM - Design, PR #216 r8 5: "the anchored edge stays exactly fixed through
+ * the spring; the overshoot happens only at the free top edge." The give is
+ * one registered length on the spring; the height and a top-pinned log's
+ * move both come from it, so its bottom edge is the same on every frame.
+ * This reads the spring and the formulas from layouts.css and walks the
+ * transition frame by frame, both ways, through the overshoot.
+ */
+describe('the anchored edge, every frame of the spring (GM r8 5)', () => {
+  const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8');
+  const stops = css.match(/--agent-log-spring: linear\(([^)]*)\)/)![1].split(',').map(Number);
+  const ease = (t: number) => {
+    const at = t * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(at));
+    return stops[i] + (stops[i + 1] - stops[i]) * (at - i);
+  };
+  const ms = Number(css.match(/transition: --agent-log-give (\d+)ms var\(--agent-log-spring\)/)![1]);
+  // The same formulas the CSS declares (pinned by the tests above).
+  const shown = (natural: number, floor: number, give: number) => Math.min(natural, Math.max(floor, natural - give));
+  const frames = (from: number, to: number) => Array.from({ length: Math.ceil(ms / (1000 / 60)) + 1 }, (_, f) => {
+    const t = Math.min(1, (f * 1000) / 60 / ms);
+    return from + (to - from) * ease(t);
+  });
+
+  it('the spring overshoots, so the test walks through the overshoot', () => {
+    expect(Math.max(...stops)).toBeGreaterThan(1);
+    expect(stops[0]).toBe(0);
+    expect(stops[stops.length - 1]).toBe(1);
+  });
+
+  for (const [name, from, to] of [['giving way', 0, 60], ['growing back', 60, 0], ['to its floor', 0, 120]] as const) {
+    it(`${name}: the bottom edge never moves, docked or floating pinned either way; the top edge carries the overshoot`, () => {
+      const natural = 180, floor = 91, personTop = 300, dockedBottom = 81;
+      const tops: number[] = [];
+      for (const give of frames(from, to)) {
+        const h = shown(natural, floor, give);
+        // Docked: held by `bottom`, its height is the shown height.
+        const docked = { bottom: dockedBottom, top: dockedBottom + h };
+        expect(docked.bottom).toBe(dockedBottom);
+        // Floating, pinned by its top: moved down by natural - shown.
+        const top = personTop + (natural - h);
+        expect(top + h).toBe(personTop + natural);
+        tops.push(top);
+      }
+      // At rest the top sits exactly where the give leaves it; with no give,
+      // exactly where the person put it.
+      expect(tops[tops.length - 1]).toBe(personTop + natural - shown(natural, floor, to));
+      if (to === 0) expect(tops[tops.length - 1]).toBe(personTop);
+      // Giving way, the free edge overshoots past its rest and comes back.
+      if (to > from && natural - to > floor) expect(Math.max(...tops)).toBeGreaterThan(tops[tops.length - 1]);
+    });
+  }
 });

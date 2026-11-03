@@ -4,6 +4,7 @@ import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
 import { useUIStore } from '../store/uiStore';
+import { setNoticeMore, setNoticeMoreToggle } from '../lib/noticeMore';
 import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
 import {
   MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
@@ -93,6 +94,8 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       expanded.current = !expanded.current;
       place();
     };
+    // The same toggle for the count an Undo notice's row carries (GM r8).
+    setNoticeMoreToggle(() => replace.current());
     watch(region);
     watch(stack);
     place();
@@ -116,6 +119,8 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       region.removeEventListener('transitionend', place);
       window.removeEventListener('resize', place);
       replace.current = () => {};
+      setNoticeMoreToggle(() => {});
+      setNoticeMore({ host: null, count: 0, expanded: false });
     };
   }, [regionRef, stackRef]);
   return useCallback(() => replace.current(), []);

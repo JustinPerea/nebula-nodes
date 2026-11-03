@@ -319,24 +319,31 @@ export function AgentLog() {
       set('--agent-log-natural-h', `${Math.ceil(natural)}px`);
       set('--agent-log-floor', `${Math.ceil(floor)}px`);
       set(LOG_COLLAPSE_VAR, `${collapse}px`);
+      // Its box is read again once those and its marks are written: a re-run
+      // of this effect clears them first, and a top-pinned log's shift and
+      // its height are drawn from them, so a box read before is off by that
+      // (round 3f: read at -16 px, the card collapsed and reopened the log in
+      // a loop).
       if (docked) {
         clear(FLOAT);
         log.dataset.docked = 'true';
         delete log.dataset.floating;
+        const box = log.getBoundingClientRect();
         set('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
-        set('--agent-log-top', `${Math.ceil(window.innerHeight - (rect.bottom - natural) + AGENT_LOG_GAP_PX)}px`);
+        set('--agent-log-top', `${Math.ceil(window.innerHeight - (box.bottom - natural) + AGENT_LOG_GAP_PX)}px`);
       } else {
         delete log.dataset.docked;
         clear(DOCK);
         // A floating log gives way held at its bottom edge too (GM r7): one
         // pinned by its top edge is moved down by what it gives.
         log.dataset.floating = position?.anchorY === 'bottom' && typeof position.offsetY === 'number' ? 'bottom' : 'top';
-        if (rect.width > 0 && rect.height > 0) {
+        const box = log.getBoundingClientRect();
+        if (box.width > 0 && box.height > 0) {
           // Its box with no give: the bottom edge stays where it is.
-          root.style.setProperty('--agent-log-float-top', `${Math.floor(rect.bottom - natural)}px`);
-          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(rect.bottom)}px`);
-          root.style.setProperty('--agent-log-float-left', `${Math.floor(rect.left)}px`);
-          root.style.setProperty('--agent-log-float-right', `${Math.ceil(rect.right)}px`);
+          root.style.setProperty('--agent-log-float-top', `${Math.floor(box.bottom - natural)}px`);
+          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(box.bottom)}px`);
+          root.style.setProperty('--agent-log-float-left', `${Math.floor(box.left)}px`);
+          root.style.setProperty('--agent-log-float-right', `${Math.ceil(box.right)}px`);
         } else {
           clear(FLOAT);
         }
