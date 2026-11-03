@@ -997,3 +997,108 @@ def test_cli_default_url_reads_the_url_file(tmp_path, monkeypatch):
     assert default_url({}) == "http://localhost:8000"
     with pytest.raises(SystemExit):
         default_url({"NEBULA_URL_FILE": str(tmp_path / "missing")})
+
+
+# -- `nebula mcp connect claude-code --channel` (the Nebula channel's listen config) ----
+
+def _listen(tmp_path: Path) -> Path:
+    return mcp_connect.listen_config_path(tmp_path)
+
+
+def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    assert path == tmp_path / ".nebula-listen.mcp.json"
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    data = json.loads(path.read_text())
+    entry = data["mcpServers"]["nebula-listen"]
+    assert entry["args"][-1] == "--channel" and entry["args"][0].endswith("backend/mcp_server.py")
+    assert entry["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": cli_env.file}
+    assert mode(path) == 0o600 and TOKEN not in path.read_text()
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err
+    command = (f'claude --mcp-config {path} --dangerously-load-development-channels server:nebula-listen '
+               '--disallowedTools "mcp__nebula__*"')
+    assert command in out.out.splitlines()
+    # The copy rules: curly apostrophes, no parentheses or semicolons in what it prints.
+    for line in out.out.splitlines():
+        if line == command:
+            continue
+        assert "'" not in line and "(" not in line and ")" not in line and ";" not in line, line
+
+
+def test_channel_connect_twice_changes_nothing_and_reuses_its_token_file(tmp_path, cli_env, monkeypatch, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    first = path.read_text()
+    capsys.readouterr()
+    # No token given the second time: the token file the config names.
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert path.read_text() == first and not list(tmp_path.glob(".nebula-listen.mcp.json.nebula-backup-*"))
+    out = capsys.readouterr().out
+    assert "already has this nebula-listen entry" in out and "--dangerously-load-development-channels" in out
+
+
+def test_channel_connect_keeps_other_servers_and_never_runs_claude(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    path.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
+    calls = []
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path,
+                                   runner=lambda *a, **k: calls.append(a)) == 0
+    data = json.loads(path.read_text())
+    assert set(data["mcpServers"]) == {"other", "nebula-listen"} and calls == []
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert json.loads(path.read_text())["mcpServers"] == {"other": {"command": "x"}}
+
+
+def test_channel_disconnect_removes_the_listen_config(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert not path.exists()
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "nothing to remove" in out
+    for line in out.splitlines():
+        assert "'" not in line and "(" not in line and ";" not in line, line
+
+
+def test_channel_connect_with_a_pasted_token_masks_it(tmp_path, legacy_env, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert json.loads(path.read_text())["mcpServers"]["nebula-listen"]["env"]["NEBULA_APP_TOKEN"] == TOKEN
+    assert mode(path) == 0o600
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err and "holds the token itself" in out.out
+
+
+def test_channel_is_claude_code_only_and_needs_a_token(tmp_path, monkeypatch, cli_env, capsys):
+    assert mcp_connect.run_connect(args("codex", channel=True), home=tmp_path) == 1
+    assert mcp_connect.run_disconnect(args("cursor", channel=True), home=tmp_path) == 1
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert not _listen(tmp_path).exists()
+    err = capsys.readouterr().err
+    assert "Claude Code only" in err and "no token" in err
+
+
+def test_channel_connect_writes_nothing_when_nebula_cant_be_reached(tmp_path, cli_env, monkeypatch, capsys):
+    monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: None)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert not _listen(tmp_path).exists()
+
+
+def test_channel_print_writes_nothing(tmp_path, cli_env, capsys):
+    assert mcp_connect.run_connect(args("claude-code", channel=True, print_only=True), home=tmp_path) == 0
+    assert not _listen(tmp_path).exists()
+    out = capsys.readouterr().out
+    assert "--channel" in out and "server:nebula-listen" in out and TOKEN not in out
+
+
+def test_the_cli_parses_channel_on_connect_and_disconnect():
+    from cli.__main__ import build_parser
+
+    parser = build_parser()
+    assert parser.parse_args(["mcp", "connect", "claude-code", "--channel"]).channel is True
+    assert parser.parse_args(["mcp", "disconnect", "claude-code", "--channel"]).channel is True
+    assert parser.parse_args(["mcp", "connect", "claude-code"]).channel is False

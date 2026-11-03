@@ -223,6 +223,7 @@ from services.agent_questions import (
 from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
+from services import channel_listeners
 from services import pending_nodes
 from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
@@ -335,6 +336,8 @@ agent_notes = AgentNotes(lambda: project_store)
 agent_questions = QuestionBook(store=lambda: project_store)
 # Each agent's status line (Q125 item 2): in memory only, like cursors.
 agent_status = AgentStatusBook()
+# Which --channel listeners are around (services/channel_listeners.py). Memory only.
+channel_book = channel_listeners.ListenerBook()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -4080,6 +4083,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
+                # Who listens to the canvas (channel readiness), person form (before
+                # the pins and the replay, which stay the last syncs).
+                await websocket.send_text(json.dumps(_channel_listeners_message()))
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
                 # Every live cursor, person form, for this tab only (GM -
@@ -6321,6 +6327,122 @@ async def list_canvas_agents() -> dict[str, Any]:
                           pending=pending_nodes.by_agent(cli_graph.nodes),
                           running=[(agent, running[agent.id]) for agent in agent_runs.agents_in(project_id)])
     return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
+
+
+# ---------- Channel readiness (services/channel_listeners.py) ----------
+#
+# Whether a Claude Code session listens to the canvas (mcp_server.py
+# --channel), per agent session: the Message box's lines read it (PR C).
+# The person's tabs get every listener, with its cursor's key and number,
+# in a channelListeners message on each change and after a verified hello;
+# an agent reads only its own (GET /api/canvas/channel, MCP channel_status).
+
+_channel_expiry: asyncio.TimerHandle | None = None
+_channel_sweeps: set[asyncio.Task] = set()
+
+
+def _channel_person_view(entry: channel_listeners.Listener) -> dict[str, Any]:
+    tag = agent_presence.session_tag(entry.agent, entry.session or None)
+    session = {"key": agent_presence.session_key(entry.agent.id, entry.session),
+               "ordinal": tag["ordinal"] if tag else None}
+    return channel_listeners.view(entry, session=session)
+
+
+def _channel_listeners_message() -> dict[str, Any]:
+    """The person's form: every listener, oldest first, with the open project."""
+    return {"type": "channelListeners", "projectId": _workspace_context()["activeProjectId"],
+            "listeners": [_channel_person_view(entry) for entry in channel_book.entries()],
+            "rev": channel_book.revision}
+
+
+async def _broadcast_channel_listeners() -> None:
+    try:
+        await manager.broadcast_browser(_channel_listeners_message())
+    except Exception:  # noqa: BLE001 - a tab that missed it gets the next one, or reads the GET
+        pass
+
+
+def _schedule_channel_expiry() -> None:
+    """Check again just after the oldest listener would run out (a beat that
+    came meanwhile moves that out, and the check schedules itself again)."""
+    global _channel_expiry
+    if _channel_expiry is not None:
+        _channel_expiry.cancel()
+        _channel_expiry = None
+    deadline = channel_book.next_deadline()
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _channel_expiry = loop.call_later(max(0.0, deadline - channel_book.now()) + 0.5, _start_channel_sweep,
+                                      context=Context())
+
+
+def _start_channel_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_channel_listeners())
+    _channel_sweeps.add(task)
+    task.add_done_callback(_channel_sweeps.discard)
+
+
+async def _sweep_channel_listeners() -> None:
+    if channel_book.sweep():
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+
+
+def _channel_caller() -> tuple[AgentIdentity, str | None]:
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports here (name it with "
+                                                    "NEBULA_AGENT_NAME)")
+    return identity, presence_session(headers)
+
+
+@app.post("/api/agent/channel")
+async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
+    """A --channel listener's beat: {state: listening|stopped, reason?:
+    idle|error, projectId?}. Answers with its entry, whose listenerId a
+    person.message names to reach it."""
+    identity, session = _channel_caller()
+    try:
+        state, reason, project_id = channel_listeners.parse_beat(body)
+    except channel_listeners.ListenerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id)
+    if changed:
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+    return {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
+
+
+@app.delete("/api/agent/channel")
+async def end_channel_listener() -> dict[str, Any]:
+    """Its session ended: the canvas shows it as not connected."""
+    identity, session = _channel_caller()
+    if channel_book.gone(identity, session):
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+    return {"listener": None}
+
+
+@app.get("/api/canvas/channel")
+async def read_channel_listeners() -> dict[str, Any]:
+    """Who listens. The person: every listener with its cursor's {key,
+    ordinal} (the channelListeners message's form). An agent: only its own
+    entries, without cursor keys. No entry for a session means it isn't
+    connected; state "stopped" means its listener stopped."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    project_id = _workspace_context()["activeProjectId"]
+    if identity is not None:
+        return {"projectId": project_id,
+                "listeners": [channel_listeners.view(entry) for entry in channel_book.for_agent(identity.id)]}
+    require_person(headers)
+    message = _channel_listeners_message()
+    return {key: value for key, value in message.items() if key != "type"}
 
 
 @app.post("/api/canvas/view")

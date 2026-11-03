@@ -1,0 +1,92 @@
+# feat/channel-deliberate-sends
+
+PR A for the agent-canvas demo (Justin's top priority, 2026-11-03): the
+channel foundation the Message box (PR C) builds on. Brief:
+`demo-prA-channel-brief.md`; GM's box spec r50, "Pacing", "Unavailable and
+failure states" and "Recipient".
+
+## Decisions taken here (not in the brief)
+
+- **A deliberate push ends a gated window.** The brief says deliberate sends
+  skip the gated-window hold and are never refused for pacing. The only
+  refusal Nebula makes is the Q42 gate (`tool_started`), so a pin or message
+  pushed into a window that kept running would have had its own turn's edits
+  refused. `_take_deliberate` sets `_window_at = None`. The cost, documented:
+  a change turn still running when it goes is freed to edit (Claude Code
+  queues the push for the next turn). A request typed in the terminal is
+  still refused inside a window: Nebula can't see the terminal. Docs say so.
+- **The pin's 1 s merge stays.** It is batching, not pacing, and the brief
+  named only min_gap, window_min and the gated-window hold. A message and an
+  answer have no merge.
+- **Everything passive rides along, however recent.** Before, a pin batch
+  left edits from the last 8 s for a gated push of their own. The brief says
+  waiting passive items ride along, so the deliberate push takes all edits,
+  every proposal decision (gated ones too) and every run end. The test that
+  pinned the old rule is turned round
+  (`test_an_edit_made_just_before_a_pin_goes_rides_with_it`).
+- **Deliberate pushes never enter `_history`.** Their own deque
+  (`_deliberate_history`) for the 200/hour cap. So a passive push keeps its
+  30 s spacing from the last passive push, never from a message (tested).
+- **At the cap, a waiting pin stops holding gated pushes** (`_pins_wait`
+  checks the cap). Otherwise a capped pin would hold edits for up to an hour.
+- **The meta wake of a deliberate push** is the most specific thing it
+  carries: `message`, else `answer`, else `pin`. INSTRUCTIONS name all three
+  (4,070 of the 4,096 characters with the server's own instructions).
+- **Answers are read back, never journaled.** `question.answered` carries only
+  the set id (agent_questions: the typed text is never journaled). The
+  listener reads the set with `GET /api/canvas/questions/{id}` as the asker
+  (owner-only route) in a task of its own (4 s bound), then pushes it. A
+  failed read still pushes, saying to call `get_answers`. "Own" is per
+  session: sets this process's `ask_person` made (like own proposals). A set
+  the agent waits for in `get_answers`, or has read, never pushes.
+- **`person.message` is addressed by `listenerId`,** a random id Nebula gives
+  each listener entry (`ch_<16 hex>`), not the session key or raw session:
+  the journal is readable by every agent, and session keys are the person's
+  form only. Text is cleaned like a pin's (multiline kept), 2,000 chars max.
+  The event's text is in the journal like a pin's; PR C decides whether that
+  is right for the box (the GM spec has every session's rows on the thread).
+- **Readiness lives in the backend** (`services/channel_listeners.py`): the
+  listener beats every 15 s from a task that runs for the whole session (so
+  "stopped" stays visible after the listener ends), DELETEs at session end
+  (shielded, 1 s), and lapses after 45 s. Not connected = no entry.
+- **`--channel` doesn't ask before writing.** The listen file is Nebula's own
+  session-only file; an unchanged file isn't rewritten and other servers in
+  it are kept. With no token given it reuses the token file the config
+  names, so the GM "Copy command" line (`nebula mcp connect claude-code
+  --channel`, no token flag) works on a second run.
+- **MCP parity:** a new read tool `channel_status` (in CHANGE_TURN_TOOLS and
+  NEBULA_MCP_TOOLS), not a new part of `start_here` (its size is budgeted).
+
+## Not done / for PR C
+
+- The route that posts a message (`person.message`) and `reply_to_person`.
+  PR C should refuse at the route when the cap is hit (the backend can count
+  per listener; the listener holds, never drops, the 201st).
+- `question.dismissed` doesn't wake (the brief named only answers).
+- No frontend changes: tabs receive `channelListeners`; the store is PR C's.
+- Nebula can't tell whether Claude Code delivers a push (dev flag missing,
+  Team org switch off): "listening" means Nebula pushes. Documented.
+
+## Tests
+
+- `backend/tests/test_mcp_channel_deliberate.py` (new): the brief's cases on
+  the fake clock, plus messages, answers and the listener's read-back.
+- `backend/tests/test_channel_readiness.py` (new): states, sessions, TTL,
+  tab messages, gates, MCP `channel_status`.
+- `backend/tests/test_agent_connect.py`: `--channel` connect, twice,
+  disconnect, legacy token, refusals, print, parser, copy rules.
+- `backend/tests/test_mcp_channel.py`: 29 tests encoded the old pin pacing
+  (pins waiting for min_gap and the window). Each was rewritten to the new
+  rule, keeping its probe's intent where it still applies (passive limits now
+  tested with edits; fuzz invariants exempt deliberate wakes from "ungated
+  into an open window").
+- Named isolated run (60 files: the channel, connect, readiness, MCP tool,
+  MCP-SETUP and three ratchet files): 1,897 passed, 1 failed. The failure,
+  `test_a_person_tab_gets_the_replay_on_its_hello_and_no_one_else_does`, was
+  real: the agentPresenceReplay must stay the last hello sync. The
+  channelListeners sync now goes after questionsSync, before the person's
+  pins, and that file passes.
+- Mutation check of the deliberate/passive split (12 mutants on
+  `mcp_channel.py`, against the deliberate and channel test files): 11
+  killed. The survivor, "a passive push ends a window too", is equivalent:
+  an ungated passive push only goes when no window is open.

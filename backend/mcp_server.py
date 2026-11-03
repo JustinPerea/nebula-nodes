@@ -4,6 +4,7 @@ import argparse
 import functools
 import inspect
 import json as _json
+import math
 import os
 import secrets
 import re as _re
@@ -1024,6 +1025,33 @@ def withdraw_questions(question_id: str, ctx: Context | None = None) -> dict[str
     from urllib.parse import quote
 
     return _canvas_call("DELETE", f"/api/canvas/questions/{quote(question_id, safe='')}", ctx)
+
+
+# -- channel readiness (services/channel_listeners.py) ----------------------------
+
+@_tool(annotations=_READ)
+def channel_status(ctx: Context | None = None) -> dict[str, Any]:
+    """Whether the person's canvas can reach you through the Nebula channel.
+
+    `thisServer`: whether this server was started with --channel, and its
+    listener's state: "listening", "stopped" (2 hours with nothing from the
+    person, or a failure; /mcp > nebula-listen > Reconnect starts it again)
+    or null (no --channel). `listeners`: your entries as Nebula sees them,
+    one per session of yours ({listenerId, state, reason, projectId, since,
+    seenAt}); none means Nebula doesn't count you as connected. Nebula can't
+    tell whether Claude Code delivers a push, so "listening" means Nebula
+    pushes, not that the session took it."""
+    if _channel is None:
+        this: dict[str, Any] = {"channel": False, "state": None}
+    else:
+        state = _channel.state
+        this = {"channel": True, "state": "stopped" if state.off else "listening",
+                "reason": state.off_reason if state.off else None, "listenerId": state.listener_id}
+    try:
+        seen = _canvas_call("GET", "/api/canvas/channel", ctx)
+    except NebulaAPIError as exc:
+        return {"thisServer": this, "listeners": None, "error": exc.detail}
+    return {"thisServer": this, "projectId": seen.get("projectId"), "listeners": seen.get("listeners") or []}
 
 
 # -- outside the graph: project covers and asset proposals (U16) -------------------
@@ -2964,21 +2992,65 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 CHANNEL_CAPABILITY = "claude/channel"
 
 
-async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
-    """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
+async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str, *,
+                         method: str = "GET", json_body: Any = None) -> dict[str, Any]:
+    """A request as this agent (a GET unless named), async on the event loop
+    (cancellable mid long-poll, no thread held)."""
     url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
     headers = with_identity({"X-Nebula-Agent": agent, **_session_headers()})
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
-            response = await client.get(f"{url}{path}", params=params, headers=headers)
+            response = await client.request(method, f"{url}{path}", params=params or None, headers=headers,
+                                            json=json_body)
         except httpx.HTTPError as exc:
-            raise NebulaAPIError(f"GET {path} failed: {exc.__class__.__name__}", kind="connect") from exc
+            raise NebulaAPIError(f"{method} {path} failed: {exc.__class__.__name__}", kind="connect") from exc
     if response.status_code >= 400:
         raise NebulaAPIError(error_detail(response), status=response.status_code)
     payload = response.json()
     if not isinstance(payload, dict):
-        raise NebulaAPIError(f"Nebula sent an invalid answer for GET {path}")
+        raise NebulaAPIError(f"Nebula sent an invalid answer for {method} {path}")
     return payload
+
+
+CHANNEL_BEAT_SECONDS = 15.0  # services/channel_listeners.BEAT_SECONDS: how often it tells Nebula it listens
+
+
+async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
+    """Tell Nebula this session listens (POST /api/agent/channel), every
+    CHANNEL_BEAT_SECONDS and at once when listening stops, for as long as the
+    session runs: the canvas's readiness (services/channel_listeners.py).
+    Nebula's answer names this listener (``listenerId``), which a message
+    the person sends it names in turn. A failed beat is tried again at the
+    next one; it never stops the listener or the tools."""
+    said: tuple[Any, ...] | None = None
+    last = -math.inf
+    while True:
+        shown = ("stopped" if state.off else "listening", state.off_reason if state.off else None)
+        now = clock()
+        if shown != said or now - last >= CHANNEL_BEAT_SECONDS:
+            body = {"state": shown[0], **({"reason": shown[1]} if shown[1] else {}),
+                    **({"projectId": state.project_id} if state.project_id else {})}
+            try:
+                answer = await _channel_fetch("/api/agent/channel", {}, 5.0, agent["name"], method="POST",
+                                              json_body=body)
+            except Exception:  # noqa: BLE001 - Nebula down or older: readiness only, tried again soon
+                pass
+            else:
+                listener = answer.get("listener") if isinstance(answer.get("listener"), dict) else {}
+                if listener.get("listenerId"):
+                    state.listener_id = str(listener["listenerId"])
+                said = shown
+            last = now
+        await anyio.sleep(1.0)
+
+
+async def _channel_goodbye(agent: dict[str, str]) -> None:
+    """The session ended: Nebula shows it as not connected (best effort, 1 s at most)."""
+    with anyio.CancelScope(shield=True), anyio.move_on_after(1.0):
+        try:
+            await _channel_fetch("/api/agent/channel", {}, 1.0, agent["name"], method="DELETE")
+        except Exception:  # noqa: BLE001 - past its TTL Nebula forgets it anyway
+            pass
 
 
 def _trace_initialize(params: Any) -> None:
@@ -3044,14 +3116,24 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
         # Listener bounds the whole check itself (review 6, LOW-3).
         return await _channel_fetch("/api/canvas/pins", {}, mcp_channel.PIN_CHECK_TIMEOUT, agent["name"])
 
+    async def fetch_question(question_id: str) -> dict[str, Any]:
+        # Its own answered set, read back for the push: only the asker may read it.
+        from urllib.parse import quote
+
+        return await _channel_fetch(f"/api/canvas/questions/{quote(question_id, safe='')}", {},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
+
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock,
-                                    fetch_pins=fetch_pins)
+                                    fetch_pins=fetch_pins, fetch_question=fetch_question)
+    started = {"beats": False}
 
     async def listen() -> None:
         await ready.wait()
         # The tools' own name, so Nebula leaves this agent's events out of the long-poll.
         agent["name"] = _agent_name(_clean_client_name(client.get("name", "unknown")))
+        started["beats"] = True
+        beats.start_soon(_channel_beats, state, agent, clock)
         try:
             await listener.run()
         except Exception as exc:  # noqa: BLE001 - the experiment must never take the tools down with it
@@ -3063,13 +3145,17 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
 
     _channel = listener
     try:
-        async with anyio.create_task_group() as group:
-            group.start_soon(tap)
-            group.start_soon(listen)
-            await server.run(tap_recv, write_stream, options)
-            group.cancel_scope.cancel()
+        async with anyio.create_task_group() as beats:
+            async with anyio.create_task_group() as group:
+                group.start_soon(tap)
+                group.start_soon(listen)
+                await server.run(tap_recv, write_stream, options)
+                group.cancel_scope.cancel()
+            beats.cancel_scope.cancel()
     finally:
         _channel = None
+        if started["beats"]:
+            await _channel_goodbye(agent)
 
 
 async def _run_channel_stdio() -> None:
