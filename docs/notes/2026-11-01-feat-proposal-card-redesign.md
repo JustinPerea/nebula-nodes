@@ -479,3 +479,82 @@ Merged origin/main (062fb370, #218 and #211) first, staged with `--no-commit`. O
 | 13, 13b, resized to 800 | 395 px beside it now: the card glides from left 413 to 127 (mid-glide frame, then rest), and sits under the log (card top 380 = the log's foot 372 + 8). |
 | 14, 1024×640, the log at 300–640 × 100–254 | Step 2: 228 and 360 px beside it, so under it: the notices from 262, the card 370–560, both kept lines whole. |
 | 15, 768×600, the log at 65–405 × 180–334 | A named shortfall: under it, the pill "2 notices", the card's body 49 px, the plan line whole, the ⚠ line behind the fade. |
+
+## Round 3h (GM - Design's r10, 2026-11-03)
+
+**The give-way scroll stops on a line boundary.**
+- `bodyScrollTop` works out the scroll as before, then, if that cuts a line, picks the boundary above or below it. It prefers the one that keeps the kept lines whole and clear of both fades, then whole, then the nearer.
+- The lines are `textLines(scroller)`: Range rects merged per line. A line that an ancestor clips (the note's six-line clamp) doesn't count. The scroller itself never clips a line, because its scroll brings that line into view.
+- The scroller has `margin-top: 4px`, so the top fade starts 4 px under the header row. The note's own top margin is 8 → 4, so the unscrolled card reads as before.
+- **Tradeoff:** stopping on a boundary costs room. `bodyFloors` now counts the room from the last boundary at or above the kept lines' top fade (`lineStop`). For the live card that's 11 px: `min` goes from 97 to 108 and `one` from 65 to 76. As a result, 17 cells that showed the plan line whole between the fades now list it short. They are the 420 cells and `768x600 floating wide 0`.
+- The grid checks every scrolled cell: no line is cut at the body's top.
+
+**The glide stays inside the window.**
+- `inWindow(d, lo, hi, peak)` limits the glide's start offset to the room around its rest.
+- It also keeps the spring's overshoot inside: the `linear()` easing's highest stop is 1.022, so the glide passes its rest by 2.2 % of the offset. `easingPeak` reads that stop.
+- `glideStack` applies the limit to both axes and rounds toward zero.
+- Test: a 1024→800 resize, plus three cases at the edges, checked at every stop of `--notice-spring`.
+- Live: 301 rAF samples of the 1024→800 glide; left went 200 → 125.4, and the right edge never passed 800.
+
+**Did the move drop the notices in 13/13b? No, they timed out.**
+- `NOTICE_HOLD_MS` is 6 s. Round 3g's harness set them at 12, then waited about 1.5 s, the shot, 0.7 s and 5.5 s before 13b: about 8.5 s.
+- Nothing in placement removes a notice. A place only folds them (`fold`, `more`, `moreHost`), and `applyNoticeStack` only sets or clears `data-notice-folded` and `inert`.
+- Pinned two ways:
+  - **Pure:** a walk through beside, beside-narrow and off-the-log placements at six sizes, with and without an Undo. Every notice is shown or folded, and a fold is counted in the row or the pill.
+  - **DOM:** going from beside to under keeps both toasts connected, unfolded and not inert.
+- Live: 13 and 13b show "2 notices" in the pill after the move. Shot 16 has 12's notices, set again, about 2.4 s after a move under the log.
+
+**The narrow layout is step 1's floor.**
+- `narrowMinimum(card)` halves the range 160–400. At each width (`atWidth` sets the width and lifts the max-width, then puts both back) it checks `narrowHolds`:
+  - the footer fits one row;
+  - the header fits one row ("Expires in 14:55" whole);
+  - the name shows at least 48 px (`NAME_MIN_PX`), or all of it when shorter.
+- The result is cached per card until the header's or footer's words change.
+- **Live minimum: 254 px.** GM expected about 320. Show is already icon-only under 396 px of content width (the 3c container query, aria-label "Show").
+- `measureNoticeStack` collects the rooms beside a docked or floating log that fall in [160, 400). It stores the minimum and, for each room at or above it, the card read at that width (`probes`). Narrower cards are taller: live body 194 at 290–370 px, 215 under 290.
+- `besideCard(m, room, rows)` is the one function for the docked and floating logs:
+  - at 400 px or more, the card as is;
+  - from the minimum, the probe, but only if its header, footer, plan line between the fades and the folded notices fit in the window's height;
+  - otherwise null, and step 2 places it.
+- `place.narrow` holds the width. `placedCard` gives the geometry the card that a place was made for, and a change of `narrow` glides.
+
+**The grid (504 cells) with the live narrow card.**
+- Own-width log, round 3f's 71: step 1 resolves **36** (1024×640 18, **768×600 18** at 339 px), step 2 resolves 0, **35 remain** (420×560 18, 420×640 17).
+- Wide log: **18** (1024×640 at 337 px), 0, **53 remain** (420 35, 768×600 18). At 768 the wide log leaves 152 px.
+- Cells that go narrow, 72 in all:
+  - 768×600 docked, open and closed (356 px), 36;
+  - 768×600 floating (339), 18;
+  - 1024×640 wide (337), 18.
+- `EXPECTED_SHORT` has 104 cells (was 140). `EXPECTED_PLAN_SHORT` has 92 (was 108; it lost 33 and gained the 17 above).
+- The 420 cells stay named shortfalls: the plan line first, nothing overlapping a notice, the header, the footer, the window or the top line.
+- **Flag for GM:** 24 of the shortfalls cross a floating log's body. That is r9's last resort, and never its header: 420×560 with the banner and 1–4 notices (16), and `768x600 floating wide` with an Undo (8). The test pins that list. r10 asks for "nothing overlaps"; within those cells, the only overlap left is the card over the log's body.
+
+**Mutation checks (round 3h).**
+- 54 mutants. 53 are caught: 41 on the first run, plus 2 whose anchors were fixed and 10 after new pins. The pins cover:
+  - a tie the nearer boundary breaks;
+  - a nearer option that would cut the kept lines;
+  - the DOM scroll snapping through `applyNoticeStack`;
+  - the root not clipping its own lines;
+  - a glide whose rest is already outside the window;
+  - a probe below the minimum;
+  - a tall narrow card that has to scroll, docked and beside a floating log on the column's right;
+  - the name being the part that decides the minimum.
+- The one that survived, `narrowMinimum`'s early 400 exit, was equivalent: the halving ends at 400 anyway. That exit is removed.
+- Runner: `scratchpad/proposal-card/mut3h/run.py`, results in `out-first.txt` and `out-pins.txt`.
+
+**Live (round 3h).** Restraint. Isolated backend on 8798, Vite on 5798. Installed Chrome with a throwaway profile, removed afterwards. Canaries blocked; nothing accepted or run. Shots are in `scratchpad/proposal-card/shots3h/`, and every md5 is distinct.
+
+| Shot | Result |
+|---|---|
+| 12, 1024×640, log at 65–405 | The card beside it at 595 px, the notices under it. |
+| 13 / 13b, log at 200–540, 1024→800 | 460 px beside the log at 1024, then 236 at 800 (under 254), so the card glides under the log. Mid-glide the card is at 155–755. Across all 301 frames, left goes 200 → 125.4 and the right edge stays ≤ 800. Both notices are in the pill "2 notices". The note is scrolled 43 px, stopping in the gap above the plan line. |
+| 15, 768×600, log at 65–405 | Beside it at the narrow width: card 413–752 (339 px), Show icon-only, both notices showing. |
+| 15b, 768×540 | The narrow card beside the log, the note scrolled 46 px. The first visible line's top is at 297.1, with the body's top at 297 and the header at 293. |
+| 16, 640×640 | 12's notices set again, then the move under the log: shot 2.4 s later, the pill reads "2 notices", the card is above the collapsed log, and the first line is whole (195.8 against the body top at 195). |
+| 17, 768×600, docked log | Beside it at the narrow width: card 70–404 (334 px). |
+
+**Checks (round 3h).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, the round 3f list: 162 files, 3322 passed.
+- The backend is unchanged since 3g.
+- Entry: 463,498 B raw, 143,562 B gzip.

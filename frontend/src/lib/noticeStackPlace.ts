@@ -95,6 +95,14 @@ export const SHRINK_ATTR = 'data-notice-shrinks';
 export const SHRINK_BODY_ATTR = 'data-notice-shrink-body';
 export const SHRINK_FOOT_ATTR = 'data-notice-shrink-foot';
 export const KEEP_ATTR = 'data-notice-keep';
+/** The card's header row, and the name in it that truncates (GM r10: its
+ * narrow layout keeps the header to one row, "Expires in …" whole). */
+export const SHRINK_HEAD_ATTR = 'data-notice-shrink-head';
+export const SHRINK_NAME_ATTR = 'data-notice-shrink-name';
+/** The least of the name a narrow card shows: a few letters and the ellipsis. */
+export const NAME_MIN_PX = 48;
+/** Where the narrow layout's search starts. */
+const NARROW_FLOOR_PX = 160;
 /** The region's mark for the frame a layout switch lands in: no spring (GM r4). */
 export const JUMP_ATTR = 'data-notice-jump';
 /** An older notice folded into the "more notices" row (step 3). */
@@ -143,7 +151,18 @@ export interface CardMeasure {
   /** Which of them can carry the fold in their own row ("Undo · 3 more",
    * GM r8): they hold a `MORE_SLOT_ATTR` mark. */
   host?: boolean[];
+  /** Its body's line boxes, unscrolled (GM r10: the scroll stops on a
+   * line boundary). */
+  lines?: BodyLine[];
+  /** GM r10: the smallest width its narrow layout holds (the footer one row
+   * with Show as its icon, "Expires in …" whole, the name truncating), and
+   * the card measured at each width it may sit at beside a log under 400. */
+  narrowMin?: number;
+  probes?: CardProbe[];
 }
+
+/** The card measured at one width. */
+export type CardProbe = { width: number } & Pick<CardMeasure, 'chrome' | 'body' | 'foot' | 'line' | 'plan' | 'first' | 'lines'>;
 
 export interface StackMeasure {
   viewportW: number;
@@ -212,6 +231,9 @@ export interface StackPlace {
   /** Beside a floating log: the region's insets from the window's left and
    * right edges, so it stops short of the log on that side. */
   inset?: { left: number; right: number } | null;
+  /** Beside a log at the card's narrow layout (GM r10): the card's width
+   * there (its `probes` entry), or null in its normal layout. */
+  narrow?: number | null;
 }
 
 export type FloatSide = 'left' | 'right' | 'under' | 'above';
@@ -221,6 +243,35 @@ export type FloatSide = 'left' | 'right' | 'under' | 'above';
  * log clears the right edge; a floating one either edge. */
 export function besideRoom(m: Pick<StackMeasure, 'viewportW' | 'gutter'>, left: number, rightClear: number): number {
   return m.viewportW - Math.max(m.gutter, rightClear) - left;
+}
+
+/**
+ * Whether the card sits beside a log with `room` beside it, docked or
+ * floating, and as which card (GM - Design, PR #216 r1, r9, r10): at 400 px
+ * or more, as it is (its normal layout); from its narrow minimum up to 400,
+ * its narrow layout at that width (`probes`), and only when every part that
+ * is never covered (its header, its plan line whole, its footer) and the
+ * notices at their most folded fit in the window's height there; else null,
+ * and step 2 places it.
+ */
+export function besideCard(m: StackMeasure, room: number, rows: number): CardMeasure | null {
+  const card = m.card;
+  if (!card) return null;
+  if (room >= BESIDE_LOG_MIN_W) return card;
+  if (!card.narrowMin || room < card.narrowMin) return null;
+  const width = Math.floor(room);
+  const probe = card.probes?.find((entry) => entry.width === width);
+  if (!probe) return null;
+  const narrow: CardMeasure = { ...card, ...probe };
+  const height = m.viewportH - m.regionBottom - m.topLine;
+  return narrow.chrome + bodyFloors(narrow).one + rows <= height ? narrow : null;
+}
+
+/** The card a place was made for: its narrow layout beside a log, else as measured. */
+export function placedCard(m: StackMeasure, place: StackPlace): CardMeasure | null {
+  if (!m.card) return null;
+  const probe = place.narrow ? m.card.probes?.find((entry) => entry.width === place.narrow) : null;
+  return probe ? { ...m.card, ...probe } : m.card;
 }
 
 const ONE_LINE_PX = 20;
@@ -234,11 +285,20 @@ export function bodyFloors(card: CardMeasure): { full: number; min: number; one:
   const least = Math.min(MIN_BODY_PX, body);
   if (!card.plan) return { full: least, min: line, one: line };
   const full = Math.min(body, Math.max(least, card.plan.bottom + FADE_PX));
-  const min = Math.min(full, card.plan.bottom - card.plan.top + 2 * FADE_PX);
+  // GM r10: the scroll stops on a line boundary, so the kept lines need the
+  // room from the last boundary at or above their top fade.
+  const min = Math.min(full, card.plan.bottom + FADE_PX - lineStop(card.plan.top - FADE_PX, card.lines));
   // The plan line alone, whole between the two fades (step 5's floor).
   const first = card.first ?? card.plan;
-  const one = Math.min(min, first.bottom - first.top + 2 * FADE_PX);
+  const one = Math.min(min, first.bottom + FADE_PX - lineStop(first.top - FADE_PX, card.lines));
   return { full, min, one };
+}
+
+/** The last scroll at or above `at` that cuts no line (GM r10). */
+export function lineStop(at: number, lines?: BodyLine[]): number {
+  if (at <= 0) return 0;
+  const cut = (lines ?? []).find((line) => line.top < at - 0.5 && line.bottom > at + 0.5);
+  return cut ? Math.max(0, Math.floor(cut.top)) : at;
 }
 
 /** The "N more notices" row's words (step 1: the newest shows). */
@@ -258,9 +318,11 @@ function sum(values: number[]): number {
 export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean } = {}): StackPlace {
   const docked = m.logClearance > 0 && m.logTop > 0;
   const beside = besideRoom(m, m.regionLeft, m.logClearance);
-  const aboveLog = docked && beside < BESIDE_LOG_MIN_W;
+  // The notices alone keep r1's 400 px; the card's floor is its narrow
+  // layout (GM r10, besideCard, below).
+  let aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: null, inset: null };
+  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: null, inset: null, narrow: null };
   if (!m.card) {
     // The notices alone clear a floating log in their column too (GM r8):
     // under it when they fit between its foot and the line, else above it,
@@ -278,7 +340,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     }
     return { aboveLog, lift: base, cap: null, mode: null, ...none };
   }
-  const card = m.card;
+  let card: CardMeasure = m.card;
   const gap = card.gap ?? 8;
   const items = card.items ?? [];
   const count = items.length;
@@ -308,7 +370,13 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   if (older.some(Boolean) && older.filter(Boolean).length < pill) ladder.push(rowsOf('folded', older));
   if (pill) ladder.push(rowsOf('pill', all));
   const compact = ladder[ladder.length - 1];
-  const floors = bodyFloors(card);
+  // Beside the docked log (r1), down to the card's narrow layout (GM r10).
+  let narrow: number | null = null;
+  const dockedCard = docked ? besideCard(m, beside, compact.rows) : null;
+  if (dockedCard && dockedCard !== m.card) { card = dockedCard; narrow = Math.floor(beside); }
+  aboveLog = docked && !dockedCard;
+  base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
+  let floors = bodyFloors(card);
   let topLine = m.topLine;
   // Steps 3 and 4 give the room of the log the stack sits above.
   const spare = Math.max(0, Math.floor(m.logSpare ?? 0));
@@ -330,8 +398,14 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     const regionRight = Math.max(m.gutter, m.logClearance);
     const leftRoom = besideRoom(m, m.regionLeft, m.viewportW - float.left + FLOAT_GAP_PX);
     const rightRoom = besideRoom(m, Math.max(m.regionLeft, float.right + FLOAT_GAP_PX), m.logClearance);
-    if (Math.max(leftRoom, rightRoom) >= BESIDE_LOG_MIN_W) {
-      floatSide = leftRoom >= rightRoom ? 'left' : 'right';
+    // Each side as the docked log's (besideCard): 400 px, or the card's
+    // narrow layout with every never-covered part in the window (GM r10).
+    const leftCard = besideCard(m, leftRoom, compact.rows);
+    const rightCard = besideCard(m, rightRoom, compact.rows);
+    if (leftCard || rightCard) {
+      floatSide = leftCard && (!rightCard || leftRoom >= rightRoom) ? 'left' : 'right';
+      const chosen = (floatSide === 'left' ? leftCard : rightCard)!;
+      if (chosen !== m.card) { card = chosen; narrow = Math.floor(floatSide === 'left' ? leftRoom : rightRoom); floors = bodyFloors(card); }
       inset = floatSide === 'left'
         ? { left: Math.floor(m.regionLeft), right: Math.ceil(m.viewportW - float.left + FLOAT_GAP_PX) }
         : { left: Math.ceil(float.right + FLOAT_GAP_PX), right: Math.floor(regionRight) };
@@ -378,7 +452,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
       underFade: height - card.chrome < floors.min,
       folded: more, fold, more, moreHost: host, expanded,
       keepPlan: height - card.chrome < floors.full,
-      float: floatSide, inset,
+      float: floatSide, inset, narrow,
     };
   };
 
@@ -406,15 +480,68 @@ export interface StackGeometry {
     /** The kept lines' span, and the plan line alone, where they show. */
     plan: { top: number; bottom: number } | null;
     first: { top: number; bottom: number } | null;
+    /** How far its body is scrolled (bodyScrollTop). */
+    scroll?: number;
   } | null;
   rows: Array<{ top: number; bottom: number; kind: 'notice' | 'more' }>;
   /** The stack's line: the log's top edge (above a docked log) or the region's. */
   line: number;
 }
 
+/** A line box in the card's body: its top and foot in the body's content,
+ * unscrolled. */
+export type BodyLine = { top: number; bottom: number };
+
+/**
+ * Where the card's body scrolls to keep its kept lines (GM r5-r7), stopping
+ * on a line boundary (GM r10): no line is cut by the body's top edge, which
+ * sits 4 px under the header (canvasProposals.css), so the first line in
+ * view is whole and clear of the header, under the fade that cues more
+ * above. `view` is the body's height, `content` its content's (0: unknown),
+ * `from` where it is scrolled now, and `lines` its line boxes.
+ * - Kept lines (step 0-4): the last one's foot over the bottom fade, never
+ *   scrolled back up.
+ * - Under them (step 5): the plan line just under the top fade, or centred
+ *   when even it can't clear both fades.
+ * Then a line cut by the top edge is hidden (scrolled past) or shown whole,
+ * whichever keeps the kept lines whole and clear of the fades; a tie takes
+ * the nearer.
+ */
+export function bodyScrollTop(o: { view: number; content: number; kept: BodyLine[]; lines?: BodyLine[]; underFade: boolean; from: number }): number {
+  if (!o.kept.length) return o.from;
+  const max = o.content > 0 ? Math.max(0, o.content - o.view) : Number.POSITIVE_INFINITY;
+  const clamp = (value: number) => Math.min(max, Math.max(0, value));
+  const kept = o.underFade ? [o.kept[0]] : o.kept;
+  const top = Math.min(...kept.map((line) => line.top));
+  const foot = Math.max(...kept.map((line) => line.bottom));
+  let at: number;
+  if (o.underFade) {
+    const one = o.kept[0];
+    const offset = Math.max(0, Math.min(FADE_PX, (o.view - (one.bottom - one.top)) / 2));
+    at = one.top - offset;
+  } else {
+    at = Math.max(o.from, Math.ceil(foot - o.view + FADE_PX));
+  }
+  at = clamp(at);
+  const cut = (o.lines ?? []).find((line) => line.top < at - 0.5 && line.bottom > at + 0.5);
+  if (!cut) return at;
+  const score = (scroll: number) => {
+    const whole = top >= scroll - 0.5 && foot <= scroll + o.view + 0.5;
+    if (!whole) return 0;
+    const clear = (scroll <= 0 || top >= scroll + FADE_PX - 0.5)
+      && (o.content > 0 && scroll >= max ? true : foot <= scroll + o.view - FADE_PX + 0.5);
+    return clear ? 2 : 1;
+  };
+  const options = [clamp(Math.ceil(cut.bottom)), clamp(Math.floor(cut.top))]
+    .filter((scroll) => !(o.lines ?? []).some((line) => line.top < scroll - 0.5 && line.bottom > scroll + 0.5));
+  if (!options.length) return at;
+  options.sort((a, b) => score(b) - score(a) || Math.abs(a - at) - Math.abs(b - at));
+  return options[0];
+}
+
 export function stackGeometry(m: StackMeasure, place: StackPlace): StackGeometry {
   const line = m.viewportH - m.regionBottom - place.lift;
-  const card = m.card;
+  const card = placedCard(m, place);
   if (!card || place.cap === null || place.mode === null) return { card: null, rows: [], line };
   const gap = card.gap ?? 8;
   const items = card.items ?? [];
@@ -440,26 +567,21 @@ export function stackGeometry(m: StackMeasure, place: StackPlace): StackGeometry
   const visible = height - card.chrome;
   let plan: { top: number; bottom: number } | null = null;
   let first: { top: number; bottom: number } | null = null;
+  let scroll = 0;
   if (card.plan) {
     const tall = card.plan.bottom - card.plan.top;
     const one = card.first ?? card.plan;
-    let shift: number;
-    if (place.underFade) {
-      // Step 5: the plan line just under the top fade (or centred when even
-      // it can't clear both), the ⚠ line next in the scroll.
-      const offset = Math.max(0, Math.min(FADE_PX, (visible - (one.bottom - one.top)) / 2));
-      shift = headBottom + offset - one.top;
-    } else if (card.plan.bottom + (card.plan.bottom < card.body ? FADE_PX : 0) <= visible) {
-      // Unscrolled while it fits with the fade under it.
-      shift = headBottom;
-    } else {
-      // Scrolled in (keepPlan): the last kept line's foot over the bottom fade.
-      shift = headBottom + visible - FADE_PX - card.plan.bottom;
-    }
+    // As the region scrolls it (bodyScrollTop), from the top: unscrolled
+    // while the kept lines fit with the fade under them.
+    const fits = card.plan.bottom + (card.plan.bottom < card.body ? FADE_PX : 0) <= visible;
+    scroll = place.underFade || !fits
+      ? bodyScrollTop({ view: visible, content: card.body, kept: [one, card.plan], lines: card.lines, underFade: place.underFade, from: 0 })
+      : 0;
+    const shift = headBottom - scroll;
     plan = { top: card.plan.top + shift, bottom: card.plan.top + shift + tall };
     first = { top: one.top + shift, bottom: one.bottom + shift };
   }
-  return { card: { top, headBottom, plan, first, footTop: cardBottom - foot, bottom: cardBottom }, rows, line };
+  return { card: { top, headBottom, plan, first, footTop: cardBottom - foot, bottom: cardBottom, scroll }, rows, line };
 }
 
 /** Whether a new place is a layout switch (GM r4; review 2 MEDIUM-1): the
@@ -480,7 +602,8 @@ export function stepChanged(prev: StackPlace | null, next: StackPlace): boolean 
     // GM r9: beside a floating log, under it or above it, and the inset
     // beside it as the log is dragged or the window resized.
     || (prev.float ?? null) !== (next.float ?? null)
-    || prev.inset?.left !== next.inset?.left || prev.inset?.right !== next.inset?.right;
+    || prev.inset?.left !== next.inset?.left || prev.inset?.right !== next.inset?.right
+    || (prev.narrow ?? null) !== (next.narrow ?? null);
 }
 
 function px(value: string): number {
@@ -499,10 +622,124 @@ export function offersUndo(item: HTMLElement): boolean {
   return [...item.querySelectorAll('button')].some((button) => /^(Undo|Redo)\b/.test((button.textContent ?? '').trim()));
 }
 
+/** The line boxes of the text in `root`, on screen, one per line (GM r10:
+ * the body's scroll stops between them). */
+export function textLines(root: HTMLElement): BodyLine[] {
+  if (typeof document.createRange !== 'function') return [];
+  const range = document.createRange();
+  if (typeof range.getClientRects !== 'function') return [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const boxes: BodyLine[] = [];
+  // A line an ancestor clips away (the note's six-line clamp) isn't one.
+  const clips = new Map<Element, { top: number; bottom: number }>();
+  const clipOf = (element: Element | null): { top: number; bottom: number } => {
+    if (!element || element === root) return { top: Number.NEGATIVE_INFINITY, bottom: Number.POSITIVE_INFINITY };
+    const known = clips.get(element);
+    if (known) return known;
+    const outer = clipOf(element.parentElement);
+    let clip = outer;
+    const style = getComputedStyle(element);
+    if (style.overflowY !== 'visible' || style.overflow === 'hidden') {
+      const box = element.getBoundingClientRect();
+      clip = { top: Math.max(outer.top, box.top), bottom: Math.min(outer.bottom, box.bottom) };
+    }
+    clips.set(element, clip);
+    return clip;
+  };
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent?.trim()) continue;
+    range.selectNodeContents(node);
+    const clip = clipOf(node.parentElement);
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.height <= 0 || rect.width <= 0) continue;
+      if (rect.top >= clip.bottom - 0.5 || rect.bottom <= clip.top + 0.5) continue;
+      const same = boxes.find((line) => rect.top < line.bottom && rect.bottom > line.top);
+      if (same) { same.top = Math.min(same.top, rect.top); same.bottom = Math.max(same.bottom, rect.bottom); }
+      else boxes.push({ top: rect.top, bottom: rect.bottom });
+    }
+  }
+  return boxes.sort((a, b) => a.top - b.top);
+}
+
 function scrollerOf(card: HTMLElement): HTMLElement | null {
   const body = card.querySelector<HTMLElement>(`[${SHRINK_BODY_ATTR}]`);
   if (!body) return null;
   return body.firstElementChild instanceof HTMLElement ? body.firstElementChild : body;
+}
+
+/** The card's fixed rows, its body and its kept lines, in layout pixels. */
+function readCard(card: HTMLElement, body: HTMLElement): Pick<CardMeasure, 'chrome' | 'body' | 'foot' | 'line' | 'plan' | 'first' | 'lines'> {
+  const cardRect = card.getBoundingClientRect();
+  // The card's own scale on screen (its entrance, a glide): boxes read
+  // inside it are divided back to layout pixels.
+  const scale = card.offsetHeight > 0 && cardRect.height > 0 ? cardRect.height / card.offsetHeight : 1;
+  const scroller = scrollerOf(card) ?? body;
+  const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
+  const kept = [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)];
+  const from = scroller.getBoundingClientRect().top;
+  const at = (y: number) => Math.round((y - from) / scale + scroller.scrollTop);
+  let plan: CardMeasure['plan'] = null;
+  let first: CardMeasure['first'] = null;
+  if (kept.length) {
+    const boxes = kept.map((element) => element.getBoundingClientRect());
+    plan = { top: at(Math.min(...boxes.map((b) => b.top))), bottom: at(Math.max(...boxes.map((b) => b.bottom))) };
+    first = { top: at(boxes[0].top), bottom: at(boxes[0].bottom) };
+  }
+  const lines = textLines(scroller).map((line) => ({ top: (line.top - from) / scale + scroller.scrollTop, bottom: (line.bottom - from) / scale + scroller.scrollTop }));
+  return {
+    chrome: Math.max(0, card.offsetHeight - body.offsetHeight),
+    body: scroller.scrollHeight,
+    foot: foot ? Math.max(0, Math.round((cardRect.bottom - foot.getBoundingClientRect().top) / scale)) : 0,
+    line: px(getComputedStyle(scroller).lineHeight) || ONE_LINE_PX,
+    plan,
+    first,
+    ...(lines.length ? { lines } : {}),
+  };
+}
+
+/** Lays the card out at `width` for `read`, then puts it back. */
+function atWidth<T>(card: HTMLElement, width: number, read: () => T): T {
+  const was = { width: card.style.width, maxWidth: card.style.maxWidth };
+  card.style.width = `${width}px`;
+  card.style.maxWidth = 'none';
+  try {
+    return read();
+  } finally {
+    card.style.width = was.width;
+    card.style.maxWidth = was.maxWidth;
+  }
+}
+
+/** Whether the card's narrow layout holds at its present width: the footer
+ * one row, the header one row with "Expires in …" whole, the name showing
+ * at least NAME_MIN_PX (or whole, when shorter). */
+function narrowHolds(card: HTMLElement): boolean {
+  const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
+  const head = card.querySelector<HTMLElement>(`[${SHRINK_HEAD_ATTR}]`);
+  const name = card.querySelector<HTMLElement>(`[${SHRINK_NAME_ATTR}]`);
+  const fits = (row: HTMLElement | null) => !row || row.scrollWidth <= row.clientWidth + 0.5;
+  const named = !name || name.clientWidth >= Math.min(NAME_MIN_PX, name.scrollWidth) - 0.5;
+  return fits(foot) && fits(head) && named;
+}
+
+const narrowCache = new WeakMap<HTMLElement, { key: string; min: number }>();
+
+/** The smallest width the card's narrow layout holds (GM r10), found by
+ * halving between NARROW_FLOOR_PX and BESIDE_LOG_MIN_W; 400 when not even
+ * that holds (the halving ends there). Kept until the header's or footer's words change. */
+export function narrowMinimum(card: HTMLElement): number {
+  const key = [SHRINK_HEAD_ATTR, SHRINK_FOOT_ATTR].map((attr) => card.querySelector(`[${attr}]`)?.textContent ?? '').join('|');
+  const known = narrowCache.get(card);
+  if (known && known.key === key) return known.min;
+  let low = NARROW_FLOOR_PX;
+  let high = BESIDE_LOG_MIN_W;
+  if (atWidth(card, low, () => narrowHolds(card))) high = low;
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2);
+    if (atWidth(card, mid, () => narrowHolds(card))) high = mid; else low = mid;
+  }
+  narrowCache.set(card, { key, min: high });
+  return high;
 }
 
 /** Reads the live layout for placeNoticeStack. Read from the items' own
@@ -525,32 +762,12 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
   let column: StackMeasure['column'] = null;
   if (card && body) {
     const cardRect = card.getBoundingClientRect();
-    // The card's own scale on screen (its entrance, a glide): boxes read
-    // inside it are divided back to layout pixels.
-    const scale = card.offsetHeight > 0 && cardRect.height > 0 ? cardRect.height / card.offsetHeight : 1;
-    const scroller = scrollerOf(card) ?? body;
-    const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
-    const kept = [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)];
-    let plan: CardMeasure['plan'] = null;
-    let first: CardMeasure['first'] = null;
-    if (kept.length) {
-      const from = scroller.getBoundingClientRect().top;
-      const boxes = kept.map((element) => element.getBoundingClientRect());
-      const at = (y: number) => Math.round((y - from) / scale + scroller.scrollTop);
-      plan = { top: at(Math.min(...boxes.map((b) => b.top))), bottom: at(Math.max(...boxes.map((b) => b.bottom))) };
-      first = { top: at(boxes[0].top), bottom: at(boxes[0].bottom) };
-    }
     shrink = {
-      chrome: Math.max(0, card.offsetHeight - body.offsetHeight),
-      body: scroller.scrollHeight,
-      foot: foot ? Math.max(0, Math.round((cardRect.bottom - foot.getBoundingClientRect().top) / scale)) : 0,
-      line: px(getComputedStyle(scroller).lineHeight) || ONE_LINE_PX,
+      ...readCard(card, body),
       items: noticeItems(stack).map((item) => item.offsetHeight),
       undo: noticeItems(stack).map(offersUndo),
       host: noticeItems(stack).map((item) => item.querySelector(`[${MORE_SLOT_ATTR}]`) !== null),
       gap: px(getComputedStyle(stack).rowGap) || 8,
-      plan,
-      first,
     };
     // Centred in the region (its stack is), at its width there with no inset.
     const width = inset.left || inset.right ? naturalCard : card.offsetWidth || cardRect.width;
@@ -571,14 +788,36 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
   }
   const floatTop = px(root.getPropertyValue('--agent-log-float-top'));
   const floatBottom = px(root.getPropertyValue('--agent-log-float-bottom'));
+  const floatLeft = px(root.getPropertyValue('--agent-log-float-left'));
+  const floatRight = px(root.getPropertyValue('--agent-log-float-right'));
+  const logClearance = px(root.getPropertyValue('--agent-log-clearance'));
+  const gutter = px(root.getPropertyValue('--page-gutter')) || 16;
+  // GM r10: the rooms the card may sit beside a log in, docked or floating,
+  // under 400: its narrow minimum, and the card laid out at each.
+  if (card && body && shrink) {
+    const view = { viewportW: window.innerWidth, gutter };
+    const rooms = [
+      ...(logClearance > 0 ? [besideRoom(view, rect.left, logClearance)] : []),
+      ...(floatBottom > 0 ? [
+        besideRoom(view, rect.left, window.innerWidth - floatLeft + FLOAT_GAP_PX),
+        besideRoom(view, Math.max(rect.left, floatRight + FLOAT_GAP_PX), logClearance),
+      ] : []),
+    ].filter((room) => room >= NARROW_FLOOR_PX && room < BESIDE_LOG_MIN_W);
+    if (rooms.length) {
+      const min = narrowMinimum(card);
+      shrink.narrowMin = min;
+      const widths = [...new Set(rooms.filter((room) => room >= min).map((room) => Math.floor(room)))];
+      if (widths.length) shrink.probes = widths.map((width) => ({ width, ...atWidth(card, width, () => readCard(card, body)) }));
+    }
+  }
   return {
     viewportW: window.innerWidth,
     viewportH: window.innerHeight,
-    gutter: px(root.getPropertyValue('--page-gutter')) || 16,
+    gutter,
     regionLeft: rect.left,
     // Read without the lift, which moves the stack and never the region.
     regionBottom: window.innerHeight - rect.bottom,
-    logClearance: px(root.getPropertyValue('--agent-log-clearance')),
+    logClearance,
     logTop: px(root.getPropertyValue('--agent-log-top')),
     topLine,
     // AgentLog writes the log's height without any give, its floor, and what
@@ -588,20 +827,20 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
     card: shrink,
     floating: floatBottom > 0 ? {
       top: floatTop, bottom: floatBottom,
-      left: px(root.getPropertyValue('--agent-log-float-left')), right: px(root.getPropertyValue('--agent-log-float-right')),
+      left: floatLeft, right: floatRight,
     } : null,
     column,
     notices,
   };
 }
 
-type Box = { top: number; bottom: number; height: number; left?: number };
+type Box = { top: number; bottom: number; height: number; left?: number; width?: number };
 const resting = new WeakMap<Element, Box>();
 const gliding = new WeakMap<Element, Animation>();
 
 function box(element: Element): Box {
   const rect = element.getBoundingClientRect();
-  return { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left };
+  return { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left, width: rect.width };
 }
 
 /** The region's insets beside a floating log, or its own (CSS) with none. */
@@ -616,7 +855,7 @@ function setInset(region: HTMLElement, inset: StackPlace['inset']): void {
  * translate, an entrance's scale about its centre). */
 export function layoutBox(element: Element): Box {
   const rect = element.getBoundingClientRect();
-  const seen = { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left };
+  const seen = { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left, width: rect.width };
   const matrix = /^matrix\(([^)]+)\)$/.exec(getComputedStyle(element).transform || '');
   if (!matrix) return seen;
   const [a = 1, , , d = 1, e = 0, f = 0] = matrix[1].split(',').map((part) => Number.parseFloat(part));
@@ -626,7 +865,7 @@ export function layoutBox(element: Element): Box {
   const scaleX = a || 1;
   const width = rect.width / scaleX;
   const left = seen.left - e - (width * (1 - scaleX)) / 2;
-  return { top, bottom: top + height, height, left };
+  return { top, bottom: top + height, height, left, width };
 }
 
 function reducedMotion(): boolean {
@@ -640,18 +879,43 @@ function reducedMotion(): boolean {
  * spring to their new place. The card is held by its footer, the rows by
  * their tops. Returns the moves it started.
  */
+/** The furthest a `linear()` easing goes past its end (1 for any other). */
+export function easingPeak(easing: string): number {
+  const stops = /^linear\(([^)]*)\)$/.exec(easing.trim());
+  if (!stops) return 1;
+  return Math.max(1, ...stops[1].split(',').map((stop) => Number.parseFloat(stop)).filter(Number.isFinite));
+}
+
+/** A glide's offset `d` (it runs d → 0, past 0 by (peak - 1)·d) held so it
+ * stays within [lo, hi] on every frame: the window's room around its rest. */
+export function inWindow(d: number, lo: number, hi: number, peak: number): number {
+  const low = Math.min(0, lo);
+  const high = Math.max(0, hi);
+  let held = Math.min(high, Math.max(low, d));
+  const over = peak - 1;
+  if (over > 0 && held > 0) held = Math.min(held, -low / over);
+  if (over > 0 && held < 0) held = Math.max(held, -high / over);
+  return held;
+}
+
 export function glideStack(elements: Array<{ element: HTMLElement; from: Box | undefined; foot?: boolean }>, easing: string): number {
   let moved = 0;
+  const peak = easingPeak(easing);
   for (const { element, from, foot } of elements) {
     if (!from || from.height === 0 || element.hasAttribute(FOLD_ATTR)) continue;
     const to = layoutBox(element);
     if (to.height === 0) continue;
     const dy = foot ? from.bottom - to.bottom : from.top - to.top;
-    // Sideways too, beside a floating log or back (GM r9).
-    const dx = from.left !== undefined && to.left !== undefined ? from.left - to.left : 0;
-    if ((Math.abs(dy) < 1 && Math.abs(dx) < 1) || typeof element.animate !== 'function') continue;
+    // Sideways too, beside a floating log or back (GM r9). Held inside the
+    // window from its start and on every frame (GM r10), the spring's
+    // overshoot past its rest included.
+    const rawX = from.left !== undefined && to.left !== undefined ? from.left - to.left : 0;
+    const right = to.left !== undefined && to.width !== undefined ? to.left + to.width : undefined;
+    const dx = to.left === undefined || right === undefined ? rawX : inWindow(rawX, -to.left, window.innerWidth - right, peak);
+    const dyIn = inWindow(dy, -to.top, window.innerHeight - to.bottom, peak);
+    if ((Math.abs(dyIn) < 1 && Math.abs(dx) < 1) || typeof element.animate !== 'function') continue;
     const move = element.animate(
-      [{ transform: `translate(${Math.round(dx)}px, ${Math.round(dy)}px)` }, { transform: 'translate(0, 0)' }],
+      [{ transform: `translate(${Math.trunc(dx)}px, ${Math.trunc(dyIn)}px)` }, { transform: 'translate(0, 0)' }],
       { duration: GLIDE_MS, easing },
     );
     gliding.set(element, move);
@@ -723,19 +987,16 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   const kept = card ? [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)] : [];
   if (place.keepPlan && scroller && kept.length) {
     const view = scroller.getBoundingClientRect();
-    if (place.underFade) {
-      // Step 5 (GM r7): the plan line first, just under the top fade, the
-      // ⚠ line next in the scroll.
-      const line = kept[0].getBoundingClientRect();
-      const offset = Math.max(0, Math.min(FADE_PX, (view.height - line.height) / 2));
-      scroller.scrollTop += Math.round(line.top - (view.top + offset));
-    } else {
-      // The last kept line's foot just over the bottom fade: whole, and any
-      // line the edge cuts sits under a fade (GM r6).
-      const foot = Math.max(...kept.map((element) => element.getBoundingClientRect().bottom));
-      const short = foot - (view.bottom - FADE_PX);
-      if (short > 0) scroller.scrollTop += Math.ceil(short);
-    }
+    const from = scroller.scrollTop;
+    const at = (box: { top: number; bottom: number }) => ({ top: box.top - view.top + from, bottom: box.bottom - view.top + from });
+    scroller.scrollTop = bodyScrollTop({
+      view: view.height,
+      content: scroller.scrollHeight,
+      kept: kept.map((element) => at(element.getBoundingClientRect())),
+      lines: textLines(scroller).map(at),
+      underFade: place.underFade,
+      from,
+    });
   }
   // Step 3: the log's body gives way by the squeeze, or grows back (step 4,
   // the collapse, is the region's ask of uiStore).

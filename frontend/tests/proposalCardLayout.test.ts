@@ -50,7 +50,9 @@ describe('the proposal card is one column', () => {
     expect(note.margin).toBe('0');
     expect(note['max-width']).toBeUndefined();
     const area = rule('.proposal-bar__note-area');
-    expect(area['margin-top']).toBe('8px');
+    // 8 px under the header as before: the body's own 4 (its top edge clear
+    // of the header, GM r10) and the note's 4.
+    expect(px(area['margin-top']) + px(rule('.proposal-bar__scroll')['margin-top'])).toBe(8);
     for (let width = 320; width <= 600; width += 10) {
       const noteWidth = width - border - edge - 2 * horizontal;
       expect(noteWidth).toBeGreaterThanOrEqual(width - 36);

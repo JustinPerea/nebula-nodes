@@ -16,6 +16,16 @@ import {
   MORE_SLOT_ATTR,
   LOG_SQUEEZE_VAR,
   besideRoom,
+  placedCard,
+  bodyScrollTop,
+  easingPeak,
+  inWindow,
+  besideCard,
+  lineStop,
+  narrowMinimum,
+  textLines,
+  type BodyLine,
+  type CardProbe,
   SHOW_LESS,
   applyNoticeStack,
   bodyFloors,
@@ -581,262 +591,230 @@ const R3F_FLOATING_SHORT = [
 // so only the room above it grows). `floating wide` is that log resized to
 // the column's width: nothing is ever beside it.
 const EXPECTED_SHORT: Record<string, [number, number]> = {
-  '420x560 open 1 banner': [85, 97],
-  '420x560 open 1 banner undo': [71, 97],
-  '420x560 open 2 banner': [85, 97],
-  '420x560 open 2 banner undo': [71, 97],
-  '420x560 open 3 banner': [85, 97],
-  '420x560 open 3 banner undo': [71, 97],
-  '420x560 open 4 banner': [85, 97],
-  '420x560 open 4 banner undo': [71, 97],
-  '420x560 closed 1 banner': [85, 97],
-  '420x560 closed 1 banner undo': [71, 97],
-  '420x560 closed 2 banner': [85, 97],
-  '420x560 closed 2 banner undo': [71, 97],
-  '420x560 closed 3 banner': [85, 97],
-  '420x560 closed 3 banner undo': [71, 97],
-  '420x560 closed 4 banner': [85, 97],
-  '420x560 closed 4 banner undo': [71, 97],
-  '420x560 floating 0': [91, 97],
-  '420x560 floating 0 banner': [34, 97],
-  '420x560 floating 1': [51, 97],
-  '420x560 floating 1 undo': [37, 97],
-  '420x560 floating 1 banner': [20, 97],
-  '420x560 floating 1 banner undo': [20, 97],
-  '420x560 floating 2': [51, 97],
-  '420x560 floating 2 undo': [37, 97],
-  '420x560 floating 2 banner': [20, 97],
-  '420x560 floating 2 banner undo': [20, 97],
-  '420x560 floating 3': [51, 97],
-  '420x560 floating 3 undo': [37, 97],
-  '420x560 floating 3 banner': [20, 97],
-  '420x560 floating 3 banner undo': [20, 97],
-  '420x560 floating 4': [51, 97],
-  '420x560 floating 4 undo': [37, 97],
-  '420x560 floating 4 banner': [20, 97],
-  '420x560 floating 4 banner undo': [20, 97],
-  '420x560 floating wide 0': [91, 97],
-  '420x560 floating wide 0 banner': [34, 97],
-  '420x560 floating wide 1': [51, 97],
-  '420x560 floating wide 1 undo': [37, 97],
-  '420x560 floating wide 1 banner': [20, 97],
-  '420x560 floating wide 1 banner undo': [20, 97],
-  '420x560 floating wide 2': [51, 97],
-  '420x560 floating wide 2 undo': [37, 97],
-  '420x560 floating wide 2 banner': [20, 97],
-  '420x560 floating wide 2 banner undo': [20, 97],
-  '420x560 floating wide 3': [51, 97],
-  '420x560 floating wide 3 undo': [37, 97],
-  '420x560 floating wide 3 banner': [20, 97],
-  '420x560 floating wide 3 banner undo': [20, 97],
-  '420x560 floating wide 4': [51, 97],
-  '420x560 floating wide 4 undo': [37, 97],
-  '420x560 floating wide 4 banner': [20, 97],
-  '420x560 floating wide 4 banner undo': [20, 97],
-  '420x640 floating 0 banner': [90, 97],
-  '420x640 floating 1': [75, 97],
-  '420x640 floating 1 undo': [61, 97],
-  '420x640 floating 1 banner': [50, 97],
-  '420x640 floating 1 banner undo': [36, 97],
-  '420x640 floating 2': [75, 97],
-  '420x640 floating 2 undo': [61, 97],
-  '420x640 floating 2 banner': [50, 97],
-  '420x640 floating 2 banner undo': [36, 97],
-  '420x640 floating 3': [75, 97],
-  '420x640 floating 3 undo': [61, 97],
-  '420x640 floating 3 banner': [50, 97],
-  '420x640 floating 3 banner undo': [36, 97],
-  '420x640 floating 4': [75, 97],
-  '420x640 floating 4 undo': [61, 97],
-  '420x640 floating 4 banner': [50, 97],
-  '420x640 floating 4 banner undo': [36, 97],
-  '420x640 floating wide 0 banner': [90, 97],
-  '420x640 floating wide 1': [75, 97],
-  '420x640 floating wide 1 undo': [61, 97],
-  '420x640 floating wide 1 banner': [50, 97],
-  '420x640 floating wide 1 banner undo': [36, 97],
-  '420x640 floating wide 2': [75, 97],
-  '420x640 floating wide 2 undo': [61, 97],
-  '420x640 floating wide 2 banner': [50, 97],
-  '420x640 floating wide 2 banner undo': [36, 97],
-  '420x640 floating wide 3': [75, 97],
-  '420x640 floating wide 3 undo': [61, 97],
-  '420x640 floating wide 3 banner': [50, 97],
-  '420x640 floating wide 3 banner undo': [36, 97],
-  '420x640 floating wide 4': [75, 97],
-  '420x640 floating wide 4 undo': [61, 97],
-  '420x640 floating wide 4 banner': [50, 97],
-  '420x640 floating wide 4 banner undo': [36, 97],
-  '768x600 floating 0': [69, 97],
-  '768x600 floating 0 banner': [62, 97],
-  '768x600 floating 1': [29, 97],
-  '768x600 floating 1 undo': [20, 97],
-  '768x600 floating 1 banner': [22, 97],
-  '768x600 floating 1 banner undo': [20, 97],
-  '768x600 floating 2': [29, 97],
-  '768x600 floating 2 undo': [20, 97],
-  '768x600 floating 2 banner': [22, 97],
-  '768x600 floating 2 banner undo': [20, 97],
-  '768x600 floating 3': [29, 97],
-  '768x600 floating 3 undo': [20, 97],
-  '768x600 floating 3 banner': [22, 97],
-  '768x600 floating 3 banner undo': [20, 97],
-  '768x600 floating 4': [29, 97],
-  '768x600 floating 4 undo': [20, 97],
-  '768x600 floating 4 banner': [22, 97],
-  '768x600 floating 4 banner undo': [20, 97],
-  '768x600 floating wide 0': [69, 97],
-  '768x600 floating wide 0 banner': [62, 97],
-  '768x600 floating wide 1': [29, 97],
-  '768x600 floating wide 1 undo': [20, 97],
-  '768x600 floating wide 1 banner': [22, 97],
-  '768x600 floating wide 1 banner undo': [20, 97],
-  '768x600 floating wide 2': [29, 97],
-  '768x600 floating wide 2 undo': [20, 97],
-  '768x600 floating wide 2 banner': [22, 97],
-  '768x600 floating wide 2 banner undo': [20, 97],
-  '768x600 floating wide 3': [29, 97],
-  '768x600 floating wide 3 undo': [20, 97],
-  '768x600 floating wide 3 banner': [22, 97],
-  '768x600 floating wide 3 banner undo': [20, 97],
-  '768x600 floating wide 4': [29, 97],
-  '768x600 floating wide 4 undo': [20, 97],
-  '768x600 floating wide 4 banner': [22, 97],
-  '768x600 floating wide 4 banner undo': [20, 97],
-  '1024x640 floating wide 0': [90, 97],
-  '1024x640 floating wide 0 banner': [90, 97],
-  '1024x640 floating wide 1': [50, 97],
-  '1024x640 floating wide 1 undo': [36, 97],
-  '1024x640 floating wide 1 banner': [50, 97],
-  '1024x640 floating wide 1 banner undo': [36, 97],
-  '1024x640 floating wide 2': [50, 97],
-  '1024x640 floating wide 2 undo': [36, 97],
-  '1024x640 floating wide 2 banner': [50, 97],
-  '1024x640 floating wide 2 banner undo': [36, 97],
-  '1024x640 floating wide 3': [50, 97],
-  '1024x640 floating wide 3 undo': [36, 97],
-  '1024x640 floating wide 3 banner': [50, 97],
-  '1024x640 floating wide 3 banner undo': [36, 97],
-  '1024x640 floating wide 4': [50, 97],
-  '1024x640 floating wide 4 undo': [36, 97],
-  '1024x640 floating wide 4 banner': [50, 97],
-  '1024x640 floating wide 4 banner undo': [36, 97],
+  '420x560 open 1 banner': [85, 108],
+  '420x560 open 1 banner undo': [71, 108],
+  '420x560 open 2 banner': [85, 108],
+  '420x560 open 2 banner undo': [71, 108],
+  '420x560 open 3 banner': [85, 108],
+  '420x560 open 3 banner undo': [71, 108],
+  '420x560 open 4 banner': [85, 108],
+  '420x560 open 4 banner undo': [71, 108],
+  '420x560 closed 1 banner': [85, 108],
+  '420x560 closed 1 banner undo': [71, 108],
+  '420x560 closed 2 banner': [85, 108],
+  '420x560 closed 2 banner undo': [71, 108],
+  '420x560 closed 3 banner': [85, 108],
+  '420x560 closed 3 banner undo': [71, 108],
+  '420x560 closed 4 banner': [85, 108],
+  '420x560 closed 4 banner undo': [71, 108],
+  '420x560 floating 0': [91, 108],
+  '420x560 floating 0 banner': [34, 108],
+  '420x560 floating 1': [51, 108],
+  '420x560 floating 1 undo': [37, 108],
+  '420x560 floating 1 banner': [20, 108],
+  '420x560 floating 1 banner undo': [20, 108],
+  '420x560 floating 2': [51, 108],
+  '420x560 floating 2 undo': [37, 108],
+  '420x560 floating 2 banner': [20, 108],
+  '420x560 floating 2 banner undo': [20, 108],
+  '420x560 floating 3': [51, 108],
+  '420x560 floating 3 undo': [37, 108],
+  '420x560 floating 3 banner': [20, 108],
+  '420x560 floating 3 banner undo': [20, 108],
+  '420x560 floating 4': [51, 108],
+  '420x560 floating 4 undo': [37, 108],
+  '420x560 floating 4 banner': [20, 108],
+  '420x560 floating 4 banner undo': [20, 108],
+  '420x560 floating wide 0': [91, 108],
+  '420x560 floating wide 0 banner': [34, 108],
+  '420x560 floating wide 1': [51, 108],
+  '420x560 floating wide 1 undo': [37, 108],
+  '420x560 floating wide 1 banner': [20, 108],
+  '420x560 floating wide 1 banner undo': [20, 108],
+  '420x560 floating wide 2': [51, 108],
+  '420x560 floating wide 2 undo': [37, 108],
+  '420x560 floating wide 2 banner': [20, 108],
+  '420x560 floating wide 2 banner undo': [20, 108],
+  '420x560 floating wide 3': [51, 108],
+  '420x560 floating wide 3 undo': [37, 108],
+  '420x560 floating wide 3 banner': [20, 108],
+  '420x560 floating wide 3 banner undo': [20, 108],
+  '420x560 floating wide 4': [51, 108],
+  '420x560 floating wide 4 undo': [37, 108],
+  '420x560 floating wide 4 banner': [20, 108],
+  '420x560 floating wide 4 banner undo': [20, 108],
+  '420x640 floating 0 banner': [90, 108],
+  '420x640 floating 1': [75, 108],
+  '420x640 floating 1 undo': [61, 108],
+  '420x640 floating 1 banner': [50, 108],
+  '420x640 floating 1 banner undo': [36, 108],
+  '420x640 floating 2': [75, 108],
+  '420x640 floating 2 undo': [61, 108],
+  '420x640 floating 2 banner': [50, 108],
+  '420x640 floating 2 banner undo': [36, 108],
+  '420x640 floating 3': [75, 108],
+  '420x640 floating 3 undo': [61, 108],
+  '420x640 floating 3 banner': [50, 108],
+  '420x640 floating 3 banner undo': [36, 108],
+  '420x640 floating 4': [75, 108],
+  '420x640 floating 4 undo': [61, 108],
+  '420x640 floating 4 banner': [50, 108],
+  '420x640 floating 4 banner undo': [36, 108],
+  '420x640 floating wide 0 banner': [90, 108],
+  '420x640 floating wide 1': [75, 108],
+  '420x640 floating wide 1 undo': [61, 108],
+  '420x640 floating wide 1 banner': [50, 108],
+  '420x640 floating wide 1 banner undo': [36, 108],
+  '420x640 floating wide 2': [75, 108],
+  '420x640 floating wide 2 undo': [61, 108],
+  '420x640 floating wide 2 banner': [50, 108],
+  '420x640 floating wide 2 banner undo': [36, 108],
+  '420x640 floating wide 3': [75, 108],
+  '420x640 floating wide 3 undo': [61, 108],
+  '420x640 floating wide 3 banner': [50, 108],
+  '420x640 floating wide 3 banner undo': [36, 108],
+  '420x640 floating wide 4': [75, 108],
+  '420x640 floating wide 4 undo': [61, 108],
+  '420x640 floating wide 4 banner': [50, 108],
+  '420x640 floating wide 4 banner undo': [36, 108],
+  '768x600 floating wide 0': [69, 108],
+  '768x600 floating wide 0 banner': [62, 108],
+  '768x600 floating wide 1': [29, 108],
+  '768x600 floating wide 1 undo': [20, 108],
+  '768x600 floating wide 1 banner': [22, 108],
+  '768x600 floating wide 1 banner undo': [20, 108],
+  '768x600 floating wide 2': [29, 108],
+  '768x600 floating wide 2 undo': [20, 108],
+  '768x600 floating wide 2 banner': [22, 108],
+  '768x600 floating wide 2 banner undo': [20, 108],
+  '768x600 floating wide 3': [29, 108],
+  '768x600 floating wide 3 undo': [20, 108],
+  '768x600 floating wide 3 banner': [22, 108],
+  '768x600 floating wide 3 banner undo': [20, 108],
+  '768x600 floating wide 4': [29, 108],
+  '768x600 floating wide 4 undo': [20, 108],
+  '768x600 floating wide 4 banner': [22, 108],
+  '768x600 floating wide 4 banner undo': [20, 108],
 };
 // Of those, where even the plan line alone (33 + two fades = 65) can't show
 // whole, [the body, 65]: it is centred between the fades.
 const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
-  '420x560 floating 0 banner': [34, 65],
-  '420x560 floating 1': [51, 65],
-  '420x560 floating 1 undo': [37, 65],
-  '420x560 floating 1 banner': [20, 65],
-  '420x560 floating 1 banner undo': [20, 65],
-  '420x560 floating 2': [51, 65],
-  '420x560 floating 2 undo': [37, 65],
-  '420x560 floating 2 banner': [20, 65],
-  '420x560 floating 2 banner undo': [20, 65],
-  '420x560 floating 3': [51, 65],
-  '420x560 floating 3 undo': [37, 65],
-  '420x560 floating 3 banner': [20, 65],
-  '420x560 floating 3 banner undo': [20, 65],
-  '420x560 floating 4': [51, 65],
-  '420x560 floating 4 undo': [37, 65],
-  '420x560 floating 4 banner': [20, 65],
-  '420x560 floating 4 banner undo': [20, 65],
-  '420x560 floating wide 0 banner': [34, 65],
-  '420x560 floating wide 1': [51, 65],
-  '420x560 floating wide 1 undo': [37, 65],
-  '420x560 floating wide 1 banner': [20, 65],
-  '420x560 floating wide 1 banner undo': [20, 65],
-  '420x560 floating wide 2': [51, 65],
-  '420x560 floating wide 2 undo': [37, 65],
-  '420x560 floating wide 2 banner': [20, 65],
-  '420x560 floating wide 2 banner undo': [20, 65],
-  '420x560 floating wide 3': [51, 65],
-  '420x560 floating wide 3 undo': [37, 65],
-  '420x560 floating wide 3 banner': [20, 65],
-  '420x560 floating wide 3 banner undo': [20, 65],
-  '420x560 floating wide 4': [51, 65],
-  '420x560 floating wide 4 undo': [37, 65],
-  '420x560 floating wide 4 banner': [20, 65],
-  '420x560 floating wide 4 banner undo': [20, 65],
-  '420x640 floating 1 undo': [61, 65],
-  '420x640 floating 1 banner': [50, 65],
-  '420x640 floating 1 banner undo': [36, 65],
-  '420x640 floating 2 undo': [61, 65],
-  '420x640 floating 2 banner': [50, 65],
-  '420x640 floating 2 banner undo': [36, 65],
-  '420x640 floating 3 undo': [61, 65],
-  '420x640 floating 3 banner': [50, 65],
-  '420x640 floating 3 banner undo': [36, 65],
-  '420x640 floating 4 undo': [61, 65],
-  '420x640 floating 4 banner': [50, 65],
-  '420x640 floating 4 banner undo': [36, 65],
-  '420x640 floating wide 1 undo': [61, 65],
-  '420x640 floating wide 1 banner': [50, 65],
-  '420x640 floating wide 1 banner undo': [36, 65],
-  '420x640 floating wide 2 undo': [61, 65],
-  '420x640 floating wide 2 banner': [50, 65],
-  '420x640 floating wide 2 banner undo': [36, 65],
-  '420x640 floating wide 3 undo': [61, 65],
-  '420x640 floating wide 3 banner': [50, 65],
-  '420x640 floating wide 3 banner undo': [36, 65],
-  '420x640 floating wide 4 undo': [61, 65],
-  '420x640 floating wide 4 banner': [50, 65],
-  '420x640 floating wide 4 banner undo': [36, 65],
-  '768x600 floating 0 banner': [62, 65],
-  '768x600 floating 1': [29, 65],
-  '768x600 floating 1 undo': [20, 65],
-  '768x600 floating 1 banner': [22, 65],
-  '768x600 floating 1 banner undo': [20, 65],
-  '768x600 floating 2': [29, 65],
-  '768x600 floating 2 undo': [20, 65],
-  '768x600 floating 2 banner': [22, 65],
-  '768x600 floating 2 banner undo': [20, 65],
-  '768x600 floating 3': [29, 65],
-  '768x600 floating 3 undo': [20, 65],
-  '768x600 floating 3 banner': [22, 65],
-  '768x600 floating 3 banner undo': [20, 65],
-  '768x600 floating 4': [29, 65],
-  '768x600 floating 4 undo': [20, 65],
-  '768x600 floating 4 banner': [22, 65],
-  '768x600 floating 4 banner undo': [20, 65],
-  '768x600 floating wide 0 banner': [62, 65],
-  '768x600 floating wide 1': [29, 65],
-  '768x600 floating wide 1 undo': [20, 65],
-  '768x600 floating wide 1 banner': [22, 65],
-  '768x600 floating wide 1 banner undo': [20, 65],
-  '768x600 floating wide 2': [29, 65],
-  '768x600 floating wide 2 undo': [20, 65],
-  '768x600 floating wide 2 banner': [22, 65],
-  '768x600 floating wide 2 banner undo': [20, 65],
-  '768x600 floating wide 3': [29, 65],
-  '768x600 floating wide 3 undo': [20, 65],
-  '768x600 floating wide 3 banner': [22, 65],
-  '768x600 floating wide 3 banner undo': [20, 65],
-  '768x600 floating wide 4': [29, 65],
-  '768x600 floating wide 4 undo': [20, 65],
-  '768x600 floating wide 4 banner': [22, 65],
-  '768x600 floating wide 4 banner undo': [20, 65],
-  '1024x640 floating wide 1': [50, 65],
-  '1024x640 floating wide 1 undo': [36, 65],
-  '1024x640 floating wide 1 banner': [50, 65],
-  '1024x640 floating wide 1 banner undo': [36, 65],
-  '1024x640 floating wide 2': [50, 65],
-  '1024x640 floating wide 2 undo': [36, 65],
-  '1024x640 floating wide 2 banner': [50, 65],
-  '1024x640 floating wide 2 banner undo': [36, 65],
-  '1024x640 floating wide 3': [50, 65],
-  '1024x640 floating wide 3 undo': [36, 65],
-  '1024x640 floating wide 3 banner': [50, 65],
-  '1024x640 floating wide 3 banner undo': [36, 65],
-  '1024x640 floating wide 4': [50, 65],
-  '1024x640 floating wide 4 undo': [36, 65],
-  '1024x640 floating wide 4 banner': [50, 65],
-  '1024x640 floating wide 4 banner undo': [36, 65],
+  '420x560 open 1 banner undo': [71, 76],
+  '420x560 open 2 banner undo': [71, 76],
+  '420x560 open 3 banner undo': [71, 76],
+  '420x560 open 4 banner undo': [71, 76],
+  '420x560 closed 1 banner undo': [71, 76],
+  '420x560 closed 2 banner undo': [71, 76],
+  '420x560 closed 3 banner undo': [71, 76],
+  '420x560 closed 4 banner undo': [71, 76],
+  '420x560 floating 0 banner': [34, 76],
+  '420x560 floating 1': [51, 76],
+  '420x560 floating 1 undo': [37, 76],
+  '420x560 floating 1 banner': [20, 76],
+  '420x560 floating 1 banner undo': [20, 76],
+  '420x560 floating 2': [51, 76],
+  '420x560 floating 2 undo': [37, 76],
+  '420x560 floating 2 banner': [20, 76],
+  '420x560 floating 2 banner undo': [20, 76],
+  '420x560 floating 3': [51, 76],
+  '420x560 floating 3 undo': [37, 76],
+  '420x560 floating 3 banner': [20, 76],
+  '420x560 floating 3 banner undo': [20, 76],
+  '420x560 floating 4': [51, 76],
+  '420x560 floating 4 undo': [37, 76],
+  '420x560 floating 4 banner': [20, 76],
+  '420x560 floating 4 banner undo': [20, 76],
+  '420x560 floating wide 0 banner': [34, 76],
+  '420x560 floating wide 1': [51, 76],
+  '420x560 floating wide 1 undo': [37, 76],
+  '420x560 floating wide 1 banner': [20, 76],
+  '420x560 floating wide 1 banner undo': [20, 76],
+  '420x560 floating wide 2': [51, 76],
+  '420x560 floating wide 2 undo': [37, 76],
+  '420x560 floating wide 2 banner': [20, 76],
+  '420x560 floating wide 2 banner undo': [20, 76],
+  '420x560 floating wide 3': [51, 76],
+  '420x560 floating wide 3 undo': [37, 76],
+  '420x560 floating wide 3 banner': [20, 76],
+  '420x560 floating wide 3 banner undo': [20, 76],
+  '420x560 floating wide 4': [51, 76],
+  '420x560 floating wide 4 undo': [37, 76],
+  '420x560 floating wide 4 banner': [20, 76],
+  '420x560 floating wide 4 banner undo': [20, 76],
+  '420x640 floating 1': [75, 76],
+  '420x640 floating 1 undo': [61, 76],
+  '420x640 floating 1 banner': [50, 76],
+  '420x640 floating 1 banner undo': [36, 76],
+  '420x640 floating 2': [75, 76],
+  '420x640 floating 2 undo': [61, 76],
+  '420x640 floating 2 banner': [50, 76],
+  '420x640 floating 2 banner undo': [36, 76],
+  '420x640 floating 3': [75, 76],
+  '420x640 floating 3 undo': [61, 76],
+  '420x640 floating 3 banner': [50, 76],
+  '420x640 floating 3 banner undo': [36, 76],
+  '420x640 floating 4': [75, 76],
+  '420x640 floating 4 undo': [61, 76],
+  '420x640 floating 4 banner': [50, 76],
+  '420x640 floating 4 banner undo': [36, 76],
+  '420x640 floating wide 1': [75, 76],
+  '420x640 floating wide 1 undo': [61, 76],
+  '420x640 floating wide 1 banner': [50, 76],
+  '420x640 floating wide 1 banner undo': [36, 76],
+  '420x640 floating wide 2': [75, 76],
+  '420x640 floating wide 2 undo': [61, 76],
+  '420x640 floating wide 2 banner': [50, 76],
+  '420x640 floating wide 2 banner undo': [36, 76],
+  '420x640 floating wide 3': [75, 76],
+  '420x640 floating wide 3 undo': [61, 76],
+  '420x640 floating wide 3 banner': [50, 76],
+  '420x640 floating wide 3 banner undo': [36, 76],
+  '420x640 floating wide 4': [75, 76],
+  '420x640 floating wide 4 undo': [61, 76],
+  '420x640 floating wide 4 banner': [50, 76],
+  '420x640 floating wide 4 banner undo': [36, 76],
+  '768x600 floating wide 0': [69, 76],
+  '768x600 floating wide 0 banner': [62, 76],
+  '768x600 floating wide 1': [29, 76],
+  '768x600 floating wide 1 undo': [20, 76],
+  '768x600 floating wide 1 banner': [22, 76],
+  '768x600 floating wide 1 banner undo': [20, 76],
+  '768x600 floating wide 2': [29, 76],
+  '768x600 floating wide 2 undo': [20, 76],
+  '768x600 floating wide 2 banner': [22, 76],
+  '768x600 floating wide 2 banner undo': [20, 76],
+  '768x600 floating wide 3': [29, 76],
+  '768x600 floating wide 3 undo': [20, 76],
+  '768x600 floating wide 3 banner': [22, 76],
+  '768x600 floating wide 3 banner undo': [20, 76],
+  '768x600 floating wide 4': [29, 76],
+  '768x600 floating wide 4 undo': [20, 76],
+  '768x600 floating wide 4 banner': [22, 76],
+  '768x600 floating wide 4 banner undo': [20, 76],
 };
 
-const EXPECTED_R9_OWN = [18, 0, 53];
-const EXPECTED_R9_WIDE = [0, 0, 71];
+const EXPECTED_R10_OWN = [36, 0, 35];
+const EXPECTED_R10_WIDE = [18, 0, 53];
+const EXPECTED_R10_768 = 18;
+
+/** The live card's line boxes (round 3h, 340 px), unscrolled, as LIVE_CARD
+ * places its kept lines (4 px lower: the 3e model's note margin). */
+const LIVE_LINES: BodyLine[] = [[5.5, 22], [25.8, 42.2], [46, 62.5], [73.8, 87.7], [90.5, 104.5], [112.3, 125.3], [125.3, 138.3], [157.2, 171.2]]
+  .map(([top, bottom]) => ({ top: top + 4, bottom: bottom + 4 }));
+/** The live card measured in its narrow layout (round 3h, 1024 x 900): its
+ * narrow minimum, and the card from each width up (the plan line wraps
+ * once more under 290 px and once less from 380). */
+const NARROW_MIN = 254;
+const NARROW: Array<{ from: number; card: Omit<CardProbe, 'width'> }> = [
+  { from: 254, card: { chrome: 93, body: 215, foot: 54, line: 20, plan: { top: 93, bottom: 159 }, first: { top: 93, bottom: 127 },
+    lines: [[5.5, 22], [25.8, 42.3], [46.1, 62.6], [66.4, 82.9], [94.3, 108.3], [111.1, 125.1], [132.9, 145.9], [145.9, 158.9], [177.9, 191.9]].map(([top, bottom]) => ({ top, bottom })) } },
+  { from: 290, card: { chrome: 93, body: 194, foot: 54, line: 20, plan: { top: 73, bottom: 138 }, first: { top: 73, bottom: 106 },
+    lines: [[5.5, 22], [25.8, 42.2], [46, 62.5], [73.8, 87.7], [90.5, 104.5], [112.3, 125.3], [125.3, 138.3], [157.2, 171.2]].map(([top, bottom]) => ({ top, bottom })) } },
+  { from: 380, card: { chrome: 93, body: 181, foot: 54, line: 20, plan: { top: 73, bottom: 125 }, first: { top: 73, bottom: 106 },
+    lines: [[5.5, 22], [25.8, 42.2], [46, 62.5], [73.8, 87.7], [90.5, 104.5], [112.3, 125.3], [144.2, 158.2]].map(([top, bottom]) => ({ top, bottom })) } },
+];
+/** The card at `width` in its narrow layout, as measureNoticeStack probes it. */
+const narrowAt = (width: number): CardProbe => ({ width, ...[...NARROW].reverse().find((entry) => width >= entry.from)!.card });
 
 describe('the grid', () => {
   const SIZES: Array<[number, number]> = [[420, 560], [420, 640], [420, 760], [420, 900], [768, 600], [1024, 640], [1440, 900]];
@@ -852,6 +830,10 @@ describe('the grid', () => {
   const PLAN_SHORT: Record<string, [number, number]> = {};
   /** Where the stack sits by each floating log (GM r9). */
   const SIDE: Record<string, string> = {};
+  /** The width each cell's card took beside a log in its narrow layout. */
+  const NARROWED: Record<string, number> = {};
+  /** The cells whose stack crosses a floating log's body. */
+  const CROSSED: string[] = [];
   const cells = SIZES.flatMap(([w, h]) => LOGS.flatMap((log) => COUNTS.flatMap((count) => [false, true].flatMap((banner) => (count ? [false, true] : [false]).map((undo) => {
     const regionLeft = 64;
     const column = { left: regionLeft, right: regionLeft + Math.min(600, w - regionLeft - 16) };
@@ -870,13 +852,20 @@ describe('the grid', () => {
       topLine,
       // The newest offers Undo, and carries the fold's count in its row (GM r8).
       card: {
-        ...LIVE_CARD, items: Array(count).fill(46),
+        ...LIVE_CARD, items: Array(count).fill(46), lines: LIVE_LINES,
         undo: Array(count).fill(false).map((_, i) => undo && i === count - 1),
         host: Array(count).fill(false).map((_, i) => undo && i === count - 1),
       },
       floating: floating ? { top: Math.round(h * 0.3), bottom: Math.round(h * 0.3) + natural, left: column.left + 1, right: column.left + 1 + logW } : null,
       column,
     };
+    // As the measure does: the rooms beside the log under 400, from the
+    // card's narrow minimum, and the card at each (GM r10).
+    const rooms = floating
+      ? [besideRoom(m, regionLeft, w - m.floating!.left + FLOAT_GAP_PX), besideRoom(m, Math.max(regionLeft, m.floating!.right + FLOAT_GAP_PX), 0)]
+      : [besideRoom(m, regionLeft, m.logClearance)];
+    const narrowRooms = rooms.filter((room) => room >= NARROW_MIN && room < BESIDE_LOG_MIN_W);
+    m.card = { ...m.card!, narrowMin: NARROW_MIN, probes: narrowRooms.map((room) => narrowAt(Math.floor(room))) };
     return { name: `${w}x${h} ${log} ${count}${banner ? ' banner' : ''}${undo ? ' undo' : ''}`, m, log, count, undo };
   })))));
 
@@ -897,23 +886,40 @@ describe('the grid', () => {
     expect(card!.footTop - card!.headBottom).toBeGreaterThanOrEqual(20);
     // The give-way order: the log gives only past every fold, and collapses
     // only past its floor; the kept lines go under the fade only past both.
-    const floors = bodyFloors(m.card!);
+    const placed = placedCard(m, place)!;
+    const chrome = placed.chrome;
+    const floors = bodyFloors(placed);
     const give = place.squeeze + (place.collapse ? m.logCollapse! : 0);
     if (place.squeeze > 0) expect(place.mode === 'pill' || place.mode === 'under' || !rows.some((row) => row.kind === 'notice' && !undo)).toBe(true);
     if (place.collapse) expect(place.squeeze).toBe(m.logSpare);
     if (place.underFade) {
       expect(give).toBe(place.aboveLog || (floating && give > 0) ? m.logSpare! + m.logCollapse! : give);
-      SHORT[name] = [place.cap! - 89, floors.min];
+      SHORT[name] = [place.cap! - chrome, floors.min];
       // The plan line first, whole between the fades.
-      if (place.cap! - 89 >= floors.one) {
+      if (place.cap! - chrome >= floors.one) {
         expect(card!.first!.top).toBeGreaterThanOrEqual(card!.headBottom);
         expect(card!.first!.bottom).toBeLessThanOrEqual(card!.footTop - FADE_PX);
       } else {
-        PLAN_SHORT[name] = [place.cap! - 89, floors.one];
+        PLAN_SHORT[name] = [place.cap! - chrome, floors.one];
       }
     } else {
       expect(card!.plan!.top).toBeGreaterThanOrEqual(card!.headBottom);
       expect(card!.plan!.bottom).toBeLessThanOrEqual(card!.footTop - FADE_PX);
+    }
+    // GM r10: scrolled, the body stops on a line boundary: the first line
+    // in view is whole, under the body's top edge (4 px under the header).
+    if (card!.scroll) {
+      for (const lineBox of placed.lines ?? []) {
+        const top = card!.headBottom + lineBox.top - card!.scroll;
+        const bottom = card!.headBottom + lineBox.bottom - card!.scroll;
+        if (bottom > card!.headBottom + 0.5) expect(top).toBeGreaterThanOrEqual(card!.headBottom - 0.5);
+      }
+    }
+    // Beside a log in the narrow layout, every part never covered fits.
+    if (place.narrow) {
+      expect(place.narrow).toBeGreaterThanOrEqual(NARROW_MIN);
+      expect(place.narrow).toBeLessThan(BESIDE_LOG_MIN_W);
+      expect(PLAN_SHORT[name]).toBeUndefined();
     }
     // A notice with an Undo is always whole; the newest whole or in the pill.
     const shownNotices = rows.filter((row) => row.kind === 'notice').length;
@@ -931,10 +937,12 @@ describe('the grid', () => {
     // body; never its header.
     let crossing = false;
     if (floating) SIDE[name] = place.float ?? 'none';
+    if (place.narrow) NARROWED[name] = place.narrow;
     if (floating && (place.float === 'left' || place.float === 'right')) {
       const float = m.floating!;
       const inset = place.inset!;
-      expect(m.viewportW - inset.right - inset.left).toBeGreaterThanOrEqual(BESIDE_LOG_MIN_W);
+      // 400 px there, or the card's narrow layout (GM r10).
+      expect(m.viewportW - inset.right - inset.left).toBeGreaterThanOrEqual(place.narrow ? NARROW_MIN : BESIDE_LOG_MIN_W);
       if (place.float === 'left') expect(m.viewportW - inset.right).toBeLessThanOrEqual(float.left - FLOAT_GAP_PX);
       else expect(inset.left).toBeGreaterThanOrEqual(float.right + FLOAT_GAP_PX);
       expect(inset.left).toBeGreaterThanOrEqual(m.regionLeft);
@@ -949,6 +957,9 @@ describe('the grid', () => {
         else expect(box.bottom <= top - FLOAT_GAP_PX + 0.5 || box.top >= float.bottom).toBe(true);
       }
     }
+    // GM r10: only a named shortfall crosses a floating log's body (r9's
+    // last resort), and then never its header, a notice or the window edge.
+    if (crossing) { expect(SHORT[name]).toBeDefined(); CROSSED.push(name); }
     // Nothing off screen; nothing past the top line.
     for (const box of boxes) {
       expect(box.top).toBeGreaterThanOrEqual(0);
@@ -969,35 +980,51 @@ describe('the grid', () => {
     }
   });
 
-  it('GM r9: how round 3f\'s 71 floating cells resolve, step by step', () => {
+  it('GM r9-r10: how round 3f\'s 71 floating cells resolve, step by step', () => {
     // 1: beside the log; 2: a side of it (under, or above with its give)
     // that holds the kept lines; else 3: a named shortfall (SHORT).
     const step = (name: string) => (SIDE[name] === 'left' || SIDE[name] === 'right' ? 1 : SHORT[name] ? 3 : 2);
     const count = (names: string[]) => [1, 2, 3].map((n) => names.filter((name) => step(name) === n).length);
     // With the log at its own width.
     const own = R3F_FLOATING_SHORT;
-    expect(count(own)).toEqual(EXPECTED_R9_OWN);
+    expect(count(own)).toEqual(EXPECTED_R10_OWN);
     // Step 1 takes every 1024x640 cell (595 px beside the log, on its
-    // right); the ones left are those in SHORT, with their numbers: at 420
-    // the log is the column's width, at 768 there are 339 px beside it.
-    expect(own.filter((name) => step(name) === 1).every((name) => name.startsWith('1024x640'))).toBe(true);
+    // right) and, in the narrow layout (GM r10), every 768x600 one (339 px);
+    // the ones left are those in SHORT, with their numbers: at 420 the log
+    // is the column's width.
+    expect(own.filter((name) => step(name) === 1).every((name) => /^(1024x640|768x600)/.test(name))).toBe(true);
+    expect(own.filter((name) => step(name) === 1 && name.startsWith('768x600')).length).toBe(EXPECTED_R10_768);
     expect(own.filter((name) => step(name) === 3)).toEqual(Object.keys(EXPECTED_SHORT).filter((name) => / floating (?!wide)/.test(name)));
     // With it resized to the column's width, as round 3f's grid had it.
     const wide = R3F_FLOATING_SHORT.map((name) => name.replace(' floating', ' floating wide'));
-    expect(count(wide)).toEqual(EXPECTED_R9_WIDE);
+    expect(count(wide)).toEqual(EXPECTED_R10_WIDE);
+    // GM r10: the narrow layout takes every 768x600 cell beside the log,
+    // docked (356 px) or floating at its own width (339 px), and the wide
+    // log's 1024x640 cells (337 px); nothing else goes narrow.
+    const narrowed = Object.entries(NARROWED).reduce<Record<string, number>>((acc, [name, width]) => {
+      const key = `${name.split(' ').slice(0, 2).join(' ')}${name.includes(' wide') ? ' wide' : ''} ${width}`;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(narrowed).toEqual({ '768x600 open 356': 18, '768x600 closed 356': 18, '768x600 floating 339': 18, '1024x640 floating wide 337': 18 });
   });
 
   it('lists the cells where every step leaves the body short of its kept lines', () => {
-    // [the body it gets, the kept lines' need (65 + two fades)].
+    // [the body it gets, the kept lines' need: 65 + two fades, and from
+    // round 3h (GM r10) the 11 px to the line boundary above the top fade].
     expect(SHORT).toEqual(EXPECTED_SHORT);
     for (const [body, need] of Object.values(SHORT)) expect(body).toBeLessThan(need);
     // The plan line shows whole in every one of them but these.
     expect(PLAN_SHORT).toEqual(EXPECTED_PLAN_SHORT);
     for (const [body, need] of Object.values(PLAN_SHORT)) expect(body).toBeLessThan(need);
+    // Of them, these cross a floating log's body (never its header): with a
+    // banner at 420x560, and the wide log's 768x600 cells with an Undo.
+    expect(CROSSED).toEqual(Object.keys(EXPECTED_SHORT).filter((name) => /^420x560 floating (wide )?[1-4] banner|^768x600 floating wide . (banner )?undo$/.test(name)));
     // GM r7's cells: 420x560, the docked log, the banner, 2-4 notices with
-    // no Undo: the plan line whole, the ⚠ line 12 px short (under the fade).
+    // no Undo: the plan line whole, the ⚠ line short (under the fade; 12 px
+    // until round 3h, 23 px now the scroll stops on a line boundary).
     for (const count of [2, 3, 4]) {
-      expect(SHORT[`420x560 open ${count} banner`]).toEqual([85, 97]);
+      expect(SHORT[`420x560 open ${count} banner`]).toEqual([85, 108]);
       expect(PLAN_SHORT[`420x560 open ${count} banner`]).toBeUndefined();
     }
   });
@@ -1279,8 +1306,9 @@ describe('the fold, the row and the glide, written to the stack', () => {
     const rest = layoutBox(card);
     expect(rest).toMatchObject({ top: 131, bottom: 281, height: 150 });
     expect(rest.left).toBeCloseTo(16, 6);
+    expect(rest.width).toBeCloseTo(600, 6);
     vi.mocked(window.getComputedStyle).mockReturnValue({ transform: 'none' } as CSSStyleDeclaration);
-    expect(layoutBox(card)).toEqual({ top: 104, bottom: 248, height: 144, left: 40 });
+    expect(layoutBox(card)).toEqual({ top: 104, bottom: 248, height: 144, left: 40, width: 576 });
   });
 
   it('a folded notice never glides, and a glide skips what has no place to come from', () => {
@@ -1475,6 +1503,294 @@ describe('measured from the live stack', () => {
     expect(REGION).toMatch(/watch\(stack\)/);
     expect(REGION).toMatch(/querySelectorAll\(`\[\$\{TOP_BAR_ATTR\}\]`\)\.forEach\(watch\)/);
     expect(REGION).toMatch(/observe\(document\.documentElement, \{ attributes: true, attributeFilter: \['style', BANNER_SHOWN_ATTR\] \}\)/);
+  });
+});
+
+describe('GM r10 (round 3h)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    document.documentElement.style.removeProperty('--agent-log-clearance');
+    document.body.innerHTML = '';
+  });
+  const L = (...pairs: Array<[number, number]>): BodyLine[] => pairs.map(([top, bottom]) => ({ top, bottom }));
+  const LINES = L([0, 16], [20, 36], [40, 56], [60, 76], [80, 96]);
+  const straddles = (lines: BodyLine[], scroll: number) => lines.some((line) => line.top < scroll - 0.5 && line.bottom > scroll + 0.5);
+
+  it('the give-way scroll stops on a line boundary, keeping the kept lines whole and clear of the fades', () => {
+    // From the bottom: 76 + 16 - 60 = 32 cuts 20-36; down to 20 the line at
+    // 60-76 sits in the bottom fade, up to 36 it is whole and clear.
+    expect(bodyScrollTop({ view: 60, content: 100, kept: L([60, 76]), underFade: false, from: 0 })).toBe(32);
+    expect(bodyScrollTop({ view: 60, content: 100, kept: L([60, 76]), lines: LINES, underFade: false, from: 0 })).toBe(36);
+    // Up would cut the kept lines' top (30), so down to the line's top: 20.
+    expect(bodyScrollTop({ view: 60, content: 100, kept: L([30, 66]), lines: LINES, underFade: false, from: 0 })).toBe(20);
+    // Up would cut the kept top even though it is nearer: down, whole.
+    expect(bodyScrollTop({ view: 60, content: 100, kept: L([24, 66]), lines: L([15, 28]), underFade: false, from: 0 })).toBe(15);
+    // Neither is clear: the nearer whole one (here down, 2 px off).
+    expect(bodyScrollTop({ view: 40, content: 200, kept: L([56, 70]), lines: L([44, 55]), underFade: false, from: 0 })).toBe(44);
+    expect(bodyScrollTop({ view: 50, content: 100, kept: L([60, 76]), lines: LINES, underFade: false, from: 0 })).toBe(40);
+    // A boundary that lands inside the next line isn't one.
+    expect(bodyScrollTop({ view: 60, content: 200, kept: L([80, 96]), lines: L([40, 56.5], [56.2, 70], [80, 96]), underFade: false, from: 0 })).toBe(40);
+    // Under the fade: the plan line alone, centred (12 px over it), then
+    // stopped on the boundary under 48.
+    const fade = bodyScrollTop({ view: 40, content: 100, kept: L([60, 76], [60, 120]), lines: LINES, underFade: true, from: 0 });
+    expect(fade).toBe(56);
+    expect(straddles(LINES, fade)).toBe(false);
+    // Held to the body's scroll range; with no height read, not above.
+    expect(bodyScrollTop({ view: 60, content: 50, kept: L([60, 76]), lines: LINES, underFade: false, from: 0 })).toBe(0);
+    expect(bodyScrollTop({ view: 60, content: 0, kept: L([160, 176]), underFade: false, from: 0 })).toBe(132);
+    expect(bodyScrollTop({ view: 60, content: 100, kept: [], underFade: false, from: 7 })).toBe(7);
+  });
+
+  it('the floors count the room to the line boundary above the top fade', () => {
+    expect(lineStop(-4, LINES)).toBe(0);
+    expect(lineStop(30, LINES)).toBe(20);
+    expect(lineStop(38, LINES)).toBe(38);
+    expect(lineStop(30)).toBe(30);
+    // The live card: the plan line at 77 has its top fade at 61, in the
+    // line 50-66.5 above it, so its floors grow by the 11 px to 50.
+    expect(bodyFloors(LIVE_CARD)).toMatchObject({ min: 97, one: 65 });
+    expect(bodyFloors({ ...LIVE_CARD, lines: LIVE_LINES })).toMatchObject({ min: 108, one: 76 });
+  });
+
+  it('the line boxes skip what an ancestor clips, not what the body itself scrolls away', () => {
+    document.body.innerHTML = `<div class="scroller" style="overflow-y: auto"><p class="note" style="overflow: hidden"><span>clamped</span></p><p>plan</p></div>`;
+    const root = document.querySelector<HTMLElement>('.scroller')!;
+    const note = document.querySelector<HTMLElement>('.note')!;
+    vi.spyOn(note, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 140 } as DOMRect);
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 150 } as DOMRect);
+    const rects: Record<string, Array<Partial<DOMRect>>> = {
+      // Two lines in the clamp's box, a third clipped below it, and two
+      // pieces of one line merged.
+      clamped: [{ top: 100, bottom: 116, width: 50, height: 16 }, { top: 120, bottom: 136, width: 30, height: 16 }, { top: 121, bottom: 137, width: 20, height: 16 }, { top: 140, bottom: 156, width: 40, height: 16 }],
+      // Below the scroller's own box: still a line (it scrolls into view).
+      plan: [{ top: 170, bottom: 186, width: 40, height: 16 }, { top: 190, bottom: 190, width: 0, height: 0 }],
+    };
+    let node: Node | null = null;
+    vi.spyOn(document, 'createRange').mockImplementation(() => ({
+      selectNodeContents(target: Node) { node = target; },
+      getClientRects() { return rects[node!.textContent!] as DOMRect[]; },
+    }) as unknown as Range);
+    expect(textLines(root)).toEqual(L([100, 116], [120, 137], [170, 186]));
+  });
+
+  it('a glide stays inside the window on every frame, its spring\'s overshoot too', () => {
+    const SPRING = /--notice-spring:\s*(linear\([^)]*\))/.exec(REGION_CSS)![1];
+    const peak = easingPeak(SPRING);
+    expect(peak).toBeCloseTo(1.022, 6);
+    expect(easingPeak('ease')).toBe(1);
+    expect(easingPeak('linear(0, 0.5, 1)')).toBe(1);
+    // Held in [lo, hi], and short enough that its overshoot is too.
+    expect(inWindow(224, -200, 24, 1)).toBe(24);
+    expect(inWindow(-300, -200, 24, 1)).toBe(-200);
+    expect(inWindow(224, -2, 222, 1.022)).toBeCloseTo(2 / 0.022, 6);
+    expect(inWindow(-222, -222, 2, 1.022)).toBeCloseTo(-2 / 0.022, 6);
+    // Already outside: it never pushes further out.
+    expect(inWindow(50, 10, 30, 1)).toBe(30);
+    expect(inWindow(-50, -30, -10, 1)).toBe(-30);
+    expect(inWindow(-50, 10, 30, 1)).toBe(0);
+    expect(inWindow(50, -30, -10, 1)).toBe(0);
+    // A 1024 -> 800 resize: the card rested at 424-1000, now at 200-776 in
+    // an 800 px window; and two near the edges, where the overshoot binds.
+    const stops = SPRING.slice(7, -1).split(',').map((stop) => Number.parseFloat(stop));
+    vi.stubGlobal('innerWidth', 800);
+    vi.stubGlobal('innerHeight', 900);
+    const cases = [
+      { from: { top: 500, bottom: 700, height: 200, left: 424, width: 576 }, to: { left: 200, width: 576 } },
+      { from: { top: 500, bottom: 700, height: 200, left: 300, width: 576 }, to: { left: 2, width: 576 } },
+      { from: { top: 500, bottom: 700, height: 200, left: 0, width: 576 }, to: { left: 222, width: 576 } },
+      { from: { top: 860, bottom: 1060, height: 200, left: 100, width: 576 }, to: { left: 100, width: 576 } },
+    ];
+    const keyframes: Array<Array<{ transform: string }>> = [];
+    Object.defineProperty(HTMLElement.prototype, 'animate', {
+      value: vi.fn((frames: Array<{ transform: string }>) => { keyframes.push(frames); return { cancel() {} } as Animation; }),
+      configurable: true,
+    });
+    for (const { from, to } of cases) {
+      const { card } = stackDom(0);
+      vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({ top: 500, bottom: 700, height: 200, ...to } as DOMRect);
+      keyframes.length = 0;
+      expect(glideStack([{ element: card, from }], SPRING)).toBe(1);
+      const [dx, dy] = /translate\((-?\d+)px, (-?\d+)px\)/.exec(keyframes[0][0].transform)!.slice(1).map(Number);
+      for (const e of stops) {
+        const x = to.left + dx * (1 - e);
+        const y = 500 + dy * (1 - e);
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(x + to.width).toBeLessThanOrEqual(800);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y + 200).toBeLessThanOrEqual(900);
+      }
+    }
+    delete (HTMLElement.prototype as { animate?: unknown }).animate;
+  });
+
+  it('beside a log: 400 px as it is; from its narrow minimum, its narrow layout if every kept part fits the height', () => {
+    const probe = narrowAt(339);
+    const m = (over: Partial<StackMeasure> = {}): StackMeasure => ({
+      ...LIVE, viewportW: 768, viewportH: 600, logClearance: 348, logTop: 268,
+      card: { ...LIVE_CARD, lines: LIVE_LINES, narrowMin: NARROW_MIN, probes: [probe] }, ...over,
+    });
+    expect(besideCard({ ...m(), card: null }, 500, 0)).toBeNull();
+    expect(besideCard(m(), 400, 0)).toMatchObject({ chrome: 89, body: 198 });
+    expect(besideCard(m(), 339.7, 0)).toMatchObject({ chrome: 93, body: 194, narrowMin: NARROW_MIN });
+    // Under the minimum, without one measured, or no card read at that width.
+    expect(besideCard(m(), NARROW_MIN - 1, 0)).toBeNull();
+    expect(besideCard(m({ card: { ...m().card!, probes: [{ ...narrowAt(NARROW_MIN), width: NARROW_MIN - 1 }] } }), NARROW_MIN - 0.5, 0)).toBeNull();
+    expect(besideCard(m({ card: { ...LIVE_CARD, probes: [probe] } }), 339, 0)).toBeNull();
+    expect(besideCard(m(), 338, 0)).toBeNull();
+    // The window's height: header, footer, the plan line whole between its
+    // fades and the notices folded, exactly; a pixel less and step 2 places it.
+    const need = probe.chrome + bodyFloors({ ...LIVE_CARD, ...probe }).one + 46;
+    const fit = { viewportH: need + LIVE.regionBottom + LIVE.topLine };
+    expect(besideCard(m(fit), 339, 46)).not.toBeNull();
+    expect(besideCard(m({ viewportH: fit.viewportH - 1 }), 339, 46)).toBeNull();
+    // Placed beside the docked log at 356 px: the narrow card, the region
+    // beside the log, and the card the place was made for.
+    const docked = { ...m(), card: { ...m().card!, probes: [narrowAt(356)] } };
+    const place = placeNoticeStack(docked);
+    expect(place).toMatchObject({ narrow: 356, aboveLog: false });
+    expect(placedCard(docked, place)).toMatchObject({ chrome: 93, body: 194 });
+    expect(placedCard(docked, { ...place, narrow: 300 })).toBe(docked.card);
+    expect(placedCard(docked, { ...place, narrow: null })).toBe(docked.card);
+    // The place is made for the narrow card: a taller one keeps its plan
+    // line by scrolling where the normal one would fit whole.
+    const tall = (width: number): CardProbe => ({ ...narrowAt(width), body: 400, plan: { top: 300, bottom: 360 }, first: { top: 300, bottom: 330 }, lines: undefined });
+    expect(place.keepPlan).toBe(false);
+    expect(placeNoticeStack({ ...docked, card: { ...docked.card, probes: [tall(356)] } })).toMatchObject({ narrow: 356, keepPlan: true });
+    // Beside a floating log on the column's right: the left side, narrow, the same.
+    const floatingRight: StackMeasure = {
+      ...m(), viewportW: 800, logClearance: 0, logTop: 0, floating: { top: 180, bottom: 360, left: 420, right: 760 },
+      column: { left: 64, right: 664 }, card: { ...m().card!, probes: [tall(348)] },
+    };
+    expect(placeNoticeStack(floatingRight)).toMatchObject({ float: 'left', narrow: 348, keepPlan: true });
+    expect(placeNoticeStack({ ...floatingRight, card: { ...floatingRight.card!, probes: [narrowAt(348)] } })).toMatchObject({ float: 'left', narrow: 348, keepPlan: false });
+    // Too short for it: above the log, as before.
+    expect(placeNoticeStack({ ...docked, viewportH: 300 })).toMatchObject({ narrow: null, aboveLog: true });
+    // Going narrow, or back, is a step change: it glides.
+    expect(stepChanged(place, { ...place, narrow: null })).toBe(true);
+    expect(stepChanged(place, { ...place })).toBe(false);
+  });
+
+  it('written to the card, the body\'s scroll stops on a line boundary', () => {
+    const { region, stack, card } = stackDom(0);
+    card.querySelector('.plan')!.textContent = 'The plan line';
+    const scroller = card.querySelector<HTMLElement>('.body')!;
+    let top = 0;
+    Object.defineProperty(scroller, 'scrollTop', { get: () => top, set: (value: number) => { top = value; }, configurable: true });
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 100, configurable: true });
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 60, height: 60 } as DOMRect);
+    vi.spyOn(card.querySelector<HTMLElement>('.plan')!, 'getBoundingClientRect').mockReturnValue({ top: 60, bottom: 76, height: 16 } as DOMRect);
+    vi.spyOn(document, 'createRange').mockImplementation(() => ({
+      selectNodeContents() {},
+      getClientRects() { return LINES.map((line) => ({ ...line, width: 40, height: line.bottom - line.top })) as unknown as DOMRect[]; },
+    }) as unknown as Range);
+    const place: StackPlace = {
+      aboveLog: false, lift: 0, cap: 300, mode: 'under', folded: 0, fold: [], more: 0, moreHost: -1, expanded: false,
+      keepPlan: true, squeeze: 0, collapse: false, underFade: false, over: 0,
+    };
+    applyNoticeStack(region, stack, place);
+    // 76 + 16 - 60 = 32 cuts the line at 20-36: up to its foot.
+    expect(top).toBe(36);
+  });
+
+  it('a move between placements never drops a notice: each shows, or folds into the row or the pill', () => {
+    // The live shots 12-15: a floating log at its own width at the card's
+    // column's left, two notices, the window resized under it.
+    const make = (w: number, h: number, undo: boolean): StackMeasure => {
+      const column = { left: 64, right: 64 + Math.min(600, w - 80) };
+      const m: StackMeasure = {
+        viewportW: w, viewportH: h, gutter: 16, regionLeft: 64, regionBottom: 81, logClearance: 0, logTop: 0,
+        logSpare: 180 - 91, logCollapse: 91 - CLOSED_LOG, topLine: 150,
+        card: { ...LIVE_CARD, lines: LIVE_LINES, items: [46, 46], undo: [false, undo], host: [false, undo] },
+        floating: { top: Math.round(h * 0.3), bottom: Math.round(h * 0.3) + 180, left: 65, right: 405 }, column,
+      };
+      const rooms = [besideRoom(m, 64, w - 65 + FLOAT_GAP_PX), besideRoom(m, 413, 0)].filter((room) => room >= NARROW_MIN && room < BESIDE_LOG_MIN_W);
+      m.card = { ...m.card!, narrowMin: NARROW_MIN, probes: rooms.map((room) => narrowAt(Math.floor(room))) };
+      return m;
+    };
+    const sides = new Set<string>();
+    for (const undo of [false, true]) {
+      for (const [w, h] of [[1024, 640], [800, 640], [600, 640], [420, 560], [1024, 900], [800, 600]] as Array<[number, number]>) {
+        const m = make(w, h, undo);
+        const place = placeNoticeStack(m);
+        sides.add(`${place.float}${place.narrow ? ' narrow' : ''}`);
+        const { rows } = stackGeometry(m, place);
+        const shown = rows.filter((row) => row.kind === 'notice').length;
+        expect(place.fold).toHaveLength(2);
+        expect(shown + place.folded).toBe(2);
+        expect(place.fold.filter(Boolean)).toHaveLength(place.folded);
+        // What folds is counted where the person can open it.
+        if (place.folded) {
+          expect(place.more).toBe(place.folded);
+          expect(rows.some((row) => row.kind === 'more') || place.moreHost >= 0).toBe(true);
+        }
+      }
+    }
+    // The walk crosses every placement: beside, beside narrow, and off it.
+    expect([...sides].sort()).toEqual(expect.arrayContaining(['right', 'right narrow']));
+    expect([...sides].some((side) => side === 'under' || side === 'above')).toBe(true);
+    // Written to the stack: moving off the log keeps both notices in place.
+    const { region, stack, toasts } = stackDom(2);
+    const base: StackPlace = {
+      aboveLog: false, lift: 0, cap: 300, mode: 'under', folded: 0, fold: [false, false], more: 0, moreHost: -1, expanded: false,
+      keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: 'right', inset: { left: 413, right: 16 }, narrow: 339,
+    };
+    applyNoticeStack(region, stack, base);
+    applyNoticeStack(region, stack, { ...base, float: 'under', inset: null, narrow: null }, false, true);
+    expect(toasts.every((toast) => toast.isConnected && !toast.hidden && !toast.hasAttribute(FOLD_ATTR) && !toast.hasAttribute('inert'))).toBe(true);
+  });
+
+  it('measures the narrow minimum and the card at each room beside the log under 400', () => {
+    document.documentElement.style.setProperty('--agent-log-clearance', '348px');
+    document.body.innerHTML = `
+      <div data-notice-region=""><div class="notice-region__stack">
+        <div data-notice-slot="proposal"><div class="card" data-notice-shrinks="">
+          <div class="head" data-notice-shrink-head=""><span class="name" data-notice-shrink-name="">Claude</span><span>Expires in 14:55</span></div>
+          <div class="scroll" data-notice-shrink-body=""><div class="body"><p class="plan" data-notice-keep="">Plan</p></div></div>
+          <div class="foot" data-notice-shrink-foot="">Accept</div>
+        </div></div>
+      </div></div>`;
+    const card = document.querySelector<HTMLElement>('.card')!;
+    const width = () => Number.parseFloat(card.style.width) || 600;
+    // The footer needs 248 px, the header 238, the name 48 of its 120 past
+    // the header's other 220: the name decides, it holds from 268. Narrower, the card is taller.
+    vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(function (this: Element) {
+      return this.matches('.foot') ? 240 : this.matches('.head') ? 230 : this.matches('.name') ? 120 : 0;
+    });
+    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+      return this.matches('.name') ? Math.max(0, Math.min(120, width() - 220)) : width() - 8;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('.card') ? (width() < 396 ? 380 : 366) : this.matches('.scroll') ? 266 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { top: 0, bottom: 0, left: this.matches('[data-notice-region]') ? 64 : 0, right: 0, height: 0, width: 0 } as DOMRect;
+    });
+    const region = document.querySelector<HTMLElement>('[data-notice-region]')!;
+    const stack = document.querySelector<HTMLElement>('.notice-region__stack')!;
+    vi.stubGlobal('innerHeight', 600);
+    // 768: 356 px beside the docked log.
+    vi.stubGlobal('innerWidth', 768);
+    const m = measureNoticeStack(region, stack, 116);
+    expect(m.card).toMatchObject({ narrowMin: 268, probes: [{ width: 356, chrome: 380 - 266 }] });
+    expect(m.card!.chrome).toBe(366 - 266);
+    expect(card.style.width).toBe('');
+    expect(card.style.maxWidth).toBe('');
+    expect(narrowMinimum(card)).toBe(268);
+    // 600: 172 px, under the minimum: no card read there.
+    vi.stubGlobal('innerWidth', 600);
+    const short = measureNoticeStack(region, stack, 116);
+    expect(short.card!.narrowMin).toBe(268);
+    expect(short.card!.probes).toBeUndefined();
+    // 1024: 612 px, the normal layout; nothing measured narrow.
+    vi.stubGlobal('innerWidth', 1024);
+    expect(measureNoticeStack(region, stack, 116).card).not.toHaveProperty('narrowMin');
+    // A footer that never fits holds nowhere under 400; new words, read anew.
+    document.querySelector('.foot')!.textContent = 'Accept all';
+    vi.mocked(Object.getOwnPropertyDescriptor(Element.prototype, 'scrollWidth')!.get!).mockImplementation(function (this: Element) {
+      return this.matches('.foot') ? 500 : 0;
+    });
+    expect(narrowMinimum(card)).toBe(BESIDE_LOG_MIN_W);
   });
 });
 

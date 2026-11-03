@@ -20,7 +20,7 @@ import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
-import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR } from '../../lib/noticeStackPlace';
+import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD_ATTR, SHRINK_NAME_ATTR } from '../../lib/noticeStackPlace';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -256,10 +256,10 @@ export function ProposalBar() {
         {...leave.props}
         ref={cardRef}
       >
-        <div className="proposal-bar__head">
+        <div className="proposal-bar__head" {...{ [SHRINK_HEAD_ATTR]: '' }}>
           <span className="proposal-bar__dot" aria-hidden="true" />
           {/* One line: a long name truncates; the region's label has it whole. */}
-          <span className="proposal-bar__agent" title={current.view.agent.name}>{current.view.agent.name}</span>
+          <span className="proposal-bar__agent" title={current.view.agent.name} {...{ [SHRINK_NAME_ATTR]: '' }}>{current.view.agent.name}</span>
           <span className="proposal-bar__proposes">proposes</span>
           <span className="proposal-bar__aside">
             {open.length > 1 && (

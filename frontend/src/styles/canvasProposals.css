@@ -320,11 +320,17 @@
    way. The wrapper is what shrinks (the region measures the card's fixed
    rows against it) and draws the body's focus ring, which the body's own
    mask would hide (review 1 LOW-7). */
+/* GM r10: the body's top edge (and its top fade) sits 4 px under the
+   header, so a line scrolled to that edge (lib/noticeStackPlace.ts
+   bodyScrollTop stops on a line boundary) never touches the header. The
+   note's own top margin gives those 4 px back, so the unscrolled card reads
+   as before. */
 .proposal-bar__scroll {
   display: flex;
   flex: 0 1 auto;
   flex-direction: column;
   box-sizing: border-box;
+  margin-top: 4px;
   min-width: 0;
   min-height: 0;
   border-radius: 8px;
@@ -373,7 +379,7 @@
 }
 
 .proposal-bar__note-area {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 /* 1. The header: one 20 px line, fixed above the scrolling body. */
