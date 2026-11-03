@@ -957,3 +957,35 @@ The run covers 12 cursor and log files; each mutant ran alone.
   - Pair · 3 (the count's own member) left: it exited as "3 more", grey, while the new "2 more" waited unseen. At most 3 in the column on every frame.
   
   The five shots have distinct md5s, and I opened each one.
+
+## Round 4j
+
+GM r22 signed off 4i on design, with one change and one check.
+
+### The say waits for the flyer's whole block (change)
+
+- `sayRoom` tests a flyer's whole drawn block (`bounds`: arrow, name pill, and its say if painted) against the say's room, not just its arrow. Two labels on top of each other are as unreadable as a say over an arrow.
+- A cursor counts as a flyer while it is on its arc, or still landing faster than the moving speed (`isMoving`, the same test the label uses). Its last frames after the arc hands off to the land spring are the same pass. Without this, the pill's tail read as a column at rest and pushed the say to the left.
+- The 600 ms cap and the log fallback are unchanged.
+- **Test:** a flyer passing along the say's row. The say waits more than 3 frames, never meets the flyer on any frame, never moves left, and then shows on the right. In 4i it showed on the next frame, over the passing pill.
+- **Mutants:** arrow box only, and arc only (no landing tail), are both killed. V32 is still killed.
+
+### Do the full cursors dim while the count leaves? (check)
+
+- **No.** 4i's 3a showed the two full cursors at 0.45 because they had gone idle (`AGENT_CURSOR_IDLE_OPACITY`): the harness sent no Pair event after the reload. The exit doesn't touch them.
+- **The harness is fixed.** Pair, Pair · 2 and the count's member act again at the same spot before the leave, which keeps their arrival. The harness then reads computed opacity (the element's and its ancestors') on every frame.
+- **Live:** the full cursors stayed at 1.000 on all 91 frames of the exit. The leaving "3 more" went 1.00 → 0.97 → 0.91 → 0.18 → gone.
+- **Pinned:** the "c leaves" layer test now asserts both full cursors stay at opacity 1 on every frame of the exit.
+
+### Checks (round 4j)
+
+- `tsc -b` 0; lint 0, with no warnings.
+- **Vitest** (explicit list): 119 files, 1,991 passed. Each cursor file alone also passes.
+- **Build budget:** pass, 447,653 B raw. The entry is unchanged.
+- **Live** at 1440, Restraint, on 8780 and 5780, with installed Chrome and a throwaway profile:
+  - 3a re-shot: Pair and Pair · 2 at full opacity next to the leaving "3 more".
+  - 4a: a flyer taking off along Solo's say row, with the say waiting.
+  - 4b: the flyer past, the say shown on the right.
+  - Across the pass, 0 frames overlapped and the say never went left.
+  
+  The seven shots have distinct md5s, and I opened each one.

@@ -2636,7 +2636,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // Review 8, MEDIUM-2: the count cursor's own member leaves. It exits as
   // the count ("3 more", grey), and the new count waits unseen until it is
   // gone: never more than three shown.
-  it('five in a column, the count cursor\'s member leaves: it exits as "3 more", the new count waits, at most 3 shown on every frame (review 8)', () => {
+  it('five in a column, the count cursor\'s member leaves: it exits as "3 more", the full cursors stay at full opacity, the new count waits, at most 3 shown on every frame (review 8, GM r22)', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd', 'e']);
     const c = byKey('c');
@@ -2652,6 +2652,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       tickFrames(1);
       const shown = cursors().filter((el) => Number(el.style.opacity) > 0.05);
       expect(shown.length).toBeLessThanOrEqual(3);
+      // Only the count's member leaves: the full cursors stay at full
+      // opacity on every frame of its exit (GM r22, 3a).
+      expect(Number(byKey('a').style.opacity)).toBe(1);
+      expect(Number(byKey('b').style.opacity)).toBe(1);
       const leaving = cursors().find((el) => el.dataset.session === 'c'.repeat(12));
       if (leaving && Number(leaving.style.opacity) > 0.05) {
         exitFrames += 1;
@@ -2674,7 +2678,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // Review 8, LOW-2 V2 (r18): the count cursor never draws a say of its own.
   // Review 8, V32: a cursor flying through the say's room makes the say
   // wait for it (it passes), not move aside as for a column at rest there.
-  it('a flyer in the say\'s room makes it wait, then it shows on its own side; never moved left for a flyer (review 8 V32)', () => {
+  it('a flyer in the say\'s room makes it wait through its arrow and its name pill, then it shows on its own side; never moved left for a flyer (review 8 V32, GM r22)', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 300);
     blocker('e', 2, 400, 318);
@@ -2684,13 +2688,18 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     tickFrames(1);
     const a = byKey('a');
     expect(a.dataset.sayWait).toBe('true');
-    // Only a flyer's arrow counts (r17 item 3): once its arrow is past,
-    // the say shows on the right while its name pill passes by.
+    // The flyer's whole drawn block counts, arrow and name pill (GM r22):
+    // the say waits while the pill passes too, so no frame draws a say
+    // over it, and then shows on its own side.
+    let waited = 0;
     for (let i = 0; i < 40; i += 1) {
       tickFrames(1);
       expect(a.dataset.saySide).toBeUndefined();
+      expect(anyMeet()).toBe(false);
+      if (!painted(a)) waited += 1;
     }
-    expect(anyMeet()).toBe(false);
+    // In 4i the say showed on the next frame, over the passing name pill.
+    expect(waited).toBeGreaterThan(3);
     expect(painted(a)).toBe(true);
   });
 

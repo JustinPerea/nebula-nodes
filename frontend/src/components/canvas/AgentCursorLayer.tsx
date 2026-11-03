@@ -416,9 +416,10 @@ class CursorField {
    * of its own column's cursors below is still in the way (they glide out
    * of it), or a flying cursor the say waits for; `foreign` when a cursor
    * of another column is in the way, which the say never moves (GM - Design,
-   * PR #211 r17 item 2). A flyer counts only when its drawn arrow is in the
-   * say's room or it is on its way to a spot under this cursor; one just
-   * passing through elsewhere doesn't (r17 item 3). Folded cursors aren't
+   * PR #211 r17 item 2). A flyer counts only when its drawn block (arrow
+   * and name pill, GM r22) is in the say's room or it is on its way to a
+   * spot under this cursor; one just passing through elsewhere doesn't
+   * (r17 item 3). Folded cursors aren't
    * drawn and don't count.
    */
   sayRoom(key: string, side: 'right' | 'left', at: Point, zoom: number): { wait: boolean; foreign: boolean } {
@@ -440,8 +441,12 @@ class CursorField {
       if (!m || spot?.collapsedInto) continue;
       const theirs = cursorShape({ x: m.pos.x * zoom, y: m.pos.y * zoom }, this.paint.get(other) ?? false, entry.nameW, entry.sayW);
       const under = spot?.above.includes(key) ?? false;
-      if (m.plan) {
-        const box = theirs.arrowBox;
+      // A flyer: on its arc, or still landing at speed (its last frames
+      // after the arc hands off are part of the same pass).
+      if (isMoving(m, zoom)) {
+        // Its whole drawn block, arrow and name pill: two labels on top of
+        // each other are as unreadable as a say over an arrow (GM r22).
+        const box = theirs.bounds;
         const inRoom = box.left < room.right + gap && box.right > room.left - gap && box.top < room.bottom + gap && box.bottom > room.top - gap;
         if (inRoom || under) out.wait = true;
         continue;
