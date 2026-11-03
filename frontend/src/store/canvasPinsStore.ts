@@ -191,9 +191,17 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     // next pins push, which every reconnect starts with).
     retryPinText();
     // PR #218 review 1 MEDIUM-1: the listing takes its place in the order as
-    // the fetch starts. Any push that arrives after that is at least as new
-    // (every write pushes the whole set after it), so this listing is
-    // dropped if one was applied before it lands.
+    // the fetch starts, and is dropped if a push numbered after it was
+    // applied first. That push alone can be older than this answer: it may
+    // have been built before the fetch started and just arrived late. The
+    // drop is still safe because of the backend's invariant. Every pin change
+    // is followed by a whole-set push built after it, by reading the set
+    // after the commit, and each socket gets pushes in the order they were
+    // built. So any change this answer holds that the applied push lacks
+    // has a push of its own still coming, and it outranks both. The last
+    // push applied is never older than an answer that was dropped, once the
+    // pushes in flight land. That ordering per socket is the backend's to
+    // keep: see main.py ConnectionManager.broadcast_raw (#220 review 1 LOW-2).
     const order = nextListingOrder();
     try {
       // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.

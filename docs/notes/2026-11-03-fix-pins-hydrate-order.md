@@ -19,10 +19,23 @@ The fix gives every whole-set listing one order (`nextListingOrder`,
 - A listing that waits for the chunk keeps its number.
 - `applyListing` drops any listing numbered before the last one applied.
 
-A push that arrives after the fetch started counts as newer, because every
-write on the backend broadcasts the whole set after it commits. If the
-fetch's answer already holds that write, the push equals it. If it doesn't,
-the answer is older. In both cases, dropping the fetch's answer is right.
+A push that arrives after the fetch started is not always newer than the
+fetch's answer. It can have been built before the fetch started and only
+arrived late. For example: W1's push is built, the fetch starts, W2 commits,
+the GET reads {W1, W2}, and then W1's push arrives and drops the answer (#220
+review 1 NIT-3).
+
+Dropping the answer is still safe because of the backend's invariant. Every
+pin change is followed by a whole-set push, built after the commit by reading
+the set then (`_pins_message`), and each socket gets pushes in the order they
+were built. So any change the dropped answer held, and the applied push
+lacked, has its own push still coming, and that push outranks both. Once the
+pushes in flight land, the last push applied is never older than a dropped
+answer.
+
+The frontend relies on that order per socket. `broadcast_raw` iterating the
+live connection list across awaits can break it (#220 review 1 LOW-2, its own
+PR).
 
 A project switch is the same case. The backend pushes canvasPins after
 graphSync, and a hydrate that started earlier never replaces one that started
@@ -107,3 +120,26 @@ Mutations, each failing both runs:
 - an announcement on any count change;
 - an announcement whenever the counter shows;
 - no refit at all.
+
+## #220 review 1 follow-ups
+
+- LOW-1: the ratchet now counts `vi.importActual`, `vi.importMock` and
+  `require` of canvasPins as bringing in every rule. `importMock`'s rules are
+  spies, so a file that uses it may need the opt-out; the header says so.
+- NIT-1: a wait has to be used as intended: `await pinTextReady`, or
+  `pinTextSettling()` awaited as a call, or a hook that returns one. A bare
+  name counts only when the file's single declaration of it is the import
+  from canvasPins, so a shadowing local or a parameter doesn't pass. Two gaps
+  are listed in the header instead of fixed: dead-code awaits, and
+  namespace receivers that aren't traced back to canvasPins.
+- NIT-2: the opt-out is read from the scanner's comment ranges (leading and
+  trailing around each node), never from strings or templates.
+- NIT-3: the ordering comment and the section above now state the real
+  invariant, and name broadcast_raw (LOW-2) as the backend dependency.
+- NIT-4: `tests/pinComposer.unsubscribe.test.tsx` counts listeners through
+  three mounts. hydrateOrder has a failed-fetch case: a push queued during
+  the failing fetch, and one after it, both apply.
+- Mutation results: each new ratchet rule broken in turn fails its fixtures.
+  The M4 mutant (unsubscribe dropped) fails the unsubscribe test. A failed
+  hydrate counted as applied, or one that blocks everything after it, fails
+  the failed-fetch case.

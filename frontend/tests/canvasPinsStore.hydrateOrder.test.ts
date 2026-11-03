@@ -5,7 +5,7 @@
 // (both listings wait on it) and with it already loaded.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const ctl = vi.hoisted(() => ({ fetches: [] as Array<(listing: unknown) => void> }));
+const ctl = vi.hoisted(() => ({ fetches: [] as Array<{ resolve: (listing: unknown) => void; reject: (error: unknown) => void }> }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
 
 const pin = (id: string) => ({ id, text: `${id} ❤️`, anchor: { x: 0, y: 0 }, status: 'open', createdAt: '' });
@@ -28,7 +28,7 @@ async function fresh(mode: Mode) {
   });
   vi.doMock('../src/lib/canvasPins', async (importOriginal) => ({
     ...await importOriginal<typeof import('../src/lib/canvasPins')>(),
-    fetchPins: vi.fn(() => new Promise((resolve) => { ctl.fetches.push(resolve); })),
+    fetchPins: vi.fn(() => new Promise((resolve, reject) => { ctl.fetches.push({ resolve, reject }); })),
   }));
   const lib = await import('../src/lib/canvasPins');
   const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
@@ -38,7 +38,8 @@ async function fresh(mode: Mode) {
   return {
     hydrate: () => store.getState().hydrate(),
     push: (event: ReturnType<typeof listing>) => store.getState().apply(event),
-    answer: (index: number, event: ReturnType<typeof listing>) => ctl.fetches[index](event),
+    answer: (index: number, event: ReturnType<typeof listing>) => ctl.fetches[index].resolve(event),
+    fail: (index: number) => ctl.fetches[index].reject(new Error('Couldn’t load the notes.')),
     ids: () => store.getState().pins.map((p) => p.id),
     project: () => store.getState().projectId,
     /** Let the chunk through (pending mode), then wait for every listing to land. */
@@ -105,6 +106,24 @@ describe.each<Mode>(['pending', 'loaded'])('hydrate and pushes in one order (chu
     await again;
     await ticks();
     expect(s.ids()).toEqual(['b']);
+  });
+
+  // #220 review 1 NIT-4: a failed fetch uses up its number but never counts
+  // as applied, so it holds back no push: one queued while it was out, nor one after.
+  it('a hydrate whose fetch fails holds back no push, queued during it or arriving after', async () => {
+    const s = await fresh(mode);
+    const h = s.hydrate();
+    s.push(listing('p', 'a'));
+    s.fail(0);
+    await h;
+    await s.finish();
+    expect(s.ids()).toEqual(['a']);
+    const again = s.hydrate();
+    s.fail(1);
+    await again;
+    s.push(listing('p', 'a', 'b'));
+    await ticks();
+    expect(s.ids()).toEqual(['a', 'b']);
   });
 
   it('pushes alone apply in arrival order', async () => {
