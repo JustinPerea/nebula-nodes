@@ -20,7 +20,7 @@ import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backe
 import { useBackendOffline } from '../../lib/useBackendOffline';
 import { placeholderLabel } from './boardPlaceholder';
 import { boardSaveLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
-import { keepUnsavedDrafts } from './unsavedDrafts';
+import { keepUnsavedDrafts, replayKeptFields, takeKeptEdit, type KeptEdit } from './unsavedDrafts';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -239,7 +239,7 @@ async function saveAway(key: string, away: 'background' | 'resend' | null = null
       const draft = withBriefFields(now.draft as MoodboardDraft);
       if (result.repeated) {
         const repeat = repeatOnBoard(at, draft, result);
-        store.patch(at, { draft: repeat.draft, thumbnail: result.thumbnail, notice: keptFromBoardLine(repeat.kept) });
+        store.patch(at, { draft: repeat.draft, thumbnail: result.thumbnail, notice: keptFromBoardLine(repeat.kept, result) });
       } else store.patch(at, { draft: draftOnBoard(draft, result, sent, asSentOf(sending)), thumbnail: result.thumbnail });
     }
     createsWaited.delete(at);
@@ -387,6 +387,30 @@ function unsentOf(draft: MoodboardDraft, fields: Partial<Record<BoardFieldKey, u
   const changed: Record<string, unknown> = draft.base ? fieldChanges(trimmedName(draft.base), trimmedName(fields)) : {};
   delete changed.images;
   return changed;
+}
+
+/**
+ * A kept edit replayed on `board` as the server has it now (round 6i, GM
+ * r17): its board fields by the 6g rule (replayKeptFields: a field the board
+ * changed since goes to the later edit, and `kept` names those the board
+ * won), its queued ops on the board's images. An add whose image the board
+ * holds already went (a save that landed before the reload); a remove keeps
+ * only the images still there; rebaseDraft drops an op on an image that's gone.
+ */
+function replayKeptEdit(board: Moodboard, kept: KeptEdit): { draft: MoodboardDraft; kept: BoardFieldKey[] } {
+  const fields = boardFieldsOf(board);
+  const replay = replayKeptFields(kept, fields, Date.parse(board.updatedAt ?? '') || 0);
+  const has = new Set(board.images.flatMap((image) => [image.id, image.url]));
+  const ops = kept.ops.flatMap((op): MoodboardOp[] => {
+    if (op.op === 'add') return op.images.some((image) => has.has(image.url) || (image.id && has.has(image.id))) ? [] : [op];
+    if (op.op === 'remove') {
+      const images = op.images.filter((id) => has.has(id));
+      return images.length ? [{ ...op, images }] : [];
+    }
+    return [op];
+  });
+  return { draft: rebaseDraft({ ...moodboardToDraft(board), ...replay.fields, pendingOps: ops }, board, fields),
+    kept: replay.kept as BoardFieldKey[] };
 }
 
 /** The draft at `key` still holds ops or board fields the server hasn't (a
@@ -728,8 +752,10 @@ function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   if (err === null || isOfflineRefusal(err)) return;
   // A saved board whose draft isn't loaded never took the add (review 9
   // NIT-2): it is lost, so not the neutral "nothing is lost" line; GM r16's
-  // red line naming its files, with no Retry (nothing is left to send).
-  if (savedId) store.patch(key, { saveState: 'error', saveError: lostAddLine(names), retry: null });
+  // red line naming its files, with no Retry (nothing is left to send). The
+  // board itself saved fine, so its chip stays as it is ("Saved"): the red
+  // line carries the loss (GM r17).
+  if (savedId) store.patch(key, { saveError: lostAddLine(names), retry: null });
   // An unsaved board's draft holds the add (landAway): its line.
   else failed();
 }
@@ -995,8 +1021,18 @@ export function MoodboardStudioView() {
         setRailScope(scope);
         rememberBrief(found);
         const lost = lostAdd();
-        initialize(moodboardToDraft(found), found.id, found.thumbnail);
-        if (lost) patch({ saveState: 'error', saveError: lost, retry: null });
+        // A kept edit an earlier page load of this tab left (round 6i, GM
+        // r17): replayed on the board as it is now, and sent. It replaces any
+        // send that waited for Nebula then, which it holds too.
+        const kept = takeKeptEdit(found.id);
+        if (kept) takeWaitingSend(found.id);
+        const replay = kept ? replayKeptEdit(found, kept) : null;
+        initialize(replay?.draft ?? moodboardToDraft(found), found.id, found.thumbnail);
+        if (lost) patch({ saveError: lost, retry: null });
+        if (kept && replay) {
+          patch({ fieldEditedAt: kept.fieldEditedAt ?? {}, notice: keptFromBoardLine(replay.kept, found) });
+          markLeftToSend(key);
+        }
       }).catch((err) => {
         if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
       });
@@ -1148,7 +1184,7 @@ export function MoodboardStudioView() {
           const current = draftNow();
           if (current) {
             const repeat = repeatOnBoard(key, current, made);
-            store.patch(key, { draft: repeat.draft, thumbnail: made.thumbnail, notice: keptFromBoardLine(repeat.kept) });
+            store.patch(key, { draft: repeat.draft, thumbnail: made.thumbnail, notice: keptFromBoardLine(repeat.kept, made) });
           }
           rememberBrief(made);
         } else {
@@ -2186,7 +2222,8 @@ export function MoodboardStudioView() {
         : <div className="moodboard-studio__notice moodboard-studio__notice--error">
           <FailureLines failure={saveError} retry={canRetry} /></div>)}
       {/* The Studio's own neutral line about this board (round 6g: what a repeat kept from the board). */}
-      {notice && <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status">{notice}</div>}
+      {notice && <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status"
+        title={typeof notice === 'string' ? undefined : notice.title}>{typeof notice === 'string' ? notice : notice.text}</div>}
       {moving.error && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
       )}

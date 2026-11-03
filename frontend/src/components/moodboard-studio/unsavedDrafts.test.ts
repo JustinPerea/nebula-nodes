@@ -1,7 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyAssetStudioEntry, useAssetStudioDraftStore, type AssetStudioDraftEntry } from '../../store/assetStudioDraftStore';
 import type { MoodboardOp } from '../../lib/moodboardEdits';
-import { isUnsavedBoardKey, keepUnsavedDrafts, resetUnsavedDrafts, restoreUnsavedDrafts, unsavedWouldBeLost } from './unsavedDrafts';
+import { isUnsavedBoardKey, keepUnsavedDrafts, keptEditOf, replayKeptFields, resetUnsavedDrafts, restoreUnsavedDrafts, takeKeptEdit,
+  unsavedWouldBeLost, type KeptEdit } from './unsavedDrafts';
 
 // Round 6g (GM r15 3): an unsaved board's draft lives through a reload of
 // its tab, in session storage, as the waiting sends do.
@@ -25,6 +26,7 @@ function failedUnsaved(): AssetStudioDraftEntry {
     fieldEditedAt: { name: 5 } };
 }
 
+const EDITS = 'nebula:moodboard-kept-edits';
 const kept = () => JSON.parse(window.sessionStorage.getItem(KEY) ?? '[]') as Array<Record<string, unknown> & { draft: { images: Array<{ url: string }>; pendingOps: MoodboardOp[] } }>;
 const set = (entries: Record<string, AssetStudioDraftEntry>) => useAssetStudioDraftStore.setState({ entries, aliases: {} });
 
@@ -40,6 +42,7 @@ beforeAll(() => {
 beforeEach(() => {
   set({});
   window.sessionStorage.removeItem(KEY);
+  window.sessionStorage.removeItem(EDITS);
   resetUnsavedDrafts();
 });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -199,5 +202,123 @@ describe('the warning before unload', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
     expect(() => restoreUnsavedDrafts()).not.toThrow();
     expect(() => set({ [newKey]: failedUnsaved() })).not.toThrow();
+  });
+});
+
+// Round 6i (GM r17 2+3): a saved board's kept edit lives through a reload too.
+describe('a saved board\'s kept edit', () => {
+  const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+  const base = { name: 'Global board', notes: '', mode: 'look', strength: 0.7 };
+  const edits = () => JSON.parse(window.sessionStorage.getItem(EDITS) ?? '[]') as KeptEdit[];
+  /** g1 loaded, with `draft` over what it last read. */
+  const saved = (draft: Record<string, unknown> = {}, entry: Partial<AssetStudioDraftEntry> = {}): AssetStudioDraftEntry => ({
+    ...emptyAssetStudioEntry({ ...base, images: [img('i1', river)], base, version: 3, pendingOps: [], ...draft }),
+    savedId: 'g1', loaded: true, dirty: true, fieldEditedAt: { name: 7 }, ...entry });
+
+  it('is what the draft holds that the server doesn\'t: changed fields with what they were, storable ops, edit times', () => {
+    const add = addOp('i9', '/api/outputs/chat-uploads/sea.png');
+    const edit = keptEditOf(g1Key, saved({ name: 'Dusk', pendingOps: [add, addOp('i8', 'blob:http://localhost/1')] }))!;
+    expect(edit).toMatchObject({ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' }, fieldEditedAt: { name: 7 }, ops: [add] });
+  });
+
+  it('is nothing for a clean board, a name changed only by spaces, a draft not loaded or not saved, or an unsaved key', () => {
+    expect(keptEditOf(g1Key, saved())).toBeNull();
+    expect(keptEditOf(g1Key, saved({ name: ' Global board ' }))).toBeNull();
+    expect(keptEditOf(g1Key, saved({ name: 'Dusk' }, { loaded: false }))).toBeNull();
+    expect(keptEditOf(g1Key, saved({ name: 'Dusk' }, { savedId: null }))).toBeNull();
+    expect(keptEditOf(newKey, saved({ name: 'Dusk' }))).toBeNull();
+    expect(keptEditOf(JSON.stringify(['character', 'global', 'c1']), saved({ name: 'Dusk' }))).toBeNull();
+    expect(keptEditOf(g1Key, undefined)).toBeNull();
+  });
+
+  it('is written while it holds something and goes once the board has it all', () => {
+    set({ [g1Key]: saved({ name: 'Dusk' }) });
+    expect(edits()).toEqual([expect.objectContaining({ board: 'g1', fields: { name: 'Dusk' } })]);
+    // Saved: the draft read the board again, nothing unsent.
+    set({ [g1Key]: saved({ name: 'Dusk', base: { ...base, name: 'Dusk' } }, { dirty: false }) });
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
+  });
+
+  it('an earlier page load\'s edit waits for its board\'s load, which takes it once; this page\'s own is never taken', () => {
+    set({ [g1Key]: saved({ name: 'Dusk' }) });
+    const stored = window.sessionStorage.getItem(EDITS)!;
+    // The reload: a new page with an empty store.
+    resetUnsavedDrafts();
+    set({});
+    window.sessionStorage.setItem(EDITS, stored);
+    // The board's draft starts loading (not loaded yet): the edit stays.
+    set({ [g1Key]: { ...emptyAssetStudioEntry({}), savedId: null } });
+    expect(edits()).toHaveLength(1);
+    expect(takeKeptEdit('g2')).toBeNull();
+    expect(takeKeptEdit('g1')).toMatchObject({ board: 'g1', fields: { name: 'Dusk' } });
+    expect(takeKeptEdit('g1')).toBeNull();
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
+    // Another board's edit written here leaves an earlier page load's edit for g1 alone.
+    window.sessionStorage.setItem(EDITS, stored);
+    const g2Key = JSON.stringify(['moodboard', 'global', 'g2']);
+    set({ [g2Key]: saved({ name: 'Other' }, { savedId: 'g2' }) });
+    expect(edits().map((it) => it.board).sort()).toEqual(['g1', 'g2']);
+    set({});
+    window.sessionStorage.removeItem(EDITS);
+    resetUnsavedDrafts();
+    // This page's own: not taken (its draft has it).
+    set({ [g1Key]: saved({ name: 'Dusk' }) });
+    expect(takeKeptEdit('g1')).toBeNull();
+    expect(edits()).toHaveLength(1);
+  });
+
+  it('an earlier page load\'s edit for a board loaded here without it gives way to this page\'s own', () => {
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' }, ops: [], at: Date.now() }]));
+    set({ [g1Key]: saved() });
+    set({ [g1Key]: saved({ notes: 'mine' }) });
+    expect(edits()).toEqual([expect.objectContaining({ board: 'g1', fields: { notes: 'mine' } })]);
+    set({ [g1Key]: saved({ notes: 'mine', base: { ...base, notes: 'mine' } }, { dirty: false }) });
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
+  });
+
+  it('drops a stored edit that is old or not shaped as one', () => {
+    const good = { board: 'g1', fields: { name: 'Dusk' }, base: {}, ops: [], at: Date.now() };
+    for (const bad of [{ ...good, at: Date.now() - 2 * 24 * 60 * 60 * 1000 }, { ...good, board: 5 }, { ...good, fields: { evil: 1 } },
+      { ...good, ops: [{ op: 'nope' }] }, { ...good, fieldEditedAt: { name: 'x' } }, { ...good, base: null }]) {
+      window.sessionStorage.setItem(EDITS, JSON.stringify([bad]));
+      expect(takeKeptEdit('g1')).toBeNull();
+    }
+  });
+
+  it('asks before unload only when its write failed', () => {
+    set({ [g1Key]: saved({ name: 'Dusk' }) });
+    expect(unsavedWouldBeLost()).toBe(false);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    useAssetStudioDraftStore.getState().patch(g1Key, { draft: { ...(useAssetStudioDraftStore.getState().entries[g1Key].draft as object), name: 'Dusk 2' } });
+    expect(unsavedWouldBeLost()).toBe(true);
+    setItem.mockRestore();
+    useAssetStudioDraftStore.getState().patch(g1Key, { draft: { ...(useAssetStudioDraftStore.getState().entries[g1Key].draft as object), name: 'Dusk 3' } });
+    expect(unsavedWouldBeLost()).toBe(false);
+  });
+});
+
+describe('replaying a kept edit on the board as it is now (the 6g rule)', () => {
+  const edit = (fields: Record<string, unknown>, from: Record<string, unknown>, at: Record<string, number> = {}): KeptEdit =>
+    ({ board: 'g1', fields, base: from, fieldEditedAt: at, ops: [], at: 0 });
+
+  it('a field the board didn\'t change since takes the edit\'s value', () => {
+    expect(replayKeptFields(edit({ name: 'Dusk' }, { name: 'Global' }, { name: 1 }), { name: 'Global' }, 99)).toEqual({ fields: { name: 'Dusk' }, kept: [] });
+  });
+
+  it('a field both changed goes to the later edit, and the board\'s win is named', () => {
+    expect(replayKeptFields(edit({ name: 'Dusk' }, { name: 'Global' }, { name: 50 }), { name: 'Rivers' }, 99)).toEqual({ fields: {}, kept: ['name'] });
+    expect(replayKeptFields(edit({ name: 'Dusk' }, { name: 'Global' }, { name: 150 }), { name: 'Rivers' }, 99)).toEqual({ fields: { name: 'Dusk' }, kept: [] });
+    // No edit time: the board's.
+    expect(replayKeptFields(edit({ notes: 'a' }, { notes: '' }), { notes: 'b' }, 1)).toEqual({ fields: {}, kept: ['notes'] });
+  });
+
+  it('a field the board already holds as the edit has it is left alone', () => {
+    expect(replayKeptFields(edit({ name: 'Dusk', mode: 'style' }, { name: 'Global', mode: 'look' }, { name: 1, mode: 1 }), { name: ' Dusk ', mode: 'style' }, 99))
+      .toEqual({ fields: {}, kept: [] });
+  });
+
+  it('every field older than the board\'s change: all the board\'s, all named', () => {
+    expect(replayKeptFields(edit({ name: 'Dusk', notes: 'n', mode: 'style', strength: 0.2 }, { name: 'G', notes: '', mode: 'look', strength: 0.7 },
+      { name: 1, notes: 1, mode: 1, strength: 1 }), { name: 'R', notes: 'm', mode: 'brand', strength: 0.5 }, 9)).toEqual({ fields: {}, kept: ['name', 'notes', 'mode', 'strength'] });
   });
 });

@@ -4,6 +4,8 @@ import type { FailureCopy } from '../lib/errorCopy';
 export type AssetStudioKind = 'character' | 'moodboard';
 export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
 export type StudioFailure = string | FailureCopy;
+/** A neutral line of the Studio's own about this board: its text, and a title (the full value a clipped line shortened). */
+export type StudioNotice = string | { text: string; title?: string };
 /** What the toolbar's Retry runs again for `saveError` (GM, error-copy round
  * 3: "Make Retry redo the failed action, never a different one."). 'reload'
  * is a failed save no button redoes: its line's step is a reload (signed
@@ -51,7 +53,7 @@ export interface AssetStudioDraftEntry<D = unknown> {
   fieldEditedAt?: Record<string, number>;
   /** A neutral line of the Studio's own about this draft (round 6g: "Kept
    * the name “Rivers” from the board."); the next edit clears it. */
-  notice?: string | null;
+  notice?: StudioNotice | null;
 }
 
 /** One create of an unsaved asset: its number, the queued ops it held, and the fields it sent. */

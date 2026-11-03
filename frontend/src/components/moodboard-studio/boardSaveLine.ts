@@ -1,5 +1,7 @@
 import { RequestFailedError, isBackendUnreachable, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
+import type { StudioNotice } from '../../store/assetStudioDraftStore';
+import { clipGraphemes } from './boardPlaceholder';
 
 /**
  * A board's save that failed with nothing lost (GM r12 1, r14, r16 7a): the
@@ -21,8 +23,10 @@ export interface BoardSaveLine {
   failure: FailureCopy;
   /** What the header offers: 'save' is its Retry (the line ends "Try
    *  again", or names a step after which trying again works); 'reload' is
-   *  no button, the line's own step is a reload (signed out, or the board
-   *  changed somewhere else: sending the same edit again fails the same way). */
+   *  no button: sending the same edit again fails the same way, and the
+   *  line's own step is outside the board (signed out: open the link Nebula
+   *  printed, as the banner says; changed somewhere else: reload, after
+   *  which the kept edit replays on the latest version, GM r17). */
   retry: 'save' | 'reload';
 }
 
@@ -36,7 +40,7 @@ const SAVE_LINES = {
   serverError: { cause: 'the server hit an error', step: 'Try again.', retry: 'save' },
   diskFull: { cause: 'the disk is full', step: 'Free up some space, then try again.', retry: 'save' },
   tooLarge: { cause: 'it’s too large', step: 'Remove some images, then try again.', retry: 'save' },
-  signedOut: { cause: 'you’re signed out', step: 'Reload to sign in again.', retry: 'reload' },
+  signedOut: { cause: 'you’re signed out', step: 'Open the link Nebula printed when it started.', retry: 'reload' },
   changed: { cause: 'it changed somewhere else', step: 'Reload to get the latest version.', retry: 'reload' },
   // GM r16 7(b): any other refusal, the create id's included.
   refused: { cause: 'the server didn’t accept this save', step: 'Try again.', retry: 'save' },
@@ -136,15 +140,26 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
   sendNotes: 'notes setting', analysis: 'analysis',
 };
 
+/** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
+export const KEPT_NAME_MAX = 40;
+
 /**
- * The neutral line when a repeated create's board kept its own later change
- * over a draft edit (round 6g, GM r15 1, r16), or null when nothing was
- * dropped: "Kept the name from the board.", "Kept the name and notes from
- * the board.", "Kept the name, notes and mode from the board.", and from
- * four fields a count: "Kept 4 changes from the board."
+ * The neutral line when the board kept its own later change over a draft
+ * edit (a repeated create, round 6g; a kept edit replayed after a reload,
+ * round 6i), or null when nothing was dropped. One field: only the name
+ * shows the value that won, clipped past KEPT_NAME_MAX with the full name in
+ * the title ("Kept the name “Rivers” from the board."); every other field,
+ * free text included, never shows a value ("Kept the notes from the
+ * board."). Several fields go without values, joined with "and" ("Kept the
+ * name and notes from the board."), and from four a count ("Kept 4 changes
+ * from the board."). GM r16, r17.
  */
-export function keptFromBoardLine(fields: readonly string[]): string | null {
+export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}): StudioNotice | null {
   if (!fields.length) return null;
   if (fields.length > MOST_NAMED) return `Kept ${fields.length} changes from the board.`;
+  if (fields.length === 1 && fields[0] === 'name') {
+    const name = (board.name ?? '').trim();
+    if (name) return { text: `Kept the name “${clipGraphemes(name, KEPT_NAME_MAX)}” from the board.`, title: name };
+  }
   return `Kept the ${joinWithAnd(fields.map((field) => KEPT_FIELD_NAMES[field] ?? field))} from the board.`;
 }

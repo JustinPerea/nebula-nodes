@@ -17,7 +17,7 @@ const LINES = {
   serverError: 'Nebula couldn’t save the board because the server hit an error. Try again.',
   diskFull: 'Nebula couldn’t save the board because the disk is full. Free up some space, then try again.',
   tooLarge: 'Nebula couldn’t save the board because it’s too large. Remove some images, then try again.',
-  signedOut: 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.',
+  signedOut: 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.',
   changed: 'Nebula couldn’t save the board because it changed somewhere else. Reload to get the latest version.',
   refused: 'Nebula couldn’t save the board because the server didn’t accept this save. Try again.',
 };
@@ -50,10 +50,16 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
     expect(reason).not.toMatch(/creat/i);
   });
 
-  it('offers no Try again where the step is a reload, and a Try again everywhere else', () => {
-    for (const [, reason] of Object.entries(LINES)) {
-      expect(reason.includes('Reload')).toBe(!/[Tt]ry again/.test(reason));
+  it('offers Retry exactly where the line says to try again; signed out points to the printed link, as the banner does (GM r17)', () => {
+    const errors: Record<keyof typeof LINES, unknown> = { noAnswer: offline(), busy: failed(429), noResponse: failed(408), serverError: failed(500),
+      diskFull: failed(507, { storageFull: true }), tooLarge: failed(413), signedOut: failed(403), changed: failed(409, { code: 'version_conflict' }),
+      refused: failed(422) };
+    for (const [kind, error] of Object.entries(errors)) {
+      const line = boardSaveLine(error);
+      expect(line.failure.reason).toBe(LINES[kind as keyof typeof LINES]);
+      expect(line.retry === 'save').toBe(/[Tt]ry again/.test(line.failure.reason));
     }
+    expect(LINES.signedOut).not.toMatch(/Reload/);
   });
 
   // GM r16: backend wording never reaches the person.
@@ -135,10 +141,26 @@ describe('the red line for a truly lost add (GM r16 7a)', () => {
 describe('the "Kept …" line (round 6g, GM r16)', () => {
   it('names up to three fields joined with "and", then counts them', () => {
     expect(keptFromBoardLine([])).toBeNull();
-    expect(keptFromBoardLine(['name'])).toBe('Kept the name from the board.');
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' })).toEqual({ text: 'Kept the name “Rivers” from the board.', title: 'Rivers' });
+    expect(keptFromBoardLine(['notes'], { name: 'Rivers' })).toBe('Kept the notes from the board.');
     expect(keptFromBoardLine(['name', 'notes'])).toBe('Kept the name and notes from the board.');
     expect(keptFromBoardLine(['name', 'notes', 'mode'])).toBe('Kept the name, notes and mode from the board.');
     expect(keptFromBoardLine(['name', 'notes', 'mode', 'strength'])).toBe('Kept 4 changes from the board.');
+  });
+
+  it('shows only the name\'s value, trimmed, clipped past 40 characters with the full name in the title (GM r17 addendum)', () => {
+    const long = 'An exceptionally long board name that keeps going well past forty';
+    const line = keptFromBoardLine(['name'], { name: `  ${long} ` }) as { text: string; title: string };
+    expect(line.title).toBe(long);
+    expect(line.text).toBe(`Kept the name “${long.slice(0, 39)}…” from the board.`);
+    const forty = 'x'.repeat(40);
+    expect(keptFromBoardLine(['name'], { name: forty })).toEqual({ text: `Kept the name “${forty}” from the board.`, title: forty });
+    // No name to show: the field alone. Free text never shows its value.
+    expect(keptFromBoardLine(['name'], { name: '  ' })).toBe('Kept the name from the board.');
+    for (const field of ['notes', 'briefOverride', 'direction', 'avoid']) {
+      expect(typeof keptFromBoardLine([field], { name: 'Rivers', notes: 'secret words' } as { name: string })).toBe('string');
+    }
+    expect(keptFromBoardLine(['name', 'notes'], { name: 'Rivers' })).toBe('Kept the name and notes from the board.');
   });
 
   it('names every board field as a noun after its one "the"', () => {

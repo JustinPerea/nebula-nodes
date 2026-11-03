@@ -179,6 +179,7 @@ beforeEach(() => {
   try { window.sessionStorage.removeItem('nebula:moodboard-adds-in-flight'); } catch { /* jsdom */ }
   try { window.sessionStorage.removeItem('nebula:moodboard-sends-waiting'); } catch { /* jsdom */ }
   try { window.sessionStorage.removeItem('nebula:moodboard-unsaved-drafts'); } catch { /* jsdom */ }
+  try { window.sessionStorage.removeItem('nebula:moodboard-kept-edits'); } catch { /* jsdom */ }
   resetUnsavedDrafts();
   setOpenProject(['p1', 'Project']);
 });
@@ -1920,7 +1921,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await uploads.open();
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
     expect(store().entries[g1Key]).toMatchObject({ retry: 'reload',
-      saveError: { heading: '', reason: 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.' } });
+      saveError: { heading: '', reason: 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.' } });
     expect(urlsOf(g1Key)).toContain(river);
   });
 
@@ -1935,15 +1936,18 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     api.editMoodboard.mockRejectedValue(new RequestFailedError("Couldn't save the board.", 500, { reason: 'boom' }));
     await uploads.open();
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
-    expect(store().entries[g1Key]).toMatchObject({ saveState: 'error', retry: null,
+    expect(store().entries[g1Key]).toMatchObject({ retry: null,
       saveError: { heading: '', reason: 'Nebula couldn’t add “river.png” because the board hadn’t loaded. Add it again.' } });
+    // The board saved fine: only the add was lost, so its state isn't an error (GM r17).
+    expect(store().entries[g1Key].saveState).not.toBe('error');
     expect(urlsOf(g1Key)).not.toContain(river);
     // The person sees it when they open the board: its load keeps the red line, with no Retry (round 6h, live).
     await toBoard('g1');
     const line = await screen.findByText('Nebula couldn’t add “river.png” because the board hadn’t loaded. Add it again.');
     expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--error');
-    expect(store().entries[g1Key]).toMatchObject({ loaded: true, saveState: 'error', retry: null });
-    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
+    expect(store().entries[g1Key]).toMatchObject({ loaded: true, saveState: 'saved', retry: null });
+    // The chip stays "Saved"; the red line carries the loss (GM r17).
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Saved');
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
@@ -4215,13 +4219,13 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(made.board?.name).toBe('Rivers');
       expect(made.puts.some((put) => put.name === 'Dusk')).toBe(false);
       expect((store().entries[madeKey].draft as { name: string }).name).toBe('Rivers');
-      const line = await screen.findByText('Kept the name from the board.');
+      const line = await screen.findByText('Kept the name “Rivers” from the board.');
       const notice = line.closest('.moodboard-studio__notice')!;
       expect(notice.className).toContain('moodboard-studio__notice--neutral');
       expect(notice.getAttribute('role')).toBe('status');
       // The next edit takes the line away.
       act(() => { store().edit(madeKey, (draft) => ({ ...(draft as object), notes: 'river light' })); });
-      await waitFor(() => expect(screen.queryByText('Kept the name from the board.')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('Kept the name “Rivers” from the board.')).toBeNull());
     });
 
     it('name and notes changed on both, the board later: one line names both, joined with "and" (GM r16)', async () => {
@@ -4412,7 +4416,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       ['401', () => new RequestFailedError(SAVE, 401, { detail: 'Connect again' })],
       ['403', () => new RequestFailedError(SAVE, 403, { detail: 'Not yours', code: 'person_required' })],
     ] as const)('%s: the create and the save say the signed-out line, neutral, with no Retry', async (_name, cause) => {
-      const line = 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.';
+      const line = 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.';
       const probe = probeAnswers('online');
       try {
         const created = await createLook(cause, line, 'reload');
@@ -4966,5 +4970,166 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(rule('body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved')).toContain('color: var(--sr-ink-light)');
     expect(css).not.toMatch(/--neutral[^{]*,[^{]*\{[^}]*#e0796b/);
     expect(css).not.toMatch(/--not-saved[^{]*,[^{]*\{[^}]*#e0796b/);
+  });
+});
+
+// Round 6i (GM r17 2+3): a saved board's kept edit lives through a reload of
+// the tab and replays on the board as the server has it then, by the 6g rule.
+describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () => {
+  const EDITS = 'nebula:moodboard-kept-edits';
+  const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+  const SAVE = "Couldn't save the board.";
+  const keptEdits = () => JSON.parse(window.sessionStorage.getItem(EDITS) ?? '[]') as Array<{ board: string; fields: Record<string, unknown>; base: Record<string, unknown> }>;
+  /** The reload: a new page, its store empty, this tab's session storage kept. */
+  const reloadTab = () => {
+    cleanup();
+    resetUnsavedDrafts();
+    act(() => { useAssetStudioDraftStore.setState({ entries: {}, aliases: {} }); });
+    useBoardUndoStore.setState({ histories: {} });
+    act(() => { restoreUnsavedDrafts(); });
+  };
+  const reopen = async (name: string) => {
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByDisplayValue(name, {}, { timeout: 3000 });
+  };
+  const rename = (from: string, to: string) => fireEvent.change(screen.getByDisplayValue(from), { target: { value: to } });
+  const later = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+  it('a rename whose save failed survives the reload and is sent then; the kept edit goes once saved', async () => {
+    const put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    expect(keptEdits()).toEqual([expect.objectContaining({ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' } })]);
+    api.updateMoodboard.mockImplementation(put);
+    reloadTab();
+    await reopen('Dusk');
+    await waitFor(() => expect(server.board.name).toBe('Dusk'), { timeout: 3000 });
+    expect(server.puts.at(-1)).toMatchObject({ name: 'Dusk', baseVersion: 1 });
+    await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
+    expect(screen.queryByText(/^Kept /)).toBeNull();
+  });
+
+  it('a conflict says Reload, with no Retry; after the reload the edit replays on the newer version', async () => {
+    const put = api.updateMoodboard.getMockImplementation()!;
+    const theirs = { ...clone(server.board), version: 5, notes: 'agent notes', updatedAt: later(60_000) } as Moodboard;
+    api.updateMoodboard.mockImplementation(async () => { throw new MoodboardVersionConflict(clone(theirs)); });
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because it changed somewhere else. Reload to get the latest version.', {}, { timeout: 4000 });
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    server.board = theirs;
+    api.updateMoodboard.mockImplementation(put);
+    reloadTab();
+    await reopen('Dusk');
+    await waitFor(() => expect(server.board).toMatchObject({ name: 'Dusk', notes: 'agent notes' }), { timeout: 3000 });
+    expect(server.puts.at(-1)).toMatchObject({ name: 'Dusk', baseVersion: 5 });
+    expect(server.puts.at(-1)).not.toHaveProperty('notes');
+  });
+
+  it('renamed elsewhere after the edit: the board\'s name stays, and the one-field line shows it with its title', async () => {
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    server.board = { ...server.board, name: 'Rivers', version: 2, updatedAt: later(60_000) } as Moodboard;
+    api.updateMoodboard.mockClear();
+    reloadTab();
+    await reopen('Rivers');
+    const line = await screen.findByText('Kept the name “Rivers” from the board.');
+    expect(line.className).toContain('moodboard-studio__notice--neutral');
+    expect(line.getAttribute('title')).toBe('Rivers');
+    await new Promise((done) => setTimeout(done, 800));
+    expect(api.updateMoodboard).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
+  });
+
+  it('renamed elsewhere before the edit: the edit is later, so it goes on, with no line', async () => {
+    const put = api.updateMoodboard.getMockImplementation()!;
+    server.board = { ...server.board, updatedAt: later(-120_000) } as Moodboard;
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    server.board = { ...server.board, name: 'Rivers', version: 2, updatedAt: later(-60_000) } as Moodboard;
+    api.updateMoodboard.mockImplementation(put);
+    reloadTab();
+    await reopen('Dusk');
+    await waitFor(() => expect(server.board.name).toBe('Dusk'), { timeout: 3000 });
+    expect(screen.queryByText(/^Kept /)).toBeNull();
+  });
+
+  it('an add and a remove replay; an add the board already has, and a remove of an image gone, don\'t', async () => {
+    const edit = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    act(() => {
+      useAssetStudioDraftStore.getState().edit(g1Key, (draft) => {
+        const current = draft as { images: MoodboardImage[]; pendingOps?: MoodboardOp[] };
+        const ops: MoodboardOp[] = [{ op: 'add', images: [{ id: 'n1', url: '/api/outputs/sea.png' }] } as MoodboardOp,
+          { op: 'add', images: [{ id: 'n2', url: '/api/outputs/dune.png' }] } as MoodboardOp, { op: 'remove', images: ['i1', 'i2'] } as MoodboardOp];
+        return { ...current, pendingOps: [...(current.pendingOps ?? []), ...ops] };
+      });
+    });
+    await waitFor(() => expect(keptEdits()[0]?.board).toBe('g1'));
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    // Meanwhile dune.png landed (a save before the reload) and i2 went.
+    server.board = { ...server.board, version: 3, images: [server.board.images[0], image('n2', { url: '/api/outputs/dune.png' })] } as Moodboard;
+    api.editMoodboard.mockReset().mockImplementation(edit);
+    reloadTab();
+    await reopen('Global board');
+    await waitFor(() => expect(server.edits.length).toBeGreaterThan(0), { timeout: 3000 });
+    const sent = server.edits.flat();
+    expect(sent.filter((op) => op.op === 'add').map((op) => (op as Extract<MoodboardOp, { op: 'add' }>).images[0].url)).toEqual(['/api/outputs/sea.png']);
+    expect(sent.filter((op) => op.op === 'remove')).toEqual([{ op: 'remove', images: ['i1'] }]);
+  });
+
+  it('replayed and refused again, it is kept again with its first edit time, so a second reload still weighs it fairly', async () => {
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    const first = (keptEdits()[0] as { fieldEditedAt?: Record<string, number> }).fieldEditedAt?.name;
+    expect(first).toBeGreaterThan(0);
+    reloadTab();
+    await reopen('Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    expect((keptEdits()[0] as { fieldEditedAt?: Record<string, number> }).fieldEditedAt?.name).toBe(first);
+  });
+
+  it('a send that waited for Nebula beside the kept edit doesn\'t overrule the replay', async () => {
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' },
+      fieldEditedAt: { name: 1 }, ops: [], at: Date.now() }]));
+    window.sessionStorage.setItem('nebula:moodboard-sends-waiting', JSON.stringify([{ board: 'g1', ops: [], fields: { name: 'Dusk' },
+      page: 'an-earlier-page', at: Date.now() }]));
+    server.board = { ...server.board, name: 'Rivers', version: 2, updatedAt: later(-1000) } as Moodboard;
+    await reopen('Rivers');
+    await screen.findByText('Kept the name “Rivers” from the board.');
+    await new Promise((done) => setTimeout(done, 800));
+    expect(api.updateMoodboard).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('nebula:moodboard-sends-waiting')).toBeNull();
+  });
+
+  it('the board deleted elsewhere before the reload: nothing replays, and the edit waits a day for its board to come back', async () => {
+    const put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
+    await openStudio();
+    rename('Global board', 'Dusk');
+    await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
+    const kept = server.board;
+    server.board = { ...kept, id: 'gone' } as Moodboard;
+    api.updateMoodboard.mockImplementation(put);
+    reloadTab();
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByText(/Moodboard not found/);
+    expect(keptEdits()).toHaveLength(1);
+    // Restored: its next load in this tab replays it.
+    server.board = kept;
+    reloadTab();
+    await reopen('Dusk');
+    await waitFor(() => expect(server.board.name).toBe('Dusk'), { timeout: 3000 });
   });
 });

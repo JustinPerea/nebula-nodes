@@ -156,7 +156,7 @@ describe('a board save that fails', () => {
     ['detail-409', saved('the server didn’t accept this save'), true],
     ['field-list', saved('the server didn’t accept this save'), true],
     ['bare-400', saved('the server didn’t accept this save'), true],
-    ['bare-403', 'Nebula couldn’t save the board because you’re signed out. Reload to sign in again.', false],
+    ['bare-403', 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.', false],
     ['bare-413', 'Nebula couldn’t save the board because it’s too large. Remove some images, then try again.', true],
     ['disk-full', 'Nebula couldn’t save the board because the disk is full. Free up some space, then try again.', true],
     ['conflict', 'Nebula couldn’t save the board because it changed somewhere else. Reload to get the latest version.', false],
