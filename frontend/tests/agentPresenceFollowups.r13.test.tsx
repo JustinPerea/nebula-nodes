@@ -7,7 +7,7 @@
 // whole. (Q3, the presence-colour author edge, is in the ratchet.)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError } from '../src/lib/errorCopy';
 
@@ -15,7 +15,9 @@ const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePi
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
 vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api }));
 
-const { HIDDEN_TEXT_COPY, MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinRefusalLine } = await import('../src/lib/canvasPins');
+const { HIDDEN_TEXT_COPY, MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinRefusalLine, pinTextReady } = await import('../src/lib/canvasPins');
+// The text rules read the lazy Unicode data: check them with it in, never in a race with its import.
+beforeAll(() => pinTextReady);
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');

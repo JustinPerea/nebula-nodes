@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Fix round 4 of PR #200 (review 4 and GM's round 5 answers), the component
@@ -26,11 +26,14 @@ import { PinComposer } from '../src/components/canvas/PinComposer';
 import { MaskPainterModal } from '../src/components/panels/MaskPainterModal';
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 import { useProjectStore } from '../src/store/projectStore';
-import { keptNoteDisplay, noteKeptLine, type KeptNote } from '../src/lib/canvasPins';
+import { keptNoteDisplay, noteKeptLine, pinTextReady, type KeptNote } from '../src/lib/canvasPins';
 import { publishOpenProject } from '../src/lib/currentProject';
 import { setProjectContext } from '../src/lib/projectContext';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
+
+// The text rules read the lazy Unicode data: check them with it in, never in a race with its import.
+beforeAll(() => pinTextReady);
 
 const initialProject = useProjectStore.getState();
 const reason = { agent: 'Codex', projectName: 'Second canvas' };
