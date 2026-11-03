@@ -363,6 +363,8 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/canvas/cursor"): "an agent's cursor; no graph",
     ("POST", "/api/canvas/status"): "an agent's status line; no graph",
     ("POST", "/api/canvas/view"): "the canvas's viewport report; no graph",
+    ("POST", "/api/agent/channel"): "a channel listener's readiness beat; no graph",
+    ("DELETE", "/api/agent/channel"): "a channel listener's goodbye; no graph",
     ("POST", "/api/canvas/agent-notes"): "Updates on the project record; no graph",
     ("POST", "/api/canvas/agent-notes/read"): "Updates read state; no graph",
     ("POST", "/api/canvas/agent-notes/{note_id}/dismiss"): "Updates dismiss; no graph",
