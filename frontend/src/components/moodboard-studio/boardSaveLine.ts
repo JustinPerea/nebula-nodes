@@ -1,5 +1,4 @@
-import { RequestFailedError, failureCopy, isBackendUnreachable, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
-import { SAVE_BOARD } from '../../lib/api';
+import { RequestFailedError, isBackendUnreachable, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 
 /**
@@ -31,18 +30,34 @@ const NOT_SAVED_OPENING = 'Nebula couldn’t save the board because ';
  * "Not saved", the header's Retry. It never says "create": after a lost
  * answer the server may have made the board.
  *
- * Kept out: a 422 refusing the create's id (`isCreateIdRefusal`). The draft's
+ * Kept out: a create refused for its id (`isCreateIdRefusal`). The draft's
  * id is one Nebula made, so this only happens if the id itself is broken;
- * sending again sends the same id and fails the same way, so "Try again"
- * would be wrong. It keeps the error look and the save heading.
+ * sending the same id again fails the same way, so "Try again" would be
+ * wrong. It says CREATE_ID_REFUSED_LINE in the error look, and the Studio
+ * drops the id (its next create goes without one), so its Retry works.
  */
 export function boardSaveFailure(error: unknown): FailureCopy {
-  return isCreateIdRefusal(error) ? failureCopy(error, { heading: SAVE_BOARD }) : boardNotSavedLine(error);
+  return isCreateIdRefusal(error) ? { heading: '', reason: CREATE_ID_REFUSED_LINE } : boardNotSavedLine(error);
 }
 
-/** A create refused for its `requestId` (the backend's 422 names the field). */
+/**
+ * The red line for a create refused for its request id (round 6g, brief 7b):
+ * the because form, no "Try again", ending with the step that works. The one
+ * place it is written; the wording is a proposal waiting on GM's confirmation
+ * (CREATE_ID_REFUSED_PENDING_GM). What the Studio really offers: Retry, since
+ * after this refusal the next create goes without the id.
+ */
+export const CREATE_ID_REFUSED_LINE = 'Nebula couldn’t save the board because the server refused its save id. Retry saves it without one.';
+/** True while CREATE_ID_REFUSED_LINE waits on GM. */
+export const CREATE_ID_REFUSED_PENDING_GM = true;
+
+/** A create refused for its `requestId`: the backend's 422 naming the field,
+ *  or its 409 for an id another project's board was made with (round 6g,
+ *  `code: "request_id_scope"`). Sent again, the same id fails the same way. */
 export function isCreateIdRefusal(error: unknown): boolean {
-  if (!(error instanceof RequestFailedError) || error.status !== 422) return false;
+  if (!(error instanceof RequestFailedError)) return false;
+  if (error.status === 409) return error.code === 'request_id_scope';
+  if (error.status !== 422) return false;
   return /\brequestId\b/.test(typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail ?? ''));
 }
 
@@ -53,7 +68,8 @@ export function isCreateIdRefusal(error: unknown): boolean {
  * chip reads "Not saved", not "Error". Its one retry is the header's Retry.
  */
 export function isBoardNotSavedLine(failure: FailureCopy | string | null | undefined): boolean {
-  return typeof failure === 'object' && failure !== null && !failure.heading && failure.reason.startsWith(NOT_SAVED_OPENING);
+  return typeof failure === 'object' && failure !== null && !failure.heading && failure.reason.startsWith(NOT_SAVED_OPENING)
+    && failure.reason.endsWith('. Try again.');
 }
 
 /** The clause after "because" for a board's send that failed. */
@@ -68,4 +84,29 @@ export function boardSaveCause(error: unknown): string {
   if (status >= 500) return 'the server hit an error';
   if (status === 401 || status === 403) return 'you don’t have access to this anymore';
   return 'the server didn’t accept it';
+}
+
+/** How a kept board field is named in the line (round 6g). Only the name's
+ *  line is GM's ("Kept the name “Rivers” from the board."); the others are
+ *  proposed, waiting on GM (KEPT_FIELD_PENDING_GM). */
+const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
+  notes: 'the notes', mode: 'the mode', strength: 'the strength', direction: 'what the board is for',
+  avoid: 'what to avoid', pinnedColors: 'the colours', briefOverride: 'the brief', clashMode: 'the clash setting',
+  colorChoices: 'the colour choices', sendNotes: 'the notes setting',
+};
+/** True while the wording for fields other than the name waits on GM. */
+export const KEPT_FIELD_PENDING_GM = true;
+
+/**
+ * The neutral line when a repeated create's board kept its own later change
+ * over a draft edit (round 6g, GM r15 1), or null when nothing was dropped:
+ * "Kept the name “Rivers” from the board.", and for other fields "Kept the
+ * notes from the board.", joined ("Kept the name “Rivers” and the notes from
+ * the board.").
+ */
+export function keptFromBoardLine(fields: readonly string[], board: { name?: string }): string | null {
+  if (!fields.length) return null;
+  const parts = fields.map((field) => (field === 'name' ? `the name “${(board.name ?? '').trim()}”` : KEPT_FIELD_NAMES[field] ?? `the ${field}`));
+  const joined = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `Kept ${joined} from the board.`;
 }

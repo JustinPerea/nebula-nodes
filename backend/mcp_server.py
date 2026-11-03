@@ -2131,8 +2131,11 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     and nothing is saved, so pass links here and this tool uploads them.
     `request_id` (optional, 8 to 128 letters, digits, '-' or '_'): your own id
     for this create. If a call's answer is lost and you call again with the
-    same id, you get the board the first call made (same id) instead of a
-    second board, even after Nebula restarts.
+    same id, you get the board the first call made (same id, as it is now)
+    instead of a second board, even after Nebula restarts. Use a new id for
+    each board: a reused id returns the board it first made whatever the
+    other arguments say, with `repeated: true` and `note` saying so, and an
+    id already used in another project (or in Global) is refused.
     """
     import moodboard_client as boards
 
@@ -2141,6 +2144,8 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     board, skipped = await _offload(lambda: _board_call(
         boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
         strength=strength, notes=notes, request_id=request_id, headers=headers), waits=True)
+    if board.get("repeated") is True:
+        return {**boards.brief(board), "note": boards.repeated_line(board)}
     return {**boards.brief(board), "duplicatesSkipped": skipped}
 
 

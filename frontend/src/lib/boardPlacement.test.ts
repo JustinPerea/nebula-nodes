@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insideView, nearestFreeAnywhere, placeTiles, respot } from './boardPlacement';
+import { insideView, nearestFreeAnywhere, outsideForChip, placeTiles, respot, visibleShare } from './boardPlacement';
 import type { NodeRect } from './nodePlacement';
 import { DROP_GAP } from './boardDrop';
 
@@ -108,26 +108,46 @@ describe('no room in view', () => {
   });
 });
 
-describe('the seen area (round 6f, GM r14)', () => {
-  it('a tile placed where the notice band covers the view is not seen: the chip points at it', () => {
-    const view = { x: 0, y: 0, width: 1000, height: 700 };
-    // The notice band covers the view's foot, 600 down: the seen area stops there (the chip's own floor).
-    const seen = { x: 0, y: 0, width: 1000, height: 600 };
+describe('the seen area (round 6g, GM r15 2)', () => {
+  const view = { x: 0, y: 0, width: 1000, height: 700 };
+  it('a tile is seen by its area in the view less what covers it there, each cover counted once', () => {
+    const tile = { x: 100, y: 500, width: 200, height: 100 };
+    expect(visibleShare(tile, { view, covers: [] })).toBe(1);
+    // The pill covers its left half: half seen.
+    expect(visibleShare(tile, { view, covers: [{ x: 0, y: 450, width: 200, height: 300 }] })).toBe(0.5);
+    // A notice over the same half and a band across the tile's top quarter: the overlap counts once.
+    expect(visibleShare(tile, { view, covers: [{ x: 0, y: 450, width: 200, height: 300 }, { x: 50, y: 520, width: 150, height: 40 },
+      { x: 0, y: 500, width: 1000, height: 25 }] })).toBeCloseTo(0.375);
+    // Only what is in the view counts.
+    expect(visibleShare({ ...tile, y: 650 }, { view, covers: [] })).toBe(0.5);
+    // A cover over the part already out of view takes nothing more off.
+    expect(visibleShare({ ...tile, y: 650 }, { view, covers: [{ x: 0, y: 700, width: 1000, height: 200 }] })).toBe(0.5);
+    expect(visibleShare({ ...tile, y: 650 }, { view, covers: [{ x: 0, y: 675, width: 1000, height: 200 }] })).toBe(0.25);
+  });
+
+  it('a tile wholly on screen beside the pill is seen: no chip; the same tile under the pill gets one (review 9 r9-area-045)', () => {
+    const pill = { x: 0, y: 600, width: 400, height: 80 };
+    const beside = { x: 576, y: 560, width: 217, height: 140 };
+    expect(outsideForChip(beside, { view, covers: [pill] })).toBe(false);
+    const under = { x: 100, y: 560, width: 217, height: 140 };
+    expect(visibleShare(under, { view, covers: [pill] })).toBeLessThan(0.5);
+    expect(outsideForChip(under, { view, covers: [pill] })).toBe(true);
+  });
+
+  it('placement reports a tile by the seen area, while it places by its own view', () => {
     const crowd = [{ x: 0, y: 0, width: 1000, height: 600 }];
-    const placed = placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 80]], occupied: crowd, view, seen, gap: 10 });
+    const notice = { x: 0, y: 600, width: 1000, height: 100 };
+    const placed = placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 80]], occupied: crowd, view, seen: { view, covers: [notice] }, gap: 10 });
     const rect = { ...placed.spots[0], width: 200, height: 80 };
     expect(insideView(rect, view)).toBe(true);
     expect(rect.y).toBe(610);
     expect(placed.outside).toEqual([0]);
-    // Judged by the whole view, the same spot would be seen.
     expect(placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 80]], occupied: crowd, view, gap: 10 }).outside).toEqual([]);
   });
 
-  it('a drop aimed into the notice band\'s strip keeps its aim with no chip: the person put it there', () => {
-    const view = { x: 0, y: 0, width: 1000, height: 700 };
-    const seen = { x: 0, y: 0, width: 1000, height: 600 };
-    // No toolbar band (the drop keeps its aim), wholly in the view but under the notice band.
-    const kept = placeTiles({ at: { x: 500, y: 650 }, sizes: [[200, 80]], occupied: [], view, seen, aim: true });
+  it('a drop aimed under a notice keeps its aim with no chip: the person put it there', () => {
+    const kept = placeTiles({ at: { x: 500, y: 650 }, sizes: [[200, 80]], occupied: [], view, aim: true,
+      seen: { view, covers: [{ x: 0, y: 600, width: 1000, height: 100 }] } });
     expect(kept.spots).toEqual([{ x: 400, y: 610 }]);
     expect(kept.outside).toEqual([]);
   });

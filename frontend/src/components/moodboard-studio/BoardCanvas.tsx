@@ -15,7 +15,8 @@ import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, isProvision
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import type { NodeRect } from '../../lib/nodePlacement';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
-import { BOTTOM_BAR_ATTR, floatingBottomLimit } from '../../lib/bottomBar';
+import { BOTTOM_BAR_ATTR, NOTICE_BAND_ATTR } from '../../lib/bottomBar';
+import type { SeenArea } from '../../lib/boardPlacement';
 import { OutsideChip } from './OutsideChip';
 import { offlineMark } from '../../lib/useBackendOffline';
 import { offlineDisabledReason } from '../../lib/errorCopy';
@@ -63,10 +64,9 @@ export interface BoardCanvasProps {
 export interface BoardTarget {
   at: { x: number; y: number };
   view: NodeRect | null;
-  /** The part of `view` a tile is seen in, for the outside chip's area rule
-   *  (GM r14): the view less the notice band over the toolbar (the floor the
-   *  chip itself stands on). Left out, the view. */
-  seen?: NodeRect | null;
+  /** What of the board is really seen, for the outside chip's area rule
+   *  (GM r15 2, lib/boardPlacement SeenArea). Left out, the view. */
+  seen?: SeenArea | null;
   aim: boolean;
   /** The view's bottom edge is the toolbar's top (lib/boardPlacement `band`). */
   band?: boolean;
@@ -744,22 +744,45 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
   };
 
-  /** What of the view a tile is seen in (GM r14): `viewRect` less the band
-   *  the app keeps for notices above the toolbar (lib/bottomBar
-   *  floatingBottomLimit, without a gutter: the line the chip's floor is
-   *  measured from). A notice that is up for a moment doesn't count. */
-  const seenRect = (): NodeRect | null => {
-    const view = viewRect();
+  /**
+   * What of the board the person really sees (GM r15 2), in board
+   * coordinates: the board's pane clipped to the window, less the boxes that
+   * cover it there, each as it really is: the toolbar pill (every
+   * `data-bottom-bar` box), the notice region's reserved band across its own
+   * width, and the notices on screen now (the app's stack and the Studio's
+   * lines). Not placement's view: a tile beside the pill, below the
+   * toolbar's line, is seen. Placement keeps its own view and band.
+   */
+  const seenArea = (): SeenArea | null => {
     const box = wrapperRef.current?.getBoundingClientRect();
-    if (!view || !box) return view;
-    const line = screenToFlowPosition({ x: box.left, y: floatingBottomLimit(0) }).y;
-    return line > view.y && line < view.y + view.height ? { ...view, height: line - view.y } : view;
+    if (!box || box.width <= 0 || box.height <= 0) return null;
+    const toBoard = (rect: { left: number; top: number; right: number; bottom: number }): NodeRect | null => {
+      const left = Math.max(rect.left, box.left, 0);
+      const top = Math.max(rect.top, box.top, 0);
+      const right = Math.min(rect.right, box.right, window.innerWidth);
+      const bottom = Math.min(rect.bottom, box.bottom, window.innerHeight);
+      if (right <= left || bottom <= top) return null;
+      const a = screenToFlowPosition({ x: left, y: top });
+      const b = screenToFlowPosition({ x: right, y: bottom });
+      return b.x > a.x && b.y > a.y ? { x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y } : null;
+    };
+    const view = toBoard(box);
+    if (!view) return null;
+    const covering = [
+      ...document.querySelectorAll<HTMLElement>(`[${BOTTOM_BAR_ATTR}]`),
+      ...document.querySelectorAll<HTMLElement>(`[${NOTICE_BAND_ATTR}]`),
+      ...document.querySelectorAll<HTMLElement>('.notice-region__stack > *, .moodboard-studio__notice'),
+    ];
+    const covers = covering.map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .flatMap((rect) => toBoard(rect) ?? []);
+    return { view, covers };
   };
 
   const addFiles = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
     if (files.length === 0) return;
-    onDropFiles(files, { at: viewPoint(), view: viewRect(), seen: seenRect(), aim: false });
+    onDropFiles(files, { at: viewPoint(), view: viewRect(), seen: seenArea(), aim: false });
   };
 
   // The pointer over the board, in screen pixels (null once it leaves): a
@@ -772,7 +795,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const onPointerLeave = () => { pointer.current = null; };
   const pasteAt = useRef<() => BoardTarget>(() => ({ at: { x: 0, y: 0 }, view: null, aim: false }));
   pasteAt.current = () => ({ at: pointer.current ? screenToFlowPosition(pointer.current) : viewPoint(),
-    view: viewRect(), seen: seenRect(), aim: false });
+    view: viewRect(), seen: seenArea(), aim: false });
   useEffect(() => {
     if (!pasteTargetRef) return undefined;
     const read = () => pasteAt.current();
@@ -955,7 +978,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     event.preventDefault();
     if (files.length === 0) return;
     const bar = controlsRef.current?.getBoundingClientRect();
-    onDropFiles(files, { at: screenToFlowPosition({ x: event.clientX, y: event.clientY }), view: viewRect(), seen: seenRect(), aim: true,
+    onDropFiles(files, { at: screenToFlowPosition({ x: event.clientX, y: event.clientY }), view: viewRect(), seen: seenArea(), aim: true,
       band: Boolean(bar && bar.height > 0) });
   };
 
@@ -1009,7 +1032,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       </BoardWideContext.Provider>
       </BoardFillContext.Provider>
       {outside && onOutsideDone && (
-        <OutsideChip key={outside.id} tiles={outside} viewOf={seenRect} onShow={showOutside} onDone={onOutsideDone}
+        <OutsideChip key={outside.id} tiles={outside} viewOf={viewRect} seenOf={seenArea} onShow={showOutside} onDone={onOutsideDone}
           focusBoard={focusBoard} />
       )}
       {nodes.length === 0 && held.length === 0 && (

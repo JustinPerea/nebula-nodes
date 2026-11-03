@@ -515,6 +515,79 @@ Main had nothing new (still 53318ca6), so nothing to merge.
 - **Gates:** tsc 0; lint 0; focused vitest over the same 152 files, two workers: 2559 of 2561, the two misses timeouts under a machine load of 23 (`pr198Fix2Money`'s 20,000-case property test and `errorCopy.namedLine`'s file scan), both passing alone (84 of 84); `npm run build` with the budget: 444,788 B raw of 512,000 (unchanged), dist deleted. The backend didn't change, so no pytest.
 - **Live (8797/5797, `serve_isolated.py`, a fresh token on stdin, canary first, 1440, Restraint):** 14 of 14. New, a real paste, the autosave's create made on the server and its answer dropped in the page: the one line on the board was "Nebula couldn’t save the board because the server isn’t answering. Try again.", neutral (no error class, a status, no button), the header chip "Not saved" in ink 0.55, one Retry (the header's), no "create" anywhere. Retry sent the same id: one board, no line left. The 29% case and the band cut as above. Shot: scratchpad `paste/shots6f/r6f-lost-create-not-saved-line.png`, opened, no md5 repeat against 6e's. The blocked log holds only canaries; no request left the lane.
 
+## Round 6g (GM r15, review 9)
+
+Main had nothing new (still 53318ca6), so nothing to merge.
+
+- **A repeat rebases on the attempt that made the board (GM r15 1, review 9 MEDIUM-1).** In 6e a repeat counted none of its send as landed, so every op replayed and every changed field went on a PUT, even over what the board had done since: a rename on the rail, a removed image, an agent's edit (R9-A, R9-B).
+  - Each create now sends an attempt number beside its `requestId` (`createAttemptFor`). The entry keeps the last 10 attempts, each with the queued ops it sent and its fields as sent.
+  - The server records which attempt made the board and the version then (1). A repeat answers `repeated`, `madeAttempt` and `madeVersion`.
+  - `repeatOnBoard` rebases the draft on the board as it is now, counting that attempt's sent ops and fields as on it. So the board's own later changes win, and only what the draft did after that attempt replays. With no record of the attempt (an older server), it falls back to 6e's replay-all.
+  - A field both sides changed goes to the later edit: the draft's edit time (`fieldEditedAt`, stamped per top-level field by the store's `edit`) against the board's `updatedAt`. Both clocks are this machine's (the backend is local), so they compare. With the board unchanged since it was made (`version == madeVersion`), the draft's edits all go, whatever the clocks say.
+  - When the board's value wins over a draft edit, one neutral line says so: "Kept the name “Rivers” from the board." (GM's wording). It's a status with no button, and the next edit takes it away. For other fields I built "Kept the notes from the board." and the like (`KEPT_FIELD_NAMES`, behind `KEPT_FIELD_PENDING_GM`); that wording waits on GM.
+  - R9-B: the made board was open from the rail with its own draft and Undo. The create's answer used to `copyTo` over it, so its epoch and Undo went. Now `handOver` folds the unsaved draft's leftover ops and fields into the open board's entry, which keeps its epoch and steps. A board not loaded still takes `copyTo`.
+- **The chip by what is actually seen (GM r15 2, review 9 MEDIUM-1).** 6f cut a full-width strip at the toolbar's line, so a tile wholly on screen beside the pill read as 44% seen and got the chip (`r9-area-045`).
+  - `BoardCanvas.seenArea()` is `{ view, covers }`. `view` is the board pane clipped to the window. `covers` are the boxes really over it, each clipped the same way: every `[data-bottom-bar]` (the toolbar pill), every `[data-notice-band]` (across that element's own width, not the column's), and the notices on screen now (`.notice-region__stack > *`, `.moodboard-studio__notice`).
+  - `visibleShare` takes the tile ∩ view less the exact union of the covers inside it (`unionArea`, a grid over the edges, so overlapping covers count once). `outsideForChip`'s big-tile rule still uses the view.
+  - Every chip site uses it: placement's outside list, the chip's own going (`OutsideChip seenOf`), a moved held spot, the return to a board an add landed on, and a 409 replay's moved add. Placement keeps its own view and band.
+  - The brief's "the pane inside its insets": #213's insets are only the bar's full-width band, which is the strip MEDIUM-1 is about. So the pane is taken whole and the pill's real box is taken off instead.
+  - Unlike 6f, a notice coming or going now changes what counts as seen (GM r15 2: "the notices on screen now").
+- **The unsaved draft survives a reload (GM r15 3, review 9 LOW-2).** `unsavedDrafts.ts` keeps each unsaved board's draft in this tab's session storage (`nebula:moodboard-unsaved-drafts`), the way the waiting sends are kept.
+  - What's kept: the images a later page can show, their queued adds, the create id, the attempts (sent ops as indices into the kept ops), the edit times, and the failure (line, Retry) if it had one.
+  - An image only that page held (a `blob:` or `data:` url, not uploaded yet) can't be kept, and its add goes with it.
+  - Entries more than a day old, or of no known shape (key, images, ops by `isOpShape`, attempts, line, id), are dropped when read. At most 10 are kept. Storage that throws keeps nothing and breaks nothing.
+  - Restored once at module load, before the first render, unless the key holds a loaded draft. It comes back with the error look, its line and Retry (or as a draft to send). Retry sends the same id as the next attempt, so a create whose answer was lost before the reload still makes one board.
+  - The page asks before unload only when the last write failed (storage full or blocked) and an unsaved board with images is open. Otherwise it never asks.
+  - An entry this page held and whose draft is gone (discarded, or handed over to its saved board) goes. One this page never held stays.
+- **A create cut off by a network drop is a background send (GM r15 4, review 9 LOW-1).** Since it carries its id, a resend is safe.
+  - `persist`'s create and `saveAway`'s first send ask for a health probe after no answer (`createWaits`). If Nebula is offline then, the draft waits with no line under the banner, and the autosave sends it once on reconnect with the same id as the next attempt.
+  - If that resend is cut off too, it doesn't wait again: it says the neutral line with "Not saved".
+  - A 5xx is an answer, so it says its line at once with no probe. The waited set lives in `boardAdds` so `resetBoardAdds` clears it.
+- **Server (GM r15 5).** Built by a helper agent to my contract; I checked it against the Studio.
+  - Write order, documented above `_CREATES_DIR`: the record as "pending", then the board, then the record as "made". A crash between them leaves a pending record whose board is live (read as the repeat, and marked made then) or one naming no board (ignored and overwritten).
+  - Records expire after 7 days (`CREATE_RECORD_DAYS`). They're pruned at startup and on at most one create a day, and purged with their board, through the single purge and empty-trash routes. Kept while the board is in Recently deleted, since a restore brings the same id back.
+  - A project's purge removes only its catalog entry, not its board files, so there are no records to drop on that path. They expire.
+  - Every scan, export, zip and import path was checked for `.creates`. Commons' `intake._moodboards` reaches it and refuses it as a project id; the others skip dot folders or never read the moodboard root.
+  - An id from another scope gets a 409 with `code: "request_id_scope"` and never returns the other scope's board. A board behind a record that can't be read gets a plain 500 ("Nebula couldn't read the board this request id made. Use a new request id."), never the parser's text and never a second board.
+  - The Studio treats that 409 as it treats the id 422 (`isCreateIdRefusal`): it drops the id and its Retry goes without one.
+- **The agent repeat (GM r15 6).** `moodboard_create` (MCP) and `nebula moodboard new` say "Board “X” was already made by an earlier call with this request id." and return that board. The client skips its image-count check on a repeat. The docstrings, the CLI help, `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md` now say: an id is unique per board; a reused id returns the first board whatever the rest says; an id from another project is refused; ids are kept 7 days. The copy sweep passes.
+- **7(a): a saved board's own failed save stays.** `failSave` never rolls back: the edit stays in the draft, dirty, and Retry resends it. So it moved to `boardSaveFailure`'s neutral line with "Not saved", as the create did in 6f.
+  - What GM loses, listed for them: the backend's own reason (a 409 "This board is locked while it is being moved.", a full disk), the short lines, the 413 "That's too large to save.", the 403 "Reload to sign in again", and the three-conflicts "Reload to get the latest version". Each now reads its cause clause and "Try again.", the same as the create already did in 6f.
+  - The not-loaded saved board in `keepFailedAway` (review 9 NIT-2) is the one exception. Its add went in no draft, so something is lost: the red save line, with no Retry.
+- **7(b): the id refusal's line, behind one constant.** `CREATE_ID_REFUSED_LINE` = "Nebula couldn’t save the board because the server refused its save id. Retry saves it without one." It's the because form, with no "Try again". It ends with the step that works, since after the refusal the Studio drops the id (`createRequestId: null`) and its Retry sends the create without one. It shows in the error look (`isBoardNotSavedLine` now also needs the ". Try again." ending). It's held behind `CREATE_ID_REFUSED_PENDING_GM` until GM confirms. GM's guess ("Copy the board’s images to a new board.") names a step the Studio doesn't offer.
+- **Review 9's other items.**
+  - NIT-1: a held spot moved out of view takes its tile's thumbnail.
+  - NIT-2: as above.
+  - LOW-4 test gaps, each now killed: backend R1-R7 by the helper; frontend R10 (a card that only touches the chip's tile), R23 and R24 (an owned name another window already set: the record keeps no field, and the resend PUTs none), and R27 (saveAway's repeat with an image added while it was out).
+- **A reload found in the live run.** Run 1 left the reload scenario's kept draft in the tab, and the next scenario's New saved it before opening a fresh board, as New does for any unsaved board with images. That is the intended behaviour; the driver now finishes each scenario clean.
+- **Tests.**
+  - `unsavedDrafts.test.ts` (new, 22): write and restore with the line, Retry, id and attempts; restore at install; blob images and their adds dropped; nine kinds of bad entry ignored; never over a loaded draft; gone once saved, emptied or discarded; another page load's entry kept; the unload warning only after a failed write.
+  - Paste (new or changed, about 25):
+    - R9-A and R9-B, including the open board's rename still out when the repeat lands, and what the unsaved board still had (an image, notes) folded in and sent;
+    - the later-edit rule both ways; the board unchanged since it was made; a field the server keeps differently; a name sent with a space;
+    - a repeat naming no attempt of this draft's;
+    - the cut-off create waiting offline and resending once, and its failed resend;
+    - the 422 and its id-less Retry; a reload after a 5xx;
+    - NIT-1, NIT-2, R10, R23 and R24, R27.
+  - ErrorCopy: a saved board's failed save on the neutral line for each cause (an image edit and a rename); the scope 409. boardSaveLine: the constant and the 409. boardPlacement, BoardCanvas and OutsideChip: the seen area, its covers, the window cut.
+- **Mutants:** 68 frontend (scratchpad `paste/mutate-r6g.py`), 66 killed.
+  - Two are equivalent. A14: the asSent name standing in for the board's trimmed one; every compare trims the name. The R27 variant counts saveAway's sent ops as unsent on a plain create; the rebase skips an add whose image the board has.
+  - Eleven needed a test after the first pass: A6, A8, A15, H1-H4, R23 (a `toMatchObject({ fields: {} })` that matched anything), U1, U4, C3 and C7.
+  - The backend's 44 (R1-R7 and G1-G37) are all killed (the helper's `py6g/mutate-be.py`).
+- **Gates:**
+  - tsc 0; lint 0.
+  - Focused vitest over 153 files, two workers: 2608 of 2608.
+  - Isolated pytest: 945 over the 23 moodboard, MCP, CLI, copy-sweep and ratchet files, then the request-id and copy-sweep files again after the last change (148 passed).
+  - Build budget: 444,797 B raw of 512,000. dist deleted.
+- **Live (8797/5797, `serve_isolated.py`, a fresh token on stdin, canary first, 1440, Restraint, the cached Chrome 131 headless shell):** 33 of 33 on run 2, after run 1's two driver fixes (the reload landing on Projects home; a too-strict "wholly seen" check).
+  - The lost create, then Dusk typed into the unsaved draft, then Rivers typed on the board opened from the rail, then Retry. The board keeps "Rivers", Dusk is never PUT, and the one neutral status says "Kept the name “Rivers” from the board.". Three creates, one id, attempts 1, 2, 3.
+  - The area-0.45 case, the tile clear of the pill: 74% seen (the notice band's reserved strip takes 12 px), no chip. The same frac under the pill: 17% seen, the chip. Beside the pill: 91% seen, no chip.
+  - A reload after two 5xx creates: no leave prompt; both images, the "didn’t respond" line, "Not saved" and Retry back. Retry made one board with both images under the first id, and the kept entry went.
+  - A create cut off by a network drop: no line, "Draft" under the offline banner. On reconnect it was sent once more with the same id as attempt 2: one board, no line.
+  - The CLI, twice with one `--request-id`: "Made Dusk CLI …", then "Board “Dusk CLI” was already made by an earlier call with this request id. Its id is 809aa7d6c8bc, with 1 image. It's in Moodboard Studio.". The same id with `--project current` was refused with the 409's sentence, exit 1. The repeat still uploads its files before the create answers; those uploads stay unused, like any upload not added.
+  - No request left the lane.
+  - Shots: scratchpad `paste/shots6g/` (7), each opened, no md5 repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -533,8 +606,9 @@ Main had nothing new (still 53318ca6), so nothing to merge.
 - Round 6d: `MoodboardStudioView.tsx` (`SendOwns`, `notSentYet`, the resends, the re-mark, the neutral line and chip, `offline` to the board and the List, the silent offline upload, the chip's tiles, `chipMovedAdds`), `boardSaveLine.ts` (`isBoardNotSavedLine`), `boardAdds.ts` (`isOpShape`), `BoardCanvas.tsx` and `MoodboardListView.tsx` (`offline`), `lib/backendConnection.ts` (`probeOffline`), `styles/moodboard-studio.css` and `styles/moodboard-board.css`, and their tests.
 - Round 6e: `backend/services/moodboard_store.py` (`create_once`, the `.creates` side folder), `backend/main.py` (`requestId` on the create, `repeated`), `backend/moodboard_client.py`, `backend/mcp_server.py`, `backend/cli/commands/moodboard.py`, `backend/tests/test_moodboard_create_request_id.py` (new); `frontend/src/lib/api.ts`, `store/assetStudioDraftStore.ts` (`createRequestId`), `MoodboardStudioView.tsx` (`createRequestIdFor`, the repeat rebase, `markLeftToSend`, the chip rule at every site), `lib/boardPlacement.ts` (`visibleShare`, `outsideForChip`), `outsideChipText.ts` (`placeChip`), `OutsideChip.tsx`, `styles/moodboard-board.css`, and their tests.
 - Round 6f: `boardSaveLine.ts` (`boardSaveFailure`, `isCreateIdRefusal`), `MoodboardStudioView.tsx` (every create and background write through it; `seen` kept and used at the chip sites), `lib/api.ts` (the create's heading), `BoardCanvas.tsx` (`seenRect`, `seen` on every target, the chip's `viewOf`), `lib/boardPlacement.ts` (`seen`), and their tests; `MoodboardStudioErrorCopy.test.tsx` (the create through the real lib/api).
+- Round 6g: `unsavedDrafts.ts` (new, with a test), `MoodboardStudioView.tsx` (`createAttemptFor`, `repeatOnBoard`, `handOverDraft`, `createWaits`, the kept line, 7a), `store/assetStudioDraftStore.ts` (`createAttempts`, `fieldEditedAt`, `notice`, `handOver`), `boardSaveLine.ts` (`CREATE_ID_REFUSED_LINE`, `keptFromBoardLine`), `boardAdds.ts` (`createsWaited`, `isOpShape` exported), `lib/boardPlacement.ts` (`SeenArea`, `unionArea`), `BoardCanvas.tsx` (`seenArea`), `OutsideChip.tsx` (`seenOf`), `lib/api.ts`, and their tests; backend `services/moodboard_store.py`, `main.py`, `moodboard_client.py`, `mcp_server.py`, `cli/commands/moodboard.py`, `tests/test_moodboard_create_request_id.py`.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs
 
-`docs/MCP-SETUP.md` and the nebula skill (`skills/nebula/SKILL.md`) gain the `--request-id` line for `nebula moodboard new` (round 6e); `moodboard_create`'s docstring describes `request_id`. Nothing else for agents changed.
+`docs/MCP-SETUP.md` and the nebula skill (`skills/nebula/SKILL.md`) gain the `--request-id` line for `nebula moodboard new` (round 6e); `moodboard_create`'s docstring describes `request_id`. Round 6g: both say an id is unique per board, a reused id returns the first board whatever the rest of the call says, an id from another project is refused (409 `request_id_scope`), and ids are kept 7 days; the repeat's sentence is in both. Nothing else for agents changed.

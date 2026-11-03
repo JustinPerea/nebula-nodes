@@ -20,7 +20,6 @@ const NO_ANSWER = "Nebula didn't respond. Try again.";
 // <reason>' so it matches everything else", heading on line 1, reason on
 // line 2; and the WRAP rule: with Retry shown, "the reason line drops its
 // 'try again'. The button is the retry."
-const SAVE = "Couldn't save the board.";
 const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
 const NO_ANSWER_SHORT = "Nebula didn't respond.";
 
@@ -33,6 +32,8 @@ vi.mock('../WorkspaceHeader', () => ({
 vi.mock('../asset-trash/AssetTrash', () => ({ RecentlyDeletedAssets: () => null, UndoDeleteToast: () => null }));
 
 import { MoodboardStudioView } from './MoodboardStudioView';
+import { CREATE_ID_REFUSED_LINE } from './boardSaveLine';
+import { noteProbeAnswer, startHealthProbe, subscribeHealthProbeRequests } from '../../lib/backendConnection';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
@@ -112,49 +113,58 @@ const cases: Array<[string, Failure, string, string]> = [
 const lines = (shown: Element) => [shown.querySelector('.failure-lines__heading')?.textContent,
   shown.querySelector('.failure-lines__reason')?.textContent];
 
+// Round 6g (brief 7a): a saved board's own save that fails keeps the edit in the draft (nothing rolls back)
+// and the toolbar's Retry sends it again, so it says what a new board's failed create says (GM r12, r14):
+// r12's neutral because-line, the "Not saved" chip. The cause names what happened; the backend's own
+// reason is in the console only.
+const saved = (cause: string) => `Nebula couldn’t save the board because ${cause}. Try again.`;
+const neutral = async () => {
+  await waitFor(() => expect(document.querySelector('.moodboard-studio__notice--neutral')).not.toBeNull(), { timeout: 3000 });
+  return document.querySelector('.moodboard-studio__notice--neutral')!;
+};
+const causes: Array<[string, Failure, string]> = [
+  ['a lost connection', 'network', 'the server isn’t answering'],
+  // The dev proxy's 503 page is the backend gone (lib/backend): no answer.
+  ['a 503', 503, 'the server isn’t answering'],
+  ['a 500', 500, 'the server hit an error'],
+  ['a 429', 429, 'the server is busy'],
+];
+
 describe('a board save that fails', () => {
-  it.each(cases)('an image edit after %s says the heading over GM\'s short line (Retry is shown)', async (_name, failure, _line, short) => {
+  it.each(causes)('an image edit after %s says the neutral line, "Not saved" and Retry', async (_name, failure, cause) => {
     state.edits = failure;
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    const shown = await notice();
-    expect(lines(shown)).toEqual([SAVE, short]);
+    expect((await neutral()).textContent).toBe(saved(cause));
+    expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull();
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Not saved');
     expect(screen.queryByText(/Failed to fetch|Save failed: \d{3}/)).toBeNull();
     // Retry stays: saving again can work.
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
-  it.each(cases)('a board field (its name) after %s says the heading over GM\'s short line', async (_name, failure, _line, short) => {
+  it.each(causes)('a board field (its name) after %s says the neutral line', async (_name, failure, cause) => {
     state.put = failure;
     await openStudio();
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Renamed' } });
-    expect(lines(await notice())).toEqual([SAVE, short]);
+    expect((await neutral()).textContent).toBe(saved(cause));
   });
 
-  it('a 4xx keeps the backend\'s reason under "Couldn\'t save the board."', async () => {
-    state.edits = 'detail-409';
-    await openStudio();
-    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    expect(lines(await notice())).toEqual([SAVE, 'This board is locked while it is being moved.']);
-  });
-
-  it('a FastAPI field list is not a reason: GM\'s fallback line, the list only in the console', async () => {
+  it.each([
+    ['detail-409', 'the server didn’t accept it'],
+    ['field-list', 'the server didn’t accept it'],
+    ['bare-400', 'the server didn’t accept it'],
+    ['bare-403', 'you don’t have access to this anymore'],
+    ['bare-413', 'the server didn’t accept it'],
+    ['conflict', 'the board changed in another window'],
+  ] as const)('a %s says the neutral line with its cause, no status code, no field list', async (failure, cause) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    state.edits = 'field-list';
+    state.edits = failure;
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    expect(lines(await notice())).toEqual([SAVE, "Try again, or reload if it keeps happening."]);
-    expect(screen.queryByText(/field required|images\.0\.url/)).toBeNull();
-    expect(vi.mocked(console.warn).mock.calls.some((call) => JSON.stringify(call).includes('field required'))).toBe(true);
-  });
-
-  it('after three conflicts in a row: GM\'s line, no version number', async () => {
-    state.edits = 'conflict';
-    await openStudio();
-    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    const shown = await notice();
-    expect(lines(shown)).toEqual([SAVE, 'This board changed in another window. Reload to get the latest version.']);
-    expect(shown.textContent).not.toMatch(/version 7|\d/);
+    const shown = await neutral();
+    expect(shown.textContent).toBe(saved(cause));
+    expect(shown.textContent).not.toMatch(/\d|field required|images\.0\.url/);
   });
 
   it('a board that fails to load says "Couldn\'t load the board." over GM\'s short line, beside Retry loading', async () => {
@@ -167,17 +177,6 @@ describe('a board save that fails', () => {
     expect(screen.getByRole('button', { name: 'Retry loading' })).toBeTruthy();
   });
 
-  it.each([
-    ['bare-400', "Try again, or reload if it keeps happening."],
-    ['bare-403', "You don't have access to this anymore. Reload to sign in again."],
-    ['bare-413', "That's too large to save."],
-  ] as const)('a %s with no reason says GM\'s line for it, without the status code', async (failure, line) => {
-    state.edits = failure;
-    await openStudio();
-    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    // GM's 4xx fallback keeps its "Try again" beside Retry (listed for GM).
-    expect(lines(await notice())).toEqual([SAVE, line]);
-  });
 });
 
 // Round 3 (GM): "Make Retry redo the failed action, never a different one."
@@ -219,7 +218,8 @@ describe('an analyze that fails', () => {
     await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the board."));
     state.edits = 503;
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    await waitFor(async () => expect(lines(await notice())).toEqual([SAVE, NO_ANSWER_SHORT]));
+    expect((await neutral()).textContent).toBe(saved('the server isn’t answering'));
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 });
 
@@ -247,7 +247,7 @@ describe('a save still owed under another failure', () => {
     state.edits = 503;
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    await waitFor(async () => expect(lines(await notice())).toEqual([SAVE, NO_ANSWER_SHORT]));
+    expect((await neutral()).textContent).toBe(saved('the server isn’t answering'));
     const key = Object.keys(useAssetStudioDraftStore.getState().entries)[0];
     // What the upload's catch does (MoodboardStudioView: patch({ saveError })).
     act(() => {
@@ -279,6 +279,13 @@ describe('a new board\'s save (its create) that fails', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
   };
 
+  // A create cut off with no answer probes first (round 6g, GM r15 4): the banner's probe finds Nebula online here.
+  let stopProbe: () => void = () => {};
+  beforeEach(() => {
+    stopProbe = subscribeHealthProbeRequests(() => { act(() => { noteProbeAnswer(startHealthProbe(), 'online'); }); });
+  });
+  afterEach(() => { stopProbe(); });
+
   it('with no answer: the neutral save line and the "Not saved" chip, as a background save says it', async () => {
     state.create = () => { throw new TypeError('Failed to fetch'); };
     await openNewWithName();
@@ -288,10 +295,20 @@ describe('a new board\'s save (its create) that fails', () => {
     expect(document.body.textContent).not.toMatch(/Couldn.t create/);
   });
 
-  it('a 422 refusing the create\'s id: the error look under the save heading, never "create"', async () => {
+  it('a 409 for an id another project\'s board was made with: the same line and look as the id 422 (round 6g)', async () => {
+    state.create = () => json({ detail: 'This request id already made a board in another project (or in Global). Use a new request id for this board.',
+      code: 'request_id_scope' }, 409);
+    await openNewWithName();
+    expect((await notice()).textContent).toBe(CREATE_ID_REFUSED_LINE);
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
+    expect(useAssetStudioDraftStore.getState().entries[JSON.stringify(['moodboard', 'global', 'new'])].createRequestId).toBeNull();
+  });
+
+  it('a 422 refusing the create\'s id: the error look, its one line (7b), never "create"', async () => {
     state.create = () => json({ detail: "requestId must be 8 to 128 letters, digits, '-' or '_'" }, 422);
     await openNewWithName();
-    expect(lines(await notice())).toEqual([SAVE, "requestId must be 8 to 128 letters, digits, '-' or '_'"]);
+    expect((await notice()).textContent).toBe(CREATE_ID_REFUSED_LINE);
+    expect(document.body.textContent).not.toMatch(/Couldn.t create/);
     expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
   });
 });

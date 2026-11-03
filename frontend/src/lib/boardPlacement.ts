@@ -51,9 +51,9 @@ export interface PlaceRequest {
   /** The view's bottom edge is the toolbar's top: an aimed tile reaching
    *  under that band moves up out of it (GM r7 answer 2). */
   band?: boolean;
-  /** The part of `view` a tile is seen in, for the chip (GM r14: the view
-   *  less the notice band); left out, the view. Placement itself uses `view`. */
-  seen?: NodeRect | null;
+  /** What of the board is really seen, for the chip (GM r15 2): left out,
+   *  `view`. Placement itself uses `view` and its band. */
+  seen?: SeenArea | null;
   gap?: number;
   /** Counts the rows and spans the search read (the speed bound's test). */
   work?: PlacementWork;
@@ -77,13 +77,51 @@ export interface Placed {
 export const insideView = (rect: NodeRect, view: NodeRect) =>
   rect.x >= view.x && rect.y >= view.y && rect.x + rect.width <= view.x + view.width && rect.y + rect.height <= view.y + view.height;
 
-/** The share of `rect`'s area inside `view`, from 0 to 1. */
-export function visibleShare(rect: NodeRect, view: NodeRect): number {
-  const area = rect.width * rect.height;
-  if (!(area > 0)) return 0;
-  const w = Math.min(rect.x + rect.width, view.x + view.width) - Math.max(rect.x, view.x);
-  const h = Math.min(rect.y + rect.height, view.y + view.height) - Math.max(rect.y, view.y);
-  return w > 0 && h > 0 ? (w * h) / area : 0;
+/**
+ * What of the board the person really sees (GM r15 2): the board's pane
+ * clipped to the window (`view`), less what covers it there (`covers`): the
+ * toolbar's real box, the notice region's reserved band across its real
+ * width, and the notices on screen now. In board coordinates.
+ */
+export interface SeenArea { view: NodeRect; covers: NodeRect[] }
+
+const isSeenArea = (area: NodeRect | SeenArea): area is SeenArea => 'view' in area && 'covers' in area;
+
+/** `a` ∩ `b`, or null when they share no area. */
+function intersect(a: NodeRect, b: NodeRect): NodeRect | null {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const w = Math.min(a.x + a.width, b.x + b.width) - x;
+  const h = Math.min(a.y + a.height, b.y + b.height) - y;
+  return w > 0 && h > 0 ? { x, y, width: w, height: h } : null;
+}
+
+/** The area of the union of `rects` (exact: the grid their edges make, each cell counted once). */
+function unionArea(rects: NodeRect[]): number {
+  if (!rects.length) return 0;
+  const xs = [...new Set(rects.flatMap((r) => [r.x, r.x + r.width]))].sort((a, b) => a - b);
+  const ys = [...new Set(rects.flatMap((r) => [r.y, r.y + r.height]))].sort((a, b) => a - b);
+  let area = 0;
+  for (let i = 0; i < xs.length - 1; i += 1) {
+    for (let j = 0; j < ys.length - 1; j += 1) {
+      const cx = (xs[i] + xs[i + 1]) / 2;
+      const cy = (ys[j] + ys[j + 1]) / 2;
+      if (rects.some((r) => r.x < cx && cx < r.x + r.width && r.y < cy && cy < r.y + r.height)) {
+        area += (xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]);
+      }
+    }
+  }
+  return area;
+}
+
+/** The share of `rect`'s area the person sees, from 0 to 1: inside the view, less what covers it there. */
+export function visibleShare(rect: NodeRect, area: NodeRect | SeenArea): number {
+  const whole = rect.width * rect.height;
+  if (!(whole > 0)) return 0;
+  const inView = intersect(rect, isSeenArea(area) ? area.view : area);
+  if (!inView) return 0;
+  const covered = isSeenArea(area) ? unionArea(area.covers.flatMap((cover) => intersect(inView, cover) ?? [])) : 0;
+  return Math.max(0, inView.width * inView.height - covered) / whole;
 }
 
 /** At this share of its area in view, or more, a tile is seen: no chip (GM r13). */
@@ -96,8 +134,9 @@ export const CHIP_SHARE = 0.5;
  * is seen while it covers the view's centre (GM r4 answer 9, r7 answer 1).
  * One rule for pastes, held spots, moved 409 adds and the chip's own going.
  */
-export function outsideForChip(rect: NodeRect, view: NodeRect): boolean {
-  if (visibleShare(rect, view) >= CHIP_SHARE) return false;
+export function outsideForChip(rect: NodeRect, area: NodeRect | SeenArea): boolean {
+  if (visibleShare(rect, area) >= CHIP_SHARE) return false;
+  const view = isSeenArea(area) ? area.view : area;
   if (rect.width <= view.width && rect.height <= view.height) return true;
   const cx = view.x + view.width / 2;
   const cy = view.y + view.height / 2;

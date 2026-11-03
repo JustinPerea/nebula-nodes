@@ -35,9 +35,25 @@ export interface AssetStudioDraftEntry<D = unknown> {
   /** An unsaved asset's create id, made at its first create and sent with
    * every create of it after (a board's: lib/api createMoodboard), so a
    * create sent again after its answer was lost returns the asset the first
-   * one made. A new draft (reset) starts without one. */
-  createRequestId?: string;
+   * one made. A new draft (reset) starts without one. Null: the server
+   * refused the id (round 6g), so its creates go without one. */
+  createRequestId?: string | null;
+  /** What each create of the unsaved asset sent (round 6g, GM r15 1): its
+   * attempt number (sent beside `createRequestId`), the queued ops it held
+   * and its fields as sent. A create sent again whose board an earlier
+   * attempt made rebases on that attempt's, so the board's own later
+   * changes win and only what came after it replays. */
+  createAttempts?: CreateAttempt[];
+  /** When each top-level draft field was last edited (ms), for "the later
+   * edit wins" when a repeat finds the board changed too (round 6g). */
+  fieldEditedAt?: Record<string, number>;
+  /** A neutral line of the Studio's own about this draft (round 6g: "Kept
+   * the name “Rivers” from the board."); the next edit clears it. */
+  notice?: string | null;
 }
+
+/** One create of an unsaved asset: its number, the queued ops it held, and the fields it sent. */
+export interface CreateAttempt { n: number; sent: unknown[]; asSent: Record<string, unknown> }
 
 /** A project draft is keyed under the canvas project it was started in
  * (lib/currentProject), so switching projects shows that project's drafts and
@@ -74,6 +90,12 @@ interface AssetStudioDraftState {
   failSave: (key: string, id: string, message: StudioFailure,
     options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo'>; step?: string }) => void;
   copyTo: (key: string, destination: string) => void;
+  /** As copyTo, but when `destination` already holds a loaded draft (the
+   * board was opened from the rail while this one was unsaved), that draft
+   * stays, with its epoch and so its Undo, and `merge` folds in what this
+   * one still has to send (round 6g, review 9 R9-B). */
+  handOver: (key: string, destination: string,
+    merge: (into: AssetStudioDraftEntry, from: AssetStudioDraftEntry) => Partial<AssetStudioDraftEntry>) => void;
   /** The asset moved (Global <-> a project): drafts kept for it take its new
    * `projectId` and the key of its new scope, so a later save never sends
    * the old one (a board's PUT refuses that) and unsaved edits come along. */
@@ -82,7 +104,22 @@ interface AssetStudioDraftState {
   clearAnalysis: (key: string, id: string) => void;
 }
 
-/** Session continuity only: drafts are never serialized with graphs or credentials. */
+/** `times` with each top-level field `next` changed from `prev` stamped now
+ *  (by reference: an edit replaces what it changes and keeps the rest). */
+function editedAt(prev: unknown, next: unknown, times: Record<string, number> | undefined): Record<string, number> | undefined {
+  if (typeof prev !== 'object' || prev === null || typeof next !== 'object' || next === null) return times;
+  const now = Date.now();
+  let out = times;
+  for (const field of Object.keys(next)) {
+    if ((next as Record<string, unknown>)[field] === (prev as Record<string, unknown>)[field]) continue;
+    out = { ...(out ?? {}), [field]: now };
+  }
+  return out;
+}
+
+/** Session continuity only: drafts are never serialized with graphs or
+ *  credentials. An unsaved board's draft is also kept in this tab's session
+ *  storage, so a reload doesn't lose it (moodboard-studio/unsavedDrafts). */
 export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get) => ({
   entries: {},
   aliases: {},
@@ -101,8 +138,9 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     key = resolveAssetStudioDraftKey(state, key);
     const entry = state.entries[key];
     if (!entry) return {};
-    return { entries: { ...state.entries, [key]: { ...entry, draft: update(entry.draft),
-      revision: entry.revision + 1, dirty: true, saveError: null, retry: null, retryStep: null,
+    const draft = update(entry.draft);
+    return { entries: { ...state.entries, [key]: { ...entry, draft, fieldEditedAt: editedAt(entry.draft, draft, entry.fieldEditedAt),
+      revision: entry.revision + 1, dirty: true, saveError: null, retry: null, retryStep: null, notice: null,
       saveState: entry.pendingSaveId ? 'saving' : 'draft' } } };
   }),
   reset: (key, draft) => set((state) => {
@@ -148,6 +186,23 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
       const aliases = Object.fromEntries(Object.entries(state.aliases)
         .filter(([from]) => from !== destination)
         .map(([from, to]) => [from, to === source ? destination : to]));
+      return { entries, aliases: { ...aliases, [source]: destination, [key]: destination } };
+    });
+  },
+  handOver: (key, destination, merge) => {
+    const source = resolveAssetStudioDraftKey(get(), key);
+    const from = get().entries[source];
+    const into = get().entries[destination];
+    if (!from || source === destination) return;
+    if (!into?.loaded) {
+      get().copyTo(key, destination);
+      return;
+    }
+    set((state) => {
+      const entries = { ...state.entries, [destination]: { ...into, ...merge(into, from) } }; delete entries[source];
+      const aliases = Object.fromEntries(Object.entries(state.aliases)
+        .filter(([alias]) => alias !== destination)
+        .map(([alias, to]) => [alias, to === source ? destination : to]));
       return { entries, aliases: { ...aliases, [source]: destination, [key]: destination } };
     });
   },

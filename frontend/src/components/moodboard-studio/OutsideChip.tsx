@@ -7,7 +7,7 @@ import { isStudioShortcutTarget } from './studioKeys';
 import type { OutsideTiles } from './BoardCanvas';
 
 import { CHIP_EDGE, outsideChipText, placeChip } from './outsideChipText';
-import { outsideForChip } from '../../lib/boardPlacement';
+import { outsideForChip, type SeenArea } from '../../lib/boardPlacement';
 
 /**
  * The reveal for tiles placed outside the view (GM - Design, #210 answer 1):
@@ -28,10 +28,12 @@ import { outsideForChip } from '../../lib/boardPlacement';
  * it, or to the board; and if the chip goes for any other reason while it
  * has focus, focus goes to the board. Never to the page body.
  */
-export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
+export function OutsideChip({ tiles, viewOf, seenOf, onShow, onDone, focusBoard }: {
   tiles: OutsideTiles;
   /** The view placement uses, in board coordinates, or null before the board has a size. */
   viewOf: () => NodeRect | null;
+  /** What of the board is really seen (GM r15 2), which the chip goes by; left out, the view. */
+  seenOf?: () => SeenArea | null;
   onShow: (rects: NodeRect[], focus: boolean) => void;
   onDone: () => void;
   focusBoard: () => void;
@@ -41,7 +43,8 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
   const view = width > 0 && height > 0 && zoom > 0 ? viewOf() : null;
-  const inView = view !== null && tiles.rects.every((rect) => !outsideForChip(rect, view));
+  const seen = view !== null ? seenOf?.() ?? view : null;
+  const inView = seen !== null && tiles.rects.every((rect) => !outsideForChip(rect, seen));
 
   // One polite announcement: the live region mounts empty and gets its words after.
   const [said, setSaid] = useState('');

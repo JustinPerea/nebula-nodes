@@ -222,6 +222,29 @@ describe('GM r13: the half-area rule', () => {
   });
 });
 
+describe('round 6g: the chip goes by what is seen (GM r15 2)', () => {
+  const pill = { x: 0, y: 600, width: 400, height: 80 };
+  const seenMount = (tile: { x: number; y: number; width: number; height: number }) => {
+    const onDone = vi.fn();
+    render(
+      <ReactFlowProvider initialWidth={1000} initialHeight={700}>
+        <OutsideChip tiles={{ id: 9, rects: [tile], thumb: null }} viewOf={() => ({ x: 0, y: 0, width: 1000, height: 600 })}
+          seenOf={() => ({ view: { x: 0, y: 0, width: 1000, height: 700 }, covers: [pill] })}
+          onShow={vi.fn()} onDone={onDone} focusBoard={vi.fn()} />
+      </ReactFlowProvider>,
+    );
+    return onDone;
+  };
+  it('a tile wholly on screen beside the pill, below the toolbar\'s line, is seen: the chip goes at once (review 9 r9-area-045)', () => {
+    expect(seenMount({ x: 576, y: 560, width: 217, height: 140 })).toHaveBeenCalledTimes(1);
+  });
+  it('the same tile under the pill keeps the chip', () => {
+    const onDone = seenMount({ x: 100, y: 560, width: 217, height: 140 });
+    expect(screen.getByRole('button', { name: /Added outside/ })).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
 describe('GM r13: where the chip sits and where its arrow points', () => {
   const pane = { width: 1000, height: 700 };
   const view = { x: 0, y: 0, width: 1000, height: 700 };

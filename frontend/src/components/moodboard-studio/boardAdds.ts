@@ -139,6 +139,15 @@ function writePending(list: PendingAdd[]) {
     else window.sessionStorage.removeItem(PENDING_KEY);
   } catch { /* no storage: nothing kept */ }
 }
+/**
+ * Unsaved boards whose create got no answer and waited for Nebula (round
+ * 6g, GM r15 4), by draft key: a create is a background send now that it
+ * carries its id (a resend can't make a second board). Cut off with Nebula
+ * then offline, it waits with no line (the banner says so) and goes again
+ * once on reconnect; if that resend fails too, the board says the neutral
+ * line. The Studio's createWaits keeps it.
+ */
+export const createsWaited = new Set<string>();
 // Adds on boards not saved yet, by board, until the board has an id.
 const unsavedPending = new Map<BoardRef, Array<{ id: string; name: string; at: number }>>();
 /** Files on their way to the board `board` names, by holder id. */
@@ -219,7 +228,7 @@ const isNumber = (value: unknown): value is number => typeof value === 'number' 
 const isOptional = (value: unknown, check: (value: unknown) => boolean) => value === undefined || check(value);
 const isString = (value: unknown): value is string => typeof value === 'string';
 /** Whether `op` has the shape of a MoodboardOp (lib/moodboardEdits). */
-function isOpShape(op: unknown): op is MoodboardOp {
+export function isOpShape(op: unknown): op is MoodboardOp {
   if (!isRecord(op)) return false;
   switch (op.op) {
     case 'add':
@@ -303,6 +312,7 @@ export function resetBoardAdds() {
   openBoard = null;
   refs.clear();
   unsavedPending.clear();
+  createsWaited.clear();
   claims.length = 0;
   turn = Promise.resolve();
   useBoardAddStore.setState({ held: [] });

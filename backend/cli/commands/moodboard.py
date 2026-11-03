@@ -515,6 +515,11 @@ def run(client: NebulaClient, args) -> None:
             if args.json:
                 _print_json(boards.brief(board))
                 return
+            if board.get("repeated") is True:
+                count = len(board.get("images") or [])
+                print(f"{boards.repeated_line(board)} Its id is {board.get('id')}, with {count} "
+                      f"image{'' if count == 1 else 's'}. It's in Moodboard Studio.")
+                return
             print(f"Made {board.get('name')} ({board.get('id')}) with "
                   f"{_added_line(len(board.get('images') or []), skipped)}. It's in Moodboard Studio.")
         elif verb == "add":
@@ -700,7 +705,9 @@ def add_parser(sub) -> None:
     new_p.add_argument("--notes", help="Notes for the whole board")
     new_p.add_argument("--request-id", dest="request_id",
                        help="Your own id for this create (8 to 128 letters, digits, '-' or '_'). Run again "
-                            "with the same id, it gives back the board the first run made instead of a second one")
+                            "with the same id, it gives back the board the first run made instead of a second "
+                            "one, whatever the name and images say. Use a new id for each board; an id used "
+                            "in another project is refused")
     new_p.add_argument("--json", action="store_true", help="Print JSON")
 
     add_p = msub.add_parser("add", help="Add files, folders and links to a board")

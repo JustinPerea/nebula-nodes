@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
-import { boardNotSavedLine, boardSaveCause, boardSaveFailure, isBoardNotSavedLine, isCreateIdRefusal } from './boardSaveLine';
+import { CREATE_ID_REFUSED_LINE, boardNotSavedLine, boardSaveCause, boardSaveFailure, isBoardNotSavedLine, isCreateIdRefusal } from './boardSaveLine';
 
 const failed = (status: number, detail?: unknown) => new RequestFailedError("Couldn't save the board.", status, { reason: 'x', detail });
 
@@ -52,12 +52,21 @@ describe('a failed create (round 6f, GM r14)', () => {
     const refusal = failed(422, "requestId must be 8 to 128 letters, digits, '-' or '_'");
     expect(isCreateIdRefusal(refusal)).toBe(true);
     expect(isBoardNotSavedLine(boardSaveFailure(refusal))).toBe(false);
-    expect(boardSaveFailure(refusal)).toMatchObject({ heading: "Couldn't save the board." });
+    expect(boardSaveFailure(refusal)).toEqual({ heading: '', reason: CREATE_ID_REFUSED_LINE });
+    // The because form, no "Try again" (round 6g, 7b).
+    expect(CREATE_ID_REFUSED_LINE).toMatch(/^Nebula couldn’t save the board because /);
+    expect(CREATE_ID_REFUSED_LINE).not.toMatch(/Try again/);
     // FastAPI's own field list naming it counts too; a 422 on anything else, or another status naming it, doesn't.
     expect(isCreateIdRefusal(failed(422, [{ loc: ['body', 'requestId'], msg: 'bad' }]))).toBe(true);
     expect(isCreateIdRefusal(failed(422, 'name must be a string'))).toBe(false);
     expect(isCreateIdRefusal(failed(400, 'requestId is wrong'))).toBe(false);
     expect(isCreateIdRefusal(failed(422, 'requestIdentity'))).toBe(false);
     expect(isCreateIdRefusal(new Error('requestId'))).toBe(false);
+    // An id another project's board was made with: the backend's 409 with its code (round 6g); any other 409 isn't.
+    const scope = new RequestFailedError("Couldn't save the board.", 409, { detail: 'This request id already made a board in another project (or in Global). Use a new request id for this board.', code: 'request_id_scope' });
+    expect(isCreateIdRefusal(scope)).toBe(true);
+    expect(boardSaveFailure(scope)).toEqual({ heading: '', reason: CREATE_ID_REFUSED_LINE });
+    expect(isCreateIdRefusal(new RequestFailedError("Couldn't save the board.", 409, { detail: 'requestId', code: 'version_conflict' }))).toBe(false);
+    expect(isCreateIdRefusal(new RequestFailedError("Couldn't save the board.", 409, { detail: 'locked' }))).toBe(false);
   });
 });
