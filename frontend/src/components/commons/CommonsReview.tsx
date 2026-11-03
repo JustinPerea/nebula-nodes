@@ -43,6 +43,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   const line = useCommonsLine(setError, '', 'commons.review-load', loadAgain);
   // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
   useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
+  /** Round 18l (GM r43 Q7): how many of the poll's reads have answered (the close dialog's grade wait). */
+  const [pollReads, setPollReads] = useState(0);
   const [index, setIndex] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
@@ -65,7 +67,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
       const version = ++requestVersion.current;
       return api.get().then((value) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
-          setBatch(value); setAnswered(true); setError('');
+          setBatch(value); setAnswered(true); setError(''); setPollReads((n) => n + 1);
         }
       }, (e: unknown) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
@@ -190,8 +192,12 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     </div>}
     <footer className="review-footer"><p>Agent proposals and your decisions are saved separately. This is assisted review, not an independent blind accuracy score.</p>
       {batch?.state === 'closed' && <p className="evaluation-hash" role="status">Closed as assisted review · {batch.closed_at ? new Date(batch.closed_at).toLocaleString() : ''} · SHA-256: {batch.close_hash}</p>}
+      {/* Round 18l (review 17 MEDIUM-2, GM r43 Q7): the opener is natively disabled while busy; inside
+          the dialog the same state is an aria lock with its line, and the grade wait follows this
+          pane's 5 s poll. */}
       {batch?.state === 'open' && <CommonsCloseBatch revision={batch.batch_revision} assisted reviewed={reviewed} total={batch.items.length}
-        disabled={dirty || !!saving || !!running} onClosed={(closed) => {
+        disabled={dirty || !!saving || !!running} lock={running ? 'grade' : dirty || saving ? 'edits' : null}
+        gradePoll={{ running: !!batch.items.some((i) => i.status === 'running'), reads: pollReads }} onClosed={(closed) => {
           // The close has committed: show it now, then reload. A failed reload is left to the poll.
           const version = ++requestVersion.current;
           setBatch((b) => b && { ...b, state: closed.state, batch_revision: closed.revision, close_hash: closed.close_hash,

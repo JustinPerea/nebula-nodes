@@ -13,21 +13,32 @@
  *    itself. Offline: no line, the close aria-disabled with the offline row as its reason.
  * 3. CommonsCloseBatch words its line only through closeBatchFailedLine (lib/errorCopy): no
  *    failureMessage, no heading-and-reason form.
+ * 4. Round 18l (review 17, GM r42, r43): the 401 line follows the tab's held state; while the close
+ *    is out it is aria-busy and aria-disabled, focusable, its label "Closing…" after 300 ms, Cancel
+ *    and Escape aria-disabled; 30 s without an answer re-reads the batch; Escape and Cancel give
+ *    focus back to the opener; the parent's busy state is an aria lock with its line; with a lock
+ *    line and offline both reasons, the line first, the row once it shows; a retry line goes
+ *    offline for good; the grade wait follows the pane's poll and stops offline.
+ * Focus here is asserted under tests/helpers/focusFixup (Chrome's focus fixup).
  * The table below is the one GM rules (scratchpad pr204-r18k-strings.md is written from it).
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineLook, NEUTRAL } from './helpers/lineLook';
+import { cascaded } from './helpers/cssCascade';
 
-const api = vi.hoisted(() => ({ close: vi.fn() }));
+const api = vi.hoisted(() => ({ close: vi.fn(), get: vi.fn() }));
 const reviewApi = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: reviewApi }));
 
-const { CommonsCloseBatch, GRADE_WAIT_MS } = await import('../src/components/commons/CommonsCloseBatch');
+const { CommonsCloseBatch, GRADE_WAIT_MS, CLOSING_LABEL_MS, CLOSE_TIMEOUT_MS, EDITS_LOCK_LINE } = await import('../src/components/commons/CommonsCloseBatch');
+const { StudioOfflineRow } = await import('../src/components/StudioOfflineRow');
+const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { CommonsRequestError } = await import('../src/lib/commonsRequestError');
-const { copyForStatus, closeBatchFailedLine, CLOSE_GRADE_RUNNING } = await import('../src/lib/errorCopy');
+const { copyForStatus, closeBatchFailedLine, CLOSE_GRADE_RUNNING, CLOSE_NO_RESPONSE } = await import('../src/lib/errorCopy');
 const { STUDIO_OFFLINE_LINE_ID } = await import('../src/lib/useBackendOffline');
 const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
@@ -68,11 +79,21 @@ export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'li
     'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
   ['403, a foreign Host (local_guard)', 403, 'Host not allowed',
     'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
-  ['Commons off', 404, 'Commons is disabled',
+  // Tested-only (GM r43 Q5): in the app a 404 "Commons is disabled" switches the Commons to its off
+  // view and the dialog unmounts with the pane (tests/presenceRound18l.closeOff), so this line
+  // shows only where the dialog renders alone.
+  ['Commons off (tested-only)', 404, 'Commons is disabled',
     'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to close this batch.', 'locked'],
 ];
-/** 401: the Commons API turns every 401 into a refusal for this tab (lib/commonsApi sessionLost). */
+/** 401: the Commons API turns every 401 into a refusal for this tab (lib/commonsApi sessionLost).
+ * GM r42: the line follows the tab's held state, not the status: a held tab isn't connected as you
+ * (it clears on the promote), any other is signed out. Both lock the close. */
 const SIGNED_OUT = 'Nebula couldn’t close the batch because you’re signed out. Open the link Nebula printed when it started.';
+const HELD = 'Nebula couldn’t close the batch because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+export const CLOSE_401_LINES: Array<[string, boolean, string]> = [
+  ['401, a held tab (not connected as you)', true, HELD],
+  ['401, a tab not held (signed out)', false, SIGNED_OUT],
+];
 
 /** The two panes' dialogs. */
 const PANES = [
@@ -80,8 +101,22 @@ const PANES = [
   { pane: 'Agent review', assisted: true, open: 'Close review & resume library analysis…', confirm: 'Close as assisted review' },
 ] as const;
 
-beforeEach(() => { document.body.className = 'app-slava-restraint'; vi.spyOn(console, 'warn').mockImplementation(() => {}); });
-afterEach(() => { cleanup(); resetLinesForTests(); vi.restoreAllMocks(); document.body.className = ''; });
+/** Let a failure's effects commit under fake timers, then advance. */
+const settle = (ms = 10) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+/** The studio's offline row opens 1 s after Nebula goes offline (StudioOfflineRow), plus a frame. */
+const STUDIO_ROW_MS = 1_100;
+
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+const fixup = withFocusFixup();
+beforeEach(() => {
+  document.body.className = 'app-slava-restraint';
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  api.close.mockReset(); api.get.mockReset(); reviewApi.get.mockReset();
+});
+afterEach(() => {
+  cleanup(); resetLinesForTests(); vi.restoreAllMocks(); document.body.className = '';
+  act(() => resetBackendConnectionForTests()); resetPersonSessionForTests(); vi.useRealTimers();
+});
 
 describe('a failed close, in either pane: the because form, curly, neutral (GM r40)', () => {
   it('every reason reads as listed', () => {
@@ -110,23 +145,56 @@ describe('a failed close, in either pane: the because form, curly, neutral (GM r
     });
   }
 
-  it('401: the Commons API makes it a refusal for this tab; the line says signed out and locks the close', async () => {
-    expect(closeBatchFailedLine(new CommonsRequestError('x', 401, { heading: 'Couldn’t close the batch.', code: 'person_required' }))).toBe(SIGNED_OUT);
-    expect(closeBatchFailedLine(failed(401, 'invalid UI session token'))).toBe(SIGNED_OUT);
-    api.close.mockRejectedValue(new CommonsRequestError('x', 401, { heading: 'Couldn’t close the batch.', code: 'person_required' }));
-    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
-    fireEvent.click(screen.getByText('Close without sealing…'));
-    const close = screen.getByText('Close without sealing');
-    close.focus();
-    fireEvent.click(close);
-    const box = await screen.findByText(SIGNED_OUT);
-    expectState(close, box.closest('[data-commons-line]')!, 'locked', '401');
+  it('401: the line follows the held state (GM r42); both lock the close', () => {
+    const refusal = new CommonsRequestError('x', 401, { heading: 'Couldn’t close the batch.', code: 'person_required' });
+    for (const [why, held, line] of CLOSE_401_LINES) {
+      expect(closeBatchFailedLine(refusal, held), why).toBe(line);
+      expect(closeBatchFailedLine(failed(401, 'invalid UI session token'), held), why).toBe(line);
+    }
+    // The default reads the gate's live state.
+    expect(closeBatchFailedLine(refusal)).toBe(SIGNED_OUT);
+    act(() => reportPersonRequired());
+    expect(closeBatchFailedLine(refusal)).toBe(HELD);
+  });
+
+  for (const [why, held, line] of CLOSE_401_LINES) {
+    it(`${why}: the line, the close locked${held ? ', and live again once the line clears on the promote' : ''}`, async () => {
+      if (held) act(() => reportPersonRequired());
+      api.close.mockRejectedValue(new CommonsRequestError('x', 401, { heading: 'Couldn’t close the batch.', code: 'person_required' }));
+      render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+      fireEvent.click(screen.getByText('Close without sealing…'));
+      const close = screen.getByText('Close without sealing');
+      close.focus();
+      fireEvent.click(close);
+      const box = await screen.findByText(line);
+      expectState(close, box.closest('[data-commons-line]')!, 'locked', why);
+      if (!held) return;
+      act(() => notePersonPromoted());
+      expect(screen.queryByText(line)).toBeNull();
+      expect(close.getAttribute('aria-disabled'), why).toBeNull();
+      expect(document.activeElement, why).toBe(close);
+    });
+  }
+
+  it('NIT-1: an exception from Nebula itself keeps the request line, and goes to the console', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(closeBatchFailedLine(new TypeError('x is undefined'))).toBe('Nebula couldn’t close the batch because the server didn’t accept the request. Try again.');
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockClear();
+    closeBatchFailedLine(failed(422));
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('N12: the 409 reasons are read only from a 409', () => {
+    expect(closeBatchFailedLine(failed(422, 'A grading attempt is still running. Close after it finishes.')))
+      .toBe('Nebula couldn’t close the batch because the server didn’t accept the request. Try again.');
   });
 });
 
 /** The close button's state beside its line: live, or aria-disabled with the line as its reason,
  * focus kept on it, a press doing nothing; Cancel live either way. */
 function expectState(close: HTMLElement, box: Element, state: 'live' | 'locked', why: string) {
+  act(() => fixup.current().flush());
   expect(document.activeElement, why).toBe(close);
   const cancel = screen.getByText('Cancel');
   expect(cancel.hasAttribute('disabled') || cancel.getAttribute('aria-disabled') === 'true', why).toBe(false);
@@ -138,6 +206,8 @@ function expectState(close: HTMLElement, box: Element, state: 'live' | 'locked',
   expect(close.hasAttribute('disabled'), why).toBe(false);
   expect(close.getAttribute('aria-describedby'), why).toBe(box.id);
   expect(box.id, why).not.toBe('');
+  // N15: the locked close dims (GM r41: "chrome dims"), by the shared rule.
+  expect(cascaded(close).get('|opacity')?.value, why).toBe('var(--sr-disabled-opacity)');
   const calls = api.close.mock.calls.length;
   fireEvent.click(close);
   expect(api.close.mock.calls.length, why).toBe(calls);
@@ -189,24 +259,370 @@ describe('the close waits for a running grade, and offline (GM r41)', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('offline: no line; the close is aria-disabled with the offline row as its reason, Cancel live', async () => {
-    api.close.mockReset();
-    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+  it('offline: no line; the close is aria-disabled, its reason the offline row once that shows (LOW-1); Cancel live', async () => {
+    vi.useFakeTimers();
+    render(<><StudioOfflineRow /><CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} /></>);
     fireEvent.click(screen.getByText('Close without sealing…'));
     const close = screen.getByText('Close without sealing');
     close.focus();
     act(() => noteBackendConnection('offline'));
-    try {
-      expect(close.getAttribute('aria-disabled')).toBe('true');
-      expect(close.hasAttribute('disabled')).toBe(false);
-      expect(close.getAttribute('aria-describedby')).toBe(STUDIO_OFFLINE_LINE_ID);
-      expect(document.activeElement).toBe(close);
-      fireEvent.click(close);
-      expect(api.close).not.toHaveBeenCalled();
-      expect(document.querySelector('[data-commons-line]')).toBeNull();
-      expect(screen.getByText('Cancel').hasAttribute('disabled')).toBe(false);
-    } finally { act(() => resetBackendConnectionForTests()); }
+    expect(close.getAttribute('aria-disabled')).toBe('true');
+    expect(close.hasAttribute('disabled')).toBe(false);
+    // The row opens after 1 s: until then the close points at nothing that isn't there.
+    expect(close.getAttribute('aria-describedby')).toBeNull();
+    await settle(STUDIO_ROW_MS);
+    expect(close.getAttribute('aria-describedby')).toBe(STUDIO_OFFLINE_LINE_ID);
+    // N14: the row is the element the id names.
+    expect(document.getElementById(STUDIO_OFFLINE_LINE_ID)?.closest('.studio-offline-row')).not.toBeNull();
+    act(() => fixup.current().flush());
+    expect(document.activeElement).toBe(close);
+    fireEvent.click(close);
+    expect(api.close).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-commons-line]')).toBeNull();
+    expect(screen.getByText('Cancel').hasAttribute('disabled')).toBe(false);
+    act(() => resetBackendConnectionForTests());
     expect(close.getAttribute('aria-disabled')).toBeNull();
+    expect(close.getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('own check (Blind labeling): it stops offline and starts again online (LOW-2)', async () => {
+    vi.useFakeTimers();
+    reviewApi.get.mockImplementation(async () => ({ items: [{ status: 'running' }] }));
+    api.close.mockRejectedValue(failed(409, 'A grading attempt is still running. Close after it finishes.'));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+    act(() => noteBackendConnection('offline'));
+    await settle(GRADE_WAIT_MS * 3);
+    expect(reviewApi.get).not.toHaveBeenCalled();
+    // A lock line is still true offline: it stays (GM r43 Q4).
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+    act(() => resetBackendConnectionForTests());
+    await settle(GRADE_WAIT_MS);
+    expect(reviewApi.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('N22: only the grade line waits; another lock line never asks', async () => {
+    vi.useFakeTimers();
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle();
+    await settle(GRADE_WAIT_MS * 3);
+    expect(reviewApi.get).not.toHaveBeenCalled();
+  });
+
+  it('N5: a check that answers after Cancel never clears the next line', async () => {
+    vi.useFakeTimers();
+    let answer: (value: unknown) => void = () => {};
+    reviewApi.get.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    api.close.mockRejectedValueOnce(failed(409, 'A grading attempt is still running. Close after it finishes.'));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle();
+    await settle(GRADE_WAIT_MS);
+    expect(reviewApi.get).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    api.close.mockRejectedValueOnce(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle();
+    const sealed = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
+    expect(screen.getByRole('alert').textContent).toBe(sealed);
+    await act(async () => { answer({ items: [] }); });
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(sealed);
+  });
+});
+
+describe('the grade wait follows Agent review\'s own poll (GM r43 Q7)', () => {
+  it('the line goes on the first poll read after it that sees no grade running; the dialog asks nothing itself', async () => {
+    vi.useFakeTimers();
+    api.close.mockRejectedValue(failed(409, 'A grading attempt is still running. Close after it finishes.'));
+    const view = (running: boolean, reads: number) => <CommonsCloseBatch revision={1} assisted disabled={false}
+      gradePoll={{ running, reads }} onClosed={vi.fn()} />;
+    const { rerender } = render(view(true, 0));
+    fireEvent.click(screen.getByText('Close review & resume library analysis…'));
+    const close = screen.getByText('Close as assisted review');
+    close.focus();
+    fireEvent.click(close);
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+    // While the line shows, the dialog asks nothing itself: the pane's poll is the check.
+    await settle(GRADE_WAIT_MS * 2);
+    expect(reviewApi.get).not.toHaveBeenCalled();
+    // No new read yet: what the pane saw before the line doesn't count.
+    rerender(view(false, 0));
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+    rerender(view(true, 1));
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+    rerender(view(false, 2));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(close.getAttribute('aria-disabled')).toBeNull();
+    act(() => fixup.current().flush());
+    expect(document.activeElement).toBe(close);
+    await settle(GRADE_WAIT_MS * 3);
+    expect(reviewApi.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('while the close is out (review 17 MEDIUM-1, GM r43 Q1)', () => {
+  for (const { pane, assisted, open, confirm } of PANES) {
+    it(`${pane}: aria-busy and aria-disabled, focusable, focus kept; "Closing…" after 300 ms; Cancel and Escape do nothing`, async () => {
+      vi.useFakeTimers();
+      let fail: (error: unknown) => void = () => {};
+      api.close.mockImplementation(() => new Promise((_resolve, reject) => { fail = reject; }));
+      render(<CommonsCloseBatch revision={1} assisted={assisted} reviewed={0} total={15} disabled={false} onClosed={vi.fn()} />);
+      fireEvent.click(screen.getByText(open));
+      const close = screen.getByText(confirm);
+      const cancel = screen.getByText('Cancel');
+      close.focus();
+      fireEvent.click(close);
+      await settle();
+      expect(close.getAttribute('aria-busy'), pane).toBe('true');
+      expect(close.getAttribute('aria-disabled'), pane).toBe('true');
+      expect(close.hasAttribute('disabled'), pane).toBe(false);
+      expect(cancel.getAttribute('aria-disabled'), pane).toBe('true');
+      expect(cancel.hasAttribute('disabled'), pane).toBe(false);
+      expect(close.id, pane).not.toBe('');
+      expect(cancel.getAttribute('aria-describedby'), pane).toBe(close.id);
+      act(() => fixup.current().flush());
+      expect(document.activeElement, pane).toBe(close);
+      // The label stays for 300 ms.
+      await settle(CLOSING_LABEL_MS - 20);
+      expect(close.textContent, pane).toBe(confirm);
+      await settle(20);
+      expect(close.textContent, pane).toBe('Closing…');
+      // Presses do nothing: no second close, no Cancel, no Escape.
+      fireEvent.click(close);
+      expect(api.close, pane).toHaveBeenCalledTimes(1);
+      fireEvent.click(cancel);
+      fireEvent.keyDown(close, { key: 'Escape' });
+      expect(screen.getByRole('alertdialog'), pane).toBeTruthy();
+      // The answer: the label back, both live, focus still on the close.
+      await act(async () => { fail(failed(503)); });
+      await settle();
+      expect(close.textContent, pane).toBe(confirm);
+      expect(close.getAttribute('aria-busy'), pane).toBeNull();
+      expect(close.getAttribute('aria-disabled'), pane).toBeNull();
+      expect(cancel.getAttribute('aria-disabled'), pane).toBeNull();
+      expect(cancel.getAttribute('aria-describedby'), pane).toBeNull();
+      act(() => fixup.current().flush());
+      expect(document.activeElement, pane).toBe(close);
+    });
+  }
+
+  it('an answer inside 300 ms never shows "Closing…"', async () => {
+    vi.useFakeTimers();
+    let fail: (error: unknown) => void = () => {};
+    api.close.mockImplementation(() => new Promise((_resolve, reject) => { fail = reject; }));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    const close = screen.getByText('Close without sealing');
+    fireEvent.click(close);
+    await settle(100);
+    await act(async () => { fail(failed(503)); });
+    await settle(CLOSING_LABEL_MS * 2);
+    expect(close.textContent).toBe('Close without sealing');
+  });
+
+  const hang = () => api.close.mockImplementation((_revision: number, signal: AbortSignal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+  }));
+
+  it('30 s without an answer: the batch read back closed is a success', async () => {
+    vi.useFakeTimers();
+    hang();
+    api.get.mockResolvedValue({ state: 'closed', revision: 2 });
+    const onClosed = vi.fn();
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={onClosed} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle(CLOSE_TIMEOUT_MS - 100);
+    expect(api.get).not.toHaveBeenCalled();
+    await settle(200);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(onClosed).toHaveBeenCalledWith({ state: 'closed', revision: 2 });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  for (const [why, read] of [['read back open', async () => ({ state: 'open' })], ['the read failing too', async () => { throw failed(503); }]] as const) {
+    it(`30 s without an answer, ${why}: "the server didn’t respond. Try again.", the close and Cancel live`, async () => {
+      vi.useFakeTimers();
+      hang();
+      api.get.mockImplementation(read);
+      const onClosed = vi.fn();
+      render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={onClosed} />);
+      fireEvent.click(screen.getByText('Close without sealing…'));
+      const close = screen.getByText('Close without sealing');
+      close.focus();
+      fireEvent.click(close);
+      await settle(CLOSE_TIMEOUT_MS + 100);
+      expect(screen.getByRole('alert').textContent).toBe(CLOSE_NO_RESPONSE);
+      expect(onClosed).not.toHaveBeenCalled();
+      expect(close.getAttribute('aria-disabled')).toBeNull();
+      expect(close.getAttribute('aria-busy')).toBeNull();
+      expect(screen.getByText('Cancel').getAttribute('aria-disabled')).toBeNull();
+      act(() => fixup.current().flush());
+      expect(document.activeElement).toBe(close);
+    });
+  }
+
+  it('the close sends its abort signal, and an answer in time clears the timer', async () => {
+    vi.useFakeTimers();
+    api.close.mockResolvedValue({ state: 'closed' });
+    render(<CommonsCloseBatch revision={7} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await settle();
+    expect(api.close).toHaveBeenCalledWith(7, expect.any(AbortSignal));
+    expect((api.close.mock.calls[0][1] as AbortSignal).aborted).toBe(false);
+    await settle(CLOSE_TIMEOUT_MS * 2);
+    expect((api.close.mock.calls[0][1] as AbortSignal).aborted).toBe(false);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('Escape and Cancel (GM r43 Q6, review 17 LOW-4)', () => {
+  for (const how of ['Escape', 'Cancel'] as const) {
+    it(`${how} closes the dialog with no call, and focus goes back to the opener`, () => {
+      render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+      fireEvent.click(screen.getByText('Close without sealing…'));
+      expect(document.activeElement?.textContent).toBe('Cancel');
+      if (how === 'Escape') fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+      else fireEvent.click(screen.getByText('Cancel'));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(api.close).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(screen.getByText('Close without sealing…'));
+    });
+  }
+
+  it('offline, the opener outside the dialog is natively disabled (the dialog\'s close never is)', () => {
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    act(() => noteBackendConnection('offline'));
+    expect((screen.getByText('Close without sealing…') as HTMLButtonElement).disabled).toBe(true);
+    act(() => resetBackendConnectionForTests());
+    expect((screen.getByText('Close without sealing…') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('another key does nothing; Escape stops at the dialog', () => {
+    const outer = vi.fn();
+    render(<div onKeyDown={outer}><CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} /></div>);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Enter' });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+    expect(outer.mock.calls.filter(([event]) => (event as KeyboardEvent).key === 'Escape')).toEqual([]);
+  });
+
+  it('N8: Cancel takes the line with it: reopened, no line and the close live', async () => {
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    fireEvent.click(screen.getByText('Close without sealing'));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Close without sealing').getAttribute('aria-disabled')).toBeNull();
+  });
+});
+
+describe('the parent\'s busy state inside the dialog is an aria lock with its line (review 17 MEDIUM-2)', () => {
+  const view = (lock: 'grade' | 'edits' | null) => <CommonsCloseBatch revision={1} assisted disabled={false} lock={lock} onClosed={vi.fn()} />;
+
+  it('Agent review, a grade running: the grade line, the close locked, focusable, focus kept; live again after', () => {
+    const { rerender } = render(view(null));
+    fireEvent.click(screen.getByText('Close review & resume library analysis…'));
+    const close = screen.getByText('Close as assisted review');
+    close.focus();
+    rerender(view('grade'));
+    const box = screen.getByRole('alert');
+    expect(box.textContent).toBe(CLOSE_GRADE_RUNNING);
+    expectState(close, box, 'locked', 'grade');
+    rerender(view(null));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(close.getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(close);
+  });
+
+  it('unsaved or saving label edits: locked, focusable, focus kept; no line until GM words it (the controls are not "Save" and "Discard")', () => {
+    expect(EDITS_LOCK_LINE).toBeNull();
+    const { rerender } = render(view(null));
+    fireEvent.click(screen.getByText('Close review & resume library analysis…'));
+    const close = screen.getByText('Close as assisted review');
+    close.focus();
+    rerender(view('edits'));
+    act(() => fixup.current().flush());
+    expect(close.getAttribute('aria-disabled')).toBe('true');
+    expect(close.hasAttribute('disabled')).toBe(false);
+    expect(document.activeElement).toBe(close);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(close);
+    expect(api.close).not.toHaveBeenCalled();
+  });
+
+  it.todo('unsaved label edits: the close\'s lock line, once GM words it for "Save labels" and "Discard unsaved changes"');
+
+  it('a retry line gives way to a parent lock (the close can\'t retry), a lock line stays', async () => {
+    api.close.mockRejectedValue(failed(503));
+    const { rerender } = render(view(null));
+    fireEvent.click(screen.getByText('Close review & resume library analysis…'));
+    fireEvent.click(screen.getByText('Close as assisted review'));
+    await screen.findByRole('alert');
+    rerender(view('edits'));
+    expect(screen.queryByRole('alert')).toBeNull();
+    rerender(view('grade'));
+    expect(screen.getByRole('alert').textContent).toBe(CLOSE_GRADE_RUNNING);
+  });
+});
+
+describe('a lock line and offline together (GM r43 Q3, Q4)', () => {
+  const SEALED = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
+  it('Q3: both reasons, the lock line first, the offline row only once it shows; the line stays through the reconnect', async () => {
+    vi.useFakeTimers();
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    render(<><StudioOfflineRow /><CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} /></>);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    const close = screen.getByText('Close without sealing');
+    close.focus();
+    fireEvent.click(close);
+    await settle();
+    const box = screen.getByRole('alert');
+    expect(box.textContent).toBe(SEALED);
+    act(() => noteBackendConnection('offline'));
+    expect(close.getAttribute('aria-describedby')).toBe(box.id);
+    await settle(STUDIO_ROW_MS);
+    expect(close.getAttribute('aria-describedby')).toBe(`${box.id} ${STUDIO_OFFLINE_LINE_ID}`);
+    for (const id of close.getAttribute('aria-describedby')!.split(' ')) expect(document.getElementById(id), id).not.toBeNull();
+    act(() => resetBackendConnectionForTests());
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(SEALED);
+    expect(close.getAttribute('aria-describedby')).toBe(box.id);
+    expect(close.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('Q4: a retry line goes offline and stays gone after the reconnect: the close live, no line', async () => {
+    vi.useFakeTimers();
+    api.close.mockRejectedValue(failed(503));
+    render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
+    fireEvent.click(screen.getByText('Close without sealing…'));
+    const close = screen.getByText('Close without sealing');
+    fireEvent.click(close);
+    await settle();
+    expect(screen.getByRole('alert').textContent).toMatch(/Try again\.$/);
+    act(() => noteBackendConnection('offline'));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    act(() => resetBackendConnectionForTests());
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(close.getAttribute('aria-disabled')).toBeNull();
+    expect(close.getAttribute('aria-describedby')).toBeNull();
   });
 });
 
@@ -220,7 +636,6 @@ describe('CommonsCloseBatch words its line only through closeBatchFailedLine', (
 
 describe('the close dialog stacks in either pane (GM r40 1)', () => {
   it('the heading, the list, the line, then one row: Cancel, then the close with its look', async () => {
-    const { cascaded } = await import('./helpers/cssCascade');
     for (const { pane, assisted, open, confirm } of PANES) {
       api.close.mockReset().mockRejectedValue(failed(503));
       // Blind labeling's dialog sits among the review's reference rows (.evaluation-review > div).

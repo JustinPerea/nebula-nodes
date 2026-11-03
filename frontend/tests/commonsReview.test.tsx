@@ -59,7 +59,7 @@ it('closes only after confirmation, then reloads the review', async () => {
   expect(api.close).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('Close as assisted review'));
   await screen.findByText(/Closed as assisted review ·/);
-  expect(api.close).toHaveBeenCalledWith(7);
+  expect(api.close).toHaveBeenCalledWith(7, expect.any(AbortSignal));
   expect(screen.queryByText('Close review & resume library analysis…')).toBeNull();
   expect(screen.getAllByText('Agree & next').length).toBeGreaterThan(0);
 });

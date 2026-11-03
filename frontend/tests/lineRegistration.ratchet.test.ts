@@ -119,7 +119,8 @@ interface Shows { file: string; expr: string }
 /** The Commons: their refusals (lib/commonsApi sessionLost, lib/commonsChatAuthority) show here. */
 const COMMONS: Shows[] = [
   { file: 'components/commons/CommonsView.tsx', expr: 'shownError' },
-  { file: 'components/commons/CommonsCloseBatch.tsx', expr: 'error' },
+  // Round 18l: the line shown is `shownLine`, the error or the parent's lock line; a not-connected line locks, so it is always the one shown.
+  { file: 'components/commons/CommonsCloseBatch.tsx', expr: 'shownLine' },
   { file: 'components/commons/CommonsEvaluation.tsx', expr: 'error' },
   { file: 'components/commons/CommonsDetail.tsx', expr: 'error' },
   { file: 'components/commons/CommonsSettings.tsx', expr: 'error' },

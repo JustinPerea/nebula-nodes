@@ -6,6 +6,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 const api = vi.hoisted(() => ({
   getOutsideSpend: vi.fn(),
@@ -55,6 +56,7 @@ afterEach(() => {
   delete (window as unknown as Record<string, unknown>).nebulaDesktop;
 });
 
+const fixup = withFocusFixup();
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
 describe('a control disabled in place while work runs hands focus to the heading and back', () => {
@@ -68,7 +70,7 @@ describe('a control disabled in place while work runs hands focus to the heading
     act(() => select.focus());
     act(() => useSettingsDraftStore.setState((s) => ({ pending: { ...s.pending, agentSpend: true } })));
     expect((select as HTMLSelectElement).disabled).toBe(true);
-    act(() => select.blur()); // Chrome's focus fixup
+    act(() => fixup.current().flush()); // Chrome's focus fixup
     expect(document.activeElement).toBe(document.getElementById('settings-agent-spend-heading'));
     act(() => useSettingsDraftStore.setState({ pending: {} }));
     expect(document.activeElement).toBe(select);
@@ -99,7 +101,7 @@ describe('a control disabled in place while work runs hands focus to the heading
     fireEvent.click(toggle);
     await flush();
     expect((toggle as HTMLInputElement).disabled).toBe(true);
-    act(() => toggle.blur());
+    act(() => fixup.current().flush()); // Chrome's focus fixup
     expect(document.activeElement).toBe(document.getElementById('settings-personal-agents-heading'));
     await act(async () => { finish(); });
     await flush();

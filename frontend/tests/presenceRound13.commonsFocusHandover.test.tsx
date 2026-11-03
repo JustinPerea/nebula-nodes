@@ -8,6 +8,7 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { useFocusHandover } from '../src/hooks/useFocusHandover';
 
 function Pane({ loaded }: { loaded: boolean }) {
@@ -35,6 +36,8 @@ function Harness({ view }: { view: string }) {
   );
 }
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 afterEach(cleanup);
 
 describe('the handover finds an unlabelled field again by the words that label it', () => {

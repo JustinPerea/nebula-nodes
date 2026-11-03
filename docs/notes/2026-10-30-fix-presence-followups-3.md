@@ -3445,3 +3445,114 @@ GM r41: the close strings verbatim, the 403's cause, the lock rule and two wordi
   - vitest on the explicit list: 447 files, 5,871 of 5,871.
   - Backend named tests: 9 of 9.
   - Build: 474,675 B raw / 147,169 B gzip.
+
+## Round 18l
+
+Review 17 (two MEDIUMs, LOWs, NITs) and GM r42/r43.
+
+- **Correction to round 18k's 403 note.** Round 18k said local_guard's 403 can't reach the
+  person's window, because it carries no CORS headers. That holds only when the page and the
+  backend are different origins. When the page is opened by a non-loopback name through the Vite
+  proxy (same origin), the guard's 403 "Host not allowed" reaches the window as an answer, so
+  GM's "this sign-in isn’t allowed to do that" line does show there. No code change.
+- **401 split on the held state (GM r42).** `closeBatchFailedLine(error, held = personGateHeld())`:
+  - held: "Nebula couldn’t close the batch because this tab isn’t connected as you. Open the link
+    Nebula printed when it started." It locks the close and clears on the promote (useCommonsLine
+    registers it), and the close is live again;
+  - not held: "…because you’re signed out. Open the link Nebula printed when it started.";
+  - one ratchet row each (`CLOSE_401_LINES`).
+- **While the close is out (MEDIUM-1, GM r43 Q1).** Nothing in the dialog is natively disabled
+  any more, so Chrome's focus fixup never drops focus to the page.
+  - The close is aria-disabled and aria-busy, stays focusable, and ignores presses.
+  - Its label reads "Closing…" after 300 ms (`CLOSING_LABEL_MS`); an answer inside that never
+    shows it.
+  - Cancel is aria-disabled with aria-describedby the close (whose busy state is the reason);
+    Escape does nothing while closing.
+  - A 30 s client timeout (`CLOSE_TIMEOUT_MS`, an AbortSignal through
+    `commonsEvaluationApi.close`). Then the dialog reads the batch: closed is a success
+    (`onClosed`); otherwise, or if the read fails, "Nebula couldn’t close the batch because the
+    server didn’t respond. Try again." with the close and Cancel live.
+  - Backend: the close was already idempotent (`evaluation.close` returns the closed view before
+    any revision check), so no backend code change. `test_close_retry_after_a_lost_answer_succeeds`
+    pins it: the same close twice, both 200 with the same hash and revision, and still 403
+    without the person's token.
+- **Parent busy state inside the dialog (MEDIUM-2).** `lock: 'grade' | 'edits' | null` is an aria
+  lock with its reason; native `disabled` stays only on the opener outside the dialog. The
+  opener's `disabled`, if a parent sets it with no `lock`, also locks the close (aria).
+  - Agent review, a grade running: the existing grade line.
+  - Unsaved label edits: GM's line names "Save" and "Discard", but the controls are "Save
+    labels", "Save accents & reveal labels" and "Discard unsaved changes" (Blind labeling) and
+    "Save corrections & next" / "Discard changes" (Agent review). So `EDITS_LOCK_LINE` is null:
+    the close locks with no line, and the ratchet has an `it.todo` row for GM's wording.
+  - In Blind labeling the edits lock is likely unreachable with the dialog open: its opener and
+    the "Review batch" toggle are disabled while busy or dirty, and the label form isn't shown in
+    review mode.
+- **Q3.** A lock line plus offline: aria-describedby is "<line> studio-offline-line", line first.
+  The offline row's id is used only once the row shows its line (`useOfflineRowShown`, a small
+  store StudioOfflineRow sets), so nothing points at a missing element in the first second
+  (LOW-1).
+- **Q4.** A retry line goes when Nebula goes offline and doesn't come back after the reconnect;
+  a lock line stays.
+- **Q5.** The "Commons off" row stays in the ratchet, marked tested-only.
+  `presenceRound18l.closeOff` shows that in the app a close answered 404 "Commons is disabled"
+  switches to the off view: the dialog unmounts with the pane and focus is on the Commons heading.
+- **Q6.** Escape is Cancel (it stops at the dialog). Cancel and Escape both give focus back to the
+  opener (live LOW-4).
+- **Q7.** In Agent review the grade wait follows the pane's 5 s poll (`gradePoll`: running, and a
+  read count): the line goes on the first read after it that sees no grade running. Blind
+  labeling keeps the dialog's own check, which stops while offline (LOW-2).
+- **Focus fixup helper.** `tests/helpers/focusFixup.ts`: a MutationObserver on `disabled` and
+  `inert` that blurs the active element as Chrome does (`withFocusFixup()` per file;
+  `installFocusFixup()` returns `flush()` and `disconnect()`).
+  - jsdom's `blur()` does nothing on a disabled element, so the helper lifts `disabled` from the
+    control (or its disabled fieldset) for the blur and puts it back. The 18h tests' hand-written
+    `field.blur()` "as Chrome would" were no-ops for that reason; they now call the helper.
+  - Installed in 22 files: every test file that asserts document.activeElement and renders from
+    components/commons, uses useFocusHandover, renders AgentSpendSection or
+    PersonalAgentsSection, or speaks of the fixup. All passed unchanged with it installed.
+  - Ratchet (`focusFixup.ratchet`): that narrower rule. The literal rule ("any test asserting
+    activeElement after an async action") covers 61 of the 78 files that assert focus, mostly
+    canvas, menus and dialogs where nothing is disabled in place; requiring the helper there is
+    noise. The ratchet also forbids hand-written blurs "as Chrome would".
+- **LOWs and NITs.**
+  - Tile reconnect re-read count pinned: 6 failed tiles, offline and back, read once each, and
+    nothing more while they stay in view (live NIT-2). The observer is disconnected on unmount
+    (N19).
+  - Flag-parens ratchet: `/\([^)]*\bNEBULA_[A-Z0-9_]+/` in both the frontend and backend. In the
+    backend it found 17 strings, all terminal text for the CLI, the dev server and the MCP
+    server ("(default: $NEBULA_URL)", "(or set $NEBULA_APP_TOKEN)"), none in what the app shows.
+    Those three are set aside by file (`TERMINAL_COPY`), for GM to decide in a separate copy
+    pass. The frontend had none.
+  - NIT-1: an exception from Nebula's own code keeps "…didn’t accept the request. Try again."
+    (the step is still right) and logs `console.error` as the bug it is. How the app words its
+    own failures belongs to the app-wide failure-copy PR.
+  - The 8 survivors (N4, N5, N8, N12, N14, N15, N19, N22) have tests.
+  - The lineRegistration ratchet now names `shownLine` as CommonsCloseBatch's registered line.
+- **Try-again ratchet.** #208's shared `tryAgainLine` helper and `tryAgainLines.ratchet` aren't
+  on origin/main yet (still 062fb370), so the close lines keep their own retry assert here and
+  move into the shared ratchet after #208 merges.
+- **Live** (installed Chrome, throwaway profile, 8951/5951, canaries refused, nothing reached a
+  blocked host): 21 of 21, with real key presses (Tab from Cancel to the close, Enter, Space,
+  Escape). Focus stays on the close and is :focus-visible after a 503, through "Closing…", after
+  the answer, and after the 30 s timeout. Escape and Cancel hand focus to the opener. A 401 on a
+  tab not held reads "…signed out…" and locks. Q3 gave reasons [the sealed line, the offline row],
+  and back online only the line. Q4 cleared the retry line offline for good. Agent review's grade
+  lock and its release kept focus.
+  - Finding: demoting the tab with the dialog open replaces the whole pane with its held view, so
+    the dialog unmounts. The held 401 line shows only in the 150 ms before the hold settles; like
+    the Commons-off row, it is in practice tested-only. GM may want that noted on the row.
+  - Shots in the scratchpad's fu3r/shots-r18l: a-close-after-failure, b-closing,
+    c-grade-lock-agent-review. Shot (c) is Agent review's grade lock, because the Blind labeling
+    edits line isn't set.
+- **Mutations.** 47 of 47 killed (L1–L47), covering every new branch and the 8 review survivors.
+  L25 (own check despite the pane's poll) and L44 (the opener's offline disabled) first
+  survived; each now has a test.
+- **Gates.**
+  - tsc -b and npm run lint are clean.
+  - vitest on the explicit list: 450 files, 5,907 passed and 2 failed on the first run
+    (commonsReview expected the old close call without a signal; lineRegistration named `error`
+    as the close's registered line, now `shownLine`). Both were fixed, and their files pass,
+    along with the new tests added after.
+  - Backend named tests (test_commons_evaluation_close, test_flag_parens_copy,
+    test_commons_review), isolated: 21 of 21.
+  - Build: 474,749 B raw / 147,176 B gzip.

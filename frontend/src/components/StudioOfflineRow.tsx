@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isBackendOffline, subscribeBackendConnection } from '../lib/backendConnection';
 import { useOfflinePulse } from '../hooks/useOfflinePulse';
 import { OFFLINE_LINE } from './BackendConnectionStatus';
-import { STUDIO_OFFLINE_LINE_ID } from '../lib/useBackendOffline';
+import { noteOfflineRowShown, STUDIO_OFFLINE_LINE_ID } from '../lib/useBackendOffline';
 
 /** How long Nebula is offline before a studio's row opens (GM, PR #198 r2:
  * "keep the existing offline delay"). The app had none: the canvas's banner
@@ -61,6 +61,12 @@ export function StudioOfflineRow() {
       window.clearTimeout(timer);
     };
   }, []);
+
+  // Round 18l (review 17 LOW-1): a control locked offline points at the line only while it shows.
+  useEffect(() => {
+    noteOfflineRowShown(open);
+    return () => noteOfflineRowShown(false);
+  }, [open]);
 
   useEffect(() => {
     if (!closing) return;

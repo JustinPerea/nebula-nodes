@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import type { LabelingWork, SaveResult } from '../src/components/commons/commonsLeave';
 
 /**
@@ -101,6 +102,8 @@ const home = () => screen.getByRole('button', { name: /^Back to projects|^Saving
 const popover = () => screen.getByRole('alertdialog');
 const popoverButtons = () => within(popover()).getAllByRole('button').map((button) => button.textContent);
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   history.replaceState(null, '', '/#commons');
   useUIStore.setState(initialUI, true);

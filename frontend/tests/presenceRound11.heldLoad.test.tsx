@@ -19,6 +19,7 @@
  * doesn't name them; the token is what the backend refuses).
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { personOnlyRoutes } from './personGatedCallers';
 
@@ -128,6 +129,8 @@ const personOnlySent = () => net.sent.filter((request) => net.personOnly.some((r
 const STORED = { token: 'stale-person-token-0123456789', backend: 'http://127.0.0.1:8000' };
 const stored = () => window.sessionStorage.getItem('nebula.person');
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   net.sent = [];
   net.asPerson = [];

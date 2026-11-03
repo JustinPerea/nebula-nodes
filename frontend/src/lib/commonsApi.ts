@@ -274,8 +274,9 @@ export const commonsEvaluationApi = {
   seal: (revision: number) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
     "Couldn’t seal the labels.", '/evaluation/seal', { revision }),
   /** Ends the batch as assisted review, never blind ground truth; the server requires the acknowledgement. */
-  close: (revision: number) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
-    "Couldn’t close the batch.", '/evaluation/close', { revision, acknowledge_not_blind: true }),
+  // Round 18l (GM r43 Q1): the close dialog gives up after 30 s (its `signal`), then reads the batch.
+  close: (revision: number, signal?: AbortSignal) => call<import('./commonsEvaluationTypes').EvaluationBatch>(
+    "Couldn’t close the batch.", '/evaluation/close', { method: 'POST', body: JSON.stringify({ revision, acknowledge_not_blind: true }), signal }),
 };
 
 export const commonsReviewApi = {

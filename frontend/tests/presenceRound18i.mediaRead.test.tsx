@@ -13,7 +13,8 @@ class FakeObserver {
   constructor(private readonly callback: IntersectionObserverCallback) { FakeObserver.all.push(this); }
   observe(target: Element) { this.targets.add(target); }
   unobserve(target: Element) { this.targets.delete(target); }
-  disconnect() { this.targets.clear(); }
+  disconnected = false;
+  disconnect() { this.targets.clear(); this.disconnected = true; }
   takeRecords() { return []; }
   static report(isIntersecting: boolean) {
     for (const observer of FakeObserver.all) {
@@ -107,4 +108,31 @@ it('media outside a control keeps its Try again button', async () => {
   expect(line()?.textContent).toBe(`${NO_ANSWER} Try again.`);
   // Its own button reads again: nothing watches it scroll.
   expect([...FakeObserver.all].some((observer) => observer.targets.size > 0)).toBe(false);
+});
+
+it('round 18l (review 17 live NIT-2): a reconnect reads each failed tile once, then nothing more', async () => {
+  render(<>{[0, 1, 2, 3, 4, 5].map((n) => <Tile key={n} />)}</>);
+  await waitFor(() => expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(6));
+  expect(reads).toHaveBeenCalledTimes(6);
+  act(() => FakeObserver.report(true));
+  act(() => noteBackendConnection('offline'));
+  act(() => noteBackendConnection('online'));
+  await waitFor(() => expect(reads).toHaveBeenCalledTimes(12));
+  await waitFor(() => expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(6));
+  // Still in view, still failing: no loop, and the observer's own entries add nothing.
+  act(() => FakeObserver.report(true));
+  await settle();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await settle();
+  expect(reads).toHaveBeenCalledTimes(12);
+});
+
+it('round 18l (review 17 logic N19): the tile\'s observer is disconnected on unmount', async () => {
+  const { unmount } = render(<Tile />);
+  await waitFor(() => expect(line()).not.toBeNull());
+  const watching = FakeObserver.all.filter((observer) => observer.targets.size > 0);
+  expect(watching).toHaveLength(1);
+  unmount();
+  expect(watching[0].disconnected).toBe(true);
+  expect(watching[0].targets.size).toBe(0);
 });

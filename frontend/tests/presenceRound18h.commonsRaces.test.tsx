@@ -11,6 +11,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../src/lib/backend', async (o) => ({ ...await o<typeof import('../src/lib/backend')>(), apiFetch: transport.fetch }));
@@ -49,6 +50,8 @@ function base(path: string, init?: RequestInit): Promise<Response> {
   if (path.includes('reanalyze')) return Promise.resolve(json({ queued: 0 }));
   return Promise.resolve(json({}));
 }
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.className = 'app-slava-restraint';

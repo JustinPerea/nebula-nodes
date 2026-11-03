@@ -10,6 +10,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 const net = vi.hoisted(() => ({ sent: [] as string[] }));
 vi.mock('../src/lib/backend', async (original) => {
@@ -42,6 +43,8 @@ const commonsSent = () => net.sent.filter((request) => request.includes('/api/co
 const settle = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); await Promise.resolve(); }); };
 const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); }); };
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
   session.resetPersonSessionForTests();

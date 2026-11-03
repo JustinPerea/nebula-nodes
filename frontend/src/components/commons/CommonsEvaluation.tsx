@@ -236,7 +236,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
         {batch.state === 'open' ? <>{batch.assisted_reviews > 0
           ? <p className="commons-notice" role="status">The agent graded these references before blind labels were sealed, so they can no longer be sealed as blind labels. Close them as assisted review to resume library analysis.</p>
           : <button className="commons-button commons-button--primary" disabled={busy || count !== 15 || readOnly} {...offlineMark(readOnly)} onClick={() => void run(() => api.seal(batch.revision))}>Seal all 15 labels</button>}
-          <CommonsCloseBatch revision={batch.revision} assisted={batch.assisted_reviews > 0} disabled={busy || dirty} onClosed={(value) => { setBatch(value); setDirty(false); }} /></>
+          <CommonsCloseBatch revision={batch.revision} assisted={batch.assisted_reviews > 0} disabled={busy || dirty} lock={busy || dirty ? 'edits' : null} onClosed={(value) => { setBatch(value); setDirty(false); }} /></>
           : batch.state === 'closed' ? <p className="evaluation-hash">Closed · SHA-256: {batch.close_hash}</p>
           : <><p className="evaluation-hash">SHA-256: {batch.seal_hash}</p><button className="commons-button" onClick={() => {
             const url = URL.createObjectURL(new Blob([JSON.stringify({ payload: batch.sealed, sha256: batch.seal_hash }, null, 2)], { type: 'application/json' }));

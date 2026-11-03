@@ -3,8 +3,8 @@
  * control in place. Chrome's focus fixup then drops focus to <body>, and the handover used to act
  * only when the control left the page. Now a control that is disabled, or sits under [inert],
  * counts as gone: focus goes to the heading at once, and on reconnect, while focus is still where
- * the hook put it, back to that very control. jsdom has no focus fixup, so these tests blur the
- * disabled field by hand, as Chrome would.
+ * the hook put it, back to that very control. jsdom has no focus fixup, so these tests install
+ * tests/helpers/focusFixup (round 18l), which blurs a disabled or inert focused control as Chrome does.
  *
  * Review 16 LOW-2: focus never waits on <body> for a line that may come; the heading holds it.
  */
@@ -12,8 +12,10 @@ import { useRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { focusGone, useFocusHandover } from '../src/hooks/useFocusHandover';
+import { withFocusFixup } from './helpers/focusFixup';
 
 afterEach(cleanup);
+const fixup = withFocusFixup();
 
 function Pane({ offline, inert = false, removed = false, line = false }: { offline: boolean; inert?: boolean; removed?: boolean; line?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
@@ -40,14 +42,15 @@ describe('a focused control disabled in place counts as gone', () => {
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
     rerender(<Pane offline />);
-    act(() => field().blur()); // Chrome's focus fixup
+    act(() => fixup.current().flush()); // Chrome's focus fixup (a no-op: focus already moved)
     // The effect ran in the same commit: the field was disabled, so focus is on the heading.
     expect(document.activeElement).toBe(heading());
     rerender(<Pane offline={false} />);
     expect(document.activeElement).toBe(field());
   });
 
-  it('works without the blur too (jsdom keeps focus on a disabled field)', () => {
+  it('works without the fixup too (jsdom alone keeps focus on a disabled field)', () => {
+    fixup.current().disconnect();
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
     rerender(<Pane offline />);
@@ -69,6 +72,7 @@ describe('a focused control disabled in place counts as gone', () => {
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
     rerender(<Pane offline={false} inert />);
+    act(() => fixup.current().flush());
     expect(document.activeElement).toBe(heading());
     rerender(<Pane offline={false} />);
     expect(document.activeElement).toBe(field());
@@ -85,6 +89,7 @@ describe('a focused control disabled in place counts as gone', () => {
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
     rerender(<Pane offline />);
+    act(() => fixup.current().flush());
     rerender(<Pane offline line />);
     expect(document.activeElement).toBe(heading());
     rerender(<Pane offline={false} line />);

@@ -6,6 +6,7 @@
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 const api = vi.hoisted(() => ({ fetchPersonalAgents: vi.fn() }));
 vi.mock('../src/lib/api', async (importOriginal) => ({
@@ -28,6 +29,8 @@ const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) 
 const demote = () => act(() => { session.notePersonPromoted(); session.reportPersonRequired(); });
 const passFrames = async () => { await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve(); }); };
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
   session.resetPersonSessionForTests();

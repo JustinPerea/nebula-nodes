@@ -13,6 +13,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null }));
@@ -105,6 +106,8 @@ const record = () => {
   for (const el of document.querySelectorAll('[aria-label], [title]')) seen += `\n${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('title') ?? ''}`;
 };
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.className = 'app-slava-restraint';

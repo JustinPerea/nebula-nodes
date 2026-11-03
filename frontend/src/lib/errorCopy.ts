@@ -25,7 +25,7 @@
 
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
-import { inDesktopShell, isBeforePromote, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
+import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -235,25 +235,32 @@ export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
 ]);
 /** The 409 a grade still running gives (CLOSE_BECAUSE's first): the close waits for it. */
 export const CLOSE_GRADE_RUNNING = 'Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.';
+/** GM r43 Q1: the close's 30 s ran out and the batch, read again, isn't closed (GM's no-answer line). */
+export const CLOSE_NO_RESPONSE = 'Nebula couldn’t close the batch because the server didn’t respond. Try again.';
 /** GM r41: the Commons turned off. */
 export const CLOSE_COMMONS_OFF = 'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to close this batch.';
 
 /**
  * PR #204 round 18k (GM r41): a failed close's line, in either pane (CommonsCloseBatch). Empty
  * when the failure says nothing (offline: the offline row says it).
- * - 401, and any refusal because this tab isn't the person's (lib/commonsApi sessionLost):
- *   "you’re signed out. Open the link Nebula printed when it started."
+ * - 401, and any refusal because this tab isn't the person's (lib/commonsApi sessionLost), split
+ *   on the tab's held state, not the status (round 18l, GM r42): a held tab (the person is signed
+ *   in, in another tab) "this tab isn’t connected as you. Open the link Nebula printed when it
+ *   started."; otherwise "you’re signed out. Open the link Nebula printed when it started."
  * - 403: the close route's only 403s are an origin or a token problem (services/local_guard's
  *   Host or Origin refusal; routes/commons human_dep, a request without the person's token):
  *   "this sign-in isn’t allowed to do that. Open the link Nebula printed when it started."
  */
-export function closeBatchFailedLine(error: unknown): string {
+export function closeBatchFailedLine(error: unknown, held: boolean = personGateHeld()): string {
   const lead = 'Nebula couldn’t close the batch because';
   const { reason } = failureCopy(error);
   if (!reason) return '';
   const status = error instanceof RequestFailedError ? error.status : null;
   const code = (error as { code?: unknown } | null)?.code;
-  if (code === PERSON_REQUIRED_CODE || status === 401) return `${lead} you’re signed out. Open the link Nebula printed when it started.`;
+  if (code === PERSON_REQUIRED_CODE || status === 401) {
+    return held ? `${lead} this tab isn’t connected as you. Open the link Nebula printed when it started.`
+      : `${lead} you’re signed out. Open the link Nebula printed when it started.`;
+  }
   if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return `${lead} the server isn’t answering. Try again.`;
   if (isCommonsOff(error)) return CLOSE_COMMONS_OFF;
   if (status === 403) return `${lead} this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.`;
@@ -265,6 +272,10 @@ export function closeBatchFailedLine(error: unknown): string {
   const clause = status === 409 ? CLOSE_BECAUSE.get(detail) : undefined;
   if (clause) return `${lead} ${clause}`;
   if (detail) console.warn(`[nebula] Couldn’t close the batch: the backend said "${detail}" (not shown).`);
+  // Round 18l (review 17 logic NIT-1): an exception from Nebula's own code (not a request's
+  // answer) keeps the request line, which still says what to do, and goes to the console as the
+  // bug it is; how the app words its own failures is the app-wide failure-copy PR's.
+  if (!(error instanceof RequestFailedError)) console.error('[nebula] Closing the batch failed in Nebula itself:', error);
   return `${lead} the server didn’t accept the request. Try again.`;
 }
 

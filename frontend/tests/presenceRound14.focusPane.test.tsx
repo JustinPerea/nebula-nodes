@@ -8,8 +8,11 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR, useFocusHandover } from '../src/hooks/useFocusHandover';
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 afterEach(cleanup);
 
 // ── The Commons layout in miniature ────────────────────────────────────────────

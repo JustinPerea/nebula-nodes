@@ -8,6 +8,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null }));
@@ -81,6 +82,8 @@ async function answer(path: string, init?: RequestInit): Promise<Response> {
 const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 const commonsLines = () => [...document.querySelectorAll('[data-commons-line]')].map((line) => line.textContent ?? '');
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.className = 'app-slava-restraint';

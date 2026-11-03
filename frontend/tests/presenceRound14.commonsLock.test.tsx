@@ -12,6 +12,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import type { PersonLock } from '../src/hooks/usePersonLock';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null, created: [] as string[] }));
@@ -82,6 +83,8 @@ const addButton = () => screen.getByRole('button', { name: ADD_NAME });
 let frames: string[][] = [];
 let watcher: MutationObserver | null = null;
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useRealTimers();
   resetPersonSessionForTests();

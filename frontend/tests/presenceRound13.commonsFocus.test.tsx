@@ -14,6 +14,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 const net = vi.hoisted(() => ({ sent: [] as string[] }));
 vi.mock('../src/lib/backend', async (original) => {
@@ -56,6 +57,8 @@ const promote = async () => {
   await settle(50);
 };
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
   session.resetPersonSessionForTests();

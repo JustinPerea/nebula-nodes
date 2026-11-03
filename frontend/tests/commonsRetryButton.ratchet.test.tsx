@@ -11,6 +11,7 @@
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import ts from 'typescript';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -43,6 +44,8 @@ function linesWithoutRetry(source: string, name: string): number {
   return count;
 }
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 afterEach(() => { cleanup(); resetLinesForTests(); });
 
 describe('every Commons line ending "Try again." has the button', () => {
