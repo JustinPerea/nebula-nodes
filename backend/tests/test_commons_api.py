@@ -360,3 +360,112 @@ def test_chat_turn_refuses_to_start_when_output_root_contains_commons(client, mo
     captured, events = _chat_turn(client, 'claude', monkeypatch)
     assert captured == {}
     assert any(e['type'] == 'error' and 'overlaps protected storage' in e['message'] for e in events)
+
+
+def _clear_png() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGBA", (24, 24), (0, 0, 0, 0)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_reanalyze_of_a_too_transparent_reference_answers_its_state_and_does_not_requeue(client):
+    # GM r6 on #208, item 3: re-analyzing can't change a property of the image,
+    # so Re-analyze answers the transparent state (kind and line), not a requeue.
+    import asyncio
+
+    from commons import analysis_errors
+    from commons.worker import CLEAR_ERROR, AnalysisWorker
+
+    h = human(client)
+    col = client.post("/api/commons/collections", json={"name": "clear"}, headers=h).json()
+    up = client.post("/api/commons/intake/files", headers=h, data={"collection_id": col["id"], "why": "clear"},
+                     files=[("files", ("clear.png", _clear_png(), "image/png"))]).json()
+    asset_id = up["results"][0]["asset_id"]
+    store = runtime.get_store()
+
+    async def never(*_a, **_k):  # pragma: no cover - a transparent reference is never sent
+        raise AssertionError("sent to the reader")
+
+    assert asyncio.run(AnalysisWorker(store, reader=never, load_avg=lambda: 0.0, budget=1).run_once()) == "failed"
+    before = store.get_asset(asset_id)
+    assert before["analysis_state"] == "analysis_failed" and before["last_error_kind"] == "transparent"
+
+    r = client.post(f"/api/commons/assets/{asset_id}/reanalyze", headers=h)
+    assert r.status_code == 200
+    assert r.json() == {"queued": False, "analysis_state": "analysis_failed", "last_error_kind": "transparent",
+                        "last_error": CLEAR_ERROR, "reason": "This image is too transparent to analyze."}
+    assert analysis_errors.TRANSPARENT_LINE == "This image is too transparent to analyze."
+    after = store.get_asset(asset_id)
+    assert (after["analysis_state"], after["attempts"], after["last_error_kind"]) == \
+        ("analysis_failed", before["attempts"], "transparent")
+    with store.db.read() as conn:
+        assert conn.execute("SELECT count(*) FROM commons_events WHERE kind = 'analysis_requeued'").fetchone()[0] == 0
+    # Asked again, the same answer (nothing moved).
+    assert client.post(f"/api/commons/assets/{asset_id}/reanalyze", headers=h).json() == r.json()
+    # Agents have no re-analyze at all: the route is the person's (no MCP tool, no CLI verb).
+    assert client.post(f"/api/commons/assets/{asset_id}/reanalyze",
+                       headers={"X-Nebula-Client": "cursor"}).status_code == 403
+    # The grid's row carries the kind, so its badge can say it neutrally.
+    rows = client.post("/api/commons/search", json={"query": ""}, headers=h).json()["results"]
+    assert [(row["id"], row["last_error_kind"]) for row in rows] == [(asset_id, "transparent")]
+    # A changed file is a different asset, with its own state: the transparent one never carries over.
+    opaque = client.post("/api/commons/intake/files", headers=h, data={"collection_id": col["id"], "why": "now opaque"},
+                         files=[("files", ("clear.png", png(7), "image/png"))]).json()["results"][0]["asset_id"]
+    assert opaque != asset_id
+    assert store.get_asset(opaque)["last_error_kind"] is None
+    assert client.post(f"/api/commons/assets/{opaque}/reanalyze", headers=h).json() == {"queued": True}
+
+
+
+def test_reanalyze_stale_leaves_a_too_transparent_reference_as_it_is(client):
+    # Review 4 N1 on #208: a prompt bump re-analyzes stale assets through the
+    # same check as the detail's Re-analyze. A transparent one with an older
+    # ok analysis (measured before alpha counted) stays analysis_failed /
+    # transparent; every other stale asset is requeued as before.
+    from commons import analysis_errors
+    from commons.reader import MODEL_ID
+    from commons.worker import CLEAR_ERROR
+
+    h = human(client)
+    col = client.post("/api/commons/collections", json={"name": "stale"}, headers=h).json()
+    up = client.post("/api/commons/intake/files", headers=h, data={"collection_id": col["id"], "why": "stale"},
+                     files=[("files", ("clear.png", _clear_png(), "image/png")),
+                            ("files", ("a.png", png(5), "image/png"))]).json()
+    clear, opaque = (r["asset_id"] for r in up["results"])
+    store = runtime.get_store()
+    with store.db.tx() as conn:
+        for asset_id in (clear, opaque):
+            conn.execute("INSERT INTO analyses(id, asset, status, prompt_version, model_id, code_version, "
+                         "vocab_version, fields, created_at) VALUES (?, ?, 'ok', 'old-prompt', ?, 'c', 'v', '{}', "
+                         "'2026-01-01T00:00:00Z')", (f"an_{asset_id}", asset_id, MODEL_ID))
+        conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', attempts = 1, last_error = ?, "
+                     "last_error_kind = ? WHERE id = ?", (CLEAR_ERROR, analysis_errors.TRANSPARENT, clear))
+        conn.execute("UPDATE assets SET analysis_state = 'ready', attempts = 1 WHERE id = ?", (opaque,))
+
+    r = client.post("/api/commons/reanalyze-stale", json={}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"queued": 1}
+    still = store.get_asset(clear)
+    assert (still["analysis_state"], still["attempts"], still["last_error_kind"]) == \
+        ("analysis_failed", 1, "transparent")
+    moved = store.get_asset(opaque)
+    assert (moved["analysis_state"], moved["attempts"]) == ("queued", 0)
+    with store.db.read() as conn:
+        events = conn.execute("SELECT payload FROM commons_events WHERE kind = 'analysis_requeued'").fetchall()
+    assert len(events) == 1 and clear not in events[0][0] and opaque in events[0][0]
+    # Agents still can't run it.
+    assert client.post("/api/commons/reanalyze-stale", json={},
+                       headers={"X-Nebula-Client": "cursor"}).status_code == 403
+
+def test_reanalyze_still_requeues_any_other_failure(client):
+    h = human(client)
+    col = client.post("/api/commons/collections", json={"name": "x"}, headers=h).json()
+    asset_id = client.post("/api/commons/intake/files", headers=h, data={"collection_id": col["id"], "why": "x"},
+                           files=[("files", ("a.png", png(3), "image/png"))]).json()["results"][0]["asset_id"]
+    store = runtime.get_store()
+    with store.db.tx() as conn:
+        conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', attempts = 3, "
+                     "last_error = 'reader timed out', last_error_kind = 'unavailable' WHERE id = ?", (asset_id,))
+    assert client.post(f"/api/commons/assets/{asset_id}/reanalyze", headers=h).json() == {"queued": True}
+    after = store.get_asset(asset_id)
+    assert (after["analysis_state"], after["attempts"]) == ("queued", 0)

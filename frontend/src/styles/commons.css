@@ -402,6 +402,11 @@ body.app-slava-restraint .commons-notice--error {
   color: var(--sr-error);
 }
 
+/* A reason that isn't an error (a too-transparent reference, GM r5 on #208). */
+body.app-slava-restraint .commons-notice--muted {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .commons-notice--proposal {
   justify-content: space-between;
   color: var(--sr-ink);
@@ -731,6 +736,14 @@ body.app-slava-restraint .commons-badge--archived,
 body.app-slava-restraint .commons-badge--superseded,
 body.app-slava-restraint .commons-badge--fidelity-unverifiable {
   color: var(--sr-ink-faint);
+}
+
+/* Too transparent to analyze: not an error, so the plain neutral badge colour,
+   never red, never QUEUED's tint, and never the faint archived tone (1.9:1).
+   On the grid it is the only signal, so it must read (GM r10 on #208, ~5.7:1).
+   This rule is the one place its colour is set. */
+body.app-slava-restraint .commons-badge--not-analyzed {
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-source {

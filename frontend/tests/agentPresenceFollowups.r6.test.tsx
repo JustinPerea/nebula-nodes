@@ -134,7 +134,7 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
   it('"+ Add" and "Extract from reference": their own titles live; the follow reason following; the offline verb offline', () => {
     select('cinema-color', { palette: ['#ff0000'] });
     const add = () => screen.getByRole('button', { name: 'Add' });
-    const extract = () => labelOf('Extract from reference');
+    const extract = () => labelOf('Extract');
     expect(add()).toBeEnabled();
     expect(add()).toHaveAttribute('title', 'Add a swatch');
     expect(extract()).toHaveAttribute('title', 'Extract a palette from an image');

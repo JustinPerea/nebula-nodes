@@ -171,8 +171,8 @@
    change, the default cursor. Clicks are inert already (`disabled`). The
    colour's own swatch edge goes grey too, so the chip reads as a muted value,
    not a live control. */
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']),
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']):hover {
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true']):hover {
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
   box-shadow: none !important;
   filter: none !important;
@@ -180,8 +180,34 @@
   opacity: 0.45 !important;
 }
 
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true'])::-webkit-color-swatch {
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true'])::-webkit-color-swatch {
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+}
+
+/* GM r20 on #208: the Inspector palette's chip is the content, so it keeps
+   its full colour disabled (no dimming, no filter); only its chrome, the
+   edge, goes to the disabled grey, with the default cursor. The hex field
+   and the × dim as above. */
+:is(.inspector__palette-color):is(:disabled, [aria-disabled='true']),
+:is(.inspector__palette-color):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+
+/* The Inspector palette's hex fields, read-only while "Extracting colors…"
+   shows (GM r17 on #208) or while the canvas is locked: the ghost look the
+   Add / Extract row has, the label and edge in the shared grey, unfilled. */
+.inspector__palette-hex:is(:disabled, [aria-disabled='true']),
+.inspector__palette-hex:is(:disabled, [aria-disabled='true']):hover {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55));
+  cursor: default;
+  opacity: 1 !important;
 }
 
 /* The Projects cover picker's image buttons, disabled while a change saves
@@ -340,4 +366,17 @@ body.app-slava-restraint .settings-switch:checked:is(:disabled, [aria-disabled='
 :is(.remotion-properties-panel__anchor-button[data-active='true']):is(:disabled, [aria-disabled='true']):hover {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
   border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
+/* GM r22 on #208 (folded): the palette's × read-only while "Extracting
+   colors…" shows (aria-disabled, focus kept) has the default cursor and
+   snaps to the disabled look, no 120 ms colour fade. */
+:is(.inspector__palette-remove):is(:disabled, [aria-disabled='true']),
+:is(.inspector__palette-remove):is(:disabled, [aria-disabled='true']):hover {
+  transition: none !important;
+}
+
+:is(.inspector__palette-remove)[aria-disabled='true'],
+:is(.inspector__palette-remove)[aria-disabled='true']:hover {
+  cursor: default !important;
 }

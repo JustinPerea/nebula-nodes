@@ -166,3 +166,53 @@ async def test_injected_vision_client_cannot_bypass_request_timeout(
             )
     finally:
         await client.aclose()
+
+
+# PR #208 round 4 (review 3 R1, N1): a reference opens as it shows on the
+# node, EXIF turn included, so an EXIF-rotated opaque reference is measured
+# upright (open_rgb, for video frames, doesn't turn it).
+
+def _exif_6_jpeg(path: Path) -> Path:
+    """A 60x40 opaque JPEG stored sideways: Orientation 6 shows it 40x60."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", (60, 40), (200, 40, 40))
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    image.save(path, format="JPEG", exif=exif.tobytes())
+    return path
+
+
+def test_open_seen_turns_an_exif_rotated_reference() -> None:
+    from services.qc_common import open_rgb, open_seen
+
+    path = _exif_6_jpeg(output_service.OUTPUT_ROOT / "qc-contract" / "exif-6.jpg")
+    assert open_rgb(path).size == (60, 40)
+    assert open_seen(path).size == (40, 60)
+
+
+@pytest.mark.asyncio
+async def test_qc_camera_geometry_measures_an_exif_rotated_opaque_reference_upright(monkeypatch) -> None:
+    import handlers.qc_camera_geometry as handler
+    from models.graph import GraphNode, PortValueDict
+
+    frame = _image(output_service.OUTPUT_ROOT / "qc-contract" / "geometry-frame.png")
+    reference = _exif_6_jpeg(output_service.OUTPUT_ROOT / "qc-contract" / "geometry-reference.jpg")
+    rel = reference.relative_to(output_service.OUTPUT_ROOT).as_posix()
+
+    async def frames(_source, _points, _temp):
+        return [frame] * 5
+
+    seen: dict = {}
+
+    def metrics(frames_in, *, reference=None, opencv=False):
+        seen["size"] = reference.size
+        raise RuntimeError("stop after the metrics")
+
+    monkeypatch.setattr(handler, "required_video", lambda inputs: frame)
+    monkeypatch.setattr(handler, "extract_frames", frames)
+    monkeypatch.setattr(handler, "camera_geometry_metrics", metrics)
+    node = GraphNode(id="q1", definitionId="qc-camera-geometry", params={"mode": "opencv"})
+    inputs = {"reference": PortValueDict(type="Image", value=f"/api/outputs/{rel}")}
+    with pytest.raises(RuntimeError, match="stop after the metrics"):
+        await handler.handle_qc_camera_geometry(node, inputs, {})
+    assert seen["size"] == (40, 60)
