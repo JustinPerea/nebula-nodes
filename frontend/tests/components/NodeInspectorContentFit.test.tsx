@@ -20,10 +20,16 @@ import { useUIStore } from '../../src/store/uiStore';
  *   under the pointer."
  * - "A pinned panel keeps its 440 px start and the person's own size."
  *
+ * GM r72: "Cap to the BAND line (~612 at 1440x900), not the bar: the reserved
+ * notice band wins; a notice covering Run/Duplicate/Delete is the overlap r57
+ * rules out. Unpinned only; pinned keeps its rule." So the bottom line is 12
+ * px above the notice region's reserved band, not the bar.
+ *
  * jsdom has no layout: the panel's header and foot (CHROME) and the body's
- * content get the heights each test says; the toolbar and the bar the rects
- * the live check measured at 1440x900 (toolbar 272-1168 x 92-142, bar
- * 475-965 x 828-876, so 154-816: 662 px of room).
+ * content get the heights each test says; the toolbar, the bar and the band
+ * the rects the live check measured at 1440x900 (toolbar 272-1168 x 92-142,
+ * bar 475-965 x 828-876, band 766-820, so 154-754: 600 px of room; GM's
+ * "~612" was an estimate).
  */
 
 vi.mock('../../src/components/panels/Inspector', () => ({
@@ -31,6 +37,8 @@ vi.mock('../../src/components/panels/Inspector', () => ({
 }));
 
 const CLEAR = 12;
+/** The notice band's height (one notice plus its gap), measured live. */
+const BAND = 54;
 /** The header, the foot row and the borders: what the panel holds besides its body's viewport. */
 const CHROME = 115;
 const TOOLBAR_BOTTOM = 142;
@@ -90,8 +98,9 @@ function chromeAt(width: number, height: number) {
   place({ 'data-top-bar': '' }, () => rect((width - 468) / 2, 24, 468, 40));
   place({ 'data-top-bar': '' }, () => rect((width - 896) / 2, 92, 896, 50));
   place({ 'data-bottom-bar': '' }, () => rect((width - 490) / 2, barTop, 490, 48));
-  place({ 'data-notice-band': '' }, () => rect(16, barTop - 8 - 54, width - 32, 54));
-  return { barTop, topLine: TOOLBAR_BOTTOM + CLEAR, bottomLine: barTop - CLEAR };
+  const bandTop = barTop - 8 - BAND;
+  place({ 'data-notice-band': '' }, () => rect(16, bandTop, width - 32, BAND));
+  return { barTop, bandTop, topLine: TOOLBAR_BOTTOM + CLEAR, bottomLine: bandTop - CLEAR };
 }
 
 function openBeside(node: DOMRect) {
@@ -177,15 +186,17 @@ describe('the unpinned Inspector grows to fit its content (GM r68)', () => {
     expect(bounds().height).toBe(300);
   });
 
-  it('stops 12 px clear of the toolbar and of the bar (not the notice band), and only then scrolls', () => {
-    const { topLine, bottomLine } = chromeAt(1440, 900);
+  it('stops 12 px clear of the toolbar and of the notice band (not the bar, GM r72), and only then scrolls', () => {
+    const { barTop, bandTop, topLine, bottomLine } = chromeAt(1440, 900);
     contentHeight = 2000;
     openBeside(rect(560, 200, 82, 56));
     const box = bounds();
     expect(box.top).toBe(topLine);
     expect(box.bottom).toBe(bottomLine);
-    // 154-816 at 1440x900: GM's "about 660 px".
-    expect(box.height).toBe(662);
+    // 154-754 at 1440x900, as measured live (GM r72 estimated "~612").
+    expect(box.height).toBe(600);
+    expect(box.bottom).toBe(bandTop - CLEAR);
+    expect(box.bottom).toBeLessThan(barTop - CLEAR);
     expect(body().scrollHeight).toBeGreaterThan(body().clientHeight);
   });
 
@@ -212,7 +223,7 @@ describe('a node low on the screen (GM r68)', () => {
     expect(box.top).toBe(bottomLine - (416 + CHROME));
   });
 
-  it('never covers the toolbar or the bar, wherever the node is', () => {
+  it('never covers the toolbar or the notice band, wherever the node is', () => {
     const { topLine, bottomLine } = chromeAt(1440, 900);
     contentHeight = 2000;
     openBeside(rect(560, 860, 82, 56));
@@ -237,11 +248,11 @@ describe('a height change from the content (GM r68)', () => {
     expect(panel().hasAttribute('data-content-resizing')).toBe(false);
     const row = rowTop();
     const before = bounds();
-    // An upload lands: the preview adds 100 px.
-    contentHeight = 416 + 100;
+    // An upload lands: the preview adds 50 px (162 + 581 stays above the band's line, 754).
+    contentHeight = 416 + 50;
     frames(1);
     expect(panel().hasAttribute('data-content-resizing')).toBe(true);
-    expect(bounds().height).toBe(416 + 100 + CHROME);
+    expect(bounds().height).toBe(416 + 50 + CHROME);
     expect(bounds().top).toBe(before.top);
     expect(rowTop()).toBe(row);
     act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS - 1); });
@@ -263,7 +274,7 @@ describe('a height change from the content (GM r68)', () => {
     expect(bounds().top).toBe(before.top);
   });
 
-  it('near the bottom, the top still holds: the panel grows to the bar and the rest scrolls', () => {
+  it('near the bottom, the top still holds: the panel grows to the band\'s line and the rest scrolls', () => {
     const { bottomLine } = chromeAt(1440, 900);
     contentHeight = 150;
     openBeside(rect(560, 400, 82, 56));
@@ -305,7 +316,9 @@ describe('a height change from the content (GM r68)', () => {
     frames(2);
     expect(bounds().top).toBe(252);
     expect(panel().hasAttribute('data-content-resizing')).toBe(false);
-    contentHeight = 400;
+    // 292 + 455 (after the move below) stays above the band's line (754), so
+    // the fresh placement keeps the height.
+    contentHeight = 340;
     frames(1);
     expect(panel().hasAttribute('data-content-resizing')).toBe(true);
     const given = bounds();
@@ -383,5 +396,23 @@ describe('the source', () => {
   const source = readFileSync(resolve(__dirname, '../../src/components/panels/NodeInspectorPopover.tsx'), 'utf8');
   it('has no spare-line rule and no palette exception left', () => {
     expect(source).not.toMatch(/POPOVER_SPARE_LINE|holdsPalette|inspector__palette|swatchCount/);
+  });
+});
+
+describe('one source for the toolbar+12 top line (GM r72)', () => {
+  const read = (path: string) => readFileSync(resolve(__dirname, '../../src', path), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  it('the popover takes its top line from floatingChromeTopLine and its bottom line from the band', () => {
+    const source = read('components/panels/NodeInspectorPopover.tsx');
+    expect(source).toMatch(/const topLimit = floatingChromeTopLine\(VIEWPORT_GUTTER\)/);
+    expect(source).toMatch(/floatingBottomLimit\([^)]*FLOATING_CHROME_CLEARANCE\)/);
+    // No second spelling of the line: no clearance passed to floatingTopLimit here.
+    expect(source).not.toMatch(/floatingTopLimit\([^)]*,/);
+    expect(source).not.toMatch(/floatingBarLimit/);
+  });
+  it('bottomBar.ts is the only place the 12 px clearance is written', () => {
+    const lib = read('lib/bottomBar.ts');
+    expect(lib).toMatch(/export const FLOATING_CHROME_CLEARANCE = 12;/);
+    expect(lib).toMatch(/return floatingTopLimit\(gutter, FLOATING_CHROME_CLEARANCE\)/);
   });
 });

@@ -76,3 +76,46 @@ content. Frontend only. Nothing in `Inspector.tsx` changed.
 - Image Input: 300 px (floor). Text Input: 334 px.
 - Reduced motion: no transition, and the height jumps.
 - Pinned: 440 px, ending at 766 (the band's line).
+
+## Round 2 (GM r72)
+
+- **The cap is the notice band's line now, not the bar's.** GM r72: "Cap to
+  the BAND line, not the bar: the reserved notice band wins; a notice
+  covering Run/Duplicate/Delete is the overlap r57 rules out. Unpinned only;
+  pinned keeps its rule." The unpinned panel's bottom line is
+  `floatingBottomLimit(..., FLOATING_CHROME_CLEARANCE)`: 12 px above the band.
+  `floatingBottomLimit` gained an optional `clearance` (default 0, so every
+  other caller is unchanged), and `floatingBarLimit` is gone. The
+  `NodeInspectorBand` assertions that the band is never covered are back for
+  the unpinned panel (now with the 12 px gap), and the pinned panel is pinned
+  to the band's line itself (no clearance), so giving it the clearance fails
+  a test.
+- **The band measured live is 54 px, not 42.** At 1440x900 the band's top is
+  766 (bar 828, minus the 8 px gap, minus 54), so the line is 754 and the room
+  is 154 to 754: 600 px. GM's "~612" was an estimate. The content-fit tests
+  now use the measured 54 px band.
+- **One toolbar+12 top line.** `lib/bottomBar.ts` exports
+  `FLOATING_CHROME_CLEARANCE` (12) and `floatingChromeTopLine(gutter)`, the
+  only source for that line; the popover calls it, and PR C 2b's resize
+  ceiling should too. A source test checks the popover passes no clearance to
+  `floatingTopLimit` itself.
+- **The order rule is in the code.** Next to the r68 reference in
+  `measurePopoverFrame`: "don't move what's under the pointer" comes before
+  the fit. Shift-up only on placement (open, another node, the node moving);
+  after a content change the top holds and the extra scrolls.
+- **Two content-fit fixtures got smaller** so they still test what they
+  meant to under the lower cap: the top-anchored grow adds 50 px, not 100,
+  and the rigid-wins test grows to 340 px of body, not 400.
+
+### Round 2 live check (1440 wide, isolated backend 8968, Vite 5968, no provider calls, Run never clicked)
+
+- Style Reference at 1440x900: top 186, bottom 717, 531 px (body fits).
+  After an upload: springs to 568 px, top still 185.56, bottom 754 (12 px
+  above the band at 766, 74 px above the bar), the file row stays at 346.9,
+  and the body scrolls (453 of 602).
+- Style Reference at 1440x700: top 154, bottom 554, 400 px, 12 px clear of
+  the toolbar and of the band (566), body scrolls (285 of 416).
+- Node near the bottom (node 784 to 840): shifted up to 223 to 754, 531 px.
+  After an upload: top, bottom and file row unchanged (no spring), the body
+  scrolls (416 of 602).
+- No request left the lane.

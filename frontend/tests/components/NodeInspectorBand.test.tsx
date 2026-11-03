@@ -12,13 +12,14 @@ import { useUIStore } from '../../src/store/uiStore';
  * 5. "Floating panels stop below the workspace header and the selection
  *    toolbar, whichever is lower, plus the same 8 px gap."
  *
- * GM r68 (2026-11-03) then bounds the unpinned Inspector beside a node by
- * the bar itself: "up to the space between the floating top chrome (the
- * selection toolbar) and the bottom bar, with 12 px clear of each. At
- * 1440x900 that's about 660 px." That is the bar's line (the band's would
- * leave 612), so the unpinned panel keeps 12 px clear of the toolbar and of
- * the bar, and the band no longer counts for it. The pinned Inspector keeps
- * both rules above.
+ * GM r68 (2026-11-03) lets the unpinned Inspector beside a node grow "up to
+ * the space between the floating top chrome (the selection toolbar) and the
+ * bottom bar, with 12 px clear of each", and GM r72 sets that bottom line:
+ * "Cap to the BAND line, not the bar: the reserved notice band wins; a notice
+ * covering Run/Duplicate/Delete is the overlap r57 rules out. Unpinned only;
+ * pinned keeps its rule." So the unpinned panel keeps 12 px clear of the
+ * toolbar and of the band, and rule 1 above still holds for it. The pinned
+ * Inspector keeps both rules above as they were.
  *
  * jsdom has no layout: the node's anchor, the bar, the band, the header and
  * the selection toolbar get the rects the live check measured at 1280x800.
@@ -120,21 +121,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the floating Inspector and the bottom bar (GM r68: 12 px clear of the bar, not the band)', () => {
-  it("GM's setup: it ends 12 px clear of the bar", () => {
+describe('the floating Inspector and the reserved notice band (GM r72: 12 px clear of the band)', () => {
+  it("GM's setup: it ends above the band, so a notice never covers its foot row", () => {
     viewport(1280, 800);
-    const { barTop } = barAndBand(1280, 800);
+    const { bandTop } = barAndBand(1280, 800);
     header(1280);
     selectionToolbar(1280);
     // The cover screenshot: a Text Input at 575-657 x 437-527.
     openBeside(rect(575, 437, 82, 90));
     expect(panel()).toHaveAttribute('data-placement', 'right');
-    expect(bounds().bottom).toBeLessThanOrEqual(barTop - CLEAR);
+    expect(bounds().bottom).toBeLessThanOrEqual(bandTop - CLEAR);
   });
 
-  it('never moves when a notice comes or goes', () => {
+  it('never moves when a notice comes or goes: the band is reserved either way', () => {
     viewport(1280, 800);
-    const { barTop } = barAndBand(1280, 800);
+    const { barTop, bandTop } = barAndBand(1280, 800);
     openBeside(rect(575, 437, 82, 90));
     const before = bounds();
     // A notice shows in the band: one line, 8 px above the bar.
@@ -144,14 +145,14 @@ describe('the floating Inspector and the bottom bar (GM r68: 12 px clear of the 
     notice.remove();
     advanceLayout();
     expect(bounds()).toEqual(before);
-    expect(before.bottom).toBeLessThanOrEqual(barTop - CLEAR);
+    expect(before.bottom).toBeLessThanOrEqual(bandTop - CLEAR);
   });
 
   it('at 1440x900 too', () => {
     viewport(1440, 900);
-    const { barTop } = barAndBand(1440, 900);
+    const { bandTop } = barAndBand(1440, 900);
     openBeside(rect(640, 560, 82, 90));
-    expect(bounds().bottom).toBeLessThanOrEqual(barTop - CLEAR);
+    expect(bounds().bottom).toBeLessThanOrEqual(bandTop - CLEAR);
   });
 
   it('the pinned Inspector stops above the band too', () => {
@@ -160,6 +161,10 @@ describe('the floating Inspector and the bottom bar (GM r68: 12 px clear of the 
     const { bandTop } = barAndBand(1280, 800);
     openBeside(rect(575, 437, 82, 90));
     expect(bounds().bottom).toBeLessThanOrEqual(bandTop);
+    // GM r72: "pinned keeps its rule": it stands on the band's line itself,
+    // without the unpinned panel's 12 px clearance.
+    expect(bounds().bottom).toBe(bandTop);
+    expect(bounds().height).toBe(440);
   });
 });
 
@@ -226,13 +231,13 @@ describe('the measured top line', () => {
 
   it('a short window: the room between the lines is less than the panel, so the panel gets shorter', () => {
     viewport(1280, 440);
-    const { barTop } = barAndBand(1280, 440);
+    const { bandTop } = barAndBand(1280, 440);
     header(1280);
     selectionToolbar(1280);
     openBeside(rect(575, 200, 82, 90));
     const box = bounds();
     expect(box.top).toBe(92 + 49 + CLEAR);
-    expect(box.bottom).toBe(barTop - CLEAR);
+    expect(box.bottom).toBe(bandTop - CLEAR);
     expect(box.height).toBeLessThan(300);
   });
 
@@ -244,13 +249,13 @@ describe('the measured top line', () => {
     openBeside(rect(640, 300, 82, 90));
     chrome.splice(0, 4).forEach((element) => element.remove());
     viewport(1280, 480);
-    const { barTop } = barAndBand(1280, 480);
+    const { bandTop } = barAndBand(1280, 480);
     header(1280);
     selectionToolbar(1280);
     advanceLayout();
     const box = bounds();
     expect(box.top).toBeGreaterThanOrEqual(92 + 49 + CLEAR);
-    expect(box.bottom).toBeLessThanOrEqual(barTop - CLEAR);
+    expect(box.bottom).toBeLessThanOrEqual(bandTop - CLEAR);
   });
 
   it('the pinned Inspector keeps below the line too', () => {

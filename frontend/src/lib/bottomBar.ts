@@ -70,29 +70,18 @@ function noticeBand(): DOMRect | null {
  * goes. Pass the panel's own `span` so the Canvas actions panel pushes it up
  * only when it would be over it: the band then stands on the line the panel
  * sees (the region itself lifts over the centred actions panel, which a panel
- * off to the side never meets).
+ * off to the side never meets). `clearance` keeps the panel that much further
+ * above the band's (or, with no band, the bar's) line: the unpinned Inspector
+ * beside a node keeps FLOATING_CHROME_CLEARANCE (GM r72: "Cap to the BAND
+ * line, not the bar: the reserved notice band wins").
  */
-export function floatingBottomLimit(gutter: number, viewportHeight = window.innerHeight, span?: HorizontalSpan): number {
+export function floatingBottomLimit(gutter: number, viewportHeight = window.innerHeight, span?: HorizontalSpan,
+  clearance = 0): number {
   const edge = viewportHeight - gutter;
   const bar = bottomBarTop(span);
   const band = noticeBand();
-  if (bar === null) return band ? Math.min(edge, band.top) : edge;
-  return Math.min(edge, bar - BOTTOM_BAR_GAP - (band?.height ?? 0));
-}
-
-/**
- * The lowest the unpinned Inspector beside a node may go (GM r68: "up to the
- * space between the floating top chrome and the bottom bar, with 12 px clear
- * of each"): `gap` above the bar, and above the Canvas actions panel only
- * where it overlaps `span`; with no bar on screen, `gutter` above the
- * window's bottom edge. Unlike floatingBottomLimit, the notice region's
- * reserved band doesn't count: r68 measures the room to the bar itself.
- */
-export function floatingBarLimit(gutter: number, gap: number, viewportHeight = window.innerHeight,
-  span?: HorizontalSpan): number {
-  const edge = viewportHeight - gutter;
-  const bar = bottomBarTop(span);
-  return bar === null ? edge : Math.min(edge, bar - gap);
+  if (bar === null) return band ? Math.min(edge, band.top - clearance) : edge;
+  return Math.min(edge, bar - BOTTOM_BAR_GAP - (band?.height ?? 0) - clearance);
 }
 
 /**
@@ -121,6 +110,24 @@ export function floatingTopLimit(gutter: number, gap = BOTTOM_BAR_GAP): number {
     line = Math.max(line, box.bottom + gap);
   }
   return line;
+}
+
+/**
+ * How far the unpinned Inspector beside a node keeps clear of the floating
+ * top chrome and of the notice band's line (GM r68: "with 12 px clear of
+ * each"; r72: the band's line, not the bar's).
+ */
+export const FLOATING_CHROME_CLEARANCE = 12;
+
+/**
+ * The top line a panel that grows toward the floating top chrome stops at:
+ * the selection toolbar's line (or the header's, whichever is lower; see
+ * floatingTopLimit), FLOATING_CHROME_CLEARANCE below it. The only source for
+ * that line: the unpinned Inspector's content fit uses it, and so does any
+ * resize that reaches up to the chrome.
+ */
+export function floatingChromeTopLine(gutter: number): number {
+  return floatingTopLimit(gutter, FLOATING_CHROME_CLEARANCE);
 }
 
 /**

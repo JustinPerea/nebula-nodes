@@ -6,21 +6,13 @@ import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
-import { floatingBarLimit, floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
+import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
 /** The floating Inspector's floor: a short body keeps this height (GM r68). */
 const POPOVER_MIN_HEIGHT = 300;
-/**
- * How far the floating Inspector keeps clear of the floating top chrome (the
- * selection toolbar) and of the bottom bar when it grows to fit its content
- * (GM r68: "up to the space between the floating top chrome and the bottom
- * bar, with 12 px clear of each. At 1440x900 that's about 660 px."). Measured
- * live there: the toolbar ends at 142 and the bar starts at 828, so 154-816.
- */
-export const POPOVER_CHROME_CLEARANCE = 12;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
 const PINNED_MAX_HEIGHT = 440;
@@ -113,8 +105,9 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   // 12 px under the floating top chrome (the header and the selection
-  // toolbar, whichever is lower; lib/bottomBar.ts).
-  const topLimit = floatingTopLimit(VIEWPORT_GUTTER, POPOVER_CHROME_CLEARANCE);
+  // toolbar, whichever is lower): lib/bottomBar.ts floatingChromeTopLine, the
+  // only source for that line.
+  const topLimit = floatingChromeTopLine(VIEWPORT_GUTTER);
   const rightSpace = viewportWidth - rect.right - POPOVER_GAP - VIEWPORT_GUTTER;
   const leftSpace = rect.left - POPOVER_GAP - VIEWPORT_GUTTER;
 
@@ -134,19 +127,27 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   }
   left = clamp(left, VIEWPORT_GUTTER, Math.max(VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER));
 
-  // 12 px above the bar across the whole width, and above the Canvas actions
-  // panel only where it is over that panel (lib/bottomBar.ts). GM r68 bounds
-  // the panel by the bar, not by the notice region's reserved band (its
-  // "about 660 px at 1440x900" is the bar's line; the band's would be 612).
-  const bottomLimit = floatingBarLimit(VIEWPORT_GUTTER, POPOVER_CHROME_CLEARANCE, viewportHeight,
-    { left, right: left + width });
+  // 12 px above the notice region's reserved band, which stands on the bar
+  // across the whole width, and above the Canvas actions panel only where it
+  // is over that panel (lib/bottomBar.ts). GM r72: "Cap to the BAND line, not
+  // the bar: the reserved notice band wins; a notice covering
+  // Run/Duplicate/Delete is the overlap r57 rules out" (154-754 at 1440x900,
+  // 600 px measured live; r68's bar line gave 662).
+  const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width },
+    FLOATING_CHROME_CLEARANCE);
   // Its whole body, never under 300 px, up to the room between the lines:
   // only past that does the body scroll (as one; the foot stays).
   const own = panelNeed === null ? POPOVER_MIN_HEIGHT : Math.max(POPOVER_MIN_HEIGHT, Math.ceil(panelNeed));
   // Its content changed height while it stood still: the top stays, and only
-  // the bottom edge moves, as far as the bar's line (then the body scrolls).
+  // the bottom edge moves, as far as the band's line (then the body scrolls).
   // Placed afresh (opened, another node, the node moved), a node low on the
   // screen shifts it up instead.
+  //
+  // The order (GM r68's "anchored at the top, so the file row doesn't move
+  // under the pointer", confirmed in r72): "don't move what's under the
+  // pointer" comes before the fit. Shift-up happens only on placement (open,
+  // another node, the node moving); after a content change the top holds and
+  // the extra scrolls, even on a low node that a fresh placement would shift.
   if (heldTop !== null && placement !== 'bottom') {
     const top = clamp(heldTop, topLimit, bottomLimit);
     const held = Math.max(0, Math.min(own, bottomLimit - top));
