@@ -41,7 +41,7 @@ from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Match
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -90,6 +90,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services.file_param_preview import follow_file_params
+from services import upload_names
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
@@ -292,6 +293,9 @@ except Exception as exc:
     _STATE_PATH: Path | None = None
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
+# The names files were uploaded with, by their stored (content-hash) name
+# (services/upload_names.py, GM r48 Q1 on #222).
+upload_names.configure(_STATE_DIR / "upload-names.json")
 
 # Whether a canvas was saved before this boot (round 21): a missing
 # canvas-revisions.json then can't be a first run, so the canvas revisions
@@ -3525,6 +3529,16 @@ def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, nod
     return False
 
 
+@app.get("/api/uploads/names")
+async def upload_names_route(file: list[str] = Query(default=[])) -> dict[str, Any]:
+    """{"names": {stored name: the name it was uploaded with}} for the stored
+    names asked (``?file=<name>``, repeated; at most 200), those Nebula
+    recorded. The canvas reads it to name a file param (frontend
+    lib/uploadNames.ts, GM r48 Q1 on #222); agents get the same name in
+    look_at_canvas."""
+    return {"names": upload_names.recorded_names(file[:200])}
+
+
 @app.post("/api/uploads")
 @graph_write(checks_in_route=True)
 async def upload_file_consolidated(
@@ -3636,6 +3650,9 @@ async def upload_file_consolidated(
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
+    # The name it was sent with, for every surface that names a file param
+    # holding it (services/upload_names.py, GM r48 Q1 on #222).
+    upload_names.record(saved_path.name, file.filename)
 
     # Base response — present for every caller.
     response: dict[str, Any] = {

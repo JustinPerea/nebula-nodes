@@ -43,7 +43,9 @@ import {
 } from './usePaletteExtracts';
 import { getProjectContext } from '../../lib/projectContext';
 import { applyPaletteFocus, notePaletteFocus, planPaletteFocus, scrollPaletteSlot, setPaletteScrollKey } from './paletteFocus';
-import { fileNameParam, inputFileName, middleTruncate } from '../../lib/fileName';
+import { fileNameParam, fileParamName, middleTruncate, shownFileName, storedName } from '../../lib/fileName';
+import { rememberUploadName, useUploadNames } from '../../lib/uploadNames';
+import { fileDropNoteStale, watchFileDropNotes } from './fileDropNotes';
 import { NO_PREVIEW, uploadingLabel, uploadProjectChangedLine } from '../../lib/uploadNotice';
 import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
@@ -53,6 +55,9 @@ type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 // run key (usePaletteExtracts' paletteRunKey): the newest pick's, read by the
 // file row while "Uploading “name”…" shows (GM r46 on #222).
 const uploadNames = new Map<string, string>();
+// GM r48 bug 2 on #222: a dropped-upload line goes on any change to its
+// param's value, whatever made it (fileDropNotes.ts).
+watchFileDropNotes();
 
 type InspectorProps = {
   embedded?: boolean;
@@ -127,6 +132,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // this Inspector, one per project, graph and node (usePaletteExtracts;
   // GM r22 Q2 on #208). This re-renders on each change.
   usePaletteExtracts();
+  // A file param's name may come from Nebula's upload record (GM r48 Q1).
+  useUploadNames();
   // GM r22 Q1: a dropped palette's line is said once. The notes this
   // Inspector showed for its node go when it leaves the node.
   // By note key, the node it was shown on and the note itself (a newer
@@ -493,8 +500,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
   function uploadIntoParam(nodeId: string, paramKey: string, file: File) {
     const project = getProjectContext()?.id ?? null;
     const generation = canvasGeneration();
-    const definitionId = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.definitionId;
+    const picked = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+    const definitionId = picked?.data.definitionId;
     if (!definitionId) return;
+    // The value the dropped line stands over: any change to it clears the
+    // line (GM r48 bug 2, fileDropNotes.ts).
+    const valueAtPick = picked?.data.params?.[paramKey] ?? '';
     const runKey = paletteRunKey(project, generation, nodeId, paramKey);
     const noteKey = paletteNoteKey(project, nodeId, paramKey);
     setPaletteDropNote(noteKey, null);
@@ -503,7 +514,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     formData.append('file', file);
     // GM, error-copy round 2: "Couldn't upload {filename}." then the
     // reason, in the canvas notice (as a canvas drop says it).
-    const heading = `Couldn't upload ${quoted(file.name)}.`;
+    const heading = `Couldn't upload ${quoted(shownFileName(file.name))}.`;
     type Uploaded = { ok: true; filePath: string; url: string } | { ok: false; error: unknown };
     startPaletteExtract<Uploaded>(
       runKey,
@@ -519,7 +530,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
         }
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
         const sameCanvas = (getProjectContext()?.id ?? null) === project && canvasGeneration() === generation;
-        const dropped = () => setPaletteDropNote(noteKey, { text: uploadProjectChangedLine(file.name), definitionId });
+        const dropped = () => setPaletteDropNote(noteKey, { text: uploadProjectChangedLine(file.name), definitionId,
+          file: { project, nodeId, key: paramKey, value: valueAtPick } });
         if (!sameCanvas || !node || node.data.definitionId !== definitionId) {
           if (!sameCanvas) dropped();
           return '';
@@ -530,6 +542,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           dropped();
           return '';
         }
+        // Its name is known here: no need to ask Nebula's record for it.
+        rememberUploadName(storedName(uploaded.filePath), file.name);
         // filePath's card names the file (lib/fileName.ts), as
         // /api/uploads keeps it for a node it creates.
         const kept = paramKey === 'filePath' ? fileNameParam(uploaded.filePath, file.name) : null;
@@ -1088,11 +1102,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
     if (param.type === 'file') {
       const fileValue = String(value);
-      // The name it was uploaded with (the stored copy's name is a hash),
-      // else the path's own name (GM r46 Q2: a file an agent set).
-      const loadedFilename = fileValue
-        ? (param.key === 'filePath' ? inputFileName(activeNodeData.params) : null) ?? fileValue.split(/[\\/]/).pop() ?? fileValue
-        : null;
+      // The name it was uploaded with, else the path's own name, never a
+      // bare content hash (GM r48 Q1: lib/fileName.ts fileParamName).
+      const loadedFilename = fileValue ? fileParamName(activeNodeData.params, param.key) : null;
       const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
       const isDocNode = activeNodeData.definitionId === 'document-input';
       const acceptAttr = isDocNode
@@ -1104,10 +1116,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
       // the name (uploadIntoParam); a dropped one says why under it, once.
       const project = getProjectContext()?.id ?? null;
       const uploadKey = paletteRunKey(project, canvasGeneration(), activeNode.id, param.key);
-      const uploading = paletteExtractView(uploadKey).shown ? uploadNames.get(uploadKey) ?? null : null;
+      const uploadView = paletteExtractView(uploadKey);
+      const uploadingName = uploadView.shown ? uploadNames.get(uploadKey) ?? null : null;
+      const uploading = uploadingName ? shownFileName(uploadingName) : null;
+      // GM r48 bug 1: while an upload is in flight (from the pick, not only
+      // once its row shows), never "No preview": a preview the param holds
+      // stays until the new one lands, and with none nothing shows.
+      const inFlight = uploadView.working;
       const noteKey = paletteNoteKey(project, activeNode.id, param.key);
       const storedNote = paletteDropNote(noteKey);
+      // GM r48 bug 2: never over a value changed since the pick.
       const dropNote = storedNote && storedNote.definitionId === activeNodeData.definitionId && !uploading
+        && !fileDropNoteStale(storedNote, activeNodeData.params[param.key])
         ? storedNote.text : null;
       if (dropNote && storedNote) shownPaletteNotes.current.set(noteKey, { node: activeNode.id, note: storedNote });
       const rowId = `file-row-${activeNode.id}-${param.key}`;
@@ -1147,7 +1167,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               }}
             />
           </label>
-          {showsPreview && fileValue && !previewUrl && (
+          {showsPreview && fileValue && !previewUrl && !inFlight && (
             // GM r46 Q2: neutral, nothing failed (the run reads the file).
             <span className="inspector__file-no-preview">{NO_PREVIEW}</span>
           )}

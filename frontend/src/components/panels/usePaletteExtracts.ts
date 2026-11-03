@@ -33,7 +33,14 @@ export type PaletteExtractView = {
 
 /** A palette that came back to a node it could no longer be written to
  *  (GM r22 Q1): said on that node when the person is back on it. */
-export type PaletteDropNote = { text: string; definitionId: string };
+export type PaletteDropNote = {
+  text: string;
+  definitionId: string;
+  /** A file param's dropped upload (GM r48 bug 2 on #222): the param and
+   *  the value it held at the pick. Any change to that value clears the
+   *  line (fileDropNotes.ts). */
+  file?: { project: string | null; nodeId: string; key: string; value: unknown };
+};
 
 /**
  * Review 8 LOW-1 / GM r22 Q2 on #208: one source of truth per palette
@@ -144,6 +151,11 @@ export function setPaletteCantRun(key: string, file: File | null): void {
 
 export function paletteDropNote(key: string): PaletteDropNote | null {
   return notes.get(key) ?? null;
+}
+
+/** Every dropped line waiting, by its key. */
+export function paletteDropNotes(): [string, PaletteDropNote][] {
+  return [...notes];
 }
 
 export function setPaletteDropNote(key: string, note: PaletteDropNote | null): void {

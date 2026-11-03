@@ -154,3 +154,57 @@ and its name, in both orders.
 - **Agent-set names.** For an agent's own upload, the path's base name is the stored
   hash (`777fcd…png`), as GM's base-name rule gives. The name the agent uploaded it
   with is on its own Image Input, not on this node.
+
+## Round 3 (GM r48)
+
+- **Bug 1: no "No preview" while an upload is in flight.** The Inspector hides
+  it from the pick (usePaletteExtracts' `working`, not only once the row reads
+  "Uploading…"), until the new file lands. A preview the param holds stays in
+  its frame meanwhile; with nothing, or a file with no preview, nothing shows
+  under the row. Round 2's shot 1 was the second case: n1 held
+  `/nowhere/harbour-at-dusk-from-the-north-pier.png` (an agent's earlier set),
+  a file with no preview.
+- **Bug 2: the dropped line goes on any change to its param.** Keyed on the
+  value, not on the path that changed it (`components/panels/fileDropNotes.ts`):
+  - the note keeps the param's value at the pick (`PaletteDropNote.file`);
+  - a store subscription, installed once by Inspector.tsx, clears it when that
+    param's value changes between two states of one canvas (same project and
+    graph generation): a pick, an agent's set arriving by graphSync, an undo,
+    a redo. A load or replace isn't a change (another canvas's node ids);
+  - the Inspector never shows it over a value other than the pick's (a change
+    made while the person was in another project, seen when A loads again).
+- **Q1: one name for a file param, everywhere.** `/api/uploads` now records
+  each upload's sent name by stored (hash) name in `upload-names.json` in the
+  state folder (`backend/services/upload_names.py`; newest name for the same
+  bytes; capped at 5,000; a sent name that is itself a hash records nothing).
+  `GET /api/uploads/names?file=…` serves it to the canvas
+  (`frontend/src/lib/uploadNames.ts`: asked once per stored name, batched, quiet
+  on failure; the tab's own upload is remembered without asking).
+  - The rule, in `fileParamName` (frontend) and `file_param_name` (backend):
+    the node's `_fileName` for filePath, else the record, else the base name,
+    and a bare content hash (32+ hex, optional extension) is "Uploaded file".
+    A backend test keeps the pattern and the label equal on both sides.
+  - Used by the Inspector row and its title, the node face (input cards), the
+    in-flight row, the dropped line and the upload failure heading.
+  - Agents: `look_at_canvas` (MCP) and `nebula look` (CLI) give `fileName`
+    (filePath's) and, with other file params, `fileNames` {param: name}, by
+    the same rule. A node with a hash path and no record now reads "Uploaded
+    file" where it used to have no name; an input card shows the same.
+  - Ratchet: `frontend/tests/fileParamNameRatchet.test.ts` fails on a base name
+    taken by hand (`.split(<path sep>).pop()`/`.at(-1)`) anywhere in `src/`
+    outside an allowlist with reasons, on `inputFileName(` outside
+    lib/fileName.ts, and checks each surface calls the shared function.
+- **Dropped uploads are kept on purpose.** Storage is deduplicated by
+  content hash, so a dropped upload may be another node's file; nobody
+  adds delete-on-drop. (A repo-wide ARCHITECTURE.md is its own task; this
+  PR doesn't start one.)
+- **Stand-in ratchet (item 5).** `backend/tests/test_stand_in_signatures.py`
+  scans every test module for `monkeypatch.setattr(<obj>, "<method>", fn)` on
+  `cli_graph`/`CLIGraph`, `manager`/`ConnectionManager` or `agent_presence`
+  with a local function or lambda, and requires `**kwargs` or the real
+  method's current signature (`inspect.signature`): room for the required
+  positionals, and by name every parameter with a default or keyword-only (how
+  a new keyword arrives). A class patch counts `self`. Opt-out:
+  `# stand-in-ok: <reason>` on the line or above. It reads 20+ live stand-ins
+  today with no faults. Mutation: the fence test's update_params stand-in
+  without `**kwargs` fails as `stand-in lacks drop`.

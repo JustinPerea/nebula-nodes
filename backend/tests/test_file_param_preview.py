@@ -71,10 +71,11 @@ def test_mcp_edit_canvas_moves_the_preview_and_name_to_the_agents_file(held, mon
     params = _after(api, node_id)
     assert params["filePath"].endswith(agents["filePath"].split("/")[-1])
     assert params["_previewUrl"] == agents["url"] != before
-    # The old upload's name goes with its file: the card shows the path's own name.
+    # The old upload's name goes with its file. The card shows the name the
+    # agent's file was uploaded with (GM r48 Q1, services/upload_names.py).
     assert "_fileName" not in params
     entry = next(n for n in api.client.get("/api/canvas/snapshot").json()["nodes"] if n["id"] == node_id)
-    assert "fileName" not in entry
+    assert entry["fileName"] == "harbour.png"
 
 
 def test_cli_set_moves_the_preview_and_name_to_the_agents_file(held, monkeypatch):

@@ -43,7 +43,8 @@ from typing import Any, Callable, Iterator, Mapping
 
 from services import node_route, universal_ports
 from services.cursor_actions import ACTIONS, SESSION_RE as _SESSION_RE, refusal as action_refusal
-from services.input_file_name import input_file_name
+from services.file_param_preview import file_param_keys
+from services.upload_names import file_param_name
 from services.selection_context import _safe_value as safe_value
 from services.text_cut import safe_cut
 
@@ -878,12 +879,21 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     who = pending_owner(node)
     if who is not None:
         entry["pending"] = {"agent": who["name"], "agentId": who["id"]}
-    # The name the file was uploaded with: params keep only its stored
-    # (hashed) path, and the private `_fileName` isn't copied above.
+    # The name each file param shows the person (GM r48 Q1 on #222,
+    # services/upload_names.py): the name it was uploaded with, else the
+    # path's base name, never a bare content hash ("Uploaded file"). Params
+    # keep only the stored (hashed) path, and the private `_fileName` isn't
+    # copied above. `fileName` is filePath's (an input node's file).
     params = node.get("params")
-    file_name = input_file_name(params) if isinstance(params, Mapping) else None
-    if file_name:
-        entry["fileName"] = file_name
+    if isinstance(params, Mapping):
+        keys = file_param_keys(definition)
+        if "filePath" not in keys and isinstance(params.get("filePath"), str):
+            keys = ["filePath", *keys]
+        names = {key: name for key in keys if (name := file_param_name(params, key))}
+        if names.get("filePath"):
+            entry["fileName"] = names["filePath"]
+        if any(key != "filePath" for key in names):
+            entry["fileNames"] = names
     # A universal node's ports come from its model: say which, once
     # (its `_model_ports` record isn't repeated in params).
     model_ports = universal_ports.stored_ports(definition_id, node.get("params"))

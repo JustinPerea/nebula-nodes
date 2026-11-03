@@ -1,3 +1,5 @@
+import { recordedUploadName } from './uploadNames';
+
 /** File names as cards show them (GM - Design, drop follow-ups, 2026-10-24). */
 
 /** How many characters of a file name fit on one line of a 200-240px card. */
@@ -26,6 +28,10 @@ export function middleTruncate(name: string, max: number = CARD_FILE_NAME_CHARS)
 
 const basename = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
+/** A path's last part: the stored name an upload record is keyed by
+ * (lib/uploadNames.ts). Not a name to show: fileParamName is that. */
+export const storedName = basename;
+
 /** A stored upload: its content hash, then its extension. */
 const STORED_UPLOAD = /^[0-9a-f]{64}\.[a-z0-9]+$/i;
 
@@ -50,4 +56,35 @@ export function inputFileName(params: Record<string, unknown>): string | null {
 export function fileNameParam(filePath: string, name: string): { file: string; name: string } | null {
   const shown = basename(name).trim();
   return shown ? { file: basename(filePath), name: shown } : null;
+}
+
+/** A bare content hash, with or without an extension: never shown as a
+ * name (GM r48 Q1 on #222). backend services/upload_names.py has the same
+ * pattern; a backend test keeps the two equal. */
+export const CONTENT_HASH_NAME = /^[0-9a-f]{32,}(\.[a-z0-9]{1,8})?$/i;
+/** What shows in place of a bare content hash. */
+export const UPLOADED_FILE = 'Uploaded file';
+
+/** `name` as a person sees it: never a bare content hash. Every name a file
+ * param shows goes through this or fileParamName (a ratchet test checks). */
+export function shownFileName(name: string): string {
+  return CONTENT_HASH_NAME.test(name) ? UPLOADED_FILE : name;
+}
+
+/** The name a file param shows, everywhere it shows (the Inspector row, the
+ * node face, the dropped-upload line): GM r48 Q1 on #222. In order:
+ * 1. the name the file was uploaded with: the node's own `_fileName` for
+ *    filePath, else Nebula's upload record (lib/uploadNames.ts);
+ * 2. otherwise the path's base name;
+ * 3. never a bare content hash: "Uploaded file".
+ * Null when the param holds no file. Agents read the same name
+ * (backend services/upload_names.py file_param_name, in look_at_canvas). */
+export function fileParamName(params: Record<string, unknown>, key: string): string | null {
+  const value = params[key];
+  if (typeof value !== 'string' || !value) return null;
+  const file = basename(value) || value;
+  const kept = key === 'filePath' ? inputFileName(params) : null;
+  if (kept && !CONTENT_HASH_NAME.test(kept)) return kept;
+  const recorded = CONTENT_HASH_NAME.test(file) ? recordedUploadName(file) : null;
+  return shownFileName(recorded || file);
 }
