@@ -1172,7 +1172,7 @@ def test_the_cli_parses_channel_on_connect_and_disconnect():
 
 # -- channel listeners need a token (Justin, 2026-11-03) ------------------------------------
 
-def _beat_once(monkeypatch, env, main_app, seconds=0.5):
+def _beat_once(monkeypatch, env, main_app, seconds=0.5, clock=None, state=None):
     """mcp_server's own beat (with_identity, the token file read as `nebula mcp
     connect claude-code --channel` writes it) against this backend, one beat."""
     import anyio
@@ -1196,18 +1196,30 @@ def _beat_once(monkeypatch, env, main_app, seconds=0.5):
     monkeypatch.setattr(mcp_server.httpx, "AsyncClient",
                         asgi_client)
     monkeypatch.setattr(mcp_server, "_current_url", lambda: "http://testserver")
-    state = mcp_channel.ChannelState(now=0.0)
+    state = state if state is not None else mcp_channel.ChannelState(now=0.0)
 
     async def run():
         with anyio.move_on_after(seconds):
-            await mcp_server._channel_beats(state, {"name": "Claude Code"}, lambda: 0.0)
+            await mcp_server._channel_beats(state, {"name": "Claude Code"}, clock or (lambda: 0.0))
 
     anyio.run(run)
     return state
 
 
+def _stepping(*times):
+    """A beat-loop clock: one value per loop step, the last kept."""
+    left = list(times)
+
+    def clock():
+        return left.pop(0) if len(left) > 1 else left[0]
+    return clock
+
+
 def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(client, monkeypatch, capsys):
     # Round 5, D2: one session is one process (each beat carries its nonce).
+    # GM r112.5: it first waits quietly (a restart's leftover entry times
+    # out within 45 s); still refused after 60 s, it is a real second
+    # process, and Nebula's line (GM r108, string 4) says so, once.
     import main
     import mcp_server
     from services import channel_listeners
@@ -1218,10 +1230,77 @@ def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(c
     assert first.listener_id and first.register_error is None
     capsys.readouterr()
     monkeypatch.setattr(mcp_server, "_CHANNEL_NONCE", "another-process-0002")
-    second = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=2.5)
+    waiting = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=2.5,
+                         clock=_stepping(0.0, 30.0, 59.0))
+    assert waiting.listener_id is None and waiting.register_error is None  # nothing shown to the person
+    err = capsys.readouterr().err
+    assert err == ("Nebula is waiting for this session’s previous listener to time out, then this one connects "
+                   "by itself.\n")
+    second = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=3.5,
+                        clock=_stepping(0.0, 30.0, 60.0, 70.0))
     assert second.listener_id is None and second.register_error == channel_listeners.SESSION_TAKEN_LINE
-    assert capsys.readouterr().err.count("error: Nebula couldn’t connect this listener because another process") == 1
+    err = capsys.readouterr().err
+    assert err.count("error: Nebula couldn’t connect this listener because another process") == 1
+    assert err.endswith("then start this listener again.\nnebula mcp connect claude-code --channel\n")
+    assert channel_listeners.SESSION_TAKEN_LINE == (
+        "Nebula couldn’t connect this listener because another process is already listening as this session. "
+        "Start each Claude Code with this command, which gives each one its own session, then start this listener "
+        "again.\nnebula mcp connect claude-code --channel")
     assert len(client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]) == 1
+
+
+def test_a_successor_on_the_same_session_connects_by_itself_once_the_old_entry_lapses(client, monkeypatch, capsys):
+    # GM r112.5 (review 4 live LOW-1): Claude Code restarted its MCP server
+    # (a crash, /mcp reconnect): the old process's entry lives until its
+    # TTL. The successor waits, says only the wait line, and registers by
+    # itself, with no error left for channel_status.
+    import main
+    import mcp_server
+    from services import channel_listeners
+
+    now = {"t": 0.0}
+    monkeypatch.setattr(main, "channel_book", channel_listeners.ListenerBook(clock=lambda: now["t"]))
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    first = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert first.listener_id
+    capsys.readouterr()
+    monkeypatch.setattr(mcp_server, "_CHANNEL_NONCE", "successor-process-03")
+    times = [10.0, 20.0, 47.0, 52.0]
+
+    def clock():
+        now["t"] = times.pop(0) if len(times) > 1 else times[0]
+        return now["t"]
+
+    successor = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=3.5,
+                           clock=clock)
+    assert successor.listener_id == first.listener_id and successor.register_error is None
+    err = capsys.readouterr().err
+    assert err == ("Nebula is waiting for this session’s previous listener to time out, then this one connects "
+                   "by itself.\n")
+
+
+def test_a_refused_beat_is_tried_again_every_5_s_not_every_second(client, monkeypatch):
+    # Review 4 NIT-2: the docs say how often; the loop now does that.
+    import main
+    import mcp_server
+
+    calls = []
+    real = mcp_server._channel_fetch
+
+    async def counting(path, *a, **kw):
+        calls.append(path)
+        return await real(path, *a, **kw)
+
+    monkeypatch.setattr(mcp_server, "_channel_fetch", counting)
+    # A clock one second per step, like the loop's own sleep: 0..9 s.
+    _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=3.5,
+               clock=_stepping(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
+    assert mcp_server.CHANNEL_RETRY_SECONDS == 5.0
+    assert len(calls) == 1  # 0..3 s: the first try only
+    calls.clear()
+    _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=7.5,
+               clock=_stepping(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
+    assert len(calls) == 2  # at 0 and at 5
 
 
 def test_a_channel_listener_registers_with_its_token_file_and_not_without(client, monkeypatch, capsys):

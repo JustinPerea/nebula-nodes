@@ -3105,7 +3105,7 @@ async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agen
         except httpx.HTTPError as exc:
             raise NebulaAPIError(f"{method} {path} failed: {exc.__class__.__name__}", kind="connect") from exc
     if response.status_code >= 400:
-        raise NebulaAPIError(error_detail(response), status=response.status_code)
+        raise NebulaAPIError(error_detail(response), status=response.status_code, headers=response.headers)
     payload = response.json()
     if not isinstance(payload, dict):
         raise NebulaAPIError(f"Nebula sent an invalid answer for {method} {path}")
@@ -3113,9 +3113,23 @@ async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agen
 
 
 CHANNEL_BEAT_SECONDS = 15.0  # services/channel_listeners.BEAT_SECONDS: how often it tells Nebula it listens
+# A beat Nebula refused (401, 409) or never answered is tried again this
+# often, not every second (review 4 NIT-2): within the 45 s an old entry
+# lives, a successor on the same session asks about nine times.
+CHANNEL_RETRY_SECONDS = 5.0
 # This process's own (round 5, D2): Nebula refuses a second process that
 # names the same agent session while this one's entry lives.
 _CHANNEL_NONCE = secrets.token_hex(12)
+# GM r112.5: a successor on the same session (Claude Code restarted its MCP
+# server, so the old process's entry still lives until its TTL) waits
+# quietly and connects by itself, nothing shown to the person. Past
+# SESSION_WAIT_SECONDS still refused, it is a real second process: then
+# Nebula's own line (another process is listening as this session) goes
+# to stderr and to channel_status.
+SESSION_TAKEN_CODE = "listener_session_taken"  # services/channel_listeners.SESSION_TAKEN_CODE
+SESSION_WAIT_SECONDS = 60.0
+SESSION_WAIT_LINE = ("Nebula is waiting for this session’s previous listener to time out, then this one connects "
+                     "by itself.")
 
 
 async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
@@ -3123,26 +3137,47 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
     CHANNEL_BEAT_SECONDS and at once when listening stops, for as long as the
     session runs: the canvas's readiness (services/channel_listeners.py).
     Nebula's answer names this listener (``listenerId``), which a message
-    the person sends it names in turn. A failed beat is tried again at the
-    next one; it never stops the listener or the tools. Only an agent token
-    registers (Justin, 2026-11-03): a refusal (no token, or one Nebula
-    doesn't know, or another process already listening as this session:
-    each beat carries this process's nonce, D2) is printed once to stderr after "error: ", and
-    channel_status says it (``registerError``) until a beat goes through."""
+    the person sends it names in turn. A failed or refused beat is tried
+    again every CHANNEL_RETRY_SECONDS; it never stops the listener or the
+    tools. Only an agent token registers (Justin, 2026-11-03): a refusal (no
+    token, or one Nebula doesn't know) is printed once to stderr after
+    "error: ", and channel_status says it (``registerError``) until a beat
+    goes through. Each beat carries this process's nonce (D2): while
+    another process's entry for this session lives, Nebula refuses it
+    (409). That is first taken for a restart's leftover (GM r112.5): the
+    wait line goes to stderr once, and only past SESSION_WAIT_SECONDS is it
+    Nebula's refusal, as above. The first beat Nebula takes hands the
+    answer to the listener's state (ChannelState.beat_answered)."""
     said: tuple[Any, ...] | None = None
+    tried: tuple[Any, ...] | None = None
     refused: str | None = None
+    waiting_since: float | None = None
+    went = True
     last = -math.inf
     while True:
         shown = ("stopped" if state.off else "listening", state.off_reason if state.off else None)
         now = clock()
-        if shown != said or now - last >= CHANNEL_BEAT_SECONDS:
+        every = CHANNEL_BEAT_SECONDS if went else CHANNEL_RETRY_SECONDS
+        if (shown != said and shown != tried) or now - last >= every:
             body = {"state": shown[0], **({"reason": shown[1]} if shown[1] else {}),
                     **({"projectId": state.project_id} if state.project_id else {}), "nonce": _CHANNEL_NONCE}
+            tried, went = shown, False
             try:
                 answer = await _channel_fetch("/api/agent/channel", {}, 5.0, agent["name"], method="POST",
                                               json_body=body)
             except NebulaAPIError as exc:
-                if exc.status in (401, 409):  # no token, a bad one, or another process on this session (D2)
+                headers = exc.headers or {}
+                code = headers.get("X-Nebula-Code") or headers.get("x-nebula-code")
+                if exc.status == 409 and code == SESSION_TAKEN_CODE:
+                    if waiting_since is None:
+                        waiting_since = now
+                        print(SESSION_WAIT_LINE, file=sys.stderr, flush=True)
+                    if now - waiting_since >= SESSION_WAIT_SECONDS:
+                        if exc.detail != refused:
+                            print(f"error: {exc.detail}", file=sys.stderr, flush=True)
+                        refused = exc.detail
+                        state.register_error = exc.detail
+                elif exc.status in (401, 409):  # no token, or a bad one
                     if exc.detail != refused:
                         print(f"error: {exc.detail}", file=sys.stderr, flush=True)
                     refused = exc.detail
@@ -3150,15 +3185,10 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
             except Exception:  # noqa: BLE001 - Nebula down or older: readiness only, tried again soon
                 pass
             else:
-                refused = None
+                refused, waiting_since, went = None, None, True
                 state.register_error = None
-                listener = answer.get("listener") if isinstance(answer.get("listener"), dict) else {}
-                if listener.get("listenerId"):
-                    state.listener_id = str(listener["listenerId"])
-                named = listener.get("agent") if isinstance(listener.get("agent"), dict) else {}
-                if named.get("id"):
-                    # Its own replies (any route) end a deliberate span (J4).
-                    state.agent_id = str(named["id"])
+                if state.beat_answered(answer, now) and _channel is not None:
+                    _channel._nudge()  # what it learned (a listener id, open pushes) may make a push due
                 said = shown
             last = now
         await anyio.sleep(1.0)

@@ -727,15 +727,20 @@ def test_two_messages_and_one_reply_keep_the_second_messages_span():
 
 
 def test_the_same_for_shell_replies_naming_its_messages():
+    # Nebula marks the session's oldest unanswered push (review 4, the push
+    # ledger): the first shell reply names msg_1, the second msg_2. A reply
+    # naming a push already answered answers nothing more.
     state = listening()
     state.agent_id = MINE["id"]
     sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     sent(state, 2, 110.0, text="and add a moon")
     assert take(state, 110.0).wake == "message"
-    state.observe(resp(replied(3, "pt_a", reply_to="msg_2"), edit(4)), now=150.0)
-    assert _first_gated(drain(state, 150.0, 400.0)) is None  # one of two answered
-    state.observe(resp(replied(5, "pt_b", reply_to="msg_2")), now=400.0)
+    state.observe(resp(replied(3, "pt_a", reply_to="msg_1"), edit(4)), now=150.0)
+    assert _first_gated(drain(state, 150.0, 300.0)) is None  # one of two answered
+    state.observe(resp(replied(5, "pt_c", reply_to="msg_1")), now=300.0)  # the same push again
+    assert _first_gated(drain(state, 300.0, 400.0)) is None
+    state.observe(resp(replied(6, "pt_b", reply_to="msg_2")), now=400.0)
     assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
 
 
@@ -832,7 +837,7 @@ def test_the_cap_clears_what_waits_so_a_later_reply_never_reaches_back():
     assert take(state, 101.0).wake == "message"
     state.observe(resp(edit(3)), now=102.0)
     assert [(at, p.gate) for at, p in drain(state, 102.0, 702.0)] == [(701.5, True)]
-    assert state._open_replies == 0
+    assert state._open_groups == {} and not state._open_pins
     sent(state, 4, 800.0)
     assert take(state, 800.0).wake == "message"
     state.observe(resp(edit(5)), now=801.0)
@@ -850,3 +855,231 @@ def test_the_instructions_say_to_answer_every_deliberate_wake():
     assert "If nothing needs saying" not in text
     # PR C: a message (and an answer) is answered with reply_to_person.
     assert "Each is their request: answer a pin with resolve_pin, the others with reply_to_person." in text
+
+
+# -- review 4: the push ledger, the listener's side ------------------------------------
+# Nebula records each push the listener reports and marks the session's
+# OLDEST unanswered one for each reply (``replyTo``: its newest message,
+# else its first question set). The listener keeps the pushes as groups and
+# removes the one a reply names. Numbers refer to the coordinator's list.
+
+def _answer_ready(state: ChannelState, question_id: str, seq: int, now: float) -> None:
+    asked(state, question_id, now=now - 1.0)
+    state.observe(resp(answered(seq, question_id)), now=now)
+    assert state.answers_to_fetch() == [question_id]
+    state.answer_fetched(question_id, {**VIEW, "id": question_id})
+
+
+def _tool_reply(state: ChannelState, at: float, reply_to: str | None, reply_id: str = "pt_1") -> None:
+    assert state.tool_started("reply_to_person", {"text": "Done."}, at) is None
+    state.tool_finished("reply_to_person", {"text": "Done."}, {"reply": {"id": reply_id, "replyTo": reply_to}}, at)
+
+
+def _two_pushes(state: ChannelState) -> None:
+    state.agent_id = MINE["id"]
+    sent(state, 1, 100.0)
+    first = take(state, 100.0)
+    sent(state, 2, 110.0, text="and add a moon")
+    second = take(state, 110.0)
+    for push in (first, second):
+        state.push_accepted(push.group)
+
+
+@pytest.mark.parametrize("order", ["echo first", "result first"])
+def test_1_one_reply_ends_exactly_one_push_whichever_of_its_echo_and_result_comes_first(order):
+    # Review 4 HIGH-1: the echo came before the tool's result 8 of 8 times on
+    # the cross-project path, and both counted.
+    state = listening()
+    _two_pushes(state)
+    echo = resp(replied(3, "pt_1", reply_to="msg_1"), edit(4))
+    if order == "echo first":
+        state.observe(echo, now=150.0)
+        _tool_reply(state, 150.1, "msg_1")
+    else:
+        _tool_reply(state, 150.0, "msg_1")
+        state.observe(echo, now=150.1)
+    assert list(state._open_groups.values())[0]["ids"] == ["msg_2"]
+    assert _first_gated(drain(state, 150.1, 400.0)) is None  # the moon's span holds
+    _tool_reply(state, 400.0, "msg_2", reply_id="pt_2")
+    assert [(at, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, True)]
+
+
+def test_1b_its_echo_before_its_result_while_the_accept_is_still_in_flight():
+    # The echo answered the group; the tool's result then names it again.
+    # Neither group is confirmed yet, so a fallback would take the moon's.
+    state = listening()
+    state.agent_id = MINE["id"]
+    sent(state, 1, 100.0)
+    take(state, 100.0)
+    sent(state, 2, 110.0, text="and add a moon")
+    take(state, 110.0)
+    state.observe(resp(replied(3, "pt_1", reply_to="msg_1")), now=150.0)
+    _tool_reply(state, 150.1, "msg_1")
+    assert [g["ids"] for g in state._open_groups.values()] == [["msg_2"]]
+
+
+def test_2_two_messages_in_one_push_one_reply_ends_it():
+    state = listening()
+    state.agent_id = MINE["id"]
+    sent(state, 1, 100.0)
+    sent(state, 2, 100.0, text="and a moon")
+    push = take(state, 100.0)
+    assert push.wake == "message" and state._open_groups[push.group]["ids"] == ["msg_1", "msg_2"]
+    state.push_accepted(push.group)
+    state.observe(resp(edit(3), replied(4, "pt_1", reply_to="msg_2")), now=150.0)
+    assert [(at, p.gate) for at, p in drain(state, 150.0, 171.0)] == [(170.0, True)]
+
+
+def test_4_a_shell_reply_to_an_answer_only_push_ends_its_span():
+    # Review 4 live MEDIUM-4: a fresh session asks, the person picks "Warm",
+    # `nebula reply` from its shell: Nebula marks the answer's push, whose
+    # replyTo is its question set.
+    state = listening()
+    state.agent_id = MINE["id"]
+    _answer_ready(state, "qs_0000000a", 1, now=100.0)
+    push = take(state, 100.0)
+    assert push.wake == "answer" and push.question_ids == ["qs_0000000a"]
+    state.push_accepted(push.group)
+    state.observe(resp(edit(2), replied(3, "pt_1", reply_to="qs_0000000a")), now=150.0)
+    assert [(at, p.gate) for at, p in drain(state, 150.0, 171.0)] == [(170.0, True)]
+
+
+def test_an_answer_push_and_a_message_push_need_two_replies():
+    # Review 4 LOW-2 (M08, B16): an answer push opens a group of its own.
+    state = listening()
+    state.agent_id = MINE["id"]
+    _answer_ready(state, "qs_0000000a", 1, now=100.0)
+    answer_push = take(state, 100.0)
+    sent(state, 2, 110.0)
+    message_push = take(state, 110.0)
+    assert answer_push.group != message_push.group and len(state._open_groups) == 2
+    state.observe(resp(edit(3)), now=111.0)
+    _tool_reply(state, 150.0, "qs_0000000a")
+    assert _first_gated(drain(state, 150.0, 400.0)) is None
+    _tool_reply(state, 400.0, "msg_2", reply_id="pt_2")
+    assert [(at, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, True)]
+
+
+def test_10_a_duplicated_or_foreign_event_removes_nothing_extra_and_never_falls_back():
+    # 10 and 19 ("echo running the fallback"): an own thread.replied whose
+    # replyTo names no open group (answered already, a sibling's, None)
+    # answers nothing, even with an unconfirmed group open.
+    state = listening()
+    state.agent_id = MINE["id"]
+    sent(state, 1, 100.0)
+    take(state, 100.0)
+    sent(state, 2, 110.0)
+    take(state, 110.0)  # neither confirmed
+    state.observe(resp(replied(3, "pt_1", reply_to="msg_1")), now=150.0)
+    state.observe(resp(replied(3, "pt_1", reply_to="msg_1"), replied(4, "pt_9", reply_to=None),
+                       replied(5, "pt_8", reply_to="msg_for_a_sibling")), now=151.0)
+    assert [g["ids"] for g in state._open_groups.values()] == [["msg_2"]]
+
+
+def test_the_tool_falls_back_only_to_an_unconfirmed_group_and_only_when_it_names_none():
+    state = listening()
+    _two_pushes(state)  # both confirmed
+    _tool_reply(state, 150.0, None)  # Nebula marked nothing: no unconfirmed group to fall back to
+    assert len(state._open_groups) == 2
+    sent(state, 3, 160.0)
+    take(state, 160.0)  # its accept never went
+    _tool_reply(state, 170.0, None, reply_id="pt_2")
+    assert [g["ids"] for g in state._open_groups.values()] == [["msg_1"], ["msg_2"]]
+
+
+def test_14_an_unreported_push_is_ended_once_by_the_tool_never_by_a_shell_reply():
+    # 14: its accept failed after every try, so Nebula's ledger never had it:
+    # a shell reply then names nothing (replyTo None), the tool falls back.
+    state = listening()
+    state.agent_id = MINE["id"]
+    sent(state, 1, 100.0)
+    take(state, 100.0)
+    state.observe(resp(edit(2), replied(3, "pt_1", reply_to=None)), now=150.0)
+    assert _first_gated(drain(state, 150.0, 400.0)) is None
+    _tool_reply(state, 400.0, None, reply_id="pt_2")
+    assert [(at, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, True)]
+
+
+def test_12_after_a_journal_reset_every_group_is_reported_again_and_the_tool_ends_one():
+    state = listening()
+    _two_pushes(state)
+    state.observe(resp(reset=True), now=200.0)
+    resend = state.groups_to_resend()
+    assert [(m, q) for _, m, q in resend] == [(["msg_1"], []), (["msg_2"], [])]
+    assert state.groups_to_resend() == []  # once per reset
+    # Before Nebula confirms them again, a tool reply Nebula couldn't mark ends one.
+    _tool_reply(state, 210.0, None)
+    assert [g["ids"] for g in state._open_groups.values()] == [["msg_2"]]
+    # Re-sent: Nebula confirmed it; a shell reply naming it ends the span.
+    state.push_accepted(resend[1][0])
+    state.observe(resp(replied(3, "pt_2", reply_to="msg_2")), now=220.0)
+    assert state._open_groups == {} and state._reply_due_at is None
+
+
+def test_13_a_listener_restarted_in_the_same_session_takes_nebulas_open_pushes():
+    state = listening()
+    state.agent_id = MINE["id"]
+    first = state.beat_answered({"listener": {"listenerId": LISTENER, "agent": {"id": MINE["id"]}},
+                                 "openPushes": [{"ids": ["msg_1"], "messageIds": ["msg_1"], "questionIds": [],
+                                                 "ageSeconds": 30.0},
+                                                {"ids": ["qs_1"], "messageIds": [], "questionIds": ["qs_1"],
+                                                 "ageSeconds": 10.0}]}, 100.0)
+    assert first is True
+    assert [(g["ids"], g["confirmed"]) for g in state._open_groups.values()] == [(["msg_1"], True), (["qs_1"], True)]
+    assert state._reply_due_at == 90.0  # the latest push, 10 s ago
+    # A second beat never seeds again.
+    assert state.beat_answered({"listener": {"listenerId": LISTENER}, "openPushes": [{"ids": ["msg_9"],
+                                "messageIds": ["msg_9"], "ageSeconds": 1}]}, 105.0) is False
+    assert len(state._open_groups) == 2
+    state.observe(resp(edit(1)), now=106.0)
+    state.observe(resp(replied(2, "pt_1", reply_to="msg_1")), now=110.0)
+    assert _first_gated(drain(state, 110.0, 300.0)) is None
+    state.observe(resp(replied(3, "pt_2", reply_to="qs_1")), now=300.0)
+    assert [(at, p.gate) for at, p in drain(state, 300.0, 321.0)] == [(320.0, True)]
+
+
+def test_seeded_pushes_past_the_cap_are_dropped():
+    state = listening()
+    state.beat_answered({"listener": {"listenerId": LISTENER},
+                         "openPushes": [{"ids": ["msg_1"], "messageIds": ["msg_1"], "ageSeconds": 700.0}]}, 1000.0)
+    assert state._open_groups == {} and state._reply_due_at is None
+
+
+def test_a_new_listener_id_is_news_to_the_listener():
+    state = ChannelState(limits=Limits(), now=0.0)
+    assert state.beat_answered({"listener": {"listenerId": "ch_a"}}, 1.0) is True
+    assert state.beat_answered({"listener": {"listenerId": "ch_a"}}, 2.0) is False
+    assert state.beat_answered({"listener": {"listenerId": "ch_b"}}, 3.0) is True  # Nebula restarted
+
+
+def test_gm_r108_a_a_pin_the_person_deletes_ends_its_span():
+    state = listening()
+    state.observe(resp(pin(1, "warmer")), now=100.0)
+    assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]
+    state.observe(resp(edit(2)), now=101.5)
+    assert _first_gated(drain(state, 101.5, 150.0)) is None
+    state.observe(resp(ev(3, "pin.removed", data={"pinId": "pin_00000001", "text": "warmer"})), now=150.0)
+    assert not state._open_pins and state._reply_due_at is None
+    assert _first_gated(drain(state, 150.0, 171.0)) is not None  # well before the cap
+
+
+def test_a_pin_left_at_the_cap_never_holds_a_later_span():
+    # Review 4 LOW-3 (B14): the cap clears the pins too.
+    state = listening()
+    state.observe(resp(pin(1, "warmer")), now=100.0)
+    assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]
+    state.observe(resp(edit(2)), now=102.0)
+    assert [(at, p.gate) for at, p in drain(state, 102.0, 702.0)] == [(701.5, True)]
+    assert not state._open_pins
+    sent(state, 3, 800.0)
+    take(state, 800.0)
+    state.observe(resp(edit(4)), now=801.0)
+    _tool_reply(state, 810.0, "msg_3")
+    assert [(at, p.gate) for at, p in drain(state, 810.0, 831.0)] == [(830.0, True)]
+
+
+def test_open_pushes_are_taken_once_per_process():
+    state = listening()
+    state.seed_open_pushes([{"ids": ["msg_1"], "messageIds": ["msg_1"], "ageSeconds": 1.0}], 100.0)
+    state.seed_open_pushes([{"ids": ["msg_2"], "messageIds": ["msg_2"], "ageSeconds": 1.0}], 101.0)
+    assert [g["ids"] for g in state._open_groups.values()] == [["msg_1"]]

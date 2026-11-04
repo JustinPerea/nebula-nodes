@@ -321,3 +321,29 @@ def test_fresh_listening_leaves_out_a_crashed_sessions_leftover_and_stopped_ones
 def test_the_mcp_listener_sends_its_own_nonce_with_each_beat_and_its_goodbye():
     nonce = mcp_server._CHANNEL_NONCE
     assert channel_listeners.parse_nonce(nonce) == nonce
+
+
+def test_one_missed_beat_never_makes_a_live_listener_stale():
+    # Review 4 NIT-3: beats every 15 s with a 5 s timeout. One that failed
+    # leaves a gap of up to 35 s; at 25 s the live listener read as stale.
+    clock = Clock()
+    book = channel_listeners.ListenerBook(clock)
+    claude = AgentIdentity(id="app:claude1", name="Claude Code", color="#C3E86B", verified=True)
+    book.beat(claude, "live", state="listening", reason=None, project_id=None)
+    clock.now += 34.0
+    assert [entry.session for entry in book.fresh_listening("app:claude1")] == ["live"]
+    clock.now += 2.0
+    assert book.fresh_listening("app:claude1") == []
+    assert channel_listeners.FRESH_SECONDS == 35.0 < channel_listeners.TTL_SECONDS
+
+
+def test_another_process_holding_the_session_is_told_apart_from_none():
+    # Review 4 LOW-4: PR C's inbox, accepted and held routes refuse a
+    # process whose nonce isn't the entry's.
+    book = channel_listeners.ListenerBook(Clock())
+    claude = AgentIdentity(id="app:claude1", name="Claude Code", color="#C3E86B", verified=True)
+    assert book.taken_by_another(claude, "s", "process-one-0001") is False  # no entry yet
+    book.beat(claude, "s", state="listening", reason=None, project_id=None, nonce="process-one-0001")
+    assert book.taken_by_another(claude, "s", "process-one-0001") is False
+    assert book.taken_by_another(claude, "s", "process-two-0002") is True
+    assert book.taken_by_another(claude, "s", None) is True
