@@ -6,6 +6,9 @@ import type { BoardCover } from '../../lib/moodboardCover';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ImageColors } from './MoodboardColors';
 import { isSetAside, setAsidePatch } from './steering';
+import { placeholderLabel, type BoardPlaceholder } from './boardPlaceholder';
+import { offlineMark } from '../../lib/useBackendOffline';
+import { offlineDisabledReason } from '../../lib/errorCopy';
 
 // The backend's cap on a private note (services/moodboard_store.py).
 export const PRIVATE_NOTE_LIMIT = 2000;
@@ -15,14 +18,20 @@ export const PRIVATE_NOTE_LIMIT = 2000;
  * Set aside, the cover pick and notes. This is Moodboard Studio's grid as it
  * was before the Board view (moodboard canvas PR5), moved here, with the
  * cover's mark and Use as cover / Back to #1 (lib/moodboardCover).
+ *
+ * Files still uploading (from any add, Board or List) are rows of their own
+ * at the end, each its own status (GM): the board's placeholder as its
+ * thumb, with the file's name, and "Uploading". Nothing else; Add Images
+ * stays live, and the toolbar has no status.
  */
-export function MoodboardListView({ images, analysis, cover, uploading, onFiles, onDrop, onRemove, onUpdate,
-  onSetCover, onTextDone }: {
+export function MoodboardListView({ images, analysis, cover, uploads = [], onFiles, onDrop, onRemove, onUpdate,
+  onSetCover, onTextDone, offline = false }: {
   images: MoodboardImage[];
   analysis: MoodboardAnalysis | null;
   /** The image the board opens on (the chosen one, else #1). */
   cover: BoardCover | null;
-  uploading: boolean;
+  /** Files still uploading to this board: one row each. */
+  uploads?: BoardPlaceholder[];
   onFiles: (files: FileList | null) => void;
   onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onRemove: (id: string) => void;
@@ -31,28 +40,30 @@ export function MoodboardListView({ images, analysis, cover, uploading, onFiles,
   onSetCover: (id: string | null) => void;
   /** A note lost focus: send it now. */
   onTextDone: () => void;
+  /** Nebula is offline (GM r12 2): Add Images is disabled with the offline
+   *  reason, and the drop hint goes until it reconnects. */
+  offline?: boolean;
 }) {
   return (
     <section
-      className={`moodboard-dropzone ${uploading ? 'moodboard-dropzone--busy' : ''}`}
+      className="moodboard-dropzone"
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
     >
       <div className="moodboard-dropzone__head">
         <div>
           <span className="moodboard-dropzone__label">Images ({images.length})</span>
-          <span className="moodboard-dropzone__hint">Drag images here or add files.</span>
+          {!offline && <span className="moodboard-dropzone__hint">Drag images here or add files.</span>}
         </div>
-        <label className={`moodboard-dropzone__file-wrap ${uploading ? 'moodboard-dropzone__file-wrap--disabled' : ''}`}>
-          <span className="moodboard-dropzone__file-button">
-            {uploading ? 'Uploading' : 'Add Images'}
-          </span>
+        <label className={`moodboard-dropzone__file-wrap${offline ? ' moodboard-dropzone__file-wrap--disabled' : ''}`}
+          {...(offline ? { title: offlineDisabledReason('add images') } : {})} {...offlineMark(offline)}>
+          <span className="moodboard-dropzone__file-button">Add Images</span>
           <input
             className="moodboard-dropzone__file-input"
             type="file"
             accept="image/*"
             multiple
-            disabled={uploading}
+            disabled={offline}
             aria-label="Add Images"
             onChange={(event) => {
               onFiles(event.target.files);
@@ -150,6 +161,17 @@ export function MoodboardListView({ images, analysis, cover, uploading, onFiles,
           </div>
           );
         })}
+        {uploads.map((upload) => (
+          <div key={upload.id} className="moodboard-tile moodboard-tile--uploading" role="status" aria-busy="true"
+            aria-label={`${placeholderLabel(upload.source)}, uploading`}>
+            <div className="moodboard-tile__image moodboard-tile__upload">
+              <span className="moodboard-tile__upload-name">{placeholderLabel(upload.source)}</span>
+            </div>
+            <div className="moodboard-tile__controls">
+              <span className="moodboard-tile__upload-state">Uploading</span>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
