@@ -66,6 +66,9 @@ STATES = ("listening", "stopped")
 # after that the row drops for good and a resend is offered. Not a new number.
 # (push_ledger.KEEP_SECONDS, 24 h, is the reply-matching bound and stays.)
 LAPSE_WINDOW_SECONDS = push_ledger.DELIBERATE_SPAN_CAP
+# A settle that failed (the project store couldn't be written) is given back
+# and tried again after this long, never dropped and never spun on.
+SETTLE_RETRY_SECONDS = 5.0
 # Justin, 2026-11-03: only an agent holding a valid agent token (Settings ›
 # Connect your agent) registers, so only a token's agent is ever addressed by
 # the person's messages. GM r81's lines (the listener prints them after
@@ -169,6 +172,8 @@ class ListenerBook:
         # Listeners that expired, ended or stopped, not yet settled by the
         # caller (round 5c, LOW-2): (agent id, raw session, listener id).
         self._gone: list[tuple[str, str, str]] = []
+        # When a settle the caller gave back may be tried again (give_back).
+        self._retry_at = 0.0
         # Round 5d: a listener whose beats lapsed is not gone for good until
         # its window ends. ``_lapsed_new`` are the ones nobody has marked yet;
         # ``_lapse_until`` maps (agent id, raw session) to (listener id,
@@ -310,6 +315,16 @@ class ListenerBook:
             gone, self._gone = self._gone, []
             return gone
 
+    def give_back(self, lapsed: list[tuple[str, str, str]] = (),
+                  gone: list[tuple[str, str, str]] = ()) -> None:
+        """Put back what a settle couldn't finish (the project store failed),
+        ahead of anything newer, to be tried again after SETTLE_RETRY_SECONDS:
+        a row is never left "sent" or lapsed because one write failed."""
+        with self._lock:
+            self._lapsed_new = [*lapsed, *self._lapsed_new]
+            self._gone = [*gone, *self._gone]
+            self._retry_at = self._clock() + SETTLE_RETRY_SECONDS
+
     def sweep(self) -> bool:
         """Drop entries past TTL_SECONDS. Returns whether any went."""
         with self._lock:
@@ -318,7 +333,9 @@ class ListenerBook:
     def next_deadline(self) -> float | None:
         with self._lock:
             if self._gone or self._lapsed_new:
-                return self._clock() - 0.5  # an expiry nobody settled yet: check again at once
+                # An expiry nobody settled yet: check again at once, or once a
+                # failed settle's retry is due.
+                return max(self._clock() - 0.5, self._retry_at)
             times = [entry.seen_at + TTL_SECONDS for entry in self._entries.values()]
             times += [until for _, until in self._lapse_until.values()]
             return min(times) if times else None

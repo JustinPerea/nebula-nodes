@@ -220,3 +220,45 @@ def test_an_evicted_listener_is_listed_gone():
         book.beat(agent, f"s{n}", state="listening", reason=None, project_id=None)
     assert [g[1] for g in book.take_gone()] == ["s0"]
     assert book.take_lapsed() == []
+
+
+# -- the 5d check's LOW: a settle the store failed is tried again, never lost ----------------------
+
+def test_a_drop_the_store_failed_is_given_back_and_lands_on_the_retry(thread, monkeypatch):
+    a = _listen(thread, SESSION_A)
+    first = _send(thread, a, "hello").json()["row"]["id"]
+    real = thread.main.thread_book.drop_route
+    failures = iter([True])
+
+    def flaky(*args):
+        if next(failures, False):
+            raise OSError("disk full")
+        return real(*args)
+
+    monkeypatch.setattr(thread.main.thread_book, "drop_route", flaky)
+    thread.client.delete("/api/agent/channel", headers=SESSION_A)  # ended on purpose: final
+    assert not _is_dropped(thread, first)  # the write failed: still waiting, not lost
+    # Not spun on: the next check waits for the retry.
+    assert thread.main.channel_book.next_deadline() >= thread.channel_clock.now + channel_listeners.SETTLE_RETRY_SECONDS - 0.01
+    thread.channel_clock.now += channel_listeners.SETTLE_RETRY_SECONDS + 1
+    _sweep(thread)
+    assert _is_dropped(thread, first)
+
+
+def test_a_lapse_the_store_failed_is_given_back_and_lands_on_the_retry(thread, monkeypatch):
+    a = _listen(thread, SESSION_A)
+    first = _send(thread, a, "hello").json()["row"]["id"]
+    real = thread.main.thread_book.lapse_route
+    failures = iter([True])
+
+    def flaky(*args):
+        if next(failures, False):
+            raise OSError("disk full")
+        return real(*args)
+
+    monkeypatch.setattr(thread.main.thread_book, "lapse_route", flaky)
+    _lapse(thread)
+    assert not _is_lapsed(thread, first)
+    thread.channel_clock.now += channel_listeners.SETTLE_RETRY_SECONDS + 1
+    _sweep(thread)
+    assert _is_lapsed(thread, first)

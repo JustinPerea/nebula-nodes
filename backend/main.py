@@ -6643,18 +6643,24 @@ async def _settle_gone_listeners() -> None:
 
 
 async def _settle_gone_listeners_locked() -> None:
-    for agent_id, session, listener_id in channel_book.take_lapsed():
+    # A store that fails mid-way gives the rest back (the failed one first) to
+    # be tried again shortly: taken items are never just lost (5d check, LOW).
+    lapsed_items = channel_book.take_lapsed()
+    for index, (agent_id, session, listener_id) in enumerate(lapsed_items):
         try:
             lapsed = await asyncio.to_thread(thread_book.lapse_route, agent_id, session, listener_id)
         except (ProjectStoreError, OSError):
-            continue
+            channel_book.give_back(lapsed=lapsed_items[index:], gone=channel_book.take_gone())
+            return
         for project_id, rows in lapsed:
             await _broadcast_thread(project_id, rows)
-    for agent_id, session, listener_id in channel_book.take_gone():
+    gone_items = channel_book.take_gone()
+    for index, (agent_id, session, listener_id) in enumerate(gone_items):
         try:
             settled = await asyncio.to_thread(thread_book.drop_route, agent_id, session, listener_id)
         except (ProjectStoreError, OSError):
-            continue
+            channel_book.give_back(gone=gone_items[index:])
+            return
         for project_id, rows in settled:
             await _broadcast_thread(project_id, rows)
 
