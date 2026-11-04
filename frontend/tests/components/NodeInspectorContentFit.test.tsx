@@ -725,6 +725,168 @@ describe('the card growing under the panel (GM r82)', () => {
   });
 });
 
+/**
+ * Review 2 LOW-1: the moves review 2's mutants showed untested. A zoom
+ * changes the card's size and its place together; a resize can land in the
+ * same frame as a move. Both are moves: rigid, never the spring (review 7 M2).
+ */
+describe('a move that comes with a size change (review 2 LOW-1)', () => {
+  it('a zoom (the card moves and grows in one frame) moves the panel at once, with no spring', () => {
+    chromeAt(1440, 900);
+    contentHeight = 300;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds().top).toBe(192);
+    // Zoomed in about the pointer: the card is larger and somewhere else.
+    anchorRect = rect(540, 180, 123, 84);
+    frames(1);
+    expect(bounds().top).toBe(172);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  });
+
+  it('a resize in the same frame as a move drops the held top without a glide', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    contentHeight = 150;
+    openBeside(rect(560, 400, 82, 56));
+    settle();
+    contentHeight = 450;
+    frames(1);
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    expect(bounds()).toEqual({ top: 392, height: 754 - 392, bottom: 754 });
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    // The window gets shorter and the canvas pans the node in one frame.
+    const at700 = windowAt(1440, 700);
+    anchorRect = rect(560, 380, 82, 56);
+    frames(1);
+    expect(bounds()).toEqual({ top: at700.topLine, height: at700.bottomLine - at700.topLine, bottom: at700.bottomLine });
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  });
+});
+
+/**
+ * Review 2 LOW-2: closing clears the frame, so a reopen never paints the last
+ * open's frame (for one frame, or for good when the node has no card on
+ * screen to place it by).
+ */
+describe('closing clears the frame (review 2 LOW-2)', () => {
+  it('a reopen paints nothing of the last open before it measures', () => {
+    chromeAt(1440, 900);
+    contentHeight = 416;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds().top).toBe(192);
+    setVisible(false);
+    // The node moved while the panel was closed.
+    anchorRect = rect(560, 400, 82, 56);
+    act(() => useUIStore.getState().setInspectorVisible(true));
+    // Committed, not yet measured: no panel at the old place.
+    expect(document.querySelector('.node-inspector-popover')).toBeNull();
+    frames(1);
+    // Placed by the node where it is now (shifted up to the band's line).
+    expect(bounds()).toEqual({ top: 754 - (416 + CHROME), height: 416 + CHROME, bottom: 754 });
+  });
+
+  it('a reopen with no card on screen shows nothing, not the last frame', () => {
+    chromeAt(1440, 900);
+    contentHeight = 2000;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds()).toEqual({ top: 154, height: 600, bottom: 754 });
+    setVisible(false);
+    // A shorter window, and the node's card is off screen (no anchor).
+    windowAt(1024, 640);
+    placed.filter((element) => element.hasAttribute('data-node-inspector-anchor')).forEach((element) => element.remove());
+    setVisible(true);
+    frames(3);
+    expect(document.querySelector('.node-inspector-popover')).toBeNull();
+  });
+});
+
+/**
+ * GM r87 (review 2 MEDIUM-1): "A 1 px hairline in the Restraint border token
+ * on the top edge of the Run/Duplicate/Delete foot row whenever the body can
+ * scroll further down; gone at the end. ... Test: a capped body not scrolled
+ * to the end always shows the hairline, incl. cuts between fields (the 900
+ * and 820 cases); at the end it's gone."
+ *
+ * The hairline is the foot's ::before, shown by
+ * `.node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot`
+ * (styles/slava-restraint.css; its CSS is pinned in inspectorBodyFade.test.tsx).
+ * jsdom draws no pseudo-elements, so these tests check that the rule's
+ * selector matches the foot. It reads the scroll position only, never where
+ * the cut falls: review 2 measured the low Style Reference's cut between
+ * fields at 1440x900 (the Strength slider wholly under it, 291 px changed by
+ * the fade) and at 1440x820 (only the gap between fields: 0 px changed).
+ * Content: 602 px, as measured live (117 px of scroll at 1440x900).
+ */
+describe("the foot row's hairline while there is more below (GM r87)", () => {
+  const LOW = () => rect(560, 784, 82, 56);
+  const SELECTOR = '.node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot';
+  const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popover__foot')!.matches(SELECTOR);
+  const left = () => body().scrollHeight - body().clientHeight - body().scrollTop;
+  /** The body's size changed: ScrollFade re-measures (a ResizeObserver in the
+   *  app; jsdom has none, so its window listener stands in). */
+  const relayout = () => {
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    frames(1);
+  };
+  const scrollTo = (top: number) => {
+    body().scrollTop = top;
+    fireEvent.scroll(body());
+    frames(1);
+  };
+
+  for (const height of [900, 820]) {
+    it(`at 1440x${height}, a low Style Reference shows it until the end of the scroll, then not`, () => {
+      const { bottomLine } = chromeAt(1440, height);
+      contentHeight = 602;
+      openBeside(LOW());
+      settle();
+      relayout();
+      expect(bounds().bottom).toBe(bottomLine);
+      expect(left()).toBeGreaterThan(1);
+      expect(hairline()).toBe(true);
+      // Part of the way down: still more below.
+      scrollTo(Math.floor((body().scrollHeight - body().clientHeight) / 2));
+      expect(hairline()).toBe(true);
+      // At the end it's gone, and back once there is more below again.
+      scrollTo(body().scrollHeight - body().clientHeight);
+      expect(left()).toBe(0);
+      expect(hairline()).toBe(false);
+      scrollTo(body().scrollHeight - body().clientHeight - 2);
+      expect(hairline()).toBe(true);
+    });
+  }
+
+  it('from 900 to 640 px tall, wherever the cut falls, it shows exactly while the body can scroll down', () => {
+    chromeAt(1440, 900);
+    contentHeight = 602;
+    openBeside(LOW());
+    settle();
+    let shown = 0;
+    for (let height = 900; height >= 640; height -= 4) {
+      windowAt(1440, height);
+      frames(1);
+      relayout();
+      expect(left(), `at ${height}`).toBeGreaterThan(1);
+      expect(hairline(), `at ${height}`).toBe(true);
+      shown += 1;
+    }
+    expect(shown).toBe(66);
+  });
+
+  it('a body that fits has none', () => {
+    chromeAt(1440, 900);
+    contentHeight = 416;
+    openBeside(LOW());
+    settle();
+    relayout();
+    expect(left()).toBe(0);
+    expect(hairline()).toBe(false);
+  });
+});
+
 describe('the pinned Inspector (GM r68: unchanged)', () => {
   it('keeps its 440 px start whatever its content, and never springs', () => {
     useUIStore.getState().setInspectorPinned(true);

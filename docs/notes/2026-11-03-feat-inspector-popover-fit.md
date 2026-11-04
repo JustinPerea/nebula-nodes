@@ -134,9 +134,9 @@ Inspector's preview `<img>`).
   tick) adds to it, so the before-paint re-measure can't end an open early.
 - **The preview has its height before it decodes (the real fix).** Nothing
   stored the dimensions, so `POST /api/uploads` now reads them from the
-  image's header with Pillow (`backend/services/preview_size.py`; lazy open,
-  no pixels decoded; EXIF orientations 5-8 swap width and height, as the
-  browser shows it). It returns them as `previewSize`, and a node it creates
+  image's header with Pillow (`backend/services/preview_size.py`; EXIF
+  orientations 5-8 swap width and height, as the browser shows it; Round 3
+  said "no pixels decoded", which was wrong for PNG until Round 4). It returns them as `previewSize`, and a node it creates
   (canvas drop, `nebula upload`, MCP `upload_file`) holds them as the private
   param `_previewSize` next to `_previewUrl`. The Inspector's own upload
   stores the same param from the response, and drops the last file's size
@@ -144,10 +144,12 @@ Inspector's preview `<img>`).
   preview `<img>` gets `width`/`height` (`lib/previewSize.ts` validates the
   stored value) and the CSS adds `height: auto`, so the browser lays it out
   at the stored ratio before it loads; once loaded its own ratio wins, so a
-  stale size can't distort it. MCP/CLI parity: agents read `_previewSize`
-  with a node's params and, like every `_` param, can't write it
-  (`agent_params.internal_keys`); their uploads get it the same way the
-  canvas's do. Saved nodes from before have no size and fall back to the
+  stale size can't distort it. It is a private layout param: agents can't
+  write it, like every `_` param (`agent_params.internal_keys`), and it
+  isn't shown to them (node params they read leave `_` keys out, and the
+  `nebula upload` / MCP `upload_file` answer doesn't carry it). Agents don't
+  need it. Their uploads store it the same way the canvas's do. (Corrected
+  in Round 4: this said agents read it.) Saved nodes from before have no size and fall back to the
   settle window.
 - **A window resize re-places (LOW-1).** A viewport size change drops the
   held top. If a top was held, or a glide is already running, the change
@@ -210,3 +212,61 @@ Inspector's preview `<img>`).
   placed afresh at once.
 - Blocked log: canary lines only. No request left the lane.
 
+
+## Round 4 (review 2, GM r87)
+
+- **The foot row's hairline (MEDIUM-1, GM r87 cue (b)).** While the body can
+  scroll further down (ScrollFade's `data-scroll-more`), the foot row's top
+  edge shows a 1 px line in the Restraint border token (`--sr-edge`, the
+  panel's own edge), drawn as the foot's `::before` in
+  `slava-restraint.css`. It is gone at the end of the scroll. It comes on
+  `SPRING_POP` and goes on `SPRING_SOFT` (`lib/springs.ts`, sampled to
+  `linear()`; the vars sit on the foot, `FOOT_SPRINGS`), and reduced motion
+  jumps. The 12 px fade stays. It reads the scroll position only, so it
+  shows wherever the cut falls, including between fields (the 1440x900 and
+  1440x820 low Style Reference cases, where the fade alone changed 291 and
+  0 px).
+- **No pixel decode for the preview size (MEDIUM-2).** `preview_size` no
+  longer calls `getexif()`, which loads a PNG whose EXIF isn't ahead of
+  its pixel data. It parses the EXIF block the header already holds
+  (`image.info["exif"]`: JPEG APP1, WebP EXIF, a PNG eXIf before IDAT) with
+  `Image.Exif().load()`. A size over `Image.MAX_IMAGE_PIXELS` is not
+  reported (Image.open only refuses twice that). The upload route runs it
+  in `asyncio.to_thread`. Measured on a 9000x9000 PNG (258 KB): peak RSS
+  went from 15 to 327 MB with the old call, and from 16 to 18 MB now.
+- **Closing clears the frame (LOW-2).** The frame state is set to null in
+  the render where the panel is closed (not in an effect, which the
+  `set-state-in-effect` lint rule refuses), so a reopen never paints the
+  last open's frame, and a node with no card on screen shows nothing.
+- **A stale `_previewSize` is dropped (NIT-2).** The size belongs to the
+  file it was read from. `_normalize_image_input_params` drops it when the
+  preview now names another file (an import from outside the output root)
+  or none. A merge that names another file through `PUT /api/graph/node`
+  or `/api/graph/apply` without sending a size drops it too
+  (`_drop_preview_size_on_file_change`). The Inspector's own upload sends
+  the new size with the file, and a file without one (the Inspector deletes
+  it locally, so nothing is sent) now loses the old size on the backend too.
+- **Docs (NIT-1).** `_previewSize` is a private layout param: agents can't
+  write it and it isn't shown to them. The Round 3 text above, the module
+  docstring and the PR body are corrected.
+- **Survivors pinned (LOW-1).** A zoom (the card moves and grows in one
+  frame) and a resize in the same frame as a move both stay rigid. EXIF
+  orientations 1-8, a bomb header, a broken EXIF block, the pixel ceiling
+  and the worker thread each have a test.
+- **Mutations.** Frontend 14 of 14 killed. Backend 18 of 20 killed; the two
+  survivors are equivalent: the `<= 0` guard (Pillow refuses a zero width
+  or height at open, checked for PNG, GIF and BMP), and the Image Input
+  check in the drop helper (no other node type gets `_previewSize`).
+
+### Round 4 live check (isolated backend 8968, Vite 5968, no provider calls, Run never clicked)
+
+- Style Reference with an uploaded image, node at 784. 1440x900: 154 to
+  754, 117 px left to scroll, the cut just under the "Strength" label, its
+  slider (687 to 721) under it. Hairline opacity 1, `rgba(255, 255, 255, 0.06)`, 1 px,
+  across the foot. 40 px down: still 1. At the end: 0, and it eased out
+  over about 26 frames (1, 0.95, 0.84, ... 0); back at the top it eased in
+  (0, 0.03, 0.10, ... 1). Reduced motion: 1 to 0 and back in one frame.
+- 1440x820: 154 to 674, 197 px left, the cut in the gap between fields.
+  Hairline 1; at the end 0.
+- Blocked log: canary lines only. The page's own canary requests were all
+  blocked.

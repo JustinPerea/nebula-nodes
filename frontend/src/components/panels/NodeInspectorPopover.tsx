@@ -7,6 +7,7 @@ import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
 import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
+import { springCssVars } from '../../lib/springs';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
@@ -20,6 +21,9 @@ const PINNED_RESIZE_MIN_WIDTH = 240;
 const PINNED_RESIZE_MIN_HEIGHT = 260;
 const PINNED_GAP = 12;
 const VIEWPORT_GUTTER = 16;
+
+/** The springs the foot row's "more below" hairline comes and goes on (GM r87). */
+const FOOT_SPRINGS = springCssVars() as CSSProperties;
 
 type PopoverFrame = {
   nodeId: string;
@@ -257,6 +261,11 @@ export function NodeInspectorPopover() {
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const setInspectorPinned = useUIStore((s) => s.setInspectorPinned);
   const [frame, setFrame] = useState<PopoverFrame | null>(null);
+  // Closed: its frame goes with it, so a reopen never paints the last open's
+  // frame first (review 2 LOW-2: it showed for a frame, and for good when
+  // the node had no card on screen, past every line). Set while rendering,
+  // so the closed render is the one React commits.
+  if ((!visible || !selectedNodeId) && frame !== null) setFrame(null);
   // The foot under the scrolling body that holds the Run / Duplicate / Delete row (InspectorFoot.tsx).
   const [foot, setFoot] = useState<HTMLDivElement | null>(null);
   const frameRef = useRef<PopoverFrame | null>(null);
@@ -302,7 +311,8 @@ export function NodeInspectorPopover() {
     if (!pinned) pinnedPreferenceRef.current = null;
     if (openTimer.current) clearTimeout(openTimer.current);
     openTimer.current = null;
-    // Closed: the next open measures afresh.
+    // Closed: the next open measures afresh (the frame state is cleared
+    // as it closes, above).
     if (!visible || !selectedNodeId) {
       frameRef.current = null;
       needRef.current = null;
@@ -582,7 +592,9 @@ export function NodeInspectorPopover() {
           </div>
         </ScrollFade>
       </InspectorFootContext.Provider>
-      <div ref={setFoot} className="node-inspector-popover__foot" />
+      {/* Its top edge shows a hairline while the body can scroll further
+          down (GM r87), on the house springs (styles/slava-restraint.css). */}
+      <div ref={setFoot} className="node-inspector-popover__foot" style={FOOT_SPRINGS} />
     </div>,
     document.body,
   );

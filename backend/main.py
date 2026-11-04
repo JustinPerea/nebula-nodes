@@ -2518,6 +2518,42 @@ def _preset_thumbnail_path_from_ref(value: str) -> Path | None:
     return path if path.is_file() else None
 
 
+def _ref_file_name(value: Any) -> str | None:
+    """The file a path or served URL names (its last part), or None."""
+    if not isinstance(value, str) or not value:
+        return None
+    return PurePosixPath(urlsplit(value).path).name or None
+
+
+def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:
+    """A `_previewSize` belongs to the file it was read from (services/preview_size.py).
+    When the preview now names another file, or none, the size goes with the
+    old one (#226 review 2, NIT-2). A move of the same file keeps it."""
+    if "_previewSize" not in after:
+        return
+    shown = _ref_file_name(after.get("_previewUrl"))
+    if shown is None or shown != _ref_file_name(before.get("_previewUrl")):
+        after.pop("_previewSize", None)
+
+
+def _drop_preview_size_on_file_change(graph: Any, node_id: str, before: dict[str, Any],
+                                     sent: Mapping[str, Any]) -> None:
+    """After a merge of ``sent`` into an Image Input's params: an agent or the
+    CLI that names another file (``filePath``, ``_previewUrl``) leaves the old
+    file's ``_previewSize`` behind, so it goes (#226 review 2, NIT-2). The
+    Inspector's own upload sends the new file's size with it, and keeps it."""
+    node = graph.nodes.get(node_id)
+    if not node or node.get("definitionId") != "image-input" or "_previewSize" in sent:
+        return
+    params = node.get("params")
+    if not isinstance(params, dict) or "_previewSize" not in params:
+        return
+    if any(key in sent and _ref_file_name(params.get(key)) != _ref_file_name(before.get(key))
+           for key in ("filePath", "_previewUrl")):
+        params.pop("_previewSize", None)
+        graph._maybe_persist()
+
+
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
     validate_file_references(params)
@@ -2570,6 +2606,7 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
                 rewritten["_previewUrl"] = preview_url
                 break
 
+    _drop_stale_preview_size(params, rewritten)
     return rewritten
 
 
@@ -3628,8 +3665,9 @@ async def upload_file_consolidated(
     }
     # An image's size as shown, so its preview has its height before it
     # decodes (services/preview_size.py; the Inspector keeps it as
-    # `_previewSize`, and a node made here gets it below).
-    shown_size = preview_size(content) if node_type == "image-input" else None
+    # `_previewSize`, and a node made here gets it below). Header only, and
+    # off the event loop (#226 review 2, MEDIUM-2).
+    shown_size = await asyncio.to_thread(preview_size, content) if node_type == "image-input" else None
     if shown_size is not None:
         response["previewSize"] = shown_size
 
@@ -7688,7 +7726,9 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
+            before = copy.deepcopy(node.get("params") or {})
             candidate.update_params(change.node_id, update)
+            _drop_preview_size_on_file_change(candidate, change.node_id, before, update)
     names = spec.names
     raw_nodes = [
         {
@@ -13472,6 +13512,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _scene_write_gone(node_id)
+            _drop_preview_size_on_file_change(cli_graph, node_id, params_before, params)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
