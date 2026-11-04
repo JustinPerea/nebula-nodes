@@ -1050,6 +1050,11 @@ turn, so it offers instead of editing under your hands. Which pushes:
 - **Never gated:** a push for your accepting its proposal or for its own
   run's end. Those act like any turn, and none of them ends a gated turn's
   window early.
+- **Its turn is never gated after the fact:** no gated push goes while the
+  turn an ungated push started (a deliberate send, an accept, its own run's
+  end) seems under way, by the same guess as a gated window: at least 60 s
+  after that push, then 20 s with no Nebula call and none running. Edits
+  you make while Claude reads your message wait and ride a later push.
 - **Always gated:** a push for a proposal you rejected, that expired or that
   was invalidated (it may only offer again), and a push carrying your edits:
   a change, the end of your run, a moodboard or canvas line, or lost events.
@@ -1069,7 +1074,9 @@ so the turn it starts can do what you asked (until 2026-11-03 a pin waited
 for the window's end, at least a minute, and a request in it was refused).
 The cost, accepted: Claude Code queues pushes that arrive while Claude is
 busy for its next turn, so a change turn still running when it goes is
-freed to edit. While a pin waits for its 1 s merge and its check, no other
+freed to edit. After it, no gated push goes until its own turn has ended
+(the same 60 s and 20 s guess), so a nudge you make while Claude is still
+reading your message never gates the turn the message started. While a pin waits for its 1 s merge and its check, no other
 gated push goes, unless Nebula can't answer the check (below): a proposal
 you reject meanwhile, and the edits you make meanwhile, ride along with it.
 
@@ -1110,8 +1117,12 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   Claude proposed the edit instead): the gate can't tell your typed turn
   from the change turn, since Nebula never sees the terminal. A request you
   send from the canvas (a message or a pin) is never refused this way: it
-  ends the window as it goes. A typed request still can be, until the gate
-  moves into Nebula.
+  ends the window as it goes, and no gated push goes while its turn seems
+  under way. One gap stays: if Claude, past the turn's first minute, makes
+  no Nebula call for more than 20 s inside a message's turn, Nebula reads
+  the turn as over, and an edit you made meanwhile can then send a gated
+  push that gates the rest of that turn. A typed request still can be
+  refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
   turn; if that is more than a minute later, the window has already ended

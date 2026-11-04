@@ -673,7 +673,9 @@ def test_a_batch_holding_a_pin_is_a_pin_wake():
 def test_a_mixed_batch_of_the_persons_change_and_an_accept_is_gated_as_a_change():
     # The decision written here (2026-10-26): the change is the person's
     # hands on the canvas, so the batch is gated whatever else it carries.
-    state = ChannelState(now=0.0)
+    # A short turn heuristic: the run's push starts an ungated turn that no
+    # gated push may gate (review 1 of #225, HIGH-1), over by 105 here.
+    state = ChannelState(limits=Limits(window_min=10.0, window_idle=10.0), now=0.0)
     # They meet when both wait for the 30 s spacing after a passive push (its
     # own run's end: a pin's push no longer counts toward the spacing).
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_m"}}, now=1.0)
@@ -1134,9 +1136,10 @@ def test_a_pin_never_waits_behind_the_persons_continued_edits():
     assert first.count == 2 and "pinned a note" in first.content and "changed the canvas (1 change)" in first.content
     assert "refused" not in first.content
     # After it, the edits wake as before: gated, 30 s after the first of
-    # each batch (they never go 8 s quiet); the pin's push never moved the
-    # passive spacing (the last passive push was at 108).
-    assert [(at, p.wake, p.gate) for at, p in pushes[1:3]] == [(145.0, "change", True), (180.0, "change", True)]
+    # each batch (they never go 8 s quiet), but only once the turn the pin
+    # started has ended (60 s with no Nebula call, at 171: review 1 of #225,
+    # HIGH-1). The pin's push never moved the passive spacing.
+    assert [(at, p.wake, p.gate) for at, p in pushes[1:3]] == [(171.5, "change", True), (205.0, "change", True)]
 
 
 def test_a_rejection_while_a_pin_waits_goes_with_the_pin():
@@ -1943,8 +1946,9 @@ def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
     anyio.run(main)
     assert pushes, "no push at all"
     before = [(at, meta.get("wake"), "gate" in meta) for at, meta, content in pushes if at < 200.0]
-    # The accept at once (ungated, no window open), the edit at the 30 s spacing (gated).
-    assert before == [(100.0, "proposal", False), (130.0, "change", True)], before
+    # The accept at once (ungated, no window open); the edit once the turn the
+    # accept started has ended (window_min, 60 s, with no Nebula call: HIGH-1).
+    assert before == [(100.0, "proposal", False), (160.001, "change", True)], before
     assert all("<pin" not in content for at, _, content in pushes if at < 200.0)
     at, meta, content = pushes[-1]
     assert at >= 200.0 and meta["wake"] == "pin" and "gate" not in meta and 'pin id="pin_00000001"' in content
@@ -2868,32 +2872,38 @@ def test_the_capability_and_its_instructions_come_only_with_the_flag(nebula):
 
 
 def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
+    # The person's edit first: a gated change push, and its turn's edit is
+    # refused. Then a pin: never gated, it ends the window, so its turn may
+    # edit. (A pin first would start an ungated turn no gated push may gate
+    # for window_min, 30 s here: review 1 of #225, HIGH-1.)
     pushes: list[dict] = []
 
     async def main():
         async with _connected(channel=True, pushes=pushes) as (session, _, _done):
             await _until(lambda: nebula.polls)  # listening, from now
-            nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
-            await _until(lambda: len(pushes) == 1)
             # Its own edit (same name as its tools) and another agent's never push.
             nebula.add("node.params", actor={"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}, node="n7")
             nebula.add("node.params", actor=OTHER_AGENT, node="n7")
             await anyio.sleep(0.8)
-            assert len(pushes) == 1
+            assert pushes == []
             nebula.add("node.params", node="n7", data={"keys": ["prompt"]}, summary="set prompt on Hero (n7)")
-            await _until(lambda: len(pushes) == 2)
+            await _until(lambda: len(pushes) == 1)
             refused = await session.call_tool("edit_canvas", {"params": [{"nodeId": "n7", "params": {"prompt": "x"}}]})
             allowed = await session.call_tool("look_at_canvas", {})
             proposed = await session.call_tool("propose_change", {"note": "warmer"})
-            return refused, allowed, proposed
+            nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
+            await _until(lambda: len(pushes) == 2)
+            freed = await session.call_tool("edit_canvas", {"params": [{"nodeId": "n7", "params": {"prompt": "x"}}]})
+            return refused, allowed, proposed, freed
 
-    refused, allowed, proposed = anyio.run(main)
-    assert pushes[0]["meta"]["wake"] == "pin" and "warmer" in pushes[0]["content"]
-    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
-    assert pushes[1]["meta"]["wake"] == "change" and pushes[1]["meta"]["gate"] == "change"
-    assert "set prompt on Hero (n7)" in pushes[1]["content"]
+    refused, allowed, proposed, freed = anyio.run(main)
+    assert pushes[0]["meta"]["wake"] == "change" and pushes[0]["meta"]["gate"] == "change"
+    assert "set prompt on Hero (n7)" in pushes[0]["content"]
     assert refused.isError and "propose_change" in refused.content[0].text
     assert not allowed.isError and not proposed.isError
+    assert pushes[1]["meta"]["wake"] == "pin" and "gate" not in pushes[1]["meta"] and "warmer" in pushes[1]["content"]
+    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
+    assert not (freed.isError and "propose_change" in freed.content[0].text)
     # The listener long-polls as the tools' own identity, without self=1, so
     # Nebula leaves this agent's own edits out.
     assert {p["agent"] for p in nebula.polls} == {"Claude Code"}
