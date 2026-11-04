@@ -1567,8 +1567,9 @@ Person-only, refused with 403 `person_required` otherwise:
   workspace or agent token is minted without the person;
 - deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
   `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
-  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
-  agent it can restore instead (see Recently deleted below);
+  `POST /api/projects/trash/empty`). It can't be undone, and a project takes
+  its moodboards, characters and styles with it. The refusal tells an agent it can restore instead
+  (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -3603,6 +3604,33 @@ Boards, characters and Styles stay until the person deletes them for good:
 there is no timer. Projects keep their 30-day expiry. Files live in
 `<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
 (`backend/services/asset_trash.py`).
+
+A project deleted for good (Delete forever, Empty, or past its 30 days) takes
+its moodboards, characters and styles with it: those filed under it and the
+ones deleted from it that wait in Recently deleted, with a board's Updates.
+They are gone like anything deleted for good: `GET /api/moodboards/{id}` or
+`/api/characters/{id}` answers 404 without `code: "in_trash"`, a Moodboard or
+Character node says it was deleted for good (and a run of one says it can't
+be found), a style leaves the Styles lists (nothing saved points at a style),
+and `storedAssetChanged` (`deleted: true`; a style also journals
+`style.purged`) goes out for each before `projectsChanged`. Images stay in
+the outputs folder, as every generated file does. Global moodboards,
+characters and styles are not touched. Each project in Recently deleted lists
+what would go with it as `goesWith` (`moodboards`, `characters`, `styles`:
+names). A purge that stops part way finishes on the next purge, project
+listing or start (`backend/services/project_asset_purge.py`). Only a
+moodboard, character or style folder whose real location is beside the
+project catalog is purged (`~/.nebula/moodboards` with `~/.nebula/projects`,
+or the desktop app's data folder, whose `NEBULA_*_ROOT` it sets; linking the
+whole `~/.nebula` or data folder elsewhere still counts). A store folder
+linked on its own to another place, a link to nothing, or a folder beside
+another catalog is left alone: the project stays on the list and its files
+stay where they are (never moved to Global). A moodboard, character or style
+in Recently deleted with `goesWithProject: true` goes when its project is
+deleted for good (`nebula trash list` says "removed for good with its
+project"; without the flag it says nothing). Anything filed under a project the
+catalog doesn't know (for example from before this change) is moved to
+Global at start, with a backup, as before; never deleted.
 
 ### Building and running over MCP
 

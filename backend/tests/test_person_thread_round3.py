@@ -374,7 +374,7 @@ def test_an_edit_with_no_note_logs_the_persons_words_never_the_terse_summary(thr
                                 json={"params": [{"nodeId": n1, "params": {"value": "a warmer cat"}}]})
     assert edited.status_code == 200, edited.text
     event = _presence(thread)[before:][-1]
-    assert event["say"] == "changed 1"  # the bubble keeps the summary
+    assert event["say"] == "Changed 1 node"  # the person's bubble counts (main's GM r47 person_say)
     label = thread.main._card_label(thread.main.node_registry.get("text-input") or {}, thread.graph.nodes[n1], "value")
     assert event["log"] == f"Changed “{label}” on “Hero shot”"
     before = len(_presence(thread))
@@ -432,7 +432,9 @@ def _apply_log(api, body):
     before = len(_presence(api))
     applied = api.client.post("/api/graph/apply", headers=CLAUDE, json=body)
     assert applied.status_code == 200, applied.text
-    return _presence(api)[before:][-1]["log"]
+    event = _presence(api)[before:][-1]
+    # A log line that would repeat the bubble is left out; the Agent log shows the bubble's words.
+    return event.get("log") or event["say"]
 
 
 def _params(ids):

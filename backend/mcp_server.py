@@ -1946,7 +1946,12 @@ def list_trash(kind: str | None = None, scope: str | None = None, project_id: st
     `kind` is person, agent, system or anonymous; an agent's `name` is the
     one it gave itself, so only kind "person" means the person). Projects also have
     `purgeAt`, when they are removed for good; boards, characters and Styles
-    stay until the person deletes them for good."""
+    stay until the person deletes them for good. A project deleted for good
+    (by the person, or past `purgeAt`) takes its moodboards, characters and
+    styles with it, those in Recently deleted too: they are gone, and a
+    lookup of one finds nothing. A project's `goesWith` names them
+    (`moodboards`, `characters`, `styles`), and a trashed one with
+    `goesWithProject: true` goes when its project is deleted for good."""
     import project_client
 
     return project_client.list_trash(_api(), kind=kind, scope=scope, project_id=project_id,
