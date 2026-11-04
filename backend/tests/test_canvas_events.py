@@ -478,6 +478,38 @@ def test_own_replies_wakes_a_waiting_poll(api, monkeypatch):
     assert [(e["seq"], e["kind"]) for e in result["events"]] == [(2, "thread.replied")]
 
 
+def test_own_pin_answers_reach_only_the_same_sessions_feed(api):
+    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # ends its pin's span; a sibling session under the same token never sees
+    # it as its own. The session is kept beside the journal, never in an event.
+    client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_1"}, session="sess-a")
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_2"}, session="sess-b")
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_3"})
+    journal.publish("node.added", actor=mine, session="sess-a")  # only OWN_SESSION_KINDS are kept
+    assert set(journal._sessions) == {1, 2}
+    a = client.get("/api/canvas/events?after=0&ownReplies=1",
+                   headers={**AGENT, "X-Nebula-Agent-Session": "sess-a"}).json()
+    assert [e["data"]["pinId"] for e in a["events"]] == ["pin_1"]
+    assert "sess-a" not in str(a) and "session" not in a["events"][0]
+    b = client.get("/api/canvas/events?after=0&ownReplies=1",
+                   headers={**AGENT, "X-Nebula-Agent-Session": "sess-b"}).json()
+    assert [e["data"]["pinId"] for e in b["events"]] == ["pin_2"]
+    plain = client.get("/api/canvas/events?after=0", headers={**AGENT, "X-Nebula-Agent-Session": "sess-a"}).json()
+    assert plain["events"] == []
+    none = client.get("/api/canvas/events?after=0&ownReplies=1", headers=AGENT).json()
+    assert none["events"] == []
+
+
+def test_the_side_sessions_are_pruned_with_the_events():
+    journal = CanvasEventJournal(max_events=3)
+    actor = {"kind": "agent", "id": "ext:a", "name": "A"}
+    for n in range(6):
+        journal.publish("pin.resolved", actor=actor, data={"pinId": f"p{n}"}, session="s")
+    assert len(journal._sessions) <= 4 and min(journal._sessions) >= journal.oldest - 1
+
+
 def test_events_endpoint_times_out(api):
     client, _graph, _journal, _ = api
     result = client.get("/api/canvas/events?wait=0.2").json()

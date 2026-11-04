@@ -293,6 +293,22 @@ def test_agent_resolves_a_pin_and_its_cursor_moves_there(api):
     assert "resolved by Claude Code" in format_pin(body)
 
 
+def test_an_agents_pin_answer_reaches_its_own_sessions_feed_only(api):
+    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # ends that pin's span; Nebula keeps the session beside the journal so
+    # only that same session's ownReplies feed shows it.
+    client, graph, _journal, *_ = api
+    node = graph.add_node("text-input", {})
+    pin = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node}).json()["pin"]
+    shell = {**AGENT, "X-Nebula-Agent-Session": "cc-session-a"}
+    assert client.post(f"/api/canvas/pins/{pin['id']}/resolve", headers=shell, json={"reply": "done"}).status_code == 200
+    mine = client.get("/api/canvas/events?after=0&ownReplies=1&kinds=pin.resolved", headers=shell).json()["events"]
+    assert [e["data"]["pinId"] for e in mine] == [pin["id"]] and "cc-session-a" not in str(mine)
+    sibling = {**AGENT, "X-Nebula-Agent-Session": "cc-session-b"}
+    assert client.get("/api/canvas/events?after=0&ownReplies=1&kinds=pin.resolved", headers=sibling).json()[
+        "events"] == []
+
+
 def test_deleting_a_node_detaches_its_pins_where_it_stood(api):
     client, graph, journal, sent, *_ = api
     node = graph.add_node("text-input", {}, position={"x": 300, "y": 40})

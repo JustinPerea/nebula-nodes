@@ -76,7 +76,21 @@ IN_APP_TOKEN_CODE = "listener_in_app_token"
 IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because it uses an in-app agent’s token, and only a "
                      "token from Settings › Connect your agent can listen. Copy one there, then run this command "
                      "again.")
+# Round 5 (D2): one session is one process. Each listener process sends a
+# nonce of its own with every beat; while an entry lives, a second process
+# naming the same agent and session is refused (409) with this line, and
+# its DELETE never removes the first's entry. The launch command gives every
+# Claude Code its own NEBULA_AGENT_SESSION, so this takes a copied or
+# exported session to happen.
+SESSION_TAKEN_CODE = "listener_session_taken"
+SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
+                      "session. Start each Claude Code with the launch command this prints, which gives each its own "
+                      "session, then start this one again.\nnebula mcp connect claude-code --channel")
 APP_ID_PREFIX = "app:"
+# A listening entry heard from this recently is fresh: a crashed session's
+# leftover entry (up to TTL_SECONDS old) is not, so it never counts when a
+# reply looks for the listener it answers (round 5, D2).
+FRESH_SECONDS = BEAT_SECONDS + 10.0
 REASONS = ("idle", "error")
 
 
@@ -89,6 +103,10 @@ class ListenerError(ValueError):
     pass
 
 
+class SessionTaken(ListenerError):
+    """Another process already listens as this agent session (D2)."""
+
+
 @dataclass
 class Listener:
     listener_id: str
@@ -99,6 +117,7 @@ class Listener:
     project_id: str | None
     since: float     # when it entered this state
     seen_at: float   # its last word
+    nonce: str | None = None  # the process's own (D2); None from a listener that sends none
 
 
 def parse_beat(body: Any) -> tuple[str, str | None, str | None]:
@@ -116,6 +135,15 @@ def parse_beat(body: Any) -> tuple[str, str | None, str | None]:
     project = body.get("projectId")
     project = project if isinstance(project, str) and 0 < len(project) <= 128 else None
     return state, reason, project
+
+
+def parse_nonce(raw: Any) -> str | None:
+    """The listener process's nonce (a beat body's ``nonce``, a DELETE's
+    query), or None when it sent none or one that isn't 8 to 64 of
+    [A-Za-z0-9_-]."""
+    if isinstance(raw, str) and 8 <= len(raw) <= 64 and all(c.isalnum() or c in "_-" for c in raw):
+        return raw
+    return None
 
 
 class ListenerBook:
@@ -143,19 +171,24 @@ class ListenerBook:
         return self._clock()
 
     def beat(self, agent: AgentIdentity, session: str | None, *, state: str, reason: str | None,
-             project_id: str | None) -> tuple[Listener, bool]:
+             project_id: str | None, nonce: str | None = None) -> tuple[Listener, bool]:
         """A listener's word. Returns its entry and whether anything the
-        person's tabs show changed (a new entry, a new state or reason)."""
+        person's tabs show changed (a new entry, a new state or reason).
+        Raises SessionTaken when another process (another ``nonce``) holds
+        this agent session's entry (D2)."""
         now = self._clock()
         key = (agent.id, session or "")
         with self._lock:
             self._expire(now)
             entry = self._entries.get(key)
             changed = False
+            if entry is not None and entry.nonce != nonce:
+                raise SessionTaken(SESSION_TAKEN_LINE)
             if entry is None:
                 self._evict_for(agent)
                 entry = Listener(listener_id=self.listener_id(*key), agent=agent, session=key[1],
-                                 state=state, reason=reason, project_id=project_id, since=now, seen_at=now)
+                                 state=state, reason=reason, project_id=project_id, since=now, seen_at=now,
+                                 nonce=nonce)
                 self._entries[key] = entry
                 changed = True
             else:
@@ -170,10 +203,15 @@ class ListenerBook:
                 self.revision += 1
             return entry, changed
 
-    def gone(self, agent: AgentIdentity, session: str | None) -> bool:
-        """Its session ended. Returns whether there was an entry."""
+    def gone(self, agent: AgentIdentity, session: str | None, nonce: str | None = None) -> bool:
+        """Its session ended. Returns whether there was an entry. Another
+        process's entry (another ``nonce``, D2) stays."""
+        key = (agent.id, session or "")
         with self._lock:
-            removed = self._entries.pop((agent.id, session or ""), None) is not None
+            entry = self._entries.get(key)
+            if entry is None or entry.nonce != nonce:
+                return False
+            removed = self._entries.pop(key, None) is not None
             if removed:
                 self.revision += 1
             return removed
@@ -218,6 +256,12 @@ class ListenerBook:
 
     def for_agent(self, agent_id: str) -> list[Listener]:
         return [entry for entry in self.entries() if entry.agent.id == agent_id]
+
+    def fresh_listening(self, agent_id: str) -> list[Listener]:
+        """The agent's entries that listen and were heard within FRESH_SECONDS (D2)."""
+        now = self._clock()
+        return [entry for entry in self.for_agent(agent_id)
+                if entry.state == "listening" and now - entry.seen_at <= FRESH_SECONDS]
 
 
 def view(entry: Listener, *, session: dict[str, Any] | None = None) -> dict[str, Any]:

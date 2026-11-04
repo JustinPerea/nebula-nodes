@@ -1202,6 +1202,24 @@ def _beat_once(monkeypatch, env, main_app, seconds=0.5):
     return state
 
 
+def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(client, monkeypatch, capsys):
+    # Round 5, D2: one session is one process (each beat carries its nonce).
+    import main
+    import mcp_server
+    from services import channel_listeners
+
+    monkeypatch.setattr(main, "channel_book", channel_listeners.ListenerBook())  # its own, left behind
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    first = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert first.listener_id and first.register_error is None
+    capsys.readouterr()
+    monkeypatch.setattr(mcp_server, "_CHANNEL_NONCE", "another-process-0002")
+    second = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=2.5)
+    assert second.listener_id is None and second.register_error == channel_listeners.SESSION_TAKEN_LINE
+    assert capsys.readouterr().err.count("error: Nebula couldn’t connect this listener because another process") == 1
+    assert len(client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]) == 1
+
+
 def test_a_channel_listener_registers_with_its_token_file_and_not_without(client, monkeypatch, capsys):
     import main
 

@@ -259,3 +259,65 @@ def test_channel_status_says_whether_this_server_listens_and_what_nebula_sees(to
     state.stop("Nebula stopped listening after 2 hours with no activity from the person.", reason="idle")
     assert mcp_server.channel_status()["thisServer"]["state"] == "stopped"
     assert mcp_server.channel_status()["thisServer"]["reason"] == "idle"
+
+
+# -- round 5, D2: one session is one process ------------------------------------------------
+
+def test_a_second_process_on_the_same_session_is_refused_while_the_first_lives(ready):
+    first = _beat(ready, nonce="process-one-0001")
+    assert first.status_code == 200
+    second = _beat(ready, nonce="process-two-0002")
+    assert second.status_code == 409
+    assert second.headers["X-Nebula-Code"] == channel_listeners.SESSION_TAKEN_CODE
+    assert second.json()["detail"] == channel_listeners.SESSION_TAKEN_LINE
+    assert "because another process is already listening as this session" in channel_listeners.SESSION_TAKEN_LINE
+    assert channel_listeners.SESSION_TAKEN_LINE.endswith("\nnebula mcp connect claude-code --channel")
+    # Its goodbye never removes the first's entry; the first's own does.
+    assert ready.client.delete("/api/agent/channel?nonce=process-two-0002", headers=SESSION_A).status_code == 200
+    assert len(ready.client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]) == 1
+    assert _beat(ready, nonce="process-one-0001").status_code == 200  # the first beats on
+    ready.client.delete("/api/agent/channel?nonce=process-one-0001", headers=SESSION_A)
+    assert ready.client.get("/api/canvas/channel", headers=PERSON).json()["listeners"] == []
+    assert _beat(ready, nonce="process-two-0002").status_code == 200  # now it may
+
+
+def test_a_dead_processs_entry_lapses_and_the_new_process_registers(ready):
+    assert _beat(ready, nonce="process-one-0001").status_code == 200
+    assert _beat(ready, nonce="process-two-0002").status_code == 409
+    ready.channel_clock.now += channel_listeners.TTL_SECONDS + 1  # the first died without a goodbye
+    assert _beat(ready, nonce="process-two-0002").status_code == 200
+
+
+def test_two_launches_of_the_printed_command_are_two_listeners(ready):
+    # Each launch evaluates NEBULA_AGENT_SESSION="cc-$(uuidgen)" afresh: two
+    # sessions, two listener ids, two cursors (each its own number).
+    one = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "cc-1B4E28BA-2FA1-11D2-883F-0016D3CCA427"}
+    two = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "cc-6F9619FF-8B86-D011-B42D-00C04FC964FF"}
+    a = _beat(ready, one, nonce="process-one-0001").json()["listener"]
+    b = _beat(ready, two, nonce="process-two-0002").json()["listener"]
+    assert a["listenerId"] != b["listenerId"]
+    person = ready.client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]
+    assert len({entry["session"]["key"] for entry in person}) == 2  # two cursors, one per session
+
+
+def test_a_nonce_must_look_like_one():
+    assert channel_listeners.parse_nonce("abcdef12") == "abcdef12"
+    for bad in (None, 7, "short", "x" * 65, "has space1", "semi;colon1"):
+        assert channel_listeners.parse_nonce(bad) is None
+
+
+def test_fresh_listening_leaves_out_a_crashed_sessions_leftover_and_stopped_ones():
+    clock = Clock()
+    book = channel_listeners.ListenerBook(clock)
+    claude = AgentIdentity(id="app:claude1", name="Claude Code", color="#C3E86B", verified=True)
+    book.beat(claude, "old", state="listening", reason=None, project_id=None)
+    clock.now += channel_listeners.FRESH_SECONDS + 1  # the old one crashed; its entry lives on for a while
+    book.beat(claude, "new", state="listening", reason=None, project_id=None)
+    book.beat(claude, "idle", state="stopped", reason="idle", project_id=None)
+    assert [entry.session for entry in book.for_agent("app:claude1")] == ["old", "new", "idle"]
+    assert [entry.session for entry in book.fresh_listening("app:claude1")] == ["new"]
+
+
+def test_the_mcp_listener_sends_its_own_nonce_with_each_beat_and_its_goodbye():
+    nonce = mcp_server._CHANNEL_NONCE
+    assert channel_listeners.parse_nonce(nonce) == nonce
