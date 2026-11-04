@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { ReactFlowProvider, useStoreApi } from '@xyflow/react';
 import {
-  CARD_WIDTH_SPRING_ATTR, LAYOUT_SPRING_EASING, LAYOUT_SPRING_MS, useCardWidthSpring, useNodeRemeasure,
+  CARD_WIDTH_SPRING_ATTR, LAYOUT_SPRING_EASING, LAYOUT_SPRING_MS, NodeRemeasureContext, useCardWidthSpring,
+  useFlowNodeRemeasure, useNodeRemeasure,
 } from '../../src/lib/cardWidthSpring';
 
 /**
@@ -38,6 +40,11 @@ function Card({ onStart }: { onStart?: (card: HTMLElement) => void }) {
 }
 
 const card = () => document.querySelector<HTMLDivElement>('.model-node__card')!;
+
+/** What Canvas.tsx does: inside React Flow's provider, it gives its nodes the remeasure. */
+function OnCanvas({ children }: { children: ReactNode }) {
+  return <NodeRemeasureContext.Provider value={useFlowNodeRemeasure()}>{children}</NodeRemeasureContext.Provider>;
+}
 /** The observer reports the card's layout width (its border box). */
 function laidOutAt(width: number) {
   act(() => {
@@ -171,7 +178,7 @@ describe('React Flow measures the node again as the spring starts (GM r107: the 
         </div>
       );
     }
-    render(<ReactFlowProvider><Probe /></ReactFlowProvider>);
+    render(<ReactFlowProvider><OnCanvas><Probe /></OnCanvas></ReactFlowProvider>);
     act(() => remeasure!(card()));
     expect(measured).toHaveLength(1);
     const update = measured[0].get('n1')!;
@@ -192,8 +199,25 @@ describe('React Flow measures the node again as the spring starts (GM r107: the 
       }, [store, fn]);
       return <div className="model-node__card" />;
     }
-    render(<ReactFlowProvider><Probe /></ReactFlowProvider>);
+    render(<ReactFlowProvider><OnCanvas><Probe /></OnCanvas></ReactFlowProvider>);
     act(() => remeasure!(card()));
     expect(measured).toHaveLength(0);
+  });
+
+  it('a card drawn outside a React Flow canvas renders, and its spring measures nothing', () => {
+    let remeasure: ((card: HTMLElement) => void) | null = null;
+    function Probe() {
+      const fn = useNodeRemeasure('n1');
+      useEffect(() => { remeasure = fn; }, [fn]);
+      return <div className="model-node__card" />;
+    }
+    expect(() => render(<Probe />)).not.toThrow();
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    const inNode = document.createElement('div');
+    node.append(inNode);
+    document.body.append(node);
+    expect(() => act(() => remeasure!(inNode))).not.toThrow();
+    node.remove();
   });
 });

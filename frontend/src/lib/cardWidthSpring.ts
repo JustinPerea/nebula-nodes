@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { useStoreApi } from '@xyflow/react';
 
@@ -92,10 +92,27 @@ export function useCardWidthSpring(ref: RefObject<HTMLElement | null>, onStart?:
  * starts from.
  */
 export function useNodeRemeasure(nodeId: string) {
-  const store = useStoreApi();
+  // From the canvas (Canvas.tsx gives it, inside React Flow's provider). A
+  // card drawn outside a canvas (a test that renders a node on its own) has
+  // none, and measures nothing.
+  const remeasure = useContext(NodeRemeasureContext);
   return useCallback((card: HTMLElement) => {
     const nodeElement = card.closest<HTMLDivElement>('.react-flow__node');
-    if (!nodeElement) return;
+    if (!nodeElement || !remeasure) return;
+    remeasure(nodeId, nodeElement);
+  }, [nodeId, remeasure]);
+}
+
+/** Measures one node again, at once (React Flow's updateNodeInternals, forced). */
+export type NodeRemeasure = (nodeId: string, nodeElement: HTMLDivElement) => void;
+
+/** The canvas's NodeRemeasure, for the nodes on it (useNodeRemeasure). */
+export const NodeRemeasureContext = createContext<NodeRemeasure | null>(null);
+
+/** The canvas's NodeRemeasure. Call it inside React Flow's provider. */
+export function useFlowNodeRemeasure(): NodeRemeasure {
+  const store = useStoreApi();
+  return useCallback((nodeId: string, nodeElement: HTMLDivElement) => {
     store.getState().updateNodeInternals(new Map([[nodeId, { id: nodeId, nodeElement, force: true }]]));
-  }, [nodeId, store]);
+  }, [store]);
 }

@@ -563,3 +563,57 @@ of the port's dot shows beside the panel. This was already true before 6b
 - `land_checks.sh` (with `tests/test_upload_drop_files.py`): tsc and the ratchets (161) pass. pytest on 77 files: 2803 passed, 1 skipped. `person_gate.py` is unchanged.
 - Build and budget pass: 472,331 bytes raw (cap 512,000), 147,026 gzip. That is 1,238 bytes over round 6.
 - Mutation check: 13 of 13 killed. The mutants: the card jumps; no flushSync; the follow CSS rule removed; the finish frame not followed; the re-measure ends the follow; the card's own frames restart its spring; reduced motion springs; a sub-pixel change springs; onStart is dropped; the re-measure is not forced; the popover ignores the springing card; the reduced-motion line misses the follow rule; the spring constants drift from panels.css.
+
+## Round 6c (GM r111)
+
+The panel now stands clear of the facing port. A port is a drag source, so it can't sit under the panel.
+
+- **The rule.** The panel's edge sits 8 px clear of the outer edge of the facing port's dot. Placed right, that is the node's outputs; placed left, its inputs. With no port on that side, the gap stays 10 px from the card. With several ports, the outermost one counts. The panel never comes nearer the card than 10 px, even when far zoomed out, where a dot sits inside that gap.
+- **How the dot is measured** (`lib/facingPort.ts`). The handle's screen box gives the dot's centre and the zoom (screen width over layout width). The skin then gives the dot's own size: the ::before's width (9 px) and `--sr-handle-rest-offset` (drawn 4 px toward the card). These are layout values, not the dot's transform, so a hover moves nothing. A handle with no drawn dot counts as its whole box.
+- **Every placement path uses it.** The open, a held top, a window resize's re-place and the follow of a springing card all go through `measurePopoverFrame`. The side is chosen with the port counted. The pinned Inspector docks by the rail and never stands beside a card, so the rule doesn't apply to it.
+- **Found live: the port steps out a frame before the card springs.** As the preview lands, the Image Input's card drops its 1 px border, so its output port steps 1 CSS px (1.3 px at 130 %) out from the card's edge. That happens one frame before the card's width spring starts. The panel's left then sprang after it, and for two frames it stood 6.7 px from the dot. Now a port that shifts against a node that hasn't moved is followed in the same frame, by the same path as a springing card (flushSync in the frame, `data-follows-card`). If the card's width changes in the same frame and it wasn't already springing, neither the port follow nor 6b's one-frame carry-over commits: the card's spring starts after the step, from its old width. The panel springs that one frame and follows the card from the next.
+- **CI fix (6b broke CI parts 1 and 3).** `useNodeRemeasure` called React Flow's `useStoreApi`, which throws outside a ReactFlowProvider. So every test that renders a node card on its own failed (16 files, 175 tests). Now `Canvas.tsx` gives its nodes the remeasure through `NodeRemeasureContext` (`useFlowNodeRemeasure`, inside the provider). A card outside a canvas reads no context, renders as it did before 6b, and measures nothing. No test was wrapped in a provider to hide this.
+
+### Round 6c tests
+- `NodeInspectorPlacement`, "the gap to the facing port (GM r111)", 16 tests:
+  - right with an output port, and left with an input port, each at zoom 0.5, 1 and 2;
+  - right with no output port, and left with no input port (10 px);
+  - several ports (the outermost counts); a hidden port doesn't count; a handle with no dot counts as its box;
+  - the 10 px floor; the side is chosen with the port counted;
+  - a window resize re-places by the rule; a zoom re-places at once;
+  - pinned is unchanged.
+- `NodeInspectorContentFit`, GM r107's frame-by-frame ratchet, now with ports:
+  - right with an output port: `|panel left - dot outer - 8| <= 1` on every frame of the card's spring;
+  - left with an input port: 8 px from the input's dot on every frame;
+  - the port stepping 1 px out (the card still; with the card springing in the same frame; with the card springing a frame later, as live): 8 px every frame.
+- `cardWidthSpring.test.tsx`: the remeasure tests run on a canvas (`OnCanvas`). New: a card drawn outside a canvas renders, and its spring measures nothing.
+- `tests/helpers/houseDots.ts` gives jsdom's handles the skin's dot.
+
+### Round 6c mutation check
+
+19 of 19 killed. The mutants:
+- the output port ignored; the input port ignored;
+- the dot not read (handle box only); the zoom ignored; the rest offset ignored;
+- the innermost port, not the outermost; hidden ports counted;
+- no 10 px floor; the side chosen without the port; a clearance of 10, not 8; the wrong side's handles;
+- a port shift not followed; a port shift followed in a fresh-widen frame; the follow carried into a fresh-widen frame; a fresh widen counted mid-spring;
+- the card needing the React Flow store again (the CI break); the remeasure context ignored; the remeasure not forced; the popover ignoring the springing card.
+
+### Round 6c gates
+- `tsc` and lint pass.
+- The 9 Inspector and popover files: 183 passed. `cardWidthSpring.test.tsx`: 10 passed.
+- Every test file that names ModelNode, DynamicNode, cardWidthSpring or NodeInspectorPopover (59 files, found by grep): 1541 passed.
+- `pr_tests.sh`: 175 files, 4674 passed.
+- `land_checks.sh`: ratchets 161; pytest on 77 files, 2803 passed and 1 skipped.
+- Build and budget pass: 472,506 bytes raw (cap 512,000), 147,118 gzip. That is 175 bytes over 6b.
+
+### Round 6c live check
+
+(1440x1000, isolated backend 8968, Vite 5968, Run never clicked, Image Input wired to an Image Compare, zoom 130 %). The dot's edge is read independently of the app, from the ::before's computed left, width and transform:
+
+| Case | Result |
+|---|---|
+| Right placement, output port, ref.png uploaded | Panel left minus the output dot's outer edge: 7.98 to 8.00 px in all 103 recorded frames, 21 of them spring frames. At rest the dot is 18.9 px out from the card, and the panel is 26.9 px from the card. |
+| Left placement, Image Input (no input port) | The card springs (23 frames). The card's left minus the panel's right is 10 in every frame. |
+| Left placement, Image Compare (input ports) | The input dot's outer edge minus the panel's right: 8.01 in every frame (24 frames). |
+| Port and wire, preview | As in 6b: the wire's end is 5.21 px from the port centre in every frame, and the preview ratio is 1.333. |

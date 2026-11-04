@@ -8,6 +8,7 @@ import {
 import { useUIStore } from '../../src/store/uiStore';
 import { useRef } from 'react';
 import { CARD_WIDTH_SPRING_ATTR, useCardWidthSpring } from '../../src/lib/cardWidthSpring';
+import { houseDots } from '../helpers/houseDots';
 
 /**
  * GM r68 (2026-11-03), the unpinned Inspector beside a node:
@@ -1179,8 +1180,14 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
     });
 
-    /** Opens beside an Image Input whose card is 179.5 px wide, with the card's own spring on it. */
-    function openOnCard(left: number) {
+    /**
+     * Opens beside an Image Input whose card is 179.5 px wide, with the card's
+     * own spring on it, and (GM r111) a port on one side or none. The port is
+     * the house skin's: a 20 px handle centred 14 px out from the card's
+     * edge, riding it every frame, its 9 px dot drawn 4 px toward the card,
+     * so the dot's outer edge is 14.5 px out.
+     */
+    function openOnCard(left: number, port: 'left' | 'right' | null = null) {
       natural = 179.5;
       openInNode(rect(left, 156.5, 179.5, 121.7), rect(left, 200, 179.5, 56));
       nodeRect = rect(left, 156.5, 179.5, 121.7);
@@ -1188,6 +1195,17 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       // Where the card is now, as the browser would lay it out (the node grows with it).
       let top = 200;
       let height = 56;
+      // The port's centre, out from the card's edge (layout px).
+      let out = 14;
+      if (port) {
+        houseDots();
+        const handle = document.createElement('div');
+        handle.className = `react-flow__handle react-flow__handle-${port}`;
+        Object.defineProperty(handle, 'offsetWidth', { value: 20 });
+        handle.getBoundingClientRect = () => rect(
+          port === 'right' ? left + cardWidth() + out - 10 : left - out - 10, top + height / 2 - 10, 20, 20);
+        anchor.closest('.react-flow__node')!.append(handle);
+      }
       anchor.getBoundingClientRect = () => rect(left, top, cardWidth(), height);
       nodeRect = rect(left, 156.5, 179.5, 121.7);
       (anchor.closest('.react-flow__node') as HTMLElement).getBoundingClientRect = () => rect(left, 156.5, cardWidth(), height + (top - 156.5));
@@ -1198,6 +1216,8 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       return {
         anchor,
         land(width: number, cardTop: number, cardHeight: number) { natural = width; top = cardTop; height = cardHeight; },
+        /** The port steps out from the card's edge (its card drops a 1 px border, live). */
+        shiftPort(to: number) { out = to; },
       };
     }
 
@@ -1240,7 +1260,12 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
         shown[prop] = value(screen.runs.get(prop)!);
       }
       const card = anchor.getBoundingClientRect();
-      return { ...shown, cardRight: card.right, committedLeft, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR) };
+      const port = document.querySelector<HTMLElement>('.react-flow__handle-right')?.getBoundingClientRect();
+      return {
+        ...shown, cardRight: card.right, committedLeft, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR),
+        // The output dot's outer edge as painted (GM r111): the handle's centre, less the 4 px rest offset, plus half the 9 px dot.
+        portOuter: port ? port.left + port.width / 2 - 4 + 4.5 : null,
+      };
     }
 
     for (const together of [true, false]) {
@@ -1289,6 +1314,74 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       });
     }
 
+    /**
+     * GM r111: a port is a drag source, so the panel never covers it. Placed
+     * right of a card with an output port, the panel's edge stands 8 px
+     * clear of the outer edge of that port's dot (14.5 px out, so 22.5 px
+     * from the card here), and the ratchet measures from the port: within
+     * 1 px of 8 on every frame while the card springs and the port rides
+     * its edge.
+     */
+    it('placed right with an output port, a preview landing: 8 px clear of the port\'s dot every frame (GM r111)', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(500, 'right');
+      expect(panel().dataset.placement).toBe('right');
+      const screen = { runs: new Map<string, Run>() };
+      const before = play(screen, anchor);
+      expect(before.portOuter! - before.cardRight).toBeCloseTo(14.5, 5);
+      expect(before.left - before.portOuter!).toBeCloseTo(8, 5);
+      land(215.4, 228.7, 180);
+      contentHeight = 486 - CHROME;
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+      expect(seen.some((f) => f.marked && f.follows)).toBe(true);
+      expect(new Set(seen.map((f) => f.cardRight.toFixed(2))).size).toBeGreaterThan(10);
+      for (const f of seen) expect(Math.abs(f.left - f.portOuter! - 8)).toBeLessThanOrEqual(1);
+      for (const f of seen.filter((x) => x.follows)) expect(f.committedLeft).toBeCloseTo(f.left, 5);
+      const last = seen[seen.length - 1];
+      expect(last.left).toBeCloseTo(715.4 + 14.5 + 8, 5);
+      expect(last.top).toBe(192);
+      expect(last.follows).toBe(false);
+    });
+
+    for (const order of ['the card still', 'the card springing in the same frame', 'the card springing a frame later (as live)'] as const) {
+      const withSpring = order !== 'the card still';
+      it(`the output port steps 1 px out from the card, ${order}: 8 px clear of its dot every frame (GM r111, found live)`, () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        chromeAt(1440, 1000);
+        contentHeight = 300 - CHROME;
+        const { anchor, land, shiftPort } = openOnCard(500, 'right');
+        const screen = { runs: new Map<string, Run>() };
+        play(screen, anchor);
+        shiftPort(15);
+        const seen: ReturnType<typeof play>[] = [];
+        if (order === 'the card springing a frame later (as live)') seen.push(play(screen, anchor));
+        if (withSpring) {
+          land(215.4, 228.7, 180);
+          contentHeight = 486 - CHROME;
+        }
+        while (seen.length < 40) seen.push(play(screen, anchor));
+        expect(seen[0].portOuter! - seen[0].cardRight).toBeCloseTo(15.5, 5);
+        if (order !== 'the card springing in the same frame') {
+          // The frame the port steps: the panel's edge is committed with it, not sprung after it.
+          expect(seen[0].follows).toBe(true);
+          expect(seen[0].committedLeft).toBeCloseTo(seen[0].left, 5);
+        } else {
+          // The card widens in the same frame: the panel springs that frame
+          // (the card's spring starts after the step, from its old width),
+          // then follows the card.
+          expect(seen[0].follows).toBe(false);
+          expect(seen.slice(1, 5).every((f) => f.follows)).toBe(true);
+        }
+        for (const f of seen) expect(Math.abs(f.left - f.portOuter! - 8)).toBeLessThanOrEqual(1);
+        const last = seen[seen.length - 1];
+        expect(last.left).toBeCloseTo((withSpring ? 715.4 : 679.5) + 15.5 + 8, 5);
+        expect(last.follows).toBe(false);
+      });
+    }
+
     it('placed left, the card springs and the panel holds: the card\'s left edge, which it faces, does not move', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       chromeAt(1440, 1000);
@@ -1303,6 +1396,27 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
       expect(seen.some((f) => f.marked)).toBe(true);
       for (const f of seen) expect(f.left).toBe(830);
+    });
+
+    it('placed left with an input port, the card springs: 8 px clear of the input\'s dot every frame, and it holds (GM r111)', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(1100, 'left');
+      expect(panel().dataset.placement).toBe('left');
+      const screen = { runs: new Map<string, Run>() };
+      play(screen, anchor);
+      land(215.4, 228.7, 180);
+      contentHeight = 486 - CHROME;
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+      expect(seen.some((f) => f.marked)).toBe(true);
+      // The input's dot: its outer (left) edge 14.5 px out from the card's left edge.
+      const inputOuter = 1100 - 14.5;
+      for (const f of seen) {
+        expect(f.left + 260).toBeCloseTo(inputOuter - 8, 5);
+        expect(Math.abs(inputOuter - (f.left + 260) - 8)).toBeLessThanOrEqual(1);
+      }
     });
   });
 });

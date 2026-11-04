@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
+import { NodeInspectorPopover, PORT_CLEARANCE } from '../../src/components/panels/NodeInspectorPopover';
+import { houseDots } from '../helpers/houseDots';
 import { useUIStore } from '../../src/store/uiStore';
 
 /**
@@ -244,5 +245,154 @@ describe('the pinned Inspector', () => {
     bottomBar(1280, 640);
     advanceLayout();
     expectWholeAndClear();
+  });
+});
+
+/**
+ * GM r111: a port is a drag source and can't sit under the panel. The panel
+ * sits 8 px clear of the outer edge of the facing port's dot: right of the
+ * node, its output ports; left of it, its input ports. With no port on the
+ * facing side the gap stays 10 px from the card. The dot is measured as it is
+ * on screen, so the rule holds at every zoom.
+ *
+ * The house skin's port (slava-restraint.css): a 20 px handle (its layout
+ * width), centred 14 px out from the card's edge, its 9 px dot drawn 4 px
+ * toward the card; so at zoom z the dot's outer edge is 14.5 z px out.
+ */
+describe('the gap to the facing port (GM r111)', () => {
+  let flowNode: HTMLElement | null = null;
+
+  afterEach(() => {
+    flowNode?.remove();
+    flowNode = null;
+    vi.restoreAllMocks();
+  });
+
+  /** A node at a zoom, its card at `card` on screen, with ports on the sides named (one or more per side). */
+  function openNode(card: DOMRect, ports: { left?: number[]; right?: number[] }, zoom = 1, width = 1440, height = 900) {
+    viewport(width, height);
+    bottomBar(width, height);
+    houseDots();
+    anchorRect = card;
+    flowNode = document.createElement('div');
+    flowNode.className = 'react-flow__node';
+    flowNode.getBoundingClientRect = () => anchorRect;
+    const anchor = document.createElement('div');
+    anchor.dataset.nodeInspectorAnchor = 'n1';
+    anchor.getBoundingClientRect = () => anchorRect;
+    flowNode.append(anchor);
+    for (const side of ['left', 'right'] as const) {
+      // Each port's centre, out from the card's edge, in layout px (14 by default; more for a port set further out).
+      for (const out of ports[side] ?? []) {
+        const handle = document.createElement('div');
+        handle.className = `react-flow__handle react-flow__handle-${side}`;
+        Object.defineProperty(handle, 'offsetWidth', { value: 20 });
+        handle.getBoundingClientRect = () => {
+          const centre = side === 'right' ? anchorRect.right + out * zoom : anchorRect.left - out * zoom;
+          return rect(centre - 10 * zoom, anchorRect.top + 20 * zoom, 20 * zoom, 20 * zoom);
+        };
+        flowNode.append(handle);
+      }
+    }
+    document.body.append(flowNode);
+    render(<NodeInspectorPopover />);
+    advanceLayout();
+  }
+
+  for (const zoom of [0.5, 1, 2]) {
+    it(`right, with an output port, at zoom ${zoom}: 8 px clear of its dot`, () => {
+      openNode(rect(400, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
+      expect(panel()).toHaveAttribute('data-placement', 'right');
+      const dot = 400 + 180 * zoom + 14.5 * zoom;
+      expect(bounds().left).toBeCloseTo(dot + PORT_CLEARANCE, 5);
+    });
+
+    it(`left, with an input port, at zoom ${zoom}: 8 px clear of its dot`, () => {
+      // Near the right edge, so it opens on the left.
+      const cardLeft = 1440 - 16 - 180 * zoom - 60;
+      openNode(rect(cardLeft, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
+      expect(panel()).toHaveAttribute('data-placement', 'left');
+      const dot = cardLeft - 14.5 * zoom;
+      expect(bounds().right).toBeCloseTo(dot - PORT_CLEARANCE, 5);
+    });
+  }
+
+  it('right, with no output port: 10 px from the card (an input port on the far side changes nothing)', () => {
+    openNode(rect(400, 300, 180, 120), { left: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'right');
+    expect(bounds().left).toBe(400 + 180 + 10);
+  });
+
+  it('left, with no input port: 10 px from the card (an output port on the far side changes nothing)', () => {
+    openNode(rect(1200, 300, 180, 120), { right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBe(1200 - 10);
+  });
+
+  it('several ports on the facing side: clear of the outermost one', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14, 30, 20] });
+    expect(bounds().left).toBeCloseTo(400 + 180 + 30.5 + PORT_CLEARANCE, 5);
+  });
+
+  it('a port hidden (no box) does not count', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    const hidden = document.createElement('div');
+    hidden.className = 'react-flow__handle react-flow__handle-right';
+    // Collapsed (no box), but further out than the shown port: it must not count.
+    hidden.getBoundingClientRect = () => rect(900, 320, 0, 0);
+    flowNode!.append(hidden);
+    advanceLayout();
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14.5 + PORT_CLEARANCE, 5);
+  });
+
+  it('a port with no drawn dot (another skin) counts as its whole box', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    vi.restoreAllMocks();
+    advanceLayout();
+    // The handle's box: 584-604.
+    expect(bounds().left).toBeCloseTo(400 + 180 + 24 + PORT_CLEARANCE, 5);
+  });
+
+  it('never nearer the card than 10 px: a dot inside that gap (far zoomed out) leaves it at 10', () => {
+    openNode(rect(400, 300, 18, 12), { right: [14] }, 0.1);
+    expect(bounds().left).toBeCloseTo(400 + 18 + 10, 5);
+  });
+
+  it('decides the side with the port counted: room at 10 px from the card but not past the port opens it on the left', () => {
+    // Right of the card: 1440 - 16 - (card right + 10) = 230 would fit 228;
+    // past the port (card right + 22.5) it is 217.5, so it opens on the left.
+    const cardRight = 1440 - 16 - 10 - 230;
+    openNode(rect(cardRight - 180, 300, 180, 120), { left: [14], right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBeCloseTo(cardRight - 180 - 14.5 - PORT_CLEARANCE, 5);
+  });
+
+  it('a window resize re-places it by the same rule', () => {
+    openNode(rect(400, 300, 180, 120), { left: [14], right: [14] });
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14.5 + PORT_CLEARANCE, 5);
+    // Too narrow for the right now: it re-places on the left, clear of the input's dot.
+    viewport(800, 900);
+    bottomBar(800, 900);
+    advanceLayout();
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBeCloseTo(400 - 14.5 - PORT_CLEARANCE, 5);
+  });
+
+  it('a zoom re-places it at once, by the dot at the new zoom', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    let zoom = 1;
+    const handle = flowNode!.querySelector<HTMLElement>('.react-flow__handle-right')!;
+    handle.getBoundingClientRect = () => rect(anchorRect.right + 14 * zoom - 10 * zoom, 320, 20 * zoom, 20 * zoom);
+    zoom = 2;
+    anchorRect = rect(400, 300, 360, 240);
+    advanceLayout();
+    expect(bounds().left).toBeCloseTo(760 + 29 + PORT_CLEARANCE, 5);
+  });
+
+  it('the pinned Inspector stays docked by the rail, whatever ports the node has', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    openNode(rect(400, 300, 180, 120), { left: [14], right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'pinned-left');
+    expect(bounds().left).toBe(16);
   });
 });

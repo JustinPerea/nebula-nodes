@@ -10,8 +10,12 @@ import { hasMoreBelow } from '../../lib/scrollMore';
 import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
 import { springCssVars } from '../../lib/springs';
 import { CARD_WIDTH_SPRING_ATTR } from '../../lib/cardWidthSpring';
+import { facingPortEdge } from '../../lib/facingPort';
 
+/** The gap to the card on a side with no port (GM r104, r111). */
 const POPOVER_GAP = 10;
+/** The gap to the outer edge of the facing port's dot (GM r111). */
+export const PORT_CLEARANCE = 8;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
 /** The floating Inspector's floor: a short body keeps this height (GM r68). */
@@ -61,6 +65,13 @@ function nodePlace(nodeId: string, anchor: HTMLElement, card: DOMRect) {
     // The card inside it: its size and its offset from the node's corner.
     card: `${nodeId}:${card.width}:${card.height}:${card.left - box.left}:${card.top - box.top}`,
   };
+}
+
+type FacingPorts = { right: number | null; left: number | null };
+
+/** The outer edges of the node's outermost port dots on each side (lib/facingPort.ts). */
+function facingPorts(anchor: HTMLElement): FacingPorts {
+  return { right: facingPortEdge(anchor, 'right'), left: facingPortEdge(anchor, 'left') };
 }
 
 function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
@@ -130,7 +141,7 @@ export const OPEN_STABLE_FRAMES = 2;
  * null to place it afresh beside its node.
  */
 function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null,
-  heldTop: number | null = null): PopoverFrame {
+  heldTop: number | null = null, ports: FacingPorts = facingPorts(anchor)): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -138,17 +149,27 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   // toolbar, whichever is lower): lib/bottomBar.ts floatingChromeTopLine, the
   // only source for that line.
   const topLimit = floatingChromeTopLine(VIEWPORT_GUTTER);
-  const rightSpace = viewportWidth - rect.right - POPOVER_GAP - VIEWPORT_GUTTER;
-  const leftSpace = rect.left - POPOVER_GAP - VIEWPORT_GUTTER;
+  // GM r111: the edge facing the node stands 8 px clear of the outer edge of
+  // the dot of the port on that side (right: its outputs; left: its inputs),
+  // so no port is under the panel; with no port there, 10 px clear of the
+  // card. Never nearer the card than those 10 px (a port's dot at a far
+  // zoom-out sits inside them). Every placement beside the node (the open,
+  // a held top, a window resize's re-place, the follow of a springing card)
+  // comes through here.
+  const { right: rightPort, left: leftPort } = ports;
+  const rightEdge = Math.max(rect.right + POPOVER_GAP, rightPort === null ? -Infinity : rightPort + PORT_CLEARANCE);
+  const leftEdge = Math.min(rect.left - POPOVER_GAP, leftPort === null ? Infinity : leftPort - PORT_CLEARANCE);
+  const rightSpace = viewportWidth - rightEdge - VIEWPORT_GUTTER;
+  const leftSpace = leftEdge - VIEWPORT_GUTTER;
 
   // Which side, and so how wide and where across: none of it depends on height.
   let placement: PopoverFrame['placement'] = 'right';
   let width = Math.min(POPOVER_WIDTH, Math.max(POPOVER_MIN_WIDTH, rightSpace));
-  let left = rect.right + POPOVER_GAP;
+  let left = rightEdge;
   if (rightSpace < POPOVER_MIN_WIDTH && leftSpace >= POPOVER_MIN_WIDTH) {
     placement = 'left';
     width = Math.min(POPOVER_WIDTH, leftSpace);
-    left = rect.left - POPOVER_GAP - width;
+    left = leftEdge - width;
   } else if (rightSpace < POPOVER_MIN_WIDTH) {
     const availableWidth = viewportWidth - VIEWPORT_GUTTER * 2;
     width = Math.max(240, Math.min(POPOVER_WIDTH, availableWidth));
@@ -338,6 +359,10 @@ export function NodeInspectorPopover() {
   // The node card's size and its offset in the node, so its growing (a
   // preview landing, its top shifting inside the node) is told from a move.
   const anchorSizeRef = useRef<string | null>(null);
+  // Where the ports' dots sit against the card's edges (GM r111).
+  const portsAtRef = useRef<string | null>(null);
+  const cardWidthRef = useRef<number | null>(null);
+  const springingRef = useRef(false);
   // The window's size, so a resize is told from a content change.
   const viewportRef = useRef<string | null>(null);
   // The top held while the content changes height, until the node moves, another
@@ -371,6 +396,9 @@ export function NodeInspectorPopover() {
       needRef.current = null;
       anchorAtRef.current = null;
       anchorSizeRef.current = null;
+      portsAtRef.current = null;
+      cardWidthRef.current = null;
+      springingRef.current = false;
       viewportRef.current = null;
       heldTopRef.current = null;
       openRef.current = null;
@@ -489,9 +517,28 @@ export function NodeInspectorPopover() {
           // Where the node is, from its own box and the canvas's transform
           // (GM r92): its card growing or its top shifting inside it (a
           // preview landing) is not a move.
-          const { at, card: size } = nodePlace(selectedNodeId, anchor, anchor.getBoundingClientRect());
-          const following = anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR);
+          const cardBox = anchor.getBoundingClientRect();
+          const { at, card: size } = nodePlace(selectedNodeId, anchor, cardBox);
           const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
+          // GM r111: the ports' dots, and where they sit against the card's
+          // edges. A port that shifts against a node that hasn't moved (an
+          // Image Input's card drops its 1 px border as its preview lands,
+          // so its output port steps 1 px out) is followed in the same frame,
+          // like a springing card: the panel's edge keeps its 8 px to the
+          // dot, never springing after it. Not in a frame where the card's
+          // width changes afresh (it wasn't springing): its spring starts
+          // after this step (before paint) from its old width, so the panel
+          // springs this frame and follows the card from the next.
+          const ports = facingPorts(anchor);
+          const portsAt = `${ports.right === null ? '-' : (ports.right - cardBox.right).toFixed(2)}:${
+            ports.left === null ? '-' : (ports.left - cardBox.left).toFixed(2)}`;
+          const springing = anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR);
+          const freshWiden = !springingRef.current && cardWidthRef.current !== null && cardBox.width !== cardWidthRef.current;
+          const portShifted = !moved && !freshWiden && portsAtRef.current !== null && portsAt !== portsAtRef.current;
+          portsAtRef.current = portsAt;
+          cardWidthRef.current = cardBox.width;
+          springingRef.current = springing;
+          const following = springing || portShifted;
           const grew = !moved && anchorSizeRef.current !== null && size !== anchorSizeRef.current;
           const viewport = `${window.innerWidth}x${window.innerHeight}`;
           const resized = viewportRef.current !== null && viewport !== viewportRef.current;
@@ -539,7 +586,7 @@ export function NodeInspectorPopover() {
           if ((contentChanged || besideGrew) && !opening && !heldTopRef.current) {
             heldTopRef.current = { nodeId: selectedNodeId, top: Number(shown!.style.top) };
           }
-          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null);
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null, ports);
           // What springs, never a move: a content change; the held top let
           // go by a resize, and the resize after it while that glide runs,
           // so it follows the resize live (GM r82); the card growing, which
@@ -560,9 +607,10 @@ export function NodeInspectorPopover() {
           // lands at rest there, off the spring's last overshoot, and the
           // panel takes that last step with it, not on a spring of its own.
           // Only a frame lets go (the re-measure straight after a commit is
-          // the same frame).
+          // the same frame). A card that widens afresh ends it at once (GM
+          // r111): its spring is about to put it back at its old width.
           const wasFollowing = followsCardRef.current;
-          const follow = following || (wasFollowing && (changed || !tick));
+          const follow = following || (wasFollowing && !freshWiden && (changed || !tick));
           const followChanged = follow !== wasFollowing;
           followsCardRef.current = follow;
           const commit = () => {
