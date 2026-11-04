@@ -31,7 +31,11 @@ export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 
  *  straight below it, never to the right. Its arrow's painted top sits
  *  `gapPx` under the earlier label block; `clearPx` is the least painted
  *  gap between any two cursors (GM - Design, PR #211 r14 and review 6;
- *  stackStepPx, deStackLayout). */
+ *  stackStepPx, deStackLayout). Joins and steps are screen px, at any zoom.
+ *  The target chain (targetChains; the backend's agent_presence.ARRIVAL_RADIUS)
+ *  and the column insert's comparison use the same 16 in canvas units, so
+ *  they agree at any zoom (#219 r62). The chain decides arrival only, never
+ *  joining: joins stay this tab's, by screen px (GM - Design, #219 r24 Q2). */
 export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2, gapPx: 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
@@ -365,7 +369,8 @@ export function stackStepPx(earlierSay: boolean): number {
  *  members it is stacked under (with their says), so a change in it is a
  *  change of layout (a say, a join, a leave), and anything else moving the
  *  spot is a ride (a node carried, a zoom). `above` lists those members.
- *  `column` is the column's id: its head's key (its earliest arrival). In a
+ *  `column` is the column's id: its earliest arrival's key (not always the
+ *  top cursor: a later one aimed higher goes in above it, r24 Q1). In a
  *  column of four or more, the third slot stands for the rest: its cursor's
  *  spot carries `group` (itself and the later arrivals folded into it, in
  *  arrival order), and each folded cursor's carries `collapsedInto`, that
@@ -377,6 +382,50 @@ export interface StackSpot {
   column?: string;
   group?: readonly string[];
   collapsedInto?: string;
+}
+
+/**
+ * Each cursor's target chain: the other cursors linked to it through
+ * targets AGENT_CURSOR_STACK.radiusPx apart or less, one link after another,
+ * from targets alone, in canvas units at zoom 1 (GM - Design, #219 r24 Q2).
+ * The backend's own (agent_presence._target_chains) decides when a carry is
+ * an arrival; this one only previews it while a node is dragged (r47 Q1).
+ * Both run the shared fixture (backend/tests/fixtures/cursor_chains.json),
+ * so they can't drift. It decides no join: joins are deStackLayout's.
+ */
+export function targetChains(points: ReadonlyMap<string, Point>): Map<string, ReadonlySet<string>> {
+  const keys = [...points.keys()];
+  const parent = new Map(keys.map((k) => [k, k]));
+  const find = (k: string): string => {
+    while (parent.get(k) !== k) {
+      const up = parent.get(parent.get(k)!)!;
+      parent.set(k, up);
+      k = up;
+    }
+    return k;
+  };
+  for (let i = 0; i < keys.length; i += 1) {
+    const a = points.get(keys[i])!;
+    for (let j = i + 1; j < keys.length; j += 1) {
+      const b = points.get(keys[j])!;
+      if (Math.hypot(a.x - b.x, a.y - b.y) <= AGENT_CURSOR_STACK.radiusPx + 1e-9) parent.set(find(keys[i]), find(keys[j]));
+    }
+  }
+  const groups = new Map<string, string[]>();
+  for (const k of keys) {
+    const r = find(k);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r)!.push(k);
+  }
+  return new Map(keys.map((k) => [k, new Set(groups.get(find(k))!.filter((o) => o !== k))]));
+}
+
+/** Whether two chains hold the same cursors. */
+export function sameChain(a: ReadonlySet<string> | undefined, b: ReadonlySet<string> | undefined): boolean {
+  if (!a || !b) return a === b;
+  if (a.size !== b.size) return false;
+  for (const k of a) if (!b.has(k)) return false;
+  return true;
 }
 
 /** A column draws at most this many cursors: from the next member on, the
@@ -400,16 +449,23 @@ export function countLabel(count: number): string {
  * Joins are transitive, and resolved again until no drawn cursor meets
  * another column, so near and identical targets make one column.
  *
- * Then each final column is laid out in arrival order (r21): its earliest
- * arrival, the head, on its own target; each next one straight below the
- * one before, a stackStepPx under its label block (say included). With more
- * than AGENT_CURSOR_COLUMN_DRAWN members, the first two are drawn in full,
- * the third arrival is the count cursor in the last slot, and every later
- * arrival folds into it (StackSpot.group). A cursor that changes slot when
+ * Then each final column is laid out at its earliest arrival's x. With
+ * more than AGENT_CURSOR_COLUMN_DRAWN members, the two earliest arrivals
+ * are drawn in full and the third arrival is the count cursor, exactly one
+ * step under the last full cursor, standing for every later arrival
+ * (StackSpot.group). The full cursors go down the column in a stable
+ * insert, in arrival order: each just before the first one placed that
+ * aims more than radiusPx canvas units below it, else last (GM - Design,
+ * #219 r24 Q1; canvas units, like the target chain, r62).
+ * The top one sits on its own target; each next one at the lower of a
+ * stackStepPx under the one above (its label block, say included) and its
+ * own target, so it is never above its target (r23 item 1) nor more than
+ * 2 steps + 2 radii below it. A cursor that changes slot when
  * columns merge or split glides there on the layout spring (its `sig`
  * changes). Only live cursors are passed in: a leaving one doesn't count.
  * Arrival is `since`, then `seq`, then the key. Targets and results are in
- * flow coordinates; every distance and step is in screen px at `zoom`.
+ * flow coordinates; joins and steps are in screen px at `zoom`, the
+ * insert's comparison in canvas units (r62).
  */
 export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
   const { radiusPx } = AGENT_CURSOR_STACK;
@@ -447,11 +503,28 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
     }
     for (const [head, members] of columns) {
       const full = members.length > AGENT_CURSOR_COLUMN_DRAWN;
-      const drawn = members.slice(0, AGENT_CURSOR_COLUMN_DRAWN);
+      // Drawn in full: every member, or with more than the column draws,
+      // the two earliest arrivals (folding is by latest arrival), then the
+      // count cursor, the third arrival, standing for the rest.
+      const shown = full ? members.slice(0, AGENT_CURSOR_COLUMN_DRAWN - 1) : members;
+      // Their order down the column: a stable insert in arrival order. Each
+      // goes in just before the first member already placed whose target is
+      // more than radiusPx canvas units below its own, else last; those
+      // placed keep their order. So every member above one aims at most
+      // radiusPx canvas units (radiusPx * zoom screen px) lower than it, and
+      // no full cursor is drawn more than 2 steps + 2 radii below its own
+      // target. Cursors aimed near one point keep arrival order (GM - Design,
+      // #219 r24 Q1). Canvas units, as the target chain is, so the insert and
+      // the chain agree at any zoom (r62); the steps stay screen px.
+      const order: number[] = [];
+      for (const m of shown) {
+        const at = order.findIndex((o) => ordered[o].target.y > ordered[m].target.y + radiusPx + 1e-9);
+        if (at === -1) order.push(m);
+        else order.splice(at, 0, m);
+      }
       const x = targets[head].x;
       let prev: number | null = null;
-      for (const m of drawn) {
-        const tip = prev === null ? targets[m] : { x, y: out[prev].tip.y + stackStepPx(says[prev]) };
+      const place = (m: number, tip: Point) => {
         out[m] = {
           tip,
           shape: cursorShape(tip, false, nameW[m]),
@@ -462,9 +535,19 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
           column: head,
         };
         prev = m;
+      };
+      for (const m of order) {
+        // A step under the one before, never above its own target: a member
+        // whose slot would sit above the point it aims at is drawn at that
+        // point instead, and the slots under it shift down (a gap is fine).
+        // GM - Design, #211 follow-up r23 item 1.
+        place(m, prev === null ? { x, y: targets[m].y } : { x, y: Math.max(out[prev].tip.y + stackStepPx(says[prev]), targets[m].y) });
       }
       if (full) {
-        const slot = drawn[drawn.length - 1];
+        // The count: exactly one step under the last full cursor, no gap.
+        const slot = members[AGENT_CURSOR_COLUMN_DRAWN - 1];
+        const last: number = prev!;
+        place(slot, { x, y: out[last].tip.y + stackStepPx(says[last]) });
         out[slot].group = members.slice(AGENT_CURSOR_COLUMN_DRAWN - 1);
         for (const m of members.slice(AGENT_CURSOR_COLUMN_DRAWN)) {
           out[m] = {
@@ -480,6 +563,9 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
   // laid out as they are then): its target near an earlier one's, or its
   // arrow and name at its target meeting an earlier one where it is drawn.
   // Then, while any drawn cursor meets another column, those columns join.
+  // The first check's meeting is not redundant with the loop since members
+  // keep to their own targets (r23 item 1): without it, 739 of 50,000
+  // random sets lay out differently (#211 review 9, NIT-1, checked).
   let laid: Laid[] = [];
   for (let i = 0; i < n; i += 1) {
     const before = lay(i);

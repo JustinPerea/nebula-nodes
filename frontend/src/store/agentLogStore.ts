@@ -74,8 +74,11 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
 // A replay (a tab that just connected, or reconnected) adds a cursor's say
 // that is still current, so a say this tab can't show on the canvas (a
 // folded member's, or one held for room) still reaches the log (GM - Design,
-// PR #211 r21). Each action is listed once: a live event and its replay
-// are the same action (agent, session, time and words).
+// PR #211 r21). Each action is listed once, by the backend's id for the
+// event (`eventId`, person tabs only): a live event and its replay carry the
+// same one, and two real actions never do, even with the same words in the
+// same millisecond (#211 review 9, LOW-5). An event without one (an older
+// backend, a line with no cursor) is always listed.
 const listed = new Set<string>();
 const LISTED_MAX = 4 * AGENT_LOG_MAX_ENTRIES;
 
@@ -83,10 +86,12 @@ const LISTED_MAX = 4 * AGENT_LOG_MAX_ENTRIES;
 export function listAgentAction(event: AgentPresenceEvent): void {
   const entry = agentActionEntry(event);
   if (!entry) return;
-  const id = `${event.agent?.id}|${cleanSession(event.session)?.key ?? ''}|${event.at}|${entry.message}`;
-  if (listed.has(id)) return;
-  listed.add(id);
-  if (listed.size > LISTED_MAX) listed.delete(listed.values().next().value as string);
+  const id = typeof event.eventId === 'string' && event.eventId ? event.eventId : null;
+  if (id !== null) {
+    if (listed.has(id)) return;
+    listed.add(id);
+    if (listed.size > LISTED_MAX) listed.delete(listed.values().next().value as string);
+  }
   useAgentLogStore.getState().add(entry);
 }
 
