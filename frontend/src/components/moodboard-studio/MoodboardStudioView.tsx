@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -16,14 +16,14 @@ import {
 import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
-import { failureCopy, failureMessage, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { agentActorLabel } from '../../lib/agentActorLabel';
 import { placeholderLabel } from './boardPlaceholder';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine,
   changedAfterRemoveLine, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectGoneLine, projectRestoreFailedLine,
-  projectRestoreFailure, projectRestoredLine,
+  projectRestoreFailure, projectRestoredLine, changeNotSavedLine,
   type KeptImage, type ProjectRestoreFailure } from './boardSaveLine';
 import { dropKeptEdit, imageState, keepUnsavedDrafts, keptEditBoards, keptEditsWaiting, noteKeptChange, noteKeptProject, opTarget,
   rememberKeptOpMeta, replayKeptFields, takeKeptEdit, valueOfOp, valueOnBoard, type KeptEdit, type KeptOpMeta } from './unsavedDrafts';
@@ -420,6 +420,11 @@ interface PurgedProject { projectId: string; name: string; boards: ProjectGoneBo
 interface PendingConfirm { project: string | null; names: string[]; boards: Array<{ id: string; name: string }>; at: string | null; stayed: string }
 /** A Restore's confirmation, in its slot, shown while board `at` is open. */
 interface RestoredLine { slot: string; text: string; title: string; at: string | null }
+/** A replayed kept edit whose save failed on a board the person isn't on (#210 round 6t, GM r113 2): its own line,
+ *  under its slot's confirmation while board `at` is open, naming the board; `retry`: Try again can work. `confirm` is
+ *  what its slot waited on, to confirm again once a Try again saves it. */
+interface AwaySaveFailure { slot: string; id: string; name: string; at: string | null; text: string; title: string; retry: boolean;
+  confirm: PendingConfirm }
 
 /** The sentence a confirmation gains for images kept removes left on their boards (GM r90.5): by number when they're
  *  on one board, else counted; by the agent's name when one agent changed them all. */
@@ -547,6 +552,21 @@ function focusAfterLine(line: HTMLElement, keyboard: boolean, project: string | 
     return;
   }
   focusMain(line.closest<HTMLElement>('main'));
+}
+
+/**
+ * A failure on a notice line, or nothing at all when it says nothing (#210 round 6t, review 12 live MEDIUM-1, GM r113 1):
+ * a write refused while offline says nothing (the banner is the reason), so no line, and never an empty alert. Every
+ * failure the Studio shows goes through here (tests/moodboardNoticeText.test.ts holds the ratchet).
+ */
+function FailureLine({ failure, className, retry = false, alert = false, neutral = false }: {
+  failure: FailureCopy | string | null | undefined; className?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
+  if (!failure || !failureText(failure, retry)) return null;
+  return (
+    <div className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
+      <FailureLines failure={failure} retry={retry} />
+    </div>
+  );
 }
 
 /** The noticeLeave fallback: the screen's <main>, with no ring (a line that left the page names no next control). */
@@ -700,6 +720,13 @@ function repeatOnBoard(key: string, draft: MoodboardDraft, board: MoodboardCreat
   return { draft: rebaseDraft({ ...mine, base: { ...(mine.base ?? {}), ...asSent } }, board, fields, new Set(made.sent as MoodboardOp[])), kept };
 }
 
+/** A fresh draft at `key` (New, a deleted or forgotten board): the Board view keeps nothing of the last one's camera,
+ *  flag or selection for it (#210 round 6t), so a New board opens fitted. */
+function resetBoardDraft(key: string, draft: MoodboardDraft) {
+  useAssetStudioDraftStore.getState().reset(key, draft);
+  useBoardCanvasStore.getState().forgetBoard(key);
+}
+
 /**
  * The unsaved draft at `key`, now the board `destination` (round 6g, review
  * 9 R9-B): moved there, or, when that board is open in the Studio already
@@ -707,6 +734,9 @@ function repeatOnBoard(key: string, draft: MoodboardDraft, board: MoodboardCreat
  * Undo; what this one still has to send goes on top and is sent.
  */
 function handOverDraft(key: string, destination: string) {
+  // The Board view's camera and its flag go with the draft (#210 round 6t): a new board's first save doesn't refit it,
+  // and the next New board doesn't open at this one's camera.
+  useBoardCanvasStore.getState().moveBoard(resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key), destination);
   useAssetStudioDraftStore.getState().handOver(key, destination, (into: AssetStudioDraftEntry, from: AssetStudioDraftEntry) => {
     const left = from.draft as MoodboardDraft;
     const open = into.draft as MoodboardDraft;
@@ -2353,22 +2383,52 @@ export function MoodboardStudioView() {
   // project, adds to its own. A neutral failure per project, kept with its line (Try again); and the red line for a
   // project deleted for good, with its boards, until its ×.
   const [confirming, setConfirming] = useState<Record<string, PendingConfirm>>({});
+  // Replayed saves that failed on boards the person isn't on, each under its slot's confirmation (GM r113 2).
+  const [awayFailures, setAwayFailures] = useState<AwaySaveFailure[]>([]);
+  // The board names each slot's confirmation has said are saved, so a Try again's confirmation still names them.
+  const slotSaved = useRef(new Map<string, string[]>());
+  // A Try again out on an away board's line, and how it was pressed: once the line goes, focus moves on (never body).
+  const awayPress = useRef<{ id: string; keyboard: boolean } | null>(null);
   const [projectFailures, setProjectFailures] = useState<Record<string, Exclude<ProjectRestoreFailure, 'purged'>>>({});
   const [projectsPurged, setProjectsPurged] = useState<PurgedProject[]>([]);
   const [dismissFocus, setDismissFocus] = useState<{ projectId: string; keyboard: boolean } | null>(null);
-  // Read only while a Restore waits on its boards' saves.
-  const draftEntries = useAssetStudioDraftStore((state) => (restoring || Object.keys(confirming).length ? state.entries : null));
+  // Read only while a Restore waits on its boards' saves, or a failed replayed save's line shows.
+  const draftEntries = useAssetStudioDraftStore((state) => (restoring || Object.keys(confirming).length || awayFailures.length
+    ? state.entries : null));
+  // A failed replayed save that landed some other way (the board's own Retry, its autosave on opening it): its line goes.
+  if (draftEntries && awayFailures.length) {
+    const settled = awayFailures.filter((failure) => !Object.values(draftEntries).some((entry) => entry.savedId === failure.id
+      && entry.loaded && entry.dirty));
+    if (settled.length) setAwayFailures((shown) => shown.filter((failure) => !settled.includes(failure)));
+  }
   if (draftEntries && Object.keys(confirming).length) {
     const entryOf = (id: string) => Object.values(draftEntries).find((entry) => entry.savedId === id && entry.loaded);
+    // A replayed save that failed (GM r113 2): not sent again on its own, so the slot doesn't wait on it.
+    const failed = (id: string) => {
+      const entry = entryOf(id);
+      return Boolean(entry && entry.dirty && !entry.pendingSaveId && entry.saveState === 'error' && entry.saveError);
+    };
     // Dirty until its save lands, as for a board's Restore; a draft no longer here isn't counted as saved.
-    const done = Object.entries(confirming).filter(([, pending]) => !pending.boards.some((board) => entryOf(board.id)?.dirty));
+    const done = Object.entries(confirming).filter(([, pending]) => !pending.boards.some((board) => entryOf(board.id)?.dirty && !failed(board.id)));
     if (done.length) {
       setConfirming((now) => Object.fromEntries(Object.entries(now).filter(([slot]) => !done.some(([finished]) => finished === slot))));
+      const lines: AwaySaveFailure[] = [];
+      const cleared = new Set<string>();
       for (const [slot, pending] of done) {
-        const saved = pending.boards.filter((board) => entryOf(board.id)).map((board) => board.name);
+        // Saved in this slot so far (a Try again confirms again with every board saved, GM r113 2).
+        const before = slotSaved.current.get(slot) ?? [];
+        const now = pending.boards.filter((board) => entryOf(board.id) && !failed(board.id)).map((board) => board.name);
+        const saved = [...before, ...now.filter((name) => !before.includes(name))];
+        slotSaved.current.set(slot, saved);
         confirmRestored(slot, pending.project !== null ? projectRestoredLine(pending.project, saved, pending.stayed)
           : restoredBoardsLine(pending.names, saved.length, pending.stayed), pending.at);
+        for (const board of pending.boards) {
+          cleared.add(board.id);
+          const line = failed(board.id) ? changeNotSavedLine(entryOf(board.id)!.saveError, board.name) : null;
+          if (line) lines.push({ slot, id: board.id, name: board.name, at: pending.at, ...line, confirm: pending });
+        }
       }
+      setAwayFailures((shown) => [...shown.filter((it) => !cleared.has(it.id)), ...lines]);
     }
   }
   if (restoring && draftEntries) {
@@ -2561,8 +2621,14 @@ export function MoodboardStudioView() {
     recheckGone();
   };
   replaysNow.current = { whenShown: replayWhenShown, project: replayRestoredProject, boards: replayRestoredBoards };
-  /** Restore: one board comes back and opens, its edit replayed by the load; for several, Recently deleted opens. */
+  /** Restore: one board comes back and opens, its edit replayed by the load; for several, Recently deleted opens.
+   *  Offline (GM r113 1, as Restore project, r90.3): a press only pulses the banner, which is the reason; nothing is
+   *  sent, no line comes, and focus stays on the button. */
   const restoreGone = async (keyboard: boolean) => {
+    if (isBackendOffline()) {
+      refuseEditWhileOffline();
+      return;
+    }
     const trashed = trashedShown;
     const held = heldTrashed;
     setRestoreError(null);
@@ -2583,7 +2649,8 @@ export function MoodboardStudioView() {
       await restoreTrashed('moodboard', board.id);
     } catch (err) {
       restoresHere.current.delete(board.id);
-      if (!mounted.current) return;
+      // Refused before it was sent (Nebula went offline as it was pressed): the banner says so; no line (GM r113 1).
+      if (!mounted.current || isOfflineRefusal(err)) return;
       // Deleted for good meanwhile: the line turns red (the check says so), not a failure to restore (review 10 LOW-2).
       if ((err as { status?: unknown }).status === 404 && await lookupStoredAsset('moodboard', board.id)
         .then((stored) => stored.status === 'missing', () => false)) {
@@ -2627,6 +2694,34 @@ export function MoodboardStudioView() {
     const press = projectPress.current;
     if (!press || document.querySelector(`[data-gone="project"][data-project="${CSS.escape(press.projectId)}"]`)) return;
     if (!document.activeElement || document.activeElement === document.body) focusMain(mainRef.current);
+  });
+  /** Try again on a board's failed replayed save (GM r113 2): its save is sent again where it is, and its slot waits on
+   *  it, so its confirmation names it once saved; failed again, its line says why again. Offline it pulses the banner. */
+  const retryAwaySave = (failure: AwaySaveFailure, keyboard: boolean) => {
+    if (isBackendOffline()) {
+      refuseEditWhileOffline();
+      return;
+    }
+    const state = useAssetStudioDraftStore.getState();
+    const found = Object.entries(state.entries).find(([, entry]) => entry.savedId === failure.id && entry.loaded);
+    if (!found || found[1].pendingSaveId || !found[1].dirty) return;
+    awayPress.current = { id: failure.id, keyboard };
+    setConfirming((now) => {
+      const waiting = now[failure.slot];
+      const boards = [...(waiting?.boards ?? []).filter((board) => board.id !== failure.id), { id: failure.id, name: failure.name }];
+      return { ...now, [failure.slot]: { ...(waiting ?? failure.confirm), boards } };
+    });
+    void sendQueued(found[0], failure.id);
+  };
+  // Its line went (saved) with focus on its Try again: the next notice control, or <main>, never body.
+  useLayoutEffect(() => {
+    const press = awayPress.current;
+    if (!press || document.querySelector(`[data-away-save="${CSS.escape(press.id)}"]`)) return;
+    awayPress.current = null;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const next = noticesRef.current?.querySelector<HTMLElement>('.moodboard-studio__notice button:not(:disabled)');
+    if (next) next.focus({ preventScroll: true, focusVisible: press.keyboard } as FocusOptions);
+    else focusMain(mainRef.current);
   });
   /** Why a Restore project's request failed (GM r53 Q1, r90.3): the connection dropped while it was out (Nebula is
    *  offline once a probe answers), the server isn't answering, or anything else. */
@@ -2727,7 +2822,7 @@ export function MoodboardStudioView() {
           if (!entry.loaded || !entry.savedId || !gone.has(entry.savedId)) continue;
           // The open board loads again (not found now); another board's draft here is forgotten.
           if (at === open) patch({ loaded: false, loadError: null, saveError: null, revision: entry.revision + 1 });
-          else store.reset(at, emptyDraft());
+          else resetBoardDraft(at, emptyDraft());
         }
         if (gone.size < listed.length && mounted.current) recheckGone();
       });
@@ -2752,9 +2847,8 @@ export function MoodboardStudioView() {
     const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
     if (!removed || !mounted.current) return;
     useBoardUndoStore.getState().clear(deletedKey);
-    const store = useAssetStudioDraftStore.getState();
     // Forget the session draft, so reopening it after a restore loads what was saved.
-    store.reset(deletedKey, emptyDraft());
+    resetBoardDraft(deletedKey, emptyDraft());
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
     const openProjectId = currentProject()?.id ?? null;
@@ -2762,7 +2856,7 @@ export function MoodboardStudioView() {
     // Another unsaved board with content is saved first, as New does (GM r8 answer 1).
     const kept = await keepUnsaved(newKey);
     if (kept.kept) {
-      store.reset(newKey, scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
+      resetBoardDraft(newKey, scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
     }
     if (!stillOn(route, kept.savedId)) return;
     setRailScope(scope);
@@ -2888,7 +2982,7 @@ export function MoodboardStudioView() {
           // fails, the board stays open with its line.
           const route = routeNow();
           const kept = await keepUnsaved(newKey);
-          if (kept.kept) useAssetStudioDraftStore.getState().reset(newKey, emptyDraft());
+          if (kept.kept) resetBoardDraft(newKey, emptyDraft());
           if (!stillOn(route, kept.savedId)) return;
           setRailScope(scope);
           enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
@@ -2902,7 +2996,7 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading Moodboard...'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
@@ -2919,11 +3013,9 @@ export function MoodboardStudioView() {
     <>
       {/* While the red line names this board (gone for good), not "Moodboard not found" too (GM r21 Q4). */}
       {shownLoadError && !(shownLoadError === NOT_FOUND_LINE && goneEdits.purged.some((board) => board.id === moodboardEditorId)) && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={shownLoadError} /></div>)}
+        <FailureLine className="moodboard-studio__notice moodboard-studio__notice--warn" failure={shownLoadError} />)}
       {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
-      {deleting.deleteError && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
-      )}
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={deleting.deleteError} alert />
       {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). A save that
           found the board deleted says the deleted-board line instead (GM r21 Q3): with Restore below while it's in
           Recently deleted; red when it's gone for good. */}
@@ -2933,14 +3025,27 @@ export function MoodboardStudioView() {
           <LiveText text={line.text} /></div>;
       })()}
       {saveError && !heldGone && (notSaved
-        ? <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status">
-          <FailureLines failure={saveError} /></div>
-        : <div className="moodboard-studio__notice moodboard-studio__notice--error">
-          <FailureLines failure={saveError} retry={canRetry} /></div>)}
+        ? <FailureLine className="moodboard-studio__notice moodboard-studio__notice--neutral" failure={saveError} neutral />
+        : <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={saveError} retry={canRetry} />)}
       {/* A Restore's confirmation (round 6k, GM r19 2; round 6l, GM r20 A): before any "Kept …" line its replay gives. */}
       {restoredLines.filter((line) => line.at === moodboardEditorId).map((line) => (
-        <div key={line.slot} className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-restored=""
-          role="status" title={line.title}><LiveText text={line.text} /></div>
+        <Fragment key={line.slot}>
+          <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-restored=""
+            role="status" title={line.title}><LiveText text={line.text} /></div>
+          {/* Under it, each board whose replayed save failed (GM r113 2): its own save line, neutral (the edit waits in
+              its draft), with Try again, a real button that sends the save again. The same element while it retries. */}
+          {awayFailures.filter((failure) => failure.slot === line.slot && failure.at === moodboardEditorId).map((failure) => (
+            <div key={failure.id} className={`moodboard-studio__notice moodboard-studio__notice--neutral${failure.retry ? ' moodboard-studio__notice--action' : ''}`}
+              data-line-neutral="" data-away-save={failure.id} role="status" title={failure.title}>
+              <span><LiveText text={failure.text} /></span>
+              {failure.retry && (
+                <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+                  aria-disabled={offline || undefined} {...offlineMark(offline)}
+                  onClick={(event) => retryAwaySave(failure, event.detail === 0)}>Try again</button>
+              )}
+            </div>
+          ))}
+        </Fragment>
       ))}
       {/* The Studio's own neutral line about this board (round 6g: what a repeat kept from the board). */}
       {notice && <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status"
@@ -2950,9 +3055,7 @@ export function MoodboardStudioView() {
         <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-undo-dropped="" role="status">
           <LiveText text={UNDO_DROPPED_LINE} /></div>
       )}
-      {moving.error && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
-      )}
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={moving.error} alert />
       {/* Kept edits whose boards were deleted (round 6j): the Restore line first, then the gone-for-good one. */}
       {trashedShown.length > 0 && (() => {
         const line = deletedBoardsLine(trashedShown.map((board) => board.name), 'trashed');
@@ -2960,7 +3063,9 @@ export function MoodboardStudioView() {
           <div className="moodboard-studio__notice moodboard-studio__notice--neutral moodboard-studio__notice--action" data-line-neutral=""
             data-gone="trashed" role="status" title={line.title}>
             <span><LiveText text={line.text} /></span>
+            {/* Offline it follows Restore project (GM r113 1, r90.3): aria-disabled, focus kept, the banner the reason. */}
             <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+              aria-disabled={offline || undefined} {...offlineMark(offline)}
               onClick={(event) => { void restoreGone(event.detail === 0); }}>Restore</button>
           </div>
         );
@@ -2986,9 +3091,7 @@ export function MoodboardStudioView() {
           </div>
         );
       })}
-      {restoreError && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={restoreError} /></div>
-      )}
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={restoreError} alert />
       {/* A project deleted for good while its Restore project was out (round 6m, GM r53 Q1): red, said once, its × only,
           as the 6k red line; its boards' kept edits are dropped once it has shown. */}
       {projectsPurged.map((project) => {

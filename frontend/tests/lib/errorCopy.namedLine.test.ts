@@ -106,6 +106,9 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // PR #210 (review 10 NIT-5, round 6l): the board save lines are built around a constant opening.
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`${NOT_SAVED_OPENING}${line.cause}. ${line.step}`',
     why: "GM r16's board save lines: the cause and the step are GM's fixed pairs (SAVE_LINES), never a server line" },
+  // PR #210 round 6t (GM r113 2): a replayed save that failed on a board the person isn't on, named, under the Restore's confirmation.
+  { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`Nebula couldn’t save your change to ${what} because ${line.cause}. ${line.step}`',
+    why: "GM r113 2's exact line: the board's quoted name over one of GM r16's fixed cause and step pairs (SAVE_LINES), never a server line" },
   { file: 'components/moodboard-studio/boardSaveLine.ts',
     text: "`${LOST_ADD_OPENING}${what} because the board hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
     why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },

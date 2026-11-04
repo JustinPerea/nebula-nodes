@@ -48,6 +48,9 @@ const SAVE_LINES = {
 
 type SaveLineKind = keyof typeof SAVE_LINES;
 
+/** The board's own save line for one of GM r16's pairs: "Nebula couldn’t save the board because <cause>. <step>". */
+const notSavedReason = (line: (typeof SAVE_LINES)[SaveLineKind]) => `${NOT_SAVED_OPENING}${line.cause}. ${line.step}`;
+
 /**
  * Whether a failed save found its board deleted (round 6l, GM r21 Q3): a 404
  * whose `code` is "in_trash" is in Recently deleted ('trashed', the r18
@@ -83,7 +86,7 @@ export function boardSaveLine(error: unknown, name = ''): BoardSaveLine {
   const gone = boardGoneKind(error);
   if (gone) return { failure: { heading: '', reason: deletedBoardsLine([name], gone).text }, retry: 'reload' };
   const line = SAVE_LINES[saveLineKind(error)];
-  return { failure: { heading: '', reason: `${NOT_SAVED_OPENING}${line.cause}. ${line.step}` }, retry: line.retry };
+  return { failure: { heading: '', reason: notSavedReason(line) }, retry: line.retry };
 }
 
 /** The line alone (boardSaveLine's failure). */
@@ -179,6 +182,25 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
     : (one ? `Nebula couldn’t save your change to ${what} because the board was deleted somewhere else.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted somewhere else.`);
   return { text, title };
+}
+
+/**
+ * A kept edit replayed on a board the person isn't on (Restore project, or a
+ * restore elsewhere) whose save failed (#210 round 6t, GM r113 2): under the
+ * Restore's confirmation, the board's own save line, naming the board, from
+ * the line its save failed with (boardSaveLine's). Neutral: the edit waits
+ * in the board's draft. `retry` is whether trying again can work (the line's
+ * Try again is then a real button that replays the save). Null for a line
+ * that isn't a board save line (a board deleted again says its own line).
+ * - "Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again."
+ */
+export function changeNotSavedLine(failure: FailureCopy | string | null | undefined, name: string):
+  { text: string; title: string; retry: boolean } | null {
+  if (typeof failure !== 'object' || failure === null || failure.heading) return null;
+  const line = Object.values(SAVE_LINES).find((it) => failure.reason === notSavedReason(it));
+  if (!line) return null;
+  const { what, title } = namedBoards([name]);
+  return { text: `Nebula couldn’t save your change to ${what} because ${line.cause}. ${line.step}`, title, retry: line.retry === 'save' };
 }
 
 /**

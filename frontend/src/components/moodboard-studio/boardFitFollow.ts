@@ -29,7 +29,8 @@
  *   opens fitted to its column. A move the person makes first cancels it.
  * - After that, a column resize refits at most once a frame, if the board is
  *   fitted when the frame runs (the camera judged against the fit of the
- *   column before the resize), springing to the new column's fit.
+ *   column before the resize), springing to the new column's fit. The Board
+ *   view decides that with its flag instead (`follows`, #210 round 6t).
  * - A refit changes the camera, never the column, so it can't call itself.
  */
 export interface FitCamera {
@@ -89,11 +90,19 @@ export interface BoardFitFollowOptions {
   fitFor: (width: number, height: number) => FitCamera | null;
   /** Fit the whole board to the column: at once on open, on the spring after that. False when there was nothing to fit. */
   refit: (instant: boolean) => boolean;
+  /**
+   * Whether a column resize refits, given whether the camera is fitted
+   * (`fitted`, as this follower reads it). Left out, it refits when fitted.
+   * The Board view passes its "view is fitted" flag (#210 round 6t, GM r113
+   * 4 and 5): a framing the person made, of any kind, follows the column; a
+   * panned view doesn't, even one back on the fit.
+   */
+  follows?: (fitted: boolean) => boolean;
   requestFrame?: (callback: () => void) => number;
   cancelFrame?: (id: number) => void;
 }
 
-export function createBoardFitFollow({ fitted, camera, fitFor, refit, requestFrame = (cb) => window.requestAnimationFrame(cb),
+export function createBoardFitFollow({ fitted, camera, fitFor, refit, follows = (on) => on, requestFrame = (cb) => window.requestAnimationFrame(cb),
   cancelFrame = (id) => window.cancelAnimationFrame(id) }: BoardFitFollowOptions): BoardFitFollow {
   let openFit = fitted;
   // Where the camera was when the board was last fitted (a fit spring or the
@@ -174,7 +183,7 @@ export function createBoardFitFollow({ fitted, camera, fitFor, refit, requestFra
         const fittedBefore = isFitted();
         frame = 0;
         before = null;
-        if (fittedBefore) refit(false);
+        if (follows(fittedBefore)) refit(false);
       });
     },
     dispose: cancel,

@@ -105,6 +105,25 @@ describe('a line on the board has a solid surface (GM r105 3)', () => {
     }
   }
 
+  // Review 12 LOW-3 (N20): a state rule (a hover, a focus inside the line) may not make it see-through either.
+  for (const skinned of [true, false]) {
+    it(`${skinned ? 'Slava skin' : 'no skin'}: hovered or with focus inside, every kind stays solid`, () => {
+      for (const kind of KINDS) {
+        const style = resolvedStyle(lineIn(kind, skinned));
+        for (const state of [':hover', ':focus-within', ':focus-visible', ':active']) {
+          const background = style[`${state}|background`] ?? style[`${state}|background-color`];
+          if (background) {
+            const layers = topLevel(resolve(background, style), ',');
+            expect(isOpaque(layers[layers.length - 1]), `${kind} ${state}: bottom layer "${layers[layers.length - 1]}"`).toBe(true);
+          }
+          expect(Number(style[`${state}|opacity`] ?? '1'), `${kind} ${state} opacity`).toBe(1);
+          expect(style[`${state}|backdrop-filter`] ?? 'none', `${kind} ${state} backdrop`).toBe('none');
+        }
+        document.body.innerHTML = '';
+      }
+    });
+  }
+
   it('over the canvas it is the colour it was over the empty canvas: the line\'s own tint on the canvas colour', () => {
     for (const kind of KINDS) {
       const style = resolvedStyle(lineIn(kind, true));

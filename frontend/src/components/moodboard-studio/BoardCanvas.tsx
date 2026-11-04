@@ -472,25 +472,34 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // A whole-board fit's refit while its column resizes (#209): `follow` knows
   // whether the camera is on the fit, by comparing it.
   const fitRef = useRef<(instant: boolean) => boolean>(() => false);
+  // The app's refit of what the flag names (reframe, below).
+  const reframeRef = useRef<() => boolean>(() => false);
   const follow = useRef<BoardFitFollow | null>(null);
   follow.current ??= createBoardFitFollow({
     fitted: startsFitted,
     camera: readCamera,
     fitFor: (width, height) => fitForRef.current(width, height),
-    refit: (instant) => fitRef.current(instant),
+    // On open, the fit; after that, a column resize frames again what the flag names (reframe: the app's refit).
+    refit: (instant) => (instant ? fitRef.current(true) : reframeRef.current()),
+    // A column resize refits a view the flag says is fitted, of any kind (GM r113 4), and only that: a panned view
+    // isn't refit, even one back on the fit (GM r113 5). A whole-board flag also needs the camera still where the
+    // fit left it (a move no callback reported clears it).
+    follows: (fitted) => placed.current !== null && (placed.current.kind !== 'board' || fitted),
   });
   // The view is fitted (#210 round 6r, GM r101): the camera is where the app
-  // last framed it: a fit (Fit, Shift+1, the fit on open, a refit) frames the
-  // whole board (`kind: 'board'`), an Update's Show the cards it names. Only
-  // the person clears it, by moving the camera (a pan, a pinch, a wheel, the
-  // zoom buttons, a keyboard zoom); a refit or an
-  // agent's change to the board doesn't. While it is set, a notice line
-  // appearing or going frames the same cards again in the new view insets
-  // (followNotices); once cleared, a line never moves the camera (#213 r3).
-  // The outside chip's press counts as a Show (round 6s, GM r105 1): it sets
-  // the flag for the area of the tiles it brings into view. The flag is kept
-  // with the camera for the visit (the store's `placed`), so it comes back
-  // with the camera from List (savedPlaced).
+  // last framed it, and for what: the whole board (`kind: 'board'`), or the
+  // cards an Update's Show or the outside chip brought into view (`cards`).
+  // Only the person's own framing sets it (GM r113 5): Fit, Shift+1, a Show,
+  // the chip's press (round 6s, GM r105 1), or opening the board fresh. The
+  // app's refits (a line coming or going, a column resize, the fit on open of
+  // a kept camera) keep it as it is and never set it. Only the person clears
+  // it, by moving the camera (a pan, a pinch, a wheel, the zoom buttons, a
+  // keyboard zoom); an agent's change to the board doesn't. While it is set,
+  // a notice line appearing or going, or the column resizing, frames the
+  // same cards again in the view as it is now (reframe); once cleared,
+  // neither moves the camera (#213 r3). The flag is kept with the camera for
+  // the visit (the store's `placed`), so it comes back with the camera from
+  // List (savedPlaced).
   const placed = useRef<BoardPlaced | null>(savedPlaced);
   const place = useCallback((value: BoardPlaced | null) => {
     placed.current = value;
@@ -537,16 +546,48 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (springTarget.current || closed.current) return;
     useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
   }, [boardKey, getViewport]);
+  // The tiles a Show or the chip framed are followed as they change (GM r113
+  // 3): a placeholder becomes its image's card when it lands, a provisional
+  // card its saved one. What each tile stands for (its image) is learned
+  // while it is on the board, so a tile whose id went is found by its image.
+  const tileImage = useRef(new Map<string, string>());
+  /** The tiles `ids` name, as the board has them now (those still on it). */
+  const tilesOf = useCallback((ids: readonly string[]): Node[] => {
+    const byId = new Map(shownRef.current.map((node) => [node.id, node]));
+    const found = new Map<string, Node>();
+    for (const id of ids) {
+      const node = byId.get(id);
+      if (node) { found.set(node.id, node); continue; }
+      const image = tileImage.current.get(id);
+      if (!image) continue;
+      for (const card of nodesRef.current) if ((card.data as { imageId?: string }).imageId === image) found.set(card.id, card);
+    }
+    return [...found.values()];
+  }, []);
   /** The camera that frames what `at` names again in a column this size: the
-   *  whole board, a Show's cards (those still on the board), or the chip's
-   *  area. Null when there is nothing to frame. */
+   *  whole board, the cards a Show or the chip framed (those still on the
+   *  board, followed: tilesOf), or an area (a chip whose tiles weren't on the
+   *  board yet). Null when there is nothing to frame. */
   const framePlaced = useCallback((at: BoardPlaced, width: number, height: number): Viewport | null => {
     if (at.kind === 'board') return fitFor(width, height);
     if (at.kind === 'area') return frame(at.bounds, width, height);
-    const wanted = new Set(at.ids);
-    const targets = nodesRef.current.filter((node) => wanted.has(node.id));
+    const targets = tilesOf(at.ids);
     return targets.length === 0 ? null : frame(getNodesBounds(targets), width, height);
-  }, [fitFor, frame, getNodesBounds]);
+  }, [fitFor, frame, getNodesBounds, tilesOf]);
+  // Learn what each tile stands for, and keep the flag's ids on the tiles as
+  // the board has them now (a landed placeholder's card, a saved card), so
+  // the store holds them for List and back too.
+  useEffect(() => {
+    for (const spot of held) if (spot.filled) tileImage.current.set(spot.id, spot.filled.imageId);
+    for (const node of nodes) {
+      const image = (node.data as { imageId?: string }).imageId;
+      if (image) tileImage.current.set(node.id, image);
+    }
+    const at = placed.current;
+    if (at?.kind !== 'cards') return;
+    const now = tilesOf(at.ids).map((node) => node.id);
+    if (now.length && (now.length !== at.ids.length || now.some((id, index) => id !== at.ids[index]))) place({ kind: 'cards', ids: now });
+  }, [held, nodes, tilesOf, place]);
   /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
   const fit = useCallback((instant = false) => {
     const { width, height, panZoom } = flowStore.getState();
@@ -556,8 +597,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (instant && !panZoom) return false;
     const to = fitFor(width, height);
     if (!to) return false;
-    // The fit on open of a camera kept from earlier in the visit keeps the
-    // flag it was kept with (GM r105 2): the fit doesn't make it the app's.
+    // The person's Fit or Shift+1 sets the flag, and so does opening the
+    // board fresh (GM r113 5); the fit on open of a camera kept from earlier
+    // in the visit keeps the flag it was kept with (GM r105 2). The app's
+    // refits never come here: they are reframe's.
     if (!instant || !savedViewport) place(WHOLE_BOARD);
     if (!instant) {
       springTo(to);
@@ -587,10 +630,12 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (at.kind === 'cards' && nodesRef.current.length === 0) return;
     reframePending.current = false;
     const to = framePlaced(at, width, height);
+    // None of the cards it framed is left (GM r113 6): the flag clears, and the camera stays where it was kept.
+    if (!to && at.kind === 'cards') place(null);
     if (!to || sameCamera(readCamera(), to)) return;
     moveCamera(to);
     useBoardCanvasStore.getState().setViewport(boardKey, to, follow.current!.onFit(to));
-  }, [flowStore, framePlaced, readCamera, moveCamera, boardKey]);
+  }, [flowStore, framePlaced, readCamera, moveCamera, boardKey, place]);
   const reframeOnOpenRef = useRef(reframeOnOpen);
   reframeOnOpenRef.current = reframeOnOpen;
   useEffect(() => {
@@ -685,24 +730,29 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     springTo({ zoom, x: cx - ((cx - from.x) / from.zoom) * zoom, y: cy - ((cy - from.y) / from.zoom) * zoom });
   }, [flowStore, getViewport, springTo, place]);
 
-  // A notice line appearing or going while the view is fitted (#210 round
-  // 6r, GM r101): the same cards are framed again in the new view insets, on
-  // the board's spring (a jump under reduced motion), so the line never
-  // covers a card the app placed. Its band is read from the stack each time
-  // the stack changes size (a line comes, goes, or wraps to more rows).
-  const followNotices = useCallback(() => {
+  /**
+   * The app's refit (#210 round 6r, GM r101; round 6t, GM r113 4-6): while
+   * the view is fitted, what the flag names is framed again in the view as
+   * it is now, on the board's spring (a jump under reduced motion), so a
+   * line never covers a card the person framed and a resized column keeps
+   * them in view. It keeps the flag as it is and never sets it. A Show's or
+   * the chip's cards are framed as many as are left; with none left, the
+   * flag clears and the camera stays still. False when nothing moved.
+   */
+  const reframe = useCallback((): boolean => {
     const at = placed.current;
-    if (!at || closed.current) return;
-    if (at.kind === 'board') {
-      fit(false);
-      return;
-    }
+    if (!at || closed.current) return false;
     const { width, height } = flowStore.getState();
-    const to = width && height ? framePlaced(at, width, height) : null;
-    if (to) springTo(to);
-  }, [fit, flowStore, springTo, framePlaced]);
-  const followNoticesRef = useRef(followNotices);
-  followNoticesRef.current = followNotices;
+    if (!width || !height) return false;
+    const to = framePlaced(at, width, height);
+    if (!to) {
+      if (at.kind === 'cards') place(null);
+      return false;
+    }
+    springTo(to);
+    return true;
+  }, [flowStore, springTo, framePlaced, place]);
+  reframeRef.current = reframe;
   useEffect(() => {
     const stack = notices?.current;
     if (!stack || typeof ResizeObserver !== 'function') return;
@@ -711,7 +761,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       const now = viewInsets().top;
       if (now === band) return;
       band = now;
-      followNoticesRef.current();
+      // A notice line came, went, or wrapped to more rows: the band changed.
+      reframeRef.current();
     });
     observer.observe(stack);
     return () => observer.disconnect();
@@ -1043,8 +1094,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   /** The chip's press: the tiles into view on the board's fit spring (for a
    *  tile bigger than the view, a zoom out until it is whole, GM r4 answer
    *  9). It is a Show (round 6s, GM r105 1): the view is fitted to the
-   *  tiles' area, so a line then frames them again, clear of it. With
-   *  `focus`, focus goes to the first tile. */
+   *  tiles, which it keeps and follows (GM r113 3: a tile moved, a
+   *  placeholder that lands), so a line or a resize frames them again. Only
+   *  tiles not on the board yet fall back to their area. With `focus`, focus
+   *  goes to the first tile. */
   const showOutside = useCallback((rects: NodeRect[], focus: boolean) => {
     const { width, height } = flowStore.getState();
     if (!width || !height || rects.length === 0) return;
@@ -1052,7 +1105,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     const y = Math.min(...rects.map((r) => r.y));
     const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
       height: Math.max(...rects.map((r) => r.y + r.height)) - y };
-    place({ kind: 'area', bounds });
+    // The tiles at the chip's spots: its placeholders or cards.
+    const at = new Set(rects.map((r) => `${r.x},${r.y},${r.width},${r.height}`));
+    const ids = shownRef.current.filter((node) => at.has(`${node.position.x},${node.position.y},${node.width},${node.height}`))
+      .map((node) => node.id);
+    place(ids.length ? { kind: 'cards', ids } : { kind: 'area', bounds });
     springTo(frame(bounds, width, height));
     if (!focus) return;
     // The board holds focus until the tile is drawn (it is culled until in view).

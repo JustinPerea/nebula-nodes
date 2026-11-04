@@ -4,7 +4,7 @@ import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine,
   changedAfterRemoveLine, isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectGoneLine, projectRestoreFailedLine,
-  projectRestoreFailure, projectRestoredLine } from './boardSaveLine';
+  projectRestoreFailure, projectRestoredLine, changeNotSavedLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
   new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
@@ -463,5 +463,41 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
         if (fields.length + count <= 3) expect(typeof line === 'string' ? line : line?.text).toMatch(/Reference #\d/);
       }
     }
+  });
+});
+
+// #210 round 6t (GM r113 2, verbatim): a replayed kept edit's save that failed on a board the person isn't on, under
+// the Restore's confirmation, names the board, from the save line it failed with.
+describe('a replayed save that failed elsewhere (GM r113 2)', () => {
+  it('names the board in the because form, with the same cause and step: GM\'s string', () => {
+    expect(changeNotSavedLine(boardSaveFailure(failed(408)), 'Rivers')).toEqual({
+      text: 'Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again.', title: '“Rivers”', retry: true });
+  });
+
+  it('every save line has its named form, and Try again only where trying again can work', () => {
+    const cases: Array<[unknown, string, boolean]> = [
+      [offline(), 'the server isn’t answering. Try again.', true],
+      [failed(429), 'the server is busy. Try again.', true],
+      [failed(500), 'the server hit an error. Try again.', true],
+      [failed(507, { storageFull: true }), 'the disk is full. Free up some space, then try again.', true],
+      [failed(413), 'it’s too large. Remove some images, then try again.', true],
+      [failed(401), 'you’re signed out. Open the link Nebula printed when it started.', false],
+      [failed(409, { code: 'version_conflict' }), 'it changed somewhere else. Reload to get the latest version.', false],
+      [failed(400), 'the server didn’t accept this save. Try again.', true],
+    ];
+    for (const [error, tail, retry] of cases) {
+      const line = changeNotSavedLine(boardSaveFailure(error, 'Rivers'), 'Rivers');
+      expect(line, tail).toEqual({ text: `Nebula couldn’t save your change to “Rivers” because ${tail}`, title: '“Rivers”', retry });
+    }
+  });
+
+  it('a long name is clipped with the full name in the title; a deleted board or any other line has no named form', () => {
+    const long = 'A very long moodboard name that goes on and on past forty';
+    expect(changeNotSavedLine(boardSaveFailure(failed(408)), long)?.title).toBe(`“${long}”`);
+    expect(changeNotSavedLine(boardSaveFailure(failed(408)), long)?.text).toContain('…”');
+    expect(changeNotSavedLine(boardSaveFailure(failed(404, { code: 'in_trash' }), 'Rivers'), 'Rivers')).toBeNull();
+    expect(changeNotSavedLine({ heading: "Couldn't save the board.", reason: 'x' }, 'Rivers')).toBeNull();
+    expect(changeNotSavedLine('Nebula couldn’t save the board because the server didn’t respond. Try again.', 'Rivers')).toBeNull();
+    expect(changeNotSavedLine(null, 'Rivers')).toBeNull();
   });
 });

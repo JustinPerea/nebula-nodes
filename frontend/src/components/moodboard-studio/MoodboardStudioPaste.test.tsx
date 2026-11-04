@@ -236,7 +236,8 @@ beforeEach(() => {
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   resetBoardAdds();
   useBoardUndoStore.setState({ histories: {} });
-  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, studioBoard: null, showRequest: null, frameRequest: null });
+  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, fitted: {}, placed: {}, studioBoard: null, showRequest: null,
+    frameRequest: null });
   try { window.localStorage.removeItem(MOODBOARD_VIEW_KEY); } catch { /* jsdom */ }
   try { window.sessionStorage.removeItem('nebula:moodboard-adds-in-flight'); } catch { /* jsdom */ }
   try { window.sessionStorage.removeItem('nebula:moodboard-sends-waiting'); } catch { /* jsdom */ }
@@ -1675,6 +1676,64 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(made.edits).toHaveLength(1));
     expect(made.edits[0]).toEqual([expect.objectContaining({ op: 'add', images: [expect.objectContaining({ url: river })] })]);
     expect(urlsOf(newKey)).toEqual([]);
+  });
+
+  // #210 round 6t (review 12, pre-existing on main): a new board's camera and "view is fitted" flag move with its draft
+  // to the saved key on its first save, and the next New board opens fresh, not at the last one's camera.
+  it('a new board\'s first save (its own autosave): its camera and flag move to the saved key, and nothing stays under "new"', async () => {
+    madeServer();
+    await openNew();
+    const cam = { x: -120, y: 40, zoom: 0.5 };
+    act(() => {
+      useBoardCanvasStore.getState().setViewport(newKey, cam, false);
+      useBoardCanvasStore.getState().setPlaced(newKey, { kind: 'cards', ids: ['c-x'] });
+    });
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(store().entries[madeKey]?.savedId).toBe('made1'));
+    await waitFor(() => expect(useUIStore.getState().moodboardEditorId).toBe('made1'));
+    const canvas = useBoardCanvasStore.getState();
+    expect(canvas.viewports[madeKey]).toEqual(cam);
+    expect(canvas.fitted[madeKey]).toBe(false);
+    expect(canvas.placed[madeKey]).toEqual({ kind: 'cards', ids: ['c-x'] });
+    expect(canvas.viewports[newKey]).toBeUndefined();
+    expect(canvas.placed[newKey]).toBeUndefined();
+  });
+
+  it('New on an empty new board (nothing to save): the fresh board under "new" keeps none of the last one\'s camera', async () => {
+    await openNew();
+    act(() => {
+      useBoardCanvasStore.getState().setViewport(newKey, { x: 5, y: 6, zoom: 0.7 }, false);
+      useBoardCanvasStore.getState().setPlaced(newKey, null);
+    });
+    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    await waitFor(() => expect(store().entries[newKey]?.epoch).toBeGreaterThan(0));
+    expect(api.createMoodboard).not.toHaveBeenCalled();
+    const canvas = useBoardCanvasStore.getState();
+    expect(canvas.viewports[newKey]).toBeUndefined();
+    expect(canvas.fitted[newKey]).toBeUndefined();
+    expect(newKey in canvas.placed).toBe(false);
+  });
+
+  it('New saves the unsaved board first: its camera goes with it, and the fresh board under "new" has none', async () => {
+    madeServer();
+    holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const cam = { x: 300, y: -80, zoom: 0.8 };
+    act(() => {
+      useBoardCanvasStore.getState().setViewport(newKey, cam, true);
+      useBoardCanvasStore.getState().setPlaced(newKey, { kind: 'board' });
+    });
+    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    await waitFor(() => expect(store().entries[madeKey]?.savedId).toBe('made1'));
+    await waitFor(() => expect(store().entries[newKey]?.epoch).toBeGreaterThan(0));
+    const canvas = useBoardCanvasStore.getState();
+    expect(canvas.viewports[madeKey]).toEqual(cam);
+    expect(canvas.placed[madeKey]).toEqual({ kind: 'board' });
+    expect(canvas.viewports[newKey]).toBeUndefined();
+    expect(canvas.fitted[newKey]).toBeUndefined();
+    expect(canvas.placed[newKey]).toBeUndefined();
   });
 
   it('New with an add in flight saves the unsaved board first; the add lands there, the fresh board stays empty', async () => {
@@ -5372,6 +5431,58 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(useUIStore.getState().moodboardEditorId).toBe('g1');
   });
 
+  // #210 round 6t (review 12 live MEDIUM-1, GM r113 1): the line's Restore follows Restore project offline (r90.3), and
+  // no line or alert ever mounts with nothing to say.
+  /** Every notice line on the page, after its text has had its frame: none is empty. */
+  const noEmptyLines = async () => {
+    await new Promise((done) => setTimeout(done, 50));
+    for (const line of document.querySelectorAll('.moodboard-studio__notice, [role="alert"]')) {
+      expect((line.textContent ?? '').trim(), line.outerHTML).not.toBe('');
+    }
+  };
+
+  it('offline: the line\'s Restore is aria-disabled, a press sends nothing, adds no line and keeps focus; after reconnect it restores', async () => {
+    seed(left('t1', 'Rivers'));
+    inTrash({ t1: { name: 'Rivers' } });
+    await openStudio();
+    const button = within((await screen.findByText(TRASHED)).parentElement!).getByRole('button', { name: 'Restore' });
+    const lines = document.querySelectorAll('.moodboard-studio__notice').length;
+    act(() => { noteBackendConnection('offline'); });
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('data-offline-disabled')).toBe(true);
+    expect(button.hasAttribute('disabled')).toBe(false);
+    button.focus();
+    fireEvent.click(button, { detail: 0 });
+    await noEmptyLines();
+    expect(trash.restore).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(button);
+    expect(document.querySelectorAll('.moodboard-studio__notice')).toHaveLength(lines);
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    // Nothing is left behind once the connection is back, and Restore works.
+    act(() => { noteBackendConnection('online'); });
+    expect(button.hasAttribute('aria-disabled')).toBe(false);
+    await noEmptyLines();
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    fireEvent.click(button);
+    await waitFor(() => expect(useUIStore.getState().moodboardEditorId).toBe('t1'));
+    expect(trash.restore).toHaveBeenCalledWith('moodboard', 't1');
+  });
+
+  it('Nebula goes offline as Restore is pressed (its request refused unsent): no line, no empty alert, the line stays', async () => {
+    seed(left('t1', 'Rivers'));
+    inTrash({ t1: { name: 'Rivers' } });
+    trash.restore.mockRejectedValue(new OfflineRefusal('POST', '/api/trash/moodboard/t1/restore'));
+    await openStudio();
+    await screen.findByText(TRASHED);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(trash.restore).toHaveBeenCalled());
+    await noEmptyLines();
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    expect(document.querySelectorAll('.moodboard-studio__notice--error')).toHaveLength(0);
+    expect(screen.getByText(TRASHED)).toBeTruthy();
+    expect(useUIStore.getState().moodboardEditorId).toBe('g1');
+  });
+
   it('gone for good: the red line with no Retry or Restore, and the stored edit is cleared', async () => {
     seed(left('t1', 'Rivers'));
     await openStudio();
@@ -6539,6 +6650,168 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       fireEvent.click(button);
       await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
       expect(sent).toEqual(['pb1']);
+    });
+
+    // ---- Round 6t: review 12 live LOW-2, GM r113 2 ----
+    const COAST_LINE = 'Nebula couldn’t save your change to “Rivers” because its project “Coast” was deleted. Restore the project to keep the change.';
+    const RIVERS_NOT_SAVED = 'Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again.';
+    /** Rivers in Coast (in Recently deleted), its replayed save answered 503 `fails` times, then saved. */
+    const coastFails = (fails: number) => {
+      const made = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Coast' });
+      const put = api.updateMoodboard.getMockImplementation()!;
+      let left = fails;
+      const tries: string[] = [];
+      api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+        if (id === 'pb1') {
+          tries.push(id);
+          if (left > 0) { left -= 1; throw new RequestFailedError("Couldn't save the board.", 503, { detail: 'busy' }); }
+        }
+        return put(id, body);
+      });
+      return { ...made, tries };
+    };
+    const awayLine = () => document.querySelector<HTMLElement>('[data-away-save="pb1"]');
+
+    it('GM r113 2: Restore project, then the replayed save fails: "Restored “Coast”." then Rivers\' own line under it, neutral, with Try again that saves it', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { sent, tries } = coastFails(1);
+      await openStudio();
+      await pressRestoreProject(true, COAST_LINE);
+      const restored = (await screen.findByText('Restored “Coast”.', {}, { timeout: 3000 })).closest('[data-restored]') as HTMLElement;
+      const failure = (await screen.findByText(RIVERS_NOT_SAVED)).closest('[data-away-save]') as HTMLElement;
+      // Underneath the confirmation, the next line in the stack.
+      expect(restored.nextElementSibling).toBe(failure);
+      expect(failure.className).toContain('moodboard-studio__notice--neutral');
+      expect(failure.className).not.toContain('--error');
+      expect(failure.getAttribute('role')).toBe('status');
+      expect(failure.getAttribute('title')).toBe('“Rivers”');
+      expect(tries).toEqual(['pb1']);
+      // The edit is kept (this tab's session storage too) until it is saved.
+      expect(stored().map((it) => it.board)).toEqual(['pb1']);
+      // A real button: from the keyboard, the save goes again and lands.
+      const again = within(failure).getByRole('button', { name: 'Try again' });
+      again.focus();
+      fireEvent.click(again, { detail: 0 });
+      await screen.findByText('Restored “Coast”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
+      expect(tries).toEqual(['pb1', 'pb1']);
+      expect(sent).toEqual(['pb1']);
+      expect(awayLine()).toBeNull();
+      expect(screen.queryByText(RIVERS_NOT_SAVED)).toBeNull();
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement?.tagName).toBe('MAIN');
+      await waitFor(() => expect(stored()).toEqual([]));
+    });
+
+    it('GM r113 2: Try again that fails again: the same line and button, saying why, with focus kept on it', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { tries } = coastFails(2);
+      await openStudio();
+      await pressRestoreProject(true, COAST_LINE);
+      await screen.findByText(RIVERS_NOT_SAVED, {}, { timeout: 3000 });
+      const line = awayLine()!;
+      const again = within(line).getByRole('button', { name: 'Try again' });
+      again.focus();
+      fireEvent.click(again, { detail: 0 });
+      await waitFor(() => expect(tries).toEqual(['pb1', 'pb1']));
+      await new Promise((done) => setTimeout(done, 100));
+      expect(awayLine()).toBe(line);
+      expect(within(line).getByRole('button', { name: 'Try again' })).toBe(again);
+      expect(document.activeElement).toBe(again);
+      expect(screen.getByText(RIVERS_NOT_SAVED)).toBeTruthy();
+      expect(screen.getByText('Restored “Coast”.')).toBeTruthy();
+    });
+
+    it('GM r113 2: offline, the line\'s Try again is aria-disabled, a press sends nothing; after reconnect it saves', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { tries } = coastFails(1);
+      await openStudio();
+      await pressRestoreProject(false, COAST_LINE);
+      await screen.findByText(RIVERS_NOT_SAVED, {}, { timeout: 3000 });
+      const again = within(awayLine()!).getByRole('button', { name: 'Try again' });
+      act(() => { noteBackendConnection('offline'); });
+      expect(again.getAttribute('aria-disabled')).toBe('true');
+      again.focus();
+      fireEvent.click(again, { detail: 0 });
+      await new Promise((done) => setTimeout(done, 50));
+      expect(tries).toEqual(['pb1']);
+      expect(document.activeElement).toBe(again);
+      act(() => { noteBackendConnection('online'); });
+      fireEvent.click(again);
+      await screen.findByText('Restored “Coast”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
+    });
+
+    // ---- Round 6t: review 12 LOW-3, survivors pinned ----
+    it('review 12 N15: Nebula goes offline as Restore project is pressed (refused unsent): no failure line, the line and its button stay', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { sent } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
+      projects.restore.mockRejectedValue(new OfflineRefusal('POST', '/api/projects/p9/restore'));
+      await openStudio();
+      const button = await pressRestoreProject(true);
+      await waitFor(() => expect(projects.restore).toHaveBeenCalled());
+      await new Promise((done) => setTimeout(done, 100));
+      expect(screen.queryByText(/couldn’t restore/)).toBeNull();
+      expect(screen.getByText(LINE)).toBeTruthy();
+      expect(button.textContent).toBe('Restore project');
+      expect(document.activeElement).toBe(button);
+      expect(document.querySelectorAll('[role="alert"], .moodboard-studio__notice--error')).toHaveLength(0);
+      expect(sent).toEqual([]);
+    });
+
+    it('review 12 N18: a re-check takes the line while Restore project is out, focus elsewhere: it stays where the person put it', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { live } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
+      let answer: () => void = () => {};
+      projects.restore.mockImplementation(() => new Promise((done) => { answer = () => { live.push('p9'); done({ id: 'p9', name: 'Shore' }); }; }));
+      await openStudio();
+      await pressRestoreProject(true);
+      await waitFor(() => expect(projects.restore).toHaveBeenCalled());
+      const name = screen.getByDisplayValue('Global board');
+      name.focus();
+      live.push('p9');
+      recheck();
+      await waitFor(() => expect(projectLines()).toHaveLength(0));
+      expect(document.activeElement).toBe(name);
+      act(() => { answer(); });
+      await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
+      expect(document.activeElement).toBe(name);
+    });
+
+    it('review 12 N13: the project is back, but the board moved to another project meanwhile: no replay on the project\'s line', async () => {
+      seed(left('pb1', 'Rivers'));
+      const { sent, live, boards } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
+      await openStudio();
+      await screen.findByText(LINE);
+      live.push('p9');
+      lookups({ pb1: { status: 'ready', asset: { ...clone(boards.pb1), projectId: 'p1' } } });
+      recheck();
+      await waitFor(() => expect(projectLines()).toHaveLength(0));
+      await new Promise((done) => setTimeout(done, 150));
+      expect(sent).toEqual([]);
+      expect(screen.queryByText(/^Restored /)).toBeNull();
+      expect(stored().map((it) => it.board)).toEqual(['pb1']);
+    });
+
+    it('review 12 N14: a deleted board restored elsewhere into a project still in Recently deleted: no replay; its project\'s line', async () => {
+      seed(left('t1', 'Rivers'));
+      lookups({ t1: trashedAs('t1', 'Rivers') });
+      projects.list.mockImplementation(async () => ({ projects: [{ id: 'p1', name: 'Project' }], trash: [{ id: 'p9', name: 'Shore' }] }));
+      const board = { ...clone(server.board), id: 't1', name: 'Rivers', projectId: 'p9' } as Moodboard;
+      const fetchBoard = api.fetchMoodboard.getMockImplementation()!;
+      api.fetchMoodboard.mockImplementation(async (id: string) => (id === 't1' ? clone(board) : fetchBoard(id)));
+      const put = api.updateMoodboard.getMockImplementation()!;
+      const sent: string[] = [];
+      api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+        if (id === 't1') { sent.push(id); return { ...clone(board), ...body, version: board.version + 1 }; }
+        return put(id, body);
+      });
+      await openStudio();
+      await screen.findByText(TRASHED('Rivers'));
+      lookups({ t1: { status: 'ready', asset: clone(board) } });
+      recheck();
+      await screen.findByText(LINE);
+      await new Promise((done) => setTimeout(done, 150));
+      expect(sent).toEqual([]);
+      expect(screen.queryByText(/^Restored /)).toBeNull();
     });
 
     it('GM r90.4: an agent restores the project while the line is up: the edit replays at once and the r71 line confirms', async () => {

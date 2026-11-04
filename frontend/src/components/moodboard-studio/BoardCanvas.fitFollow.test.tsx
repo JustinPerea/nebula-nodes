@@ -93,19 +93,27 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     setViewport: flow.setViewport,
     getViewport: () => ({ ...flow.camera }),
     // The whole board (2000 x 1000 for the three cards, wider when a card
-    // sits further right: one added or moved there), or one card (an
-    // Update's Show of it).
-    getNodesBounds: (nodes: Array<{ position: { x: number } }>) => (nodes.length > 1
+    // sits further right: one added or moved there), or one tile where it
+    // is (an Update's Show of it, the chip's).
+    getNodesBounds: (nodes: Array<{ position: { x: number; y: number }; width?: number; height?: number }>) => (nodes.length > 1
       ? { x: 0, y: 0, width: 2000 + Math.max(...nodes.map((node) => node.position.x)) - 1040, height: 1000 }
-      : { x: 0, y: 0, width: 480, height: 270 }),
+      : { x: nodes[0].position.x, y: nodes[0].position.y, width: nodes[0].width ?? 480, height: nodes[0].height ?? 270 }),
   }),
   // One store for the provider's life, as React Flow's is.
   useStoreApi: () => flow.store,
   };
 });
 
+// The edge chip, recorded: the board's press handler (#210 round 6t: the chip follows its tiles).
+type ChipRect = { x: number; y: number; width: number; height: number };
+const chip = vi.hoisted(() => ({ onShow: null as null | ((rects: ChipRect[], focus: boolean) => void) }));
+vi.mock('./OutsideChip', () => ({
+  OutsideChip: (props: { onShow: (rects: ChipRect[], focus: boolean) => void }) => { chip.onShow = props.onShow; return null; },
+}));
+
 import { getViewportForBounds } from '@xyflow/react';
 import { BoardCanvas } from './BoardCanvas';
+import type { BoardPlaceholder } from './boardPlaceholder';
 import { BOARD_BAR_BAND_PX } from '../../lib/boardViewInsets';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 
@@ -320,10 +328,24 @@ describe('a fitted board follows its column', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('an Update\'s Show frames its cards; a later resize keeps that framing', () => {
+  it('an Update\'s Show frames its cards; a later resize frames them again in the new column (GM r113 4)', () => {
     mounted();
     act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
     runFrames();
+    expect(camera()).toEqual(getViewportForBounds({ x: 0, y: 0, width: 480, height: 270 }, 870, 851 - BOARD_BAR_BAND_PX, 0.02, 1, 0.12));
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    expect(flow.setViewport).not.toHaveBeenCalled(); // on the next frame, on the spring
+    runFrames();
+    expect(camera()).toEqual(getViewportForBounds({ x: 0, y: 0, width: 480, height: 270 }, 430, 851 - BOARD_BAR_BAND_PX, 0.02, 1, 0.12));
+    expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['ca'] });
+  });
+
+  it('an Update\'s Show, then a pan: a resize keeps the person\'s view', () => {
+    mounted();
+    act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
+    runFrames();
+    stuckPan();
     flow.setViewport.mockClear();
     resize(430, 851);
     runFrames();
@@ -441,7 +463,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a person who pans back exactly onto the fit has a fitted board again', () => {
+  it('a person who pans back exactly onto the fit: kept as on the fit, but a panned view, so a resize keeps it (GM r113 5)', () => {
     mounted();
     notch(50);
     expect(kept().fitted).toBe(false);
@@ -451,16 +473,20 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
       flow.props!.onMoveEnd!(wheel(), camera());
     });
     expect(kept().fitted).toBe(true);
+    expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+    const back = camera();
+    flow.setViewport.mockClear();
     resize(430, 851);
     runFrames();
-    expect(camera()).toEqual(fitViewport(430, 851));
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(back);
   });
 });
 
 describe('a camera kept from earlier in the visit', () => {
   it('kept while fitted, at another column size: it opens fitted to the column it has now, then follows it', () => {
     // Fitted at 1440 wide, then List, the window narrowed, back to Board (review 2, H).
-    useBoardCanvasStore.setState({ viewports: { k1: { x: 46, y: 261.5, zoom: 0.319 } }, fitted: { k1: true } });
+    useBoardCanvasStore.setState({ viewports: { k1: { x: 46, y: 261.5, zoom: 0.319 } }, fitted: { k1: true }, placed: { k1: { kind: 'board' } } });
     flow.state.width = 430;
     mount();
     expect(flow.props?.defaultViewport).toBeUndefined();
@@ -650,7 +676,7 @@ describe('a press with no pan (review 4 LOW-1)', () => {
 
 // GM, review 4 question 2: landing on the exact fit by any route counts as fitted.
 describe('the zoom buttons', () => {
-  it('zoom in, then back out: back on the fit, the board is fitted, refits and is kept fitted', () => {
+  it('zoom in, then back out: back on the fit and kept so, but the person\'s camera: a resize (the offline row) keeps it (review 12 LOW-1, GM r113 5)', () => {
     mounted();
     press('Zoom in');
     runFrames();
@@ -662,9 +688,14 @@ describe('the zoom buttons', () => {
     expect(camera().x).toBeCloseTo(fit.x, 6);
     expect(camera().y).toBeCloseTo(fit.y, 6);
     expect(kept().fitted).toBe(true);
-    resize(430, 851);
+    const back = camera();
+    flow.setViewport.mockClear();
+    resize(870, 802); // the offline row opens: 49 px shorter
     runFrames();
-    expect(camera()).toEqual(fitViewport(430, 851));
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(back);
+    // The refit didn't make it the app's: the flag stays clear.
+    expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
   });
 
   it('zoom out, then back in, then List and back: it reopens fitted to the column it has then', () => {
@@ -858,7 +889,7 @@ describe('a press that jitters within the click distance (#213 review 1 LOW-1)',
 // GM, #213 round 3: fitted means the camera is on the fit of the layout the
 // board has now, however it got there; a spring that lands on the fit is a fit.
 describe('on the fit of the layout the board has now (GM, #213 round 3)', () => {
-  it('a zoom-out spring that lands on the fit, with a resize while it runs: it follows the resize (review 1 LOW-2)', () => {
+  it('a zoom-out spring that lands on the fit, with a resize while it runs: the zoom buttons are the person\'s, so it lands where it was going (GM r113 5)', () => {
     mounted();
     press('Zoom in');
     runFrames();
@@ -867,10 +898,24 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     step(0);
     step(16);
     resize(430, 851);
+    runFrames();
+    const fit = fitViewport(870, 851);
+    expect(camera().zoom).toBeCloseTo(fit.zoom, 9);
+    expect(camera().x).toBeCloseTo(fit.x, 6);
+    expect(camera().y).toBeCloseTo(fit.y, 6);
+    expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+  });
+
+  it('a Fit spring with a resize while it runs: it follows the resize (review 1 LOW-2)', () => {
+    mounted();
+    notch();
+    act(() => { fitButton().click(); });
+    step(0);
+    step(16);
+    resize(430, 851);
     const before = camera();
     step(32); // one spring frame, then the refit frame: the camera is mid-spring when it is judged
     expect(camera()).not.toEqual(before);
-    expect(camera()).not.toEqual(fitViewport(870, 851));
     runFrames();
     expect(camera()).toEqual(fitViewport(430, 851));
     expect(kept()).toEqual({ viewport: fitViewport(430, 851), fitted: true });
@@ -914,16 +959,16 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     ['zoom 0.11% off', { zoom: -0.0011 }, false],
   ];
   for (const [name, off, fitted] of edges) {
-    it(`a camera ${name} the fit is ${fitted ? '' : 'not '}fitted`, () => {
+    it(`a camera ${name} the fit is ${fitted ? '' : 'not '}kept as fitted; moved there, it is a panned view a resize keeps (GM r113 5)`, () => {
       mounted();
       const fit = fitViewport(870, 851);
       autopan({ x: fit.x + (off.x ?? 0), y: fit.y + (off.y ?? 0), zoom: fit.zoom * (1 + (off.zoom ?? 0)) });
       expect(kept().fitted).toBe(fitted);
+      expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
       flow.setViewport.mockClear();
       resize(430, 851);
       runFrames();
-      if (fitted) expect(camera()).toEqual(fitViewport(430, 851));
-      else expect(flow.setViewport).not.toHaveBeenCalled();
+      expect(flow.setViewport).not.toHaveBeenCalled();
     });
   }
 
@@ -1409,6 +1454,194 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
     });
   });
+
+  // #210 round 6t (GM r113 3-6, review 12): the chip keeps and follows its
+  // tiles, any fitted view refits on a column resize, only the person's own
+  // framing sets the flag, and a later line frames whatever is left.
+  describe('the person\'s framing and what follows it (GM r113)', () => {
+    /** The camera that frames `b` in the view as it is now (below a line that shows). */
+    const frameOf = (b: ChipRect, width = 870, height = boxes.board.height) => {
+      const top = boxes.stack.height > 0 ? bandEnd() : 0;
+      const to = getViewportForBounds(b, width, height - top - 53, 0.02, 1, 0.12);
+      return { x: to.x, y: to.y + top, zoom: to.zoom };
+    };
+    const tileD = { x: 3000, y: 1200, width: 480, height: 270 };
+    const withD = (at: { x: number; y: number } = tileD) => [...images, { id: 'd', url: '/api/outputs/d.png', weight: 1, notes: '',
+      privateNote: '', excluded: false, placements: [{ ...card('cd', at.x), y: at.y }] }];
+    const outside = { id: 1, rects: [tileD], thumb: null };
+    const chipUi = (list: MoodboardImage[], held: BoardPlaceholder[] = []) => (
+      <BoardCanvas boardKey="k1" images={list} onMove={() => {}} onDropFiles={() => {}} notices={{ current: stackEl }}
+        placeholders={held} outside={outside} onOutsideDone={() => {}} />);
+    const openChip = (list: MoodboardImage[], held: BoardPlaceholder[] = []) => {
+      flow.state.width = 870;
+      flow.state.height = boxes.board.height;
+      const view = render(chipUi(list, held));
+      flow.setViewport.mockClear();
+      return view;
+    };
+    const pressChip = () => act(() => { chip.onShow!([tileD], false); });
+
+    it('the chip keeps its tile, not an area, and follows it: moved by an agent, a later line frames it where it is now', () => {
+      const view = openChip(withD());
+      dragPan();
+      pressChip();
+      runFrames();
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['cd'] });
+      expectClose(camera(), frameOf(tileD));
+      const moved = { x: 5200, y: -1800 };
+      view.rerender(chipUi(withD(moved)));
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      expect(flow.setViewport).toHaveBeenCalled();
+      expectClose(camera(), frameOf({ ...tileD, ...moved }));
+    });
+
+    it('the chip\'s tile moved while in List: it reopens framed on the tile where it is now', () => {
+      const view = openChip(withD());
+      dragPan();
+      pressChip();
+      runFrames();
+      view.unmount();
+      flow.setViewport.mockClear();
+      const moved = { x: 5200, y: -1800 };
+      render(chipUi(withD(moved)));
+      expect(flow.setViewport).toHaveBeenCalledTimes(1);
+      expectClose(camera(), frameOf({ ...tileD, ...moved }));
+    });
+
+    it('the chip on a placeholder: once it lands, the flag holds its card, and follows the card', () => {
+      const spot: BoardPlaceholder = { id: 'p1', ...tileD, source: { kind: 'file', name: 'd.png' } };
+      const view = openChip(images, [spot]);
+      dragPan();
+      pressChip();
+      runFrames();
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['p1'] });
+      // The upload lands: its image fills the spot, then the placeholder goes.
+      view.rerender(chipUi(withD(), [{ ...spot, filled: { imageId: 'd', url: '/api/outputs/d.png' } }]));
+      view.rerender(chipUi(withD()));
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['cd'] });
+      const moved = { x: 5200, y: -1800 };
+      view.rerender(chipUi(withD(moved)));
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      expectClose(camera(), frameOf({ ...tileD, ...moved }));
+    });
+
+    it('a tile not on the board yet: the chip frames its area', () => {
+      openChip(images);
+      dragPan();
+      pressChip();
+      runFrames();
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'area', bounds: tileD });
+    });
+
+    it('the chip\'s framing refits on a column resize (GM r113 4)', () => {
+      openChip(withD());
+      dragPan();
+      pressChip();
+      runFrames();
+      flow.setViewport.mockClear();
+      act(() => { boxes.board = { top: 98, height: 542 }; boxes.stack = { top: 110, height: 0 }; });
+      resize(870, 542);
+      runFrames();
+      expect(flow.setViewport).toHaveBeenCalled();
+      expectClose(camera(), frameOf(tileD, 870, 542));
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['cd'] });
+    });
+
+    it('a Show whose cards an agent removed, partly: a later line frames what is left (GM r113 6)', () => {
+      const view = open();
+      dragPan();
+      act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca', 'cb']); });
+      runFrames();
+      view.rerender(ui(images.filter((image) => image.id !== 'b')));
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      expectClose(camera(), frameOf({ x: 0, y: 0, width: 480, height: 270 }));
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['ca'] });
+    });
+
+    it('a Show whose cards an agent removed, all of them: a later line clears the flag and the camera stays still (GM r113 6, review 12 N2)', () => {
+      const view = open();
+      dragPan();
+      act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
+      runFrames();
+      const shown = camera();
+      view.rerender(ui(images.filter((image) => image.id !== 'a')));
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      expect(flow.setViewport).not.toHaveBeenCalled();
+      expect(camera()).toEqual(shown);
+      expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+      // Cleared: the line going moves nothing either, nor does a resize.
+      line(0);
+      resize(430, boxes.board.height);
+      runFrames();
+      expect(flow.setViewport).not.toHaveBeenCalled();
+    });
+
+    it('a Show whose cards an agent removed while in List: it reopens where it was kept, and the flag clears (GM r113 6)', () => {
+      const view = open();
+      dragPan();
+      act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
+      runFrames();
+      const shown = camera();
+      view.unmount();
+      flow.setViewport.mockClear();
+      render(ui(images.filter((image) => image.id !== 'a')));
+      expect(flow.setViewport).not.toHaveBeenCalled();
+      expect(camera()).toEqual(shown);
+      expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+    });
+
+    it('List and back, a pan, then Fit: the flag is set again, so a later line refits (review 12 N3)', () => {
+      const view = open();
+      view.unmount();
+      render(ui());
+      dragPan();
+      expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+      act(() => { fitButton().click(); });
+      runFrames();
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'board' });
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      expect(flow.setViewport.mock.calls.length).toBeGreaterThan(2);
+      expectClose(camera(), fitBelowLine());
+    });
+
+    it('List and back, a pan, then Shift+1: the same', () => {
+      const view = open();
+      view.unmount();
+      render(ui());
+      dragPan();
+      act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true })); });
+      runFrames();
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'board' });
+      line(62);
+      runFrames();
+      expectClose(camera(), fitBelowLine());
+    });
+
+    it('an app refit never sets the flag: a line while panned, then a resize, moves nothing (GM r113 5)', () => {
+      open();
+      dragPan();
+      const panned = camera();
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      act(() => { boxes.board = { top: 98, height: 542 }; boxes.stack = { top: 110, height: 62 }; });
+      resize(870, 542);
+      runFrames();
+      expect(flow.setViewport).not.toHaveBeenCalled();
+      expect(camera()).toEqual(panned);
+      expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
+    });
+  });
 });
 
 // #213 review 1 NIT-2: what the camera check counts as a move.
@@ -1524,12 +1757,21 @@ describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a pan back exactly onto the fit, then a card added: fitted, and a resize refits to all four', () => {
+  it('a pan back exactly onto the fit, then a card added: kept as fitted, but a panned view, so a resize keeps it (GM r113 5)', () => {
     const view = mounted();
     autopan({ ...fitViewport(870, 851), x: -400 });
     expect(kept().fitted).toBe(false);
     autopan(fitViewport(870, 851));
     expect(kept().fitted).toBe(true);
+    rerender(view, added);
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+
+  it('a card added while fitted by Fit, then a resize: it refits to all four', () => {
+    const view = mounted();
     rerender(view, added);
     resize(430, 851);
     runFrames();

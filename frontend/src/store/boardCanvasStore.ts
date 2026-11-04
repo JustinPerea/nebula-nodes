@@ -78,6 +78,17 @@ interface BoardCanvasState {
   /** Whether that camera is where the app framed it, and for what (BoardPlaced), per board draft key. */
   placed: Record<string, BoardPlaced | null>;
   setPlaced: (boardKey: string, placed: BoardPlaced | null) => void;
+  /**
+   * The board's draft moved to `to` (a new board's first save: its draft
+   * leaves the shared "new" key for the saved board's own, #210 round 6t):
+   * its camera, its flag and its selection go with it, so the Board view
+   * opens on the saved key where the person left it, and the next New board
+   * starts fresh. A draft already at `to` (the board open from the rail)
+   * keeps its own.
+   */
+  moveBoard: (from: string, to: string) => void;
+  /** A fresh draft at `boardKey` (New, a forgotten draft): nothing of the last board's view is kept for it. */
+  forgetBoard: (boardKey: string) => void;
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
@@ -114,6 +125,30 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   setPlaced: (boardKey, placed) => {
     if (get().placed[boardKey] === placed) return;
     set((state) => ({ placed: { ...state.placed, [boardKey]: placed } }));
+  },
+  moveBoard: (from, to) => {
+    if (from === to) return;
+    set((state) => {
+      const moved = <T,>(table: Record<string, T>): Record<string, T> => {
+        if (!(from in table)) return table;
+        const { [from]: value, ...rest } = table;
+        return to in rest ? rest : { ...rest, [to]: value };
+      };
+      return { viewports: moved(state.viewports), fitted: moved(state.fitted), placed: moved(state.placed),
+        selection: moved(state.selection) };
+    });
+  },
+  forgetBoard: (boardKey) => {
+    const state = get();
+    if (!(boardKey in state.viewports) && !(boardKey in state.fitted) && !(boardKey in state.placed)
+      && !(boardKey in state.selection)) return;
+    const without = <T,>(table: Record<string, T>): Record<string, T> => {
+      const { [boardKey]: _gone, ...rest } = table;
+      void _gone;
+      return rest;
+    };
+    set({ viewports: without(state.viewports), fitted: without(state.fitted), placed: without(state.placed),
+      selection: without(state.selection) });
   },
   studioBoard: null,
   setStudioBoard: (board) => {
