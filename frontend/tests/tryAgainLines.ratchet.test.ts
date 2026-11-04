@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PALETTE_CANT_RUN } from '../src/lib/paletteNotice';
+import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { projectRestoreFailedLine } from '../src/components/moodboard-studio/boardSaveLine';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
@@ -8,6 +9,7 @@ import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 // line; a new line shown beside Try again adds its row here.
 const ROWS: [where: string, line: string][] = [
   ["the Inspector palette's can't-run line (#208)", PALETTE_CANT_RUN],
+  ["the Message box's send that the server didn't answer (GM r50)", SERVER_FAILED_LINE],
   // #210 round 6m (GM r53 Q1): Restore project's neutral failures, each beside its Try again.
   ["Restore project, the server isn't answering (#210)", projectRestoreFailedLine('Shore', 'noAnswer').text],
   ["Restore project, the server didn't accept it (#210)", projectRestoreFailedLine('Shore', 'refused').text],

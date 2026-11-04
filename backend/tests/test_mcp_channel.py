@@ -2645,9 +2645,10 @@ def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     allowed = mcp_channel.CHANGE_TURN_TOOLS
     assert allowed <= set(tools)
     writes = {name for name in allowed if not tools[name].annotations.readOnlyHint}
-    # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose.
+    # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose;
+    # and answer the person in the Message box (reply_to_person, PR C), as a pin is answered.
     assert writes == {"point_at", "post_note", "resolve_pin", "propose_change", "propose_asset_change",
-                      "withdraw_proposal"}
+                      "withdraw_proposal", "reply_to_person"}
     for name in ("start_here", "look_at_canvas", "describe_node", "view_output", "get_run", "list_notes"):
         assert name in allowed, name
     for name in ("edit_canvas", "run_nodes", "open_project", "moodboard_edit", "moodboard_update",
@@ -2684,6 +2685,11 @@ class _Journal:
         self.beats: list[dict] = []  # POST /api/agent/channel: the listener's readiness beats
         self.goodbyes = 0  # DELETE /api/agent/channel: its session ended
         self.questions: dict[str, dict] = {}  # GET /api/canvas/questions/{id}: an answered set, by id
+        # GET /api/agent/thread/inbox: the person's messages to this session, not pushed yet;
+        # POST /api/agent/thread/accepted: the ids the listener said it pushed.
+        self.inbox: list[dict] = []
+        self.inbox_reads = 0
+        self.accepted: list[str] = []
 
     def add(self, kind: str, actor=None, **kwargs) -> None:
         with self.cond:
@@ -2751,6 +2757,10 @@ def _fake_nebula(journal: _Journal):
                             status.pop(pin_id, None)
                 self._send({"projectId": "proj_1", "pins": [{"id": k, "status": v} for k, v in status.items()]})
                 return
+            if url.path == "/api/agent/thread/inbox":
+                journal.inbox_reads += 1
+                self._send({"messages": [m for m in journal.inbox if m["messageId"] not in journal.accepted]})
+                return
             if url.path.startswith("/api/canvas/questions/") and url.path.rsplit("/", 1)[-1] in journal.questions:
                 self._send({"questions": journal.questions[url.path.rsplit("/", 1)[-1]]})
                 return
@@ -2762,6 +2772,11 @@ def _fake_nebula(journal: _Journal):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 journal.beats.append({**body, "agent": self.headers.get("X-Nebula-Agent")})
                 self._send({"listener": {"listenerId": "ch_fake0123456789", "state": body.get("state")}})
+                return
+            if urlsplit(self.path).path == "/api/agent/thread/accepted":
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                journal.accepted.extend(body.get("messageIds") or [])
+                self._send({"accepted": body.get("messageIds") or []})
                 return
             journal.tool_agents.append(self.headers.get("X-Nebula-Agent") or "")
             self._send({"ok": True, "path": urlsplit(self.path).path})

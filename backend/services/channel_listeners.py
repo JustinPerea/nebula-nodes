@@ -28,8 +28,9 @@ of (agent, session) under a secret this backend process makes at launch, so
 it stays the same when the entry lapses and comes back (a beat gap past the
 TTL, an eviction) and the person's sent or held messages to it still reach
 it (review 1 of #225, boundary LOW-1). It can't be worked back to the
-session, and a restarted Nebula gives new ids: messages sent before a
-restart and never pushed stay "sent" (the notes say so).
+session, and a restarted Nebula gives new ids. The person's messages
+name their listener by agent and session too (person_thread.route_key),
+so one sent before a restart and never pushed is still read after it.
 
 Only an agent holding a valid agent token registers (Justin, 2026-11-03;
 main._channel_caller refuses a name alone), so every entry is a token's
@@ -50,6 +51,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from services import push_ledger
 from services.agent_presence import AgentIdentity
 
 BEAT_SECONDS = 15.0  # how often a listener says it is there
@@ -57,6 +59,16 @@ TTL_SECONDS = 45.0   # an entry with no word this long is gone (three beats)
 MAX_LISTENERS = 64   # entries kept; past this the least recently heard goes
 MAX_PER_AGENT = 8    # entries kept per agent identity; past this its own least recently heard goes
 STATES = ("listening", "stopped")
+# How long a lapsed listener (its beats stopped, never ended) may still come
+# back to the messages sent before it lapsed: the send's own 10-minute cap
+# (DELIBERATE_SPAN_CAP). Beats keep going while Claude works, so a lapse is a
+# stopped process, not a long task; ten minutes covers a quick reconnect, and
+# after that the row drops for good and a resend is offered. Not a new number.
+# (push_ledger.KEEP_SECONDS, 24 h, is the reply-matching bound and stays.)
+LAPSE_WINDOW_SECONDS = push_ledger.DELIBERATE_SPAN_CAP
+# A settle that failed (the project store couldn't be written) is given back
+# and tried again after this long, never dropped and never spun on.
+SETTLE_RETRY_SECONDS = 5.0
 # Justin, 2026-11-03: only an agent holding a valid agent token (Settings ›
 # Connect your agent) registers, so only a token's agent is ever addressed by
 # the person's messages. GM r81's lines (the listener prints them after
@@ -86,6 +98,10 @@ SESSION_TAKEN_CODE = "listener_session_taken"
 SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
                       "session. Start each Claude Code with this command, which gives each one its own session, then "
                       "start this listener again.\nnebula mcp connect claude-code --channel")  # GM r108, string 4
+# channel_status with no agent token (review 3, NIT-2: `nebula channel`
+# says the same in its own words, cli/commands/thread.NO_TOKEN_CHANNEL_LINE).
+NO_TOKEN_STATUS_LINE = ("This Nebula server has no agent token, so Nebula can’t tell which listeners are yours. Run "
+                        "this command, then start Claude Code as it says.\nnebula mcp connect claude-code --channel")
 APP_ID_PREFIX = "app:"
 # A listening entry heard from this recently is fresh: a crashed session's
 # leftover entry (up to TTL_SECONDS old) is not, so it never counts when a
@@ -153,6 +169,17 @@ class ListenerBook:
         self._clock = clock
         self._lock = threading.Lock()
         self._entries: dict[tuple[str, str], Listener] = {}
+        # Listeners that expired, ended or stopped, not yet settled by the
+        # caller (round 5c, LOW-2): (agent id, raw session, listener id).
+        self._gone: list[tuple[str, str, str]] = []
+        # When a settle the caller gave back may be tried again (give_back).
+        self._retry_at = 0.0
+        # Round 5d: a listener whose beats lapsed is not gone for good until
+        # its window ends. ``_lapsed_new`` are the ones nobody has marked yet;
+        # ``_lapse_until`` maps (agent id, raw session) to (listener id,
+        # window end) while the same agent and session may still return.
+        self._lapsed_new: list[tuple[str, str, str]] = []
+        self._lapse_until: dict[tuple[str, str], tuple[str, float]] = {}
         self._secret = secrets.token_bytes(16)
         self.revision = 0
 
@@ -165,9 +192,15 @@ class ListenerBook:
         """Make room for one more entry of ``agent`` (lock held)."""
         own = [k for k in self._entries if k[0] == agent.id]
         if len(own) >= MAX_PER_AGENT:
-            del self._entries[min(own, key=lambda k: self._entries[k].seen_at)]
+            self._evict(min(own, key=lambda k: self._entries[k].seen_at))
         if len(self._entries) >= MAX_LISTENERS:
-            del self._entries[min(self._entries, key=lambda k: self._entries[k].seen_at)]
+            self._evict(min(self._entries, key=lambda k: self._entries[k].seen_at))
+
+    def _evict(self, key: tuple[str, str]) -> None:
+        """Pushed out for room: final, its waiting messages settle as dropped."""
+        entry = self._entries.pop(key)
+        self._forget_lapse(key)
+        self._gone.append((key[0], key[1], entry.listener_id))
 
     def now(self) -> float:
         return self._clock()
@@ -187,6 +220,7 @@ class ListenerBook:
             if entry is not None and entry.nonce != nonce:
                 raise SessionTaken(SESSION_TAKEN_LINE)
             if entry is None:
+                self._forget_lapse(key)  # back within its window: it is no longer lapsed
                 self._evict_for(agent)
                 entry = Listener(listener_id=self.listener_id(*key), agent=agent, session=key[1],
                                  state=state, reason=reason, project_id=project_id, since=now, seen_at=now,
@@ -197,6 +231,9 @@ class ListenerBook:
                 if (entry.state, entry.reason) != (state, reason):
                     entry.state, entry.reason, entry.since = state, reason, now
                     changed = True
+                    if state == "stopped":
+                        self._forget_lapse(key)
+                        self._gone.append((agent.id, key[1], entry.listener_id))
                 if entry.agent != agent or entry.project_id != project_id:
                     entry.agent, entry.project_id = agent, project_id
                     changed = True
@@ -225,6 +262,8 @@ class ListenerBook:
                 return False
             removed = self._entries.pop(key, None) is not None
             if removed:
+                self._forget_lapse(key)
+                self._gone.append((key[0], key[1], entry.listener_id))
                 self.revision += 1
             return removed
 
@@ -234,6 +273,10 @@ class ListenerBook:
         with self._lock:
             keys = [key for key in self._entries if key[0] == agent_id]
             dropped = [self._entries.pop(key) for key in keys]
+            for key in keys:
+                self._forget_lapse(key)
+            for key in [k for k in self._lapse_until if k[0] == agent_id]:
+                self._forget_lapse(key)
             if dropped:
                 self.revision += 1
             return dropped
@@ -241,10 +284,46 @@ class ListenerBook:
     def _expire(self, now: float) -> bool:
         stale = [key for key, entry in self._entries.items() if now - entry.seen_at > TTL_SECONDS]
         for key in stale:
-            del self._entries[key]
+            entry = self._entries.pop(key)
+            self._lapsed_new.append((key[0], key[1], entry.listener_id))
+            self._lapse_until[key] = (entry.listener_id, now + LAPSE_WINDOW_SECONDS)
+        for key in [k for k, (_, until) in self._lapse_until.items() if until <= now]:
+            listener_id, _ = self._lapse_until.pop(key)
+            self._forget_lapse(key)
+            self._gone.append((key[0], key[1], listener_id))  # the window ended: final
         if stale:
             self.revision += 1
         return bool(stale)
+
+    def _forget_lapse(self, key: tuple[str, str]) -> None:
+        self._lapse_until.pop(key, None)
+        self._lapsed_new = [item for item in self._lapsed_new if (item[0], item[1]) != key]
+
+    def take_lapsed(self) -> list[tuple[str, str, str]]:
+        """The listeners whose beats lapsed since the last call, as (agent
+        id, raw session, listener id): their waiting messages read "lapsed"
+        (they still reach the listener if it comes back within the window)."""
+        with self._lock:
+            lapsed, self._lapsed_new = self._lapsed_new, []
+            return lapsed
+
+    def take_gone(self) -> list[tuple[str, str, str]]:
+        """The listeners gone for good since the last call (the lapse window
+        ended, ended, stopped, evicted), as (agent id, raw session, listener
+        id): their messages still in flight can't be taken any more."""
+        with self._lock:
+            gone, self._gone = self._gone, []
+            return gone
+
+    def give_back(self, lapsed: list[tuple[str, str, str]] = (),
+                  gone: list[tuple[str, str, str]] = ()) -> None:
+        """Put back what a settle couldn't finish (the project store failed),
+        ahead of anything newer, to be tried again after SETTLE_RETRY_SECONDS:
+        a row is never left "sent" or lapsed because one write failed."""
+        with self._lock:
+            self._lapsed_new = [*lapsed, *self._lapsed_new]
+            self._gone = [*gone, *self._gone]
+            self._retry_at = self._clock() + SETTLE_RETRY_SECONDS
 
     def sweep(self) -> bool:
         """Drop entries past TTL_SECONDS. Returns whether any went."""
@@ -253,9 +332,13 @@ class ListenerBook:
 
     def next_deadline(self) -> float | None:
         with self._lock:
-            if not self._entries:
-                return None
-            return min(entry.seen_at for entry in self._entries.values()) + TTL_SECONDS
+            if self._gone or self._lapsed_new:
+                # An expiry nobody settled yet: check again at once, or once a
+                # failed settle's retry is due.
+                return max(self._clock() - 0.5, self._retry_at)
+            times = [entry.seen_at + TTL_SECONDS for entry in self._entries.values()]
+            times += [until for _, until in self._lapse_until.values()]
+            return min(times) if times else None
 
     def entries(self) -> list[Listener]:
         with self._lock:

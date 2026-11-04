@@ -846,8 +846,10 @@ export function Canvas() {
               transforms it, and a measured line would ease down with it. With
               nothing selected the panel is empty, 0 px wide but still one
               toolbar tall (canvas.css), so an open Inspector holds its place
-              (GM, round 3: "A panel shouldn't move unless someone moves it"). */}
-          <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
+              (GM, round 3: "A panel shouldn't move unless someone moves it").
+              data-toolbar-slot: the Agent log's ceiling counts the slot only
+              where it overlaps the slot's reserved width (GM r70). */}
+          <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="" data-toolbar-slot="">
             <SelectionToolbar />
           </Panel>
           <CanvasNavigation />

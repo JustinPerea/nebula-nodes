@@ -13,6 +13,8 @@ export const BACKEND_PROBE_INTERVAL_MS = 3_000;
  * Round 13 read "Nebula is offline. Reconnecting…"; GM keeps "Reconnecting…"
  * for a day when edits really queue, which they don't. */
 export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it reconnects.';
+/** The offline row's id: a control locked while offline names it as its describedby (the Message box's composer). */
+export const OFFLINE_LINE_ID = 'nebula-offline-line';
 
 /**
  * The offline banner (GM, round 14): role=status, so it is announced once
@@ -101,6 +103,7 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
   return (
     <div
       ref={banner}
+      id={OFFLINE_LINE_ID}
       className="backend-connection backend-connection--offline"
       {...{ [NOTICE_TOP_LINE_ATTR]: '' }}
       data-placement={placement}

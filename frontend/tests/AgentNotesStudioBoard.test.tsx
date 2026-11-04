@@ -279,7 +279,7 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     await settle();
     const dialog = openList();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Undo the sort' }));
-    await vi.waitFor(() => expect(within(dialog).getByRole('alert').textContent).toMatch(/Undo the sort.*can't run here yet/));
+    await vi.waitFor(() => expect(within(dialog).getByRole('alert').textContent).toMatch(/Undo the sort.*can’t run here yet/));
     expect(api.dismissAgentNote).not.toHaveBeenCalled();
     expect(useBoardCanvasStore.getState().showRequest).toBeNull();
   });

@@ -34,7 +34,10 @@ session-only config ~/.nebula-listen.mcp.json (mode 600) with one
 `--channel`, and prints the command that starts Claude Code with it. Same
 token handling as above (the config names the token file); with no token
 given it reuses the token file the config already names, so running it again
-is safe. It never touches Claude Code's own config. `nebula mcp disconnect
+is safe, and on the first run the token file Claude Code's saved `nebula`
+server names (the plain connect wrote it), so the bare command the canvas's
+Message box copies works once Claude Code is connected. The token itself is
+never on argv, printed, or in the clipboard. It never touches Claude Code's own config. `nebula mcp disconnect
 claude-code --channel` removes it.
 """
 from __future__ import annotations
@@ -348,13 +351,36 @@ CLAUDE_DEV_CHANNELS_TITLE = "WARNING: Loading development channels"
 CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
 
 
-def launch_command(path: Path) -> str:
+# Round 5 (D2): each launch gives the session its own id, evaluated by the
+# shell every time the command runs (never a value printed once), shared by
+# the listener (the MCP server) and Claude's own shell (the `nebula` CLI):
+# one session, one cursor, one listener. POSIX tools only (review 4: uuidgen
+# isn't on every Linux, and without it every launch was the bare "cc-"):
+# the shell's clock and its own process id, so two terminals, or two
+# launches from one, never share a session (macOS, Linux and WSL; Windows
+# shells can't run the env-prefix form at all). It fits
+# cursor_actions.SESSION_RE.
+SESSION_ENV = "NEBULA_AGENT_SESSION"
+SESSION_ASSIGNMENT = f'{SESSION_ENV}="cc-$(date +%s)-$$"'
+
+
+def launch_command(path: Path, token_file: str | None = None) -> str:
     """The one command that starts Claude Code with the channel. The saved
     `nebula` server's copies of the tools are left out, so nebula-listen
     serves both the tools and the pushes (the listener learns which proposals
-    and runs are Claude's from the calls it serves)."""
-    return (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
-            f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
+    and runs are Claude's from the calls it serves). With a token file, the
+    command sets NEBULA_APP_TOKEN_FILE to its path (never the token) for the
+    session, so the `nebula` CLI in Claude's own shell reads the same token
+    as the listener (J2, Justin 2026-11-04: `nebula reply` then answers the
+    person's message as the session that took it). It always sets
+    NEBULA_AGENT_SESSION to a new id at each launch (SESSION_ASSIGNMENT), so
+    that shell is the listener's own session too (round 5, D2)."""
+    command = (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
+               f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
+    command = f"{SESSION_ASSIGNMENT} {command}"
+    if token_file:
+        command = f"{TOKEN_FILE_ENV}={shlex.quote(token_file)} {command}"
+    return command
 
 
 def _listen_token_file(data: dict[str, Any]) -> str | None:
@@ -362,6 +388,36 @@ def _listen_token_file(data: dict[str, Any]) -> str | None:
     env = entry.get("env") if isinstance(entry, dict) else None
     value = env.get(TOKEN_FILE_ENV) if isinstance(env, dict) else None
     return value if isinstance(value, str) and value else None
+
+
+CLAUDE_CODE_CONFIG = ".claude.json"
+
+
+def saved_claude_code_token_file(home: Path | None = None) -> str | None:
+    """The token file Claude Code's saved `nebula` server names, if any.
+
+    The first `--channel` run, with no token given and no listen config yet
+    (the Message box copies the bare command): the plain `nebula mcp
+    connect claude-code` already wrote `--scope user` into ~/.claude.json,
+    naming the same app's token file. Only that file's path is read here,
+    never a token: a saved entry that holds the token itself (a config made
+    before token files) is not reused. The token is then read from the file
+    with the MCP server's own strict reader, as --token-file is."""
+    home = home if home is not None else Path(os.path.expanduser("~"))
+    path = home / CLAUDE_CODE_CONFIG
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 64 * 1024 * 1024:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    servers = data.get("mcpServers") if isinstance(data, dict) else None
+    entry = servers.get(SERVER_NAME) if isinstance(servers, dict) else None
+    env = entry.get("env") if isinstance(entry, dict) else None
+    value = env.get(TOKEN_FILE_ENV) if isinstance(env, dict) else None
+    if not isinstance(value, str) or not value.strip() or value == agent_connect.TOKEN_FILE_PLACEHOLDER:
+        return None
+    return os.path.abspath(os.path.expanduser(value.strip()))
 
 
 def _address(args: Any, status: dict[str, Any] | None) -> tuple[str | None, str | None]:
@@ -391,9 +447,21 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
     try:
         token, token_file = _token(args)
         again = _listen_token_file(before)
+        stale: TokenSourceError | None = None
         if token is None and not print_only and again:
             # Running it again: the token file the config already names.
-            token, token_file = _read_app_token_file(again), again
+            try:
+                token, token_file = _read_app_token_file(again), again
+            except TokenSourceError as exc:
+                # Revoked since (Nebula deleted the file): the saved nebula
+                # server may name the new one (review 2, parity LOW-2).
+                stale = exc
+        saved = saved_claude_code_token_file(home) if token is None and not print_only else None
+        if saved and saved != again:
+            # The first run, or a new token: the file Claude Code's saved nebula server names.
+            token, token_file = _read_app_token_file(saved), saved
+        if token is None and stale is not None:
+            raise stale
     except TokenSourceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -432,7 +500,7 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
     print()
     print("Start Claude Code with the Nebula channel from any folder with this command.")
     print()
-    print(launch_command(path))
+    print(launch_command(path, None if legacy else token_file))
     print()
     # Claude Code's own dialog, quoted exactly: its title and confirm label as
     # of Claude Code 2.1.317. If an update renames them, change both here.

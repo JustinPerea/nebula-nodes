@@ -876,7 +876,43 @@ nebula point --say "Reading your board"   # no target: said where your cursor is
 nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
+nebula reply "Done. Warmed the palette on the hero shot." --node n4   # answer in the Message box
+nebula thread                  # the Message box thread: the person's messages and agents' replies
+nebula channel                 # your channel listeners as Nebula sees them (MCP channel_status)
 ```
+
+**The Message box.** The person can message a Claude Code session that
+listens through the Nebula channel (`nebula mcp connect claude-code
+--channel`) from the composer in the canvas's Agent log. Such a message
+arrives as a channel push with `wake="message"`. Answer it in the thread,
+not only in your terminal: the person reads the thread, not your terminal.
+Reply with the `reply_to_person` tool or with `nebula reply "<text>"` from
+your session's shell; under your token both are the same reply. Answer
+every message push with a reply and every pin push with `resolve_pin` (or
+`nebula pin resolve`): each answer ends that push's protection from gated
+pushes, and only your own session's answers count. Replying
+takes a token from Settings › Connect your agent, the same as listening;
+the launch command `nebula mcp connect claude-code --channel` prints sets
+NEBULA_APP_TOKEN_FILE and a fresh NEBULA_AGENT_SESSION for the session, and
+`nebula` reads both, so your shell is the same agent and the same session
+as your tools: your reply answers your own message and flies your own
+cursor. Each reply answers your oldest unanswered message (or answer)
+push; if it was sent in another project, the reply goes to that
+project's thread and the person gets an Update to open it, and `--node`
+is ignored there. A reply that answers nothing goes to the open
+project's thread. With no project open, Nebula refuses the reply:
+"Nebula couldn’t post this reply because no project is open. Open one
+with open_project, then reply again." Open the project the person's
+message came from (`nebula projects` lists them), never an unrelated
+one just to post a reply: opening a project switches the person's
+canvas.
+`--node` flies your cursor to
+the node the answer is about and shows its first sentence there. `nebula
+thread` reads the thread; every connected agent can read it, as pins (a
+question's text only its asker). Replies are paced: 5 in a row, then one
+every 2 s; past that Nebula refuses and says when you can reply again, so
+put everything in one reply. `nebula channel` says whether Nebula counts
+your session as listening.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

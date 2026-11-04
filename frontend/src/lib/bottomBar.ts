@@ -112,6 +112,61 @@ export function floatingTopLimit(gutter: number, gap = BOTTOM_BAR_GAP): number {
   return line;
 }
 
+/**
+ * How far floating chrome keeps clear of the top chrome and the bottom bar
+ * (GM - Design r68 for the Inspector popover, r70 for the Agent log's
+ * ceiling: "Same clearance as the r68 popover rule").
+ */
+export const CHROME_CLEARANCE = 12;
+
+/**
+ * On the selection toolbar's slot (its React Flow Panel, which also carries
+ * `data-top-bar`). The slot keeps the toolbar's height while nothing is
+ * selected (canvas.css), and reserves its width as
+ * `--selection-toolbar-slot-w`: the widest the toolbar draws (896 px at
+ * 1440 with a model node's actions), so the slot's span doesn't depend on
+ * whether the toolbar shows, or on what is selected.
+ */
+export const TOOLBAR_SLOT_ATTR = 'data-toolbar-slot';
+export const TOOLBAR_SLOT_WIDTH_VAR = '--selection-toolbar-slot-w';
+
+/** The span across the window the toolbar's slot reserves, centred on the slot. */
+export function toolbarSlotSpan(slot: HTMLElement, box: DOMRect = slot.getBoundingClientRect()): HorizontalSpan {
+  const reserved = Number.parseFloat(getComputedStyle(slot).getPropertyValue(TOOLBAR_SLOT_WIDTH_VAR)) || 0;
+  const width = Math.min(Math.max(box.width, reserved), window.innerWidth);
+  const centre = box.left + box.width / 2;
+  return { left: centre - width / 2, right: centre + width / 2 };
+}
+
+/**
+ * The top line a floating box that reaches up stops at, `gap` below the top
+ * chrome (GM - Design r70: "the selection toolbar's slot bottom + 12 px
+ * whenever the log's horizontal span overlaps that slot (whether or not the
+ * toolbar is showing — selecting a node must not move the log). Otherwise
+ * the top bar + 12 px."). Over the slot (or with no `span`) it is
+ * floatingTopLimit's line, the one source for "the toolbar + 12" shared
+ * with the r68 popover rule; clear of the slot, the other top bars' line.
+ * `floor` is the line with no top bar on screen.
+ */
+export function chromeTopLimit(span?: HorizontalSpan, gap = CHROME_CLEARANCE, floor = 0): number {
+  if (typeof document === 'undefined') return floor;
+  const slots = [...document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}][${TOOLBAR_SLOT_ATTR}]`)];
+  const overSlot = !span || slots.some((part) => {
+    const box = part.getBoundingClientRect();
+    if (box.height <= 0) return false;
+    const slot = toolbarSlotSpan(part, box);
+    return slot.right > span.left && slot.left < span.right;
+  });
+  if (overSlot) return floatingTopLimit(floor, gap);
+  let line = floor;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]:not([${TOOLBAR_SLOT_ATTR}])`)) {
+    const box = part.getBoundingClientRect();
+    if (box.height <= 0) continue;
+    line = Math.max(line, box.bottom + gap);
+  }
+  return line;
+}
+
 /** Parts of the top line only the notice stack's proposal card stays under,
  * besides the top bars: the offline banner (GM - Design, PR #216 r4 7). The
  * floating panels don't move for it. */

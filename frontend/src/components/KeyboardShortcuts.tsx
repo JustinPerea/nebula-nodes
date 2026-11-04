@@ -3,7 +3,9 @@ import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { isCanvasShortcutTarget, keyBlockedByModal } from '../lib/canvasShortcutScope';
 import { returnFocusOnSlip } from '../lib/modalFocus';
-import { displayKey, SHORTCUT_GROUPS, SHORTCUTS_OPEN_EVENT } from '../lib/keyboardShortcuts';
+import { displayKey, MESSAGE_SHORTCUT_KEY, SHORTCUT_GROUPS, SHORTCUTS_OPEN_EVENT } from '../lib/keyboardShortcuts';
+import { availabilityLabel } from '../lib/personThread';
+import { useMessageAvailability } from '../store/personThreadStore';
 import '../styles/keyboard-shortcuts.css';
 import { ModalPortal } from './ModalPortal';
 
@@ -22,6 +24,8 @@ export function KeyboardShortcuts() {
   const cardRef = useRef<HTMLElement>(null);
   const openRef = useRef(false);
   useEffect(() => { openRef.current = open; }, [open]);
+  // GM r94.2: "/" names the agent as the Message box's field does.
+  const messageLabel = `Message ${availabilityLabel(useMessageAvailability())}`;
 
   useEffect(() => {
     const show = () => setOpen(true);
@@ -85,8 +89,8 @@ export function KeyboardShortcuts() {
               <h3>{group.title}</h3>
               <dl>
                 {group.items.map((item) => (
-                  <div key={item.label} className="keyboard-shortcuts__row">
-                    <dt>{item.label}</dt>
+                  <div key={item.keys.join('+')} className="keyboard-shortcuts__row">
+                    <dt>{item.keys.length === 1 && item.keys[0] === MESSAGE_SHORTCUT_KEY ? messageLabel : item.label}</dt>
                     <dd>{item.keys.map((key) => <kbd key={key}>{displayKey(key)}</kbd>)}</dd>
                   </div>
                 ))}

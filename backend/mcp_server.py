@@ -1060,13 +1060,16 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     person, or a failure; /mcp > nebula-listen > Reconnect starts it again)
     or null (no --channel). `listeners`: your entries as Nebula sees them,
     one per session of yours ({listenerId, state, reason, projectId, since,
-    seenAt}); none means Nebula doesn't count you as connected.
+    seenAt}); none means Nebula doesn't count you as connected. With no
+    agent token here, `token` is false, `listeners` null and `detail` says
+    what to do, as `nebula channel` does (review 3, NIT-2).
     `thisServer.registerError`: why Nebula refused this listener (only an
     agent token from Settings › Connect your agent registers one, never an
     in-app agent's; `nebula mcp connect claude-code --channel` reads the
     token file Settings saved and points the listener at it). Nebula can't
     tell whether Claude Code delivers a push, so "listening" means Nebula
-    pushes, not that the session took it."""
+    pushes, not that the session took it. `nebula channel` prints the same
+    listeners from the terminal."""
     if _channel is None:
         this: dict[str, Any] = {"channel": False, "state": None}
     else:
@@ -1074,11 +1077,83 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
         this = {"channel": True, "state": "stopped" if state.off else "listening",
                 "reason": state.off_reason if state.off else None, "listenerId": state.listener_id,
                 "registerError": getattr(state, "register_error", None)}
+    from nebula_api import has_token
+    from services.channel_listeners import NO_TOKEN_STATUS_LINE
+
+    if not has_token():
+        # Nebula can't tell which listeners are yours (the CLI's answer too).
+        return {"thisServer": this, "listeners": None, "token": False, "detail": NO_TOKEN_STATUS_LINE}
     try:
         seen = _canvas_call("GET", "/api/canvas/channel", ctx)
     except NebulaAPIError as exc:
         return {"thisServer": this, "listeners": None, "error": exc.detail}
     return {"thisServer": this, "projectId": seen.get("projectId"), "listeners": seen.get("listeners") or []}
+
+
+# -- the Message box's thread (services/person_thread.py) ---------------------------
+
+@_tool(annotations=_EDIT)
+def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """Answer the person in the canvas's Message box (the thread in the
+    Agent log). Use it for every answer to a message they sent you from the
+    canvas (a push with wake="message"): they read the thread, not this
+    terminal.
+
+    `text` is your answer, 2,000 characters at most; line breaks are kept.
+    `node_id` (optional) is a node your answer is about: your cursor flies
+    there and shows the answer's first sentence (140 characters at most) for
+    a moment; the whole answer stays in the thread. A pin's answer goes in
+    resolve_pin, and something you noticed that should last goes in
+    post_note. Every agent connected to Nebula can read the thread (as
+    pins), so don't put anything there you wouldn't pin.
+
+    Replies are paced per agent: 5 in a row, then one every 2 s. Past that
+    the reply isn't saved (code replies_rate_limited) and Nebula says "Nebula
+    couldn’t post this reply because replies are paced at 5 in a row, then
+    one every 2 s. You can reply again in N s, so put everything you have to
+    say in one reply.": wait, then send one reply with everything in it.
+
+    Only an agent connected with a token from Settings › Connect your agent
+    replies (code reply_no_token for a name alone, reply_in_app_token for an
+    in-app agent, reply_token_invalid for a revoked token). Under the
+    channel, each message (or answer) push wants one reply from this
+    session: until every one has it, the person's later edits don't gate
+    your turn (10 minutes at most after the latest push). One from this tool
+    counts; so does `nebula reply` in your session's own shell, which shares
+    this session (the launch command sets it). Reply when you're done, not
+    before; answer a pin with resolve_pin instead.
+
+    Each reply answers this session's oldest unanswered push (a message,
+    or the answers to your questions) and goes to that push's thread
+    (`projectId` says which; the person may have opened another project
+    since, and an Update there points to it; node_id is then ignored). A
+    reply that answers nothing goes to the open project's thread. With no
+    project open it is refused (code no_project) with "Nebula couldn’t
+    post this reply because no project is open. Open one with
+    open_project, then reply again.": open the project the person's
+    message came from (list_projects gives ids), never an unrelated one
+    just to post a reply, since open_project switches the person's canvas.
+    A `note` in the answer says what Nebula couldn't do."""
+    body: dict[str, Any] = {"text": text}
+    if node_id:
+        body["nodeId"] = node_id
+    return _canvas_call("POST", "/api/canvas/thread/replies", ctx, json=body)
+
+
+@_tool(annotations=_READ)
+def read_thread(limit: int = 20, ctx: Context | None = None) -> dict[str, Any]:
+    """The canvas's Message box thread in the open project, oldest first:
+    the person's messages (`kind` "message", `from` "person", with the
+    `nodeIds` they had selected), agents' replies (`agent` says whose), and
+    the questions, proposals, Updates and pins that crossed the channel.
+    Every connected agent reads it, as pins. A question row names its set
+    (`questionId`) and asker (`agent`); only the asker reads its
+    `questions`, and the person's answers are read with get_answers (the
+    asker's). A reply's `replyTo` is the message it followed. `state` on a message: "sent"
+    (not pushed yet), "held" (its listener holds it at 200 messages an
+    hour) or "accepted" (its listener pushed it). `limit` is the newest rows
+    to return (1-300)."""
+    return _canvas_call("GET", "/api/canvas/thread", ctx, params={"limit": max(1, min(int(limit), 300))})
 
 
 # -- outside the graph: project covers and asset proposals (U16) -------------------
@@ -3219,9 +3294,28 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
         return await _channel_fetch(f"/api/canvas/questions/{quote(question_id, safe='')}", {},
                                     mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
 
+    # Each names this process (its nonce): Nebula answers only the process
+    # that holds this session's listener entry (review 4 LOW-4).
+    async def fetch_inbox() -> dict[str, Any]:
+        # This session's own messages from the canvas's Message box: the
+        # journal's person.message carries none (every agent reads it).
+        return await _channel_fetch("/api/agent/thread/inbox", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
+
+    async def accept_messages(message_ids: list[str], question_ids: list[str]) -> dict[str, Any]:
+        return await _channel_fetch("/api/agent/thread/accepted", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"], method="POST",
+                                    json_body={"messageIds": message_ids, "questionIds": question_ids})
+
+    async def hold_messages(message_ids: list[str]) -> dict[str, Any]:
+        return await _channel_fetch("/api/agent/thread/held", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"], method="POST",
+                                    json_body={"messageIds": message_ids})
+
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock,
-                                    fetch_pins=fetch_pins, fetch_question=fetch_question)
+                                    fetch_pins=fetch_pins, fetch_question=fetch_question, fetch_inbox=fetch_inbox,
+                                    accept_messages=accept_messages, hold_messages=hold_messages)
     started = {"beats": False}
 
     async def listen() -> None:

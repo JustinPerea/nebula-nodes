@@ -523,6 +523,43 @@ def build_parser() -> argparse.ArgumentParser:
                      "$NEBULA_AGENT_SESSION separates show as their own cursors on the person's canvas only."))
     agents_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_agents returns it")
 
+    reply_p = sub.add_parser(
+        "reply", help="Answer the person in the canvas's Message box (MCP reply_to_person)",
+        description=("Answer a message the person sent you from the canvas's Message box (the thread in the Agent "
+                     "log). They read the thread, not your terminal. --node flies your cursor to a node and shows "
+                     "the reply's first sentence there. 2,000 characters at most. Every connected agent can read "
+                     "the thread, as pins. Replying takes an agent token from Settings > Connect your agent: the "
+                     "CLI reads NEBULA_APP_TOKEN_FILE, which the launch command nebula mcp connect claude-code "
+                     "--channel prints sets for the session. From that session's shell it is the same reply as "
+                     "MCP reply_to_person, and it ends the turn's protection from gated pushes the same way, so "
+                     "reply when you're done."))
+    reply_p.add_argument("text", help="Your answer (line breaks are kept)")
+    reply_p.add_argument("--node", default=None, metavar="nX", help="A node the answer is about (on the open canvas)")
+    reply_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    reply_p.add_argument("--as", dest="agent_name",
+                         help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    thread_p = sub.add_parser(
+        "thread", help="The canvas's Message box thread (MCP read_thread)",
+        description=("The person's messages from the canvas, with the nodes they had selected and the agent each "
+                     "was for, agents' replies, and the questions, proposals, Updates and pins that crossed the "
+                     "channel, oldest first. Every connected agent reads it, as pins."))
+    thread_p.add_argument("--limit", type=int, default=20, help="How many of the newest rows (1-300, default 20)")
+    thread_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP read_thread returns it")
+    thread_p.add_argument("--as", dest="agent_name",
+                          help="Your agent name (default: $NEBULA_AGENT_NAME)")
+
+    channel_p = sub.add_parser(
+        "channel", help="Whether the person's canvas can reach you through the Nebula channel (MCP channel_status)",
+        description=("Your channel listeners as Nebula sees them, one per session of yours: listening (Nebula "
+                     "pushes the person's messages, pins and answers to it), or stopped (2 hours with nothing from "
+                     "the person, or a failure; /mcp > nebula-listen > Reconnect starts it again). None means "
+                     "Nebula doesn't count you as connected. Nebula can't tell whether Claude Code delivers a "
+                     "push, so listening means Nebula pushes, not that the session took it."))
+    channel_p.add_argument("--json", action="store_true", help="Print it as JSON (MCP channel_status's listeners)")
+    channel_p.add_argument("--as", dest="agent_name",
+                           help="Your agent name (default: $NEBULA_AGENT_NAME)")
+
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
     quick_p.add_argument("node_id", help="Node definition ID")
@@ -752,6 +789,7 @@ def main() -> None:
     from .commands import notes as notes_cmd
     from .commands import questions as questions_cmd
     from .commands import agents as agents_cmd
+    from .commands import thread as thread_cmd
     from .commands import style
 
     dispatch = {
@@ -788,6 +826,9 @@ def main() -> None:
         ),
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
+        "reply": lambda: thread_cmd.run_reply(client, args),
+        "thread": lambda: thread_cmd.run_thread(client, args),
+        "channel": lambda: thread_cmd.run_channel(client, args),
         "note": lambda: notes_cmd.run_note(client, args),
         "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),
