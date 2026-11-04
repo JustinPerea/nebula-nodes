@@ -2,7 +2,7 @@
   "components/agent-notes/AgentNotesCorner.tsx": 4,
   "components/asset-trash/AssetTrash.tsx": 1,
   "components/brand/BrandShowcaseView.tsx": 1,
-  "components/canvas/ProposalBar.tsx": 2,
+  "components/canvas/ProposalBar.tsx": 1,
   "components/character-studio/CharacterDefinitionPanel.tsx": 2,
   "components/character-studio/CharacterLibraryRail.tsx": 1,
   "components/character-studio/CharacterStudioView.tsx": 2,
