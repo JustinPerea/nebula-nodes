@@ -22,10 +22,12 @@ replying in a loop can't push it out before its listener takes it (review
   take it, never a read receipt). ``clientId`` makes a resend of the same
   message (Try again after a lost answer) land once.
 - ``reply``: an agent's, through reply_to_person. ``{id, kind, at, text,
-  nodeId, agent, session, replyTo}``. ``replyTo`` is the latest message
-  that agent session's listener had taken when it replied (null when none):
-  the box clears that message's status and the ones before it, never a
-  later one still in flight (review 1, NIT-4).
+  nodeId, agent, session, replyTo}``. ``replyTo`` names the push it
+  answers (services/push_ledger.py, review 4): that push's newest message,
+  else its first question set id; null for a follow-up that answers no
+  push. The box clears that message's status and the ones before it, never
+  a later one still in flight (review 1, NIT-4), and a question set id
+  clears no message.
 - Rows that point at what Nebula already keeps elsewhere, added only while
   that agent's session listens (what crosses the channel): ``question``
   (``questionId``, the questions as asked and, once it closes, ``outcome``:
@@ -121,24 +123,55 @@ REPLY_IN_APP_LINE = ("Nebula couldn’t post this reply because it uses an in-ap
                      "in this chat instead.")
 REPLY_BAD_TOKEN_LINE = ("Nebula couldn’t post this reply because its token isn’t valid anymore. Copy a new one from "
                         "Settings › Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND)
-# GM r100 (verbatim): a reply that answers no message, with no project open.
+# GM r110 (verbatim): a reply that answers no push, with no project open.
+# Agents open a project themselves (open_project, its id from list_projects);
+# open_project switches the person's canvas, so the docs say to open the
+# project the person's message came from, never an unrelated one.
 REPLY_NO_PROJECT_CODE = "no_project"
-REPLY_NO_PROJECT_LINE = ("Nebula couldn’t post this reply because no project is open. Ask the person to open one, then "
-                         "reply again.")
-# Round 5 (D2): a reply from a terminal that isn't a listening session of
-# this agent, while two or more of its sessions listen. Nebula saves it but
-# won't guess which message it answers (replyTo None).
+REPLY_NO_PROJECT_LINE = ("Nebula couldn’t post this reply because no project is open. Open one with open_project, "
+                         "then reply again.")
+# Round 5 (D2), GM r108 string 3: a reply from a terminal that isn't a
+# listening session of this agent, while two or more of its sessions
+# listen. Nebula saves it but won't guess which push it answers (replyTo
+# None).
 def reply_unmatched_line(name: str, count: int) -> str:
     return (f"Nebula posted this reply but couldn’t tell which message it answers because {count} {name} sessions "
-            "are listening and this terminal isn’t one of them. Reply from the session the person messaged, or "
-            "start Claude Code with the launch command this prints, so its terminal shares the session.\n"
-            + CONNECT_CHANNEL_COMMAND)
+            "are listening and this terminal isn’t one of them. Reply from the Claude Code the person messaged. To "
+            "stop this, start each Claude Code with this command, which gives it its own session that its "
+            "terminals share.\n" + CONNECT_CHANNEL_COMMAND)
 
 
-# GM r100: the Update a reply posts when it lands in another project's thread
-# than the open one (the thread of the message it answers).
-def replied_elsewhere_text(name: str, project_name: str) -> str:
-    return f"{name} replied in “{project_name}”."
+# Review 4 (the push ledger): a reply that answers a push from another
+# project than the open one ignores its node_id (the node is on that
+# project's canvas, not the one the person sees), and says so.
+def reply_node_elsewhere_line(node_id: str, project_name: str) -> str:
+    return (f"Nebula posted this reply in “{project_name}” but didn’t point at {node_id} because that project "
+            "isn’t the one open, so your cursor stayed where it was.")
+
+
+# GM r100, r112.1: the Update a reply posts when it lands in another
+# project's thread than the open one (the thread of the push it answers).
+# One per agent and project while unread, counted from the second reply.
+# An unnamed project reads “Untitled” (GM r108 d).
+UNTITLED = "Untitled"
+
+
+def replied_elsewhere_text(name: str, project_name: str, count: int = 1) -> str:
+    shown = project_name.strip() or UNTITLED
+    if count > 1:
+        return f"{name} replied {count} times in “{shown}”."
+    return f"{name} replied in “{shown}”."
+
+
+def route_key(agent_id: str, session: str | None) -> str:
+    """Which listener a message is for, stable across Nebula restarts: a
+    digest of (agent, raw session). A listener id (an HMAC under a secret
+    each backend process makes) changes when Nebula restarts, so a message
+    "Sent" before a restart was never read back after it (review 4). Kept
+    on the row as ``route``, which never leaves the backend."""
+    import hashlib
+
+    return hashlib.sha256(f"{agent_id}\0{session or ''}".encode("utf-8")).hexdigest()[:32]
 
 # THE read rule (Justin, 2026-11-03: every connected agent reads the thread,
 # as pins). False narrows the journal, the read tool and the cursor's say to
@@ -307,6 +340,15 @@ class SendCap:
             return len(self._trim(listener_id, self._clock()))
 
 
+def _for_listener(row: Mapping[str, Any], listener_ids: set[str], route: str | None) -> bool:
+    """Whether the person's message ``row`` is for this listener: by its
+    ``route`` (agent and raw session, stable across a Nebula restart), else,
+    for a row saved before routes, by its listener id."""
+    if row.get("route"):
+        return route is not None and row.get("route") == route
+    return (row.get("to") or {}).get("listenerId") in listener_ids
+
+
 def _in_flight(row: Mapping[str, Any]) -> bool:
     """The person's message its listener hasn't taken yet: never trimmed."""
     return row.get("kind") == "message" and row.get("state") in ("sent", "held")
@@ -404,11 +446,15 @@ class PersonThread:
         mine = [agent_view(row, agent_id) for row in rows if visible_to_agent(row, agent_id)]
         return project_id, mine[-limit:]
 
-    def inbox(self, listener_ids: Iterable[str]) -> tuple[str | None, list[dict[str, Any]]]:
-        """Messages to these listeners that no listener has taken yet, in
+    def inbox(self, listener_ids: Iterable[str], route: str | None = None
+              ) -> tuple[str | None, list[dict[str, Any]]]:
+        """Messages to this listener that no listener has taken yet, in
         every project (boundary LOW-2: the person may switch projects before
         the listener reads), the open project's first. Each names its
-        project. Returns (the open project, messages)."""
+        project. Returns (the open project, messages). A message is this
+        listener's by its ``route`` (agent and session, so one sent before
+        a Nebula restart is still found after it), else, for a row saved
+        before routes, by its listener id."""
         wanted = set(listener_ids)
         catalog = self._store().read()
         open_id = catalog.get("activeProjectId")
@@ -420,7 +466,7 @@ class PersonThread:
             rows = project.get(FIELD) if isinstance(project, dict) else None
             for row in rows if isinstance(rows, list) else []:
                 if (isinstance(row, dict) and row.get("kind") == "message" and row.get("state") in ("sent", "held")
-                        and (row.get("to") or {}).get("listenerId") in wanted):
+                        and _for_listener(row, wanted, route)):
                     due.append({"messageId": row["id"], "text": row.get("text") or "",
                                 "nodeIds": list(row.get("nodeIds") or []), "projectId": project_id})
         return open_id, due
@@ -445,11 +491,12 @@ class PersonThread:
                 store.commit(catalog)
         return project_id, result
 
-    def _write_all(self, mutate: Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+    def _write_all(self, mutate: Callable[..., list[dict[str, Any]]], *, with_project: bool = False
                    ) -> list[tuple[str, list[dict[str, Any]]]]:
-        """``mutate`` each project's thread in one transaction; the
-        projects whose rows changed, with those rows (boundary LOW-2: a
-        message is found by id wherever it was sent)."""
+        """``mutate`` each project's thread in one transaction (``mutate(
+        project_id, rows)`` with ``with_project``); the projects whose rows
+        changed, with those rows (boundary LOW-2: a message is found by id
+        wherever it was sent)."""
         store = self._store()
         changed: list[tuple[str, list[dict[str, Any]]]] = []
         with store.transaction() as catalog:
@@ -457,7 +504,7 @@ class PersonThread:
                 rows = project.get(FIELD) if isinstance(project, dict) else None
                 if not isinstance(rows, list) or not rows:
                     continue
-                result = mutate(rows)
+                result = mutate(project_id, rows) if with_project else mutate(rows)
                 if result:
                     changed.append((project_id, result))
             if changed:
@@ -465,11 +512,15 @@ class PersonThread:
         return changed
 
     def add_message(self, *, text: str, node_ids: list[str], to: dict[str, Any],
-                    client_id: str | None = None, held: bool = False) -> tuple[str, dict[str, Any], bool]:
+                    client_id: str | None = None, held: bool = False,
+                    route: str | None = None) -> tuple[str, dict[str, Any], bool]:
         """(project id, row, new). A resend with the same client id returns the
-        first row. ``held``: the listener is sure to hold it (SendCap)."""
+        first row. ``held``: the listener is sure to hold it (SendCap).
+        ``route``: route_key of its listener's agent and session."""
         row = {"id": _new_id("pm"), "kind": "message", "at": self._now_ms(), "text": text, "nodeIds": node_ids,
                "to": to, "state": "held" if held else "sent", "acceptedAt": None, "rev": 1}
+        if route:
+            row["route"] = route
         if client_id:
             row["clientId"] = client_id
 
@@ -484,28 +535,40 @@ class PersonThread:
         project_id, (kept, new) = self._write(mutate)
         return project_id, kept, new
 
-    def accept(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
+    def accept(self, message_ids: Iterable[str], listener_ids: Iterable[str], route: str | None = None,
+               agent_id: str | None = None, counted: dict[str, str] | None = None
+               ) -> list[tuple[str, list[dict[str, Any]]]]:
         """The listener pushed these: mark them accepted, in whichever project
-        each was sent. Only messages sent to one of ``listener_ids`` (the
-        caller's own) change. Returns [(project id, changed rows)]."""
+        each was sent. Only messages sent to the caller's own listener change
+        (its ``route``, else one of ``listener_ids``). Returns [(project id,
+        changed rows)]. ``counted`` gets, for the push ledger, each id that
+        counts as this caller's push (id -> project): one it just accepted,
+        or a re-send of one already accepted for this agent (``agent_id``:
+        the listener reports its open pushes again after Nebula restarted)."""
         wanted, own = set(message_ids), set(listener_ids)
         at = self._now_ms()
 
-        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def mutate(project_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             changed = []
             for row in rows:
-                if (row.get("kind") == "message" and row.get("id") in wanted
-                        and row.get("state") in ("sent", "held")
-                        and (row.get("to") or {}).get("listenerId") in own):
+                if row.get("kind") != "message" or row.get("id") not in wanted:
+                    continue
+                if row.get("state") in ("sent", "held") and _for_listener(row, own, route):
                     row["state"] = "accepted"
                     row["acceptedAt"] = at
                     _bump(row)
                     changed.append(dict(row))
+                    if counted is not None:
+                        counted[row["id"]] = project_id
+                elif (counted is not None and row.get("state") == "accepted" and agent_id
+                      and ((row.get("to") or {}).get("agent") or {}).get("id") == agent_id):
+                    counted[row["id"]] = project_id
             return changed
 
-        return self._write_all(mutate)
+        return self._write_all(mutate, with_project=True)
 
-    def hold(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
+    def hold(self, message_ids: Iterable[str], listener_ids: Iterable[str], route: str | None = None
+             ) -> list[tuple[str, list[dict[str, Any]]]]:
         """The listener holds these at its runaway cap: mark them held (only
         the caller's own, and only while not yet pushed), in any project."""
         wanted, own = set(message_ids), set(listener_ids)
@@ -514,7 +577,7 @@ class PersonThread:
             changed = []
             for row in rows:
                 if (row.get("kind") == "message" and row.get("id") in wanted and row.get("state") == "sent"
-                        and (row.get("to") or {}).get("listenerId") in own):
+                        and _for_listener(row, own, route)):
                     row["state"] = "held"
                     _bump(row)
                     changed.append(dict(row))
@@ -522,16 +585,17 @@ class PersonThread:
 
         return self._write_all(mutate)
 
-    def drop_for(self, listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
-        """Those listeners are gone for good (their token was revoked,
-        boundary LOW-1): their messages still in flight settle as dropped,
-        in every project. Never touches an accepted message."""
-        own = set(listener_ids)
+    def drop_for(self, agent_id: str) -> list[tuple[str, list[dict[str, Any]]]]:
+        """That agent is gone for good (its token was revoked, boundary
+        LOW-1): its messages still in flight settle as dropped, in every
+        project and every session, whether a listener of it was still
+        registered or not. Never touches an accepted message."""
+        own = agent_id
 
         def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             changed = []
             for row in rows:
-                if _in_flight(row) and (row.get("to") or {}).get("listenerId") in own:
+                if _in_flight(row) and ((row.get("to") or {}).get("agent") or {}).get("id") == own:
                     row["state"] = DROPPED_STATE
                     _bump(row)
                     changed.append(dict(row))
@@ -539,50 +603,68 @@ class PersonThread:
 
         return self._write_all(mutate) if own else []
 
-    def add_reply(self, fields: Mapping[str, Any], listener_ids: Iterable[str]) -> tuple[str, dict[str, Any]]:
-        """An agent's reply. ``replyTo``: the latest message to one of
-        ``listener_ids`` (the replying session's: main._reply_listener_ids)
-        that its listener took, in any project. The reply goes to the thread
-        of that message (GM r100.3: the person may have opened another
-        project since), else to the open project's, and with no project open
-        it is refused (REPLY_NO_PROJECT_LINE). It then carries that message's
-        session (the person's form), so a reply from the agent's own shell
-        reads as the session that took it. Its ``nodeId`` stays only in the
-        open project's thread (the node was checked on the open canvas)."""
-        own = set(listener_ids)
+    def reply_target(self, ledger: Any = None, key: tuple[str, str | None] | None = None) -> str | None:
+        """The project a reply from this listener session would go to now,
+        without taking anything (the route checks its node against the
+        open canvas only when that is where it goes). None: the open one."""
+        if ledger is None or key is None:
+            return None
+        projects = (self._store().read().get("projects") or {})
+        push = ledger.peek(key[0], key[1], lambda project: project is None or project in projects)
+        return push.project() if push is not None else None
+
+    def add_reply(self, fields: Mapping[str, Any], *, ledger: Any = None,
+                  key: tuple[str, str | None] | None = None,
+                  taker_session: Mapping[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
+        """An agent's reply. It answers the replying listener session's
+        OLDEST open push in the push ledger (``key``: (agent id, raw
+        session); services/push_ledger.py) whose project still exists:
+        ``replyTo`` is that push's newest message, else its first question
+        set, and the reply goes to that one's project (GM r100.3, r112.2:
+        the person may have opened another project since). Nothing to
+        answer: the open project's thread, ``replyTo`` None (a follow-up);
+        no project open: refused (REPLY_NO_PROJECT_LINE). The push is
+        marked answered only once the row is saved; a save that fails
+        leaves it open. A reply that answers a push carries the taking
+        listener's session (``taker_session``, the person's form), so one
+        from the agent's own shell reads as that session. Its ``nodeId``
+        stays only in the open project's thread (the node was checked on
+        the open canvas)."""
         row = {"id": _new_id("pt"), "kind": "reply", "at": self._now_ms(), **fields, "replyTo": None, "rev": 1}
         store = self._store()
-        with store.transaction() as catalog:
-            open_id = catalog.get("activeProjectId")
-            projects = catalog.get("projects") or {}
-            answered: tuple[Any, ...] | None = None  # (acceptedAt, at, project id, message)
-            for project_id, project in projects.items() if own else ():
-                rows = project.get(FIELD) if isinstance(project, dict) else None
-                for old in rows if isinstance(rows, list) else []:
-                    if (isinstance(old, dict) and old.get("kind") == "message" and old.get("state") == "accepted"
-                            and (old.get("to") or {}).get("listenerId") in own):
-                        key = (int(old.get("acceptedAt") or 0), int(old.get("at") or 0))
-                        if answered is None or key >= answered[:2]:
-                            answered = (*key, project_id, old)
-            if answered is not None:
-                project_id, message = answered[2], answered[3]
-                row["replyTo"] = message.get("id")
-                session = (message.get("to") or {}).get("session")
-                if isinstance(session, Mapping) and session.get("key"):
-                    row["session"] = copy.deepcopy(dict(session))
-            elif open_id and open_id in projects:
-                project_id = open_id
-            else:
-                raise ThreadError(409, REPLY_NO_PROJECT_LINE, REPLY_NO_PROJECT_CODE)
-            if project_id != open_id:
-                row["nodeId"] = None
-            project = projects[project_id]
-            rows = project.get(FIELD)
-            if not isinstance(rows, list):
-                rows = project[FIELD] = []
-            rows.append(row)
-            trim(rows)
-            store.commit(catalog)
+        token = secrets.token_hex(8)
+        picked = None
+        try:
+            with store.transaction() as catalog:
+                open_id = catalog.get("activeProjectId")
+                projects = catalog.get("projects") or {}
+                opened = open_id if open_id in projects else None
+                if ledger is not None and key is not None:
+                    # A push asked in no project (None) answers into the open one.
+                    picked = ledger.claim(key[0], key[1], lambda project: (project or opened) in projects, token)
+                project_id = opened
+                if picked is not None:
+                    row["replyTo"] = picked.reply_to()
+                    project_id = picked.project() or opened
+                    if taker_session and taker_session.get("key"):
+                        row["session"] = copy.deepcopy(dict(taker_session))
+                if not project_id or project_id not in projects:
+                    raise ThreadError(409, REPLY_NO_PROJECT_LINE, REPLY_NO_PROJECT_CODE)
+                if project_id != open_id:
+                    row["nodeId"] = None
+                project = projects[project_id]
+                rows = project.get(FIELD)
+                if not isinstance(rows, list):
+                    rows = project[FIELD] = []
+                rows.append(row)
+                trim(rows)
+                store.commit(catalog)
+        except BaseException:
+            if picked is not None:
+                ledger.release(picked, token)
+            raise
+        if picked is not None:
+            ledger.settle(picked, token, row["id"])
         return project_id, row
 
     def close_question(self, question_id: str, outcome: Mapping[str, Any], *,
@@ -614,15 +696,20 @@ class PersonThread:
         return project_id, row
 
 
+# Never outside the backend: a message's route (a digest of its listener's
+# agent and raw session, route_key).
+_SERVER_ONLY_KEYS = ("route",)
+
+
 def person_view(row: Mapping[str, Any]) -> dict[str, Any]:
-    """A row as the person's tabs get it: every field, the client id too (a
-    tab matches its own pending send to the saved row by it)."""
-    return copy.deepcopy(dict(row))
+    """A row as the person's tabs get it: every field but the route, the
+    client id too (a tab matches its own pending send to the saved row by it)."""
+    return {key: copy.deepcopy(value) for key, value in row.items() if key not in _SERVER_ONLY_KEYS}
 
 
 # Never in an agent's form: the person's form only (cursor keys, listener
 # ids, the tab's client id, a question's outcome, which holds their answer).
-_PERSON_ONLY_KEYS = ("clientId", "session", "to", "outcome")
+_PERSON_ONLY_KEYS = ("clientId", "session", "to", "outcome", *_SERVER_ONLY_KEYS)
 
 
 def agent_view(row: Mapping[str, Any], viewer_id: str | None = None) -> dict[str, Any]:

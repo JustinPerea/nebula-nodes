@@ -147,6 +147,16 @@ describe('a message’s state comes only from what Nebula saw', () => {
     expect(repliedAfter(row, [row, reply({ sessionKey: 'ffffffffffff' })])).toBe(false);
     expect(repliedAfter(row, [row, reply({ agent: { ...CLAUDE, id: 'other' } })])).toBe(false);
   });
+
+  it('push ledger test 17: a reply naming a question set clears no message', () => {
+    const row = message();
+    const asked: ThreadRow = { id: 'q-row', kind: 'question', at: 1_500, questionId: 'qs_1', agent: CLAUDE, sessionKey: KEY };
+    // Even a question row whose own id the reply names: only a message clears.
+    const sameId: ThreadRow = { ...asked, id: 'qs_1' };
+    const reply: ThreadRow = { id: 'r', kind: 'reply', at: 2_000, agent: CLAUDE, sessionKey: KEY, replyTo: 'qs_1' };
+    expect(repliedAfter(row, [row, asked, reply])).toBe(false);
+    expect(repliedAfter(row, [row, sameId, reply])).toBe(false);
+  });
 });
 
 describe('Sending… shows after 300 ms and holds 400 ms', () => {

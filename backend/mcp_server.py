@@ -1123,12 +1123,17 @@ def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None =
     this session (the launch command sets it). Reply when you're done, not
     before; answer a pin with resolve_pin instead.
 
-    The reply goes to the thread of the message it answers (`projectId`
-    says which; the person may have opened another project since, and an
-    Update there points to it). With no message to answer and no project
-    open it is refused (code no_project) with "Nebula couldn’t post this
-    reply because no project is open. Ask the person to open one, then
-    reply again.". A `note` in the answer says what Nebula couldn't do."""
+    Each reply answers this session's oldest unanswered push (a message,
+    or the answers to your questions) and goes to that push's thread
+    (`projectId` says which; the person may have opened another project
+    since, and an Update there points to it; node_id is then ignored). A
+    reply that answers nothing goes to the open project's thread. With no
+    project open it is refused (code no_project) with "Nebula couldn’t
+    post this reply because no project is open. Open one with
+    open_project, then reply again.": open the project the person's
+    message came from (list_projects gives ids), never an unrelated one
+    just to post a reply, since open_project switches the person's canvas.
+    A `note` in the answer says what Nebula couldn't do."""
     body: dict[str, Any] = {"text": text}
     if node_id:
         body["nodeId"] = node_id
@@ -3274,18 +3279,23 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
         return await _channel_fetch(f"/api/canvas/questions/{quote(question_id, safe='')}", {},
                                     mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
 
+    # Each names this process (its nonce): Nebula answers only the process
+    # that holds this session's listener entry (review 4 LOW-4).
     async def fetch_inbox() -> dict[str, Any]:
         # This session's own messages from the canvas's Message box: the
         # journal's person.message carries none (every agent reads it).
-        return await _channel_fetch("/api/agent/thread/inbox", {}, mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
+        return await _channel_fetch("/api/agent/thread/inbox", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
 
-    async def accept_messages(message_ids: list[str]) -> dict[str, Any]:
-        return await _channel_fetch("/api/agent/thread/accepted", {}, mcp_channel.ANSWER_READ_TIMEOUT,
-                                    agent["name"], method="POST", json_body={"messageIds": message_ids})
+    async def accept_messages(message_ids: list[str], question_ids: list[str]) -> dict[str, Any]:
+        return await _channel_fetch("/api/agent/thread/accepted", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"], method="POST",
+                                    json_body={"messageIds": message_ids, "questionIds": question_ids})
 
     async def hold_messages(message_ids: list[str]) -> dict[str, Any]:
-        return await _channel_fetch("/api/agent/thread/held", {}, mcp_channel.ANSWER_READ_TIMEOUT,
-                                    agent["name"], method="POST", json_body={"messageIds": message_ids})
+        return await _channel_fetch("/api/agent/thread/held", {"nonce": _CHANNEL_NONCE},
+                                    mcp_channel.ANSWER_READ_TIMEOUT, agent["name"], method="POST",
+                                    json_body={"messageIds": message_ids})
 
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock,

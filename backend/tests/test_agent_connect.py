@@ -1018,7 +1018,7 @@ def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(
     assert TOKEN not in out.out + out.err
     # J2: the session's own shell gets the token file's path (never the token).
     # D2 (round 5): and a session id of its own, made by the shell at each launch.
-    command = (f'NEBULA_APP_TOKEN_FILE={cli_env.file} NEBULA_AGENT_SESSION="cc-$(uuidgen)" claude --mcp-config '
+    command = (f'NEBULA_APP_TOKEN_FILE={cli_env.file} NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config '
                f'{path} --dangerously-load-development-channels server:nebula-listen --disallowedTools '
                '"mcp__nebula__*"')
     assert command in out.out.splitlines()
@@ -1071,7 +1071,7 @@ def test_channel_disconnect_removes_the_listen_config(tmp_path, cli_env, capsys)
     assert "nothing to remove" in out
     for line in out.splitlines():
         if " claude --mcp-config " in line:
-            continue  # the launch command itself (its "$(uuidgen)" is shell, not copy)
+            continue  # the launch command itself (its "$(date +%s)-$$" is shell, not copy)
         assert "'" not in line and "(" not in line and ";" not in line, line
 
 
@@ -1127,7 +1127,7 @@ def test_channel_after_a_revoke_uses_the_new_file_claude_codes_saved_server_name
     assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
     entry = json.loads(_listen(tmp_path).read_text())["mcpServers"]["nebula-listen"]
     assert entry["env"]["NEBULA_APP_TOKEN_FILE"] == fresh
-    assert f'NEBULA_APP_TOKEN_FILE={fresh} NEBULA_AGENT_SESSION="cc-$(uuidgen)" claude' in capsys.readouterr().out
+    assert f'NEBULA_APP_TOKEN_FILE={fresh} NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude' in capsys.readouterr().out
     # With no saved server either, the stale file's own error stands.
     os.unlink(fresh)
     (tmp_path / ".claude.json").unlink()

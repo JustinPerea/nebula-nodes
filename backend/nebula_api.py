@@ -129,12 +129,17 @@ def app_token_from_file(environ: Any = None) -> str | None:
 
 
 def _token_source(env: Any) -> str | None:
-    """Which variable with_identity sends a token from, in the MCP server's
-    order (mcp_server.load_app_token_file; D3, round 5): NEBULA_AGENT_TOKEN
-    (an in-app chat's turn token); else NEBULA_APP_TOKEN_FILE, unless a
-    personal agent's NEBULA_AGENT_TOKEN_FILE is set (the file replaces any
-    NEBULA_APP_TOKEN also set, and a bad one fails closed); else
-    NEBULA_APP_TOKEN (a config made before token files). None: no token."""
+    """Which variable with_identity sends a token from (D3, round 5):
+    NEBULA_AGENT_TOKEN (an in-app chat's turn token); else
+    NEBULA_APP_TOKEN_FILE, unless a personal agent's NEBULA_AGENT_TOKEN_FILE
+    is set (the file replaces any NEBULA_APP_TOKEN also set, and a bad one
+    fails closed); else NEBULA_APP_TOKEN (a config made before token
+    files). None: no token. This is the MCP server's order
+    (mcp_server.load_app_token_file) for the app token, minus its step 2:
+    the CLI never reads NEBULA_AGENT_TOKEN_FILE itself (the MCP server
+    loads it into NEBULA_AGENT_TOKEN at start), so with that variable set
+    and NEBULA_APP_TOKEN beside it, the CLI sends NEBULA_APP_TOKEN (review 4
+    NIT-2; as on main)."""
     if env.get("NEBULA_AGENT_TOKEN"):
         return "NEBULA_AGENT_TOKEN"
     if env.get(APP_TOKEN_FILE_ENV) is not None and env.get("NEBULA_AGENT_TOKEN_FILE") is None:

@@ -669,7 +669,15 @@ export function AgentLog() {
     if (!log) return;
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = { startY: e.clientY, start: log.offsetHeight, edge, bounds: resizeBounds(log, edge) };
+    const start = log.offsetHeight;
+    const bounds = resizeBounds(log, edge);
+    resizeRef.current = { startY: e.clientY, start, edge, bounds };
+    // GM r112.4: the press alone never changes the height. Resizing lifts
+    // the content cap, so the rendered height is written first (a drag
+    // starts from it), and the ceiling (154 at the top) holds while the
+    // hand moves: the lifted cap is the drag's own bound, never the CSS's.
+    log.style.height = `${start}px`;
+    log.style.maxHeight = `${Math.max(bounds.max, start)}px`;
     log.dataset.resizing = '';
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
@@ -689,6 +697,7 @@ export function AgentLog() {
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (!drag || !log) return;
     delete log.dataset.resizing;
+    log.style.maxHeight = '';
     // A press with no move (the first half of a double-click) changes nothing.
     if (e.clientY === drag.startY) {
       log.style.height = personHeight === null ? '' : `${personHeight}px`;

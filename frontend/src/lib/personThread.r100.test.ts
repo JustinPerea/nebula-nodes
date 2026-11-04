@@ -122,6 +122,18 @@ describe('GM r100.3: a reply saved in another project’s thread is unread there
     expect(state.unreadElsewhere).toEqual({});
   });
 
+  it('review 4 NIT-6: the same reply arriving twice (a newer rev) counts once', () => {
+    receiveSync('p1', []);
+    receiveRows('p2', [reply('r2', 2_000, { rev: 1 })]);
+    receiveRows('p2', [reply('r2', 2_000, { rev: 2 }), reply('r3', 2_500)]);
+    expect(usePersonThreadStore.getState().unreadElsewhere).toEqual({ p2: 2 });
+  });
+
+  it('review 4 NIT-4: a sync keeps a row the tab holds at the snapshot’s newest time', () => {
+    const out = syncRows([message('m1', 1_000), reply('r-same', 2_000)], [message('m1', 1_000), message('m2', 2_000)]);
+    expect(out.map((row) => row.id)).toEqual(['m1', 'm2', 'r-same']);
+  });
+
   it('opening that thread with the log already open leaves nothing unread; a message is never counted', () => {
     receiveSync('p1', []);
     receiveRows('p2', [message('m9', 1_000), reply('r2', 2_000)]);

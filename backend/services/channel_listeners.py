@@ -28,8 +28,9 @@ of (agent, session) under a secret this backend process makes at launch, so
 it stays the same when the entry lapses and comes back (a beat gap past the
 TTL, an eviction) and the person's sent or held messages to it still reach
 it (review 1 of #225, boundary LOW-1). It can't be worked back to the
-session, and a restarted Nebula gives new ids: messages sent before a
-restart and never pushed stay "sent" (the notes say so).
+session, and a restarted Nebula gives new ids. The person's messages
+name their listener by agent and session too (person_thread.route_key),
+so one sent before a restart and never pushed is still read after it.
 
 Only an agent holding a valid agent token registers (Justin, 2026-11-03;
 main._channel_caller refuses a name alone), so every entry is a token's

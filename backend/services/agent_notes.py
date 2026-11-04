@@ -88,7 +88,7 @@ ACTIONS: dict[str, dict[str, Any]] = {
     "question.answer": {"labels": ("Answer",), "keys": {"questionId": str}},
     # A reply that landed in another project's thread (GM r100.3): opens that
     # project and its thread in the Agent log.
-    "thread.open": {"labels": ("Open",), "keys": {"projectId": str}},
+    "thread.open": {"labels": ("Open",), "keys": {"projectId": str, "replyId": str}},
 }
 
 # A board image ref inside saved text: private-use characters, which
@@ -810,6 +810,50 @@ class AgentNotes:
         project_id, (unread, removed) = self._write_project(mutate, keep_open=True)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
+
+    # -- a reply saved in another project's thread (GM r100.3, r112.1) ------------
+    def post_replied(self, *, author: Mapping[str, Any], project_id: str, reply_id: str,
+                     text_for: Callable[[int], str]) -> dict[str, Any]:
+        """The Update a reply posts on the open project's list when it went to
+        ``project_id``'s thread (``source: "nebula"``, attributed to the
+        replying agent, an Open action that opens that thread at the reply).
+        GM r112.1: one per agent and project while it is unread. A later
+        reply updates it in place (same id, the latest time, moved to the
+        top) and counts: ``text_for(count)``. Once read, the next reply
+        starts a new one. The agent's own rate limit applies (6 a minute on
+        this list, shared with its post_note): past it the Update is left as
+        it is (the reply is saved either way)."""
+        clean_author = _clean_author(author)
+        actions = _clean_actions([{"label": "Open", "op": {"kind": "thread.open", "projectId": project_id,
+                                                          "replyId": reply_id}}])
+        open_id, _ = self._read_project()
+        if not open_id:
+            raise NoteError(409, "Open or create a project first: updates are kept with a project", "no_project")
+
+        def same(note: Mapping[str, Any]) -> bool:
+            author_of = note.get("author") or {}
+            replied = note.get("replied") if isinstance(note.get("replied"), Mapping) else {}
+            return (_unread(note) and replied.get("projectId") == project_id
+                    and author_of.get("kind") == clean_author["kind"] and author_of.get("id") == clean_author["id"])
+
+        def mutate(notes: list[dict[str, Any]], keep: frozenset[str]) -> tuple[dict[str, Any], int, list[str], bool]:
+            old = next((note for note in notes if same(note)), None)
+            count = int((old.get("replied") or {}).get("count") or 1) + 1 if old is not None else 1
+            note = self._new_note(author=clean_author, source="nebula", about="other",
+                                  text=clean_note_text(text_for(count)), refs=[], actions=actions)
+            note["replied"] = {"projectId": project_id, "count": count}
+            if old is not None:
+                note["id"] = old["id"]  # in place: the same Update, now on top
+                notes.remove(old)
+            notes.append(note)
+            removed = _prune(notes, MAX_PROJECT_NOTES, keep)
+            return note, unread_count(notes), removed, old is not None
+
+        with self._limiter.slot(self._surface_key(("canvas", None), open_id), str(clean_author["id"])):
+            project, (note, unread, removed, updated) = self._write_project(mutate, project_id=open_id,
+                                                                            keep_open=True)
+        return {"note": note_view(note), "unread": unread, "projectId": project, "removed": removed,
+                "updated": updated}
 
     # -- a proposal's Update (Justin's Q92 a, Q112 a) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,

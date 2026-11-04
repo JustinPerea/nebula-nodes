@@ -209,6 +209,31 @@
   margin-bottom: 4px;
 }
 
+/* GM r108 D2: Open on a reply's Update focuses the reply's row. Its ring is
+   drawn inside the row (a negative offset as wide as the ring), so the
+   thread's scroll area never clips it and it never reaches the header; the
+   scroll margin keeps it clear of the scroll fade when it is brought in. */
+.message-box__item {
+  scroll-margin-block: var(--scroll-fade-size, 12px);
+}
+
+.message-box__item[data-focus-target]:focus {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Room between the ring and the row's words, only while it is the focus
+   target: the padding is given back by the margins, so nothing moves. */
+.message-box__item[data-focus-target] {
+  padding: 4px 6px;
+  margin: -4px -6px 8px;
+}
+
+.message-box__item[data-focus-target]:last-child {
+  margin-bottom: 0;
+}
+
 .message-box__row--enter {
   animation: message-box-row-in 420ms var(--agent-log-spring) both;
 }

@@ -855,6 +855,10 @@ def test_the_instructions_say_to_answer_every_deliberate_wake():
     assert "If nothing needs saying" not in text
     # PR C: a message (and an answer) is answered with reply_to_person.
     assert "Each is their request: answer a pin with resolve_pin, the others with reply_to_person." in text
+    # Review 4 parity LOW-1: the merge dropped it from the gated-turn list.
+    assert ("may only look, point (point_at say), post_note, reply_to_person, answer pins and propose "
+            "(propose_change, propose_asset_change)") in text
+    assert "reply_to_person" in mcp_channel.CHANGE_TURN_TOOLS
 
 
 # -- review 4: the push ledger, the listener's side ------------------------------------

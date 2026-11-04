@@ -149,6 +149,45 @@ describe('review 3 live LOW-1: the first drag tracks the pointer past half the v
   });
 });
 
+describe('GM r112.4: a press with no movement never changes the height', () => {
+  function measured(log: HTMLElement, height: number, top: number) {
+    Object.defineProperty(log, 'offsetHeight', { configurable: true, get: () => height });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => height });
+    log.getBoundingClientRect = () => ({ top, bottom: top + height, left: 0, right: 400, height, width: 400, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  }
+
+  it('press and release in place: the rendered height is held, then given back to the content', () => {
+    render(<AgentLog />);
+    const log = document.querySelector<HTMLElement>('.agent-log')!;
+    measured(log, 450, 370);
+    const handle = document.querySelector<HTMLElement>('.agent-log__resize')!;
+    expect(log.style.height).toBe('');
+    fireEvent.pointerDown(handle, { button: 0, clientY: 372, pointerId: 1 });
+    // Written before resizing lifts the cap: the box can't leap to its content height.
+    expect(log.hasAttribute('data-resizing')).toBe(true);
+    expect(log.style.height).toBe('450px');
+    expect(Number.parseFloat(log.style.maxHeight)).toBeGreaterThanOrEqual(450);
+    fireEvent.pointerUp(handle, { button: 0, clientY: 372, pointerId: 1 });
+    expect(log.hasAttribute('data-resizing')).toBe(false);
+    expect(log.style.height).toBe('');
+    expect(log.style.maxHeight).toBe('');
+    expect(log.hasAttribute('data-sized')).toBe(false);
+  });
+
+  it('the ceiling holds while dragging: the lifted cap is the drag’s own bound', () => {
+    render(<AgentLog />);
+    const log = document.querySelector<HTMLElement>('.agent-log')!;
+    measured(log, 450, 370);
+    const handle = document.querySelector<HTMLElement>('.agent-log__resize')!;
+    fireEvent.pointerDown(handle, { button: 0, clientY: 372, pointerId: 1 });
+    const cap = Number.parseFloat(log.style.maxHeight);
+    expect(cap).toBeLessThanOrEqual(370 + 450); // never past the log's own bottom less the top chrome
+    fireEvent.pointerMove(handle, { clientY: -400, pointerId: 1 });
+    expect(Number.parseFloat(log.style.height)).toBeLessThanOrEqual(cap);
+    fireEvent.pointerUp(handle, { clientY: -400, pointerId: 1 });
+  });
+});
+
 describe('r100.2: after a reduced-motion jump the thread is the person’s again', () => {
   it('scrolling up after the jump still raises the pill for an agent row', () => {
     reduced(true);

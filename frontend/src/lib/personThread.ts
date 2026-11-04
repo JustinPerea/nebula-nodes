@@ -203,7 +203,9 @@ export function mergeRows(current: readonly ThreadRow[], incoming: readonly Thre
 export function syncRows(current: readonly ThreadRow[], snapshot: readonly ThreadRow[]): ThreadRow[] {
   const newest = snapshot.reduce((at, row) => Math.max(at, row.at), -Infinity);
   const ids = new Set(snapshot.map((row) => row.id));
-  return mergeRows(current.filter((row) => ids.has(row.id) || row.at > newest), snapshot);
+  // At or after the snapshot's newest (review 4 NIT-4): a row the tab holds
+  // with the same time as the snapshot's newest isn't older than it.
+  return mergeRows(current.filter((row) => ids.has(row.id) || row.at >= newest), snapshot);
 }
 
 /** The last event of an agent session (by cursor key): when, and its action line. */

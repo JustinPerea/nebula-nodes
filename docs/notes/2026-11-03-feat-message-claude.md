@@ -740,3 +740,139 @@ server's instructions.
     returned to Coast with the log open;
   - the other way posted "Claude Code replied in “Harbor”." in Coast.
   Five shots, distinct md5s, nothing intercepted, no page errors.
+
+## Round 5b (review 4; the push ledger; GM r108, r110, r112)
+
+Merged #223's round 5b (fa659a0f): the listener's push groups, the
+successor wait and `taken_by_another`.
+
+### The push ledger (coordinator decision, adversarially checked)
+
+- **Where it lives.** `services/push_ledger.py`, beside `add_reply` and
+  the accepted route, which are both in this PR (#223 serves neither).
+  That's the split rule's tiebreak: the shared server ledger goes where
+  `add_reply` lives.
+- **Keyed by (agent id, raw session)**, never by a listener id or a
+  cursor's session key. Both are HMACs under a secret each backend process
+  makes, so they change on a restart or eviction.
+- **Recording.** The listener reports each push (POST
+  `/api/agent/thread/accepted` with `messageIds` and `questionIds`).
+  - A message counts when this call accepted it or it was already
+    accepted for this agent.
+  - A question set counts when the caller asked it and it's answered.
+  - A retry with the same id set records nothing.
+- **Claiming.** A reply claims the session's OLDEST pickable open push
+  whose project still exists. `replyTo` is that push's newest message id,
+  else its first question set id.
+  - claim, then settle once the row is committed, else release: a failed
+    save leaves the push open, and two racing replies take two different
+    pushes.
+  - Oldest first follows the order Claude Code answers queued pushes in.
+- **The cap mirrors the listener's** (`DELIBERATE_SPAN_CAP`, 600 s; a test
+  keeps them equal). Once the session's last push is older than the cap
+  its pushes are dropped, so a push after a longer gap starts a new
+  period.
+  - The decision's "periods split where the gap is over the cap" falls out
+    of that rule.
+  - A separate split loop was dead code (the mutation run showed it), so
+    it's gone.
+- **Restart.** The ledger is memory only. A listener restarted in the
+  same session gets `openPushes` on the first beat of its new nonce. After
+  a Nebula restart, the listener sends its groups to Nebula again
+  (`groups_to_resend`).
+- **Architecture:** sessions are a convenience boundary inside one token,
+  not an auth boundary. Any holder of the token can name any session. The
+  ledger only keeps one Claude Code's replies from settling another's
+  pushes by mistake. (The repo has no ARCHITECTURE.md, so this note is the
+  record; the same sentence is in push_ledger's docstring.)
+
+### Where a reply goes (GM r112.2, review 4 MEDIUM-1)
+
+- **Answers a push in another project:** it goes to that project's
+  thread, with one "replied in" Update on the open project.
+  - `nodeId` is ignored there: no 422, no cursor flies (GM r108 b), and
+    the answer's `note` says "Nebula posted this reply in “Coast” but
+    didn’t point at n3 because that project isn’t the one open, so your
+    cursor stayed where it was."
+- **Answers nothing:** a follow-up in the open project's thread, with no
+  Update. Ten follow-ups after an answered message post 0 Updates.
+- **No project open:** GM r110's refusal (below).
+
+### GM r112.1: one Update per agent and project while unread
+
+- `agent_notes.post_replied` updates the same note id in place, with the
+  latest time, moved to the top.
+  - "Claude Code replied in “Coast”." becomes "Claude Code replied 3 times
+    in “Coast”." from the second reply on.
+  - Two projects give two Updates. Once read, the next reply starts a new
+    one.
+- The agent's 6-a-minute Updates limit applies, shared with its
+  post_note. Past it, the Update is left as it is (its count lags) and the
+  reply is saved.
+- An unnamed project reads “Untitled” (GM r108 d). The Open action now
+  carries `replyId`, which `thread.open` requires.
+
+### Routing, nonce and restart (review 4 LOW-4 and the restart probe)
+
+- **The restart probe was real.** The inbox matched `to.listenerId`, an
+  HMAC under a per-process secret, so after a Nebula restart a message
+  "Sent" before it was never read.
+  - Message rows now carry `route` = sha256(agent \0 session)[:32]. The
+    inbox, accepted and held routes match by it, falling back to the
+    listener id for rows saved before routes.
+  - `route` never leaves the backend: it's stripped from the person's and
+    the agents' views.
+  - Revoke settles in-flight messages by agent id, so it works after a
+    restart too, and drops the agent's ledger entries.
+- **Nonce:** the inbox, accepted and held routes take `?nonce=` and answer
+  409 `listener_session_taken` when another process holds the session.
+  The listener sends its nonce on all three.
+
+### GM r108 / r110 / r112 strings and the rest
+
+- **GM r110 / CI fix (eebe52f0):** the refusal, the `reply_to_person`
+  docstring, MCP-SETUP and SKILL.md all say "Nebula couldn’t post this
+  reply because no project is open. Open one with open_project, then reply
+  again.", and say to open the project the message came from, never an
+  unrelated one.
+  - A sweep test checks SKILL.md, MCP-SETUP, every MCP tool description and
+    INSTRUCTIONS for "ask the person to open one". It reads SKILL.md, so
+    land_checks picks it up.
+- **String 3** is in `reply_unmatched_line`; string 4 came with #223.
+  - In both, "this command" is still `nebula mcp connect claude-code
+    --channel`: the server can't print the real launch command, because it
+    names the person's token file path.
+- **String 6:** threadOpen's lines are because-form, with "Try again."
+  only where it helps.
+  - "this Update doesn’t say which project it’s in" and "its project is
+    in Recently deleted" are my reasons for the two cases GM's list didn't
+    cover; flagged.
+  - The apostrophe ratchet now covers every line an Updates action throws
+    (threadOpen, canvas and asset proposal review, goToCanvas,
+    AgentNotesCorner); their straight apostrophes are curled.
+- **D1:** a module-level store subscription clears a "Back to “X”" toast
+  as soon as the open project becomes X, by any route.
+- **D2:** Open focuses the reply's row (tabIndex -1 only while it is
+  focused).
+  - The ring is inset (offset -2px), with 4/6 px of room given back by
+    negative margins, so nothing moves.
+  - Live: the ring was inside the thread's scroll area and below the
+    header.
+- **c:** the Open button's accessible name is "Open Claude Code’s reply in
+  “Coast”".
+- **r112.3:** a pin answer's cursor say folds into the pin reply row.
+- **r112.4:** the press writes the rendered height before `data-resizing`
+  lifts the cap, and the drag's own bound is the max-height while
+  dragging.
+- **Test 17:** only a message id a reply names clears messages.
+- **Launch command:** `cc-$(date +%s)-$$` replaces uuidgen (POSIX; a test
+  runs the printed assignment in `sh`). MCP-SETUP says the command is for
+  macOS, Linux and WSL.
+- **INSTRUCTIONS:** `reply_to_person` is back in the gated list. "
+  (experiment)" was dropped to stay under the 4,096-character cut.
+- **NITs:**
+  - the MCP-SETUP symlink clause, plus a test that every token-file clause
+    is listed;
+  - syncRows keeps a row at the snapshot's newest time;
+  - `_token_source`'s docstring;
+  - unread-elsewhere counts each reply id once.

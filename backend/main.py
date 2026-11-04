@@ -229,6 +229,7 @@ from services.agent_presence import request_headers_scope
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services import channel_listeners
 from services import person_thread
+from services import push_ledger
 from services import pending_nodes
 from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
@@ -349,6 +350,9 @@ thread_book = person_thread.PersonThread(lambda: project_store)
 thread_send_cap = person_thread.SendCap()
 # reply_to_person's pace per agent (Justin, 2026-11-03): 5 in a row, then one every 2 s.
 thread_reply_pace = person_thread.ReplyPace()
+# Which push each reply answers (review 4 of #225): the listener reports each
+# deliberate push; a reply answers its session's oldest open one. Memory only.
+thread_ledger = push_ledger.PushLedger()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -4913,18 +4917,22 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
     # offering them, and a send to one is refused as stopped.
-    dropped = channel_book.drop_agent(f"{channel_listeners.APP_ID_PREFIX}{app_id}")
+    agent_id = f"{channel_listeners.APP_ID_PREFIX}{app_id}"
+    dropped = channel_book.drop_agent(agent_id)
     if dropped:
         await _broadcast_channel_listeners()
         _schedule_channel_expiry()
-        # Its messages still in flight can't be delivered any more (a new
-        # token is a new agent): they settle as dropped (#225 review 2).
-        try:
-            settled = await asyncio.to_thread(thread_book.drop_for, [entry.listener_id for entry in dropped])
-        except (ProjectStoreError, OSError):
-            settled = []
-        for project_id, rows in settled:
-            await _broadcast_thread(project_id, rows)
+    thread_ledger.forget_agent(agent_id)
+    # Its messages still in flight can't be delivered any more (a new token
+    # is a new agent): they settle as dropped (#225 review 2), whether one of
+    # its listeners was still registered or not (review 4: by agent, not by
+    # listener id, which a Nebula restart changes).
+    try:
+        settled = await asyncio.to_thread(thread_book.drop_for, agent_id)
+    except (ProjectStoreError, OSError):
+        settled = []
+    for project_id, rows in settled:
+        await _broadcast_thread(project_id, rows)
     return {"status": "revoked"}
 
 
@@ -6469,16 +6477,25 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
         state, reason, project_id = channel_listeners.parse_beat(body)
     except channel_listeners.ListenerError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    nonce = channel_listeners.parse_nonce(body.get("nonce"))
+    known = any(entry.session == (session or "") and entry.nonce == nonce
+                for entry in channel_book.for_agent(identity.id))
     try:
         entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id,
-                                           nonce=channel_listeners.parse_nonce(body.get("nonce")))
+                                           nonce=nonce)
     except channel_listeners.SessionTaken as exc:
         raise HTTPException(status_code=409, detail=str(exc),
                             headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
     if changed:
         await _broadcast_channel_listeners()
     _schedule_channel_expiry()
-    return {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
+    answer: dict[str, Any] = {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
+    if not known:
+        # A new process on this session (a listener that restarted): the
+        # pushes Nebula recorded for the session that no reply answered yet,
+        # so its span picks up where the old process left it (review 4).
+        answer["openPushes"] = thread_ledger.open_pushes(identity.id, session)
+    return answer
 
 
 @app.delete("/api/agent/channel")
@@ -6594,6 +6611,16 @@ def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[s
     return [entry.listener_id for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
 
 
+def _listener_process(identity: AgentIdentity, session: str | None, nonce: str | None) -> None:
+    """The inbox, accepted and held routes answer only the process that
+    holds this session's listener entry (review 4 LOW-4: the nonce bound the
+    beat only, so a process refused there could still read the inbox and
+    take a message meant for the live one). 409, as for a beat."""
+    if channel_book.taken_by_another(identity, session, channel_listeners.parse_nonce(nonce)):
+        raise HTTPException(status_code=409, detail=channel_listeners.SESSION_TAKEN_LINE,
+                            headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE})
+
+
 def _reply_listeners(identity: AgentIdentity, session: str | None) -> tuple[list[channel_listeners.Listener], int]:
     """The listeners a reply answers for, and how many fresh ones it
     wouldn't guess between. This session's own entry (the launch command
@@ -6670,7 +6697,9 @@ async def send_person_message(body: Any = Body(None)) -> Any:
         to = {"listenerId": listener.listener_id, "agent": listener.agent.as_dict(),
               "session": _channel_person_view(listener).get("session")}
         project_id, row, new = await asyncio.to_thread(thread_book.add_message, text=text, node_ids=node_ids,
-                                                       to=to, client_id=client_id, held=held)
+                                                       to=to, client_id=client_id, held=held,
+                                                       route=person_thread.route_key(listener.agent.id,
+                                                                                     listener.session))
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
@@ -6687,52 +6716,81 @@ async def send_person_message(body: Any = Body(None)) -> Any:
 
 
 @app.get("/api/agent/thread/inbox")
-async def read_thread_inbox() -> dict[str, Any]:
+async def read_thread_inbox(nonce: str | None = None) -> dict[str, Any]:
     """A --channel listener reads the messages sent to its own session that
-    it hasn't pushed yet (answered for this agent session only)."""
+    it hasn't pushed yet (answered for this agent session only, matched by
+    agent and session so a restart of Nebula loses none). ``nonce``: the
+    listener process's own; another process on the session gets 409."""
     # Only a token's listener (Justin, 2026-11-03): the same refusal as registering.
     identity, session = _channel_caller()
+    _listener_process(identity, session, nonce)
     listener_ids = _thread_listener_ids(identity, session)
     try:
-        project_id, messages = await asyncio.to_thread(thread_book.inbox, listener_ids)
+        project_id, messages = await asyncio.to_thread(thread_book.inbox, listener_ids,
+                                                       person_thread.route_key(identity.id, session))
     except ProjectStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"projectId": project_id, "messages": messages}
 
 
+def _id_list(raw: Any) -> list[str] | None:
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw) or len(raw) > 100:
+        return None
+    return raw
+
+
 @app.post("/api/agent/thread/accepted")
-async def accept_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
-    """The listener pushed these messages to its session: {messageIds}. The
-    person's box then reads "Waiting for Claude" (Nebula saw the push go,
-    never that Claude read it)."""
+async def accept_thread_messages(body: Any = Body(None), nonce: str | None = None) -> dict[str, Any]:
+    """The listener pushed these to its session: {messageIds, questionIds?}
+    (one push). The person's box then reads "Waiting for Claude" for each
+    message (Nebula saw the push go, never that Claude read it). The push
+    goes in the push ledger (review 4): a reply from this session answers
+    its oldest open push. A message counts when it is this caller's and was
+    sent or held, or (a re-send after Nebula restarted) already accepted
+    for this agent; a question set when this agent asked it and the person
+    answered it. A retry with the same ids records nothing new."""
     identity, session = _channel_caller()  # a token's listener only, as registering
-    ids = body.get("messageIds") if isinstance(body, dict) else None
-    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
-        raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
+    _listener_process(identity, session, nonce)
+    ids = _id_list(body.get("messageIds") if isinstance(body, dict) else None)
+    questions = _id_list(body.get("questionIds") if isinstance(body, dict) else None)
+    if ids is None or questions is None or not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {messageIds: [...], questionIds?: [...]} (at most 100 each)")
     listener_ids = _thread_listener_ids(identity, session)
+    counted: dict[str, str] = {}
     try:
-        changed = await asyncio.to_thread(thread_book.accept, ids, listener_ids)
+        changed = await asyncio.to_thread(thread_book.accept, ids, listener_ids,
+                                          person_thread.route_key(identity.id, session), identity.id, counted)
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)  # type: ignore[return-value]
     except ProjectStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    items: list[tuple[str, str, str | None]] = [(i, push_ledger.MESSAGE, counted[i]) for i in ids if i in counted]
+    for question_id in questions:
+        asked = agent_questions.get(question_id)
+        if asked is not None and asked.agent.id == identity.id and asked.status == "answered":
+            items.append((question_id, push_ledger.QUESTION, asked.project_id))
+    thread_ledger.record(identity.id, session, items)
     for project_id, rows in changed:  # wherever each was sent (boundary LOW-2)
         await _broadcast_thread(project_id, rows)
     return {"accepted": [row["id"] for _, rows in changed for row in rows]}
 
 
 @app.post("/api/agent/thread/held")
-async def hold_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
+async def hold_thread_messages(body: Any = Body(None), nonce: str | None = None) -> dict[str, Any]:
     """The listener holds these messages at its runaway cap (200 deliberate
     sends an hour): {messageIds}. The person's box reads "Sends in a few
     minutes because you’ve sent 200 this hour." until it pushes them."""
     identity, session = _channel_caller()  # a token's listener only, as registering
+    _listener_process(identity, session, nonce)
     ids = body.get("messageIds") if isinstance(body, dict) else None
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
         raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
     listener_ids = _thread_listener_ids(identity, session)
     try:
-        changed = await asyncio.to_thread(thread_book.hold, ids, listener_ids)
+        changed = await asyncio.to_thread(thread_book.hold, ids, listener_ids,
+                                          person_thread.route_key(identity.id, session))
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)  # type: ignore[return-value]
     except ProjectStoreError as exc:
@@ -6755,14 +6813,19 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     retryAfter (s) and a line saying when it can reply again; nothing is
     saved, and a reply Nebula refuses later never spends one.
 
-    Round 5: the reply answers the latest message this session's listener
-    took (D2: Claude Code's shell shares its listener's session; a terminal
-    started otherwise answers the agent's one fresh listener, and with two
-    or more Nebula won't guess: ``replyTo`` None and a ``note`` saying why).
-    It goes to that message's project's thread (GM r100.3), with an Update
-    on the open project when that is another one, and its cursor is the
-    session's that took the message (GM r100.1). No message answered and no
-    project open: 409 no_project (GM r100's line)."""
+    Review 4 (the push ledger, services/push_ledger.py): the reply answers
+    the oldest open push of this session's listener (D2: Claude Code's shell
+    shares its listener's session; a terminal started otherwise answers for
+    the agent's one fresh listener, and with two or more Nebula won't
+    guess: ``replyTo`` None and a ``note`` saying why). It goes to that
+    push's project's thread (GM r100.3, r112.2), with an Update on the open
+    project when that is another one (GM r112.1: one per agent and project
+    while unread). A reply that answers no push is a follow-up in the open
+    project's thread, with no Update; with no project open, 409 no_project
+    (GM r110's line). ``nodeId`` is checked against the open canvas only
+    when the reply goes there; for another project's thread it is ignored,
+    with a ``note``, and no cursor flies (GM r108 b). The cursor that flies
+    is the session's that took the push (GM r100.1)."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None and is_person(headers):
@@ -6780,10 +6843,27 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
         raise HTTPException(status_code=422, detail=f"unknown field {unknown[0][:40]!r}: a reply takes text and "
                                                     "nodeId")
     node_id = body.get("nodeId")
-    if node_id is not None and (not isinstance(node_id, str) or node_id not in cli_graph.nodes):
+    if node_id is not None and not isinstance(node_id, str):
         raise HTTPException(status_code=422, detail=f"No node {str(node_id)[:40]!r} on the canvas: read it again "
                                                     "(look_at_canvas), or reply without node_id")
     session = presence_session(headers)
+    listeners, unmatched = _reply_listeners(identity, session)
+    taker = listeners[0] if listeners else None
+    key = (identity.id, taker.session) if taker is not None else None
+    # Where it would go, before checking the node: only the open canvas's
+    # nodes can be checked (review 4 LOW-3: node ids repeat across projects).
+    try:
+        target = await asyncio.to_thread(thread_book.reply_target, thread_ledger, key)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    open_id = _workspace_context()["activeProjectId"]
+    elsewhere = target is not None and target != open_id
+    if node_id is not None and not elsewhere and node_id not in cli_graph.nodes:
+        raise HTTPException(status_code=422, detail=f"No node {str(node_id)[:40]!r} on the canvas: read it again "
+                                                    "(look_at_canvas), or reply without node_id")
+    ignored_node = node_id if elsewhere else None
+    if elsewhere:
+        node_id = None
     try:
         text = person_thread.clean_reply(body.get("text"))
     except person_thread.ThreadError as exc:
@@ -6795,33 +6875,33 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
         return JSONResponse(status_code=429, headers={"Retry-After": str(retry)},
                             content={"detail": person_thread.reply_limited_detail(wait),
                                      "code": person_thread.REPLY_LIMITED_CODE, "retryAfter": retry})
-    listeners, unmatched = _reply_listeners(identity, session)
     try:
         fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
                   "session": _thread_session(identity, session)}
-        project_id, row = await asyncio.to_thread(thread_book.add_reply, fields,
-                                                  [entry.listener_id for entry in listeners])
+        taker_session = _thread_session(identity, taker.session) if taker is not None else None
+        project_id, row = await asyncio.to_thread(thread_book.add_reply, fields, ledger=thread_ledger, key=key,
+                                                  taker_session=taker_session)
     except person_thread.ThreadError as exc:
         thread_reply_pace.refund(identity.id)  # nothing was saved (live L1)
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
         thread_reply_pace.refund(identity.id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    # Always journaled (only its ids when narrowed): its own listener counts
-    # it as an answer to the message it names (PR A, J4; round 5, D1).
+    # Always journaled (only its ids when narrowed): its own listener removes
+    # the push it names (replyTo; PR A, J4; review 4).
     _journal(person_thread.REPLY_EVENT, node_id=row.get("nodeId"), data=person_thread.reply_event_data(row),
              summary="replied to the person", project_id=project_id)
     await _broadcast_thread(project_id, [row])
     open_id = _workspace_context()["activeProjectId"]
     if project_id != open_id:
-        await _post_reply_elsewhere(identity, project_id)
-    # The cursor that flies is the session's that took the message (GM
-    # r100.1: one Claude is one cursor), so a reply from its own shell never
-    # makes a "· 2"; with no message answered, the caller's own.
-    # (_reply_listeners gives this session's entry or the one fresh one.)
-    taker = listeners[0] if listeners and row.get("replyTo") else None
-    cursor_session = (taker.session or None) if taker is not None else session
-    if node_id is not None:  # checked on the open canvas, where the person is
+        await _post_reply_elsewhere(identity, project_id, row["id"])
+    # The cursor that flies is the session's that took the push (GM r100.1:
+    # one Claude is one cursor), so a reply from its own shell never makes a
+    # "· 2"; with no push answered, the caller's own. Only on the canvas the
+    # reply is about (GM r108 b): one saved in another project's thread
+    # flies nothing, and the Update is the signal.
+    cursor_session = (taker.session or None) if taker is not None and row.get("replyTo") else session
+    if node_id is not None and project_id == open_id:
         try:
             # The first sentence goes on the person's tabs; on the agents'
             # form (and what look_at_canvas and the roster keep) only while
@@ -6839,22 +6919,33 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     answer: dict[str, Any] = {"projectId": project_id, "reply": person_thread.agent_view(row, identity.id)}
     if unmatched > 1:
         answer["note"] = person_thread.reply_unmatched_line(identity.name, unmatched)
+    elif ignored_node is not None:
+        answer["note"] = person_thread.reply_node_elsewhere_line(str(ignored_node)[:40], _project_name(project_id))
     return answer
 
 
-async def _post_reply_elsewhere(identity: AgentIdentity, project_id: str) -> None:
-    """GM r100.3: the reply went to another project's thread (the message it
-    answers was sent there): an Update on the open project names that
-    project, and its Open action opens that project's thread. Decoration:
-    never fails the saved reply."""
+def _project_name(project_id: str) -> str:
+    """A project's name as the person reads it; an unnamed one is “Untitled” (GM r108 d)."""
     try:
         project = (project_store.read().get("projects") or {}).get(project_id) or {}
-        name = str(project.get("name") or "").strip() or "another project"
+    except Exception:  # noqa: BLE001 - a name is decoration
+        project = {}
+    return str(project.get("name") or "").strip() or person_thread.UNTITLED
+
+
+async def _post_reply_elsewhere(identity: AgentIdentity, project_id: str, reply_id: str) -> None:
+    """GM r100.3, r112.1: the reply went to another project's thread (the
+    push it answers was sent there): an Update on the open project names
+    that project, and its Open action opens that thread at the reply. One
+    per agent and project while unread, updated in place with a count from
+    the second reply; the agent's Updates limit applies. Decoration: never
+    fails the saved reply."""
+    try:
+        name = _project_name(project_id)
         result = await asyncio.to_thread(
-            agent_notes.post_nebula, ("canvas", None), author={"kind": "agent", **identity.as_dict()},
-            about="other", text=person_thread.replied_elsewhere_text(identity.name, name),
-            actions=[{"label": "Open", "op": {"kind": "thread.open", "projectId": project_id}}])
-    except Exception:  # noqa: BLE001 - the reply is saved; the Update is a pointer to it
+            agent_notes.post_replied, author={"kind": "agent", **identity.as_dict()}, project_id=project_id,
+            reply_id=reply_id, text_for=lambda count: person_thread.replied_elsewhere_text(identity.name, name, count))
+    except Exception:  # noqa: BLE001 - the reply is saved; the Update is a pointer to it (or rate limited)
         return
     note = result["note"]
     _journal_note(note, "canvas", project_id=result["projectId"])

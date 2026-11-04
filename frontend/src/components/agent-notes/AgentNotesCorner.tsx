@@ -11,7 +11,7 @@ import {
   type AgentNoteAuthor,
   type AgentNotesSurface,
 } from '../../lib/agentNotes';
-import { cornerRight, roomBelow, showLabel, type Box } from '../../lib/agentNotesView';
+import { cornerRight, roomBelow, showLabel, threadOpenLabel, type Box } from '../../lib/agentNotesView';
 import { springCssVars, springLinear, SPRING_SOFT } from '../../lib/springs';
 import { viewportRevealing } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
@@ -332,7 +332,7 @@ function seeAllActions(): Promise<void> {
     .then(() => whenReady(() => onCanvas() && agentLogHeader() !== null))
     .then((ready) => {
       if (request !== seeAllRequest || !onCanvas()) return;
-      if (!ready) throw writtenLine("The Agent log didn't open. Try again.");
+      if (!ready) throw writtenLine('The Agent log didn’t open. Try again.');
       useUIStore.getState().openAgentLog();
       window.requestAnimationFrame(() => {
         if (onCanvas()) agentLogHeader()?.focus({ preventScroll: true });
@@ -1068,12 +1068,19 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         // An asset proposal's Update (Q92 a): go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
         // A reply saved in another project's thread (GM r100.3): open that thread.
-        if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId);
+        if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId, action.op.replyId);
         const proposals = useCanvasProposalsStore.getState();
         const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
         if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
         if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
-        throw writtenLine(`"${action.label}" can't run from here.`);
+        throw writtenLine(`“${action.label}” can’t run from here.`);
+      },
+      // GM r108 c: Open on a reply's Update names whose reply and where.
+      actionLabel: (note, action) => {
+        if (action.op.kind !== 'thread.open') return undefined;
+        const id = action.op.projectId;
+        const name = useProjectStore.getState().projects.find((project) => project.id === id)?.name;
+        return threadOpenLabel(action.label, note.author.name, name);
       },
       actionState: (action) => {
         // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
@@ -1113,7 +1120,7 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
         useBoardCanvasStore.getState().requestShow(boardId, onBoard);
       },
       runAction: async (_note, action) => {
-        throw writtenLine(`"${action.label}" can't run here yet.`);
+        throw writtenLine(`“${action.label}” can’t run here yet.`);
       },
     };
   }, [boardId, order]);

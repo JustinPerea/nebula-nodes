@@ -443,7 +443,8 @@ export function counterAnnouncement(lengthBefore: number, length: number, max: n
 
 /** Whether a reply from this message's agent (and session, when both name one) came after it.
  * A reply that names the message it followed (`replyTo`, review 1 NIT-4)
- * clears that message and the ones before it, never a later one in flight. */
+ * clears that message and the ones before it, never a later one in flight;
+ * one that names a question set (an answer push's reply) clears none. */
 export function repliedAfter(row: ThreadRow, rows: readonly ThreadRow[]): boolean {
   if (row.kind !== 'message' || !row.to) return false;
   const to = row.to;
@@ -452,7 +453,9 @@ export function repliedAfter(row: ThreadRow, rows: readonly ThreadRow[]): boolea
     if (to.sessionKey && other.sessionKey && other.sessionKey !== to.sessionKey) return false;
     if (other.replyTo === undefined) return true;
     if (other.replyTo === null) return false;
-    const followed = rows.find((one) => one.id === other.replyTo);
+    // Only a message it names clears (push ledger test 17): a reply to an
+    // answer push names a question set id, and clears no message.
+    const followed = rows.find((one) => one.id === other.replyTo && one.kind === 'message');
     return other.replyTo === row.id || (followed !== undefined && row.at < followed.at);
   });
 }
@@ -469,14 +472,20 @@ export function firstSentence(text: string, limit = 140): string {
 const ECHO_MS = 10_000;
 
 /** GM r79.1: a session's "Replied on …" say matching its own reply row is no
- * action: never folded or counted (the Agent log's own list still has it). */
+ * action: never folded or counted (the Agent log's own list still has it).
+ * GM r112.3: the same for a pin answer (resolve_pin): its cursor's say folds
+ * into the pin reply row, never a trailing "1 action" after it. A pin reply
+ * is about its pin's node, so it needs no nodeId of its own. */
 export function isReplyEcho(entry: { ts: number; message?: string; agent?: { id: string; name: string } },
   rows: readonly ThreadRow[]): boolean {
   if (!entry.agent || !entry.message) return false;
   const agent = entry.agent;
-  return rows.some((row) => row.kind === 'reply' && row.nodeId && row.agent?.id === agent.id
+  const message = entry.message;
+  return rows.some((row) => ((row.kind === 'reply' && row.nodeId) || row.kind === 'pinReply')
+    && row.agent?.id === agent.id
     && cursorLabel(row.agent.name, row.session ?? null) === agent.name
-    && entry.ts >= row.at && entry.ts - row.at <= ECHO_MS && firstSentence(row.text ?? '') === entry.message);
+    && entry.ts >= row.at && entry.ts - row.at <= ECHO_MS
+    && (firstSentence(row.text ?? '') === message || (row.kind === 'pinReply' && (row.text ?? '').trim() === message)));
 }
 
 /** The thread with the Agent log's actions folded between its rows (r50: "3 actions"),

@@ -354,10 +354,14 @@ CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
 # Round 5 (D2): each launch gives the session its own id, evaluated by the
 # shell every time the command runs (never a value printed once), shared by
 # the listener (the MCP server) and Claude's own shell (the `nebula` CLI):
-# one session, one cursor, one listener. "cc-" plus a UUID fits
+# one session, one cursor, one listener. POSIX tools only (review 4: uuidgen
+# isn't on every Linux, and without it every launch was the bare "cc-"):
+# the shell's clock and its own process id, so two terminals, or two
+# launches from one, never share a session (macOS, Linux and WSL; Windows
+# shells can't run the env-prefix form at all). It fits
 # cursor_actions.SESSION_RE.
 SESSION_ENV = "NEBULA_AGENT_SESSION"
-SESSION_ASSIGNMENT = f'{SESSION_ENV}="cc-$(uuidgen)"'
+SESSION_ASSIGNMENT = f'{SESSION_ENV}="cc-$(date +%s)-$$"'
 
 
 def launch_command(path: Path, token_file: str | None = None) -> str:

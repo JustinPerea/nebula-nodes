@@ -289,7 +289,7 @@ def test_a_dead_processs_entry_lapses_and_the_new_process_registers(ready):
 
 
 def test_two_launches_of_the_printed_command_are_two_listeners(ready):
-    # Each launch evaluates NEBULA_AGENT_SESSION="cc-$(uuidgen)" afresh: two
+    # Each launch evaluates NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" afresh: two
     # sessions, two listener ids, two cursors (each its own number).
     one = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "cc-1B4E28BA-2FA1-11D2-883F-0016D3CCA427"}
     two = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "cc-6F9619FF-8B86-D011-B42D-00C04FC964FF"}

@@ -124,3 +124,23 @@ describe('r61 A: the run', () => {
     expect(withRun(items, null)).toEqual(items);
   });
 });
+
+describe('GM r112.3: a pin answer’s cursor say folds into the pin reply row', () => {
+  const pinReply: ThreadRow = { id: 'pr1', kind: 'pinReply', at: 5_000, text: 'Pin fold check answered. The sky is warmer.',
+    pinId: 'pin1', agent: CLAUDE, session: null };
+  const say = (over: Partial<{ id: string; ts: number; message: string; agent: { id: string; name: string } }> = {}) => ({
+    id: 'e1', ts: 5_200, message: 'Pin fold check answered.', agent: { id: CLAUDE.id, name: CLAUDE.name }, ...over });
+
+  it('never a trailing "1 action" after the pin reply row', () => {
+    expect(foldActions([pinReply], [say()]).map((item) => item.kind)).toEqual(['row']);
+    expect(foldActions([pinReply], [say({ message: 'Pin fold check answered. The sky is warmer.' })]).map((item) => item.kind)).toEqual(['row']);
+  });
+
+  it('another agent, another sentence or a late say still folds', () => {
+    expect(foldActions([pinReply], [say({ agent: { id: 'a2', name: 'Codex' } })]).at(-1)?.kind).toBe('actions');
+    // Another agent with the same name (two apps both called Claude): still its own action.
+    expect(foldActions([pinReply], [say({ agent: { id: 'a2', name: CLAUDE.name } })]).at(-1)?.kind).toBe('actions');
+    expect(foldActions([pinReply], [say({ message: 'Moved the sun.' })]).at(-1)?.kind).toBe('actions');
+    expect(foldActions([pinReply], [say({ ts: 16_000 })]).at(-1)?.kind).toBe('actions');
+  });
+});

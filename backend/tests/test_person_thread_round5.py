@@ -84,7 +84,8 @@ def test_a_reply_after_a_project_switch_goes_to_its_messages_thread_both_ways(th
     name = thread.main.project_store.read()["projects"][sent_in]["name"]
     notes = _notes_of(thread, opened)
     assert [note["text"] for note in notes] == [f"Claude Code replied in “{name}”."]
-    assert notes[0]["actions"] == [{"label": "Open", "op": {"kind": "thread.open", "projectId": sent_in}}]
+    assert notes[0]["actions"] == [{"label": "Open", "op": {"kind": "thread.open", "projectId": sent_in,
+                                                            "replyId": answer.json()["reply"]["id"]}}]
     assert notes[0]["source"] == "nebula" and notes[0]["author"]["id"] == "app:claude1"
     # The person's tabs hear the row with its own project, and the Update.
     told = [m for m in thread.browser if m.get("type") == "personThread" and m.get("change") == "rows"]
@@ -93,8 +94,8 @@ def test_a_reply_after_a_project_switch_goes_to_its_messages_thread_both_ways(th
 
 
 def test_a_reply_saved_in_another_project_keeps_no_node_of_the_open_canvas(thread):
-    # The node was checked on the open canvas; the other project's thread
-    # can't point at it. The cursor still flies on the open canvas.
+    # The node is on the other project's canvas, not the open one: it is
+    # ignored (review 4; GM r108 b: no cursor flies, the Update is the signal).
     first = thread.project_id
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
@@ -116,7 +117,9 @@ def test_a_reply_in_the_open_project_posts_no_update(thread):
     assert _notes_of(thread, thread.project_id) == []
 
 
-def test_the_latest_taken_message_wins_across_projects(thread):
+def test_the_oldest_open_push_is_answered_first_across_projects(thread):
+    # Review 4 (the push ledger): oldest first follows the order Claude
+    # answers its queued pushes in.
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
     older = _send(thread, a, "first").json()["row"]
@@ -126,6 +129,8 @@ def test_the_latest_taken_message_wins_across_projects(thread):
     _accept(thread, SESSION_A, newer)
     _open(thread, thread.project_id)
     answer = _reply(thread, "Done.", headers=SESSION_A).json()
+    assert answer["reply"]["replyTo"] == older["id"] and answer["projectId"] == thread.project_id
+    answer = _reply(thread, "Done too.", headers=SESSION_A).json()
     assert answer["reply"]["replyTo"] == newer["id"] and answer["projectId"] == coast
 
 
@@ -133,8 +138,8 @@ def test_no_message_and_no_project_open_is_refused_with_r100s_line(paced):
     _open(paced, None)
     refused = _reply(paced, "Done.", headers=CLAUDE_TOKEN)
     assert refused.status_code == 409 and refused.json()["code"] == "no_project"
-    assert refused.json()["detail"] == ("Nebula couldn’t post this reply because no project is open. Ask the person "
-                                        "to open one, then reply again.")
+    assert refused.json()["detail"] == ("Nebula couldn’t post this reply because no project is open. Open one with "
+                                        "open_project, then reply again.")
     # Never spent the pace (it was refunded): a full burst still goes once one is open.
     _open(paced, paced.project_id)
     assert [_reply(paced, f"t{n}", headers=CLAUDE_TOKEN).status_code for n in range(6)] == [201] * 5 + [429]
@@ -210,9 +215,9 @@ def test_with_two_fresh_listeners_a_stray_terminal_isnt_guessed(thread):
     assert answer.json()["note"] == person_thread.reply_unmatched_line("Claude Code", 2)
     assert answer.json()["note"] == (
         "Nebula posted this reply but couldn’t tell which message it answers because 2 Claude Code sessions are "
-        "listening and this terminal isn’t one of them. Reply from the session the person messaged, or start "
-        "Claude Code with the launch command this prints, so its terminal shares the session.\n"
-        "nebula mcp connect claude-code --channel")
+        "listening and this terminal isn’t one of them. Reply from the Claude Code the person messaged. To stop "
+        "this, start each Claude Code with this command, which gives it its own session that its terminals share.\n"
+        "nebula mcp connect claude-code --channel")  # GM r108, string 3
 
 
 def test_a_crashed_sessions_leftover_never_blocks_the_answer(thread):
@@ -228,14 +233,33 @@ def test_a_crashed_sessions_leftover_never_blocks_the_answer(thread):
 
 
 def test_the_launch_command_makes_a_session_id_per_launch():
+    # Review 4 (all three lenses): no uuidgen (Debian/Ubuntu ship it apart,
+    # and without it every launch was the bare session "cc-"). POSIX only:
+    # the shell's clock and its own process id, at each launch.
     from cli.commands import mcp_connect
 
     command = mcp_connect.launch_command(mcp_connect.Path("/tmp/listen.json"), "/state/app.token")
-    assert command.startswith('NEBULA_APP_TOKEN_FILE=/state/app.token NEBULA_AGENT_SESSION="cc-$(uuidgen)" claude ')
-    # Evaluated by the shell at each launch: what it makes fits the cursor's session id.
-    for made in ("cc-1B4E28BA-2FA1-11D2-883F-0016D3CCA427", "cc-6f9619ff-8b86-d011-b42d-00c04fc964ff"):
-        assert SESSION_RE.fullmatch(made)
-    assert "cc-$(uuidgen)" in mcp_connect.launch_command(mcp_connect.Path("/tmp/listen.json"))
+    assert command.startswith('NEBULA_APP_TOKEN_FILE=/state/app.token NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" '
+                              'claude ')
+    assert "uuidgen" not in command
+    assert 'NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude ' in mcp_connect.launch_command(
+        mcp_connect.Path("/tmp/listen.json"))
+
+
+def test_the_printed_session_is_new_at_each_launch_with_posix_tools_only():
+    # Run as a shell runs it, with a PATH that has no uuidgen: two launches
+    # (two shells, as two terminals) give two sessions, neither a bare "cc-".
+    import subprocess
+
+    from cli.commands import mcp_connect
+
+    script = f'{mcp_connect.SESSION_ASSIGNMENT} /bin/sh -c \'printf %s "$NEBULA_AGENT_SESSION"\''
+    made = [subprocess.run(["/bin/sh", "-c", script], capture_output=True, text=True, timeout=10,
+                           env={"PATH": "/bin:/usr/bin"}).stdout for _ in range(2)]
+    assert made[0] != made[1]
+    for session in made:
+        assert re.fullmatch(r"cc-\d{9,}-\d+", session), session
+        assert SESSION_RE.fullmatch(session)
 
 
 # -- `nebula pin resolve` from the session's shell ends its pin's span ---------------------------

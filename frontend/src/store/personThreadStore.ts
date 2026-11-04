@@ -158,11 +158,18 @@ export function replyAnnouncement(row: ThreadRow): string {
 }
 
 /** New rows from the socket: merged; each new reply (countsAsReply) counts as unread (panel closed) and is announced once. */
+/** The reply ids counted unread in each other project, until that project's thread loads. */
+const countedElsewhere = new Map<string, Set<string>>();
+
 export function receiveRows(projectId: string | null, incoming: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
   if (state.projectId !== null && projectId !== null && projectId !== state.projectId) {
-    // A reply in another project's thread (GM r100.3): unread there, once.
-    const count = incoming.filter(countsAsReply).length;
+    // A reply in another project's thread (GM r100.3): unread there, once,
+    // by its id (review 4 NIT-6: a re-sent copy, a newer rev, counts once).
+    // Tied to the count: none held there (none yet, or read since) starts afresh.
+    const seen = (projectId in state.unreadElsewhere && countedElsewhere.get(projectId)) || new Set<string>();
+    countedElsewhere.set(projectId, seen);
+    const count = incoming.filter((row) => countsAsReply(row) && !seen.has(row.id) && seen.add(row.id)).length;
     if (count > 0) {
       usePersonThreadStore.setState((s) => ({
         unreadElsewhere: { ...s.unreadElsewhere, [projectId]: (s.unreadElsewhere[projectId] ?? 0) + count },

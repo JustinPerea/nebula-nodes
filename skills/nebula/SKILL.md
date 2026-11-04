@@ -883,9 +883,16 @@ the launch command `nebula mcp connect claude-code --channel` prints sets
 NEBULA_APP_TOKEN_FILE and a fresh NEBULA_AGENT_SESSION for the session, and
 `nebula` reads both, so your shell is the same agent and the same session
 as your tools: your reply answers your own message and flies your own
-cursor. If the message was sent in another project, the reply goes to
-that project's thread and the person gets an Update to open it. With no
-project open, Nebula refuses the reply; ask the person to open one.
+cursor. Each reply answers your oldest unanswered message (or answer)
+push; if it was sent in another project, the reply goes to that
+project's thread and the person gets an Update to open it, and `--node`
+is ignored there. A reply that answers nothing goes to the open
+project's thread. With no project open, Nebula refuses the reply:
+"Nebula couldn’t post this reply because no project is open. Open one
+with open_project, then reply again." Open the project the person's
+message came from (`nebula projects` lists them), never an unrelated
+one just to post a reply: opening a project switches the person's
+canvas.
 `--node` flies your cursor to
 the node the answer is about and shows its first sentence there. `nebula
 thread` reads the thread; every connected agent can read it, as pins (a

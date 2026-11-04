@@ -53,6 +53,12 @@ def thread(api, monkeypatch):  # noqa: F811 - the imported fixture
     monkeypatch.setattr(api.main, "thread_send_cap", cap)
     # Each test starts with a fresh reply pace (round 3: 5 in a row, then one every 2 s).
     monkeypatch.setattr(api.main, "thread_reply_pace", person_thread.ReplyPace(clock))
+    # And a fresh push ledger on the same clock (review 4: which push a reply answers).
+    from services import push_ledger
+
+    ledger = push_ledger.PushLedger(clock)
+    monkeypatch.setattr(api.main, "thread_ledger", ledger)
+    api.ledger = ledger
     # Agent sockets: what the agents' form of a broadcast reached.
     others: list[dict] = []
 

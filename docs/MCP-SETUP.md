@@ -912,17 +912,20 @@ config and the command without writing; `nebula mcp disconnect claude-code
 Then, each time (the command it prints, with the full path):
 
 ```bash
-NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file NEBULA_AGENT_SESSION="cc-$(uuidgen)" claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
+NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
 `NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's
 path (never the token), so `nebula reply` and the other `nebula` commands
 Claude runs there are the same agent as its tools (J2, below).
-`NEBULA_AGENT_SESSION="cc-$(uuidgen)"` is evaluated by your shell at each
-launch, so each Claude Code you start this way is its own session: its
-listener, its cursor and its shell's `nebula` commands share one fresh
-session id (D2, round 5), and two terminals running the same command are
-two sessions, each with its own cursor label.
+`NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your shell at
+each launch (the time and the shell's own process id, POSIX tools only),
+so each Claude Code you start this way is its own session: its listener,
+its cursor and its shell's `nebula` commands share one fresh session id
+(D2, round 5), and two terminals running the same command are two
+sessions, each with its own cursor label. The command is for macOS, Linux
+and WSL shells; Windows shells (cmd, PowerShell) can't run the
+`NAME=value command` form.
 `--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
 same tools out of the session, so `nebula-listen` serves both the tools and the
 pushes. It has to: the listener learns which proposals and runs are Claude's,
@@ -1195,7 +1198,8 @@ server, and the old process's entry lives up to 45 s): it waits quietly,
 nothing shown on the canvas, and prints only "Nebula is waiting for this
 session’s previous listener to time out, then this one connects by
 itself." It asks again every 5 s, so once the other entry is gone (its
-goodbye, or 45 s after a crash) it registers. Still refused after 60 s, it prints the line above.
+goodbye, or 45 s after a crash) it registers, and reads any message you
+sent it meanwhile. Still refused after 60 s, it prints the line above.
 A beat Nebula refuses for its token, or never answers, is also tried again
 every 5 s.
 
@@ -1273,7 +1277,7 @@ or on a Team org with Channels off, still reads "listening".
 - **The session's own shell is the same agent** (J2, Justin 2026-11-04).
   The launch command `--channel` prints starts with
   `NEBULA_APP_TOKEN_FILE=<the token file's path>` (the path, never the
-  token) and `NEBULA_AGENT_SESSION="cc-$(uuidgen)"`, so the `nebula` CLI in
+  token) and `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"`, so the `nebula` CLI in
   Claude's own Bash reads the same token as the listener and speaks for
   the same session. The CLI reads tokens in the MCP server's order (D3,
   round 5): `NEBULA_AGENT_TOKEN`, else `NEBULA_APP_TOKEN_FILE` (unless a
@@ -1289,8 +1293,9 @@ or on a Team org with Channels off, still reads "listening".
   "points to a file that doesn’t exist", "points to something that isn’t
   a regular file", "points to a file too large to be a token", "points to
   a file that belongs to another user", "points to a file other users can
-  read", "points to a file Nebula can’t read", "points to a file that
-  doesn’t hold a token" or "points to a file Nebula can’t use". Set but
+  read", "points to a file Nebula can’t open" (a symlink, among others),
+  "points to a file Nebula can’t read", "points to a file that doesn’t
+  hold a token" or "points to a file Nebula can’t use". Set but
   empty: "NEBULA_APP_TOKEN_FILE is empty. Unset it, or point it at the
   token file that Settings › Connect your agent saved." So `nebula reply`,
   `nebula thread`, `nebula pin resolve` and `nebula channel` from that
@@ -1381,40 +1386,77 @@ reload and every tab show the same rows.
   because replies are paced at 5 in a row, then one every 2 s. You can
   reply again in 2 s, so put everything you have to say in one reply." A
   reply Nebula refuses for another reason never spends one. With no
-  project open: `409 no_project`, "Nebula couldn’t post this reply
-  because no project is open. Ask the person to open one, then reply
-  again." (GM r100). A reply row's `replyTo` is the latest message the
-  replying session's listener had taken, in any project. A shell with no
-  session of its own answers for its agent's one fresh listener (beat in
-  the last 25 s); with more than one fresh listener it doesn't guess:
-  `replyTo` is null and the answer carries a `note` (printed by `nebula
-  reply`): "Nebula posted this reply but couldn’t tell which message it
-  answers because 2 Claude Code sessions are listening and this terminal
-  isn’t one of them. Reply from the session the person messaged, or start
-  Claude Code with the launch command this prints, so its terminal shares
-  the session." with `nebula mcp connect claude-code --channel` on the
-  next line. The row carries the answered message's session, so the box
-  clears only that message's status and the ones before it, and the
-  cursor that flies is that listener's (GM r100.1).
-- **A reply goes to the thread of the message it answers** (GM r100.3).
-  When that message is in another project than the open one, the reply is
-  saved in that project's thread (unread there; its node, if any, is
-  dropped, since the open canvas doesn't hold it) and an Update is posted
-  on the open project: "Claude Code replied in “Coast”." (the agent's name,
-  the project's name), with an **Open** action (`thread.open`) that opens
-  that project and its Agent log. In the open project no Update is posted.
+  push to answer and no project open: `409 no_project`, "Nebula couldn’t
+  post this reply because no project is open. Open one with open_project,
+  then reply again." (GM r110). Open the project the person's message came
+  from (`list_projects` gives ids): `open_project` switches the person's
+  canvas, so never open an unrelated one just to post a reply.
+- **Which push a reply answers: the push ledger** (review 4). The listener
+  reports each push it makes (`POST /api/agent/thread/accepted` with
+  `messageIds` and `questionIds`, and its process's `nonce`). Nebula
+  records it for that listener's agent and session (memory only; a
+  message counts when it is that listener's and was sent or held, or a
+  re-send of one already accepted for that agent; a question set when that
+  agent asked it and the person answered it). A reply answers its
+  session's **oldest** open push (Claude Code queues pushes while Claude
+  works, so oldest first is the order Claude answers in), whose project
+  still exists and within the 10-minute cap of the listener's span:
+  `replyTo` is that push's newest message, else its first question set.
+  The push is marked answered once the reply is saved. A reply with no
+  open push to answer is a follow-up in the open project's thread
+  (`replyTo` null). A shell with no session of its own answers for its
+  agent's one fresh listener (beat in the last 35 s); with more than one
+  fresh listener it doesn't guess: `replyTo` is null and the answer
+  carries a `note` (printed by `nebula reply`): "Nebula posted this reply
+  but couldn’t tell which message it answers because 2 Claude Code
+  sessions are listening and this terminal isn’t one of them. Reply from
+  the Claude Code the person messaged. To stop this, start each Claude
+  Code with this command, which gives it its own session that its
+  terminals share." with `nebula mcp connect claude-code --channel` on the
+  next line (GM r108). The row carries the answering listener's session,
+  so the box clears only that message's status and the ones before it (a
+  question set's id clears none), and the cursor that flies is that
+  listener's (GM r100.1). Sessions are a convenience boundary inside one
+  token, not an auth boundary: any holder of the token can name any
+  session.
+- **A reply goes to the thread of the push it answers** (GM r100.3,
+  r112.2). When that push is in another project than the open one, the
+  reply is saved in that project's thread (unread there) and an Update is
+  posted on the open project: "Claude Code replied in “Coast”." (the
+  agent's name, the project's name; an unnamed project reads “Untitled”),
+  with an **Open** action (`thread.open`, with the project and the reply)
+  that opens that project, its Agent log, and focuses the reply. One
+  Update per agent and project while it is unread: a later reply updates
+  it in place (moved to the top, the latest time) and counts, "Claude
+  Code replied 3 times in “Coast”."; once read, the next starts a new
+  one. These count toward the agent's 6 Updates a minute; past that the
+  Update is left as it is (the reply is saved). Its `nodeId` is checked
+  only when the reply goes to the open canvas: for another project's
+  thread it is ignored, no cursor flies (GM r108 b), and the answer's
+  `note` says "Nebula posted this reply in “Coast” but didn’t point at n3
+  because that project isn’t the one open, so your cursor stayed where it
+  was." In the open project no Update is posted.
 - Under the channel, a deliberate wake (a message, an answer, a pin) is a
-  span owned by the listener session that got it (D1, round 5). It counts
-  that session's unanswered deliberate pushes and ends when each is
-  answered, or at the 10-minute cap from the latest push. One push is
-  answered by one of the session's own replies: through `reply_to_person`
-  in its own process, or by a `thread.replied` in its events whose
-  `replyTo` is one of the messages pushed to it (`nebula reply` from its
-  own shell). A pin's push ends only on this session's own `resolve_pin`,
-  or a `pin.resolved` for that pin from this agent and this session (`nebula
-  pin resolve` from its own shell; the events route keeps each
-  `pin.resolved`'s session beside the journal, never in the event). A
-  sibling session's reply or resolve under the same token never ends it.
+  span owned by the listener session that got it. The listener keeps one
+  group of ids per push and removes the one a reply names (`replyTo`),
+  through `reply_to_person` in its own process or a `thread.replied` in
+  its events (`nebula reply` from its own shell); the span ends when none
+  is left, or at the 10-minute cap from the latest push. Only the tool's
+  own result, never an event, answers a push Nebula never recorded (the
+  report failed, or Nebula restarted before the listener reported it
+  again). After Nebula restarts (a journal reset) the listener reports its
+  open pushes again; a listener that restarts in the same session gets
+  them from its first beat (`openPushes`). A pin's push ends only on this
+  session's own `resolve_pin`, a `pin.resolved` for that pin from this
+  agent and this session (`nebula pin resolve` from its own shell; the
+  events route keeps each `pin.resolved`'s session beside the journal,
+  never in the event), or the person deleting the pin. A sibling session's
+  reply or resolve under the same token never ends it.
+- The listener's inbox, accepted and held calls carry its process's
+  `nonce`: while another process holds the session's entry, they get `409
+  listener_session_taken`, as its beats do. A message is matched to its
+  listener by agent and session (kept on the row, never sent anywhere), so
+  one sent before Nebula restarted is still read after it.
 - The thread keeps at most 300 rows. Past that the oldest agent rows go
   first, then the person's settled rows; a message still `sent` or `held`
   is never trimmed. The person's tabs get each row in a `personThread` socket
