@@ -37,9 +37,12 @@ import { RemotionEditorToolbar } from '../src/components/video-editor/RemotionEd
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { normalizeCinemaScene } from '../src/lib/cinemaScene';
 import { useOfflineHiddenNotice } from '../src/hooks/useOfflineHiddenNotice';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import type { CinemaSceneSpec } from '../src/types';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const source = (file: string) => readFileSync(join(__dirname, '../src', file), 'utf8');
 const css = (file: string) => source(file).replace(/\/\*[\s\S]*?\*\//g, '');

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 24, on graphStore.fix22b's keyed backend:
@@ -29,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -372,7 +376,7 @@ describe('review 22 LOW-2: a stop put back with its scene keeps its reason and i
     h.codex('n1', [{ id: 's1', prompt: 'codex s1' }, { id: 's2', prompt: 'b' }]);
     await vi.waitFor(() => expect(clashOf('n1')).toBeTruthy(), { timeout: 3000, interval: 5 });
     useGraphStore.getState().deleteNode('n1');
-    await sleep(300);
+    await deleteLanded(useGraphStore);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(clashOf('n1')).toBeTruthy(), { timeout: 3000, interval: 5 });
     // The stop behind the prompt is the one it had, reason and all.
@@ -400,7 +404,7 @@ describe('review 22 LOW-2: a stop put back with its scene keeps its reason and i
     await vi.waitFor(() => expect(h.scenes.get('n1')!.refuse.length).toBe(0), { timeout: 3000, interval: 5 });
     await vi.waitFor(() => expect(stopped().n1).toBe(true), { timeout: 3000, interval: 5 });
     useGraphStore.getState().deleteNode('n1');
-    await sleep(300);
+    await deleteLanded(useGraphStore);
     store.setSceneTryTimeoutForTests(120);
     const release = holdNextPut('n1');
     useGraphStore.getState().undo();

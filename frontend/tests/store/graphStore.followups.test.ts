@@ -23,7 +23,10 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
-const { useGraphStore } = await import('../../src/store/graphStore');
+const { useGraphStore, resetDeletedSceneEditsForTests } = await import('../../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useCanvasProposalsStore } = await import('../../src/store/canvasProposalsStore');
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -64,12 +64,16 @@ vi.mock('../src/components/create-studio/CreateView', () => ({
 }));
 
 import App from '../src/App';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { usePricingStore } from '../src/store/pricingStore';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import { showNotice } from '../src/lib/canvasNotice';
+
+// App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 // The region and the proposal bar are lazy chunks: under a loaded machine
 // their import alone can take longer than findBy's 1 s default.

@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import * as api from '../src/lib/api';
 import { getBackendBaseUrl } from '../src/lib/backend';
 import { wsClient } from '../src/lib/wsClient';
 import { EXECUTION_RECONNECTING_NOTE, WORLD_LABS_RECONNECTING_NOTE, type RunRecord } from '../src/lib/runHistory';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 

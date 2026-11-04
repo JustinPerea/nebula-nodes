@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 round 25 (review 23 LOW-1, GM r38): Codex's change to the field
@@ -21,6 +22,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -454,7 +458,8 @@ describe('review 23 NIT-1: the retrying line’s paths the mutants found unteste
     await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING('“Opening”')]), { timeout: 3000, interval: 5 });
     useGraphStore.getState().deleteNode('n7');
     // The delete lands first (as review 23's R2a: Undo after it, not racing its request).
-    await vi.waitFor(() => expect(h.scenes.get('n7')!.deleted).toBe(true), { timeout: 2000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.scenes.get('n7')!.deleted).toBe(true);
     await sleep(100);
     expect(stopLines()).toEqual([]);
     const w = watch();
