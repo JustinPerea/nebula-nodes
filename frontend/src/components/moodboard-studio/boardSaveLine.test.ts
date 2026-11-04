@@ -3,7 +3,7 @@ import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine,
-  isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectRestoreFailedLine,
+  changedAfterRemoveLine, isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectGoneLine, projectRestoreFailedLine,
   projectRestoreFailure, projectRestoredLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
@@ -236,13 +236,59 @@ describe('a Restore\'s confirmation (round 6l, GM r20 A, r21 Q6)', () => {
   });
 });
 
-describe('a kept edit whose board\'s project was deleted (GM r21 Q8)', () => {
-  it('names the board, one line each', () => {
-    expect(projectDeletedLine('Rivers')).toEqual({ title: '“Rivers”',
-      text: 'Nebula couldn’t save your change to “Rivers” because its project was deleted. Restore the project to keep the change.' });
+describe('kept edits whose boards\' project was deleted (GM r21 Q8; round 6p, GM r90.2)', () => {
+  it('one line per project, naming the project and its boards: one, up to three, then a count; the title lists every name', () => {
+    expect(projectDeletedLine('Coast', ['Rivers'])).toEqual({ title: '“Rivers” in “Coast”',
+      text: 'Nebula couldn’t save your change to “Rivers” because its project “Coast” was deleted. Restore the project to keep the change.' });
+    expect(projectDeletedLine('Coast', ['Rivers', 'Tide'])).toEqual({ title: '“Rivers” and “Tide” in “Coast”',
+      text: 'Nebula couldn’t save your changes to “Rivers” and “Tide” because their project “Coast” was deleted. Restore the project to keep the changes.' });
+    expect(projectDeletedLine('Coast', ['Rivers', 'Tide', 'Harbor']).text).toBe(
+      'Nebula couldn’t save your changes to “Rivers”, “Tide” and “Harbor” because their project “Coast” was deleted. Restore the project to keep the changes.');
+    expect(projectDeletedLine('Coast', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({ title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”',
+      text: 'Nebula couldn’t save your changes to 4 moodboards because their project “Coast” was deleted. Restore the project to keep the changes.' });
+    expect(projectDeletedLine('Coast', ['a', 'b', 'c', 'd', 'e']).text).toContain('your changes to 5 moodboards because their project “Coast”');
     const long = 'An exceptionally long board name that keeps going well past forty';
-    expect(projectDeletedLine(long).text).toContain(`“${long.slice(0, 39)}…”`);
-    expect(projectDeletedLine(long).title).toBe(`“${long}”`);
+    expect(projectDeletedLine('Coast', [long]).text).toContain(`“${long.slice(0, 39)}…”`);
+    expect(projectDeletedLine('Coast', [long]).title).toBe(`“${long}” in “Coast”`);
+    expect(projectDeletedLine(long, ['Rivers']).text).toContain(`its project “${long.slice(0, 39)}…” was deleted`);
+  });
+
+  it('deleted for good somewhere else (GM r90.1): red, "couldn’t keep", one, up to three, then a count', () => {
+    expect(projectGoneLine('Coast', ['Rivers'])).toEqual({ title: '“Rivers” in “Coast”',
+      text: 'Nebula couldn’t keep your change to “Rivers” because its project “Coast” was deleted for good.' });
+    expect(projectGoneLine('Coast', ['Rivers', 'Tide'])).toEqual({ title: '“Rivers” and “Tide” in “Coast”',
+      text: 'Nebula couldn’t keep your changes to “Rivers” and “Tide” because their project “Coast” was deleted for good.' });
+    expect(projectGoneLine('Coast', ['Rivers', 'Tide', 'Harbor']).text).toBe(
+      'Nebula couldn’t keep your changes to “Rivers”, “Tide” and “Harbor” because their project “Coast” was deleted for good.');
+    expect(projectGoneLine('Coast', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({ title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”',
+      text: 'Nebula couldn’t keep your changes to 4 moodboards because their project “Coast” was deleted for good.' });
+  });
+});
+
+describe('a kept remove the board changed after (GM r90.5)', () => {
+  it('names the numbers by the names rule, then counts them; by the agent\'s own label', () => {
+    expect(changedAfterRemoveLine([], 'Claude')).toBe('');
+    expect(changedAfterRemoveLine([3], 'Claude')).toBe('Claude changed #3 after you removed it, so it’s still on the board.');
+    expect(changedAfterRemoveLine([3, 5], 'Claude')).toBe('Claude changed #3 and #5 after you removed them, so they’re still on the board.');
+    expect(changedAfterRemoveLine([3, 5, 7], 'Claude')).toBe('Claude changed #3, #5 and #7 after you removed them, so they’re still on the board.');
+    expect(changedAfterRemoveLine([1, 3, 5, 7], 'Claude')).toBe('Claude changed 4 images after you removed them, so they’re still on the board.');
+    // The agent's label, never a fixed "Claude".
+    expect(changedAfterRemoveLine([3], 'Codex')).toBe('Codex changed #3 after you removed it, so it’s still on the board.');
+    // Across boards, counted (a number names an image on one board only).
+    expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on the board.');
+    // No one known agent: the image is the subject.
+    expect(changedAfterRemoveLine([3], null)).toBe('#3 changed after you removed it, so it’s still on the board.');
+    expect(changedAfterRemoveLine([3, 5], ' ')).toBe('#3 and #5 changed after you removed them, so they’re still on the board.');
+    expect(changedAfterRemoveLine([1, 2, 3, 4], null)).toBe('4 images changed after you removed them, so they’re still on the board.');
+  });
+
+  it('follows the confirmation it joins', () => {
+    const stayed = changedAfterRemoveLine([3], 'Claude');
+    expect(projectRestoredLine('Coast', ['Rivers'], stayed).text)
+      .toBe('Restored “Coast”. Your change to “Rivers” is saved. Claude changed #3 after you removed it, so it’s still on the board.');
+    expect(projectRestoredLine('Coast', [], stayed).text).toBe('Restored “Coast”. Claude changed #3 after you removed it, so it’s still on the board.');
+    expect(restoredBoardsLine(['Rivers'], 1, stayed).text)
+      .toBe('Restored “Rivers”. Your change is saved. Claude changed #3 after you removed it, so it’s still on the board.');
   });
 });
 
@@ -253,6 +299,9 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
       text: 'Nebula couldn’t restore “Shore” because the server isn’t answering. Try again.' });
     expect(projectRestoreFailedLine('Shore', 'refused')).toEqual({ title: '“Shore”',
       text: 'Nebula couldn’t restore “Shore” because the server didn’t accept the request. Try again.' });
+    // Round 6p (GM r90.3): the connection dropped while it was out.
+    expect(projectRestoreFailedLine('Coast', 'lost')).toEqual({ title: '“Coast”',
+      text: 'Nebula couldn’t restore “Coast” because it lost the connection. Try again.' });
   });
 
   it('deleted for good: names the boards whose change can\'t be kept, one, up to three, then a count', () => {

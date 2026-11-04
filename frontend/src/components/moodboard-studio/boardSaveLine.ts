@@ -193,23 +193,85 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
  * - "Restored 4 boards. Your changes are saved."
  * - "Restored “Rivers”."
  */
-export function restoredBoardsLine(names: readonly string[], saved: number): { text: string; title: string } {
+export function restoredBoardsLine(names: readonly string[], saved: number, stayed = ''): { text: string; title: string } {
   const { what, title } = namedBoards(names);
-  // Each form spelled out whole.
+  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence (GM r90.5).
   const text = saved === 0 ? `Restored ${what}.`
     : saved === 1 ? `Restored ${what}. Your change is saved.`
       : `Restored ${what}. Your changes are saved.`;
-  return { text, title };
+  return { text: stayed ? `${text} ${stayed}` : text, title };
 }
 
 /**
- * The line for a kept edit whose board's project is in Recently deleted
- * (round 6l, GM r21 Q8): the board can't be reached until the project is
- * back. One line per board, neutral, with "Restore project".
+ * The line for kept edits whose boards' project is in Recently deleted
+ * (round 6l, GM r21 Q8; round 6p, GM r90.2): one line per project, naming
+ * the project and its boards by the names rule (one; up to three joined;
+ * then a count), neutral, with "Restore project". The title lists every
+ * board, then the project, with no colon (GM r74).
+ * - "Nebula couldn’t save your change to “Rivers” because its project
+ *   “Coast” was deleted. Restore the project to keep the change."
+ * - "Nebula couldn’t save your changes to “Rivers” and “Tide” because their
+ *   project “Coast” was deleted. Restore the project to keep the changes."
+ * - "…your changes to 4 moodboards because their project “Coast” was deleted…"
+ *   (the count says "moodboards", GM r90 addendum, matching PR #228)
  */
-export function projectDeletedLine(name: string): { text: string; title: string } {
-  const { what, title } = namedBoards([name]);
-  return { text: `Nebula couldn’t save your change to ${what} because its project was deleted. Restore the project to keep the change.`, title };
+export function projectDeletedLine(project: string, boards: readonly string[]): { text: string; title: string } {
+  const { what, title } = namedBoards([project]);
+  // The count form says "moodboards" (GM r90 addendum, matching PR #228).
+  const kept = namedBoards(boards.length ? boards : [''], 'moodboards');
+  // Each form spelled out whole.
+  const text = kept.one
+    ? `Nebula couldn’t save your change to ${kept.what} because its project ${what} was deleted. Restore the project to keep the change.`
+    : `Nebula couldn’t save your changes to ${kept.what} because their project ${what} was deleted. Restore the project to keep the changes.`;
+  return { text, title: `${kept.title} in ${title}` };
+}
+
+/**
+ * The red line for kept edits whose boards' project was deleted for good
+ * somewhere else (round 6p, GM r90.1): Project home's Delete forever or
+ * Empty, or the 30-day expiry, while no Restore project was out. Shown once
+ * wherever the project's line showed, with its × only; the kept edits are
+ * dropped once it has been seen. Titled as projectDeletedLine.
+ * - "Nebula couldn’t keep your change to “Rivers” because its project
+ *   “Coast” was deleted for good."
+ * - "Nebula couldn’t keep your changes to “Rivers” and “Tide” because their
+ *   project “Coast” was deleted for good."
+ * - "…your changes to 4 moodboards because their project “Coast” was deleted for good."
+ */
+export function projectGoneLine(project: string, boards: readonly string[]): { text: string; title: string } {
+  const { what, title } = namedBoards([project]);
+  // The count form says "moodboards" (GM r90 addendum, matching PR #228).
+  const lost = namedBoards(boards.length ? boards : [''], 'moodboards');
+  // Each form spelled out whole.
+  const text = lost.one ? `Nebula couldn’t keep your change to ${lost.what} because its project ${what} was deleted for good.`
+    : `Nebula couldn’t keep your changes to ${lost.what} because their project ${what} was deleted for good.`;
+  return { text, title: `${lost.title} in ${title}` };
+}
+
+/**
+ * The sentence a Restore's confirmation gains when a kept remove didn't
+ * replay because the image changed after it (round 6p, GM r90.5): the
+ * image stays on the board, and the line says who changed it, by the
+ * agent's own label (clipped as a board name is). Numbers follow the names
+ * rule ("#3", "#3 and #5"); from four, or across several boards, the count
+ * counts them all. With no single known changer, the image is the subject.
+ * - "Claude changed #3 after you removed it, so it’s still on the board."
+ * - "Claude changed #3 and #5 after you removed them, so they’re still on the board."
+ * - "Claude changed 4 images after you removed them, so they’re still on the board."
+ * - "#3 changed after you removed it, so it’s still on the board."
+ */
+export function changedAfterRemoveLine(numbers: readonly number[], by: string | null, counted = false): string {
+  if (!numbers.length) return '';
+  const one = numbers.length === 1 && !counted;
+  const what = one || (!counted && numbers.length <= MOST_NAMED) ? joinWithAnd(numbers.map((n) => `#${n}`)) : `${numbers.length} images`;
+  const who = by?.trim() ? clipGraphemes(by.trim(), KEPT_NAME_MAX) : '';
+  // Each form spelled out whole.
+  if (who) {
+    return one ? `${who} changed ${what} after you removed it, so it’s still on the board.`
+      : `${who} changed ${what} after you removed them, so they’re still on the board.`;
+  }
+  return one ? `${what} changed after you removed it, so it’s still on the board.`
+    : `${what} changed after you removed them, so they’re still on the board.`;
 }
 
 /**
@@ -224,23 +286,25 @@ export function projectDeletedLine(name: string): { text: string; title: string 
  * - "Restored “Coast”. Your changes to 4 boards are saved."
  * - "Restored “Coast”."
  */
-export function projectRestoredLine(project: string, saved: readonly string[]): { text: string; title: string } {
+export function projectRestoredLine(project: string, saved: readonly string[], stayed = ''): { text: string; title: string } {
   const { what, title } = namedBoards([project]);
-  if (!saved.length) return { text: `Restored ${what}.`, title };
+  const tail = stayed ? ` ${stayed}` : '';
+  if (!saved.length) return { text: `Restored ${what}.${tail}`, title };
   const kept = namedBoards(saved);
-  // Each form spelled out whole.
+  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence (GM r90.5):
+  // "Restored “Coast”. Your change to “Rivers” is saved. Claude changed #3 after you removed it, so it’s still on the board."
   const text = kept.one ? `Restored ${what}. Your change to ${kept.what} is saved.`
     : `Restored ${what}. Your changes to ${kept.what} are saved.`;
-  return { text, title: `${kept.title} in ${title}` };
+  return { text: `${text}${tail}`, title: `${kept.title} in ${title}` };
 }
 
 /** Why a Restore project failed (round 6m, GM r53 Q1): the server isn't answering, the project was deleted for good,
  *  or anything else. A project another tab restored first isn't a failure. */
-export type ProjectRestoreFailure = 'noAnswer' | 'purged' | 'refused';
+export type ProjectRestoreFailure = 'noAnswer' | 'lost' | 'purged' | 'refused';
 
 /** Which failure a Restore project's error is, from its kind and status, never its words (a 404 is decided by a
  *  look at the project list, so it isn't one of these). */
-export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFailure, 'purged'> {
+export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFailure, 'purged' | 'lost'> {
   return isBackendUnreachable(error) ? 'noAnswer' : 'refused';
 }
 
@@ -253,7 +317,10 @@ export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFai
  *   change to “Rivers” can’t be kept." (red, with ×; "Your changes to
  *   “Rivers” and “Harbor”" or "to 4 boards" for several);
  * - "Nebula couldn’t restore “Shore” because the server didn’t accept the
- *   request. Try again." (neutral, with Try again).
+ *   request. Try again." (neutral, with Try again);
+ * - "Nebula couldn’t restore “Coast” because it lost the connection. Try
+ *   again." (round 6p, GM r90.3: the connection dropped mid-request;
+ *   neutral, with Try again, which waits for the reconnect).
  * The purged line's title lists every board, then the project, with no colon
  * (GM r74): "“Rivers” and “Harbor” in “Shore”"; the other two name the project.
  */
@@ -263,6 +330,8 @@ export function projectRestoreFailedLine(project: string, failure: ProjectRestor
   // Each form spelled out whole.
   if (failure === 'noAnswer') return { text: `Nebula couldn’t restore ${what} because the server isn’t answering. Try again.`, title };
   if (failure === 'refused') return { text: `Nebula couldn’t restore ${what} because the server didn’t accept the request. Try again.`, title };
+  // Round 6p (GM r90.3): the connection dropped while the request was out (Nebula is offline once a probe answers).
+  if (failure === 'lost') return { text: `Nebula couldn’t restore ${what} because it lost the connection. Try again.`, title };
   const lost = namedBoards(boards.length ? boards : ['']);
   const text = lost.one ? `Nebula couldn’t restore ${what} because it was deleted for good. Your change to ${lost.what} can’t be kept.`
     : `Nebula couldn’t restore ${what} because it was deleted for good. Your changes to ${lost.what} can’t be kept.`;
@@ -286,9 +355,9 @@ export function lostTooLine(names: readonly string[]): { text: string; title: st
 }
 
 /** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name. */
-function namedBoards(names: readonly string[]): { one: boolean; what: string; title: string } {
+function namedBoards(names: readonly string[], noun = 'boards'): { one: boolean; what: string; title: string } {
   const shown = names.map((name) => name.trim() || 'Untitled');
-  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} boards`;
+  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} ${noun}`;
   return { one: shown.length === 1, what, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
 }
 

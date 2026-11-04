@@ -248,6 +248,8 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
  */
 const BASELINE_PATH = join(__dirname, 'straightApostrophes.baseline.json');
 const STRAIGHT_IN_WORD = /[A-Za-z]'[A-Za-z]/;
+/** A possessive or contraction right after an interpolation: `${name}'s` (review 11 NIT-2). */
+const STRAIGHT_AFTER_SLOT = /^'[a-z]/;
 
 /** The person copy in `text` that holds a straight apostrophe inside a word, as the literal's text. */
 function straightApostrophes(text: string): string[] {
@@ -268,6 +270,8 @@ function straightApostrophes(text: string): string[] {
     }
     if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)
       || ts.isTemplateMiddle(node) || ts.isTemplateTail(node) || ts.isJsxText(node)) && STRAIGHT_IN_WORD.test(node.text)) {
+      hits.push(node.text);
+    } else if ((ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) && STRAIGHT_AFTER_SLOT.test(node.text)) {
       hits.push(node.text);
     }
     ts.forEachChild(node, visit);
@@ -297,6 +301,10 @@ describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
     expect(straightApostrophes("const a = 'Nebula couldn\\'t restore it.';")).toHaveLength(1);
     expect(straightApostrophes('const a = `The board\'s ${name} is gone.`;')).toHaveLength(1);
     expect(straightApostrophes('const a = `${name} isn\'t answering.`;')).toHaveLength(1);
+    // Right after an interpolation (review 11 NIT-2): `${name}'s images`, and in the middle of a template.
+    expect(straightApostrophes('const a = `${name}\'s images`;')).toHaveLength(1);
+    expect(straightApostrophes('const a = `${a} and ${name}\'s ${b}`;')).toHaveLength(1);
+    expect(straightApostrophes('const a = `[data-id=\'${id}\']`;')).toHaveLength(0);
     expect(straightApostrophes("const a = <p>Deleted boards aren't kept.</p>;")).toHaveLength(1);
     expect(straightApostrophes('const a = <button aria-label="Don\'t save">x</button>;')).toHaveLength(1);
     // Curly is the house form.
@@ -359,6 +367,9 @@ function colonsInLabels(text: string): string[] {
     else if (ts.isShorthandPropertyAssignment(node) && COLON_NAMES.has(node.name.text)) value = node.name;
     else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'setAttribute'
       && node.arguments.length === 2 && ts.isStringLiteral(node.arguments[0]) && COLON_NAMES.has(node.arguments[0].text)) value = node.arguments[1];
+    // A DOM property set by assignment: `el.title = …`, `el.ariaLabel = …` (review 11 NIT-1).
+    else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && ts.isPropertyAccessExpression(node.left) && COLON_NAMES.has(node.left.name.text)) value = node.right;
     // A variable named title or aria-label is read even when it is passed on some other way.
     else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && COLON_NAMES.has(node.name.text) && node.initializer) value = node.initializer;
     if (value) values.push(value);
@@ -391,7 +402,26 @@ function colonsInLabels(text: string): string[] {
     // `line.title` is checked where its title is written, a function where it is called: neither is read here.
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isFunctionLike(node)) return;
     if (ts.isCallExpression(node)) {
-      node.arguments.forEach(read);
+      // A chained call reads the call it chains on (`names.map(…).join()`).
+      if (ts.isPropertyAccessExpression(node.expression) && ts.isCallExpression(node.expression.expression)) read(node.expression.expression);
+      // A callback passed inline is read too (review 11 NIT-1, live LOW-2: `names.map((name) => \`Board: ${name}\`)`):
+      // its expression body, or what its own returns give (a function nested inside it is its own).
+      node.arguments.forEach((argument) => {
+        if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) {
+          read(argument);
+          return;
+        }
+        if (!ts.isBlock(argument.body)) {
+          read(argument.body);
+          return;
+        }
+        const returns = (inner: ts.Node) => {
+          if (ts.isFunctionLike(inner)) return;
+          if (ts.isReturnStatement(inner) && inner.expression) read(inner.expression);
+          ts.forEachChild(inner, returns);
+        };
+        ts.forEachChild(argument.body, returns);
+      });
       return;
     }
     if (ts.isIdentifier(node)) {
@@ -438,6 +468,13 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
     expect(colonsInLabels("const line = { text: 'Note: this', title: 'Shown' };\nconst x = <p title={line.title} />;")).toEqual([]);
     // GM r74's form passes.
     expect(colonsInLabels('function f() { return { text, title: `${kept.title} in ${title}` }; }')).toEqual([]);
+    // Review 11 NIT-1: an inline callback inside a title value, and the DOM property forms.
+    expect(colonsInLabels('function f(names) { return { title: joinWithAnd(names.map((name) => `Board: “${name}”`)) }; }')).toEqual(['Board: “']);
+    expect(colonsInLabels('const t = { title: names.map(function (name) { return `${name}: x`; }).join() };')).toEqual([': x']);
+    expect(colonsInLabels("const t = { title: names.map((name) => { const f = () => 'a: b'; return name; }) };")).toEqual([]);
+    expect(colonsInLabels("el.title = 'x: y';")).toEqual(['x: y']);
+    expect(colonsInLabels('el.ariaLabel = `${a}: b`;')).toEqual([': b']);
+    expect(colonsInLabels("el.textContent = 'x: y';")).toEqual([]);
   });
 
   it('only the reviewed ones (a new colon fails), and none stale', () => {

@@ -79,6 +79,8 @@ export interface RecentlyDeletedAssetsProps {
   /** Change it to list again (after a delete in the Studio). */
   refreshKey?: unknown;
   onRestored?: (item: TrashedItem) => void;
+  /** A Restore in this list was pressed, before its request goes (a Studio leaves that board to it: PR #210 round 6p). */
+  onRestoring?: (item: TrashedItem) => void;
   /** Something came into or left this list (often an agent's delete or
    * restore elsewhere), so the library above it should list again. */
   onTrashChanged?: () => void;
@@ -96,7 +98,7 @@ export interface RecentlyDeletedAssetsProps {
 
 export interface TrashOpenRequest { n: number; focus?: readonly string[]; keyboard?: boolean }
 
-export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged, openRequest, defaultOpen = false, atStake,
+export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onRestoring, onTrashChanged, openRequest, defaultOpen = false, atStake,
   onPurged }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
   // Which tab and project `items` came from.
@@ -231,7 +233,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                 <span className="asset-trash__actions">
                   <button type="button" className="asset-trash__button" disabled={busy} data-restore-id={item.id}
                     aria-label={`Restore ${item.name || 'Untitled'}`}
-                    onClick={() => void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item))}>
+                    onClick={() => { onRestoring?.(item); void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item)); }}>
                     <RotateCcw aria-hidden="true" />Restore
                   </button>
                   {(() => {

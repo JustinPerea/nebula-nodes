@@ -2,6 +2,7 @@ import { emptyAssetStudioEntry, useAssetStudioDraftStore, type AssetStudioDraftE
   type StudioFailure, type StudioRetry } from '../../store/assetStudioDraftStore';
 import { BOARD_FIELD_KEYS, sameValue, type MoodboardOp } from '../../lib/moodboardEdits';
 import { isOpShape, keepWaitingWhile } from './boardAdds';
+import { currentProject } from '../../lib/currentProject';
 
 /**
  * An unsaved board's draft, kept in this tab's session storage so a reload
@@ -205,9 +206,18 @@ export interface KeptEdit {
   ops: MoodboardOp[];
   /** Each op's KeptOpMeta, by index (null: not known, as for a record from before round 6l). */
   opMeta?: Array<KeptOpMeta | null>;
+  /** The board's project, by its id and name as this tab last saw it (round 6p, GM r90.1): a project deleted for good
+   *  is in neither project list, so its red line names it from here. Set when the edit is kept (the open project) and
+   *  again by each look-up that finds the project listed (noteKeptProject). */
+  project?: { id: string; name: string };
+  /** Who changed an image after this tab kept the edit, by image id (an agent's own name), as the board's change
+   *  events said while the tab listened (noteKeptChange; round 6p, GM r90.5). Set on a taken edit only. */
+  changedBy?: Record<string, string>;
   at: number;
 }
 const EDITS_KEY = 'nebula:moodboard-kept-edits';
+/** noteKeptChange's record, by board id, then image id (kept apart from the edits: a held edit is rebuilt from its draft). */
+const CHANGES_KEY = 'nebula:moodboard-kept-changes';
 
 /**
  * When a queued op was made and what it changed from (round 6l, review 10
@@ -221,6 +231,14 @@ const EDITS_KEY = 'nebula:moodboard-kept-edits';
  * version.
  */
 export interface KeptOpMeta { at: number; from?: unknown; version?: number }
+
+/** What a kept remove compares (round 6p, GM r90.5): each image's state when it was removed, so a replay can tell
+ *  whether the board changed it since (its weight, set-aside, notes, private note, or a card's spot). */
+export function imageState(image: ImageLike): Record<string, unknown> {
+  return { weight: image.weight ?? null, excluded: Boolean(image.excluded), notes: typeof image.notes === 'string' ? image.notes : '',
+    privateNote: typeof image.privateNote === 'string' ? image.privateNote : '',
+    cards: (image.placements ?? []).map((card) => ({ id: card.id ?? null, x: card.x ?? null, y: card.y ?? null })) };
+}
 const opMeta = new WeakMap<MoodboardOp, KeptOpMeta>();
 
 /** The meta of `op`, a queued op this page saw made (or a kept one a load put back). */
@@ -302,6 +320,15 @@ function stampNewOps(entries: Record<string, AssetStudioDraftEntry>): void {
         opMeta.set(op, typeof draft.version === 'number' ? { at, version: draft.version } : { at });
         return;
       }
+      // A remove records the state of each image it took (GM r90.5: one the board changed after it stays).
+      if (op.op === 'remove') {
+        const states = Object.fromEntries(op.images.flatMap((id) => {
+          const image = before?.images?.find((it) => it.id === id);
+          return image ? [[id, imageState(image)]] : [];
+        }));
+        opMeta.set(op, Object.keys(states).length ? { at, from: states } : { at });
+        return;
+      }
       const target = opTarget(op);
       if (!target) { opMeta.set(op, { at }); return; }
       const earlier = firstFrom(queued.slice(0, index), target) ?? firstFrom(replaced, target);
@@ -339,8 +366,11 @@ export function keptEditOf(key: string, entry: AssetStudioDraftEntry | undefined
   if (!ops.length && !Object.keys(fields).length) return null;
   const nameOf = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
   const name = nameOf(base.name) || nameOf(draft.name);
+  // A project board is edited with its project open: its name, for a red line if the project is ever deleted for good.
+  const open = currentProject();
+  const project = typeof draft.projectId === 'string' && open?.id === draft.projectId ? { id: open.id, name: open.name } : null;
   return { board: entry.savedId, ...(name ? { name } : {}), fields, base: from, fieldEditedAt: entry.fieldEditedAt, ops,
-    opMeta: ops.map((op) => opMeta.get(op) ?? null), at: Date.now() };
+    opMeta: ops.map((op) => opMeta.get(op) ?? null), ...(project ? { project } : {}), at: Date.now() };
 }
 
 function readEdits(): KeptEdit[] {
@@ -353,6 +383,7 @@ function readEdits(): KeptEdit[] {
       && (it.fieldEditedAt === undefined || (isRecord(it.fieldEditedAt) && Object.values(it.fieldEditedAt).every((at) => typeof at === 'number')))
       && Array.isArray(it.ops) && it.ops.every(isOpShape)
       && (it.opMeta === undefined || (Array.isArray(it.opMeta) && it.opMeta.length === it.ops.length && it.opMeta.every(isOpMeta)))
+      && (it.project === undefined || (isRecord(it.project) && typeof it.project.id === 'string' && typeof it.project.name === 'string'))
       // No age limit (round 6l, GM r21): a kept edit lives as long as its board, or its project, can be restored.
       && typeof it.at === 'number');
   } catch { return []; }
@@ -428,15 +459,75 @@ export function dropKeptEdit(board: string): void {
   const list = readEdits();
   const left = list.filter((it) => it.board !== board);
   if (left.length !== list.length) writeEdits(left);
+  forgetChanges(board);
 }
 
-/** The kept edit an earlier page load of this tab left for `board`, taken once (null if none, or if this page holds the board's edit itself). */
+/** The kept edit an earlier page load of this tab left for `board`, taken once (null if none, or if this page holds the board's edit itself),
+ *  with who changed its images since (noteKeptChange). */
 export function takeKeptEdit(board: string): KeptEdit | null {
   if ([...writtenEdits.values()].some((it) => it.board === board)) return null;
   const list = readEdits();
   const found = list.find((it) => it.board === board) ?? null;
-  if (found) writeEdits(list.filter((it) => it !== found));
-  return found;
+  if (!found) return null;
+  writeEdits(list.filter((it) => it !== found));
+  const changedBy = readChanges()[board];
+  forgetChanges(board);
+  return changedBy ? { ...found, changedBy } : found;
+}
+
+/** Remember the project a waiting kept edit's board is in, by the name the project lists show now (round 6p, GM r90.1). */
+export function noteKeptProject(board: string, project: { id: string; name: string }): void {
+  const list = readEdits();
+  let changed = false;
+  const next = list.map((it) => {
+    if (it.board !== board || (it.project?.id === project.id && it.project.name === project.name)) return it;
+    changed = true;
+    return { ...it, project: { id: project.id, name: project.name } };
+  });
+  if (changed) writeEdits(next);
+}
+
+function readChanges(): Record<string, Record<string, string>> {
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(CHANGES_KEY) ?? '{}') as unknown;
+    if (!isRecord(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, Record<string, string>] =>
+      isRecord(entry[1]) && Object.values(entry[1]).every((name) => typeof name === 'string')));
+  } catch { return {}; }
+}
+
+function writeChanges(changes: Record<string, Record<string, string>>): void {
+  try {
+    if (Object.keys(changes).length) window.sessionStorage.setItem(CHANGES_KEY, JSON.stringify(changes));
+    else window.sessionStorage.removeItem(CHANGES_KEY);
+  } catch { /* nothing kept: the line then names the image, not who changed it */ }
+}
+
+function forgetChanges(board: string): void {
+  const changes = readChanges();
+  if (!(board in changes)) return;
+  delete changes[board];
+  writeChanges(changes);
+}
+
+/**
+ * An agent changed `images` on `board`, which holds a kept edit in this tab (round 6p, GM r90.5): remembered by its
+ * own name, so a kept remove the change keeps from replaying says who changed the image. A later change by someone
+ * else (the person, another client) forgets the name: the line then names only the image.
+ */
+export function noteKeptChange(board: string, images: readonly string[], by: string | null): void {
+  const boards = keptEditBoards();
+  if (!images.length || !boards.has(board)) return;
+  // A board whose kept edit went (saved, taken or dropped) forgets its record here too.
+  const changes = Object.fromEntries(Object.entries(readChanges()).filter(([id]) => boards.has(id)));
+  const mine = { ...(changes[board] ?? {}) };
+  for (const image of images) {
+    if (by) mine[image] = by;
+    else delete mine[image];
+  }
+  if (Object.keys(mine).length) changes[board] = mine;
+  else delete changes[board];
+  writeChanges(changes);
 }
 
 /**
