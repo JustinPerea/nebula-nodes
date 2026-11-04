@@ -12,7 +12,7 @@ import {
   listenerDroppedLine,
   messageStatus,
   oneLine,
-  runMessage,
+  runOrigin,
   statusLeadsRun,
   stoppedListeningLine,
   waitingLine,
@@ -94,12 +94,12 @@ describe('r61 A: the run', () => {
   const entry = (id: string, ts: number) => ({ id, ts });
 
   it('the run is the latest message with no reply', () => {
-    expect(runMessage([message()])?.id).toBe('m1');
-    expect(runMessage([message(), reply(2_000)])).toBeNull();
-    expect(runMessage([message(), reply(2_000), message({ id: 'm2', at: 3_000 })])?.id).toBe('m2');
+    expect(runOrigin([message()], [])?.id).toBe('m1');
+    expect(runOrigin([message(), reply(2_000)], [])).toBeNull();
+    expect(runOrigin([message(), reply(2_000), message({ id: 'm2', at: 3_000 })], [])?.id).toBe('m2');
     // A later reference row doesn't end the run.
-    expect(runMessage([message(), { id: 'p', kind: 'proposal', at: 2_000, agent: CLAUDE }])?.id).toBe('m1');
-    expect(runMessage([])).toBeNull();
+    expect(runOrigin([message(), { id: 'p', kind: 'proposal', at: 2_000, agent: CLAUDE }], [])?.id).toBe('m1');
+    expect(runOrigin([], [])).toBeNull();
   });
 
   it('only working and waiting lead the fold', () => {
@@ -112,14 +112,15 @@ describe('r61 A: the run', () => {
 
   it('the trailing actions become the run’s fold, keeping their id; none: a status item at the end', () => {
     const run = message();
+    const origin = runOrigin([run], [])!;
     const items = foldActions([run], [entry('e1', 1_500), entry('e2', 1_600)]);
-    const marked = withRun(items, run);
+    const marked = withRun(items, origin);
     expect(marked.map((item) => item.kind)).toEqual(['row', 'run']);
     expect(marked[1]).toMatchObject({ kind: 'run', id: 'actions-e1', entries: [{ id: 'e1' }, { id: 'e2' }] });
     // The reply lands: the same id, now a plain fold above it.
     const after = foldActions([run, reply(2_000)], [entry('e1', 1_500), entry('e2', 1_600)]);
     expect(after.map((item) => (item.kind === 'row' ? item.row.id : item.kind === 'answer' ? item.answer.id : item.id))).toEqual(['m1', 'actions-e1', 'r2000']);
-    expect(withRun(foldActions([run], []), run)).toEqual([{ kind: 'row', row: run }, { kind: 'run', id: 'run-m1', message: run, entries: [] }]);
+    expect(withRun(foldActions([run], []), origin)).toEqual([{ kind: 'row', row: run }, { kind: 'run', id: 'run-m1', origin, entries: [] }]);
     expect(withRun(items, null)).toEqual(items);
   });
 });

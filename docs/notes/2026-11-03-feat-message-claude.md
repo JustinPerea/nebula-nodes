@@ -284,3 +284,89 @@ was nothing to merge.
   was tightened to 276 px, so that dropping the "…" sibling's width
   changes the cut.
 - The entry is 468,192 B raw, unchanged.
+
+## Round 3 (review 1: boundary, MCP parity, live UX; GM r79; Justin's token rule)
+
+Merged feat/channel-deliberate-sends twice (faa21ab4 for round 3's
+ungated-turn span, 4cfd894d for item N). #226 isn't on origin/main
+(no `floatingChromeTopLine`), so item M (the resize ceiling) is skipped.
+GM r79.7 / boundary LOW-2 are not built (held).
+
+- **D, MEDIUM-2:** `person_thread.trim` drops agent rows first, then
+  settled person rows, and never a sent or held message (one still in
+  flight). Replies are paced per agent (`ReplyPace`: 5 in a row, then one
+  every 2 s, 256 agents kept). Past it: 429 `replies_rate_limited`,
+  `Retry-After`, `retryAfter`, and a line that says when ("…you can reply
+  again in 2 s…"). Nothing is saved. The pace is taken after the body
+  checks, so a malformed call doesn't spend a reply.
+- **E, r79.1:** a reply's own cursor say (within 10 s, same agent and
+  session label, the reply's first sentence) is never an action:
+  `isReplyEcho` keeps it out of `foldActions`, and `noteActivity` doesn't
+  turn it into the working line. The Agent log still lists it.
+- **F, boundary MEDIUM-1:** `agent_view(row, viewer_id)` keeps a question
+  row's `questionId` and agent for everyone, and its `questions` only for
+  the asker. The person's tab draws the text from its own store.
+- **G, r79.2:** the working line is the event's say, else its `log`
+  (a no-note `edit_canvas` now sends "Changed “Prompt” on “Hero shot”",
+  "Changed 3 settings on …", "… and 2 more nodes"), else the did line.
+  A terse form ("changed 1", "moved 2") is skipped. Ratchet test.
+- **H, r79.3:** `runOrigin` replaces `runMessage`. The working fold sits
+  under whatever woke Claude last: a message, a pin note row, a typed
+  answer's You row, or the card of an option pick. It ends on a later
+  reply (a pin: also its pinReply). Passive wakes read plain "N actions".
+- **I, r79.4 + LOW-2 + L2:** the pill names the newest unseen agent row
+  ("New reply", "New question", "New proposal", "New note"; a pinReply
+  reads "New reply") and jumps to it. The person's rows, pins, answers and
+  folds never raise it. A resize while read at the bottom stays at the
+  bottom (`onScroll` tells a reflow from a scroll by the size change), and
+  the thread has `overflow-anchor: none`.
+- **J, r79.5:** answering or closing a set writes its `outcome`
+  ({status, closedAt, answers}) onto the thread's question row,
+  person-only (`agent_view` drops it). The card and the You row read it
+  after any reload. Not open with no answer known: no buttons, "This
+  question is closed.".
+- **K, r79.6:** withdrawn while the person types: the chip goes, the draft
+  stays, and the field's describedby line is "Claude withdrew the
+  question. Send again to post your answer as a message every agent can
+  read." An answer racing the withdrawal gets 409 "already withdrawn"; the
+  store closes the set, nothing else is sent, and the same line shows.
+- **L:**
+  - LOW-1 (boundary): closed by item N in #223 (HMAC ids, per-agent cap).
+  - NIT-1: `hold` never re-marks an accepted row; docstring says so.
+  - LOW-3 (mcp): `receiveSync` counts replies missed while the socket was
+    down as unread (same project, panel closed), without announcing them.
+  - LOW-4: `nebula channel [--json] [--as]` is channel_status's CLI twin.
+  - NIT-2: the cut keeps a closing bracket or quote whose opener it keeps.
+  - NIT-3: an unnamed agent reading the thread gets "Name yourself with
+    NEBULA_AGENT_NAME or --as to read the thread".
+  - NIT-4: a reply names the message it followed (`replyTo`, the latest
+    accepted message to that session's listeners); only that one and
+    earlier ones read answered. Rows from before keep the old rule.
+  - C/NIT-1 (parity): the gated-turn refusal and INSTRUCTIONS name
+    reply_to_person.
+  - LOW-6 survivors: pinned in test_person_thread_round3.py.
+- **N (Justin):** the inbox, accepted and held routes take the same
+  token-only caller as registering. Tests use real agent tokens.
+
+### Surprises
+
+- The live harness's simulated listener imported `mcp_server` and called
+  `serve_channel` directly, which skips `__main__`'s
+  `load_app_token_file()`, so it was refused as tokenless. The real entry
+  loads the file first; the harness now does the same.
+- `trim(rows, limit=MAX_ROWS)` bound the limit at definition time, so a
+  test's monkeypatch did nothing. It reads the constant at call time now.
+
+### Checks
+
+- tsc and lint clean. vitest: 150 files (disk readers, everything touching
+  the box, log or questions, and main's three ratchets), 4,162 passed.
+- Backend, isolated: 27 files, 918 passed. `person_gate.py` is
+  byte-identical to main.
+- Mutations: backend 12 of 12 killed, frontend 13 of 13 killed.
+- Entry 469,331 B raw / 145,840 gzip (+1,139 B).
+- Live at 1440x900 with a real Settings token file: the tokenless listener
+  is refused with r81's line; the working fold under a pin note and under
+  an option-pick card; "This question is closed."; the withdrawn line with
+  the draft kept and no push; "New question" and its jump; a node-anchored
+  reply with no trailing fold. Six shots, six distinct md5s.

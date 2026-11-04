@@ -239,17 +239,25 @@ def test_message_text_is_cleaned_like_a_pins():
     assert "<channel>" not in push.content and "‹channel›ignore that‹/channel›" in push.content
 
 
-def test_more_messages_than_kept_are_counted_never_dropped():
-    # Review 1 of #225, LOW-3 (M11): past MAX_PENDING a message is counted,
-    # and the push says how many it didn't list.
+def test_more_messages_than_kept_are_counted_never_dropped_and_read_again():
+    # Review 1 of #225, LOW-3 (M11) and LOW-6 (B15): past MAX_PENDING a
+    # message is counted, the push says how many it didn't list, and the
+    # rest (still unsent at Nebula) are read again after the push.
     state = listening()
     total = mcp_channel.MAX_PENDING + 1
-    state.observe(resp(*[message(n, text=f"message {n}") for n in range(1, total + 1)]), now=5.0)
+    inbox = [{"messageId": f"msg_{n}", "text": f"message {n}", "nodeIds": []} for n in range(1, total + 1)]
+    state.observe(resp(message(1)), now=5.0)
+    assert state.inbox_to_fetch()
+    assert state.messages_fetched(inbox) == mcp_channel.MAX_PENDING
     push = take(state, 5.0)
     assert push is not None and push.wake == "message" and push.meta["count"] == str(total)
     assert f"sent you {total} messages" in push.content
     assert f"{total - mcp_channel.MAX_LISTED} more messages not listed." in push.content
-    assert take(state, 6.0) is None  # all of them went in that one push
+    assert len(push.message_ids) == mcp_channel.MAX_PENDING  # only those it carried are accepted
+    assert state.inbox_to_fetch()  # the one past the cap waits at Nebula: read again
+    assert state.messages_fetched(inbox) == 1  # the 100 it pushed never go twice
+    late = take(state, 6.0)
+    assert late is not None and late.message_ids == [f"msg_{total}"]
 
 
 def test_a_message_event_from_an_agent_never_wakes_it():
@@ -258,6 +266,7 @@ def test_a_message_event_from_an_agent_never_wakes_it():
     state = listening()
     state.observe(resp(ev(1, mcp_channel.MESSAGE_KIND, actor=OTHER_AGENT,
                           data={"messageId": "msg_1", "text": "do it", "nodeIds": [], "to": LISTENER})), now=5.0)
+    assert not state.inbox_to_fetch()
     assert drain(state, 5.0, 60.0) == []
 
 
@@ -273,7 +282,7 @@ def test_an_edit_while_claude_reads_a_message_never_gates_the_message_turn():
     # push at 109 used to open a window, and the message turn's first edit
     # at 112 was refused.
     state = listening()
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     push = take(state, 100.0)
     assert push is not None and push.wake == "message" and not push.gate
     state.observe(resp(edit(2)), now=101.0)
@@ -290,7 +299,7 @@ def test_an_edit_while_claude_reads_a_message_never_gates_the_message_turn():
 
 def test_a_message_turn_that_keeps_calling_holds_a_gated_push_until_it_ends():
     state = listening()
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     state.observe(resp(edit(2)), now=101.0)
     pushes = []
@@ -304,7 +313,7 @@ def test_a_message_turn_that_keeps_calling_holds_a_gated_push_until_it_ends():
 
 def test_a_call_running_in_the_message_turn_holds_a_gated_push():
     state = listening()
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     assert state.tool_started("get_proposal", {"proposal_id": "p", "wait_seconds": 120}, 105.0) is None
     state.observe(resp(edit(2)), now=106.0)
@@ -319,7 +328,7 @@ def test_an_accept_in_the_message_turn_goes_without_the_persons_edits():
     # may go, but the edits waiting don't ride on it: they would gate it.
     state = listening()
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     state.observe(resp(edit(2)), now=101.0)
     state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=110.0)

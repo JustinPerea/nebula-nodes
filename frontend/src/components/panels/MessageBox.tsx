@@ -30,8 +30,8 @@ import {
   COPIED_LINE,
   COPY_COMMAND,
   COPY_LABEL,
-  NEW_REPLY_PILL,
   NOT_CONNECTED_LINE,
+  QUESTION_CLOSED_LINE,
   SENDING_LINE,
   SERVER_FAILED_LINE,
   actionsLabel,
@@ -47,15 +47,20 @@ import {
   foldActions,
   listenerDroppedLine,
   messageStatus,
+  nextOriginChange,
   nextStatusChange,
   oneLine,
+  originStatus,
+  pillFor,
   repliedAfter,
-  runMessage,
+  runOrigin,
   statusLeadsRun,
   stoppedListeningLine,
   unreadLabel,
   withRun,
+  withdrawnLine,
   type AnswerRow,
+  type RunOrigin,
   type Availability,
   type StatusLine,
 } from '../../lib/personThreadBox';
@@ -259,10 +264,11 @@ function useMessageStatus(row: ThreadRow | null, rows: readonly ThreadRow[]): St
   return messageStatus(row, now, { replied, activity, label: agentLabel(row.to?.agent, row.to?.session) });
 }
 
-function StatusView({ status, row }: { status: StatusLine; row: ThreadRow }) {
+function StatusView({ status, row, origin }: { status: StatusLine; row?: ThreadRow; origin?: RunOrigin }) {
   if (!status) return null;
+  const style = origin ? shade(origin.agent ?? undefined, origin.session) : shade(row?.to?.agent, row?.to?.session);
   return (
-    <div className={`message-box__status message-box__status--${status.kind}`} style={shade(row.to?.agent, row.to?.session)}>
+    <div className={`message-box__status message-box__status--${status.kind}`} style={style}>
       {(status.kind === 'waiting' || status.kind === 'working') && <span className="message-box__breath" aria-hidden="true" />}
       <span>{status.text}</span>
     </div>
@@ -271,6 +277,28 @@ function StatusView({ status, row }: { status: StatusLine; row: ThreadRow }) {
 
 function MessageStatus({ row, rows }: { row: ThreadRow; rows: readonly ThreadRow[] }) {
   return <StatusView status={useMessageStatus(row, rows)} row={row} />;
+}
+
+/** GM r79.3: the working line of a run a pin or an answer started (a
+ * message's is useMessageStatus's). Only working: Nebula never sees whether
+ * a pin or an answer was taken, so there is no "Waiting". */
+function useOriginStatus(origin: RunOrigin | null): { status: StatusLine; who: RunOrigin | null } {
+  const activity = usePersonThreadStore((s) => s.activity);
+  const listeners = usePersonThreadStore((s) => s.listeners);
+  const [until, setUntil] = useState<number | null>(null);
+  const now = useNow(until);
+  const live = origin && origin.kind !== 'message' ? origin : null;
+  const next = live ? nextOriginChange(live, now, activity) : null;
+  if (next !== until) setUntil(next);
+  if (!live) return { status: null, who: null };
+  // A pin reaches every listener: the line names (and is shaded as) the session that acted.
+  let who = live;
+  if (!live.agent) {
+    const acted = listeners.filter((entry) => entry.sessionKey && (activity[entry.sessionKey]?.at ?? 0) >= live.at)
+      .sort((a, b) => (activity[b.sessionKey ?? '']?.at ?? 0) - (activity[a.sessionKey ?? '']?.at ?? 0))[0];
+    if (acted) who = { ...live, agent: acted.agent, session: acted.session };
+  }
+  return { status: originStatus(live, now, activity, who.agent ? agentLabel(who.agent, who.session) : undefined), who };
 }
 
 function ShowButton({ onShow, label = 'Show', disabled = false }: { onShow: () => void; label?: string; disabled?: boolean }) {
@@ -290,10 +318,16 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   const answeringHere = usePersonThreadStore((s) => Boolean(row.questionId && s.answering?.setId === row.questionId));
   const questions = entry?.view.questions ?? row.questions ?? [];
   const open = entry?.view.status === 'open' && Boolean(entry.answerKey);
+  // GM r79.5: the set this tab holds, else the outcome kept with the row, so
+  // "You chose …" survives any reload.
+  const closed = entry && entry.view.status !== 'open' ? entry.view : row.outcome;
   // r61 answer 4: once answered, the row drops its buttons for a quiet line.
-  const answered = entry?.view.status === 'answered' ? answeredLine(entry.view.answers ?? []) : null;
+  const answered = closed?.status === 'answered' ? answeredLine(closed.answers ?? []) : null;
   // GM r70: typed words on one line, cut inside their curly quotes.
-  const typed = entry?.view.status === 'answered' ? answeredQuote(entry.view.answers ?? []) : null;
+  const typed = closed?.status === 'answered' ? answeredQuote(closed.answers ?? []) : null;
+  // GM r79.5: not open and no answer known (withdrawn, dismissed, or an
+  // outcome Nebula no longer has): no buttons, the neutral line.
+  const shut = !open && !answered;
   // One single-choice question: a click is the answer (r50's mock). Anything
   // more keeps its picks until Send, as the Agents panel's form does.
   const oneClick = questions.length === 1 && !questions[0].multiple && questions[0].options.length > 0;
@@ -312,11 +346,11 @@ function QuestionRow({ row }: { row: ThreadRow }) {
     <div className="message-box__card" style={shade(row.agent, row.session)}>
       <div className="message-box__who"><span className="message-box__dot" aria-hidden="true" />{agentLabel(row.agent, row.session)} asks</div>
       {questions.map((question) => {
-        const picked = open ? drafts?.[question.id]?.choices ?? [] : entry?.view.answers?.find((a) => a.questionId === question.id)?.choices ?? [];
+        const picked = open ? drafts?.[question.id]?.choices ?? [] : closed?.answers?.find((a) => a.questionId === question.id)?.choices ?? [];
         return (
           <div key={question.id} className="message-box__question" role="group" aria-label={question.text}>
             <p className="message-box__text">{question.text}</p>
-            {!answered && question.options.length > 0 && (
+            {!answered && !shut && question.options.length > 0 && (
               <div className="message-box__options">
                 {question.options.map((option) => (
                   <button key={option} type="button" className="message-box__option"
@@ -333,6 +367,7 @@ function QuestionRow({ row }: { row: ThreadRow }) {
       {answered && (typed
         ? <TypedAnswerLine before={typed.before} words={typed.words} after={typed.after} />
         : <p className="message-box__answered">{answered}</p>)}
+      {shut && <p className="message-box__answered">{QUESTION_CLOSED_LINE}</p>}
       {open && fromComposer && (
         <button type="button" className="message-box__show" aria-pressed={answeringHere}
           onClick={() => usePersonThreadStore.getState().answer({ setId, questionId: questions[0].id, question: questions[0].text })}>
@@ -446,20 +481,21 @@ function RowView({ row, rows, nodeName, inRun }: {
  * which opens to that run's actions; when the reply lands it settles to
  * "› 1 action" above the reply, keeping its place and whether it was open.
  */
-function ActionsFold({ entries, status, row }: { entries: AgentLogEntry[]; status?: StatusLine; row?: ThreadRow }) {
+function ActionsFold({ entries, status, origin }: { entries: AgentLogEntry[]; status?: StatusLine; origin?: RunOrigin }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const lead = status && statusLeadsRun(status) ? status : null;
   if (entries.length === 0) {
     // The run's status with nothing to fold yet: the last row on its own.
-    return lead && row ? <StatusView status={lead} row={row} /> : null;
+    return lead && origin ? <StatusView status={lead} origin={origin} /> : null;
   }
   return (
     <div className="message-box__actions">
       {/* GM r70: the same bordered chip working and settled; only its words
           and the breathing dot change, so settling never moves the row. */}
       <button type="button" className="message-box__fold"
-        aria-expanded={open} aria-controls={listId} style={lead && row ? shade(row.to?.agent, row.to?.session) : undefined}
+        aria-expanded={open} aria-controls={listId}
+        style={lead && origin ? shade(origin.agent ?? undefined, origin.session) : undefined}
         onClick={() => setOpen((value) => !value)}>
         <ChevronRight className="message-box__fold-icon" size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         {lead && <span className="message-box__breath" aria-hidden="true" />}
@@ -501,42 +537,54 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   const [atBottom, setAtBottom] = useState(true);
   // The same, for the resize observer below (it reads it outside render).
   const pinned = useRef(true);
-  const [pill, setPill] = useState(false);
+  const [pill, setPill] = useState<{ id: string; label: string } | null>(null);
+  // The size at the last scroll event: a scroll the reflow caused (a narrower
+  // window rewraps the rows) never unpins a thread read at the bottom (live-ux L2).
+  const size = useRef({ height: 0, client: 0 });
   const answers = useAnswerRows(rows);
+  const sets = useAgentQuestionsStore((s) => s.sets);
   // Rows here when the panel opened just are; later ones enter on the spring.
   const [firstIds] = useState(() => new Set([...rows.map((row) => row.id), ...answers.map((answer) => answer.id)]));
   // The tab's own send shows as its pending row until it settles.
   const shownRows = useMemo(() => rows.filter((row) => !(pending && row.clientId === pending.clientId)), [rows, pending]);
-  const run = useMemo(() => runMessage(shownRows), [shownRows]);
-  const runStatus = useMessageStatus(run, shownRows);
-  // r61 A: while the run's session works on the message (or it waits on it),
-  // its status leads the run's fold at the end, so the newest thing is last.
+  // GM r79.3: every deliberate wake (a message, a pin, an answer) gets the working fold.
+  const run = useMemo(() => runOrigin(shownRows, answers, sets), [shownRows, answers, sets]);
+  const messageStatusLine = useMessageStatus(run?.kind === 'message' ? run.row : null, shownRows);
+  const other = useOriginStatus(run);
+  const runStatus = run?.kind === 'message' ? messageStatusLine : other.status;
+  const runWho = run?.kind === 'message' ? run : other.who;
+  // r61 A: while the run's session works on it (or, for a message, it waits
+  // on it), its status leads the run's fold at the end, so the newest thing is last.
   const leads = statusLeadsRun(runStatus);
   const items = useMemo(() => {
     const folded = foldActions(shownRows, entries.filter((entry) => entry.source === 'agent'), answers);
-    return withRun(folded, leads ? run : null);
-  }, [shownRows, entries, run, leads, answers]);
+    return withRun(folded, leads ? runWho : null);
+  }, [shownRows, entries, runWho, leads, answers]);
   const lastRow = shownRows[shownRows.length - 1];
   const lastAnswer = answers[answers.length - 1];
-  // The person's own answer last: it scrolls into view like a row, but is never "New reply".
   const answerIsLast = Boolean(lastAnswer && (!lastRow || lastAnswer.at >= lastRow.at));
   const lastId = answerIsLast ? lastAnswer.id : lastRow?.id ?? '';
-  // r50: a new row while the person reads further up shows "New reply" instead of scrolling.
-  const [seenLastId, setSeenLastId] = useState(lastId);
-  if (seenLastId !== lastId) {
-    setSeenLastId(lastId);
-    if (!atBottom && lastId && !answerIsLast) setPill(true);
+  // GM r79.4: the pill only for agent rows addressed to the person (replies,
+  // questions, proposals, Updates notes), naming the newest unseen; never
+  // the person's own rows, their answers or a fold.
+  const newest = useMemo(() => [...shownRows].reverse().find((row) => pillFor(row) !== null) ?? null, [shownRows]);
+  const [seenNewest, setSeenNewest] = useState(newest?.id ?? '');
+  if (seenNewest !== (newest?.id ?? '')) {
+    setSeenNewest(newest?.id ?? '');
+    if (!atBottom && newest) setPill({ id: newest.id, label: pillFor(newest) ?? '' });
   }
 
   useLayoutEffect(() => {
     const element = scroller.current;
     if (element) element.scrollTop = element.scrollHeight;
+    if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, []);
 
   // r50: new rows scroll into view only when the thread is already at the bottom.
   useLayoutEffect(() => {
     const element = scroller.current;
     if (element && atBottom) element.scrollTop = element.scrollHeight;
+    if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, [lastId, pending, atBottom]);
 
   // A row that grows (its state line, an opened "3 actions") or a thread that
@@ -547,6 +595,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
     if (!element || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(() => {
       if (pinned.current) element.scrollTop = element.scrollHeight;
+      size.current = { height: element.scrollHeight, client: element.clientHeight };
     });
     observer.observe(element);
     if (list.current) observer.observe(list.current);
@@ -556,20 +605,32 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   function onScroll() {
     const element = scroller.current;
     if (!element) return;
+    const resized = size.current.height > 0
+      && (element.scrollHeight !== size.current.height || element.clientHeight !== size.current.client);
+    size.current = { height: element.scrollHeight, client: element.clientHeight };
+    if (pinned.current && resized) {
+      // The reflow moved it, not the person: keep it at the bottom.
+      element.scrollTop = element.scrollHeight;
+      return;
+    }
     const bottom = element.scrollHeight - element.scrollTop - element.clientHeight <= AT_BOTTOM_PX;
     pinned.current = bottom;
     setAtBottom(bottom);
-    if (bottom) setPill(false);
+    if (bottom) setPill(null);
   }
 
-  function jumpDown() {
+  // GM r79.4: the pill jumps to the row it names.
+  function jumpTo(id: string) {
     const element = scroller.current;
     if (!element) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-    element.scrollTo({ top: element.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
-    pinned.current = true;
-    setAtBottom(true);
-    setPill(false);
+    const target = element.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`);
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+    } else {
+      element.scrollTo({ top: element.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+    }
+    setPill(null);
   }
 
   return (
@@ -578,14 +639,16 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
         <ol ref={list} className="message-box__rows" aria-label="Messages with Claude">
           {items.map((item) => (
             <li key={item.kind === 'row' ? item.row.id : item.kind === 'answer' ? item.answer.id : item.id}
+              data-row-id={item.kind === 'row' ? item.row.id : undefined}
               className={(item.kind === 'row' && !firstIds.has(item.row.id)) || (item.kind === 'answer' && !firstIds.has(item.answer.id))
                 ? 'message-box__item message-box__row--enter' : 'message-box__item'}>
               {item.kind === 'row'
-                ? <RowView row={item.row} rows={shownRows} nodeName={nodeName} inRun={leads && item.row.id === run?.id} />
+                ? <RowView row={item.row} rows={shownRows} nodeName={nodeName}
+                  inRun={leads && run?.kind === 'message' && item.row.id === run.id} />
                 : item.kind === 'answer'
                   ? <AnswerRowView answer={item.answer} />
                   : item.kind === 'run'
-                    ? <ActionsFold entries={item.entries} status={runStatus} row={item.message} />
+                    ? <ActionsFold entries={item.entries} status={runStatus} origin={item.origin} />
                     : <ActionsFold entries={item.entries} />}
             </li>
           ))}
@@ -593,7 +656,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
         </ol>
       </ScrollFade>
       {pill && (
-        <button type="button" className="message-box__pill" onClick={jumpDown}>{NEW_REPLY_PILL}</button>
+        <button type="button" className="message-box__pill" onClick={() => jumpTo(pill.id)}>{pill.label}</button>
       )}
     </div>
   );
@@ -708,10 +771,15 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   const failure = usePersonThreadStore((s) => s.failure);
   const listeners = usePersonThreadStore((s) => s.listeners);
   const answering = usePersonThreadStore((s) => s.answering);
+  const withdrawn = usePersonThreadStore((s) => s.withdrawn);
   // The question still open here (answered elsewhere, the chip goes).
   const answerOpen = useAgentQuestionsStore((s) => {
     const entry = answering ? s.sets[answering.setId] : undefined;
     return Boolean(entry && entry.view.status === 'open' && entry.answerKey);
+  });
+  const answerWithdrawn = useAgentQuestionsStore((s) => {
+    const entry = answering ? s.sets[answering.setId] : undefined;
+    return !entry || entry.view.status === 'withdrawn';
   });
   const answerBusy = useAgentQuestionsStore((s) => Boolean(answering && s.busy[answering.setId]));
   const state = useAvailability();
@@ -733,10 +801,18 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     else if (counterLine(draft.length, max) === null && announced) setAnnounced('');
   }
 
-  // Answered here or in the Agents panel, or closed: the chip goes, the draft stays.
+  // Answered here or in the Agents panel, or closed: the chip goes, the draft
+  // stays. GM r79.6: withdrawn while the person typed (or as their answer
+  // went), the composer says so; the next send posts the words as a message.
   useEffect(() => {
-    if (answering && !answerOpen) usePersonThreadStore.getState().stopAnswering();
-  }, [answering, answerOpen]);
+    if (!answering || answerOpen) return;
+    const store = usePersonThreadStore.getState();
+    const asked = store.rows.find((row) => row.kind === 'question' && row.questionId === answering.setId);
+    store.stopAnswering();
+    if (answerWithdrawn && store.draft.trim()) {
+      usePersonThreadStore.setState({ withdrawn: agentLabel(asked?.agent, asked?.session) });
+    }
+  }, [answering, answerOpen, answerWithdrawn]);
 
   // "Answer" on a question row brings the person here (r61 answer 4).
   const answeringId = answeringNow?.questionId ?? null;
@@ -762,7 +838,9 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     : failure.kind === 'server' ? SERVER_FAILED_LINE
       : failure.kind === 'stopped' ? listenerDroppedLine(listenerLabel(listeners, failure.to))
         : failure.line ?? SERVER_FAILED_LINE;
-  const lineText = lockLine ?? failureText;
+  // GM r79.6: neutral, until the words go or the draft is cleared.
+  const withdrawnText = !answeringNow && withdrawn && draft.trim() ? withdrawnLine(withdrawn) : null;
+  const lineText = lockLine ?? failureText ?? withdrawnText;
   // Offline: the app's own row says it (the house pattern), no line here.
   const described = [state.kind === 'offline' ? OFFLINE_LINE_ID : lineText ? lineId : null, counter ? counterId : null]
     .filter(Boolean).join(' ') || undefined;
@@ -801,6 +879,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
       return;
     }
     if (state.kind !== 'ready') return;
+    usePersonThreadStore.setState({ withdrawn: null });
     void sendMessage(state.recipient.listenerId);
   }
 

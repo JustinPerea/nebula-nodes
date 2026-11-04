@@ -14,7 +14,8 @@
  * Claude · 2"). With one session the label is "Claude".
  */
 import { quotedNames } from './errorCopy';
-import { MESSAGE_MAX, type ChannelListener, type SessionActivity, type ThreadRow } from './personThread';
+import { cursorLabel } from './agentCursorLabel';
+import { MESSAGE_MAX, type ChannelListener, type SessionActivity, type ThreadAgent, type ThreadRow } from './personThread';
 
 /** "N left" shows from here (the composer's counter, PromptDialog's form). */
 export const MESSAGE_COUNTER_FROM = 200;
@@ -34,6 +35,16 @@ export const SERVER_FAILED_LINE = 'Nebula couldn’t send your message because t
 export const COPY_LABEL = 'Copy command';
 export const COPIED_LINE = 'Copied the command';
 export const NEW_REPLY_PILL = 'New reply';
+/** GM r79.4: the pill names the newest unseen agent row addressed to the person. */
+export const NEW_ROW_PILLS = {
+  reply: 'New reply',
+  pinReply: 'New reply',
+  question: 'New question',
+  proposal: 'New proposal',
+  note: 'New note',
+} as const satisfies Partial<Record<ThreadRow['kind'], string>>;
+/** GM r79.5: a question whose outcome Nebula no longer knows. */
+export const QUESTION_CLOSED_LINE = 'This question is closed.';
 /** r61 answer 4: a question with no options is answered from the composer. */
 export const ANSWER_LABEL = 'Answer';
 export const ANSWERING_PREFIX = 'Answering';
@@ -56,6 +67,16 @@ export function stoppedListeningLine(label: string = DEFAULT_SESSION_LABEL): str
 
 export function listenerDroppedLine(label: string = DEFAULT_SESSION_LABEL): string {
   return `Nebula couldn’t send your message because ${label} stopped listening. Reconnect it in the terminal, then send it again.`;
+}
+
+/** GM r79.6: the question was withdrawn while the person typed its answer. */
+export function withdrawnLine(label: string = DEFAULT_SESSION_LABEL): string {
+  return `${label} withdrew the question. Send again to post your answer as a message every agent can read.`;
+}
+
+/** The pill's words for a row, or null for one that never raises it (the person's own, a fold). */
+export function pillFor(row: ThreadRow): string | null {
+  return (NEW_ROW_PILLS as Partial<Record<ThreadRow['kind'], string>>)[row.kind] ?? null;
 }
 
 /** The one-session forms (r50's words, unchanged with one session). */
@@ -204,8 +225,26 @@ export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** What a cut drops before its ellipsis: a trailing comma, space or other punctuation. */
-const CUT_TAIL = /[\s\p{P}]+$/u;
+/** Closing brackets and quotes with their openers. */
+const PAIRS: Record<string, string> = { ')': '(', ']': '[', '}': '{', '”': '“', '’': '‘', '»': '«' };
+
+function count(text: string, ch: string): number {
+  return text.split(ch).length - 1;
+}
+
+/** What a cut drops before its ellipsis: a trailing comma, space or other
+ * punctuation, but never a closing bracket or quote whose opener is in the
+ * words (review 1, NIT-2: “Use (see n4)…”, not “Use (see n4…”). */
+function cutTail(words: string): string {
+  let out = words;
+  for (;;) {
+    const last = out.slice(-1);
+    if (!last || !/[\s\p{P}]/u.test(last)) return out;
+    const opener = PAIRS[last];
+    if (opener && count(out, opener) >= count(out, last)) return out;
+    out = out.slice(0, -1);
+  }
+}
 
 /**
  * GM r73: THE word-boundary cut, shared by the "Answering “…”" chip and
@@ -223,7 +262,7 @@ export function cutAtWord(text: string, fits: (candidate: string) => boolean): s
   if (whole === '' || fits(whole)) return whole;
   const candidates: string[] = [];
   for (const match of whole.matchAll(/\s/g)) {
-    const words = whole.slice(0, match.index).replace(CUT_TAIL, '');
+    const words = cutTail(whole.slice(0, match.index));
     if (words && words !== candidates[candidates.length - 1]) candidates.push(words);
   }
   // One long word: as it is (the CSS cut takes it).
@@ -276,7 +315,8 @@ export function answerRows(rows: readonly ThreadRow[], sets: Readonly<Record<str
   for (const row of rows) {
     if (row.kind !== 'question' || !row.questionId || seen.has(row.questionId)) continue;
     seen.add(row.questionId);
-    const view = sets[row.questionId]?.view;
+    // The set this tab holds, else the outcome kept with the row (GM r79.5: any reload).
+    const view = sets[row.questionId]?.view ?? row.outcome;
     if (!view || view.status !== 'answered' || !view.answers || typeof view.closedAt !== 'number') continue;
     if (view.answers.some((answer) => answer.choices.length > 0)) continue;
     const typed = view.answers.map((answer) => (answer.text ?? '').trim()).filter(Boolean);
@@ -300,21 +340,42 @@ export function counterAnnouncement(lengthBefore: number, length: number, max: n
   return `${left} ${left === 1 ? 'character' : 'characters'} left`;
 }
 
-/** Whether a reply from this message's agent (and session, when both name one) came after it. */
+/** Whether a reply from this message's agent (and session, when both name one) came after it.
+ * A reply that names the message it followed (`replyTo`, review 1 NIT-4)
+ * clears that message and the ones before it, never a later one in flight. */
 export function repliedAfter(row: ThreadRow, rows: readonly ThreadRow[]): boolean {
   if (row.kind !== 'message' || !row.to) return false;
   const to = row.to;
-  return rows.some((other) => other.kind === 'reply' && other.at >= row.at && other.agent?.id === to.agent.id
-    && (!to.sessionKey || !other.sessionKey || other.sessionKey === to.sessionKey));
+  return rows.some((other) => {
+    if (other.kind !== 'reply' || other.at < row.at || other.agent?.id !== to.agent.id) return false;
+    if (to.sessionKey && other.sessionKey && other.sessionKey !== to.sessionKey) return false;
+    if (other.replyTo === undefined) return true;
+    if (other.replyTo === null) return false;
+    const followed = rows.find((one) => one.id === other.replyTo);
+    return other.replyTo === row.id || (followed !== undefined && row.at < followed.at);
+  });
 }
 
-/** The message whose run is going on: the latest one with no reply yet (r61 A). */
-export function runMessage(rows: readonly ThreadRow[]): ThreadRow | null {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    const row = rows[index];
-    if (row.kind === 'message') return repliedAfter(row, rows) ? null : row;
-  }
-  return null;
+/** The reply's first sentence, as its cursor says it (person_thread.first_sentence). */
+export function firstSentence(text: string, limit = 140): string {
+  let line = (text.split(/\r?\n/)[0] ?? '').split(/\s+/).filter(Boolean).join(' ');
+  const end = line.search(/[.!?](?: |$)/);
+  if (end >= 0) line = line.slice(0, end + 1);
+  return line.length > limit ? `${line.slice(0, limit - 1).trimEnd()}…` : line;
+}
+
+/** How long after a reply its cursor's say may come. */
+const ECHO_MS = 10_000;
+
+/** GM r79.1: a session's "Replied on …" say matching its own reply row is no
+ * action: never folded or counted (the Agent log's own list still has it). */
+export function isReplyEcho(entry: { ts: number; message?: string; agent?: { id: string; name: string } },
+  rows: readonly ThreadRow[]): boolean {
+  if (!entry.agent || !entry.message) return false;
+  const agent = entry.agent;
+  return rows.some((row) => row.kind === 'reply' && row.nodeId && row.agent?.id === agent.id
+    && cursorLabel(row.agent.name, row.session ?? null) === agent.name
+    && entry.ts >= row.at && entry.ts - row.at <= ECHO_MS && firstSentence(row.text ?? '') === entry.message);
 }
 
 /** The thread with the Agent log's actions folded between its rows (r50: "3 actions"),
@@ -324,9 +385,9 @@ export type ThreadItem<E> =
   | { kind: 'answer'; answer: AnswerRow }
   | { kind: 'actions'; id: string; entries: E[] };
 
-export function foldActions<E extends { id: string; ts: number }>(rows: readonly ThreadRow[], entries: readonly E[],
-  answers: readonly AnswerRow[] = []): ThreadItem<E>[] {
-  const sorted = [...entries].sort((a, b) => a.ts - b.ts);
+export function foldActions<E extends { id: string; ts: number; message?: string; agent?: { id: string; name: string } }>(
+  rows: readonly ThreadRow[], entries: readonly E[], answers: readonly AnswerRow[] = []): ThreadItem<E>[] {
+  const sorted = entries.filter((entry) => !isReplyEcho(entry, rows)).sort((a, b) => a.ts - b.ts);
   const items: ThreadItem<E>[] = [];
   let next = 0;
   let nextAnswer = 0;
@@ -354,6 +415,79 @@ export function foldActions<E extends { id: string; ts: number }>(rows: readonly
 }
 
 /**
+ * GM r79.3: what woke Claude on purpose, whose run gets the working fold
+ * under it: a message, a pin note row, a typed answer's You row, or the
+ * question card for an option pick. Passive wakes (edits, finished runs)
+ * have none: their actions fold as plain "N actions". `agent` (and
+ * `sessionKey`) is the session whose work and reply it waits on; a pin
+ * reaches every listener, so any session's (null).
+ */
+export interface RunOrigin {
+  id: string;
+  kind: 'message' | 'pin' | 'answer' | 'question';
+  at: number;
+  row: ThreadRow | null;
+  agent: ThreadAgent | null;
+  session: ThreadRow['session'];
+  sessionKey: string | null;
+}
+
+/** The latest deliberate wake still waiting on its reply, or null. */
+export function runOrigin(rows: readonly ThreadRow[], answers: readonly AnswerRow[],
+  sets: Readonly<Record<string, AnsweredSetLike | undefined>> = {}): RunOrigin | null {
+  let best: RunOrigin | null = null;
+  const consider = (origin: RunOrigin) => { if (!best || origin.at >= best.at) best = origin; };
+  const questionRow = (id: string) => rows.find((row) => row.kind === 'question' && row.questionId === id) ?? null;
+  for (const row of rows) {
+    if (row.kind === 'message') {
+      consider({ id: row.id, kind: 'message', at: row.at, row, agent: row.to?.agent ?? null,
+        session: row.to?.session ?? null, sessionKey: row.to?.sessionKey ?? null });
+    } else if (row.kind === 'pin') {
+      consider({ id: row.id, kind: 'pin', at: row.at, row, agent: null, session: null, sessionKey: null });
+    } else if (row.kind === 'question' && row.questionId) {
+      const view = sets[row.questionId]?.view ?? row.outcome;
+      if (view?.status === 'answered' && typeof view.closedAt === 'number'
+        && (view.answers ?? []).some((answer) => answer.choices.length > 0)) {
+        consider({ id: row.id, kind: 'question', at: Math.max(view.closedAt, row.at), row, agent: row.agent ?? null,
+          session: row.session ?? null, sessionKey: row.sessionKey ?? null });
+      }
+    }
+  }
+  for (const answer of answers) {
+    const asked = answer.questionId ? questionRow(answer.questionId) : null;
+    consider({ id: answer.id, kind: 'answer', at: answer.at, row: asked, agent: asked?.agent ?? null,
+      session: asked?.session ?? null, sessionKey: asked?.sessionKey ?? null });
+  }
+  const origin = best as RunOrigin | null;
+  if (!origin) return null;
+  if (origin.kind === 'message') return origin.row && repliedAfter(origin.row, rows) ? null : origin;
+  // Answered: a reply (or, for a pin, its reply on the pin) from that session after it.
+  const answered = rows.some((row) => row.at >= origin.at
+    && (row.kind === 'reply' || (origin.kind === 'pin' && row.kind === 'pinReply' && row.pinId === origin.row?.pinId))
+    && (!origin.agent || (row.agent?.id === origin.agent.id
+      && (!origin.sessionKey || !row.sessionKey || row.sessionKey === origin.sessionKey))));
+  return answered ? null : origin;
+}
+
+/** The working line for a run that isn't a message's (a pin, an answer):
+ * only what Nebula saw, an event from that session (any, for a pin) since. */
+export function originStatus(origin: RunOrigin, now: number, activity: Readonly<Record<string, SessionActivity>>,
+  label?: string): StatusLine {
+  const events = origin.sessionKey ? [activity[origin.sessionKey]] : Object.values(activity);
+  const event = events.filter((one): one is SessionActivity => Boolean(one) && one.at >= origin.at)
+    .sort((a, b) => b.at - a.at)[0];
+  return event && now - event.at < WORKING_SETTLE_MS ? { kind: 'working', text: workingLine(label, event.line) } : null;
+}
+
+/** When originStatus may next change by itself. */
+export function nextOriginChange(origin: RunOrigin, now: number, activity: Readonly<Record<string, SessionActivity>>): number | null {
+  const events = origin.sessionKey ? [activity[origin.sessionKey]] : Object.values(activity);
+  const ends = events.filter((one): one is SessionActivity => Boolean(one) && one.at >= origin.at)
+    .map((one) => one.at + WORKING_SETTLE_MS).filter((t) => t > now);
+  return ends.length ? Math.min(...ends) : null;
+}
+
+/**
  * r61 A: the thread's items with the run's fold marked. While the latest
  * message waits on its session (or the session works on it), the actions
  * after the last row are that run's, and the status row is their fold's
@@ -361,13 +495,13 @@ export function foldActions<E extends { id: string; ts: number }>(rows: readonly
  * fold keeps its id when the reply lands, so it stays open or shut as the
  * person left it, then reads "1 action" above the reply.
  */
-export type RunItem<E> = ThreadItem<E> | { kind: 'run'; id: string; message: ThreadRow; entries: E[] };
+export type RunItem<E> = ThreadItem<E> | { kind: 'run'; id: string; origin: RunOrigin; entries: E[] };
 
-export function withRun<E extends { id: string; ts: number }>(items: readonly ThreadItem<E>[], run: ThreadRow | null): RunItem<E>[] {
+export function withRun<E extends { id: string; ts: number }>(items: readonly ThreadItem<E>[], run: RunOrigin | null): RunItem<E>[] {
   if (!run) return [...items];
   const last = items[items.length - 1];
   if (last && last.kind === 'actions' && last.entries.every((entry) => entry.ts >= run.at)) {
-    return [...items.slice(0, -1), { kind: 'run', id: last.id, message: run, entries: last.entries }];
+    return [...items.slice(0, -1), { kind: 'run', id: last.id, origin: run, entries: last.entries }];
   }
-  return [...items, { kind: 'run', id: `run-${run.id}`, message: run, entries: [] }];
+  return [...items, { kind: 'run', id: `run-${run.id}`, origin: run, entries: [] }];
 }

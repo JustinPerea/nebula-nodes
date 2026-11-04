@@ -865,6 +865,7 @@ nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 nebula reply "Done. Warmed the palette on the hero shot." --node n4   # answer in the Message box
 nebula thread                  # the Message box thread: the person's messages and agents' replies
+nebula channel                 # your channel listeners as Nebula sees them (MCP channel_status)
 ```
 
 **The Message box.** The person can message a Claude Code session that
@@ -874,7 +875,11 @@ arrives as a channel push with `wake="message"`. Answer it with `nebula
 reply "<text>"` (MCP `reply_to_person`), not only in your terminal: the
 person reads the thread, not your terminal. `--node` flies your cursor to
 the node the answer is about and shows its first sentence there. `nebula
-thread` reads the thread; every connected agent can read it, as pins.
+thread` reads the thread; every connected agent can read it, as pins (a
+question's text only its asker). Replies are paced: 5 in a row, then one
+every 2 s; past that Nebula refuses and says when you can reply again, so
+put everything in one reply. `nebula channel` says whether Nebula counts
+your session as listening.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

@@ -72,6 +72,8 @@ interface PersonThreadState {
   pending: PendingSend | null;
   failure: SendFailureState | null;
   answering: AnsweringState | null;
+  /** GM r79.6: the asker's label when it withdrew the question being answered (the composer's line). */
+  withdrawn: string | null;
   removeContext: () => void;
   choose: (listenerId: string | null) => void;
   markRead: () => void;
@@ -97,6 +99,7 @@ function initial() {
     pending: null as PendingSend | null,
     failure: null as SendFailureState | null,
     answering: null as AnsweringState | null,
+    withdrawn: null as string | null,
   };
 }
 
@@ -111,7 +114,7 @@ export const usePersonThreadStore = create<PersonThreadState>((set) => ({
 
   clearFailure: () => set({ failure: null }),
 
-  answer: (target) => set({ answering: target }),
+  answer: (target) => set({ answering: target, withdrawn: null }),
 
   stopAnswering: () => set({ answering: null }),
 
@@ -151,12 +154,34 @@ export function receiveRows(projectId: string | null, incoming: ThreadRow[]): vo
 
 export function receiveSync(projectId: string | null, rows: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
+  const same = projectId === state.projectId;
+  // A reply that landed while the socket was down (review 1, LOW-3) counts as
+  // unread with the panel closed; a burst after a reconnect isn't spoken.
+  const known = new Set(state.rows.map((row) => row.id));
+  const missed = same && state.rows.length > 0 && !useUIStore.getState().agentLogOpen
+    ? rows.filter((row) => row.kind === 'reply' && !known.has(row.id)).length : 0;
   usePersonThreadStore.setState({
     projectId,
     rows,
     // Another project's thread: nothing of the old one is unread.
-    unread: projectId === state.projectId ? state.unread : 0,
+    unread: same ? state.unread + missed : 0,
   });
+}
+
+/** Bubble forms that never reach the thread (GM r79.2): "changed 1", "moved 2", "no change"... */
+const TERSE = /\b(?:added|connected|changed|renamed|moved|removed|disconnected) \d|\bmade \d+ ready\b|^\d+ placeholders?\b|^no change$/;
+
+/** An event's words for the working line (GM r79.2): its say, else its log,
+ * else its did line as the Agent log words it ("Changed “Hero shot”"); never
+ * a terse summary. */
+export function activityLine(event: AgentPresenceEvent): string | null {
+  for (const raw of [event.say, event.log]) {
+    const line = typeof raw === 'string' ? raw.trim() : '';
+    if (line && !TERSE.test(line)) return line;
+  }
+  const did = event.did;
+  if (!did?.verb) return null;
+  return did.label ? `${did.verb} “${did.label}”` : did.verb;
 }
 
 /** One event from an agent session: the "working" line reads it. */
@@ -164,8 +189,13 @@ export function noteActivity(event: AgentPresenceEvent): void {
   const key = sessionKeyOf(event.session);
   if (!key) return;
   const at = Number.isFinite(event.at) && event.at > 0 ? event.at : now();
-  const said = (typeof event.log === 'string' ? event.log.trim() : '') || (typeof event.say === 'string' ? event.say.trim() : '');
-  const previous = usePersonThreadStore.getState().activity[key];
+  const state = usePersonThreadStore.getState();
+  // GM r79.1: a reply's own cursor say ("Replied on …") is not an action.
+  const say = typeof event.say === 'string' ? event.say.replace(/…$/, '').trim() : '';
+  if (event.did?.verb?.startsWith('Replied') && say && state.rows.some((row) => row.kind === 'reply'
+    && row.sessionKey === key && (row.text ?? '').startsWith(say))) return;
+  const said = activityLine(event);
+  const previous = state.activity[key];
   if (previous && previous.at > at) return;
   usePersonThreadStore.setState((state) => ({
     activity: { ...state.activity, [key]: { at, line: said || previous?.line || null } },

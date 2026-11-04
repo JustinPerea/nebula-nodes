@@ -323,6 +323,11 @@ class NebulaClient:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("GET", "/api/canvas/thread", params={"limit": limit}, headers=headers)
 
+    def get_channel(self, agent_name: str | None = None) -> dict[str, Any]:
+        """Your channel listeners as Nebula sees them (MCP channel_status)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("GET", "/api/canvas/channel", headers=headers)
+
     def get_agents(self) -> dict[str, Any]:
         """The roster: the agents around in the open project (MCP list_agents)."""
         return self._request("GET", "/api/canvas/agents")

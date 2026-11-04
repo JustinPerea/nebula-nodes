@@ -9,7 +9,7 @@ import {
   type QuestionSetStatus,
   type QuestionSetView,
 } from '../lib/agentQuestions';
-import { failureMessage } from '../lib/errorCopy';
+import { RequestFailedError, failureMessage } from '../lib/errorCopy';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -204,6 +204,15 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       try {
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
+        // The set closed first (withdrawn, or answered in another tab): it is
+        // closed here too, and nothing went out (GM r79.6's race). The
+        // composer then says what happened; the row shows its outcome.
+        const already = error instanceof RequestFailedError && error.status === 409
+          ? /already (answered|dismissed|withdrawn)/.exec(String(error.detail ?? '')) : null;
+        if (already) {
+          get().closed(setId, already[1] as Exclude<QuestionSetStatus, 'open'>, null);
+          return false;
+        }
         set((state) => ({
           busy: without(state.busy, setId),
           errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't send the answers.") },

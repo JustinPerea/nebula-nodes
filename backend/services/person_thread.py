@@ -9,7 +9,11 @@ writes; a Claude Code session listening through the Nebula channel
 ``agentNotes`` and outside ``snapshot`` (the browser's autosave never drops
 it), so a reload and every tab show the same rows.
 
-Rows, oldest first, at most ``MAX_ROWS`` (the oldest go first):
+Rows, oldest first, at most ``MAX_ROWS``. Past it the oldest agent rows
+go first, then the person's settled rows (an accepted message, a pin); a
+message of theirs still ``sent`` or ``held`` is never trimmed, so an agent
+replying in a loop can't push it out before its listener takes it (review
+1 of #225, MEDIUM-2; replies are also paced per agent: ReplyPace).
 
 - ``message``: the person's. ``{id, kind, at, text, nodeIds, to: {listenerId,
   agent, session: {key, ordinal}}, state, acceptedAt}``. ``state`` is
@@ -18,10 +22,15 @@ Rows, oldest first, at most ``MAX_ROWS`` (the oldest go first):
   take it, never a read receipt). ``clientId`` makes a resend of the same
   message (Try again after a lost answer) land once.
 - ``reply``: an agent's, through reply_to_person. ``{id, kind, at, text,
-  nodeId, agent, session}``.
+  nodeId, agent, session, replyTo}``. ``replyTo`` is the latest message
+  that agent session's listener had taken when it replied (null when none):
+  the box clears that message's status and the ones before it, never a
+  later one still in flight (review 1, NIT-4).
 - Rows that point at what Nebula already keeps elsewhere, added only while
   that agent's session listens (what crosses the channel): ``question``
-  (``questionId`` and the questions as asked), ``proposal``
+  (``questionId``, the questions as asked and, once it closes, ``outcome``:
+  ``{status, closedAt, answers?}``, the person's own record of what they
+  chose or typed, GM r79.5), ``proposal``
   (``proposalId``), ``note`` (an Update it posted, ``noteId``), ``pinReply``
   (its reply on a pin) and, from the person while any session listens,
   ``pin`` (a note they pinned, with its text and node).
@@ -38,6 +47,15 @@ message's ``to`` is woken, whatever the switch. It reads its messages back
 from ``inbox`` (the journal is not trusted to hold them), pushes them and
 says so (``accept``).
 
+Questions stay owner-scoped in the thread too (review 1, MEDIUM-1): every
+agent reads a question row's ``questionId`` and ``agent``, but only the
+asker reads the questions' text and options, as GET
+/api/canvas/questions/{id} answers only the asker. A row's ``outcome``
+holds the person's answer, which goes only to the asker through
+question.answered and get_answers: no agent reads it here (agent_view
+drops it for every agent), the way agent_questions keeps typed text out of
+every agent route.
+
 Sending is the person's alone (the route checks the person token): agents
 write only replies. The 201st message to one listener in a rolling hour is
 accepted and held, never refused (GM r55): PR A's listener holds a
@@ -46,7 +64,10 @@ deliberate send past its runaway cap of 200 an hour. The row reads
 listener already had ``SEND_CAP`` messages this hour (its push of each of
 them falls inside the same hour, so the listener is sure to hold this one),
 and the listener reports any other it holds (a pin or an answer can fill
-its cap too). Once pushed it is ``accepted`` like any other.
+its cap too, and one push can batch several messages, so a row marked
+held may still go at once: the listener's accept then corrects it). Once
+pushed it is ``accepted`` like any other; a held mark never reopens an
+accepted row.
 """
 from __future__ import annotations
 
@@ -57,7 +78,7 @@ import time
 from collections import deque
 from typing import Any, Callable, Iterable, Mapping
 
-from services.canvas_pins import shown_text, text_length
+from services.canvas_pins import agent_text, shown_text, text_length
 
 MAX_ROWS = 300
 MAX_TEXT = 2000
@@ -73,6 +94,13 @@ ROW_KINDS = ("message", "reply", "question", "proposal", "note", "pin", "pinRepl
 PERSON_ROWS = frozenset({"pin"})
 # The journal kind a reply is announced with (every agent reads it while the thread is open to all).
 REPLY_EVENT = "thread.replied"
+# Rows an agent writes (or that point at an agent's act): trimmed first.
+AGENT_ROWS = frozenset({"reply", "question", "proposal", "note", "pinReply"})
+# reply_to_person's pace per agent (Justin, 2026-11-03: like the passive
+# wakes): a burst of REPLY_BURST, then one every REPLY_EVERY seconds.
+REPLY_BURST = 5
+REPLY_EVERY = 2.0
+REPLY_LIMITED_CODE = "replies_rate_limited"
 
 # THE read rule (Justin, 2026-11-03: every connected agent reads the thread,
 # as pins). False narrows the journal, the read tool and the cursor's say to
@@ -221,6 +249,67 @@ class SendCap:
             return len(self._trim(listener_id, self._clock()))
 
 
+def _in_flight(row: Mapping[str, Any]) -> bool:
+    """The person's message its listener hasn't taken yet: never trimmed."""
+    return row.get("kind") == "message" and row.get("state") in ("sent", "held")
+
+
+def trim(rows: list[dict[str, Any]], limit: int | None = None) -> None:
+    """Keep at most ``limit`` rows (MAX_ROWS): the oldest agent rows go
+    first, then the person's settled rows; a message still in flight never
+    goes (it may then run over, by at most the messages in flight)."""
+    excess = len(rows) - (MAX_ROWS if limit is None else limit)
+    if excess <= 0:
+        return
+    drop: set[int] = set()
+    for wanted in (lambda row: row.get("kind") in AGENT_ROWS, lambda row: not _in_flight(row)):
+        for index, row in enumerate(rows):
+            if len(drop) >= excess:
+                break
+            if index not in drop and wanted(row):
+                drop.add(index)
+    rows[:] = [row for index, row in enumerate(rows) if index not in drop]
+
+
+class ReplyPace:
+    """reply_to_person's pace, per agent identity (memory only): a burst of
+    ``burst`` replies, then one every ``every`` seconds (a token bucket).
+    ``take`` returns 0 when a reply may go now (and counts it), else the
+    seconds until one may."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic, *, burst: int = REPLY_BURST,
+                 every: float = REPLY_EVERY, max_agents: int = 256) -> None:
+        self._clock = clock
+        self.burst = burst
+        self.every = every
+        self._max = max_agents
+        self._tokens: dict[str, tuple[float, float]] = {}
+        self._lock = threading.Lock()
+
+    def take(self, agent_id: str) -> float:
+        with self._lock:
+            now = self._clock()
+            tokens, at = self._tokens.pop(agent_id, (float(self.burst), now))
+            tokens = min(float(self.burst), tokens + max(0.0, now - at) / self.every)
+            if tokens >= 1.0:
+                self._tokens[agent_id] = (tokens - 1.0, now)
+                wait = 0.0
+            else:
+                self._tokens[agent_id] = (tokens, now)
+                wait = (1.0 - tokens) * self.every
+            while len(self._tokens) > self._max:  # the least recently used goes (it starts full again)
+                del self._tokens[next(iter(self._tokens))]
+            return wait
+
+
+def reply_limited_detail(wait: float) -> str:
+    """The refusal an agent replying too fast gets: what happened, when it
+    can reply again, and what to do instead."""
+    seconds = max(1, int(-(-wait // 1)))
+    return (f"Too many replies at once: you can reply again in {seconds} s. Replies are paced at {REPLY_BURST} in "
+            f"a row, then one every {REPLY_EVERY:g} s, so put everything you have to say in one reply.")
+
+
 class PersonThread:
     """The rows, read from and written to the project record."""
 
@@ -245,7 +334,7 @@ class PersonThread:
 
     def for_agent(self, agent_id: str, *, limit: int = 50) -> tuple[str | None, list[dict[str, Any]]]:
         project_id, rows = self.rows()
-        mine = [agent_view(row) for row in rows if visible_to_agent(row, agent_id)]
+        mine = [agent_view(row, agent_id) for row in rows if visible_to_agent(row, agent_id)]
         return project_id, mine[-limit:]
 
     def inbox(self, listener_ids: Iterable[str]) -> tuple[str | None, list[dict[str, Any]]]:
@@ -272,8 +361,7 @@ class PersonThread:
                 rows = project[FIELD] = []
             before = copy.deepcopy(rows)
             result = mutate(rows)
-            if len(rows) > MAX_ROWS:
-                del rows[: len(rows) - MAX_ROWS]
+            trim(rows)
             if rows != before:
                 store.commit(catalog)
         return project_id, result
@@ -333,6 +421,43 @@ class PersonThread:
 
         return self._write(mutate)
 
+    def add_reply(self, fields: Mapping[str, Any], listener_ids: Iterable[str]) -> tuple[str, dict[str, Any]]:
+        """An agent's reply. ``replyTo``: the latest message to one of
+        ``listener_ids`` (the replying session's) that its listener took."""
+        own = set(listener_ids)
+        row = {"id": _new_id("pt"), "kind": "reply", "at": self._now_ms(), **fields, "replyTo": None}
+
+        def mutate(rows: list[dict[str, Any]]) -> None:
+            for old in reversed(rows):
+                if (old.get("kind") == "message" and old.get("state") == "accepted"
+                        and (old.get("to") or {}).get("listenerId") in own):
+                    row["replyTo"] = old.get("id")
+                    break
+            rows.append(row)
+
+        project_id, _ = self._write(mutate)
+        return project_id, row
+
+    def close_question(self, question_id: str, outcome: Mapping[str, Any], *,
+                       project_id: str | None = None) -> tuple[str | None, list[dict[str, Any]]]:
+        """A question set closed: its rows keep the outcome (person form
+        only, GM r79.5), so "You chose …" survives any reload. Nothing
+        changes when no row names the set."""
+        kept = copy.deepcopy(dict(outcome))
+
+        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            changed = []
+            for row in rows:
+                if row.get("kind") == "question" and row.get("questionId") == question_id:
+                    row["outcome"] = copy.deepcopy(kept)
+                    changed.append(dict(row))
+            return changed
+
+        try:
+            return self._write(mutate, project_id)
+        except ThreadError:
+            return None, []
+
     def add_row(self, kind: str, fields: Mapping[str, Any], *, project_id: str | None = None) -> tuple[str, dict[str, Any]]:
         if kind not in ROW_KINDS:
             raise ValueError(kind)
@@ -347,11 +472,23 @@ def person_view(row: Mapping[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(dict(row))
 
 
-def agent_view(row: Mapping[str, Any]) -> dict[str, Any]:
+# Never in an agent's form: the person's form only (cursor keys, listener
+# ids, the tab's client id, a question's outcome, which holds their answer).
+_PERSON_ONLY_KEYS = ("clientId", "session", "to", "outcome")
+
+
+def agent_view(row: Mapping[str, Any], viewer_id: str | None = None) -> dict[str, Any]:
     """A row as an agent reads it: no cursor keys or listener ids (those are
-    the person's form), no client id; a message names the agent it was for."""
-    shown = {key: copy.deepcopy(value) for key, value in row.items()
-             if key not in ("clientId", "session", "to")}
+    the person's form), no client id; a message names the agent it was for.
+    A question row keeps its id and agent for every agent, but its text and
+    options only for the asker (``viewer_id``), and its outcome for none
+    (review 1 of #225, MEDIUM-1; GM r79.5). Pin text is in agents' form
+    (canvas_pins.agent_text, GM r23)."""
+    shown = {key: copy.deepcopy(value) for key, value in row.items() if key not in _PERSON_ONLY_KEYS}
+    if row.get("kind") == "question" and (viewer_id is None or row_agent_id(row) != viewer_id):
+        shown.pop("questions", None)
+    if row.get("kind") in ("pin", "pinReply") and isinstance(shown.get("text"), str):
+        shown["text"] = agent_text(shown["text"])
     if row.get("kind") == "message":
         shown["from"] = "person"
         agent = (row.get("to") or {}).get("agent")

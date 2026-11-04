@@ -29,21 +29,30 @@ import pytest
 
 import mcp_channel
 import mcp_server
-from services import channel_listeners, krea_agent_mcp, person_thread
+from services import app_tokens, channel_listeners, krea_agent_mcp, person_thread
 from tests.conftest import PERSON
 from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, Clock, api  # noqa: F401 - fixture
 
-SESSION_A = {**CLAUDE, "X-Nebula-Agent-Session": "sess-a"}
-SESSION_B = {**CLAUDE, "X-Nebula-Agent-Session": "sess-b"}
+# Only an agent token registers a listener (Justin, 2026-11-03): sessions of
+# one Settings token, as `nebula mcp connect claude-code --channel` saves it.
+TOKENS = {"tok-claude": {"id": "claude1", "name": "Claude Code", "color": "#C3E86B"},
+          "tok-codex": {"id": "codex1", "name": "Codex", "color": "#7AA2F7"}}
+CLAUDE_TOKEN = {"Authorization": "Agent tok-claude"}
+CODEX_TOKEN = {"Authorization": "Agent tok-codex"}
+SESSION_A = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "sess-a"}
+SESSION_B = {**CLAUDE_TOKEN, "X-Nebula-Agent-Session": "sess-b"}
 
 
 @pytest.fixture
 def thread(api, monkeypatch):  # noqa: F811 - the imported fixture
+    monkeypatch.setattr(app_tokens, "lookup", lambda token: TOKENS.get(token))
     clock = Clock()
     book = channel_listeners.ListenerBook(clock)
     monkeypatch.setattr(api.main, "channel_book", book)
     cap = person_thread.SendCap(clock)
     monkeypatch.setattr(api.main, "thread_send_cap", cap)
+    # Each test starts with a fresh reply pace (round 3: 5 in a row, then one every 2 s).
+    monkeypatch.setattr(api.main, "thread_reply_pace", person_thread.ReplyPace(clock))
     # Agent sockets: what the agents' form of a broadcast reached.
     others: list[dict] = []
 
@@ -104,7 +113,10 @@ def test_the_person_sends_and_only_the_listener_named_reads_it(thread):
     inbox = thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()["messages"]
     assert inbox == [{"messageId": row["id"], "text": "line one\nline two", "nodeIds": [n1]}]
     assert thread.client.get("/api/agent/thread/inbox", headers=SESSION_B).json()["messages"] == []
-    assert thread.client.get("/api/agent/thread/inbox", headers=CODEX).json()["messages"] == []
+    assert thread.client.get("/api/agent/thread/inbox", headers=CODEX_TOKEN).json()["messages"] == []
+    # A name alone (no token) can't read any inbox (Justin, 2026-11-03).
+    refused = thread.client.get("/api/agent/thread/inbox", headers={**CLAUDE, "X-Nebula-Agent-Session": "sess-a"})
+    assert refused.status_code == 401 and "has no token" in refused.json()["detail"]
 
 
 def test_every_agent_reads_the_message_in_the_journal_and_the_switch_narrows_it(thread, monkeypatch):
@@ -114,7 +126,7 @@ def test_every_agent_reads_the_message_in_the_journal_and_the_switch_narrows_it(
     assert len(events) == 1 and events[0]["actor"] == {"kind": "person"}
     assert events[0]["data"] == {"messageId": row["id"], "text": "the plan for the hero shot", "nodeIds": [],
                                  "to": a}
-    seen = thread.client.get("/api/canvas/events", headers=CODEX, params={"after": 0}).json()["events"]
+    seen = thread.client.get("/api/canvas/events", headers=CODEX_TOKEN, params={"after": 0}).json()["events"]
     assert "the plan for the hero shot" in json.dumps(seen)
     assert person_thread.MESSAGE_EVENT == mcp_channel.MESSAGE_KIND
     # Narrowed, the event names only its listener (the wake still works).
@@ -179,7 +191,7 @@ def test_the_listener_reports_what_it_holds(thread):
     rows = {r["id"]: r for r in thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]}
     assert rows[to_a]["state"] == "held" and rows[to_b]["state"] == "sent"
     assert [r["state"] for r in _rows(thread) if r["id"] == to_a] == ["sent", "held"]
-    assert thread.client.post("/api/agent/thread/held", headers=PERSON, json={"messageIds": [to_a]}).status_code == 400
+    assert thread.client.post("/api/agent/thread/held", headers=PERSON, json={"messageIds": [to_a]}).status_code == 401
 
 
 def test_a_resend_with_the_same_client_id_lands_once(thread):
@@ -209,7 +221,7 @@ def test_accepted_marks_only_the_callers_own_messages(thread):
     # Session A can't mark B's, nor Codex A's.
     assert thread.client.post("/api/agent/thread/accepted", headers=SESSION_A,
                               json={"messageIds": [to_a, to_b]}).json() == {"accepted": [to_a]}
-    assert thread.client.post("/api/agent/thread/accepted", headers=CODEX,
+    assert thread.client.post("/api/agent/thread/accepted", headers=CODEX_TOKEN,
                               json={"messageIds": [to_b]}).json() == {"accepted": []}
     rows = {r["id"]: r for r in thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]}
     assert rows[to_a]["state"] == "accepted" and isinstance(rows[to_a]["acceptedAt"], int)
@@ -272,15 +284,15 @@ def test_first_sentence():
 
 def test_every_agent_reads_the_whole_thread_and_the_switch_narrows_it(thread, monkeypatch):
     a = _listen(thread, SESSION_A)
-    codex = _listen(thread, CODEX)
+    codex = _listen(thread, CODEX_TOKEN)
     _send(thread, a, "for claude")
     _send(thread, codex, "for codex")
     thread.client.post("/api/canvas/thread/replies", headers=SESSION_A, json={"text": "claude's answer"})
-    thread.client.post("/api/canvas/thread/replies", headers=CODEX, json={"text": "codex's answer"})
+    thread.client.post("/api/canvas/thread/replies", headers=CODEX_TOKEN, json={"text": "codex's answer"})
     every = ["for claude", "for codex", "claude's answer", "codex's answer"]
     person = thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]
     assert [r["text"] for r in person] == every
-    other = thread.client.get("/api/canvas/thread", headers=CODEX).json()["rows"]
+    other = thread.client.get("/api/canvas/thread", headers=CODEX_TOKEN).json()["rows"]
     assert [r["text"] for r in other] == every
     assert other[0]["from"] == "person" and other[0]["toAgent"]["name"] == "Claude Code"
     assert "to" not in other[0] and "session" not in other[2]  # the person's form only
@@ -289,7 +301,7 @@ def test_every_agent_reads_the_whole_thread_and_the_switch_narrows_it(thread, mo
     monkeypatch.setattr(person_thread, "AGENTS_READ_WHOLE_THREAD", False)
     claude = thread.client.get("/api/canvas/thread", headers=SESSION_B).json()["rows"]  # any of Claude's sessions
     assert [r["text"] for r in claude] == ["for claude", "claude's answer"]
-    other = thread.client.get("/api/canvas/thread", headers=CODEX).json()["rows"]
+    other = thread.client.get("/api/canvas/thread", headers=CODEX_TOKEN).json()["rows"]
     assert [r["text"] for r in other] == ["for codex", "codex's answer"]
 
 
@@ -330,7 +342,7 @@ def test_rows_that_point_elsewhere_come_only_while_that_session_listens(thread):
     assert rows[1]["questions"][0]["options"] == ["All three", "Only this one"]
     assert rows[2]["text"] == "warmer" and rows[2]["nodeId"] == n1
     # Every agent reads them all, the pin too.
-    own = thread.client.get("/api/canvas/thread", headers=CODEX).json()["rows"]
+    own = thread.client.get("/api/canvas/thread", headers=CODEX_TOKEN).json()["rows"]
     assert [r["kind"] for r in own] == ["note", "question", "pin"]
     reply = thread.client.post(f"/api/canvas/pins/{pin.json()['pin']['id']}/resolve", headers=SESSION_A,
                                json={"reply": "Warmed it"})
@@ -342,12 +354,17 @@ def test_rows_that_point_elsewhere_come_only_while_that_session_listens(thread):
 def test_the_thread_is_kept_with_the_project_and_capped(thread, monkeypatch):
     monkeypatch.setattr(person_thread, "MAX_ROWS", 5)
     a = _listen(thread)
-    for n in range(7):
-        _send(thread, a, f"m{n}")
+    ids = [_send(thread, a, f"m{n}").json()["row"]["id"] for n in range(7)]
     catalog = thread.main.project_store.read()
     kept = catalog["projects"][thread.project_id][person_thread.FIELD]
-    assert [r["text"] for r in kept] == ["m2", "m3", "m4", "m5", "m6"]
+    # Messages still in flight (sent, not taken) are never trimmed (MEDIUM-2).
+    assert [r["text"] for r in kept] == [f"m{n}" for n in range(7)]
     assert "personThread" not in catalog["projects"][thread.project_id]["snapshot"]
+    # Once taken (accepted) they are the person's settled rows: the oldest go.
+    assert thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": ids}).status_code == 200
+    _send(thread, a, "m7")
+    kept = thread.main.project_store.read()["projects"][thread.project_id][person_thread.FIELD]
+    assert [r["text"] for r in kept] == ["m3", "m4", "m5", "m6", "m7"]
 
 
 def test_the_hello_sync_is_the_persons_form(thread):
@@ -402,20 +419,27 @@ def test_a_typed_answer_is_one_question_answered_and_never_a_thread_row_post_or_
     new = [e for e in thread.journal._events if e["seq"] > seq_before]
     assert [e["kind"] for e in new] == [mcp_channel.ANSWERED_KIND]
     assert TYPED_ANSWER not in _journal_text(thread)
-    # No thread row, no thread post to any tab or agent, nothing in an inbox.
-    assert thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"] == rows_before
+    # No new thread row, no message, nothing in an inbox. GM r79.5: the
+    # question row keeps the outcome, in the person's form only.
+    rows_after = thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]
+    assert [r["id"] for r in rows_after] == [r["id"] for r in rows_before]
+    assert rows_after[0]["outcome"] == {"status": "answered", "closedAt": rows_after[0]["outcome"]["closedAt"],
+                                        "answers": [{"questionId": "q1", "choices": [], "text": TYPED_ANSWER}]}
     later = thread.browser[browser_before:]
-    assert not [m for m in later if m.get("type") == "personThread"]
-    # Only the person's sockets got the answer (the questionsClosed that draws their row).
-    assert [m["type"] for m in later if TYPED_ANSWER in json.dumps(m)] == ["questionsClosed"]
+    # Only the person's sockets got the answer: the question row's outcome
+    # and the questionsClosed that draws their row.
+    assert [m["type"] for m in later if TYPED_ANSWER in json.dumps(m)] == ["personThread", "questionsClosed"]
+    assert all(m["change"] == "rows" and [r["kind"] for r in m["rows"]] == ["question"]
+               for m in later if m.get("type") == "personThread")
     assert TYPED_ANSWER not in json.dumps(thread.others[others_before:] + thread.raw_others[raw_before:])
     assert thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()["messages"] == []
-    # An agent's thread read (MCP read_thread and `nebula thread` call this route) never has it.
-    for headers in (SESSION_A, SESSION_B, CODEX):
+    # An agent's thread read (MCP read_thread and `nebula thread` call this route) never has it,
+    # the asker's included (it reads its answers with get_answers).
+    for headers in (SESSION_A, SESSION_B, CODEX_TOKEN):
         read = thread.client.get("/api/canvas/thread", headers=headers)
-        assert read.status_code == 200 and TYPED_ANSWER not in read.text
+        assert read.status_code == 200 and TYPED_ANSWER not in read.text and "outcome" not in read.text
     stored = thread.main.project_store.read()["projects"][thread.project_id][person_thread.FIELD]
-    assert TYPED_ANSWER not in json.dumps(stored)
+    assert [json.dumps(r).count(TYPED_ANSWER) for r in stored] == [1]  # the outcome, nowhere else
     # The asking agent reads it, as its own set.
     own = thread.client.get(f"/api/canvas/questions/{set_id}", headers=SESSION_A).json()
     assert own["questions"]["answers"][0]["text"] == TYPED_ANSWER

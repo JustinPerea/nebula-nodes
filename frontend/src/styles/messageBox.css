@@ -185,6 +185,9 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* The thread keeps its own bottom (MessageThread's observer): the
+     browser's scroll anchoring would move it on a reflow (live-ux L2). */
+  overflow-anchor: none;
 }
 
 .message-box__rows {

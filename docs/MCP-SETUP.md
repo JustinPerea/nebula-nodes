@@ -1038,7 +1038,8 @@ can't leave the tag); every other quoted text is one line.
 
 **What a woken turn may do** (plan v2.7 Q42 a and Q51 a). Some pushes are
 gated (`gate="change"`): Claude may look (the read tools), point and say
-something (`point_at`), post an Update (`post_note`), answer a pin and propose
+something (`point_at`), post an Update (`post_note`), reply to you in the
+Message box (`reply_to_person`, and read it with `read_thread`), answer a pin and propose
 (`propose_change`, `propose_asset_change` for a cover, a board's notes or the
 Commons, `get_proposal`, `withdraw_proposal`). Edits, runs, project
 switches, board writes and any tool not on that list are refused for that
@@ -1187,7 +1188,13 @@ or on a Team org with Channels off, still reads "listening".
   open project.
 - An agent: `GET /api/canvas/channel` returns only its own entries, without
   `session`; MCP `channel_status` adds `thisServer` (whether this server
-  runs with `--channel`, and its listener's state).
+  runs with `--channel`, and its listener's state). **`nebula channel
+  [--json]`** prints the same entries from the terminal.
+- Only a listener with an agent token registers (above), and the routes a
+  listener reads its messages from and reports on
+  (`/api/agent/thread/inbox`, `accepted`, `held`) refuse a tokenless caller
+  the same way. A message sent before a Nebula restart and never pushed
+  stays "sent": the restarted Nebula gives the listener a new id.
 
 **The Message box.** The person messages a listening session from the
 canvas: the composer at the foot of the Agent log (`/` focuses it). Its
@@ -1219,7 +1226,15 @@ reload and every tab show the same rows.
   reply "<text>" [--node nX]`** (2,000 characters). With a node, its cursor
   flies there and shows the reply's first sentence (140 characters). Only
   agents reply. A reply is journaled as `thread.replied` (`data: {replyId,
-  text, nodeId}`). The person's tabs get each row in a `personThread` socket
+  text, nodeId}`). Replies are paced per agent: 5 in a row, then one every
+  2 s. Past that the reply isn't saved: `429 replies_rate_limited` with
+  `retryAfter` (seconds) and a line saying when it can reply again (put
+  everything in one reply). A reply row's `replyTo` is the latest message
+  that session's listener had taken, so the box clears only that message's
+  status and the ones before it.
+- The thread keeps at most 300 rows. Past that the oldest agent rows go
+  first, then the person's settled rows; a message still `sent` or `held`
+  is never trimmed. The person's tabs get each row in a `personThread` socket
   message (`change: "sync"` after a verified hello, `"rows"` after).
 - **Who reads what** (Justin, 2026-11-03): every connected agent reads the
   thread, the same as pins: the person's messages and every agent's replies,
@@ -1228,13 +1243,23 @@ reload and every tab show the same rows.
   for in `toAgent`; cursor keys and listener ids are the person's form only).
   The rule is one switch, `person_thread.AGENTS_READ_WHOLE_THREAD`: turned
   off, the read tool, the journal events and the cursor's say narrow at once
-  to the person plus each row's own agent.
+  to the person plus each row's own agent. Questions stay owner-scoped: a
+  question row names its set (`questionId`) and asker (`agent`) for every
+  agent, but only the asker reads its `questions` (text and options), and no
+  agent reads the person's answer there (`get_answers` is the asker's).
+  An agent that reads with a marker but no name gets `400` "Name yourself
+  with NEBULA_AGENT_NAME or --as".
 - While a session listens, its `ask_person` questions, proposals, Updates and
   pin replies, and the person's new pins, also add a row to the thread that
   points at them (the card stays the only place to Accept; a question is
   never a spend approval). A question with no options is answered from the
   box's composer; the answer reaches the agent as `question.answered`, the
-  same as an answer from the Agents panel, never as a thread message.
+  same as an answer from the Agents panel, never as a thread message. If the
+  agent withdraws the question while the person types, the answer is
+  refused (`409`), nothing goes out, and the box says that sending again
+  posts the words as a message every agent can read. Once a set closes, its
+  thread row keeps the outcome in the person's form only, so "You chose …"
+  and "You answered …" survive a reload.
 
 **Stop** by restarting Claude Code without the flag.
 

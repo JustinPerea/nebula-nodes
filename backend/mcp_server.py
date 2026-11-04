@@ -1065,7 +1065,8 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     agent token from Settings › Connect your agent registers one; `nebula mcp
     connect claude-code --channel` makes and saves it). Nebula can't
     tell whether Claude Code delivers a push, so "listening" means Nebula
-    pushes, not that the session took it."""
+    pushes, not that the session took it. `nebula channel` prints the same
+    listeners from the terminal."""
     if _channel is None:
         this: dict[str, Any] = {"channel": False, "state": None}
     else:
@@ -1095,7 +1096,12 @@ def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None =
     a moment; the whole answer stays in the thread. A pin's answer goes in
     resolve_pin, and something you noticed that should last goes in
     post_note. Every agent connected to Nebula can read the thread (as
-    pins), so don't put anything there you wouldn't pin."""
+    pins), so don't put anything there you wouldn't pin.
+
+    Replies are paced per agent: 5 in a row, then one every 2 s. Past that
+    the reply isn't saved and Nebula says in how many seconds you can reply
+    again (code replies_rate_limited): wait, then send one reply with
+    everything in it."""
     body: dict[str, Any] = {"text": text}
     if node_id:
         body["nodeId"] = node_id
@@ -1108,7 +1114,10 @@ def read_thread(limit: int = 20, ctx: Context | None = None) -> dict[str, Any]:
     the person's messages (`kind` "message", `from` "person", with the
     `nodeIds` they had selected), agents' replies (`agent` says whose), and
     the questions, proposals, Updates and pins that crossed the channel.
-    Every connected agent reads it, as pins. `state` on a message: "sent"
+    Every connected agent reads it, as pins. A question row names its set
+    (`questionId`) and asker (`agent`); only the asker reads its
+    `questions`, and the person's answers are read with get_answers (the
+    asker's). A reply's `replyTo` is the message it followed. `state` on a message: "sent"
     (not pushed yet), "held" (its listener holds it at 200 messages an
     hour) or "accepted" (its listener pushed it). `limit` is the newest rows
     to return (1-300)."""

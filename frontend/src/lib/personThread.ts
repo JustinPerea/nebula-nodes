@@ -61,6 +61,16 @@ export interface ThreadRow {
   proposalId?: string;
   noteId?: string;
   pinId?: string;
+  /** A reply: the message its session's listener had taken when it replied (NIT-4). */
+  replyTo?: string | null;
+  /** A question row, once its set closed (GM r79.5): the person's own record, never an agent's. */
+  outcome?: QuestionOutcome;
+}
+
+export interface QuestionOutcome {
+  status: string;
+  closedAt: number | null;
+  answers: { questionId: string; choices: string[]; text: string | null }[] | null;
 }
 
 export interface ChannelListener {
@@ -121,8 +131,21 @@ export function sanitizeRow(raw: unknown): ThreadRow | null {
     clean.session = cleanSession(row.session);
     clean.sessionKey = sessionKeyOf(row.session);
   }
-  for (const key of ['questionId', 'proposalId', 'noteId', 'pinId'] as const) {
+  for (const key of ['questionId', 'proposalId', 'noteId', 'pinId', 'replyTo'] as const) {
     if (typeof row[key] === 'string') clean[key] = row[key] as string;
+  }
+  const outcome = row.outcome as Record<string, unknown> | undefined;
+  if (outcome && typeof outcome.status === 'string') {
+    clean.outcome = {
+      status: outcome.status,
+      closedAt: typeof outcome.closedAt === 'number' ? outcome.closedAt : null,
+      answers: Array.isArray(outcome.answers) ? outcome.answers.flatMap((a) => {
+        const answer = a as Record<string, unknown> | null;
+        return answer && typeof answer.questionId === 'string' ? [{ questionId: answer.questionId,
+          choices: Array.isArray(answer.choices) ? answer.choices.filter((c): c is string => typeof c === 'string') : [],
+          text: typeof answer.text === 'string' ? answer.text : null }] : [];
+      }) : null,
+    };
   }
   if (Array.isArray(row.questions)) {
     clean.questions = row.questions.flatMap((q) => {

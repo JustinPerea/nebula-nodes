@@ -346,6 +346,8 @@ channel_book = channel_listeners.ListenerBook()
 # record; the send cap is memory only.
 thread_book = person_thread.PersonThread(lambda: project_store)
 thread_send_cap = person_thread.SendCap()
+# reply_to_person's pace per agent (Justin, 2026-11-03): 5 in a row, then one every 2 s.
+thread_reply_pace = person_thread.ReplyPace()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -6562,6 +6564,11 @@ async def read_person_thread(limit: int = 50) -> Any:
     the agents' form (person_thread.for_agent under the one switch)."""
     headers = current_request_headers()
     identity = identify_agent(headers)
+    if identity is None and has_agent_marker(headers) and not is_person(headers):
+        # An agent that didn't say who it is (review 1, NIT-3): the thread is
+        # read by name, so say how to give one.
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as to read the "
+                                                    "thread")
     limit = max(1, min(int(limit), person_thread.MAX_ROWS))
     try:
         if identity is not None:
@@ -6624,11 +6631,9 @@ async def send_person_message(body: Any = Body(None)) -> Any:
 async def read_thread_inbox() -> dict[str, Any]:
     """A --channel listener reads the messages sent to its own session that
     it hasn't pushed yet (answered for this agent session only)."""
-    headers = current_request_headers()
-    identity = identify_agent(headers)
-    if identity is None:
-        raise HTTPException(status_code=400, detail="Only an agent's channel listener reads its messages")
-    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    # Only a token's listener (Justin, 2026-11-03): the same refusal as registering.
+    identity, session = _channel_caller()
+    listener_ids = _thread_listener_ids(identity, session)
     try:
         project_id, messages = await asyncio.to_thread(thread_book.inbox, listener_ids)
     except ProjectStoreError as exc:
@@ -6641,14 +6646,11 @@ async def accept_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
     """The listener pushed these messages to its session: {messageIds}. The
     person's box then reads "Waiting for Claude" (Nebula saw the push go,
     never that Claude read it)."""
-    headers = current_request_headers()
-    identity = identify_agent(headers)
-    if identity is None:
-        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports this")
+    identity, session = _channel_caller()  # a token's listener only, as registering
     ids = body.get("messageIds") if isinstance(body, dict) else None
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
         raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
-    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    listener_ids = _thread_listener_ids(identity, session)
     try:
         project_id, rows = await asyncio.to_thread(thread_book.accept, ids, listener_ids)
     except person_thread.ThreadError as exc:
@@ -6664,14 +6666,11 @@ async def hold_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
     """The listener holds these messages at its runaway cap (200 deliberate
     sends an hour): {messageIds}. The person's box reads "Sends in a few
     minutes because you’ve sent 200 this hour." until it pushes them."""
-    headers = current_request_headers()
-    identity = identify_agent(headers)
-    if identity is None:
-        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports this")
+    identity, session = _channel_caller()  # a token's listener only, as registering
     ids = body.get("messageIds") if isinstance(body, dict) else None
     if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
         raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
-    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    listener_ids = _thread_listener_ids(identity, session)
     try:
         project_id, rows = await asyncio.to_thread(thread_book.hold, ids, listener_ids)
     except person_thread.ThreadError as exc:
@@ -6687,7 +6686,9 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     """An agent answers the person in the thread: {text, nodeId?}. With a
     node, its cursor flies there and says the reply's first sentence (140
     characters at most), on the person's tabs only. The person can't post
-    here: they send messages."""
+    here: they send messages. Paced per agent (ReplyPace: 5 in a row, then
+    one every 2 s): past it, 429 replies_rate_limited with retryAfter (s)
+    and a line saying when it can reply again; nothing is saved."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None:
@@ -6707,9 +6708,20 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     session = presence_session(headers)
     try:
         text = person_thread.clean_reply(body.get("text"))
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)
+    # Paced after the body checks, so a malformed call doesn't spend a reply.
+    wait = thread_reply_pace.take(identity.id)
+    if wait > 0:
+        retry = max(1, math.ceil(wait))
+        return JSONResponse(status_code=429, headers={"Retry-After": str(retry)},
+                            content={"detail": person_thread.reply_limited_detail(wait),
+                                     "code": person_thread.REPLY_LIMITED_CODE, "retryAfter": retry})
+    try:
         fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
                   "session": _thread_session(identity, session)}
-        project_id, row = await asyncio.to_thread(thread_book.add_row, "reply", fields)
+        project_id, row = await asyncio.to_thread(thread_book.add_reply, fields,
+                                                  _thread_listener_ids(identity, session))
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
@@ -6734,7 +6746,7 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
             await _broadcast_presence(event, person)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
             pass
-    return {"projectId": project_id, "reply": person_thread.agent_view(row)}
+    return {"projectId": project_id, "reply": person_thread.agent_view(row, identity.id)}
 
 
 @app.post("/api/canvas/view")
@@ -9259,6 +9271,25 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
 
+async def _thread_question_outcome(question_set: QuestionSet) -> None:
+    """GM r79.5: the thread's question row keeps how the set closed (and the
+    person's answers), so "You chose …" survives any reload. Person form
+    only: agents never read ``outcome`` (person_thread.agent_view), as no
+    agent route reads the set's answers but the asker's. Decoration: never
+    fails the close."""
+    view = _question_view(question_set)
+    outcome: dict[str, Any] = {"status": question_set.status, "closedAt": view.get("closedAt")}
+    if question_set.status == "answered":
+        outcome["answers"] = [{"questionId": answer.get("questionId"), "choices": list(answer.get("choices") or []),
+                               "text": answer.get("text")} for answer in (question_set.answers or [])]
+    try:
+        project_id, rows = await asyncio.to_thread(thread_book.close_question, question_set.id, outcome,
+                                                   project_id=question_set.project_id)
+    except Exception:  # noqa: BLE001 - the thread is decoration on a close that already succeeded
+        return
+    await _broadcast_thread(project_id, rows)
+
+
 async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
     """Journal each, tell the person's sockets (only theirs: the message
     carries their answers back to them), then settle each one's Update.
@@ -9266,6 +9297,7 @@ async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str
     for question_set in sets:
         _journal_question(question_set, actor=actor)
     for question_set in sets:
+        await _thread_question_outcome(question_set)
         try:
             await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
                                              "status": question_set.status, "agentId": question_set.agent.id,
@@ -14171,6 +14203,27 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     return updated
 
 
+def _edit_log_line(verb: str, node_id: str, keys: Sequence[str], others: int) -> str:
+    """An edit_canvas with no note, as the Agent log words it (GM r79.2;
+    never the bubble's terse "changed 1"): "Changed “Prompt” on “Hero
+    shot”", "Changed “Prompt” and “Seed” on “Hero shot”", "Changed 3
+    settings on “Hero shot”", else the verb and the node ("Moved “Hero
+    shot”"); "and 2 more nodes" when the edit touched others."""
+    node = _quoted(_node_label(node_id))
+    line = f"{verb} {node}"
+    if verb == "Changed" and keys:
+        record = cli_graph.nodes.get(node_id) or {}
+        definition = node_registry.get(str(record.get("definitionId") or "")) or {}
+        labels = [label for label in (_card_label(definition, record, key) for key in keys) if label]
+        if len(labels) in (1, 2) and len(labels) == len(keys):
+            line = f"Changed {' and '.join(f'“{label}”' for label in labels)} on {node}"
+        else:
+            line = f"Changed {'a setting' if len(keys) == 1 else f'{len(keys)} settings'} on {node}"
+    if others:
+        line += f" and {others} more {'node' if others == 1 else 'nodes'}"
+    return line
+
+
 def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
     """The cursor bubble and the Agent log line for an agent's param change
     (say, log): _set_words over the fields a card or a configured model
@@ -15190,10 +15243,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
     _journal_cluster(list(id_map.values()), edge_ids, note=note)
     changed: list[str] = []
+    changed_keys: dict[str, list[str]] = {}
     for node_id, before in params_before.items():
         changes = param_changes(before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
         if changes:
             changed.append(node_id)
+            changed_keys[node_id] = [str(key) for key in changes.get("keys") or []]
             _journal(
                 "node.params",
                 node_id=node_id,
@@ -15259,7 +15314,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 else "Renamed" if focus in renamed else "Moved")
         # A param value change is typing, as through PUT (GM - Design, PR
         # #211 r2): the person's tabs show `type`; agents still read `click`.
+        touched = set(added) | set(changed) | set(renamed) | set(moves) | {gone["id"] for gone in removed}
+        # With no note the bubble keeps the terse summary ("changed 1"); the
+        # Agent log and the Message box's working line get the person's
+        # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []),
+                                                                len(touched - {focus})),
                           shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)

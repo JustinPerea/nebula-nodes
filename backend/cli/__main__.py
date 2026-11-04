@@ -545,6 +545,17 @@ def build_parser() -> argparse.ArgumentParser:
     thread_p.add_argument("--as", dest="agent_name",
                           help="Your agent name (default: $NEBULA_AGENT_NAME)")
 
+    channel_p = sub.add_parser(
+        "channel", help="Whether the person's canvas can reach you through the Nebula channel (MCP channel_status)",
+        description=("Your channel listeners as Nebula sees them, one per session of yours: listening (Nebula "
+                     "pushes the person's messages, pins and answers to it), or stopped (2 hours with nothing from "
+                     "the person, or a failure; /mcp > nebula-listen > Reconnect starts it again). None means "
+                     "Nebula doesn't count you as connected. Nebula can't tell whether Claude Code delivers a "
+                     "push, so listening means Nebula pushes, not that the session took it."))
+    channel_p.add_argument("--json", action="store_true", help="Print it as JSON (MCP channel_status's listeners)")
+    channel_p.add_argument("--as", dest="agent_name",
+                           help="Your agent name (default: $NEBULA_AGENT_NAME)")
+
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
     quick_p.add_argument("node_id", help="Node definition ID")
@@ -813,6 +824,7 @@ def main() -> None:
         "pin": lambda: pins.run_pin(client, args),
         "reply": lambda: thread_cmd.run_reply(client, args),
         "thread": lambda: thread_cmd.run_thread(client, args),
+        "channel": lambda: thread_cmd.run_channel(client, args),
         "note": lambda: notes_cmd.run_note(client, args),
         "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),
