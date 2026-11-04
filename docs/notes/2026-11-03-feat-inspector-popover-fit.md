@@ -617,3 +617,45 @@ The panel now stands clear of the facing port. A port is a drag source, so it ca
 | Left placement, Image Input (no input port) | The card springs (23 frames). The card's left minus the panel's right is 10 in every frame. |
 | Left placement, Image Compare (input ports) | The input dot's outer edge minus the panel's right: 8.01 in every frame (24 frames). |
 | Port and wire, preview | As in 6b: the wire's end is 5.21 px from the port centre in every frame, and the preview ratio is 1.333. |
+
+### Round 6d (final review 5, GM r114)
+
+- **A resize in the middle of a card's width spring** (review 5 MEDIUM-2). Under `data-follows-card` the panel's top and height stay on the layout spring; only the left, which tracks the card frame by frame, is exempt (`panels.css`). The re-place from a window resize now takes the spring. Seen before: the top jumped 400 px in one frame.
+- **The panel clears the port's whole hit target and its hover circle** (review 5 MEDIUM-1, GM r114.1). `lib/facingPort.ts` now returns where the panel's edge stands: the farthest of the dot's edge + 8, the handle box + 2 and the hover circle + 2, at every zoom. The hit target is the handle's screen box. The circle is the `::after`'s computed width, with its border when the box doesn't count it, at the handle's centre, offset by the magnet. Nothing is a constant the skin defines. At 100 % the panel is now 12 px from the port's centre (it was 8.5), 26 px from the card.
+- **Every content width change springs, and a change mid-spring retargets** (GM r114.2). The hook reads the card's natural width each frame a spring runs (lifting the animation for the read, in the same task, so nothing paints; the ratio of the two boxes gives layout px at any zoom). A new target carries on from the card's width and speed at that frame (a damped oscillator that matches the layout spring) and starts that frame, so typing a rename chases smoothly and no frame restarts from rest. Moves, pans and zooms are still rigid; reduced motion still jumps.
+- **Four guards pinned** (review 5 LOW-1): reduced motion keeps the last width; the follow is cleared when another node opens; the frame the follow ends in is committed before paint; an outside URL has its own identity.
+- **One painted frame at 7 px made 8** (review 5 NIT-2). When the port's 1 px step lands in the frame the card's spring starts, the panel takes that step alone, in that frame (left only, no spring), and follows the card from the next frame. Only for a card that springs (a new `data-width-springs` mark from the hook), and not under reduced motion.
+- **`_same_ref_file` corners** (review 5 NIT-3). Same file is now `os.path.samefile`: a hard link, a differently cased spelling on a case-insensitive disk, an in-root file under a differently cased path. A gone old ref is compared by what is left of its path (its place under an output folder, else the absolute path), not by its name, so a deleted `a/photo.png` and `b/photo.png` stay two files.
+
+Public-API change: `PORT_CLEARANCE` is no longer exported from `NodeInspectorPopover`; `facingPortEdge` now includes the clearances.
+
+**Tests:**
+- `tests/lib/facingPort.test.ts` (new, 11): right and left at 100, 200 and 400 %, farthest wins, a content-box circle counts its border, the magnet's offset, the hit target on its own, no port.
+- `NodeInspectorPlacement`: "the panel overlaps neither the handle's box nor its hover circle" at 100, 200 and 400 %, both sides (6); the port-gap tests now follow the three-way rule.
+- `NodeInspectorContentFit`: a window resize a few frames into the card's spring keeps top and left within the spring's step; the port step in the card's first frame holds the gap exactly; reduced motion and a card with no width spring take no held frame; another node opened mid-follow starts clean; the frame the follow ends in is committed before paint; the CSS pin now includes `top`.
+- `tests/lib/cardWidthSpring.test.tsx`: retarget each keystroke (one spring at a time, the card marked throughout); speed continuous across six changes a frame apart; a retarget at speed carries it; a change back springs back; within 0.5 px starts nothing; reduced motion jumps; a card whose animation can't be lifted keeps its spring; reduced motion keeps its width; ending the spring clears the mark.
+- `backend/tests/test_upload_drop_files.py`: two outside URLs with one basename (and one path on two hosts); a deleted outside file is not another of the same name; a hard link is one file; a differently cased spelling (skipped on a case-sensitive disk), in and out of the root.
+
+**Mutation check:** 24 mutants, all killed in the end. Four survived first and were fixed:
+- the hit-target term (equivalent in the house skin, where the circle is the same 20 px; now pinned by a skin with no circle);
+- the outside-URL identity (the path fallback hid it; now pinned by one path on two hosts);
+- the follow's last-frame flush (the ratchet read after the flush; it now reads the attribute before it);
+- two guards in the held frame that were equivalent code (simplified, then killed).
+
+**Gates:**
+- `tsc` and lint pass.
+- `pr_tests.sh`: 176 files, 177 passed, 4709 tests.
+- `land_checks.sh`: ratchets 161; pytest on 78 files, 2893 passed and 3 skipped.
+- Build and budget pass: 477,544 bytes raw (cap 512,000), 148,792 gzip.
+
+**Live** (2000x1200, isolated backend 8968, Vite 5968, Run never clicked, hovered handle, house skin). Panel clearance past the handle's box and the hover circle, and past the dot's outer edge:
+
+| Zoom | Placement | Past the box / circle | Past the dot | Overlap |
+|---|---|---|---|---|
+| 100 % | right, left | 2 px | 11.5 px | none |
+| 200 % | right, left | 2 px | 21 px | none |
+| 400 % | right, left | 2 px | 40 px | none |
+
+`elementFromPoint` across each handle's box (and 2 px beyond) reads only the handle; the panel starts 2 px past it.
+
+Typing a rename a few letters a frame (200 to 240 px): 3 springs, each retargeting from the card's width and speed; the largest change in step between frames 2.15 px; no stall frame; it settles at 240.

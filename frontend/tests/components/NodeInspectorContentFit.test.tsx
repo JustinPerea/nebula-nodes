@@ -1232,11 +1232,13 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       }
       // The once-a-frame step, and what it committed before this frame's paint.
       let committedLeft = NaN;
+      let committedFollows = false;
       act(() => {
         const pending = [...callbacks.values()];
         callbacks.clear();
         pending.forEach((callback) => callback(performance.now()));
         committedLeft = parseFloat(panel().style.left);
+        committedFollows = panel().hasAttribute('data-follows-card');
       });
       // The observer, after layout, before paint (it may start the card's spring).
       for (let i = 0; i < 3 && reported !== cardWidth(); i++) {
@@ -1262,11 +1264,19 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       const card = anchor.getBoundingClientRect();
       const port = document.querySelector<HTMLElement>('.react-flow__handle-right')?.getBoundingClientRect();
       return {
-        ...shown, cardRight: card.right, committedLeft, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR),
+        ...shown, cardRight: card.right, committedLeft, committedFollows, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR),
         // The output dot's outer edge as painted (GM r111): the handle's centre, less the 4 px rest offset, plus half the 9 px dot.
         portOuter: port ? port.left + port.width / 2 - 4 + 4.5 : null,
       };
     }
+
+    /**
+     * GM r114: the panel clears the port's 20 px hit target and hover circle
+     * by 2 px, the farthest of the three (the dot + 8 is nearer at 100 %):
+     * 12 px from the handle's centre, so 11.5 px from the dot's outer edge
+     * (0.5 px past the centre) at zoom 1.
+     */
+    const PORT_GAP = 11.5;
 
     for (const together of [true, false]) {
       it(`placed right, a preview landing${together ? ' with the panel\'s body growing' : ' (the card only)'}: the gap holds within 1 px every frame`, () => {
@@ -1331,17 +1341,17 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       const screen = { runs: new Map<string, Run>() };
       const before = play(screen, anchor);
       expect(before.portOuter! - before.cardRight).toBeCloseTo(14.5, 5);
-      expect(before.left - before.portOuter!).toBeCloseTo(8, 5);
+      expect(before.left - before.portOuter!).toBeCloseTo(PORT_GAP, 5);
       land(215.4, 228.7, 180);
       contentHeight = 486 - CHROME;
       const seen: ReturnType<typeof play>[] = [];
       for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
       expect(seen.some((f) => f.marked && f.follows)).toBe(true);
       expect(new Set(seen.map((f) => f.cardRight.toFixed(2))).size).toBeGreaterThan(10);
-      for (const f of seen) expect(Math.abs(f.left - f.portOuter! - 8)).toBeLessThanOrEqual(1);
+      for (const f of seen) expect(Math.abs(f.left - f.portOuter! - PORT_GAP)).toBeLessThanOrEqual(1);
       for (const f of seen.filter((x) => x.follows)) expect(f.committedLeft).toBeCloseTo(f.left, 5);
       const last = seen[seen.length - 1];
-      expect(last.left).toBeCloseTo(715.4 + 14.5 + 8, 5);
+      expect(last.left).toBeCloseTo(715.4 + 14.5 + PORT_GAP, 5);
       expect(last.top).toBe(192);
       expect(last.follows).toBe(false);
     });
@@ -1369,18 +1379,160 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
           expect(seen[0].follows).toBe(true);
           expect(seen[0].committedLeft).toBeCloseTo(seen[0].left, 5);
         } else {
-          // The card widens in the same frame: the panel springs that frame
-          // (the card's spring starts after the step, from its old width),
-          // then follows the card.
-          expect(seen[0].follows).toBe(false);
+          // The card widens in the same frame as the port's step (review 5
+          // NIT-2): the card is painted at its old width this frame (its
+          // spring starts after the step), so the panel takes the port's
+          // step alone, in this frame, and the gap is exact, not 7 px for a
+          // frame. Then it follows the card.
+          expect(seen[0].follows).toBe(true);
+          expect(seen[0].committedLeft).toBeCloseTo(seen[0].left, 5);
+          expect(seen[0].left - seen[0].portOuter!).toBeCloseTo(PORT_GAP, 5);
           expect(seen.slice(1, 5).every((f) => f.follows)).toBe(true);
         }
-        for (const f of seen) expect(Math.abs(f.left - f.portOuter! - 8)).toBeLessThanOrEqual(1);
+        for (const f of seen) expect(Math.abs(f.left - f.portOuter! - PORT_GAP)).toBeLessThanOrEqual(1);
+        // The frames the port and the spring start in hold the gap exactly.
+        for (const f of seen.slice(0, 2)) expect(f.left - f.portOuter!).toBeCloseTo(PORT_GAP, 5);
         const last = seen[seen.length - 1];
-        expect(last.left).toBeCloseTo((withSpring ? 715.4 : 679.5) + 15.5 + 8, 5);
+        expect(last.left).toBeCloseTo((withSpring ? 715.4 : 679.5) + 15.5 + PORT_GAP, 5);
         expect(last.follows).toBe(false);
       });
     }
+
+    /**
+     * GM r114 (review 5 MEDIUM-2): a window resize a few frames into the
+     * card's width spring re-places the panel (r82), and the re-place takes
+     * the spring: its top, which the follow doesn't track, glides on the
+     * spring, and its left keeps following the card, each within the spring's
+     * per-frame step. Seen live: the top jumped 400 px in one frame.
+     */
+    it('a window resize a few frames into the card\'s spring: the top glides, the left keeps the card (GM r114)', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(500);
+      const screen = { runs: new Map<string, Run>() };
+      play(screen, anchor);
+      land(215.4, 228.7, 180);
+      contentHeight = 486 - CHROME;
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 3; i++) seen.push(play(screen, anchor));
+      expect(seen[2].follows).toBe(true);
+      expect(seen[2].marked).toBe(true);
+      const topBefore = seen[2].top;
+      // Too short now for its body at that top: it re-places, shifting up.
+      windowAt(1440, 600);
+      for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+      const last = seen[seen.length - 1];
+      const distance = Math.abs(last.top - topBefore);
+      expect(distance).toBeGreaterThan(20);
+      let top = 0;
+      let left = 0;
+      for (let i = 3; i < seen.length; i++) {
+        top = Math.max(top, Math.abs(seen[i].top - seen[i - 1].top));
+        left = Math.max(left, Math.abs(seen[i].left - seen[i - 1].left));
+      }
+      expect(top).toBeGreaterThan(0);
+      expect(top).toBeLessThanOrEqual(SPRING_FRAME_STEP * distance + 1e-6);
+      expect(left).toBeLessThanOrEqual(SPRING_FRAME_STEP * 35.9 + 1e-6);
+      // The gap to the card holds every frame, and it ends at rest.
+      for (const f of seen) expect(Math.abs(f.left - f.cardRight - 10)).toBeLessThanOrEqual(1);
+      expect(last.left).toBeCloseTo(725.4, 5);
+      expect(last.follows).toBe(false);
+    });
+
+    /**
+     * The held frame is only for a card that will spring: with the width
+     * spring off (reduced motion) or not on that card (a Character card),
+     * the card is at its new width in this frame, so the panel is at its new
+     * edge in it, not an old one (review 5 NIT-2's guards).
+     */
+    for (const why of ['reduced motion', 'a card with no width spring'] as const) {
+      it(`${why}: the port's step and the card's widening in one frame take no held frame`, () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        chromeAt(1440, 1000);
+        contentHeight = 300 - CHROME;
+        const { anchor, land, shiftPort } = openOnCard(500, 'right');
+        const screen = { runs: new Map<string, Run>() };
+        play(screen, anchor);
+        if (why === 'reduced motion') {
+          vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query }));
+        } else {
+          anchor.removeAttribute('data-width-springs');
+          // No spring on it: its animations play nothing, the card's width is its content's at once.
+          HTMLElement.prototype.animate = (() => ({ addEventListener: () => {}, cancel: () => {} })) as unknown as HTMLElement['animate'];
+        }
+        shiftPort(15);
+        land(215.4, 228.7, 180);
+        contentHeight = 486 - CHROME;
+        const first = play(screen, anchor);
+        // The card is painted at its new width.
+        expect(first.cardRight).toBeCloseTo(715.4, 5);
+        if (why === 'reduced motion') {
+          // The panel jumps to its new edge, past its port.
+          expect(first.left).toBeCloseTo(715.4 + 15.5 + PORT_GAP, 5);
+        } else {
+          // Not the held frame (old edge + the port's step, following): the
+          // panel springs to its new edge as before, from where it stood.
+          expect(first.follows).toBe(false);
+          expect(first.left).toBeCloseTo(500 + 179.5 + 14 + 12, 5);
+        }
+      });
+    }
+
+    /**
+     * Review 5 LOW-1: the follow is the open's, so it ends with the open.
+     * Another node opened in the middle of a follow starts clean: no follow
+     * attribute, no spring, its first placement is where its card is.
+     */
+    it('another node opened mid-follow starts clean (the follow is not carried over)', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(500);
+      const screen = { runs: new Map<string, Run>() };
+      play(screen, anchor);
+      land(215.4, 228.7, 180);
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 4; i++) seen.push(play(screen, anchor));
+      expect(seen[3].follows).toBe(true);
+      place({ 'data-node-inspector-anchor': 'n2' }, () => rect(900, 300, 180, 56));
+      act(() => {
+        useUIStore.getState().selectNode('n2');
+        useUIStore.getState().setInspectorVisible(true);
+      });
+      // Before its first step runs, and after it: nothing of the old follow on it.
+      expect(panel().hasAttribute('data-follows-card')).toBe(false);
+      expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+      act(() => { const pending = [...callbacks.values()]; callbacks.clear(); pending.forEach((cb) => cb(performance.now())); });
+      expect(panel().hasAttribute('data-follows-card')).toBe(false);
+      expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+      expect(parseFloat(panel().style.left)).toBeCloseTo(900 + 180 + 10, 5);
+    });
+
+    /**
+     * Review 5 LOW-1: the frame the follow ends in is committed before it is
+     * painted, like the frames of the follow: the card lands at rest there, off
+     * its last overshoot, and the panel takes that last step with it.
+     */
+    it('the frame the follow ends in is committed before its paint, the panel at its edge as the card lands', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(500);
+      const screen = { runs: new Map<string, Run>() };
+      play(screen, anchor);
+      land(215.4, 228.7, 180);
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+      const end = seen.findIndex((f, i) => i > 0 && seen[i - 1].follows && !f.follows);
+      expect(end).toBeGreaterThan(0);
+      // The attribute goes in the frame the follow ends, not a frame after: it is committed before the paint.
+      expect(seen[end - 1].committedFollows).toBe(true);
+      expect(seen[end].committedFollows).toBe(false);
+      expect(seen[end].cardRight).toBeCloseTo(715.4, 5);
+      expect(seen[end].committedLeft).toBeCloseTo(725.4, 5);
+      expect(seen[end].left).toBeCloseTo(725.4, 5);
+    });
 
     it('placed left, the card springs and the panel holds: the card\'s left edge, which it faces, does not move', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -1414,8 +1566,8 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       // The input's dot: its outer (left) edge 14.5 px out from the card's left edge.
       const inputOuter = 1100 - 14.5;
       for (const f of seen) {
-        expect(f.left + 260).toBeCloseTo(inputOuter - 8, 5);
-        expect(Math.abs(inputOuter - (f.left + 260) - 8)).toBeLessThanOrEqual(1);
+        expect(f.left + 260).toBeCloseTo(inputOuter - PORT_GAP, 5);
+        expect(Math.abs(inputOuter - (f.left + 260) - PORT_GAP)).toBeLessThanOrEqual(1);
       }
     });
   });
@@ -1915,12 +2067,12 @@ describe("the layout spring's CSS", () => {
 
   it('springs the floating popover only while data-content-resizing is on, never the pinned one', () => {
     const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.block));
-    // The spring, and (GM r107) the same spring on its height alone while it follows a card springing its width.
+    // The spring, and (GM r107, r114) the same spring on its height and top (never its left, which tracks the card) while it follows a card springing its width.
     expect(moving.map((r) => r.selector)).toEqual([
       '.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)',
       '.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)',
     ]);
-    expect(moving[1].block.trim()).toBe('transition: height var(--inspector-layout-spring);');
+    expect(moving[1].block.trim()).toBe('transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);');
     expect(moving[0].block).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\),\s*left var\(--inspector-layout-spring\);/);
     // The sampled spring, never a stock easing.
     expect(moving[0].block).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import wave
 
 import pytest
@@ -769,6 +770,61 @@ def test_an_old_root_that_no_longer_resolves_falls_back_to_the_name():
     assert main_module._ref_identity(gone) is None
     assert main_module._same_ref_file(gone, "/elsewhere/output/run1/n1_final.png")
     assert not main_module._same_ref_file(gone, "/elsewhere/output/run1/other.png")
+
+
+# #226 review 5, LOW-1 (B3): an outside http(s) URL names its own file, so two
+# of them with one basename are two files (never read as one by name).
+def test_two_outside_urls_with_one_basename_are_two_files():
+    assert not main_module._same_ref_file("https://a.example.com/x/photo.png", "https://b.example.com/y/photo.png")
+    assert not main_module._same_ref_file("https://a.example.com/x/photo.png", "https://a.example.com/x/other.png")
+    # The same path on another host is another file.
+    assert not main_module._same_ref_file("https://a.example.com/x/photo.png", "https://b.example.com/x/photo.png")
+    assert main_module._same_ref_file("https://a.example.com/x/photo.png", "https://a.example.com/x/photo.png")
+
+
+# #226 review 5, NIT-3: the corners of the same-file rule.
+def test_a_deleted_outside_file_is_not_another_file_of_the_same_name(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (b / "photo.png").write_bytes(_image_bytes("PNG", (20, 30)))
+    # a/photo.png is gone: what is left of it is its path, not its name.
+    assert not main_module._same_ref_file(str(a / "photo.png"), str(b / "photo.png"))
+    # Both gone: still two paths. The same gone path, spelled another way, is one.
+    (b / "photo.png").unlink()
+    assert not main_module._same_ref_file(str(a / "photo.png"), str(b / "photo.png"))
+    assert main_module._same_ref_file(str(a / "photo.png"), str(a / "." / "photo.png"))
+    assert main_module._same_ref_file(str(a / "photo.png"), str(a / "x" / ".." / "photo.png"))
+
+
+def test_one_file_under_two_names_is_one_file_as_samefile_reads_it(tmp_path):
+    # A hard link has another name and the same file; a symlink's target path
+    # resolves to it already. Neither reads as two files.
+    (tmp_path / "out").mkdir()
+    first = tmp_path / "first.png"
+    first.write_bytes(_image_bytes("PNG", (30, 20)))
+    os.link(first, tmp_path / "second.png")
+    assert main_module._same_ref_file(str(first), str(tmp_path / "second.png"))
+    other = tmp_path / "third.png"
+    other.write_bytes(_image_bytes("PNG", (30, 20)))
+    assert not main_module._same_ref_file(str(first), str(other))
+
+
+def test_a_differently_cased_spelling_of_one_file_is_one_file_on_a_case_insensitive_disk(tmp_path):
+    (tmp_path / "Photo.png").write_bytes(_image_bytes("PNG", (30, 20)))
+    if not (tmp_path / "photo.png").exists():
+        pytest.skip("a case-sensitive filesystem: the two spellings name two files")
+    assert main_module._same_ref_file(str(tmp_path / "Photo.png"), str(tmp_path / "photo.png"))
+
+
+def test_a_case_spelling_of_a_file_in_the_output_root_is_the_same_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    (tmp_path / "run1").mkdir()
+    (tmp_path / "run1" / "N1_final.png").write_bytes(_image_bytes("PNG", (30, 20)))
+    if not (tmp_path / "run1" / "n1_final.png").exists():
+        pytest.skip("a case-sensitive filesystem")
+    assert main_module._same_ref_file("/api/outputs/run1/N1_final.png", str(tmp_path / "run1" / "n1_final.png"))
+    assert main_module._same_ref_file(str(tmp_path / "run1" / "N1_final.png"), str(tmp_path / "RUN1" / "n1_final.png"))
 
 
 # #226 review 4, NIT-2: only an Image Input's preview follows its file. An

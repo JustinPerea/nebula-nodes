@@ -2555,16 +2555,61 @@ def _ref_identity(value: Any) -> tuple[str, str] | None:
         return None
 
 
+def _ref_local_file(identity: tuple[str, str]) -> Path | None:
+    """The local file an identity stands for, or None (an outside URL)."""
+    kind, value = identity
+    if kind == "output":
+        return OUTPUT_ROOT / value
+    if kind == "path":
+        return Path(value)
+    return None
+
+
+def _unresolved_ref_key(value: str) -> tuple[str, str]:
+    """What is left of a ref whose file is gone (it names nothing on disk).
+
+    A ref into an output folder (a served URL, or a path under any directory
+    named like the output root or ``output``, the root the outputs moved from)
+    is its path under that folder: the folder itself is what is gone, the
+    rest still says which output it was. Any other path is the path itself,
+    absolute and in the filesystem's own case spelling, so ``a/photo.png``
+    and ``b/photo.png`` stay two files after both are deleted (#226 review 5,
+    NIT-3)."""
+    ref = urlsplit(value).path if value.startswith(("http://", "https://")) else value
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return ("output", ref[len(_OUTPUTS_URL_PREFIX):])
+    parts = Path(ref).parts
+    names = {OUTPUT_ROOT.name, "output"}
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx] in names and parts[idx + 1:]:
+            return ("output", PurePosixPath(*parts[idx + 1:]).as_posix())
+    return ("path", os.path.normcase(os.path.abspath(os.path.expanduser(ref))))
+
+
 def _same_ref_file(old: Any, new: Any) -> bool:
-    """Whether two refs name the same file: by what they resolve to, and by
-    name only when the old one no longer resolves (outputs moved from a root
-    that is gone: the name is all that is left of it)."""
+    """Whether two refs name the same file: by what they resolve to (the same
+    file on disk however it is spelled: a symlink, a ``..``, a differently
+    cased name on a case-insensitive filesystem, as ``os.path.samefile``
+    reads it), and, when the old one no longer resolves (outputs moved from a
+    root that is gone, a file deleted), by what is left of its path."""
     if _ref_file_name(old) is None or _ref_file_name(new) is None:
         return _ref_file_name(old) == _ref_file_name(new)
     old_id = _ref_identity(old)
+    new_id = _ref_identity(new)
     if old_id is None:
-        return _ref_file_name(old) == _ref_file_name(new)
-    return old_id == _ref_identity(new)
+        old_key = _unresolved_ref_key(old)
+        return old_key == new_id or old_key == _unresolved_ref_key(new)
+    if old_id == new_id:
+        return True
+    if new_id is None:
+        return False
+    old_file, new_file = _ref_local_file(old_id), _ref_local_file(new_id)
+    if old_file is None or new_file is None:
+        return False
+    try:
+        return os.path.samefile(old_file, new_file)
+    except OSError:
+        return False
 
 
 def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:

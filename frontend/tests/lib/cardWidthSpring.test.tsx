@@ -161,6 +161,245 @@ describe("a card's width springs when its own content widens it (GM r107)", () =
   });
 });
 
+describe('reduced motion keeps the width it saw (review 5 LOW-1)', () => {
+  it('turned off after a jump, the next change springs from where the card was, not from a stale width', () => {
+    reduced = true;
+    render(<Card />);
+    laidOutAt(200);
+    laidOutAt(240);
+    expect(played).toHaveLength(0);
+    reduced = false;
+    laidOutAt(220);
+    expect(played).toHaveLength(1);
+    expect(played[0].keyframes.map((k) => k.width)).toEqual(['240px', '220px']);
+  });
+
+  it('ending the spring clears the mark from the card, and unmounting a card that never sprang leaves none', () => {
+    const { unmount } = render(<Card />);
+    laidOutAt(200);
+    laidOutAt(240);
+    const element = card();
+    act(() => played[0].animation.cancel());
+    expect(element.hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(false);
+    unmount();
+    expect(element.hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(false);
+  });
+});
+
+/**
+ * GM r114: every content width change springs, and one that lands while a
+ * spring runs (typing a rename: a few px per keystroke) retargets it,
+ * carrying on from the width and the speed the card has, never from rest.
+ * The page is played a frame at a time: its card paints at its animation's
+ * width (the keyframes, by offset; the layout spring's easing for the first
+ * spring), and at its content's own width with the animation lifted
+ * (effect.setKeyframes([]), which the hook uses to read it).
+ */
+describe('a content change while the spring runs retargets it, keeping its speed (GM r114)', () => {
+  const FRAME = 1000 / 60;
+  const points = LAYOUT_SPRING_EASING.match(/linear\((.*)\)/)![1].split(',').map(Number);
+  let now: number;
+  let natural: number;
+  let current: Fake | null;
+  let all: Fake[];
+
+  class Fake extends EventTarget {
+    startAt: number | null = null;
+    keyframes: Keyframe[];
+    lifted = false;
+    cancelled = false;
+    finished = false;
+    constructor(keyframes: Keyframe[], readonly options: KeyframeAnimationOptions) { super(); this.keyframes = keyframes; }
+    get currentTime() { return this.startAt === null ? 0 : now - this.startAt; }
+    set startTime(value: number | null) { this.startAt = value; }
+    get effect() {
+      return {
+        getKeyframes: () => this.keyframes,
+        setKeyframes: (next: Keyframe[]) => { this.lifted = next.length === 0; if (next.length) this.keyframes = next; },
+      };
+    }
+    finish() { this.finished = true; this.dispatchEvent(new Event('finish')); }
+    cancel() { this.cancelled = true; this.dispatchEvent(new Event('cancel')); }
+    width(): number {
+      const frames = this.keyframes;
+      const elapsed = this.currentTime;
+      const duration = Number(this.options.duration);
+      const share = Math.min(1, Math.max(0, elapsed / duration));
+      if (frames.length === 2) {
+        const at = share * (points.length - 1);
+        const i = Math.min(points.length - 2, Math.floor(at));
+        const curve = points[i] + (points[i + 1] - points[i]) * (at - i);
+        const from = parseFloat(String(frames[0].width));
+        return from + (parseFloat(String(frames[1].width)) - from) * curve;
+      }
+      const i = Math.min(frames.length - 2, Math.floor(share * (frames.length - 1)));
+      const a = parseFloat(String(frames[i].width));
+      const b = parseFloat(String(frames[i + 1].width));
+      return a + (b - a) * (share * (frames.length - 1) - i);
+    }
+  }
+
+  /** What the page paints for the card: the animation's width, or its content's. */
+  const painted = () => (current && !current.cancelled && !current.finished && !current.lifted ? current.width() : natural);
+
+  /** One frame: time moves, a pending animation starts, one at its end finishes, the observer reports. */
+  function frame() {
+    now += FRAME;
+    if (current && current.startAt === null) current.startAt = now;
+    if (current && current.startAt !== null && now - current.startAt >= Number(current.options.duration)) {
+      const done = current;
+      act(() => done.finish());
+      current = null;
+    }
+    let reported = NaN;
+    for (let i = 0; i < 4 && reported !== painted(); i++) {
+      reported = painted();
+      laidOutAt(reported);
+    }
+    return painted();
+  }
+
+  beforeEach(() => {
+    now = 0;
+    natural = 200;
+    current = null;
+    all = [];
+    vi.stubGlobal('document', Object.assign(document, {}));
+    Object.defineProperty(document, 'timeline', { configurable: true, get: () => ({ currentTime: now }) });
+    HTMLElement.prototype.animate = function (keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+      const animation = new Fake(keyframes, options);
+      // A new animation only becomes the page's when it replaces the last.
+      current = animation;
+      all.push(animation);
+      return animation as unknown as Animation;
+    } as HTMLElement['animate'];
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return new DOMRect(0, 0, painted(), 56);
+    };
+  });
+
+  afterEach(() => {
+    delete (document as unknown as { timeline?: unknown }).timeline;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).getBoundingClientRect;
+  });
+
+  function settleAt(width: number) {
+    natural = width;
+    laidOutAt(width);
+  }
+
+  /** Types: each of `steps` frames the content grows `grow` px, after `lead` frames of the first spring. */
+  function type(lead: number, steps: number, grow: number) {
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    const widths = [frame()];
+    for (let i = 0; i < lead; i++) widths.push(frame());
+    for (let i = 0; i < steps; i++) {
+      natural += grow;
+      widths.push(frame());
+    }
+    for (let i = 0; i < 80; i++) widths.push(frame());
+    return widths;
+  }
+
+  it('retargets each keystroke: one spring at a time, the card marked throughout, ending at the last width, unmarked', () => {
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    frame();
+    for (let i = 0; i < 4; i++) frame();
+    expect(card().hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(true);
+    const first = all.length;
+    for (let i = 0; i < 5; i++) {
+      natural += 3;
+      frame();
+      expect(card().hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(true);
+    }
+    // One new spring per change, each cancelling the one before.
+    expect(all.length - first).toBe(5);
+    expect(all.slice(0, -1).every((a) => a.cancelled)).toBe(true);
+    expect(all[all.length - 1].cancelled).toBe(false);
+    for (let i = 0; i < 80; i++) frame();
+    expect(painted()).toBe(255);
+    expect(card().hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(false);
+    expect(all[all.length - 1].finished).toBe(true);
+  });
+
+  it('keeps its speed across a retarget, never restarting from rest: a change a frame apart, six in a row', () => {
+    const widths = type(5, 6, 3);
+    const step = widths.map((w, i) => (i ? w - widths[i - 1] : 0));
+    // The change lands in frame 7 of the run (6 + lead); from there on, the
+    // step between frames changes only as far as the spring's pull does
+    // (omega^2 x distance x dt^2, about 4 px a frame at 40 px), never down to
+    // the ~2 px step a spring starting from rest takes.
+    const dt = FRAME / 1000;
+    for (let i = 7; i < 14; i++) {
+      const distance = Math.abs(258 - widths[i]);
+      expect(Math.abs(step[i] - step[i - 1])).toBeLessThanOrEqual(19.65 ** 2 * (distance + 3) * dt * dt + 0.6);
+      // Moving on, in the direction of its target (no stall frame, no restart).
+      expect(step[i]).toBeGreaterThan(0.5);
+    }
+    // And it settles at the last width.
+    expect(widths[widths.length - 1]).toBe(258);
+  });
+
+  it('a retarget at speed carries it: the step after the change is as big as before it, not a start from rest', () => {
+    const widths = type(5, 1, 20);
+    const before = widths[5] - widths[4];
+    const after = widths[7] - widths[6];
+    expect(before).toBeGreaterThan(4);
+    // From rest, the first steps toward a target 20 px further would be ~2 px.
+    expect(after).toBeGreaterThan(before * 0.8);
+  });
+
+  it('a change back to the width it came from springs back, and ends there', () => {
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    for (let i = 0; i < 6; i++) frame();
+    natural = 200;
+    for (let i = 0; i < 90; i++) frame();
+    expect(painted()).toBe(200);
+    expect(card().hasAttribute(CARD_WIDTH_SPRING_ATTR)).toBe(false);
+  });
+
+  it('a content width within half a pixel of the target starts nothing', () => {
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    for (let i = 0; i < 6; i++) frame();
+    const count = all.length;
+    natural = 240.3;
+    for (let i = 0; i < 4; i++) frame();
+    expect(all.length).toBe(count);
+  });
+
+  it('reduced motion jumps, whatever the change', () => {
+    reduced = true;
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    frame();
+    natural = 260;
+    frame();
+    expect(all).toHaveLength(0);
+    expect(painted()).toBe(260);
+  });
+
+  it('a card whose animation cannot be lifted (no effect) keeps the spring it has', () => {
+    render(<Card />);
+    settleAt(200);
+    natural = 240;
+    frame();
+    const spring = current!;
+    Object.defineProperty(spring, 'effect', { value: null });
+    natural = 260;
+    for (let i = 0; i < 4; i++) frame();
+    expect(all).toHaveLength(1);
+  });
+});
+
 describe('React Flow measures the node again as the spring starts (GM r107: the wire never shows the new width for a frame)', () => {
   it('measures its node at once, forced, from the card\'s React Flow node', () => {
     const measured: Array<Map<string, { id: string; nodeElement: HTMLDivElement; force?: boolean }>> = [];

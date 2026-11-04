@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { NodeInspectorPopover, PORT_CLEARANCE } from '../../src/components/panels/NodeInspectorPopover';
+import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
 import { houseDots } from '../helpers/houseDots';
 import { useUIStore } from '../../src/store/uiStore';
 
@@ -253,7 +253,9 @@ describe('the pinned Inspector', () => {
  * sits 8 px clear of the outer edge of the facing port's dot: right of the
  * node, its output ports; left of it, its input ports. With no port on the
  * facing side the gap stays 10 px from the card. The dot is measured as it is
- * on screen, so the rule holds at every zoom.
+ * on screen, so the rule holds at every zoom. GM r114: the panel also clears
+ * the port's 20 px hit target and hover circle by 2 px, whichever stands
+ * farthest.
  *
  * The house skin's port (slava-restraint.css): a 20 px handle (its layout
  * width), centred 14 px out from the card's edge, its 9 px dot drawn 4 px
@@ -299,22 +301,60 @@ describe('the gap to the facing port (GM r111)', () => {
     advanceLayout();
   }
 
+  /**
+   * GM r114: from a port's centre, the panel stands at the farthest of the
+   * dot's outer edge + 8 (the 9 px dot drawn 4 px toward the card), the hit
+   * target's edge + 2 and the hover circle's edge + 2 (both 20 px). Past
+   * about 100 % the target governs.
+   */
+  const clear = (zoom: number) => Math.max(0.5 * zoom + 8, 10 * zoom + 2);
+
   for (const zoom of [0.5, 1, 2]) {
-    it(`right, with an output port, at zoom ${zoom}: 8 px clear of its dot`, () => {
+    it(`right, with an output port, at zoom ${zoom}: clear of its dot, hit target and hover circle`, () => {
       openNode(rect(400, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
       expect(panel()).toHaveAttribute('data-placement', 'right');
-      const dot = 400 + 180 * zoom + 14.5 * zoom;
-      expect(bounds().left).toBeCloseTo(dot + PORT_CLEARANCE, 5);
+      const centre = 400 + 180 * zoom + 14 * zoom;
+      expect(bounds().left).toBeCloseTo(centre + clear(zoom), 5);
     });
 
-    it(`left, with an input port, at zoom ${zoom}: 8 px clear of its dot`, () => {
+    it(`left, with an input port, at zoom ${zoom}: clear of its dot, hit target and hover circle`, () => {
       // Near the right edge, so it opens on the left.
       const cardLeft = 1440 - 16 - 180 * zoom - 60;
       openNode(rect(cardLeft, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
       expect(panel()).toHaveAttribute('data-placement', 'left');
-      const dot = cardLeft - 14.5 * zoom;
-      expect(bounds().right).toBeCloseTo(dot - PORT_CLEARANCE, 5);
+      const centre = cardLeft - 14 * zoom;
+      expect(bounds().right).toBeCloseTo(centre - clear(zoom), 5);
     });
+  }
+
+  /**
+   * GM r114 (review 5 MEDIUM-1): at 100, 200 and 400 % the panel never
+   * overlaps the facing port's handle box (its hit target) or its hover
+   * circle, which reach 10 x zoom from the centre; measured from the real
+   * boxes the page gives, not from the rule's constants.
+   */
+  for (const zoom of [1, 2, 4]) {
+    for (const side of ['right', 'left'] as const) {
+      it(`${side} at ${zoom * 100} %: the panel overlaps neither the handle's box nor its hover circle`, () => {
+        const cardWidth = 180 * zoom;
+        const cardLeft = side === 'right' ? 100 : 3200 - 16 - cardWidth - 60;
+        openNode(rect(cardLeft, 300, cardWidth, 120 * zoom), { left: [14], right: [14] }, zoom, 3200, 1800);
+        expect(panel()).toHaveAttribute('data-placement', side);
+        const handle = flowNode!.querySelector<HTMLElement>(`.react-flow__handle-${side}`)!;
+        const box = handle.getBoundingClientRect();
+        // The hover circle: 20 layout px, centred on the handle (border-box).
+        const half = 10 * zoom;
+        const centre = box.left + box.width / 2;
+        const circle = { left: centre - half, right: centre + half };
+        if (side === 'right') {
+          expect(bounds().left).toBeGreaterThanOrEqual(box.right + 2 - 1e-6);
+          expect(bounds().left).toBeGreaterThanOrEqual(circle.right + 2 - 1e-6);
+        } else {
+          expect(bounds().right).toBeLessThanOrEqual(box.left - 2 + 1e-6);
+          expect(bounds().right).toBeLessThanOrEqual(circle.left - 2 + 1e-6);
+        }
+      });
+    }
   }
 
   it('right, with no output port: 10 px from the card (an input port on the far side changes nothing)', () => {
@@ -331,7 +371,7 @@ describe('the gap to the facing port (GM r111)', () => {
 
   it('several ports on the facing side: clear of the outermost one', () => {
     openNode(rect(400, 300, 180, 120), { right: [14, 30, 20] });
-    expect(bounds().left).toBeCloseTo(400 + 180 + 30.5 + PORT_CLEARANCE, 5);
+    expect(bounds().left).toBeCloseTo(400 + 180 + 30 + clear(1), 5);
   });
 
   it('a port hidden (no box) does not count', () => {
@@ -342,7 +382,7 @@ describe('the gap to the facing port (GM r111)', () => {
     hidden.getBoundingClientRect = () => rect(900, 320, 0, 0);
     flowNode!.append(hidden);
     advanceLayout();
-    expect(bounds().left).toBeCloseTo(400 + 180 + 14.5 + PORT_CLEARANCE, 5);
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14 + clear(1), 5);
   });
 
   it('a port with no drawn dot (another skin) counts as its whole box', () => {
@@ -350,7 +390,7 @@ describe('the gap to the facing port (GM r111)', () => {
     vi.restoreAllMocks();
     advanceLayout();
     // The handle's box: 584-604.
-    expect(bounds().left).toBeCloseTo(400 + 180 + 24 + PORT_CLEARANCE, 5);
+    expect(bounds().left).toBeCloseTo(400 + 180 + 24 + 8, 5);
   });
 
   it('never nearer the card than 10 px: a dot inside that gap (far zoomed out) leaves it at 10', () => {
@@ -360,22 +400,22 @@ describe('the gap to the facing port (GM r111)', () => {
 
   it('decides the side with the port counted: room at 10 px from the card but not past the port opens it on the left', () => {
     // Right of the card: 1440 - 16 - (card right + 10) = 230 would fit 228;
-    // past the port (card right + 22.5) it is 217.5, so it opens on the left.
+    // past the port (card right + 26) it is 214, so it opens on the left.
     const cardRight = 1440 - 16 - 10 - 230;
     openNode(rect(cardRight - 180, 300, 180, 120), { left: [14], right: [14] });
     expect(panel()).toHaveAttribute('data-placement', 'left');
-    expect(bounds().right).toBeCloseTo(cardRight - 180 - 14.5 - PORT_CLEARANCE, 5);
+    expect(bounds().right).toBeCloseTo(cardRight - 180 - 14 - clear(1), 5);
   });
 
   it('a window resize re-places it by the same rule', () => {
     openNode(rect(400, 300, 180, 120), { left: [14], right: [14] });
-    expect(bounds().left).toBeCloseTo(400 + 180 + 14.5 + PORT_CLEARANCE, 5);
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14 + clear(1), 5);
     // Too narrow for the right now: it re-places on the left, clear of the input's dot.
     viewport(800, 900);
     bottomBar(800, 900);
     advanceLayout();
     expect(panel()).toHaveAttribute('data-placement', 'left');
-    expect(bounds().right).toBeCloseTo(400 - 14.5 - PORT_CLEARANCE, 5);
+    expect(bounds().right).toBeCloseTo(400 - 14 - clear(1), 5);
   });
 
   it('a zoom re-places it at once, by the dot at the new zoom', () => {
@@ -386,7 +426,7 @@ describe('the gap to the facing port (GM r111)', () => {
     zoom = 2;
     anchorRect = rect(400, 300, 360, 240);
     advanceLayout();
-    expect(bounds().left).toBeCloseTo(760 + 29 + PORT_CLEARANCE, 5);
+    expect(bounds().left).toBeCloseTo(760 + 28 + clear(2), 5);
   });
 
   it('the pinned Inspector stays docked by the rail, whatever ports the node has', () => {
