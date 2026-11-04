@@ -323,3 +323,54 @@ turn's edit was refused. Coordinator decisions D1/D2, adversarially checked
 - Judgment: a pin the person deletes before Claude answers it keeps its span
   until the cap (the strict rule: only this session's answer ends it). The
   safe direction: nothing is refused, edits wait.
+
+## Round 5b (review 4: the push ledger; GM r108, r112)
+
+Review 4 HIGH-1 (two lenses): a `reply_to_person` whose own
+`thread.replied` reached the listener before the tool's result counted
+twice, so one reply ended the span of two messages. The coordinator's
+decision (adversarially checked) replaces the count with a push ledger:
+Nebula records each push and marks the session's oldest unanswered one per
+reply. The server half lives in PR C, beside `add_reply` and the accepted
+route (#223 serves neither); this half is the listener's.
+
+- **Push groups, no count.** `_open_groups`: one group per deliberate push
+  that carried messages or answers (message ids, then question set ids, in
+  push order), `confirmed` once Nebula recorded it. `Push.group` and
+  `Push.question_ids` carry them to PR C's accepted call. `_open_replies`,
+  `_pushed_messages` and `_tool_reply_ids` are gone.
+- **What answers a group.** An own `thread.replied` removes the group that
+  holds its `replyTo`, else nothing (never a fallback). The tool's result
+  does the same; when its `replyTo` names no group and isn't one already
+  answered (`_answered_ids`, so its echo coming first is harmless), Nebula
+  never heard of the push, and the oldest unconfirmed group is answered.
+  So one reply answers one push in either order.
+- **A journal reset** (Nebula restarted, its ledger with it) marks every
+  group unconfirmed and `groups_to_resend` hands them to PR C's listener
+  once. **The first good beat** (`ChannelState.beat_answered`) takes
+  Nebula's `openPushes` once per process: a listener restarted in the same
+  session starts with those groups, confirmed, and the span from the
+  latest. `beat_answered` returns True on news (first beat, a new listener
+  id), and the beat loop then nudges the listener.
+- **GM r108 a:** the person deleting a pin this session was pushed ends
+  its span (`pin.removed`).
+- **GM r112.5, a successor on the same session** (review 4 live LOW-1): a
+  409 `listener_session_taken` is first taken for a restart's leftover
+  entry. The listener prints "Nebula is waiting for this session’s previous
+  listener to time out, then this one connects by itself." once, shows
+  nothing (no `registerError`), and asks again every 5 s. Past 60 s still
+  refused, it is a real second process: Nebula's line (GM r108 string 4)
+  then goes to stderr after "error: " and to `channel_status`.
+- **NIT-2:** a refused or unanswered beat is tried again every 5 s
+  (`CHANNEL_RETRY_SECONDS`), not every second; the docs say so.
+- **NIT-3:** `FRESH_SECONDS` is two beats plus a beat's timeout (35 s), so
+  one missed beat never makes a live listener stale. A crashed leftover
+  can then count as fresh for 35 s instead of 25 s, which only matters to
+  a terminal started without the launch command's session.
+- **LOW-4 (helper):** `ListenerBook.taken_by_another` for PR C's inbox,
+  accepted and held routes.
+- GM r108 string 4 is in `SESSION_TAKEN_LINE`. The command on its own line
+  is still `nebula mcp connect claude-code --channel` (the server can't
+  print the launch command: it names the person's token file path).
+
+Checks: see the PR body's Round 5b section.

@@ -31,18 +31,25 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   (10 minutes) after the latest push if it hasn't, however long the turn
   goes without a Nebula call. So edits the person makes while Claude works
   on the request ride a later push instead of gating its turn (review 1 of
-  #225, HIGH-1). The listener keeps a count, per session (one listener is
-  one session): each push that carried a message or an answer is answered
-  by one reply this session saved, by reply_to_person (any one after the
-  push: Nebula, not the agent, picks which message a reply answers) or by
-  ``nebula reply`` in the session's own shell (the journal's
-  ``thread.replied`` by this agent whose ``replyTo`` is a message this
-  listener pushed, which it asks for with ownReplies=1: REPLY_KIND); each
-  pin a push carried is answered by this session's own answer on that pin
-  (resolve_pin, or ``nebula pin resolve`` from its shell, which Nebula
-  keeps in its feed only from this same session). A sibling session under
-  the same token, another token, or a reply Nebula refused never answers
-  one. After the last answer the next gated push gates as before (once the
+  #225, HIGH-1). The listener keeps the pushes it hasn't seen answered as
+  a set of push groups, per session (one listener is one session; review 4,
+  the push ledger): each push that carried messages or answers is one group
+  of their ids (message ids, question set ids). Nebula records each push
+  the listener reports (POST /api/agent/thread/accepted, PR C) and answers
+  a reply by marking this session's OLDEST unanswered push; the reply names
+  it (``replyTo``: its newest message, else its first question set). An
+  own ``thread.replied`` (asked for with ownReplies=1: REPLY_KIND, so
+  ``nebula reply`` from the session's own shell counts) removes the group
+  holding its ``replyTo``, and nothing else; so does the reply_to_person
+  tool's result, whichever of the two arrives first (the other then finds
+  nothing). Only the tool's result, never the event, falls back to the
+  oldest group Nebula hasn't confirmed when its ``replyTo`` names none of
+  them (Nebula never heard of that push). Each pin a push carried is
+  answered by this session's own answer on that pin (resolve_pin, or
+  ``nebula pin resolve`` from its shell, which Nebula keeps in its feed
+  only from this same session), or by the person deleting it (GM r108 a).
+  A sibling session under the same token, another token, or a reply Nebula
+  refused never answers one. After the last answer the next gated push gates as before (once the
   agent has been quiet for ``agent_quiet``). An ungated passive push (an accept, its own run's
   end) starts a span too, ended by the window's heuristic (below:
   ``window_min`` after the push, ``window_idle`` after its last Nebula call,
@@ -268,6 +275,11 @@ class Push:
     meta: dict[str, str]
     gate: bool              # a gated turn (Q42 a, Q51 a): only CHANGE_TURN_TOOLS run
     count: int
+    # A deliberate push that carried messages or answers: its group's key in
+    # ChannelState._open_groups, and the ids the listener reports to Nebula
+    # (POST /api/agent/thread/accepted: messageIds, questionIds).
+    group: str | None = None
+    question_ids: list[str] = field(default_factory=list)
 
 
 class ChannelRefused(Exception):
@@ -444,19 +456,26 @@ class ChannelState:
         # Settings token's, ``app:<id>``): a thread.replied by this agent
         # ends the deliberate span. None until a beat goes through.
         self.agent_id: str | None = None
-        # Replies its reply_to_person tool saved (their ids): the tool's answer
-        # already counted, so their own thread.replied, arriving a moment
-        # later, must not count again.
-        self._tool_reply_ids: dict[str, None] = {}
-        # Round 5 (D1): what the deliberate span waits for. Its deliberate
-        # pushes that carried a message or an answer and haven't been
-        # answered yet (a count: Nebula picks which message a reply answers,
-        # so no reply names a push); the pins its pushes carried that this
-        # session hasn't answered; and the message ids it pushed (a reply
-        # from its own shell counts only when it answers one of them).
-        self._open_replies = 0
+        # What the deliberate span waits for (review 4, the push ledger). Its
+        # deliberate pushes that carried messages or answers and haven't been
+        # answered, oldest first: group key -> {"ids": message ids then
+        # question set ids, in push order, "messages", "questions",
+        # "confirmed": Nebula recorded the push (the accepted route
+        # answered)}. A reply names the push Nebula marked (``replyTo``, one
+        # of its ids), so it removes that group only. And the pins its pushes
+        # carried that this session hasn't answered.
+        self._open_groups: dict[str, dict[str, Any]] = {}
+        self._group_seq = 0
+        # Ids of groups already answered: a reply's second sighting (its
+        # event after its tool result, or the other way round) finds its
+        # replyTo here and does nothing, so one reply never answers two pushes.
+        self._answered_ids: dict[str, None] = {}
+        # Nebula's journal was reset (it restarted): every group is
+        # unconfirmed and the listener reports each again (groups_to_resend).
+        self._resend_due = False
+        # The first good beat's openPushes are taken once per process.
+        self._seeded = False
         self._open_pins: dict[str, None] = {}
-        self._pushed_messages: dict[str, None] = {}
         # Its proposals still waiting for the person (a decision on one
         # pushes), oldest first, at most MAX_OWN (one a Nebula restart closed
         # never gets a decision).
@@ -488,8 +507,8 @@ class ChannelState:
         self._turn_at: float | None = None
         # J4 (Justin, 2026-11-04): when the latest deliberate push whose span
         # is open went. Set, that span ends only once this session has
-        # answered every deliberate push (round 5, D1: _open_replies,
-        # _open_pins) or DELIBERATE_SPAN_CAP after it, never by the window's
+        # answered every deliberate push (_open_groups, _open_pins) or
+        # DELIBERATE_SPAN_CAP after it, never by the window's
         # 20 s idle guess; None, the span (if any) is a passive push's.
         self._reply_due_at: float | None = None
 
@@ -650,6 +669,13 @@ class ChannelState:
         if lost:
             self._note_edit(now, wakes=True)
             self._lost.add(lost)
+        if lost == "reset":
+            # A new journal: Nebula restarted, and its push ledger with it.
+            # Every open group is reported again (groups_to_resend); until
+            # Nebula confirms one, only the tool's own result can answer it.
+            for group in self._open_groups.values():
+                group["confirmed"] = False
+            self._resend_due = bool(self._open_groups)
         for event in response.get("events") or []:
             if isinstance(event, Mapping):
                 self._observe_event(event, now)
@@ -678,24 +704,24 @@ class ChannelState:
             # Its answer is its own call, made now, like the tool's.
             self.last_call = max(self.last_call, now)
             self._pin_answered(str(data.get("pinId") or ""))
+        if kind == "pin.removed":
+            # The person deleted a pin this session was pushed: nothing is
+            # left to answer, so its span ends (GM r108 a).
+            self._pin_answered(str(data.get("pinId") or ""))
         if kind == REPLY_KIND:
             # Before the actor filter: a reply by this same token agent from
-            # any route counts once it answers a message this listener pushed
-            # (``replyTo``, which Nebula sets: round 5, D1). A sibling
-            # session's reply answers its own messages, never these; another
+            # any route answers the push Nebula marked for it (``replyTo``,
+            # one of that push's ids: review 4, the push ledger). A sibling
+            # session's reply names its own pushes, never these; another
             # agent's, or one Nebula refused (never journaled), never counts.
+            # Never the tool's fallback: an event naming no group of this
+            # session answers nothing.
             if not self._own_event(event):
                 return
-            reply_id = str(data.get("replyId") or "")
-            if reply_id and reply_id in self._tool_reply_ids:
-                self._tool_reply_ids.pop(reply_id, None)  # its tool's answer counted already
-                return
-            if str(data.get("replyTo") or "") not in self._pushed_messages:
-                return
-            # Its reply is its own call, made now, like the tool's: the next
-            # gated push waits for agent_quiet after it, as after the tool.
-            self.last_call = max(self.last_call, now)
-            self._replied()
+            if self._answer_group(str(data.get("replyTo") or "")):
+                # Its reply is its own call, made now, like the tool's: the next
+                # gated push waits for agent_quiet after it, as after the tool.
+                self.last_call = max(self.last_call, now)
             return
         if kind in DECISIONS:
             proposal_id = str(data.get("proposalId") or "")
@@ -902,16 +928,124 @@ class ChannelState:
         if now > end:
             self._turn_at = None
             self._reply_due_at = None
-            self._open_replies = 0  # the cap: nothing left waits for an answer
+            # The cap: nothing left waits for an answer (Nebula's ledger
+            # stops offering these pushes at the same cap).
+            self._open_groups.clear()
             self._open_pins.clear()
             return False
         return True
 
-    def _replied(self) -> None:
-        """This session replied to the person (J4): one of its unanswered
-        message or answer pushes is answered (round 5, D1)."""
-        self._open_replies = max(0, self._open_replies - 1)
+    def _new_group(self, messages: list[str], questions: list[str]) -> str | None:
+        """A deliberate push that carried messages or answers: its group."""
+        ids = [*messages, *questions]
+        if not ids:
+            return None
+        self._group_seq += 1
+        key = f"g{self._group_seq}"
+        self._open_groups[key] = {"ids": ids, "messages": list(messages), "questions": list(questions),
+                                  "confirmed": False}
+        while len(self._open_groups) > MAX_OWN:
+            del self._open_groups[next(iter(self._open_groups))]
+        return key
+
+    def _answer_group(self, reply_to: str) -> bool:
+        """A reply named ``reply_to``: the group holding it is answered.
+        Returns whether one was (a second sighting of the same reply finds
+        none)."""
+        if not reply_to:
+            return False
+        key = next((k for k, group in self._open_groups.items() if reply_to in group["ids"]), None)
+        if key is None:
+            return False
+        for kept in self._open_groups.pop(key)["ids"]:
+            _remember(self._answered_ids, kept)
         self._settle()
+        return True
+
+    def _tool_replied(self, reply_to: str) -> None:
+        """Its reply_to_person saved a reply (one process, so its own result
+        is sure): the group its ``replyTo`` names is answered. When it names
+        none, and isn't one already answered (its own event came first),
+        Nebula never heard of the push it answers (the accepted route
+        failed, or Nebula restarted before the listener reported it again):
+        the oldest group Nebula hasn't confirmed is answered instead. Only
+        the tool falls back; a shell reply's event never does."""
+        if self._answer_group(reply_to) or (reply_to and reply_to in self._answered_ids):
+            return
+        key = next((k for k, group in self._open_groups.items() if not group["confirmed"]), None)
+        if key is not None:
+            self._answer_group(self._open_groups[key]["ids"][0])
+
+    def beat_answered(self, answer: Mapping[str, Any], now: float) -> bool:
+        """Nebula took a beat (POST /api/agent/channel answered): its entry
+        names this listener and its agent. Returns True when this is news
+        (the first beat, or a new listener id: Nebula restarted), so the
+        listener looks again at what may be due. The first beat's
+        ``openPushes`` (pushes Nebula recorded for this session that no
+        reply answered: a listener restarted in the same session) are
+        taken once (seed_open_pushes)."""
+        listener = answer.get("listener") if isinstance(answer.get("listener"), Mapping) else {}
+        was = self.listener_id
+        if listener.get("listenerId"):
+            self.listener_id = str(listener["listenerId"])
+        named = listener.get("agent") if isinstance(listener.get("agent"), Mapping) else {}
+        if named.get("id"):
+            # Its own replies (any route) end a deliberate span (J4).
+            self.agent_id = str(named["id"])
+        first = not self._seeded
+        if first:
+            self.seed_open_pushes(answer.get("openPushes"), now)
+        return first or self.listener_id != was
+
+    def push_accepted(self, group: str) -> None:
+        """Nebula recorded the push of ``group`` (the accepted route answered)."""
+        if group in self._open_groups:
+            self._open_groups[group]["confirmed"] = True
+
+    def groups_to_resend(self) -> list[tuple[str, list[str], list[str]]]:
+        """After a journal reset: every open group, to report to Nebula again
+        (key, message ids, question set ids). Once per reset."""
+        if not self._resend_due:
+            return []
+        self._resend_due = False
+        return [(key, list(group["messages"]), list(group["questions"]))
+                for key, group in self._open_groups.items() if not group["confirmed"]]
+
+    def seed_open_pushes(self, pushes: Any, now: float) -> None:
+        """The first good beat of this process: the pushes Nebula recorded
+        for this session that no reply has answered (a listener that
+        restarted in the same session, under a new nonce). Each is a group,
+        confirmed, and the span runs from the latest as if this process had
+        pushed it. Once per process."""
+        if self._seeded:
+            return
+        self._seeded = True
+        latest: float | None = None
+        for raw in pushes if isinstance(pushes, list) else []:
+            if not isinstance(raw, Mapping):
+                continue
+            messages = [_ident(i) for i in raw.get("messageIds") or [] if _ident(i)] if isinstance(
+                raw.get("messageIds"), list) else []
+            questions = [_ident(i) for i in raw.get("questionIds") or [] if _ident(i)] if isinstance(
+                raw.get("questionIds"), list) else []
+            held = {i for group in self._open_groups.values() for i in group["ids"]} | set(self._answered_ids)
+            if any(i in held for i in [*messages, *questions]):
+                continue
+            key = self._new_group(messages, questions)
+            if key is None:
+                continue
+            self._open_groups[key]["confirmed"] = True
+            try:
+                age = max(0.0, float(raw.get("ageSeconds") or 0.0))
+            except (TypeError, ValueError):
+                age = 0.0
+            at = now - age
+            latest = at if latest is None else max(latest, at)
+        if latest is not None and latest + self.limits.deliberate_span > now:
+            self._turn_at = max(self._turn_at or latest, latest)
+            self._reply_due_at = max(self._reply_due_at or latest, latest)
+        elif latest is not None:
+            self._open_groups.clear()
 
     def _pin_answered(self, pin_id: str) -> None:
         """This session answered a pin: the span its push opened is answered."""
@@ -923,7 +1057,7 @@ class ChannelState:
         """Every deliberate push this session got is answered: the span ends,
         so the next gated push gates as before (once the agent has been quiet
         for ``agent_quiet``, like any gated push)."""
-        if self._reply_due_at is not None and self._open_replies == 0 and not self._open_pins:
+        if self._reply_due_at is not None and not self._open_groups and not self._open_pins:
             self._turn_at = None
             self._reply_due_at = None
 
@@ -964,11 +1098,9 @@ class ChannelState:
         self.last_call = now
         self.in_flight = max(0, self.in_flight - 1)
         if name == "reply_to_person" and _reply_went(name, result):
-            # Any reply it saved after a push answers one push (round 5, D1:
-            # its replyTo may be None, or an older message).
-            self._replied()
-            if result["reply"].get("id"):
-                _remember(self._tool_reply_ids, str(result["reply"]["id"]))
+            # The push Nebula marked for it (its replyTo), or, when Nebula
+            # never heard of the push, the oldest it hasn't confirmed.
+            self._tool_replied(str(result["reply"].get("replyTo") or ""))
         elif name == "resolve_pin" and _reply_went(name, result):
             # Only the span its own pin's push opened (round 5, D1).
             self._pin_answered(str(args.get("pin_id") or ""))
@@ -1326,17 +1458,19 @@ class ChannelState:
         # by a reply, a pin by its own answer on that pin.
         self._turn_at = at
         self._reply_due_at = at
-        if messages or message_overflow or answers:
-            self._open_replies += 1
-        for message in messages:
-            if message.get("messageId"):
-                _remember(self._pushed_messages, str(message["messageId"]))
+        # One group per push that carried messages or answers (review 4, the
+        # push ledger): a reply answers the whole push.
+        message_ids = [str(m["messageId"]) for m in messages if m.get("messageId")]
+        question_ids = [str(a["questionId"]) for a in answers if a.get("questionId")]
+        group = self._new_group(message_ids, question_ids)
         for pin in pins:
             _remember(self._open_pins, str(pin["pinId"]))
         content = self._render(wake, messages, message_overflow, answers, pins, proposals, runs, *edits,
                                held=held, now=now, gate=False, nth=0, pin_overflow=pin_overflow,
                                deliberate_nth=len(self._deliberate_history))
-        return self._push(wake, content, count, held, False)
+        push = self._push(wake, content, count, held, False)
+        push.group, push.question_ids = group, question_ids
+        return push
 
     def _push(self, wake: str, content: str, count: int, held: int, gate: bool) -> Push:
         meta = {"wake": wake, "count": str(count)}

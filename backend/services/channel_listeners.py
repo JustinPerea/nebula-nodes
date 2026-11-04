@@ -84,13 +84,15 @@ IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because it uses an
 # exported session to happen.
 SESSION_TAKEN_CODE = "listener_session_taken"
 SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
-                      "session. Start each Claude Code with the launch command this prints, which gives each its own "
-                      "session, then start this one again.\nnebula mcp connect claude-code --channel")
+                      "session. Start each Claude Code with this command, which gives each one its own session, then "
+                      "start this listener again.\nnebula mcp connect claude-code --channel")  # GM r108, string 4
 APP_ID_PREFIX = "app:"
 # A listening entry heard from this recently is fresh: a crashed session's
 # leftover entry (up to TTL_SECONDS old) is not, so it never counts when a
-# reply looks for the listener it answers (round 5, D2).
-FRESH_SECONDS = BEAT_SECONDS + 10.0
+# reply looks for the listener it answers (round 5, D2). Two beats and a
+# beat's 5 s timeout: one missed beat never makes a live listener stale
+# (review 4 NIT-3: at 25 s a single failed beat left it unfresh for ~5 s).
+FRESH_SECONDS = 2 * BEAT_SECONDS + 5.0
 REASONS = ("idle", "error")
 
 
@@ -202,6 +204,16 @@ class ListenerBook:
             if changed:
                 self.revision += 1
             return entry, changed
+
+    def taken_by_another(self, agent: AgentIdentity, session: str | None, nonce: str | None) -> bool:
+        """Whether another process (another ``nonce``) holds this agent
+        session's entry: its inbox, accepted and held calls are refused then
+        (review 4 LOW-4), as its beats are. No entry: nothing to take."""
+        key = (agent.id, session or "")
+        with self._lock:
+            self._expire(self._clock())
+            entry = self._entries.get(key)
+            return entry is not None and entry.nonce != nonce
 
     def gone(self, agent: AgentIdentity, session: str | None, nonce: str | None = None) -> bool:
         """Its session ended. Returns whether there was an entry. Another

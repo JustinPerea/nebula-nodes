@@ -1117,17 +1117,24 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   this way: it ends the window as it goes, and no gated push goes until
   that session has answered every request it got from you, or 10 minutes
   after the latest if it hasn't (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04).
-  The listener counts, per session (one listener is one session): each
-  push with a message or an answer is answered by one reply that session
-  saved after it (`reply_to_person`; or `nebula reply` from the session's
-  own shell, once Nebula says it answers a message this listener pushed),
-  and each pin by that session's own answer on that pin (`resolve_pin`, or
-  `nebula pin resolve` from its shell). So two messages need two replies,
-  and a reply to the first never ends the second's span. A reply or pin
-  answer from another session under the same token, from another token,
-  or one Nebula refused (never journaled) answers nothing here. The
-  listener learns of a shell reply from its own `thread.replied` event
-  (whose `replyTo` names the message, set by Nebula) and of a shell pin
+  The listener keeps, per session (one listener is one session), the
+  pushes it hasn't seen answered, one group of ids per push that carried
+  messages or answers. It reports each push to Nebula, which records it
+  for that session (`POST /api/agent/thread/accepted`, with the message ids
+  and the question set ids). A reply then answers that session's oldest
+  unanswered push, and Nebula names it in the reply (`replyTo`: the push's
+  newest message, else its first question set); the listener removes that
+  group, whichever route the reply took (`reply_to_person`, or `nebula
+  reply` from the session's own shell). Each pin is answered by that
+  session's own answer on that pin (`resolve_pin`, or `nebula pin resolve`
+  from its shell), or once you delete the pin. So two messages need two
+  replies, and a reply to the first never ends the second's span. A reply
+  or pin answer from another session under the same token, from another
+  token, or one Nebula refused (never journaled) answers nothing here.
+  When Nebula never heard of a push (its report failed, or Nebula
+  restarted before the listener reported it again), only the
+  `reply_to_person` tool's own result can answer it. The listener learns
+  of a shell reply from its own `thread.replied` event and of a shell pin
   answer from its own `pin.resolved`, which its long-poll asks for with
   `ownReplies=1` (its other own events stay out of its feed). How long
   Claude thinks or works in other tools between Nebula calls doesn't
@@ -1157,12 +1164,19 @@ second process naming the same agent and session is refused (`409`,
 first's entry. It prints:
 
 - "error: Nebula couldn’t connect this listener because another process is
-  already listening as this session. Start each Claude Code with the launch
-  command this prints, which gives each its own session, then start this one
+  already listening as this session. Start each Claude Code with this
+  command, which gives each one its own session, then start this listener
   again." then `nebula mcp connect claude-code --channel` on its own line.
 
-It beats again every 15 s, so once the other entry is gone (its goodbye, or
-45 s after a crash) it registers.
+That line is for a real second process only. A refused process first takes
+the other entry for a restart's leftover (Claude Code restarted its MCP
+server, and the old process's entry lives up to 45 s): it waits quietly,
+nothing shown on the canvas, and prints only "Nebula is waiting for this
+session’s previous listener to time out, then this one connects by
+itself." It asks again every 5 s, so once the other entry is gone (its
+goodbye, or 45 s after a crash) it registers. Still refused after 60 s, it prints the line above.
+A beat Nebula refuses for its token, or never answers, is also tried again
+every 5 s.
 
 **Only a Settings agent token registers a listener** (Justin, 2026-11-03
 and 2026-11-04). The listener must hold a valid agent token from Settings ›
