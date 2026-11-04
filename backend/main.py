@@ -192,6 +192,7 @@ from services.canvas_proposals import (
     ProposalError,
     ProposalSpec,
     agent_wording,
+    billed_to,
     canvas_proposals,
     clean_note,
     clean_positions,
@@ -206,6 +207,8 @@ from services.asset_proposals import parse_change as parse_asset_change, summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
                                       update_detail as asset_update_detail, update_text as asset_update_text)
 # Each canvas proposal's Update too (Justin's Q112 a).
+from services.canvas_proposals import model_label
+from services.canvas_proposals import plan_name as card_name
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
 from services.agent_questions import (
@@ -6041,6 +6044,13 @@ def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
     return node_route.node_name(definition, node.get("label"), str(node.get("definitionId") or node_id))
 
 
+def _node_model(node_id: str, graph: CLIGraph | None = None) -> str:
+    """A node's model as the canvas titles it ("Krea 2"), whatever its label."""
+    node = (graph or cli_graph).nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
+    return node_route.canvas_title(definition) if definition else str(node.get("definitionId") or "")
+
+
 def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
     """A node's name in a run, from the run's own nodes, for a refusal: the
     label it carries (a run's node has none today: GraphNode keeps no label),
@@ -6872,8 +6882,10 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
         return ANOTHER_PROJECT
     try:
         _refuse_overwriting_later_edits(proposal)
+        dropped: list[dict[str, str]] = []
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
-                                                                models=models)
+                                                                models=models, drops=dropped)
+        _refuse_changed_drops(proposal, dropped)
         _refuse_changed_runs(proposal, candidate, id_map, run_ids)
     except HTTPException as exc:
         return str(exc.detail)
@@ -7600,8 +7612,50 @@ async def _sweep_proposals() -> None:
     await _announce_closed_proposals(expired, actor=dict(_SYSTEM_ACTOR))
 
 
+def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
+    """The names, on the canvas now, of the existing nodes an open proposal
+    touches, the far ends of the connections it removes among them (GM - Design,
+    PR #216 r4 4: names follow renames live; review 3 LOW-2). None for
+    a closed one, or one for a project that isn't open: its ids name nodes
+    there, not here."""
+    if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
+        return {}
+    return {node_id: _node_label(node_id) for node_id in sorted(proposal.touched) if node_id in cli_graph.nodes}
+
+
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
-    return canvas_proposals.view(proposal, registry=node_registry)
+    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal))
+
+
+# What each open proposal's card last showed for its nodes' names: a rename
+# re-sends the card (_follow_renamed_proposals).
+_proposal_names_sent: dict[str, dict[str, str]] = {}
+
+
+async def _follow_renamed_proposals() -> None:
+    """After a canvas edit, re-send each open proposal whose nodes were
+    renamed to the person's canvases, so the card and plan line read the new
+    names (GM - Design, PR #216 r4 4)."""
+    for proposal in canvas_proposals.open_list():
+        live = _proposal_live_names(proposal)
+        shown = _proposal_names_sent.get(proposal.id) or {
+            node_id: name for node_id, name in proposal.shown_names().items() if node_id in live}
+        if live == shown:
+            continue
+        _proposal_names_sent[proposal.id] = live
+        try:
+            await manager.broadcast_browser({
+                "type": "proposalOpened",
+                "proposal": _proposal_view(proposal),
+                "acceptKey": proposal.accept_key,
+                "personValues": canvas_proposals.person_values(proposal),
+            })
+        except Exception:  # noqa: BLE001 - the next sync carries the names too
+            pass
+    for proposal_id in list(_proposal_names_sent):
+        kept = canvas_proposals.get(proposal_id)
+        if kept is None or not kept.is_open:
+            _proposal_names_sent.pop(proposal_id, None)
 
 
 def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
@@ -7650,19 +7704,8 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
     node = graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
     params = node.get("params") or {}
-    definition = node_registry.get(definition_id) or {}
-    inputs = node_ports(definition_id, params, definition, "inputPorts")
-    outputs = node_ports(definition_id, params, definition, "outputPorts")
     configured = universal_ports.stored_ports(definition_id, params) is not None
-    # A node never configured with no declared ports in a direction takes any
-    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
-    def fits(edge: dict[str, Any]) -> bool:
-        if edge.get("source") == node_id and (outputs or configured):
-            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
-        if edge.get("target") == node_id and (inputs or configured):
-            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
-        return True
-    orphans = [edge for edge in graph.edges if not fits(edge)]
+    orphans = _orphaned_wires(graph, node_id)
     if orphans:
         wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
         model = universal_ports.model_of(definition_id, params)
@@ -7678,6 +7721,82 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
             f"{why}: {wires}. Disconnect them in the same edit (`unwire`), or pick a model that takes them."))
 
 
+def _model_set(graph: CLIGraph, node_id: str) -> bool:
+    node = graph.nodes.get(node_id) or {}
+    return bool(universal_ports.model_of(str(node.get("definitionId") or ""), node.get("params")))
+
+
+class PortsUnread(HTTPException):
+    """_refuse_orphaned_wires's refusal for a canvas proposal (``drops``)
+    whose new model's ports can't be read right now (review 2, wire-drop
+    LOW-4): an agent (create, a reopen) reads the same `unwire` words as
+    before, while Accept tells the person in theirs and keeps the proposal
+    open, so it accepts once the read works again."""
+
+    def __init__(self, graph: CLIGraph, node_id: str, reason: str) -> None:
+        try:
+            _refuse_orphaned_wires(graph, node_id, reason=reason)
+            detail = reason
+        except HTTPException as exc:
+            detail = str(exc.detail)
+        super().__init__(status_code=400, detail=detail)
+        node = graph.nodes.get(node_id) or {}
+        definition_id = str(node.get("definitionId") or "")
+        self.node_name = _node_label(node_id, graph)
+        self.model = universal_ports.model_of(definition_id, node.get("params"))
+        self.provider = universal_ports.PROVIDER_NAME.get(universal_ports.PROVIDER.get(definition_id, ""), "the provider")
+        self.missing_key = getattr(reason, "kind", "") == "missing-key"
+
+
+def _ports_unread_line(exc: PortsUnread) -> str:
+    """The person's line when Accept can't read a new model's ports (review 2
+    LOW-4; error copy's style: what happened, then what to do, and never the
+    agents' `unwire`). The proposal stays open: Accept again works once the
+    read does."""
+    name = card_name(exc.node_name) or exc.node_name
+    if exc.missing_key:
+        return (f"Nebula can't read which inputs {exc.model} takes until your {exc.provider} key is set, so it "
+                f"can't tell which connections “{name}” keeps. Add it in Settings, then accept again.")
+    return (f"Nebula couldn't read which inputs {exc.model} takes from {exc.provider}'s server, so it can't tell "
+            f"which connections “{name}” keeps. Try Accept again in a moment.")
+
+
+def _orphaned_wires(graph: CLIGraph, node_id: str) -> list[dict[str, Any]]:
+    """The wires on a node that its ports, as its params now set them, don't
+    take: _refuse_orphaned_wires's test, shared."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    return [edge for edge in graph.edges if not fits(edge)]
+
+
+def _drop_orphaned_wires(graph: CLIGraph, node_id: str, *, keep: set[str]) -> list[dict[str, str]]:
+    """Removes, from a staged graph, the wires already on it (not in `keep`,
+    the ids this proposal made) that ``node_id``'s new model has no port for,
+    and returns them by their ends (_stage_proposal's `drops`)."""
+    dropped: list[dict[str, str]] = []
+    for edge in _orphaned_wires(graph, node_id):
+        if str(edge.get("id") or "") in keep:
+            continue
+        ends = {key: str(edge.get(key) or "") for key in ("source", "sourceHandle", "target", "targetHandle")}
+        if graph.remove_edge(ends["source"], ends["sourceHandle"], ends["target"], ends["targetHandle"]):
+            dropped.append(ends)
+    return dropped
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
@@ -7686,6 +7805,7 @@ def _stage_proposal(
     what: str = "a proposal",
     models: Mapping[tuple[str, str], Any] | None = None,
     report: dict[str, dict[str, Any]] | None = None,
+    drops: list[dict[str, str]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -7702,6 +7822,14 @@ def _stage_proposal(
     known (no key, unknown model) is refused with the reason. `report`, when
     given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
     {node id: reason} for those nodes.
+
+    `drops`, when given (a canvas proposal: the person sees each one before
+    Accept, GM - Design, PR #216 r3), takes the wires already on the canvas
+    that a model change leaves on ports the new model doesn't have: they are
+    removed from the candidate, as the picker removes them for the person,
+    and listed there. Only when the new model's ports are known; a wire this
+    proposal makes, or ports that can't be read, are still refused. Direct
+    edits never pass it: they stay all or nothing (`unwire`).
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
@@ -7778,8 +7906,25 @@ def _stage_proposal(
                     f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        if drops is not None:
+            made = set(edge_ids)
+            for node_id, reason in configured.items():
+                # Only a swap to a model whose ports are known (GM - Design, PR
+                # #216 r4 8): a cleared model, or ports that can't be read,
+                # still refuse with the agents' `unwire`.
+                if reason or node_id in new_ids or not _model_set(candidate, node_id):
+                    continue
+                drops.extend(_drop_orphaned_wires(candidate, node_id, keep=made))
         for node_id, reason in configured.items():
+            if reason and drops is not None and _orphaned_wires(candidate, node_id):
+                # A canvas proposal's swap whose ports can't be read now: the
+                # person's Accept says so in their words (_ports_unread_line).
+                raise PortsUnread(candidate, node_id, reason)
             _refuse_orphaned_wires(candidate, node_id, reason=reason)
+    except PortsUnread as exc:
+        if ref_for:
+            exc.detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), str(exc.detail))
+        raise
     except HTTPException as exc:
         # The validators name nodes by id; a new node's staged id (n12) means
         # nothing to the agent, which wrote +img.
@@ -7910,13 +8055,16 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
 
 
 def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
-                   measured: input_sizes.Measured) -> dict[str, Any]:
+                   measured: input_sizes.Measured,
+                   models: Mapping[tuple[str, str], Any] | None = None) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
 
     Each node is free (utility) or paid (a provider call), with its list
     price when model_pricing.json has one. "Up to" when ancestors are counted,
     because the execution cache may skip them. ``measured`` holds the input
     sizes for prices read from them (_measure_proposal_inputs, awaited first).
+    ``models`` (_look_up_models) gives a universal node's chosen model its
+    catalog name for the plan line.
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
@@ -7933,12 +8081,18 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             # The input ports wired into it: a Krea-only one keeps the run on Krea (cost_for).
             wired = {str(edge.get("targetHandle")) for edge in graph_edges
                      if str(edge.get("target")) == node_id and edge.get("targetHandle")}
+            params = candidate.nodes[node_id].get("params") or {}
+            entry = cost_for(definition, params, definitions, api_keys, wired=wired)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
-                           wired=wired),
+                **entry,
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
+                # The plan line's words (canvas_proposals.plan_line): the node
+                # by its name, its model, and who pays for its run.
+                "name": _node_label(node_id, candidate),
+                "model": model_label(definition, params, models),
+                "billedTo": billed_to(definition, params, entry, wired=wired),
             })
         if estimate:
             estimate = {
@@ -7961,6 +8115,21 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             cost["pendingSkipped"] = skipped
         return cost
     return summarize_cost(entries, up_to=up_to)
+
+
+def _model_reread(change: Any, models: Mapping[tuple[str, str], Any]) -> dict[str, str] | None:
+    """{key, name} when a change sets a universal node's model to the model it
+    already has: its ports are read again, so the card's model line reads
+    "Krea 2 · inputs updated", never "X → X" (GM - Design, PR #216 r4 8)."""
+    node = cli_graph.nodes.get(change.node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    key = universal_ports.MODEL_PARAM.get(definition_id)
+    if not key or key not in change.params:
+        return None
+    model = universal_ports.model_of(definition_id, change.params)
+    if not model or model != universal_ports.model_of(definition_id, node.get("params")):
+        return None
+    return {"key": key, "name": universal_ports.model_name(definition_id, model, models.get((definition_id, model)))}
 
 
 def _not_ready_nodes(
@@ -8002,11 +8171,62 @@ def _not_ready_nodes(
                 # The line the proposal bar and layer show (error copy round
                 # 3f): the key by its provider, the node by its name. Agents
                 # keep `missing`, find_nodes' words, as before.
-                "person": node_readiness.instance_missing_line(
+                "person": _quoted_name_line(node_readiness.instance_missing_line(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
-                    wired.get(node_id, {}), name=name) or need,
+                    wired.get(node_id, {}), name=_card_quoted(name)) or need, name, definition),
             })
     return rows
+
+
+def _wire_words(ends: Mapping[str, Any], graph: CLIGraph, id_map: Mapping[str, str]) -> dict[str, str]:
+    """A wire as the card's panel names it: “Prompt” → “Second take” ·
+    Prompt (GM - Design, PR #216 r3): both nodes by name and the target's
+    port by its label, read on ``graph`` (the staged one for a wire the
+    proposal makes, with its new nodes under ``id_map``; the live one for a
+    wire it removes, whose port the new model drops)."""
+    source = id_map.get(str(ends.get("source")), str(ends.get("source")))
+    target = id_map.get(str(ends.get("target")), str(ends.get("target")))
+    handle = str(ends.get("targetHandle") or "")
+    node = graph.nodes.get(target) or {}
+    definition_id = str(node.get("definitionId") or "")
+    ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, "inputPorts")
+    label = next((str(port.get("label") or handle) for port in ports or []
+                  if isinstance(port, Mapping) and port.get("id") == handle), handle)
+    return {"sourceName": _node_label(source, graph), "targetName": _node_label(target, graph), "targetLabel": label}
+
+
+def _dropped_ends(dropped: Iterable[Mapping[str, Any]]) -> list[tuple[str, str, str, str]]:
+    return sorted((str(e.get("source")), str(e.get("sourceHandle")), str(e.get("target")), str(e.get("targetHandle")))
+                  for e in dropped)
+
+
+def _refuse_changed_drops(proposal: Proposal, dropped: list[dict[str, str]]) -> None:
+    """409 when Accept would now remove other wires than the proposal listed
+    (one was made or removed on that node since): the person decides on the
+    removals the card showed."""
+    if _dropped_ends(dropped) != _dropped_ends(proposal.removed_edges):
+        raise HTTPException(status_code=409, detail="the connections it removes changed after it was proposed")
+
+
+def _card_quoted(name: str) -> str:
+    """A node's name on the proposal card, quoted once by the plan line's rule
+    (canvas_proposals.plan_name; review 2 L4: “Hero” never reads ““Hero””)."""
+    return f"“{card_name(name) or name}”"
+
+
+def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
+    """The card names nodes in curly quotes (GM - Design, PR #216 r1):
+    "“Hero shot” needs your Krea account. Connect it in Settings." A route's
+    line (node_route.route_unavailable_line) starts with the model's name;
+    it gets the node's, quoted, the same way."""
+    if line.startswith("“"):
+        return line
+    # Only the model's own names: a line that starts with neither isn't about
+    # the node by name, so nothing is quoted (review 1 L2).
+    for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition)):
+        if lead and line.startswith(f"{lead} "):
+            return f"{_card_quoted(name)}{line[len(lead):]}"
+    return line
 
 
 def _estimate_proposal_run(
@@ -8097,8 +8317,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
                           before=current.get("params") or {}, must_exist=True)
     models = await _look_up_models(_spec_models_wanted(spec))
     _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
+    dropped: list[dict[str, str]] = []
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models, drops=dropped)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
@@ -8107,15 +8328,26 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     positions = place_new_nodes(spec, known, visible_area)
     measured = await _measure_proposal_inputs(candidate, run_ids)
     _refuse_if_graph_moved(fence)
-    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
+    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured, models=models)
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
             "name": f"{_node_label(node_id)} ({node_id})",
+            # The person's words for it (the card names nodes, never ids).
+            "title": _node_label(node_id),
+            # The model it runs after Accept: a universal node's chosen model by
+            # name ("GPT-4o"), never its provider (GM - Design, PR #216 r5).
+            "model": model_label(node_registry.get(str((candidate.nodes.get(node_id) or {}).get("definitionId") or ""))
+                                 or {}, (candidate.nodes.get(node_id) or {}).get("params") or {}, models)
+            or _node_model(node_id),
             "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
         }
         for node_id in spec.references
     }
+    for change in spec.params:
+        reread = _model_reread(change, models)
+        if reread and change.node_id in existing:
+            existing[change.node_id]["inputsUpdated"] = reread
     try:
         proposal = canvas_proposals.create(
             agent=identity,
@@ -8128,6 +8360,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # The card's words for its wires, and the wires Accept removes (GM - Design, PR #216 r3).
+    proposal.wires = [_wire_words(edge.as_dict(), candidate, id_map) for edge in spec.edges]
+    proposal.removed_edges = [{**ends, **_wire_words(ends, cli_graph, {})} for ends in dropped]
     # The canvas it was made on, in the step that made it (review 20 L-3).
     proposal.canvas_revision = _canvas_revision()
     # Which of the agent's cursors proposed it, for the "Accepted" click on
@@ -8145,6 +8380,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             "adds": len(spec.nodes),
             "wires": len(spec.edges),
             "sets": len(spec.params),
+            # The wires its model change removes on Accept (review 2 N1): the
+            # same count as the Update's (canvas_proposals.change_count).
+            "removes": len(proposal.removed_edges),
             "runs": len(spec.run),
             "paidRuns": cost["paidRuns"],
         },
@@ -8390,11 +8628,19 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         raise _proposal_http_error(exc) from exc
     positions = {**proposal.positions, **dragged}
     staging_error: HTTPException | None = None
+    unread: PortsUnread | None = None
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
+            dropped: list[dict[str, str]] = []
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models,
+                                                                   drops=dropped)
+            _refuse_changed_drops(proposal, dropped)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
+        except PortsUnread as exc:
+            # The provider can't be read right now: nothing changed, and the
+            # proposal stays open to accept again (review 2 LOW-4).
+            unread = exc
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
             staging_error = exc
@@ -8405,6 +8651,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
                 [candidate.nodes[node_id] for node_id in touched],
                 source="proposal",
             )
+    if unread is not None:
+        raise HTTPException(status_code=409, detail=_ports_unread_line(unread))
     if staging_error is not None:
         detail = str(staging_error.detail)
         try:
@@ -8445,6 +8693,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     # Each names the proposal in data: nebula-mcp --channel leaves these out
     # of the person's edits by that field, never by the summary's note.
     _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
+    # The wires its model changes dropped, as the card listed them (GM - Design, PR #216 r3).
+    for ends in dropped:
+        _journal_edge("edge.removed", dict(ends), actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
         before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
         changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
@@ -11990,6 +12241,8 @@ async def _broadcast_graph_sync(
     # (_broadcast_admitted_run) is paid by this one.
     global _graph_sync_owed
     _graph_sync_owed = False
+    if not graph_replaced:
+        await _follow_renamed_proposals()
     if graph_replaced:
         # Its events went to the journal above, before any await. (The pins
         # listing follows catalog.json, so one taken between the commit and

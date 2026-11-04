@@ -112,6 +112,26 @@ export function floatingTopLimit(gutter: number, gap = BOTTOM_BAR_GAP): number {
   return line;
 }
 
+/** Parts of the top line only the notice stack's proposal card stays under,
+ * besides the top bars: the offline banner (GM - Design, PR #216 r4 7). The
+ * floating panels don't move for it. */
+export const NOTICE_TOP_LINE_ATTR = 'data-notice-top-line';
+/** On the root while the offline banner shows: the notice region places its
+ * stack again when it comes or goes (NoticeRegion's root watch). */
+export const BANNER_SHOWN_ATTR = 'data-offline-banner';
+
+/** floatingTopLimit, and below the offline banner while it shows. */
+export function noticeTopLimit(gutter: number): number {
+  let line = floatingTopLimit(gutter);
+  if (typeof document === 'undefined') return line;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${NOTICE_TOP_LINE_ATTR}]`)) {
+    const box = part.getBoundingClientRect();
+    if (box.height <= 0) continue;
+    line = Math.max(line, box.bottom + gutter);
+  }
+  return line;
+}
+
 /**
  * How far the unpinned Inspector beside a node keeps clear of the floating
  * top chrome and of the notice band's line (GM r68: "with 12 px clear of
