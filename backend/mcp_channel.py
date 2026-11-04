@@ -32,9 +32,11 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   saved), or ``DELIBERATE_SPAN_CAP`` (10 minutes) after the push if no reply
   comes, however long the turn goes without a Nebula call. So edits the
   person makes while Claude works on the request ride a later push instead
-  of gating its turn (review 1 of #225, HIGH-1). Another agent's reply, or
-  a reply this process doesn't make (``nebula reply`` from a shell: its own
-  events never reach its feed), doesn't end it; the cap does. After the
+  of gating its turn (review 1 of #225, HIGH-1). A reply under this
+  listener's own token by any route ends it too: ``nebula reply`` from the
+  session's own shell is Claude's reply (the journal's ``thread.replied``
+  by this agent, which the listener asks for with ownReplies=1: REPLY_KIND).
+  Another token's reply, or one Nebula refused, doesn't. After the
   reply the next gated push gates as before (once the agent has been quiet
   for ``agent_quiet``). An ungated passive push (an accept, its own run's
   end) starts a span too, ended by the window's heuristic (below:
@@ -194,6 +196,12 @@ DELIBERATE_SPAN_CAP = 600.0
 # What ends that span: this session's reply to the person (the Message box)
 # or its answer on a pin (a pinReply row in the box).
 REPLY_TOOLS = frozenset({"reply_to_person", "resolve_pin"})
+# A reply saved in the person's thread (PR C's services/person_thread.py
+# REPLY_EVENT). The listener asks for its own with ownReplies=1
+# (main.get_canvas_events), so a reply under this listener's token from any
+# route (the tool, `nebula reply` in the session's own shell, HTTP) ends
+# the span too (Justin, 2026-11-04: that is Claude's reply).
+REPLY_KIND = "thread.replied"
 
 MAX_LISTED = 20       # events written out per push; the rest are a count
 MAX_PENDING = 100     # pins, and changes, kept while waiting (each on its own); past this only a count
@@ -440,6 +448,14 @@ class ChannelState:
         # Why Nebula refused to register this listener (no token, or one it
         # doesn't know: main._channel_caller), until a beat goes through.
         self.register_error: str | None = None
+        # This listener's agent as Nebula named it when it registered (the
+        # Settings token's, ``app:<id>``): a thread.replied by this agent
+        # ends the deliberate span. None until a beat goes through.
+        self.agent_id: str | None = None
+        # Replies its reply_to_person tool saved (their ids): the tool's answer
+        # already ended the span, so their own thread.replied, arriving a
+        # moment later, must not end a span a newer push started.
+        self._tool_reply_ids: dict[str, None] = {}
         # Its proposals still waiting for the person (a decision on one
         # pushes), oldest first, at most MAX_OWN (one a Nebula restart closed
         # never gets a decision).
@@ -623,7 +639,8 @@ class ChannelState:
 
     def observe(self, response: Mapping[str, Any], now: float) -> None:
         """One /api/canvas/events answer (fetched without self=1: Nebula has
-        already left out this agent's own events)."""
+        already left out this agent's own events, but its own thread.replied:
+        ownReplies=1)."""
         if response.get("cursor") is not None:
             self.cursor = int(response["cursor"])
         self.journal = response.get("journal") or self.journal
@@ -651,6 +668,22 @@ class ChannelState:
         # open. The answer's projectId does (observe), and so does a
         # canvas.replaced that opened another (_pin_event).
         self._pin_event(kind, event)
+        if kind == REPLY_KIND:
+            # Before the actor filter: a reply by this same token agent,
+            # whatever route posted it, is this session's reply (J4). Another
+            # agent's reply, or one Nebula refused (never journaled), isn't.
+            replier = event.get("actor") or {}
+            if not (self.agent_id and replier.get("kind") == "agent" and replier.get("id") == self.agent_id):
+                return
+            reply_id = str(data.get("replyId") or "")
+            if reply_id and reply_id in self._tool_reply_ids:
+                self._tool_reply_ids.pop(reply_id, None)  # its tool's answer ended the span already
+                return
+            # Its reply is its own call, made now, like the tool's: the next
+            # gated push waits for agent_quiet after it, as after the tool.
+            self.last_call = max(self.last_call, now)
+            self._replied()
+            return
         if kind in DECISIONS:
             proposal_id = str(data.get("proposalId") or "")
             if proposal_id in self.own_proposals:
@@ -931,6 +964,8 @@ class ChannelState:
         self.in_flight = max(0, self.in_flight - 1)
         if name in REPLY_TOOLS and _reply_went(name, result):
             self._replied()
+            if name == "reply_to_person" and result["reply"].get("id"):
+                _remember(self._tool_reply_ids, str(result["reply"]["id"]))
         if name == "get_proposal":
             key = str(args.get("proposal_id") or "")
             self._release(self._waiting_proposals, key)
@@ -1826,7 +1861,8 @@ class Listener:
         """The journal long-poll, always 25 s: an answer comes as soon as there are events."""
         backoff = 0.0
         while not self.state.off:
-            params: dict[str, Any] = {"wait": POLL_SECONDS, "limit": 100}
+            # ownReplies: its own replies by any route come through (REPLY_KIND).
+            params: dict[str, Any] = {"wait": POLL_SECONDS, "limit": 100, "ownReplies": 1}
             if self.state.cursor is not None:
                 params["after"] = self.state.cursor
             if self.state.journal:

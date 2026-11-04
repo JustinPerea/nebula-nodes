@@ -1186,10 +1186,12 @@ def test_a_channel_listener_registers_with_its_token_file_and_not_without(client
     seen = client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]
     assert [entry["listenerId"] for entry in seen] == [state.listener_id]
     assert seen[0]["agent"]["verified"] is True
+    # Its agent as Nebula names it: a thread.replied by it ends its span (J4).
+    assert state.agent_id == seen[0]["agent"]["id"] and state.agent_id.startswith("app:")
     # Tokenless (a name only): refused, said once on stderr after "error: ".
     capsys.readouterr()
     tokenless = _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=2.5)  # 3 beats
-    assert tokenless.listener_id is None
+    assert tokenless.listener_id is None and tokenless.agent_id is None
     assert tokenless.register_error == ("Nebula couldn’t connect this listener because it has no token. Copy one "
                                         "from Settings › Connect your agent, then run this command again.")
     assert capsys.readouterr().err.count("error: Nebula couldn’t connect this listener because it has no token.") == 1

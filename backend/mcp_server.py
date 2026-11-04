@@ -3126,6 +3126,10 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
                 listener = answer.get("listener") if isinstance(answer.get("listener"), dict) else {}
                 if listener.get("listenerId"):
                     state.listener_id = str(listener["listenerId"])
+                named = listener.get("agent") if isinstance(listener.get("agent"), dict) else {}
+                if named.get("id"):
+                    # Its own replies (any route) end a deliberate span (J4).
+                    state.agent_id = str(named["id"])
                 said = shown
             last = now
         await anyio.sleep(1.0)

@@ -1023,6 +1023,7 @@ def _listener_rig(limits: Limits):
 
     async def fetch_events(params):
         record["polls"] += 1
+        record["params"] = dict(params)
         record["open"] += 1
         record["most_open"] = max(record["most_open"], record["open"])
         try:
@@ -1048,6 +1049,21 @@ def _listener_rig(limits: Limits):
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
                                     clock=time.monotonic, log=lambda line: None, fetch_pins=fetch_pins)
     return listener, record, ends
+
+
+def test_the_events_poll_asks_for_its_own_replies():
+    # Its reply under its token by any route (`nebula reply` in its shell)
+    # must reach its feed: ownReplies=1 (J4, Justin 2026-11-04).
+    listener, record, _ends = _listener_rig(Limits())
+
+    async def main():
+        async with anyio.create_task_group() as group:
+            group.start_soon(listener.run)
+            await _until(lambda: record["polls"] == 1)
+            group.cancel_scope.cancel()
+
+    anyio.run(main)
+    assert record["params"]["ownReplies"] == 1 and "self" not in record["params"]
 
 
 def test_a_run_end_never_abandons_the_events_long_poll():

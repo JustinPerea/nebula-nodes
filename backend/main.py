@@ -153,6 +153,7 @@ from services.agent_presence import (
 )
 from services.canvas_events import (
     MOVE_THRESHOLD_PX,
+    OWN_REPLY_KIND,
     TooManyWaiters,
     actor_for_headers,
     actor_for_identity,
@@ -7007,10 +7008,12 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     Query: after (seq; default "from now"), journal (id from a previous
     response), wait (seconds, capped at 25), limit (1-100), kinds (comma
     list of groups or exact kinds), self=1 to include the caller's own
-    events. Resume with after=<cursor>.
+    events, ownReplies=1 to include only its own thread.replied (a channel
+    listener: its reply by any route ends its deliberate span). Resume with
+    after=<cursor>.
     """
     query = request.query_params
-    known = {"after", "journal", "wait", "limit", "kinds", "self"}
+    known = {"after", "journal", "wait", "limit", "kinds", "self", "ownReplies"}
     await _sweep_proposals()
     unknown = sorted(set(query) - known)
     if unknown:
@@ -7028,6 +7031,9 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     include_self = (query.get("self") or "0").lower()
     if include_self not in {"0", "1", "true", "false"}:
         raise HTTPException(status_code=422, detail="self must be 1 or 0")
+    own_replies = (query.get("ownReplies") or "0").lower()
+    if own_replies not in {"0", "1", "true", "false"}:
+        raise HTTPException(status_code=422, detail="ownReplies must be 1 or 0")
     identity = identify_agent(current_request_headers())
     exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
     try:
@@ -7039,6 +7045,7 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
             limit=int(limit) if limit is not None else 50,
             kinds=kinds,
             exclude_actor_id=exclude,
+            keep_own=frozenset({OWN_REPLY_KIND}) if own_replies in {"1", "true"} else frozenset(),
         )
     except TooManyWaiters as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
