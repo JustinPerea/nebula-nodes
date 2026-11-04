@@ -90,3 +90,44 @@ failure states" and "Recipient".
   `mcp_channel.py`, against the deliberate and channel test files): 11
   killed. The survivor, "a passive push ends a window too", is equivalent:
   an ungated passive push only goes when no window is open.
+
+## Round 3 (review 1 of #225, the channel half)
+
+- **HIGH-1 (two lenses rated it MEDIUM): a deliberate push starts an
+  ungated-turn span.** `_take_deliberate` cleared the window but left no
+  trace of the turn it started: the push never entered `_history` and never
+  touched `last_call`, so the agent still read as idle, and a gated change
+  push 8 s after a nudge opened a window inside the message's own turn
+  (probe P6: message at 100, nudge at 101, change push at 109, the turn's
+  `edit_canvas` at 112 refused). Now every ungated push (a deliberate one,
+  and an accept or its own run's end, which had the same gap) sets
+  `_turn_at`; `_ungated_turn` reads it with the window's own heuristic
+  (`_turn_end`, factored out of `_window_end`: at least `window_min` after
+  the push, `window_idle` after its last call, never while a call runs).
+  While it is open no gated push goes (`_ready`, `take_push`'s ride-along
+  and `next_check`'s gated times). An ungated push due meanwhile (an
+  accept) still goes, without the edits (they would gate it).
+- Chosen over the reviewers' minimum (`last_call = at`), which still lost
+  when Claude thought for more than 20 s. The gap that stays: past the
+  first minute, a pause of more than 20 s with no Nebula call reads as the
+  turn's end. Module docstring and MCP-SETUP say so.
+- Cost, accepted: after an accept or its own run's end, a gated change now
+  waits up to a minute (the turn's guess) instead of the 30 s spacing.
+- Tests turned round (each to the new rule, intent kept): the pin-never-
+  waits probe (171.5 / 205 instead of 145 / 180), the failing pin check
+  (the edit at 160.001), the cap test (61.5), the passive-limits test (a
+  short turn heuristic so it still measures the 30 s spacing), the mixed
+  batch (a short heuristic so both still meet at the spacing), and the live
+  `test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds` (now the
+  edit first, gated and refused, then the pin, which frees the turn).
+- New: P6, a turn that keeps calling, a call running in the turn, the pin
+  and accept variants, and an accept inside the message turn going without
+  the edits.
+- **LOW-3 survivors pinned:** 101 messages in one read (counted, "81 more
+  messages not listed", never dropped) and a `person.message` from an agent
+  actor (never wakes).
+- **NIT-1 (reply_to_person in the gated wording)** belongs to #225, where
+  the tool lives.
+- Mutations (deliberate + channel files): 8 mutants on the span and the two
+  survivors, 8 killed. The one that first survived (take_push's ride-along
+  ignoring the span) is now killed by the accept-inside-the-turn test.

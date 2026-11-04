@@ -25,7 +25,15 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   that it is still open; an answer once the listener has read it back), with
   no ``min_gap``, no hourly limit of the passive wakes, no wait for the agent
   to be quiet and no wait for a gated window: it ends that window, so the
-  turn it starts acts like any turn and is never refused for pacing. Their
+  turn it starts acts like any turn and is never refused for pacing. No
+  gated push goes until that turn ends by the window's heuristic (below:
+  ``window_min`` after the push, ``window_idle`` after its last Nebula
+  call, never while a call runs), so edits the person makes while Claude
+  reads the request ride a later push instead of gating its turn (review 1
+  of #225, HIGH-1). The same holds after an ungated passive push (an
+  accept, its own run's end). It is a guess: past the first minute, a pause
+  of more than ``window_idle`` with no Nebula call reads as the turn's end,
+  and a gated push may then gate the rest of it. Their
   only limit is a runaway cap of ``deliberate_per_hour`` (200) in a rolling
   hour, counted on its own; past it they wait, never dropped. Everything
   passive that waits rides along in that push (edits, decisions, run ends),
@@ -72,7 +80,8 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   no turn seems under way, so the gate lands on the turn it wakes. No passive
   push ever closes or shortens a gated window: an ungated passive push (an
   accept, its own run's end) goes only once the window has ended on its own
-  terms. Only a deliberate push ends one, at once: the person asked for
+  terms. Every ungated push starts a turn of its own that no gated push may
+  gate (``_turn_at``, ended by the same heuristic). Only a deliberate push ends one, at once: the person asked for
   something, and a request they make is never refused for pacing. The cost,
   accepted: Claude Code queues pushes that arrive while Claude is busy for
   its next turn, so a change turn still running when one goes is freed to
@@ -410,6 +419,12 @@ class ChannelState:
         self._waiting_runs: dict[str, int] = {}
         self._window_at: float | None = None
         self._wrap_noted = False
+        # An ungated turn under way (review 1 of #225, HIGH-1): when an ungated
+        # push went (a deliberate one, or an accept or its own run's end).
+        # Until that turn ends by the window's heuristic (_turn_end), no gated
+        # push goes, so the person's edits made while Claude reads a message
+        # can't gate the turn the message started.
+        self._turn_at: float | None = None
 
     # -- the journal ---------------------------------------------------------------
     def _keep(self, bucket: list[dict], item: dict) -> bool:
@@ -746,18 +761,36 @@ class ChannelState:
                 self.run_ended({"runId": run_id, "status": "running"}, now)
 
     # -- the agent's own calls -------------------------------------------------------
-    def _window_end(self) -> float | None:
-        """When the gated window closes on its own terms (None: no window;
-        inf: a call is running, so not yet known). Only this ends a window:
-        no push, pins included, ever closes or shortens one (review 1)."""
-        if self._window_at is None:
+    def _turn_end(self, start: float | None) -> float | None:
+        """When a turn a push started at ``start`` ends, by the window's
+        heuristic (None: no turn; inf: a call is running, so not yet known):
+        at least window_min after the push, and window_idle after its last
+        Nebula call."""
+        if start is None:
             return None
         if self.in_flight:
             # A call still running (a get_proposal or wait_for_canvas_change
             # wait) is the woken turn going on, however long it waits.
             return math.inf
-        return max(self._window_at + self.limits.window_min,
-                   (self.last_call if self.last_call > self._window_at else self._window_at) + self.limits.window_idle)
+        return max(start + self.limits.window_min,
+                   (self.last_call if self.last_call > start else start) + self.limits.window_idle)
+
+    def _window_end(self) -> float | None:
+        """When the gated window closes on its own terms (None: no window;
+        inf: a call is running, so not yet known). Only this, or a deliberate
+        push, ends a window: no passive push ever closes or shortens one (review 1)."""
+        return self._turn_end(self._window_at)
+
+    def _ungated_turn(self, now: float) -> bool:
+        """An ungated push's turn still seems under way: no gated push may go
+        (it would gate that turn: review 1 of #225, HIGH-1)."""
+        end = self._turn_end(self._turn_at)
+        if end is None:
+            return False
+        if now > end:
+            self._turn_at = None
+            return False
+        return True
 
     def _window_open(self, now: float) -> bool:
         end = self._window_end()
@@ -938,7 +971,9 @@ class ChannelState:
         # While a pin waits, a gated push waits too (review 2, M1): each one
         # would start a new window and leave the pin behind it, for as long
         # as the person kept editing. The pin's batch takes them along.
-        gated_may_go = idle and not self._pins_wait(now)
+        # Nor while the turn an ungated push started (a message, a pin, an
+        # answer, an accept, its own run's end) still seems under way.
+        gated_may_go = idle and not self._pins_wait(now) and not self._ungated_turn(now)
         if any(self._gated_decision(p) for p in self._proposals) and gated_may_go:
             return "proposal"
         if any(not self._gated_decision(p) for p in self._proposals) and free:
@@ -992,6 +1027,11 @@ class ChannelState:
         ready_times = []
         idle_at = self._idle_at(now)
         free_at = now
+        # A gated push waits for the ungated turn under way to end, too.
+        if self._ungated_turn(now):
+            end = self._turn_end(self._turn_at)
+            turn_free = end + 0.001 if end is not None and math.isfinite(end) else now + self.limits.window_idle
+            idle_at = max(idle_at, turn_free)
         if self._window_open(now):
             end = self._window_end()
             # A window closes just after its end; with a call running the end
@@ -1063,7 +1103,7 @@ class ChannelState:
         # What gates a push (a rejected, expired or invalidated decision, the
         # person's edits) rides only when no turn seems under way and no pin
         # waits (a pin's batch takes it, as in _ready).
-        gated_may_ride = idle and not self._pins_wait(now)
+        gated_may_ride = idle and not self._pins_wait(now) and not self._ungated_turn(now)
         if gated_may_ride:
             proposals = list(self._proposals)
         else:
@@ -1086,7 +1126,10 @@ class ChannelState:
         if gate:  # a gated turn starts (a window still open runs on from now)
             self._window_at = at
             self._wrap_noted = False
-        # An ungated passive push leaves no window to close: it only goes when none is open.
+        else:
+            # An ungated passive push leaves no window to close (it only goes
+            # when none is open), but it starts a turn no gated push may gate.
+            self._turn_at = at
         content = self._render(wake, [], 0, [], [], proposals, runs, *edits, held=held, now=now, gate=gate,
                                nth=len(self._history))
         return self._push(wake, content, count, held, gate)
@@ -1129,6 +1172,8 @@ class ChannelState:
         # The person asked for something: a gated window ends here.
         self._window_at = None
         self._wrap_noted = False
+        # ...and starts a turn no gated push may gate until it ends (HIGH-1).
+        self._turn_at = at
         content = self._render(wake, messages, message_overflow, answers, pins, proposals, runs, *edits,
                                held=held, now=now, gate=False, nth=0, pin_overflow=pin_overflow,
                                deliberate_nth=len(self._deliberate_history))
