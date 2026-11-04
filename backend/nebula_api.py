@@ -120,8 +120,10 @@ def app_token_from_file(environ: Any = None) -> str | None:
     try:
         token = agent_token_file.read(path)
     except agent_token_file.TokenFileError as exc:
-        raise NebulaAPIError(f"{APP_TOKEN_FILE_ENV}: {exc}. Copy a new token from Settings › Connect your agent, "
-                             "then run nebula mcp connect claude-code --channel again.", kind="token") from exc
+        # GM r97: r94's shape, the reason as a clause, the command on its own line.
+        raise NebulaAPIError(f"Nebula couldn’t read this agent’s token because {APP_TOKEN_FILE_ENV} {exc.clause}. "
+                             "Copy a new one from Settings › Connect your agent, then run this command.\n"
+                             "nebula mcp connect claude-code --channel", kind="token") from exc
     _file_token = (path, token)
     return token
 

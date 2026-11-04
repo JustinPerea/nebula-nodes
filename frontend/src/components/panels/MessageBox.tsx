@@ -454,7 +454,7 @@ function RowView({ row, rows, nodeName, inRun }: {
           style={row.kind === 'pinReply' ? shade(row.agent, row.session) : undefined}>
           <div className="message-box__who">
             {row.kind === 'pinReply' && <span className="message-box__dot" aria-hidden="true" />}
-            {row.kind === 'pin' ? `You left a note ${pinWhere(row, nodeName)}` : `${name} replied on your note ${pinWhere(row, nodeName)}`}
+            {row.kind === 'pin' ? `You left a note ${pinWhere(row, nodeName)}` : `${name} replied to your note${row.nodeId ? ` ${pinWhere(row, nodeName)}` : ''}`}
           </div>
           {row.text && <p className="message-box__text">{row.text}</p>}
           <ShowButton onShow={() => window.dispatchEvent(new CustomEvent(PIN_SHOW_EVENT, { detail: { pinId: row.pinId } }))} />

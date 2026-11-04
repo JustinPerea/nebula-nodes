@@ -309,7 +309,7 @@ describe('the thread', () => {
     expect(screen.getByText('Claude proposed a change')).toBeTruthy();
     expect(screen.getByText('Claude left a note in Updates')).toBeTruthy();
     expect(screen.getByText('You left a note on “FLUX.2”')).toBeTruthy();
-    expect(screen.getByText('Claude replied on your note on “FLUX.2”')).toBeTruthy();
+    expect(screen.getByText('Claude replied to your note on “FLUX.2”')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^(accept|reject)$/i })).toBeNull();
     const shows = screen.getAllByRole('button', { name: 'Show' });
     expect(shows).toHaveLength(4);

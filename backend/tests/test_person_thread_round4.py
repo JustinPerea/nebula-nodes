@@ -165,14 +165,33 @@ def test_a_token_file_open_to_others_fails_closed_without_the_token(token_file):
     os.chmod(token_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
     with pytest.raises(nebula_api.NebulaAPIError) as refused:
         nebula_api.with_identity()
-    assert "readable by other users" in refused.value.detail and "a" * 40 not in refused.value.detail
-    assert refused.value.detail.startswith("NEBULA_APP_TOKEN_FILE")
+    assert "a" * 40 not in refused.value.detail
+    # GM r97: r94's shape, the reason as a clause after the variable, the command on its own line.
+    assert refused.value.detail == (
+        "Nebula couldn’t read this agent’s token because NEBULA_APP_TOKEN_FILE points to a file other users "
+        "can read. Copy a new one from Settings › Connect your agent, then run this command.\n"
+        "nebula mcp connect claude-code --channel")
 
 
 def test_a_missing_token_file_fails_closed(token_file, monkeypatch):
     monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", token_file + ".gone")
-    with pytest.raises(nebula_api.NebulaAPIError):
+    with pytest.raises(nebula_api.NebulaAPIError) as refused:
         nebula_api.with_identity()
+    assert refused.value.detail.startswith(
+        "Nebula couldn’t read this agent’s token because NEBULA_APP_TOKEN_FILE points to a file that doesn’t exist. ")
+
+
+@pytest.mark.parametrize("content,clause", [
+    ("not a token", "points to a file that doesn’t hold a token"),
+    ("x" * 5000, "points to a file too large to be a token"),
+])
+def test_each_token_file_reason_reads_as_a_clause(token_file, content, clause):
+    with open(token_file, "w") as handle:
+        handle.write(content)
+    os.chmod(token_file, stat.S_IRUSR | stat.S_IWUSR)
+    with pytest.raises(nebula_api.NebulaAPIError) as refused:
+        nebula_api.with_identity()
+    assert f"because NEBULA_APP_TOKEN_FILE {clause}. " in refused.value.detail
 
 
 def test_a_reply_from_the_listening_sessions_own_shell_settles_its_message(thread):

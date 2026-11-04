@@ -573,15 +573,21 @@ unverified reply author) is moot after J1 and not built.
   “Keep it?”" (`closingPeriod`, on the last quote only). The typed row's
   words cut short end in the ellipsis, so they keep "”." (`afterCut`).
 - Collapsed log: an answer on a pin previews as "Claude Code replied to
-  your note" (the expanded row keeps "replied on your note on “…”").
+  your note". Round 4c (GM r97): the expanded row matches, "Claude Code
+  replied to your note on “FLUX.2”", and a canvas note drops "on the
+  canvas" ("…replied to your note").
 - Agent-facing lines, GM r94 verbatim, each command on its own line:
   REPLY_NO_TOKEN_LINE (three lines), REPLY_BAD_TOKEN_LINE (two),
   REPLY_IN_APP_LINE, the CLI's NO_TOKEN_CHANNEL_LINE (three), the empty
   NEBULA_APP_TOKEN_FILE line; #223's in-app listener line. Codes
   unchanged. A ratchet test pins each.
-- Left as is (GM gave no new words): the token-file failure "NEBULA_APP_
-  TOKEN_FILE: <why>. Copy a new token from Settings › Connect your agent,
-  then run nebula mcp connect claude-code --channel again."
+- Round 4c (GM r97): the token-file failure takes r94's shape, the reason
+  as a clause after the variable, the command on its own line: "Nebula
+  couldn’t read this agent’s token because NEBULA_APP_TOKEN_FILE points to
+  a file that doesn’t exist. Copy a new one from Settings › Connect your
+  agent, then run this command." + `nebula mcp connect claude-code
+  --channel`. The clause lives on TokenFileError.clause (one per reason);
+  str() stays the short reason the MCP server logs.
 
 ### Checks (round 4b)
 
