@@ -294,17 +294,18 @@ function ConfirmInline({ label, confirmLabel, prompt, detail, busy, onConfirm, c
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
+  const text = [prompt, detail].filter(Boolean).join(' ');
   if (!armed) {
     // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
     return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
       onClick={() => setArmed(true)}>{label}</button>;
   }
   return (
-    <span className="project-home__confirm" role="group" aria-label={[prompt, detail].filter(Boolean).join(' ')} onKeyDown={(event) => {
+    <span className="project-home__confirm" role="group" aria-label={text} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      <span className="project-home__confirm-prompt">{prompt}</span>
-      {detail && <span className="project-home__confirm-prompt">{detail}</span>}
+      {/* One text, one space between the question and the line (GM r102). */}
+      <span className="project-home__confirm-prompt">{text}</span>
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
     </span>
@@ -397,7 +398,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
             <span className="project-home__sr-only">, {trash.length} {trash.length === 1 ? 'project' : 'projects'}</span>
           </button>
         </h2>
-        {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
+        {open && <ConfirmInline label="Empty" confirmLabel={trash.length === 1 ? 'Delete forever' : 'Delete all'} prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
           detail={emptyTrashLine(trash)} busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
       </div>
       {open && (
@@ -548,7 +549,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // After Delete forever or Empty, focus goes to the next row's Restore (the
   // row before when it was the last), else to the Recently deleted heading,
   // else to "Recent projects": never left on the page once the row is gone.
-  const afterPurge = useRef<{ gone: string[]; next: string | null } | null>(null);
+  const afterPurge = useRef<{ gone: string[]; next: string | null; started?: boolean } | null>(null);
   const purge = (id: string) => {
     const at = trash.findIndex((entry) => entry.id === id);
     afterPurge.current = { gone: [id], next: trash[at + 1]?.id ?? trash[at - 1]?.id ?? null };
@@ -574,6 +575,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       ?? recentHeading.current;
     target?.focus();
   }, [trash]);
+  // A purge that failed (busy came and went, the rows are still there) drops
+  // its target, so a later expiry or another tab doesn't move focus.
+  useEffect(() => {
+    const pending = afterPurge.current;
+    if (!pending) return;
+    if (busy) { pending.started = true; return; }
+    if (pending.started) afterPurge.current = null;
+  }, [busy]);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);

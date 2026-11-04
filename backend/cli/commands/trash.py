@@ -85,12 +85,20 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
         print(f"Nothing in Recently deleted {where}." if where else "Recently deleted is empty.", file=out)
         return 0
     print(f"RECENTLY DELETED {where} ({len(items)}):" if where else f"RECENTLY DELETED ({len(items)}):", file=out)
+    # A trashed project's date, for the boards, characters and styles that go with it.
+    project_purge = {item.get("id"): item.get("purgeAt") for item in items
+                     if item.get("kind") == "project" and item.get("purgeAt")}
     for item in items:
         scope = ""
+        expiry = ""
         if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
-        expiry = (f", removed for good{_goes_with(item)} after {str(item['purgeAt'])[:10]}"
-                  if item.get("purgeAt") else "")
+            if item.get("projectId"):
+                # It goes when its project is deleted for good (the person's note says so too).
+                when = project_purge.get(item["projectId"])
+                expiry = f", removed for good with its project{f' after {str(when)[:10]}' if when else ''}"
+        elif item.get("purgeAt"):
+            expiry = f", removed for good{_goes_with(item)} after {str(item['purgeAt'])[:10]}"
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
               f"  (deleted {_when(item)} by {_who(item)}{expiry})", file=out)
     first = items[0]

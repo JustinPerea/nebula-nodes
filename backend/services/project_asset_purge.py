@@ -47,15 +47,24 @@ after they are all gone is the id taken off the list (a second commit). So:
 
 Which stores (one pairing rule for every purge and replay). A store's
 files are deleted only when its root sits beside the catalog's own folder
-(``roots_paired``: ``~/.nebula`` holds the catalog's ``projects/`` and
-``moodboards/``, or the desktop app's data folder holds ``state/`` and
-``moodboards/`` side by side). A backend pointed at a copy of a catalog
-while its store roots are still the person's (``NEBULA_STATE_DIR`` set,
-``HOME`` left real) would otherwise delete the person's boards, characters
-and styles for a project their own catalog still has. An unpaired store is
-left alone: the id stays on the list (the re-home keeps skipping it), and
-the count is logged once per start, never a name. ``goesWith`` lists only
-what a paired store holds, so a line never promises more than goes.
+(``roots_paired``): ``~/.nebula`` holds the catalog's ``projects/`` and
+``moodboards/``; or, only when the store's root was set explicitly (its
+``NEBULA_*_ROOT``, as the desktop app sets all three, desktop/paths.mjs),
+the app's data folder holds ``state/`` and ``moodboards/`` side by side. A
+backend pointed at a copy of a catalog while its store roots are still the
+person's (``NEBULA_STATE_DIR`` set, even to ``~/.nebula/state``, with
+``HOME`` left real and no store root set) would otherwise delete the
+person's boards, characters and styles for a project their own catalog
+still has. "Beside" compares real folders: the catalog's folder, resolved,
+against the folder the store's entry sits in, resolved, so a store folder
+that is itself a symlink (to another disk or a synced folder) still counts
+as beside the catalog it sits next to and is purged like any other. A path
+that can't be resolved (a symlink loop) makes the store unpaired, logged
+once per start. An unpaired store is left alone: the id stays on the list
+(the re-home keeps skipping it, so nothing is hidden: the project's files
+stay where they were, and the count is logged once per start, never a
+name). ``goesWith`` lists only what a paired store holds, so a line never
+promises more than goes.
 
 A project merely absent from the catalog is never a reason to delete: only
 ids this catalog put on its own list are purged. Assets filed under an id
@@ -68,12 +77,15 @@ holds while it updates, moves, trashes, restores or purges that id) and
 reads the file or trash record again under it, so it only ever removes what
 still names the project at that moment. Live files and the trash are each
 passed over until a pass finds nothing (a board moved to Recently deleted,
-or restored, between two passes is still caught), at most a few times.
+or restored, between two passes is still caught), at most a few times. If
+anything of the project's is still there after the last pass, the id stays
+on the list and the next purge, listing or start goes on.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Callable, Container, Iterable
 from contextlib import AbstractContextManager, nullcontext
@@ -106,6 +118,17 @@ class AssetStore:
     root: Path
     side_folders: tuple[str, ...] = ()
     lock: Callable[[str], AbstractContextManager[Any]] = lambda _asset_id: nullcontext()
+    # The root came from its NEBULA_*_ROOT (ROOT_ENV), not the ~/.nebula default.
+    explicit: bool = False
+
+
+# Each store's root setting (the desktop app sets all three, desktop/paths.mjs).
+ROOT_ENV = {"moodboard": "NEBULA_MOODBOARD_ROOT", "character": "NEBULA_CHARACTER_ROOT",
+            "style": "NEBULA_PRESET_ROOT"}
+
+
+def _explicit(kind: str) -> bool:
+    return bool(os.environ.get(ROOT_ENV[kind]))
 
 
 def default_stores() -> list[AssetStore]:
@@ -114,32 +137,45 @@ def default_stores() -> list[AssetStore]:
 
     return [
         AssetStore("moodboard", moodboard_store.store_root(), moodboard_store.BOARD_SIDE_FOLDERS,
-                   moodboard_store._board_lock),
-        AssetStore("character", character_store.store_root(), (), character_store._char_lock),
-        AssetStore("style", preset_store.store_root(), (), preset_store._preset_lock),
+                   moodboard_store._board_lock, _explicit("moodboard")),
+        AssetStore("character", character_store.store_root(), (), character_store._char_lock,
+                   _explicit("character")),
+        AssetStore("style", preset_store.store_root(), (), preset_store._preset_lock, _explicit("style")),
     ]
 
 
 # -- which stores are this catalog's ----------------------------------------------
 
-def roots_paired(state_dir: Path, store_root: Path) -> bool:
+# Once per start: a store path that can't be resolved is logged the first time.
+_UNRESOLVED_LOGGED: set[str] = set()
+
+
+def roots_paired(state_dir: Path, store_root: Path, *, explicit: bool = False) -> bool:
     """Whether a store root belongs with the catalog under ``state_dir`` (the
     folder holding the catalog's ``projects/``): ``~/.nebula`` holds both
-    (``~/.nebula/moodboards``), or the desktop app's data folder holds them
-    side by side (``<data>/state``, ``<data>/moodboards``)."""
+    (``~/.nebula/moodboards``), or, for a root set explicitly
+    (``explicit``: its NEBULA_*_ROOT), the desktop app's data folder holds
+    them side by side (``<data>/state``, ``<data>/moodboards``). Real
+    folders on both sides: the catalog's folder, and the folder the store's
+    own entry sits in (a symlinked store folder sits where its link is). A
+    path that can't be resolved (a symlink loop) is never paired."""
     try:
         state = state_dir.resolve()
-        parent = store_root.resolve().parent
-    except OSError:
+        parent = store_root.parent.resolve()
+    except (OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop (Python 3.12)
+        if "unresolved" not in _UNRESOLVED_LOGGED:
+            _UNRESOLVED_LOGGED.add("unresolved")
+            logger.warning("A moodboard, character or style folder can't be resolved (%s): nothing in it "
+                           "is deleted with a project", type(exc).__name__)
         return False
-    return parent == state or (state.name == "state" and parent == state.parent)
+    return parent == state or (explicit and state.name == "state" and parent == state.parent)
 
 
 def paired_stores(state_dir: Path, stores: list[AssetStore] | None = None) -> tuple[list[AssetStore], list[AssetStore]]:
     """``(paired, unpaired)``: the stores whose files this catalog may delete,
     and the rest (left alone, see the module docstring)."""
     stores = stores if stores is not None else default_stores()
-    paired = [store for store in stores if roots_paired(state_dir, store.root)]
+    paired = [store for store in stores if roots_paired(state_dir, store.root, explicit=store.explicit)]
     return paired, [store for store in stores if store not in paired]
 
 
@@ -366,16 +402,24 @@ def _empty_removed() -> Removed:
     return {kind: [] for kind in KINDS}
 
 
+def _left(store: AssetStore, project_id: str) -> bool:
+    """Whether the store still holds anything of the project's (live or trashed)."""
+    return store.root.is_dir() and bool(_live_of(store, project_id) or _trashed_of(store, project_id))
+
+
 def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: Path,
                           stores: list[AssetStore] | None = None) -> tuple[bool, Removed]:
     """``delete_store_assets`` in every store that is the catalog's. Returns
     ``(complete, removed)``: ``complete`` is False when a store was skipped
-    as not the catalog's (the id stays on the list), and what went, by kind."""
+    as not the catalog's, or when anything of the project's is still there
+    after the last pass (a store busy the whole time); the id then stays on
+    the list and the next purge, listing or start goes on. And what went, by kind."""
     paired, unpaired = paired_stores(state_dir, stores)
     removed = _empty_removed()
     for store in paired:
         removed[store.kind].extend(delete_store_assets(store, project_id, keep=keep))
-    return not unpaired, removed
+    left = any(_left(store, project_id) for store in paired)
+    return not unpaired and not left, removed
 
 
 def finish(catalog: dict[str, Any], *, state_dir: Path,

@@ -171,3 +171,56 @@ what main moved to Global stays there).
 - Mutation check: every deletion guard and lock, 46 mutants; the one
   survivor (live pass before trash pass) is equivalent now that the passes
   repeat until a round finds nothing.
+
+## Round 4 (review 2)
+
+- **The desktop allowance needs explicit roots.** `roots_paired` counted any
+  store whose folder sat beside a catalog folder named `state` as paired. A
+  half-isolated backend with `NEBULA_STATE_DIR=~/.nebula/state` (a copied
+  catalog) and default store roots therefore paired with the person's real
+  `~/.nebula/moodboards`, characters and presets, and Delete forever, Empty
+  or the expiry on a listing would have deleted them. The side-by-side case
+  now applies only when the store's own `NEBULA_*_ROOT` is set
+  (`AssetStore.explicit`, read in `default_stores`; the desktop sidecar sets
+  all three, `desktop/paths.mjs`). A root at its `~/.nebula` default pairs
+  only with `~/.nebula` itself.
+- **Real folders on both sides.** Pairing compares the resolved catalog
+  folder with the resolved folder the store's entry sits in
+  (`store_root.parent.resolve()`), not the parent of the resolved store. A
+  `~/.nebula/moodboards` that is a symlink to another disk now pairs and is
+  purged like any other store; before, it was never paired, so a purged
+  project's boards stayed in its folder with no project and nothing listing
+  them. A catalog reached through a symlinked `~/.nebula` pairs too.
+- **Symlink loops.** `Path.resolve()` raises `RuntimeError` on a loop in
+  Python 3.12, which `roots_paired` didn't catch, so `GET /api/projects`,
+  `GET /api/trash` and the purge routes returned 500. It now catches
+  `(OSError, RuntimeError)`, treats the store as unpaired (the id stays
+  listed) and logs once per start, with no path.
+- **Leftovers keep the id listed.** When the last of the 3 passes still
+  found something (a store busy the whole purge), the id was cleared and the
+  rest was moved to Global at the next start. `delete_project_assets` now
+  checks what is left of the project's, live or trashed, in every paired
+  store after the passes; anything left keeps the id on the list for the
+  next purge, listing or start.
+- **Focus after a failed purge.** The `afterPurge` target was kept after a
+  failed request, so a later expiry or another tab's purge moved focus.
+  It is now dropped when `busy` comes and goes with the rows still there.
+- **Empty with one project** confirms with "Delete forever", as the row
+  does; with two or more it stays "Delete all" (GM r102).
+- **One space after "for good?".** Empty's question and line were two spans
+  laid out 6 px apart by the confirm's gap, and the DOM text had no space.
+  They are now one text joined by a single space, the same as the
+  `aria-label` (GM r102).
+- **`nebula trash list`.** A trashed moodboard, character or style filed
+  under a project now ends ", removed for good with its project", plus
+  " after <date>" when that project is in the same listing. The MCP
+  `list_trash` docstring and MCP-SETUP say the same.
+- **Guards pinned.** Six guards survived review 2's mutation run; each now
+  has a test: an unresolvable root is unpaired (the loop test), paths are
+  compared resolved (a symlinked `~/.nebula`), one failing id doesn't hold up
+  the others (an `OSError` on one asset), a malformed `assetPurges` entry is
+  ignored, and a file in a project folder or the trash whose name isn't an
+  asset id is left.
+- The `agentPresenceFollowups` ratchet now expects three red "Delete forever"
+  controls in `ProjectHome.tsx` (the row's trigger and confirm, and Empty's
+  confirm with one project).

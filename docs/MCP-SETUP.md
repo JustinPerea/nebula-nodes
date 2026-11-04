@@ -3201,9 +3201,12 @@ what would go with it as `goesWith` (`moodboards`, `characters`, `styles`:
 names). A purge that stops part way finishes on the next purge, project
 listing or start (`backend/services/project_asset_purge.py`). Only a
 moodboard, character or style folder beside the project catalog is purged
-(`~/.nebula/moodboards` with `~/.nebula/projects`, or the desktop app's
-data folder): a backend pointed at another catalog leaves the others alone
-and keeps the project on its list. Anything filed under a project the
+(`~/.nebula/moodboards` with `~/.nebula/projects`, a symlinked folder
+there too, or the desktop app's data folder, whose `NEBULA_*_ROOT` it
+sets): a backend pointed at another catalog leaves the others alone and
+keeps the project on its list. A moodboard, character or style in
+Recently deleted with a `projectId` goes when that project is deleted for
+good (`nebula trash list` says "removed for good with its project"). Anything filed under a project the
 catalog doesn't know (for example from before this change) is moved to
 Global at start, with a backup, as before; never deleted.
 
