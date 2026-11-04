@@ -217,7 +217,8 @@ export function projectDeletedLine(name: string): { text: string; title: string 
  * 6n, GM r71), naming the project and, as the purged line does, the boards
  * whose kept edit was sent and saved (one; up to three joined; then a
  * count). With none saved (the boards kept every change), the first
- * sentence alone.
+ * sentence alone. The title lists every board, then the project, with no
+ * colon (GM r74): "“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”".
  * - "Restored “Coast”. Your change to “Rivers” is saved."
  * - "Restored “Coast”. Your changes to “Rivers” and “Tide” are saved."
  * - "Restored “Coast”. Your changes to 4 boards are saved."
@@ -230,7 +231,7 @@ export function projectRestoredLine(project: string, saved: readonly string[]): 
   // Each form spelled out whole.
   const text = kept.one ? `Restored ${what}. Your change to ${kept.what} is saved.`
     : `Restored ${what}. Your changes to ${kept.what} are saved.`;
-  return { text, title: `${title}: ${kept.title}` };
+  return { text, title: `${kept.title} in ${title}` };
 }
 
 /** Why a Restore project failed (round 6m, GM r53 Q1): the server isn't answering, the project was deleted for good,
@@ -253,6 +254,8 @@ export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFai
  *   “Rivers” and “Harbor”" or "to 4 boards" for several);
  * - "Nebula couldn’t restore “Shore” because the server didn’t accept the
  *   request. Try again." (neutral, with Try again).
+ * The purged line's title lists every board, then the project, with no colon
+ * (GM r74): "“Rivers” and “Harbor” in “Shore”"; the other two name the project.
  */
 export function projectRestoreFailedLine(project: string, failure: ProjectRestoreFailure, boards: readonly string[] = []):
   { text: string; title: string } {
@@ -263,7 +266,7 @@ export function projectRestoreFailedLine(project: string, failure: ProjectRestor
   const lost = namedBoards(boards.length ? boards : ['']);
   const text = lost.one ? `Nebula couldn’t restore ${what} because it was deleted for good. Your change to ${lost.what} can’t be kept.`
     : `Nebula couldn’t restore ${what} because it was deleted for good. Your changes to ${lost.what} can’t be kept.`;
-  return { text, title: `${title}: ${lost.title}` };
+  return { text, title: `${lost.title} in ${title}` };
 }
 
 /** A kept Undo that was dropped because the board changed after it (round 6l, GM r21 Q1): neutral, no button. */

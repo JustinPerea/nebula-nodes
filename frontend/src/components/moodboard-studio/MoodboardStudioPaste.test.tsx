@@ -6165,7 +6165,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await screen.findByText(TIDE_LINE);
       await pressRestoreProject();
       const done = await screen.findByText('Restored “Shore”. Your changes to “Rivers” and “Tide” are saved.', {}, { timeout: 3000 });
-      expect(done.closest('[data-restored]')?.getAttribute('title')).toBe('“Shore”: “Rivers” and “Tide”');
+      expect(done.closest('[data-restored]')?.getAttribute('title')).toBe('“Rivers” and “Tide” in “Shore”');
       expect([...sent].sort()).toEqual(['pb1', 'pb2']);
       expect(screen.queryByText(TIDE_LINE)).toBeNull();
     });
@@ -6204,7 +6204,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await pressRestoreProject();
       const failed = await screen.findByText(
         'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers” and “Tide” can’t be kept.');
-      expect(failed.closest('[data-gone]')?.getAttribute('title')).toBe('“Shore”: “Rivers” and “Tide”');
+      expect(failed.closest('[data-gone]')?.getAttribute('title')).toBe('“Rivers” and “Tide” in “Shore”');
       expect(sent).toEqual([]);
       await waitFor(() => expect(stored()).toEqual([]));
     });

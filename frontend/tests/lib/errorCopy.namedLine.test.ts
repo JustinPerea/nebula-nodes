@@ -323,3 +323,130 @@ describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
       expect(under).toEqual([]);
     });
 });
+
+/**
+ * #210 round 6o (GM r74): a title or aria-label never holds a colon ("“Coast”:
+ * “Rivers”" slipped into the Restore project lines' titles; GM's form is
+ * "“Rivers” and “Tide” in “Coast”"). Across src/components/moodboard-studio/,
+ * read with the TypeScript parser, the text that can reach a title or an
+ * aria-label is:
+ * - a JSX `title`, `aria-label` or `ariaLabel` attribute's value;
+ * - an object property of those names (`{ text, title: … }`, React Flow's
+ *   `ariaLabel`), and `setAttribute('title' | 'aria-label', …)`'s value;
+ * - a variable the file declares with that name or passes as such a value
+ *   (`{ text, title }`, `title={label}`), read through its initializer.
+ * Every string literal and template text in that value counts (a ternary's
+ * own `:` is syntax, not text). Older hits are listed below, each reviewed;
+ * a new one fails, and a listed one that's gone fails too (drop it).
+ */
+const COLON_NAMES = new Set(['title', 'aria-label', 'ariaLabel']);
+const COLON_REVIEWED: { file: string; text: string; why: string }[] = [
+  { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (round 6, before GM r74); for GM to reword' },
+  { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (round 6, before GM r74); for GM to reword' },
+  { file: 'MoodboardListView.tsx', text: 'Open the board on this image. Nothing moves: no image changes number.',
+    why: "GM's cover button title (before GM r74); for GM to reword" },
+];
+
+/** The literal text holding a colon in each title or aria-label value in `text`. */
+function colonsInLabels(text: string): string[] {
+  const file = ts.createSourceFile('x.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const nameOf = (name: ts.Node) => (ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined);
+  const values: ts.Node[] = [];
+  const collect = (node: ts.Node) => {
+    let value: ts.Node | undefined;
+    if (ts.isJsxAttribute(node) && COLON_NAMES.has(node.name.getText(file))) value = node.initializer;
+    else if (ts.isPropertyAssignment(node) && COLON_NAMES.has(nameOf(node.name) ?? '')) value = node.initializer;
+    else if (ts.isShorthandPropertyAssignment(node) && COLON_NAMES.has(node.name.text)) value = node.name;
+    else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'setAttribute'
+      && node.arguments.length === 2 && ts.isStringLiteral(node.arguments[0]) && COLON_NAMES.has(node.arguments[0].text)) value = node.arguments[1];
+    // A variable named title or aria-label is read even when it is passed on some other way.
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && COLON_NAMES.has(node.name.text) && node.initializer) value = node.initializer;
+    if (value) values.push(value);
+    ts.forEachChild(node, collect);
+  };
+  collect(file);
+  /** What a name stands for: the initializer of the variable it names in its own scope (none for a parameter). */
+  const declarationOf = (id: ts.Identifier): ts.Expression | undefined => {
+    for (let scope: ts.Node | undefined = id.parent; scope; scope = scope.parent) {
+      if (ts.isFunctionLike(scope) && scope.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === id.text)) return undefined;
+      if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
+      for (const statement of scope.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        const found = statement.declarationList.declarations.find((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === id.text);
+        if (found) return found.initializer;
+      }
+    }
+    return undefined;
+  };
+  const hits: string[] = [];
+  const seen = new Set<ts.Node>();
+  const read = (node: ts.Node) => {
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)
+      || ts.isTemplateMiddle(node) || ts.isTemplateTail(node) || ts.isJsxText(node)) {
+      if (node.text.includes(':')) hits.push(node.text);
+      return;
+    }
+    // `line.title` is checked where its title is written, a function where it is called: neither is read here.
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isFunctionLike(node)) return;
+    if (ts.isCallExpression(node)) {
+      node.arguments.forEach(read);
+      return;
+    }
+    if (ts.isIdentifier(node)) {
+      const initializer = declarationOf(node);
+      if (initializer) read(initializer);
+      return;
+    }
+    ts.forEachChild(node, read);
+  };
+  values.forEach(read);
+  return hits;
+}
+
+function moodboardStudioSources(): { name: string; text: string }[] {
+  const root = join(__dirname, '../../src/components/moodboard-studio');
+  return sources(root).map((path) => ({ name: relative(root, path), text: readFileSync(path, 'utf8') }));
+}
+
+describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM r74)', () => {
+  it('the scanner sees each place a title or aria-label is written', () => {
+    expect(colonsInLabels('const a = <div title="Board: Rivers" />;')).toEqual(['Board: Rivers']);
+    expect(colonsInLabels('const a = <div aria-label={`${label}: pick`} />;')).toEqual([': pick']);
+    expect(colonsInLabels('const a = <Card ariaLabel={on ? \'Shown: yes\' : \'Hidden\'} />;')).toEqual(['Shown: yes']);
+    // The colon round 6n wrote: an object property.
+    expect(colonsInLabels('function f() { return { text, title: `${title}: ${kept.title}` }; }')).toEqual([': ']);
+    expect(colonsInLabels("const a = { 'aria-label': 'Close: now' };")).toEqual(['Close: now']);
+    expect(colonsInLabels("el.setAttribute('title', `${a}: ${b}`);")).toEqual([': ']);
+    // Through a variable: the shorthand `{ title }`, an attribute's name, a constant.
+    expect(colonsInLabels('const title = `${a}: ${b}`;\nconst x = { text, title };')).toEqual([': ']);
+    expect(colonsInLabels('const label = `${a}: ${b}`;\nconst x = <p title={label} />;')).toEqual([': ']);
+    expect(colonsInLabels("const SEP = ': ';\nconst x = { title: a + SEP + b };")).toEqual([': ']);
+    // Not a title: the text, other attributes, a ternary's own colon, another object's `title` read.
+    expect(colonsInLabels('const a = <p title={on ? \'Shown\' : \'Hidden\'}>Note: this</p>;')).toEqual([]);
+    expect(colonsInLabels("const a = { text: 'Note: this', title: 'Shown' };")).toEqual([]);
+    expect(colonsInLabels("const a = <p data-x='a:b' className='x:y' title={line.title} />;")).toEqual([]);
+    expect(colonsInLabels("const label = 'Note: this';\nconst a = <p>{label}</p>;")).toEqual([]);
+    // A name is read in its own scope; a parameter, a function's body and another `label` aren't.
+    expect(colonsInLabels("const x = <p title={reason('add: images')} />;")).toEqual(['add: images']);
+    expect(colonsInLabels("const f = () => 'a: b';\nconst x = <p title={f()} />;")).toEqual([]);
+    expect(colonsInLabels("const label = 'x: y';\nfunction f(label) { return <p title={label} />; }")).toEqual([]);
+    expect(colonsInLabels("function a() { const label = 'x: y'; return label; }\nfunction b() { const label = 'ok'; return <p title={label} />; }"))
+      .toEqual([]);
+    expect(colonsInLabels("function b() { const label = 'x: y'; return <p title={label} />; }")).toEqual(['x: y']);
+    expect(colonsInLabels("const line = { text: 'Note: this', title: 'Shown' };\nconst x = <p title={line.title} />;")).toEqual([]);
+    // GM r74's form passes.
+    expect(colonsInLabels('function f() { return { text, title: `${kept.title} in ${title}` }; }')).toEqual([]);
+  });
+
+  it('only the reviewed ones (a new colon fails), and none stale', () => {
+    const files = moodboardStudioSources();
+    expect(files.length).toBeGreaterThan(10);
+    const found = files.flatMap(({ name, text }) => colonsInLabels(text).map((hit) => ({ file: name, text: hit })));
+    const unknown = found.filter((hit) => !COLON_REVIEWED.some((entry) => entry.file === hit.file && entry.text === hit.text));
+    expect(unknown.map((hit) => `${hit.file}: ${JSON.stringify(hit.text)}`), 'a colon in a title or aria-label: say it in words (GM r74)').toEqual([]);
+    const stale = COLON_REVIEWED.filter((entry) => !found.some((hit) => hit.file === entry.file && hit.text === entry.text));
+    expect(stale.map((entry) => `${entry.file}: ${entry.text}`)).toEqual([]);
+  });
+});
