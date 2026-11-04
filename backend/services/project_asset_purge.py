@@ -46,25 +46,35 @@ after they are all gone is the id taken off the list (a second commit). So:
   old-style folder to move to Global.
 
 Which stores (one pairing rule for every purge and replay). A store's
-files are deleted only when its root sits beside the catalog's own folder
-(``roots_paired``): ``~/.nebula`` holds the catalog's ``projects/`` and
-``moodboards/``; or, only when the store's root was set explicitly (its
+files are deleted only when its real folder sits beside the catalog's own
+folder (``roots_paired``): ``~/.nebula`` holds the catalog's ``projects/``
+and ``moodboards/``; or, only when the store's root was set explicitly (its
 ``NEBULA_*_ROOT``, as the desktop app sets all three, desktop/paths.mjs),
-the app's data folder holds ``state/`` and ``moodboards/`` side by side. A
-backend pointed at a copy of a catalog while its store roots are still the
-person's (``NEBULA_STATE_DIR`` set, even to ``~/.nebula/state``, with
-``HOME`` left real and no store root set) would otherwise delete the
-person's boards, characters and styles for a project their own catalog
-still has. "Beside" compares real folders: the catalog's folder, resolved,
-against the folder the store's entry sits in, resolved, so a store folder
-that is itself a symlink (to another disk or a synced folder) still counts
-as beside the catalog it sits next to and is purged like any other. A path
-that can't be resolved (a symlink loop) makes the store unpaired, logged
-once per start. An unpaired store is left alone: the id stays on the list
-(the re-home keeps skipping it, so nothing is hidden: the project's files
-stay where they were, and the count is logged once per start, never a
-name). ``goesWith`` lists only what a paired store holds, so a line never
-promises more than goes.
+the app's data folder holds ``state/`` and ``moodboards/`` side by side.
+"Real" means resolved: the store folder itself is followed to where it
+really is. So a backend on a copy of a catalog never deletes the person's
+files, whether its store roots are still the person's (``NEBULA_STATE_DIR``
+set, even to ``~/.nebula/state``, with ``HOME`` left real), or its own
+store folder is a link to the person's store. And a folder where another
+catalog sits (``projects/catalog.json`` or ``state/projects/catalog.json``
+that isn't this one) is never paired, whatever the env says. A store root
+that is a link to nothing (a disk that isn't mounted) or a loop, or a path
+that can't be resolved, is unpaired too.
+
+What that costs: a store folder linked on its own to another disk or a
+synced folder is unpaired, so a project deleted for good keeps its files
+there (in no tab, and never moved to Global) and the id stays on the list.
+Linking the whole ``~/.nebula`` or the desktop app's data folder still
+purges: the store and the catalog are then both followed to the same place.
+
+An unpaired store is left alone: the id stays on the list (the re-home
+keeps skipping it, so nothing is hidden or moved: the project's files stay
+where they were, and the count is logged once per start, never a name).
+There is no fallback to Global: a copy's purge would otherwise move the real
+project's files. ``goesWith`` lists only what a paired store holds, so a
+line never promises more than goes. Inside a paired store a ``.trash`` or
+side folder (a board's ``.notes``) that is itself a symlink is never
+followed, as a symlinked ``<root>/P`` isn't.
 
 A project merely absent from the catalog is never a reason to delete: only
 ids this catalog put on its own list are purged. Assets filed under an id
@@ -150,25 +160,39 @@ def default_stores() -> list[AssetStore]:
 _UNRESOLVED_LOGGED: set[str] = set()
 
 
+def _logged_once(exc: BaseException) -> None:
+    if "unresolved" not in _UNRESOLVED_LOGGED:
+        _UNRESOLVED_LOGGED.add("unresolved")
+        logger.warning("A moodboard, character or style folder can't be resolved (%s): nothing in it "
+                       "is deleted with a project", type(exc).__name__)
+
+
 def roots_paired(state_dir: Path, store_root: Path, *, explicit: bool = False) -> bool:
     """Whether a store root belongs with the catalog under ``state_dir`` (the
-    folder holding the catalog's ``projects/``): ``~/.nebula`` holds both
-    (``~/.nebula/moodboards``), or, for a root set explicitly
-    (``explicit``: its NEBULA_*_ROOT), the desktop app's data folder holds
-    them side by side (``<data>/state``, ``<data>/moodboards``). Real
-    folders on both sides: the catalog's folder, and the folder the store's
-    own entry sits in (a symlinked store folder sits where its link is). A
-    path that can't be resolved (a symlink loop) is never paired."""
+    folder holding the catalog's ``projects/``). The store is followed to
+    its real folder, and that folder's parent (``home``) must be the
+    catalog's real folder (``~/.nebula`` holds both), or, for a root set
+    explicitly (``explicit``: its NEBULA_*_ROOT), the desktop app's data
+    folder holding ``state/`` (the catalog's) beside it. Never paired: a
+    store root that is a link to nothing (an unmounted disk) or a loop, a
+    path that can't be resolved, or a ``home`` that holds another catalog
+    (``projects/catalog.json`` or ``state/projects/catalog.json`` that
+    isn't this one's)."""
     try:
+        if store_root.is_symlink() and not store_root.is_dir():
+            return False  # dangling, a disk that isn't mounted, or a loop
         state = state_dir.resolve()
-        parent = store_root.parent.resolve()
+        home = store_root.resolve().parent
+        if not (home == state or (explicit and state.name == "state" and home == state.parent)):
+            return False
+        own = (state / "projects" / "catalog.json").resolve()
+        for catalog in (home / "projects" / "catalog.json", home / "state" / "projects" / "catalog.json"):
+            if catalog.exists() and catalog.resolve() != own:
+                return False  # another catalog's stores
+        return True
     except (OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop (Python 3.12)
-        if "unresolved" not in _UNRESOLVED_LOGGED:
-            _UNRESOLVED_LOGGED.add("unresolved")
-            logger.warning("A moodboard, character or style folder can't be resolved (%s): nothing in it "
-                           "is deleted with a project", type(exc).__name__)
+        _logged_once(exc)
         return False
-    return parent == state or (explicit and state.name == "state" and parent == state.parent)
 
 
 def paired_stores(state_dir: Path, stores: list[AssetStore] | None = None) -> tuple[list[AssetStore], list[AssetStore]]:
@@ -242,8 +266,8 @@ def _record_names(record: dict[str, Any] | None, project_id: str) -> bool:
 def _trash_records(store: AssetStore) -> list[tuple[str, Path, dict[str, Any]]]:
     """(id, record path, record) for every trashed asset whose file is there."""
     trash = store.root / TRASH_DIR
-    if not trash.is_dir():
-        return []
+    if not trash.is_dir() or trash.is_symlink():
+        return []  # a linked trash may be another store's
     found = []
     for record_path in sorted(trash.glob(f"*{RECORD_SUFFIX}")):
         asset_id = record_path.name[: -len(RECORD_SUFFIX)]
@@ -329,6 +353,8 @@ def _drop_side_files(store: AssetStore, asset_id: str) -> None:
     if not store.side_folders or _copies(store, asset_id):
         return
     for folder in store.side_folders:
+        if (store.root / folder).is_symlink():
+            continue  # a linked side folder may be another store's
         (store.root / folder / f"{asset_id}.json").unlink(missing_ok=True)
 
 

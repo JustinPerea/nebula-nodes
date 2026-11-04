@@ -224,3 +224,48 @@ what main moved to Global stays there).
 - The `agentPresenceFollowups` ratchet now expects three red "Delete forever"
   controls in `ProjectHome.tsx` (the row's trigger and confirm, and Empty's
   confirm with one project).
+
+## Round 5 (review 3)
+
+- **Pairing by real location only.** Round 4 compared the folder a store's
+  link sits in, so an isolated backend (temp HOME, copied catalog) whose
+  `.nebula/moodboards` linked to the person's real store paired with the
+  copy, and Delete forever, Empty or the expiry on a listing deleted the real
+  boards, trashed boards and `.notes` of a project the real catalog still
+  had. `roots_paired` now follows the store to its real folder and requires
+  that folder's parent to be the catalog's real folder (or, for an explicit
+  root, the desktop data folder holding `state/`). The decision for this
+  round (coordinator, 2026-11-04) accepts the cost: a store folder linked on
+  its own to another disk keeps a purged project's files, logged; linking the
+  whole `~/.nebula` or desktop data folder still purges.
+- **No fallback to Global.** An unpaired store deletes nothing and keeps the
+  id on `assetPurges`, so the re-home keeps skipping it. Moving its files to
+  Global was considered and refuted: the re-home has no pairing check, so a
+  copy's purge would move the real project's boards.
+- **Another catalog beside the store.** A store whose real parent holds a
+  `projects/catalog.json` or `state/projects/catalog.json` that isn't this
+  catalog's is never paired. Closes `NEBULA_STATE_DIR=~/.nebula/state` with
+  all three roots set to `~/.nebula/*` (the explicit allowance would have
+  paired it) and the mirror, a copy at `<data>/projects` beside
+  `<data>/state/projects`.
+- **Dangling links and loops.** A store root that is a link but not a
+  directory (an unmounted disk, a link to itself) is unpaired before
+  anything is resolved, so the result doesn't depend on how a Python version
+  reports a loop. The id stays listed, and when the disk comes back the
+  store is still linked on its own, so its boards never reach Global.
+- **Links inside a paired store.** A `.trash` or side folder (`.notes`)
+  that is a link is never followed, as a linked `<root>/P` already wasn't.
+- **The CLI's "removed for good with its project".** `GET /api/trash` now
+  sets `goesWithProject: true` on a trashed moodboard, character or style
+  deleted from its project's own folder (`scopeDir == projectId`) in a store
+  paired with the catalog; `nebula trash list` adds the clause only for
+  those and says nothing otherwise (an older backend sends no flag).
+  `list_trash` and MCP-SETUP name the flag.
+- **Review 3's five surviving mutants** each have a test: an id on the list
+  that is back in Recently deleted, two ids through `_purge_noted_assets`
+  with one unfinished, a `*.json.tmp` behind a linked project folder, the
+  root setting read per kind, and the trashed file removed before its
+  record.
+- **Follow-up (not in this PR).** Main's start-up re-home should be gated
+  with the same `roots_paired`: today a half-isolated copy re-homes the real
+  projects missing from the copy to Global.

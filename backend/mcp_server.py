@@ -1842,8 +1842,8 @@ def list_trash(kind: str | None = None, scope: str | None = None, project_id: st
     (by the person, or past `purgeAt`) takes its moodboards, characters and
     styles with it, those in Recently deleted too: they are gone, and a
     lookup of one finds nothing. A project's `goesWith` names them
-    (`moodboards`, `characters`, `styles`), and a trashed one with a
-    `projectId` goes when that project is deleted for good."""
+    (`moodboards`, `characters`, `styles`), and a trashed one with
+    `goesWithProject: true` goes when its project is deleted for good."""
     import project_client
 
     return project_client.list_trash(_api(), kind=kind, scope=scope, project_id=project_id,

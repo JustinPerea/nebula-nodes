@@ -93,8 +93,9 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
         expiry = ""
         if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
-            if item.get("projectId"):
-                # It goes when its project is deleted for good (the person's note says so too).
+            if item.get("goesWithProject") is True:
+                # It goes when its project is deleted for good (GET /api/trash says so only when
+                # it would: deleted from that project's folder, in a store beside the catalog).
                 when = project_purge.get(item["projectId"])
                 expiry = f", removed for good with its project{f' after {str(when)[:10]}' if when else ''}"
         elif item.get("purgeAt"):

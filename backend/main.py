@@ -20459,17 +20459,28 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
                      projectId: str | None = None) -> dict[str, Any]:
     """What's in Recently deleted, newest first. ``kind`` narrows it to
     moodboards, characters or projects; ``scope`` (global, or project with
-    ``projectId``) narrows boards and characters the way their lists do."""
+    ``projectId``) narrows boards and characters the way their lists do.
+    A board, character or style that goes when its project is deleted for
+    good has ``goesWithProject: true`` (deleted from that project's own
+    folder, in a store beside this catalog: project_asset_purge)."""
     if kind is not None:
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     items: list[dict[str, Any]] = []
+    paired_kinds: set[str] | None = None
     for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             try:
-                items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
+                records = _asset_store(asset_kind).list_trash(scope=scope, projectId=projectId)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if paired_kinds is None:
+                paired, _unpaired = project_asset_purge.paired_stores(_catalog_folder())
+                paired_kinds = {store.kind for store in paired}
+            for record in records:
+                pid = record.get("projectId")
+                items.append({**record, "goesWithProject": True} if (
+                    asset_kind in paired_kinds and pid and record.get("scopeDir") == pid) else record)
     if kind in (None, "project") and scope is None:
         trashed_projects, assets_gone = _project_trash_items()
         items.extend(trashed_projects)
