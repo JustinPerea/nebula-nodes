@@ -297,7 +297,7 @@ def test_16_a_cross_project_reply_with_a_node_is_saved_without_it_flies_nothing_
     assert answer.status_code == 201, answer.text
     assert answer.json()["projectId"] == coast and _replies_in(thread, coast)[0]["nodeId"] is None
     assert answer.json()["note"] == ("Nebula posted this reply in “Coast” but didn’t point at n3 because that "
-                                     "project isn’t the one open, so your cursor stayed where it was.")
+                                     "project isn’t open, so your cursor stayed where it was.")
     assert len([m for m in thread.sent if m.get("type") == "agentPresence"]) == before  # GM r108 b
 
 

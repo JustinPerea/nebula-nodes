@@ -9,8 +9,9 @@ export const UNTITLED = 'Untitled';
 
 /** GM r108 string 6: the because form, with the real reason; "Try again."
  * only when trying again can help. */
-export function threadOpenLine(what: string, why: string, retry: boolean): string {
-  return `Nebula couldn’t open ${what} because ${why}.${retry ? ' Try again.' : ''}`;
+export function threadOpenLine(what: string, why: string, retry: boolean, unlock?: string): string {
+  // A lock says what unlocks it (GM r115 b); a passing failure says Try again.
+  return `Nebula couldn’t open ${what} because ${why}.${unlock ? ` ${unlock}` : ''}${retry ? ' Try again.' : ''}`;
 }
 
 const THIS_THREAD = 'this thread';
@@ -38,7 +39,7 @@ export async function openThreadIn(projectId: unknown, replyId?: unknown): Promi
   if (projects.activeProject?.id !== projectId) {
     const listed = projects.projects.find((project) => project.id === projectId);
     const trashed = projects.trash.find((project) => project.id === projectId);
-    if (trashed) throw writtenLine(threadOpenLine(THIS_THREAD, 'its project is in Recently deleted', false));
+    if (trashed) throw writtenLine(threadOpenLine(THIS_THREAD, 'its project is in Recently deleted', false, 'Restore the project to open it.'));
     if (!listed) throw writtenLine(threadOpenLine(THIS_THREAD, 'its project was deleted for good', false));
     throw writtenLine(threadOpenLine(quoted(listed.name), 'it didn’t finish loading', true));
   }

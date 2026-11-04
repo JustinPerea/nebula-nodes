@@ -1434,7 +1434,7 @@ reload and every tab show the same rows.
   only when the reply goes to the open canvas: for another project's
   thread it is ignored, no cursor flies (GM r108 b), and the answer's
   `note` says "Nebula posted this reply in “Coast” but didn’t point at n3
-  because that project isn’t the one open, so your cursor stayed where it
+  because that project isn’t open, so your cursor stayed where it
   was." In the open project no Update is posted.
 - Under the channel, a deliberate wake (a message, an answer, a pin) is a
   span owned by the listener session that got it. The listener keeps one

@@ -146,7 +146,7 @@ def reply_unmatched_line(name: str, count: int) -> str:
 # project's canvas, not the one the person sees), and says so.
 def reply_node_elsewhere_line(node_id: str, project_name: str) -> str:
     return (f"Nebula posted this reply in “{project_name}” but didn’t point at {node_id} because that project "
-            "isn’t the one open, so your cursor stayed where it was.")
+            "isn’t open, so your cursor stayed where it was.")
 
 
 # GM r100, r112.1: the Update a reply posts when it lands in another

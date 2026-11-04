@@ -63,7 +63,7 @@ describe('openThreadIn', () => {
       projects: [{ id: 'p2', name: 'Coast' }], trash: [{ id: 'p3', name: 'Old' }] } as never);
     await expect(openThreadIn(undefined)).rejects.toThrow(exactly('Nebula couldn’t open this thread because this Update doesn’t say which project it’s in.'));
     await expect(openThreadIn('p2')).rejects.toThrow(exactly('Nebula couldn’t open “Coast” because it didn’t finish loading. Try again.'));
-    await expect(openThreadIn('p3')).rejects.toThrow(exactly('Nebula couldn’t open this thread because its project is in Recently deleted.'));
+    await expect(openThreadIn('p3')).rejects.toThrow(exactly('Nebula couldn’t open this thread because its project is in Recently deleted. Restore the project to open it.'));
     await expect(openThreadIn('p9')).rejects.toThrow(exactly('Nebula couldn’t open this thread because its project was deleted for good.'));
     header?.remove();
     header = null;

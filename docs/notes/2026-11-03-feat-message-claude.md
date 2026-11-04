@@ -876,3 +876,8 @@ successor wait and `taken_by_another`.
   - syncRows keeps a row at the snapshot's newest time;
   - `_token_source`'s docstring;
   - unread-elsewhere counts each reply id once.
+
+## GM r115 wording (2026-11-04)
+- The reply-elsewhere note says "…because that project isn’t open, so your cursor stayed where it was." ("isn’t the one open" cut).
+- A thread whose project is in Recently deleted is a lock, so its line says what unlocks it: "Nebula couldn’t open this thread because its project is in Recently deleted. Restore the project to open it." (`threadOpenLine`'s `unlock` argument).
+- Merge with main (#219's person_say): the person's bubble shows the count, the Agent log the named line; the log is dropped only when it would repeat the bubble. GM agreed.
