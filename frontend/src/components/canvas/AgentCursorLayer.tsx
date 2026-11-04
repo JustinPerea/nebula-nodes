@@ -157,6 +157,9 @@ class CursorField {
   /** Cursors a merge put under a member they are drawn above: they glide
    *  past it to their slot, not floored, until they come to rest (hold). */
   readonly crossing = new Set<string>();
+  /** The members of every column one of whose cursors glides now: drawn in
+   *  column order, the head on top (inOrder). */
+  readonly ordered = new Set<string>();
   /** Count cursors on their way out, by key, with the members they stood
    *  for: the count that takes their slot (one of those members) waits,
    *  unseen, until they are gone, so a column never shows more than three
@@ -527,6 +530,43 @@ class CursorField {
     return true;
   }
 
+  /**
+   * Column order while a glide lasts (GM - Design, #219 r95): while any
+   * member of a column glides on the land spring, every member of it draws
+   * in column order, the head on top, so a gliding cursor never draws under
+   * a member it passes, however far down the column (a carry going from the
+   * bottom slot back to the head passes two; the crossing mark only ever
+   * judges the member right above, review 5, drag-live LOW-1). After the
+   * glide the column's normal order returns. A flight is not a glide (it
+   * passes over by design), nor is a ride, and a member whose loop stopped
+   * (its node gone) glides no more. A cursor alone in its column has no
+   * order to keep. True when `key` is in a column drawn in order now; any
+   * other member whose state this changes is drawn again here.
+   */
+  inOrder(key: string, zoom: number): boolean {
+    const laid = this.layout(zoom);
+    const size = new Map<string, number>();
+    const gliding = new Set<string>();
+    for (const [k, spot] of laid) {
+      if (spot.column === undefined || spot.collapsedInto) continue;
+      size.set(spot.column, (size.get(spot.column) ?? 0) + 1);
+      const m = this.motions.get(k);
+      const stepped = this.steppedAt.get(k);
+      if (m?.landing && !m.plan && stepped !== undefined && this.frameTime - stepped < 100) gliding.add(spot.column);
+    }
+    const want = new Set<string>();
+    for (const [k, spot] of laid) {
+      if (spot.column !== undefined && !spot.collapsedInto && gliding.has(spot.column) && size.get(spot.column)! > 1) want.add(k);
+    }
+    const changed = [...new Set([...this.ordered, ...want])].filter((k) => want.has(k) !== this.ordered.has(k));
+    if (changed.length > 0) {
+      this.ordered.clear();
+      for (const k of want) this.ordered.add(k);
+      for (const k of changed) if (k !== key) this.placers.get(k)?.();
+    }
+    return want.has(key);
+  }
+
   /** This cursor came to rest outside a frame's own step (a caught-up frame
    *  after a stall or a hidden tab, a stale or replayed event snapped to its
    *  spot): no glide is left for it to pass the member above in, so its
@@ -567,10 +607,12 @@ class CursorField {
    *  each its own frame (the one above stepped at t, this one at t + a few
    *  µs), so hold() took the member above for one still to step and left
    *  this one off the floor, 1.1 px under the step mid-zoom on CI's slower
-   *  clock (#219 r3h). A clock read can also be past the next frame's
-   *  timestamp, and that frame would then not move frameTime on. */
+   *  clock (#219 r3h). Before any frame has run (no cursor can have a
+   *  motion yet, so no carry steps one: kept safe all the same), 0: one
+   *  value for the whole carry, and never past the next frame's timestamp,
+   *  as a clock read can be (review 5, NIT-2). */
   carryTime(): number {
-    return Number.isFinite(this.frameTime) ? this.frameTime : performance.now();
+    return Number.isFinite(this.frameTime) ? this.frameTime : 0;
   }
 
   /**
@@ -1210,11 +1252,18 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       // Two crossing at once keep their column's order between themselves,
       // the upper one on top, not the DOM's (GM r85 NIT): its depth is how
       // many members its slot has above it (agentCursor.css).
-      if (!leaving && field.crossing.has(cursor.key)) {
-        el.dataset.crossing = 'true';
+      // And while any member of its column glides, the whole column draws
+      // in that order, so a glide never passes under a member it is drawn
+      // over (GM r95; CursorField.inOrder).
+      const crossing = !leaving && field.crossing.has(cursor.key);
+      const ordered = !leaving && field.inOrder(cursor.key, zoomRef.current);
+      if (crossing) el.dataset.crossing = 'true';
+      else delete el.dataset.crossing;
+      if (ordered) el.dataset.columnOrder = 'true';
+      else delete el.dataset.columnOrder;
+      if (crossing || ordered) {
         el.style.setProperty('--agent-cursor-crossing-depth', String(field.layout(zoomRef.current).get(cursor.key)?.above.length ?? 0));
       } else {
-        delete el.dataset.crossing;
         el.style.removeProperty('--agent-cursor-crossing-depth');
       }
     };
@@ -1306,10 +1355,15 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       frame.current = requestAnimationFrame(tick);
       field.dueAt.set(cursor.key, field.frameTime);
     };
-    const tick = (time: number) => {
+    const tick = (time: number, carried = false) => {
       frame.current = null;
       field.dueAt.delete(cursor.key);
-      if (time > field.frameTime) field.frameTime = time;
+      // A frame's own timestamp is the frame, even one behind a time a
+      // carry stepped at: frameTime never stays ahead of it, so hold() and
+      // holdBelow() still tell this frame's steps from the last one's
+      // (review 5, NIT-2). A carry steps at the frame's time, or a glide's
+      // own last one, and never moves it.
+      if (!carried) field.frameTime = time;
       if (leavingRef.current) {
         // Its exit: no events, no place in the stack, no hover; it fades out
         // where it is, then it's forgotten.
@@ -1407,6 +1461,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
         lastTime.current = null;
         apply();
+        // The members under it judged against where it is now: a mark one
+        // of them carries at rest (r89) has no frame of its own to end on
+        // (review 5, LOW-1 and LOW-2).
+        field.steppedAt.set(cursor.key, time);
+        field.holdBelow(cursor.key, z, time);
         updateWire(null);
         field.invalidateLayout();
         updateLabel.current();
@@ -1463,6 +1522,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         phase.current = 'rest';
         field.snapped(cursor.key);
         apply();
+        // And the members under it, as on any frame: one marked crossing at
+        // rest (r89) ends its mark here, with no frame of its own to do it
+        // (review 5, LOW-1 and LOW-2).
+        field.steppedAt.set(cursor.key, time);
+        field.holdBelow(cursor.key, z, time);
         updateWire(null);
         field.landed(cursor.key);
         updateLabel.current();
@@ -1554,12 +1618,20 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         // zoom. A glide steps no time here (its frame's own time is spent
         // already), so only the zoom moves it; its next frame runs as usual.
         const resting = frame.current === null && phase.current === 'rest';
+        // Woken by an event and not stepped since (its frame still to
+        // come): no clock of its own yet, like one at rest. The carry steps
+        // it at the frame it happens in, and its first frame counts one
+        // frame's step from there, not from the carry's time: that can be
+        // seconds old when every cursor rested (no frame ran), and the gap
+        // read as a stall would land it with no flight and no ring (#219
+        // review 5, MEDIUM-1).
+        const fresh = resting || lastTime.current === null;
         if (frame.current !== null) cancelAnimationFrame(frame.current);
         frame.current = null;
         field.dueAt.delete(cursor.key);
-        tick(resting || lastTime.current === null ? field.carryTime() : lastTime.current);
+        tick(fresh ? field.carryTime() : lastTime.current!, true);
         // The next frame's step counts from that frame, not from now.
-        if (resting) lastTime.current = null;
+        if (fresh) lastTime.current = null;
         return;
       }
       wake.current();

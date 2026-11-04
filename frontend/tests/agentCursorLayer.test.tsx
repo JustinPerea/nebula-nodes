@@ -598,6 +598,33 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     expect(rereads(() => {})).toBe(false);
   });
 
+  // Review 5, NIT-1 (M13): a cursor's boxes go stale by how far its tip
+  // moved on screen, not in canvas units. Zoomed in to 2, its node moved 0.8
+  // canvas units (1.6 px on screen, past HOVER_STALE_PX): it reads its boxes
+  // again on coming to rest. Zoomed out to 0.25, 3 canvas units (0.75 px):
+  // it doesn't.
+  it.each([[2, 0.8, true], [0.25, 3, false]] as const)('at zoom %s a rest %s canvas units on re-reads its boxes: %s (review 5, NIT-1, M13)', (zoom, dx, again) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+    try {
+      pane.transform = [0, 0, zoom];
+      render(<AgentCursorLayer />);
+      send(event());
+      flush();
+      act(() => { vi.advanceTimersByTime(1600); });
+      pointer(1400, 880);
+      const before = reads.count;
+      pointer(1390, 880);
+      expect(reads.count).toBe(before); // cached
+      moveNode('n1', dx);
+      flush();
+      // Followed its node (drawn on whole device pixels).
+      expect(Math.abs(at(cursors()[0]).x - (500 + dx))).toBeLessThanOrEqual(1 / zoom);
+      expect(reads.count > before).toBe(again);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('re-reads its boxes when its label changes (a pill appears or goes)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
     try {
@@ -4056,6 +4083,8 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
         expect(landed[k], k).toBeGreaterThanOrEqual(0);
         // Within a frame of its own rest (the cap would be 18 frames on).
         expect(landed[k] - Math.max(ownRest[k], 0), k).toBeLessThanOrEqual(2);
+        // Nor does it keep its column in glide order (GM r95): it glides no more.
+        expect(byKey(k).dataset.columnOrder, k).toBeUndefined();
       }
     } finally {
       vi.useRealTimers();
@@ -4480,6 +4509,280 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       // started over, so it never got there.
       expect(loggedAt, states.join('')).toBeGreaterThan(0);
       expect(loggedAt).toBeLessThan(100);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #219 review 5, MEDIUM-1 (R5PROBE_B, kept): a cursor at rest, no frame
+  // for a while (every cursor rested), then an event woke it and a zoom came
+  // before its first frame. The zoom's carry stepped it at the field's
+  // frameTime, from the last frame anyone drew, and left its clock there:
+  // its first frame saw a gap past the stall threshold and landed it with
+  // no flight and no ring (2 s idle), or jumped its flight's first frame
+  // 187 px (100 ms idle). The control has no zoom. performance.now() as a
+  // browser has it, a little past the frame (the r3h tests' mock).
+  it.each([[true, 2000], [false, 2000], [true, 100]] as const)('an event after an idle spell, a zoom before its first frame (%s, idle %s ms): it flies there and the click rings (review 5, MEDIUM-1)', (zoomFirst, idle) => {
+    let reads = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock + 4 + (reads += 0.001));
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 } }));
+      flush();
+      const x0 = at(byKey('a')).x;
+      expect(x0).toBe(300);
+      clock += idle;
+      send(event({ ...session('a', 1), target: { x: 700, y: 300 }, action: 'click' }));
+      if (zoomFirst) { pane.transform = [0, 0, 0.95]; notifyStore(); }
+      const xs: number[] = [];
+      let rippled = false;
+      for (let i = 0; i < 120 && frames.length > 0; i += 1) {
+        tickFrames(1);
+        xs.push(at(byKey('a')).x);
+        if (ripple()) rippled = true;
+      }
+      const inFlight = xs.filter((x) => x > x0 + 5 && x < 695).length;
+      expect(inFlight, JSON.stringify(xs.slice(0, 5))).toBeGreaterThan(15);
+      // Its first frame steps a frame or two of its flight (the carry's
+      // own step, then the frame's), not the gap's 187 px.
+      expect(xs[0] - x0).toBeLessThan(40);
+      expect(xs[xs.length - 1]).toBe(700);
+      expect(rippled).toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+      pane.transform = [0, 0, 1];
+    }
+  });
+
+  // Review 5, NIT-2 and M18: a carry's time before any frame has run is one
+  // value for the whole carry, and never past the next frame's timestamp, as
+  // a clock read can be. (No cursor has a motion before a frame, so no carry
+  // steps one then: the value is pinned here, on the field.)
+  it('a carry before any frame steps at a time no later than the next frame, the same for every cursor (review 5, NIT-2)', () => {
+    let reads = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock + 40 + (reads += 0.001));
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 } }));
+      const field = fieldOf() as unknown as { carryTime: () => number; frameTime: number };
+      expect(field.frameTime).toBe(-Infinity);
+      const first = field.carryTime();
+      expect(field.carryTime()).toBe(first);
+      expect(first).toBeLessThanOrEqual(clock + 1000 / 60);
+      tickFrames(1);
+      expect(field.frameTime).toBe(clock);
+      expect(field.carryTime()).toBe(clock);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  // Review 5, NIT-2: a frame stamped behind the field's frameTime (a time a
+  // carry stepped at that ran ahead of it, or a clock that went back) is
+  // still that frame: frameTime follows it, so hold() still tells a member
+  // above that is still to step from one that has (the floor read from it
+  // marked e crossing on every frame of the head-to-bottom glide, review 4),
+  // and no step runs backwards on a negative dt. In either frame order.
+  it.each((['ahead', 'back'] as const).flatMap((how) => [2, 6, 10, 14].flatMap((at) => [[how, at, false], [how, at, true]] as const)))('a frame stamped behind frameTime (%s, %s frames into the glide) is still its own frame: the head-to-bottom glide keeps its step and marks only the carry (review 5, NIT-2; reversed: %s)', (how, k0, reversed) => {
+    const bound = springSteps();
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      reverseFrames = reversed;
+      dragFrames('n2', [{ x: 400, y: 284 }], () => {});
+      for (let i = 0; i < k0; i += 1) frame();
+      const field = fieldOf() as unknown as { frameTime: number };
+      if (how === 'ahead') field.frameTime = clock + 50;
+      else clock -= 40;
+      const to = { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } };
+      let prev = where();
+      for (let i = 0; i < 60; i += 1) {
+        frame();
+        const w = where();
+        expect(w.e.y - w.d.y, `frame ${i}`).toBeCloseTo(S, 9);
+        expect(['d', 'e'].filter((k) => byKey(k).dataset.crossing === 'true'), `frame ${i}`).toEqual([]);
+        // Never more than the spring's step.
+        for (const k of ['a', 'd', 'e'] as const) {
+          expect(Math.abs(w[k].y - prev[k].y), `${k} frame ${i}`).toBeLessThanOrEqual(bound[k] * 1.02);
+        }
+        prev = w;
+      }
+      expect(where()).toEqual(to);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // And the case the stale-floor guard is for (review 4, drag LOW-1): the
+  // hand back to the head k frames into the glide, each frame's callbacks in
+  // reverse order, with frames stamped behind frameTime from there on.
+  it.each([0, 1, 2, 3].flatMap((k) => [[k, 'ahead'], [k, 'back']] as const))('the hand crosses back %s frames into the glide, frames stamped behind frameTime (%s): no frame moves a cursor more than its spring step (review 5, NIT-2)', (k, how) => {
+    const bound = springSteps();
+    fakeTimers();
+    reverseFrames = true;
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      let prev = where();
+      const worst: Record<string, number> = { a: 0, d: 0, e: 0 };
+      const rec = () => {
+        const w = where();
+        for (const key of ['a', 'd', 'e']) worst[key] = Math.max(worst[key], Math.abs(w[key].y - prev[key].y));
+        prev = w;
+      };
+      for (let i = 0; i < k; i += 1) { frame(); rec(); }
+      const field = fieldOf() as unknown as { frameTime: number };
+      if (how === 'ahead') field.frameTime = clock + 50;
+      else clock -= 40;
+      dragFrames('n2', [{ x: 400, y: 283 }], rec);
+      for (let i = 0; i < 80; i += 1) { frame(); rec(); }
+      for (const key of ['a', 'd', 'e']) expect(worst[key], `${key} at k=${k}`).toBeLessThanOrEqual(bound[key] * 1.02);
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 5, LOW-1 and LOW-2 (R5PROBE_A, kept): r65's head-to-bottom move,
+  // then the hand straight back to the head with each frame's callbacks in
+  // reverse order: d is marked crossing at rest (r89). Then 1 s with no
+  // frames (a stall, a hidden tab), or a replay of a's event meanwhile:
+  // a lands on its caught-up frame, or snaps to its spot, and neither went
+  // through holdBelow, so d kept its mark (and its negative z-index) at
+  // rest with no frame of its own to end it.
+  it.each(['stall', 'replay'] as const)('a member marked crossing at rest loses its mark when the one above lands on a %s (review 5, LOW-1 and LOW-2)', (how) => {
+    fakeTimers();
+    reverseFrames = true;
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      const field = fieldOf() as unknown as { motions: Map<string, { landing: unknown; plan: unknown }>; placers: Map<string, () => void> };
+      const keyOf = (c: string) => [...field.placers.keys()].find((x) => x.endsWith(c.repeat(12)))!;
+      dragFrames('n2', [{ x: 400, y: 283 }], () => {});
+      let found = '';
+      for (let i = 0; i < 40 && !found; i += 1) {
+        for (const c of ['d', 'e']) {
+          const m = field.motions.get(keyOf(c));
+          if (byKey(c).dataset.crossing === 'true' && m && !m.landing && !m.plan) found = c;
+        }
+        if (!found) frame();
+      }
+      // The case: a member at rest, marked.
+      expect(found).toBe('d');
+      act(() => { vi.advanceTimersByTime(1000); });
+      clock += 1000;
+      if (how === 'replay') {
+        act(() => { useAgentPresenceStore.getState().apply({ ...event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }), replay: true, secondsAgo: 0 } as never); });
+      }
+      tickFrames(1);
+      for (let i = 0; i < 30; i += 1) frame();
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+      expect(frames.length).toBe(0);
+      expect(['a', 'd', 'e'].filter((c) => byKey(c).dataset.crossing === 'true')).toEqual([]);
+      expect(cursors().filter((el) => el.style.getPropertyValue('--agent-cursor-crossing-depth') !== '')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r95 (review 5, drag-live LOW-1): the carry dragged back out of the
+  // band goes from the bottom slot to the head, past e and then d. Only the
+  // member right under a cursor was ever judged crossing, so e, later in the
+  // DOM than a, drew over a for a frame or two as a passed it. While a glide
+  // lasts the whole column draws in column order, the head on top: a over d
+  // over e, whatever the DOM's order; after it, normal order returns.
+  /** How this cursor paints against the others in the layer: its z-index
+   *  (agentCursor.css: -1 - depth when marked, else auto, as 0), then the
+   *  DOM's order. */
+  const paintRank = (k: string): [number, number] => {
+    const el = byKey(k);
+    const marked = el.dataset.crossing === 'true' || el.dataset.columnOrder === 'true';
+    const z = marked ? -1 - Number(el.style.getPropertyValue('--agent-cursor-crossing-depth')) : 0;
+    return [z, cursors().indexOf(el)];
+  };
+  const drawnOver = (up: string, down: string) => {
+    const [a, b] = [paintRank(up), paintRank(down)];
+    return a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+  };
+  it.each([false, true])('the carry going from the bottom slot back to the head draws over both members it passes, then the column\'s order is back (GM r95; reversed: %s)', (reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      settle(1200);
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+      expect(cursors().filter((el) => el.dataset.columnOrder === 'true')).toEqual([]);
+      // a before e in the DOM: by DOM order alone e draws over a.
+      expect(cursors().indexOf(byKey('a'))).toBeLessThan(cursors().indexOf(byKey('e')));
+      reverseFrames = reversed;
+      let passing = 0;
+      let ordered = 0;
+      const check = (label: string) => {
+        const w = where();
+        if (byKey('a').dataset.columnOrder === 'true') ordered += 1;
+        // Wherever a's label is within a step of a member's, a draws over it.
+        for (const k of ['d', 'e']) {
+          if (Math.abs(w.a.y - w[k].y) < S) {
+            passing += 1;
+            expect(drawnOver('a', k), `a over ${k} ${label}`).toBe(true);
+          }
+        }
+        if (Math.abs(w.d.y - w.e.y) < S) expect(drawnOver('d', 'e'), `d over e ${label}`).toBe(true);
+      };
+      dragFrames('n2', [{ x: 400, y: 283 }], () => check('on the drag frame'));
+      for (let i = 0; i < 90; i += 1) { frame(); check(`frame ${i}`); }
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+      // It passed both, over several frames, in column order throughout.
+      expect(passing).toBeGreaterThan(3);
+      expect(ordered).toBeGreaterThan(5);
+      // After the glide, normal order returns: no column order, no depth.
+      for (const k of ['a', 'd', 'e']) {
+        expect(byKey(k).dataset.columnOrder, k).toBeUndefined();
+        expect(byKey(k).dataset.crossing, k).toBeUndefined();
+        expect(byKey(k).style.getPropertyValue('--agent-cursor-crossing-depth'), k).toBe('');
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r95's other half: column order is for a column while it glides
+  // only. A cursor flying and landing alone, a column at rest, and a flight
+  // on its arc into a column draw in plain order (a flight passes over by
+  // design).
+  it('column order holds only while a member of a column of two or more glides (GM r95)', () => {
+    fakeTimers();
+    try {
+      const view = render(<AgentCursorLayer />);
+      const anyOrdered = () => cursors().some((el) => el.dataset.columnOrder === 'true');
+      // A cursor alone in its column, flying and landing, with another
+      // cursor elsewhere: no column to order.
+      send(event({ ...session('h', 6), target: { x: 200, y: 200 } }));
+      send(event({ ...session('f', 5), target: { x: 900, y: 600 } }));
+      for (let i = 0; i < 10; i += 1) frame();
+      send(event({ ...session('f', 5), target: { x: 1100, y: 640 } }));
+      for (let i = 0; i < 90; i += 1) { frame(); expect(anyOrdered(), `alone, frame ${i}`).toBe(false); }
+      view.unmount();
+      useAgentPresenceStore.getState().clear();
+      frames = [];
+      frameIds = [];
+      render(<AgentCursorLayer />);
+      intoColumn();
+      settle(400);
+      expect(anyOrdered()).toBe(false);
+      // A flight into the column: its arc orders nothing; its landing glide may.
+      send(event({ ...session('g', 1), agent: { id: 'pair', name: 'Pair', color: '#FF9F43', verified: true }, target: { x: 500, y: 344 }, since: 3000 }));
+      for (let i = 0; i < 120; i += 1) {
+        frame();
+        const p = at(cursors().find((el) => el.dataset.agent === 'pair')!);
+        if (Math.hypot(p.x - 500, p.y - (344 + 2 * S)) > 60) expect(anyOrdered(), `g in flight at ${p.x}, ${p.y}`).toBe(false);
+      }
+      expect(at(cursors().find((el) => el.dataset.agent === 'pair')!)).toEqual({ x: 500, y: 344 + 2 * S });
+      // Landed: the column's normal order.
+      expect(anyOrdered()).toBe(false);
     } finally {
       vi.useRealTimers();
     }

@@ -91,4 +91,7 @@ describe('ratchets the look depends on (review 1, F5)', () => {
     expect(rule('.agent-cursor-layer')).toMatch(/z-index:\s*\d+;/);
     expect(rule('.agent-cursor')).not.toMatch(/z-index/);
   });
+  it('while a member of a column glides, the whole column draws in column order on the same depth scale, the head on top (GM r95)', () => {
+    expect(rule(".agent-cursor[data-column-order='true']")).toMatch(/z-index:\s*calc\(-1 - var\(--agent-cursor-crossing-depth, 0\)\);/);
+  });
 });

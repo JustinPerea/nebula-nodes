@@ -57,6 +57,15 @@
   z-index: calc(-1 - var(--agent-cursor-crossing-depth, 0));
 }
 
+/* While any member of a column glides, the whole column draws in column
+   order, the head on top, on the same depth scale (GM - Design, #219 r95):
+   a gliding cursor never draws under a member it passes, however far down
+   the column, and the DOM's order decides nothing. Set from JS
+   (CursorField.inOrder) and gone when the glide ends. */
+.agent-cursor[data-column-order='true'] {
+  z-index: calc(-1 - var(--agent-cursor-crossing-depth, 0));
+}
+
 /* A leaving cursor whose name a live cursor now shows (a number taken over)
    hides its pill at once, for the rest of its exit: one name never shows
    twice (PR #211 reviews 4 and 5). */

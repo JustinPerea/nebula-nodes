@@ -548,6 +548,105 @@ both under the 42 px step, on the first carry of the zoom.
   live run: the change is only on a zoom's carry, and r3g's held and
   after-drop shots have no zoom.
 
+## 2k. Round 3i (review 5, GM r95)
+
+- **A. MEDIUM-1, a zoom before a woken cursor's first frame (r3h regression).**
+  The zoom branch reset `lastTime` only for a resting cursor, so a cursor
+  an event had just woken (frame pending, `lastTime` null) kept the carry's
+  time, the field's `frameTime`. When every cursor had rested, that was the
+  last frame anyone drew, seconds old: the next frame's dt passed the 0.25 s
+  stall gap and stepMotion landed it with no flight and no ring. Fixed as the
+  reviewer proposed: `fresh = resting || lastTime === null` steps at
+  `carryTime()` and resets `lastTime` for both. Checked the other paths: a
+  carry tick only ever sets `lastTime` to its own `time` argument, which is
+  now `carryTime()` (then reset) or a gliding cursor's own last frame time.
+  The one remaining way to keep an old `lastTime` is a loop stopped on
+  `!resolved` (node not drawn), which predates r3h and lands on its next
+  frame by design. R5PROBE_B is kept as a test, all three cases (2 s idle with
+  a zoom, the no-zoom control, 100 ms idle with a zoom): over 15 frames in
+  flight, first step under 40 px, ring shown.
+- **B. NIT-2, frame timestamps behind `frameTime`.** Two changes. (1)
+  `carryTime()` before any frame returns 0, not a clock read: one value for
+  the whole carry and never past the next frame's timestamp. In practice
+  this branch can't run (a cursor has no motion until its first rAF tick,
+  which sets `frameTime`), so it is pinned on the field directly (M18). (2) A
+  rAF tick sets `frameTime` to its own timestamp; a carry tick never moves
+  it. Negative dt: stepMotion and stepExit already clamp it (planner
+  `Math.max(0, dtSeconds)` on every use, `liveVel` only for dt > 0), so no
+  step runs backwards; I added no second clamp. Tests: a frame stamped
+  behind `frameTime` (bumped 50 ms ahead, or the clock moved back 40 ms) at
+  2, 6, 10 and 14 frames into the head-to-bottom glide, both rAF orders:
+  `e - d` stays the step, only the carry is marked, no frame passes the
+  spring step. And the hand-back case (k = 0-3, reversed) with the same
+  skews.
+- **C. LOW-1/LOW-2, an at-rest crossing mark after a stall or a replay.**
+  The caught-up branch and the stale/replay branch now set `steppedAt` and
+  run `holdBelow` after `apply()`, as every other frame does. `hold()`
+  recomputes an at-rest member's mark from scratch, so d's mark ends when a
+  lands. R5PROBE_A is kept as a test for both paths (stall, replay of a's
+  event): the at-rest mark is found first, then cleared, with no depth
+  variable left.
+- **D. drag-live LOW-1, GM r95 (binding).** `CursorField.inOrder()`: while
+  any member of a column of two or more glides on the land spring (landing,
+  no plan, stepped within 100 ms so a stopped loop doesn't count), every
+  member gets `data-column-order` and the depth variable; CSS draws it at
+  `-1 - depth`, the same scale as crossings, so the head is on top and the
+  DOM order decides nothing. Every `apply()` recomputes it and repaints any
+  other member whose state changed, so landing on a caught-up or stale path
+  clears it too. Flights (arc) and rides don't order a column; a cursor alone
+  in its column doesn't either. Tradeoff: while a column glides, all its
+  members sit under unmarked cursors of other columns and under the wire
+  layer (as crossings already did). Columns don't overlap other columns, so
+  nothing new shows. Test: r65's head-to-bottom, landed, then the carry back
+  from the bottom slot to the head past e and d, both rAF orders: a draws
+  over each member wherever their labels are within a step, d over e, and no
+  column order or depth is left after the glide. Plus: a lone flight, a
+  flight's arc into a column, and a stopped loop (R4 test) order nothing.
+- **E. NIT-1.** M13 pinned: at zoom 2 a rest 0.8 canvas units on re-reads its
+  boxes (1.6 px), at 0.25 a rest 3 units on doesn't (0.75 px). M18 pinned
+  (B). M4 and M6 are equivalent, as review 5 says: `dueAt` is deleted at
+  tick start and re-set to `frameTime` on request, so a member that stepped
+  this frame never has `dueAt < frameTime`; and `snapped` dropping
+  `heldSince` is redone by restGate/hold on the next step because
+  `m.landing` is null.
+- **drag-live NIT-1 (a member at rest under a riding head trails it a frame
+  when its rAF runs first): not fixed.** The member reads the head's spot
+  from the head's last `report()`. Fixing it means moving a member that has
+  already stepped this frame once the head reports (a second step, which
+  holdBelow's rule forbids), or holding at-rest members under a riding head,
+  which turns a ride into a glide (`landing` set, a wake) and only works for
+  downward rides. Neither is cheap and safe. The lag is 3-6 px inside a
+  36-40 px step, with no label overlap, and the rule is older than this PR.
+- **Mutation (19 mutants, 3 test files).** Killed 14: A1 (r3h reset only at
+  rest), B2 (carryTime clock read, M18), C1, C2, D1-D8 (inOrder off, no
+  repaint of others, lone column ordered, flights order, stopped loop
+  glides, depth only when crossing, CSS rule gone, ordered at rest too), E1
+  (M13). Survived 5, all equivalent or unreachable: A2 (`fresh = resting`:
+  `tick(null)` sets `lastTime` to null anyway), B1 (`frameTime` only moves
+  forward: a rAF timestamp behind it can't happen once the carry no longer
+  reads the clock; no test scenario tells them apart), B4 (a carry moving
+  `frameTime`: its time is always `frameTime` or a glide's own last frame,
+  equal in practice), C3 (`steppedAt` on the caught-up frame: the member
+  under reads the up's `dueAt`, already deleted), M4, M6.
+- **Live** (isolated backend 8780, Vite 5780, headless Chrome, throwaway
+  profile, 8000-8010/5173/8840/5840 blocked; blocked.log canary lines only,
+  no off-host requests). A ctrl+wheel sent as the click event's POST
+  returns, after d rested 2.5 s: 8 of 8 flew (24-27 moving frames; review
+  5 had 6 of 8 snapped), and with a ring poll 6 of 6 rang 441-469 ms in, at
+  the flight's end. The carry dragged back out of the band at 1440 (s9):
+  a overlapped e (12.1, 11.8 px) and then d with z a -1, d -2, e -3: 0
+  frames with the upper drawn under. Position, second tab and reload agree
+  (a -262, d 44, e 86). The 1024 run didn't get its cursors on screen
+  (driver issue, the session lookup timed out), so it isn't counted.
+- **Round 3i checks.** `tsc -b --noEmit` and `npm run lint` pass. pr_tests
+  (the PR's test files plus every source-reading test, 116 files): 4,092
+  passed. land_checks with test_agent_cursor_followups: tsc, the three
+  ratchets (103), isolated pytest over 30 files (1,125 passed, 1 skipped),
+  person_gate unchanged. Every agentCursor*/cursor* file (7): 637 passed.
+  The zoom tests (342) with `performance.now()` skewed +4, +50, -4 and -50 ms
+  from the frame clock: all pass. Build and budget: entry 471,107 B raw
+  (146,495 gzip) of 512,000.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's
