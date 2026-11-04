@@ -273,8 +273,12 @@ after the notice. The 17 sites that still wait on the text "Deleted the node."
 Mutation: the hold ending 200 ms after the notice. That new test fails in
 236 ms and names the cause. The deleteLanded tests in fix16/17/18/24/25
 pass. 17 other tests fail, because the delay also breaks restores and
-retries. The `deleteAndWait` helpers in fix21stops, fix22 and fix22b now
-call deleteLanded.
+retries. The `deleteAndWait` helpers in fix21stops, fix22 and fix22b did
+not call deleteLanded in this PR (an earlier version of this note said they
+did; PR #221 review 2 LOW-3): they waited on the notice text and then
+`sleep(20)`, so they relied on the coupling fix16's pin guards. The
+follow-up fix/ratchet-followups-221 makes them call deleteLanded
+(docs/notes/2026-11-03-fix-ratchet-followups-221.md).
 
 ### Ex-MEDIUM-2: fixed sleeps between a delete and its Undo
 
