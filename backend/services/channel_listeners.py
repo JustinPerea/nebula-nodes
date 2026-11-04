@@ -69,7 +69,19 @@ NO_TOKEN_LINE = ("Nebula couldn’t connect this listener because it has no toke
                  "your agent, then run this command again.")
 BAD_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token isn’t valid anymore. Copy a new one from "
                   "Settings › Connect your agent, then run this command again.")
+# J3 (Justin, 2026-11-04): only a Settings app token registers. An in-app
+# agent's turn token (commons.actors.agent_registry: the in-app Claude, Codex
+# and the rest) is verified too, but is refused here with this line.
+IN_APP_TOKEN_CODE = "listener_in_app_token"
+IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token is an in-app agent’s, and only a token "
+                     "from Settings › Connect your agent can listen. Copy one there, then run this command again.")
+APP_ID_PREFIX = "app:"
 REASONS = ("idle", "error")
+
+
+def is_app_agent(agent: AgentIdentity) -> bool:
+    """A Settings › Connect your agent token's agent (services/app_tokens)."""
+    return agent.verified and agent.id.startswith(APP_ID_PREFIX)
 
 
 class ListenerError(ValueError):
@@ -164,6 +176,16 @@ class ListenerBook:
             if removed:
                 self.revision += 1
             return removed
+
+    def drop_agent(self, agent_id: str) -> list[Listener]:
+        """Its token was revoked (boundary LOW-1): every entry of that agent
+        goes at once, so the canvas stops offering it. Returns the entries."""
+        with self._lock:
+            keys = [key for key in self._entries if key[0] == agent_id]
+            dropped = [self._entries.pop(key) for key in keys]
+            if dropped:
+                self.revision += 1
+            return dropped
 
     def _expire(self, now: float) -> bool:
         stale = [key for key, entry in self._entries.items() if now - entry.seen_at > TTL_SECONDS]

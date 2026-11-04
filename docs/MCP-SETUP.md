@@ -1122,13 +1122,17 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   Claude within that minute, it is refused the same way (in the live check
   Claude proposed the edit instead): the gate can't tell your typed turn
   from the change turn, since Nebula never sees the terminal. A request you
-  send from the canvas (a message or a pin) is never refused this way: it
-  ends the window as it goes, and no gated push goes while its turn seems
-  under way. One gap stays: if Claude, past the turn's first minute, makes
-  no Nebula call for more than 20 s inside a message's turn, Nebula reads
-  the turn as over, and an edit you made meanwhile can then send a gated
-  push that gates the rest of that turn. A typed request still can be
-  refused, until the gate moves into Nebula.
+  send from the canvas (a message, a pin or an answer) is never refused
+  this way: it ends the window as it goes, and no gated push goes until
+  that session replies to you (its own `reply_to_person`, or `resolve_pin`
+  for a pin, that Nebula saved), or 10 minutes after the push if no reply
+  comes (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04). How long Claude thinks
+  or works in other tools between Nebula calls doesn't matter. Another
+  agent's reply doesn't end it, and neither does a `nebula reply` from a
+  shell (the listener never sees its own agent's events), so answer a push
+  with the tool. After the reply, an edit you made meanwhile goes as a
+  gated push once Claude has been quiet for 20 s. A typed request still can
+  be refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
   turn; if that is more than a minute later, the window has already ended
@@ -1147,21 +1151,31 @@ session) and at once when listening stops, and deletes its entry when the
 session ends; Nebula drops an entry it hasn't heard from for 45 s
 (`backend/services/channel_listeners.py`).
 
-**Only an agent token registers a listener** (Justin, 2026-11-03). The
-listener must hold a valid agent token from Settings › Connect your agent;
-`nebula mcp connect claude-code --channel` makes one and writes the token
-file the listener reads. The agent is the token's: a name header beside it
-changes nothing, so one agent's token never registers as another. A
-listener with no token, or with a token Nebula no longer knows (revoked),
-is refused (`401`, `X-Nebula-Code: listener_no_token` or
-`listener_token_invalid`) and never gets a listener id, so the person's
-messages never reach it. The server prints the reason once on stderr:
+**Only a Settings agent token registers a listener** (Justin, 2026-11-03
+and 2026-11-04). The listener must hold a valid agent token from Settings ›
+Connect your agent. `nebula mcp connect claude-code --channel` doesn't make
+one: it reads the token file Settings saved (or the one Claude Code's
+saved `nebula` server names) and points the listener at it. The agent is
+the token's: a name header beside it changes nothing, so one agent's token
+never registers as another. An in-app agent's turn token (the Claude, Codex
+and other agents Nebula runs itself) is verified but can't listen. A
+listener with no token, with a token Nebula no longer knows (revoked), or
+with an in-app agent's token is refused (`401`, `X-Nebula-Code:
+listener_no_token`, `listener_token_invalid` or `listener_in_app_token`)
+and never gets a listener id, so the person's messages never reach it. The
+server prints the reason once on stderr:
 
 - "error: Nebula couldn’t connect this listener because it has no token.
   Copy one from Settings › Connect your agent, then run this command again."
 - "error: Nebula couldn’t connect this listener because its token isn’t
   valid anymore. Copy a new one from Settings › Connect your agent, then run
   this command again."
+- "error: Nebula couldn’t connect this listener because its token is an
+  in-app agent’s, and only a token from Settings › Connect your agent can
+  listen. Copy one there, then run this command again."
+
+Revoking the token in Settings drops its listeners at once: the canvas
+stops offering them, and a message sent to one is refused as stopped.
 
 `channel_status` shows it as `thisServer.registerError` until a beat goes
 through. The canvas keeps its "Connect Claude Code…" state meanwhile. A
