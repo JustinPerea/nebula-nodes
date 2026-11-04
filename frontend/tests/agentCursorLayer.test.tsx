@@ -5214,4 +5214,160 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(c.querySelector('.agent-cursor__say')).toBeNull();
     expect(agentActionEntry(said)!.message).toBe('Counting along');
   });
+
+  // ===== #219 round 3k (review 7) =====
+  type Order = Motions & { ordered: Set<string>; stalled: Set<string> };
+  const keyIn = (field: Order, c: string) => [...field.motions.keys()].find((k) => k.endsWith(c.repeat(12)))!;
+  const marked = () => cursors().filter((el) => el.dataset.aloft || el.dataset.columnOrder || el.dataset.crossing);
+
+  // GM r103: a flight takes its column's order only once it has landed AND
+  // the column's glide is at rest. A wobble drag (r66) keeps a's carry
+  // gliding past e's own rest, which the 300 ms cap gives it: e lands on its
+  // own while its column still glides, and stays aloft all that time
+  // (review 7, layout LOW-1). Either frame order.
+  it.each([false, true])('a flight that lands by the 300 ms cap while its column still glides stays aloft (GM r103; reversed: %s)', (reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      send(event({ ...session('e', 2), target: { x: 900, y: 700 }, since: 2000 }));
+      settle(800);
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      reverseFrames = reversed;
+      dragFrames('n2', [{ x: 400, y: 284 }], () => {});
+      const field = fieldOf() as unknown as Order;
+      const e = keyIn(field, 'e');
+      const others = ['a', 'd'].map((c) => keyIn(field, c));
+      const path = Array.from({ length: 120 }, (_, i) => { const k = i % 24; return { x: 400, y: 284 + (k < 12 ? k : 24 - k) }; });
+      let i = 0;
+      let restWhileGliding = 0;
+      let dropped = 0;
+      dragFrames('n2', path, () => {
+        if (i === 3) send(event({ ...session('e', 2), target: { x: 500, y: 344 }, since: 2000 }));
+        i += 1;
+        const me = field.motions.get(e);
+        const othersMove = others.some((k) => { const m = field.motions.get(k)!; return m.landing !== null || m.plan !== null; });
+        if (i > 4 && me && me.plan === null && me.landing === null && othersMove) {
+          restWhileGliding += 1;
+          if (!field.aloft.has(e) || byKey('e').dataset.aloft !== 'true') dropped += 1;
+        }
+      });
+      // The scenario holds: e came to its own rest while a still glided.
+      expect(restWhileGliding).toBeGreaterThan(10);
+      expect(dropped).toBe(0);
+      settle(1500);
+      expect(field.aloft.size).toBe(0);
+      expect(marked()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The order's depth is read at the store's zoom, as the order is: at 0.25,
+  // d and e (120 units apart) are one column (two at zoom 1). d's say makes
+  // e glide, and e draws one step under d's band, not level with it, where
+  // the DOM's order would decide (r85; review 7, layout LOW-2).
+  it('the order depth is read at the store\'s zoom (review 7, layout LOW-2)', () => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, 0.25];
+      render(<AgentCursorLayer />);
+      send(event({ ...session('d', 1), target: { x: 500, y: 300 }, since: 1000 }));
+      settle(800);
+      send(event({ ...session('e', 2), target: { x: 500, y: 420 }, since: 2000 }));
+      settle(1500);
+      send(event({ ...session('d', 1), target: { x: 500, y: 300 }, since: 1000, say: 'Looking at the prompt node now' }));
+      let seen = 0;
+      for (let i = 0; i < 90; i += 1) {
+        frame();
+        const e = byKey('e');
+        if (e.dataset.columnOrder === 'true' && e.dataset.aloft !== 'true') {
+          seen += 1;
+          expect(e.style.getPropertyValue('--agent-cursor-crossing-depth'), `frame ${i}`).toBe('1');
+          expect(zOf(e), `frame ${i}`).toBeLessThan(zOf(byKey('d')));
+        }
+      }
+      expect(seen).toBeGreaterThan(0);
+    } finally {
+      pane.transform = [0, 0, 1];
+      vi.useRealTimers();
+    }
+  });
+
+  // A stalled cursor never ticks, so its landing never clears: its node
+  // going after the arc's hand-off (plan done, landing glide running) must
+  // still bring it down from on top, not leave it over every cursor and
+  // wire until the node comes back (review 7, layout NIT-1).
+  it('a cursor whose node goes mid landing glide comes down from on top (review 7, layout NIT-1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      settle(400);
+      const field = fieldOf() as unknown as Order;
+      send(event({ ...session('d', 1), target: { nodeId: 'n2' }, since: 1000 }));
+      const d = keyIn(field, 'd');
+      let handoff = -1;
+      for (let i = 0; i < 120 && handoff < 0; i += 1) {
+        frame();
+        const m = field.motions.get(d)!;
+        if (m.plan === null && m.landing !== null) handoff = i;
+      }
+      expect(handoff).toBeGreaterThan(0);
+      expect(field.aloft.has(d)).toBe(true);
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      for (let i = 0; i < 60; i += 1) frame();
+      expect(field.aloft.has(d)).toBe(false);
+      expect(byKey('d').dataset.aloft).toBeUndefined();
+      expect(frames.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A stalled member counts as no glide. g lands alone into a resting d, e
+  // column and its node goes 2 to 14 frames into its landing: its one
+  // repaint at the stall must not count it as gliding, since no view
+  // applies again once the others rest and nothing would take the column
+  // order off (review 7, drag-live LOW-2).
+  it.each([2, 6, 10, 14])('a stalled glider never keeps its column ordered at rest (review 7, drag-live LOW-2; node goes %s frames into the landing)', (k) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn([]);
+      settle(600);
+      const node = lookupRef.current.get('n2') as Entry;
+      const moved = new Map(lookupRef.current) as Map<string, Entry>;
+      moved.set('n2', { ...node, dragging: false, internals: { ...node.internals, positionAbsolute: { x: 400, y: 300 } } });
+      lookupRef.current = moved as never;
+      notifyStore();
+      settle(600);
+      send(event({ ...session('g', 1), agent: pairAgent, target: { nodeId: 'n2' }, since: 3000 }));
+      const field = fieldOf() as unknown as Order;
+      const gKey = () => [...field.placers.keys()].find((x) => !['d', 'e'].some((c) => x.endsWith(c.repeat(12))))!;
+      let landingFrames = 0;
+      for (let i = 0; i < 200 && landingFrames < k; i += 1) {
+        frame();
+        const m = field.motions.get(gKey());
+        if (m && m.plan === null && m.landing !== null) landingFrames += 1;
+      }
+      expect(landingFrames).toBe(k);
+      // The column is ordered while g glides into it.
+      expect(field.ordered.size).toBeGreaterThan(0);
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      for (let j = 0; j < 90; j += 1) frame();
+      expect(field.ordered.size).toBe(0);
+      expect(marked()).toEqual([]);
+      expect(frames.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -588,6 +588,13 @@ class CursorField {
    *   normal order returns. A flight is not a glide, nor is a ride, and a
    *   member whose loop stopped (its node gone) glides no more. A cursor
    *   alone in its column has no order to keep.
+   * - **Known limit, accepted (GM - Design, #219 r111).** The order's band
+   *   (agentCursor.css) raises a gliding column over other columns'
+   *   resting cursors, never lowers it. z-index alone can't keep the exact
+   *   at-rest order between columns whose DOM orders interleave, and
+   *   columns don't overlap at rest, so nothing visible changes. Don't go
+   *   back to a negative z-index for it: that put columns under the wires
+   *   (r106).
    *
    * Every other cursor whose marks this changes is repainted here, by its
    * marker, which only reads this state. Re-entry (a marker can't reach it,

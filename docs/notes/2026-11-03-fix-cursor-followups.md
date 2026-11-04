@@ -734,15 +734,23 @@ both under the 42 px step, on the first carry of the zoom.
   H3 (order at zoom 1, killed by a test added for it), H4 (repaint through
   placers); X1 (a crossing doesn't order its column, killed by a test added
   for it); S1-S3 (CSS: negative band, cursors back to auto, aloft under the
-  band). Survived 15, each equivalent or unreachable:
-  - N1, N2 (collapsed members ordered or counted): a collapsed member isn't
-    drawn, and a column with one is full, so its size is over 1 anyway.
+  band). Survived 15. Review 7 found two of them (A3, D4) untested
+  behaviour rather than equivalents; round 3k (§2m) adds a test for each.
+  The rest are equivalent or unreachable:
+  - N1 (collapsed members ordered): a collapsed member isn't drawn.
+  - N2 (collapsed members counted in `glides()`): for the size, a column
+    with one is full, so its size is over 1 anyway. It also lets a folded
+    member's landing glide order the drawn members: within the column
+    nothing shows (they are a step apart), but it would raise them over a
+    neighbour column for that glide, the r111 known limit. No test.
   - N4 (a leaving cursor read as ordered): a leaving key is released, so
     it is never in `ordered`.
   - N6 (no `steppedAt` on the stale path): the members under it read the
     stale cursor's `dueAt`, already deleted, so they hold either way.
-  - N9 (a lone glider gets a rest gate): its gate is its own `nearRest`,
-    which is the rest it reaches alone.
+  - N9 (a lone glider gets a rest gate): its gate is its own `nearRest`
+    from the last frame, so it rests one frame later than alone (on the
+    frame it first comes near rest, `mayRest` is still false). A one-frame
+    delay, invisible.
   - N10 (`forget` keeps a crossing): the key is gone from the layout, so
     `glides()` and hold never read it; a cursor coming back under the same
     key gets a fresh mark on its first hold.
@@ -751,9 +759,12 @@ both under the 42 px step, on the first carry of the zoom.
     which is now `stalled` (D) and skipped before the window is read.
   - A2, A3 (aloft ends at the hand-off when the column isn't gliding, or
     at its own rest whatever the column): a landing cursor in a column
-    makes its column glide itself (A2); and r65's rest gate lands a
-    column's gliders on one frame, so its own rest and the column's agree
-    except past the 300 ms cap (A3).
+    makes its column glide itself (A2). A3 was wrong (review 7, layout
+    LOW-1): r65's rest gate lands a column's gliders on one frame, but past
+    r66's 300 ms cap a cursor rests on its own while a member keeps moving
+    (a person's wobble drag, or a head nudged every few frames), and then
+    it must stay aloft until the column rests (r103). Killed by a test in
+    round 3k.
   - A4, A8 (a change of aloft not repainted from another cursor's sync):
     a flight starts in its own tick, which paints it; and an aloft cursor
     that comes down when its column stops gliding also leaves `ordered`,
@@ -761,8 +772,11 @@ both under the 42 px step, on the first carry of the zoom.
   - D2, D6 (the stall not snapped, or not repainted on its own): `hold`
     on a stalled cursor clears its crossing, and the store change that
     made it stall wakes every view, whose sync repaints it.
-  - D4 (a stalled member still counts as gliding): the 100 ms window ends
-    it after six frames; nothing shows in between that the tests sample.
+  - D4 (a stalled member still counts as gliding) was wrong (review 7,
+    drag-live LOW-2): the 100 ms window lapsing triggers no recompute. The
+    stalled view runs `syncOrder()` once, at the stall, when it still
+    counts as gliding; if the other members rest, no view applies again
+    and their column order stays for good. Killed by a test in round 3k.
   - X2 (depth not capped at 8): a drawn column has at most three members.
 - **Round 3j checks.** `tsc -b --noEmit` and `npm run lint` pass. pr_tests
   (the PR's test files plus every source-reading test, 116 files): 4,191
@@ -772,6 +786,35 @@ both under the 42 px step, on the first carry of the zoom.
   The zoom tests (382) with `performance.now()` skewed +4, +50, -4 and
   -50 ms from the frame clock: all pass. Build and budget: entry 471,107 B
   raw (146,505 gzip) of 512,000.
+
+## 2m. Round 3k (review 7, GM r111)
+
+Tests, two comments and notes; no behaviour change.
+
+- **GM r111, the known limit in the code.** The CSS band's comment
+  (agentCursor.css) and `syncOrder()`'s doc now say it: a gliding column
+  is raised over other columns' resting cursors, never lowered. z-index
+  alone can't keep the exact at-rest order between columns whose DOM
+  orders interleave, columns don't overlap at rest, and negative z must
+  not come back (it put columns under the wires, r106).
+- **Tests (agentCursorLayer.test.tsx, round 3k block), each from a review 7
+  probe, each failing against its mutant:**
+  - "a flight that lands by the 300 ms cap while its column still glides
+    stays aloft" (both rAF orders): a wobble drag keeps a gliding; e flies
+    back in and rests by r66's cap on more than 10 frames while a glides,
+    aloft on every one. Kills A3 (`gliding.has(column)` dropped from
+    aloft's hold).
+  - "the order depth is read at the store's zoom": at zoom 0.25, d and e
+    are one column; while d's say makes e glide, e is ordered at depth 1,
+    under d. Kills M26 (`depthOf` reads `layout(1)`).
+  - "a cursor whose node goes mid landing glide comes down from on top":
+    the node goes after the arc's hand-off (plan done, landing set). Kills
+    M10 (`!stalled` dropped from aloft's hold).
+  - "a stalled glider never keeps its column ordered at rest" (node goes 2,
+    6, 10, 14 frames into g's landing into a resting d, e column): column
+    ordered before, nothing ordered or marked 90 frames after, no frame
+    pending. Kills D4 (`glides()` doesn't skip a stalled member), and M10.
+- **Survivor notes (§2l E) corrected** for N2, N9, A3 and D4 per review 7.
 
 ## 3. Low findings
 
