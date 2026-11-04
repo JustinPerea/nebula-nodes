@@ -49,9 +49,12 @@
    CursorField.hold) draws under every live cursor, so the one above draws
    on top while it passes and their labels overlap cleanly, never
    interleaved (GM - Design, #219 r75.2). Under 0 inside the layer's own
-   stacking context (its z-index), so still above nodes and edges. */
+   stacking context (its z-index), so still above nodes and edges. Two
+   crossing at once keep their column's order, the upper one on top
+   (r85): the depth is how many members sit above its slot (set from JS),
+   so the DOM's order never decides it. */
 .agent-cursor[data-crossing='true'] {
-  z-index: -1;
+  z-index: calc(-1 - var(--agent-cursor-crossing-depth, 0));
 }
 
 /* A leaving cursor whose name a live cursor now shows (a number taken over)

@@ -72,6 +72,9 @@ let frames: FrameRequestCallback[] = [];
 let frameIds: number[] = [];
 let nextFrameId = 0;
 let clock = 0;
+/** Run each frame's callbacks last asked first: a browser's rAF order between
+ *  cursors varies (review 4, drag LOW-1), so the column must not lean on it. */
+let reverseFrames = false;
 /** Run animation frames 1/60 s apart until none is asked for (or the cap). */
 const flush = (max = 400) => act(() => {
   for (let i = 0; i < max && frames.length > 0; i += 1) {
@@ -79,7 +82,7 @@ const flush = (max = 400) => act(() => {
     frames = [];
     frameIds = [];
     clock += 1000 / 60;
-    for (const callback of run) callback(clock);
+    for (const callback of reverseFrames ? [...run].reverse() : run) callback(clock);
   }
 });
 /** Run just a few frames. */
@@ -108,6 +111,7 @@ beforeEach(() => {
   frames = [];
   frameIds = [];
   clock = 0;
+  reverseFrames = false;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     nextFrameId += 1;
     frames.push(callback);
@@ -3329,12 +3333,16 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it.each(Array.from({ length: 50 }, (_, k) => k))('the hand crosses back %s frames into the head-to-bottom glide: no frame moves a cursor more than its spring step (r75.1, r75.2)', (k) => {
+  // And with each frame's callbacks in reverse order (review 4, drag LOW-1:
+  // a member stepping before the one above read a stale floor; at k = 0, d
+  // and e moved 8.59 px in one frame).
+  it.each(Array.from({ length: 50 }, (_, k) => k).flatMap((k) => [[k, false], [k, true]] as const))('the hand crosses back %s frames into the head-to-bottom glide: no frame moves a cursor more than its spring step (r75.1, r75.2; frame order reversed: %s)', (k, reversed) => {
     const bound = springSteps();
     // The clean glide's steps: a's is 101 px of spring, d's and e's 25.
     expect(bound.a).toBeGreaterThan(8);
     expect(bound.d).toBeLessThan(4);
     fakeTimers();
+    reverseFrames = reversed;
     try {
       render(<AgentCursorLayer />);
       headToBottom();
@@ -3356,13 +3364,110 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
+  // Review 4, drag LOW-1 (PROBE2): in r65's head-to-bottom glide d and e
+  // close up in lockstep, a step apart, and pass no one: only the carry is
+  // marked crossing, whichever cursor's frame runs first. A floor read from
+  // the member above before it stepped marked e crossing on every frame.
+  it.each([false, true])('the head-to-bottom glide marks only the carry crossing, in either frame order (review 4, drag LOW-1; reversed: %s)', (reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      reverseFrames = reversed;
+      dragFrames('n2', [{ x: 400, y: 284 }], () => {});
+      let marked = 0;
+      for (let i = 0; i < 60; i += 1) {
+        frame();
+        const w = where();
+        expect(w.e.y - w.d.y, `frame ${i}`).toBeCloseTo(S, 9);
+        expect(['d', 'e'].filter((k) => byKey(k).dataset.crossing === 'true'), `frame ${i}`).toEqual([]);
+        if (byKey('a').dataset.crossing === 'true') marked += 1;
+      }
+      expect(marked).toBeGreaterThan(3);
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r85 NIT: two members crossing at once keep their column's order
+  // between themselves, the upper on top, whatever the DOM's order. In
+  // [a, d, e], d and e both marked crossing: e comes after d in the DOM (it
+  // would draw on top by DOM order), but d's depth is 1 and e's 2, so d's
+  // z-index (-1 - depth, agentCursor.css) is over e's. Unmarked, no depth.
+  it('two crossing members draw in column order, the upper on top, not in DOM order (r85 NIT)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+      const field = fieldOf() as unknown as { crossing: Set<string>; placers: Map<string, () => void> };
+      const keyOf = (k: string) => [...field.placers.keys()].find((x) => x.endsWith(k.repeat(12)))!;
+      const z = (k: string) => -1 - Number(byKey(k).style.getPropertyValue('--agent-cursor-crossing-depth'));
+      expect(cursors().indexOf(byKey('e'))).toBeGreaterThan(cursors().indexOf(byKey('d')));
+      for (const k of ['d', 'e']) field.crossing.add(keyOf(k));
+      act(() => { for (const k of ['e', 'd']) field.placers.get(keyOf(k))!(); });
+      expect(byKey('d').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('1');
+      expect(byKey('e').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('2');
+      expect(z('d')).toBeGreaterThan(z('e'));
+      for (const k of ['d', 'e']) field.crossing.delete(keyOf(k));
+      act(() => { for (const k of ['d', 'e']) field.placers.get(keyOf(k))!(); });
+      for (const k of ['d', 'e']) {
+        expect(byKey(k).dataset.crossing).toBeUndefined();
+        expect(byKey(k).style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('');
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 4, layout LOW-1 (PROBE1): a crossing mark ends with the glide
+  // however it ends. A stall or a hidden tab lands everything on a caught-up
+  // frame, and a stale or replayed event snaps a cursor to its spot: neither
+  // went through hold, which cleared the mark only on a frame of its own, so
+  // d stayed drawn under every live cursor at rest.
+  it.each(['stall', 'replay'] as const)('a crossing mark goes when the glide ends on a %s, not only on its own landing (review 4, layout LOW-1)', (how) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      frame();
+      dragFrames('n2', [{ x: 400, y: 283 }], () => {});
+      frame();
+      frame();
+      const marked = () => ['a', 'd', 'e'].filter((k) => byKey(k).dataset.crossing === 'true');
+      expect(marked()).toContain('d');
+      // 1 s with no frames (a hidden tab), then frames again: the others
+      // land on their caught-up frame, which holds no one under them. On a
+      // replay, d's event comes again meanwhile, as a reconnect gives it,
+      // and snaps it to its spot.
+      act(() => { vi.advanceTimersByTime(1000); });
+      clock += 1000;
+      if (how === 'replay') {
+        act(() => { useAgentPresenceStore.getState().apply({ ...event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000 }), replay: true, secondsAgo: 0 } as never); });
+      }
+      tickFrames(1);
+      for (let i = 0; i < 5; i += 1) frame();
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+      expect(frames.length).toBe(0);
+      expect(marked()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // GM r75.2: mid-glide, a member may sit less than a step under the one
   // above; the one above draws on top. d and e glide back under a with no
   // floor push, and every frame one of them is less than a step under the
   // member above (or passed by it), it is marked as crossing, which draws
   // it under every live cursor (agentCursor.css). Landed, the mark is gone.
-  it.each([0, 1, 2])('the hand back %s frames into the head-to-bottom glide: a member less than a step under the one above draws under it (r75.2)', (k) => {
+  it.each([0, 1, 2].flatMap((k) => [[k, false], [k, true]] as const))('the hand back %s frames into the head-to-bottom glide: a member less than a step under the one above draws under it (r75.2; frame order reversed: %s)', (k, reversed) => {
     fakeTimers();
+    reverseFrames = reversed;
     try {
       render(<AgentCursorLayer />);
       headToBottom();
@@ -3654,8 +3759,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   type Trace = { name: string; zoom: number; h: { node: Box; handle: string; port: Box }; carry: { width: number; height: number };
     path: [number, number][]; arrivalFrom: number | null; slots: number[] };
   const traces = (JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/fixtures/cursor_chains.json'), 'utf8')) as { traces: Trace[] }).traces;
-  it('the shared fixture holds the r75.3 traces at zoom 0.5, 1 and 2', () => {
-    expect(new Set(traces.map((t) => t.zoom))).toEqual(new Set([0.5, 1, 2]));
+  it('the shared fixture holds the r75.3 traces at zoom 0.5, 1 and 2, and r85\'s at 0.25 and 0.1 and on a left input near the header', () => {
+    expect(new Set(traces.map((t) => t.zoom))).toEqual(new Set([0.1, 0.25, 0.5, 1, 2]));
+    expect(traces.filter((t) => t.h.port.x < 0 && t.h.port.y === 62).map((t) => t.zoom).sort()).toEqual([0.25, 0.25, 0.25, 0.5, 0.5, 0.5, 1, 1, 1]);
     expect(traces.filter((t) => t.arrivalFrom === null).length).toBeGreaterThanOrEqual(9);
     expect(traces.filter((t) => t.arrivalFrom !== null).length).toBeGreaterThanOrEqual(3);
   });
@@ -3704,6 +3810,83 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
+  // Review 4, MEDIUM-1 (GM r85 rule b), the reviewers' probes kept as
+  // tests: a carried onto a port cursor's drawn tip, at zooms and port
+  // spots the shared traces don't all cover. The band's chain-space join is
+  // the zoom-1 join in canvas units at every zoom, so a carry on the tip
+  // never reaches h's node header there however far out the view is. Its
+  // slot in h's column never goes to the bottom mid-drag (from below, the
+  // r24 insert puts h first until a is within 16 of it, r80), the held
+  // frames move nothing, and nothing moves at the drop.
+  type Probe = { zoom: number; from: 'above' | 'left' | 'below' | 'diagonal'; node: Box; port: Box; side: 'source' | 'target'; end: [number, number]; far?: number; slots?: number[] };
+  const fixtureH = { node: { x: 400, y: 300, width: 280, height: 180 }, port: { x: 225, y: 150, width: 16, height: 16 } };
+  const probes: [string, Probe][] = [
+    // PROBE3 (layout lens): the fixture's port, 2 units off its tip (633, 458).
+    ...([[0.25, 'above'], [0.1, 'above'], [0.25, 'left'], [0.1, 'left'], [0.25, 'below'], [0.1, 'below'], [4, 'above'], [4, 'below'], [3, 'left']] as const)
+      .map(([zoom, from]): [string, Probe] => [`PROBE3: the fixture's port at zoom ${zoom} from ${from}`, { zoom, from, ...fixtureH, side: 'source',
+        end: from === 'below' ? [533, 416] : from === 'left' ? [531, 414] : [533, 412] }]),
+    // PROBE4 (layout lens): an output port near the header row, tip (680, 358), header (540, 344).
+    // From the left, a's target (y 358) passes 14 under the header on its
+    // way: in h's chain there, a real arrival had it dropped, so the bottom
+    // slot then and back to the head past it (the r65 path both ways).
+    ...([[1, 'above'], [0.75, 'above'], [0.5, 'above'], [0.5, 'left'], [0.5, 'below'], [1, 'left'], [0.75, 'below']] as const)
+      .map(([zoom, from]): [string, Probe] => [`PROBE4: an output port near the header at zoom ${zoom} from ${from}`, { zoom, from,
+        node: fixtureH.node, port: { x: 272, y: 50, width: 16, height: 16 }, side: 'source',
+        end: from === 'below' ? [580, 316] : from === 'left' ? [578, 314] : [580, 312], slots: from === 'left' ? [0, 1, 0] : undefined }]),
+    // PROBE5 (layout lens): a left input at y 62, tip (400, 370).
+    ...([[0.5, 'above'], [0.5, 'below'], [0.6, 'above'], [0.4, 'above'], [1, 'above']] as const)
+      .map(([zoom, from]): [string, Probe] => [`PROBE5: a left input at y 62 at zoom ${zoom} from ${from}`, { zoom, from,
+        node: fixtureH.node, port: { x: -8, y: 62, width: 16, height: 16 }, side: 'source',
+        end: from === 'below' ? [300, 330] : [300, 322] }]),
+    // PROBE5 (drag-live lens): combine-text's left input, from the upper left
+    // on the live drag's diagonal; and the fixture's port from above at 0.25-0.45.
+    ...[0.5, 0.6, 0.75, 1].map((zoom): [string, Probe] => [`PROBE5 live: a left input from the upper left at zoom ${zoom}`, { zoom, from: 'diagonal',
+      node: { x: 400, y: 300, width: 200, height: 180 }, port: { x: -18, y: 80.39, width: 10, height: 10 }, side: 'target', end: [287, 341.39] }]),
+    ...[0.25, 0.35, 0.45].map((zoom): [string, Probe] => [`PROBE5 live: the fixture's port from above at zoom ${zoom}`, { zoom, from: 'above', ...fixtureH, side: 'source',
+      end: [533, 412], far: 318 }]),
+  ];
+  it.each(probes)('%s: no band slot on the tip, nothing moves while held or at the drop (review 4, MEDIUM-1; r85)', (_name, p) => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, p.zoom];
+      const far = p.far ?? 400 / p.zoom;
+      const n = Math.round(far / 2);
+      const path: [number, number][] = p.from === 'diagonal'
+        ? Array.from({ length: 61 }, (_, i) => [250 + (37 * i) / 60, 100 + (241.39 * i) / 60])
+        : Array.from({ length: n + 1 }, (_, i) => {
+          const d = far * (1 - i / n);
+          return p.from === 'above' ? [p.end[0], p.end[1] - d] : p.from === 'below' ? [p.end[0], p.end[1] + d] : [p.end[0] - d, p.end[1]];
+        });
+      const handle = { id: 'text', ...p.port };
+      const n1 = { id: 'n1', measured: { width: p.node.width, height: p.node.height },
+        internals: { positionAbsolute: { x: p.node.x, y: p.node.y }, handleBounds: p.side === 'source' ? { source: [handle], target: [] } : { source: [], target: [handle] } } };
+      const n2 = { id: 'n2', measured: { width: 200, height: 120 },
+        internals: { positionAbsolute: { x: path[0][0], y: path[0][1] }, handleBounds: { source: [], target: [] } } };
+      lookupRef.current = new Map([['n1', n1], ['n2', n2]]) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: 'text' }, since: 1000 }));
+      flush();
+      const slots: number[] = [];
+      const note = () => {
+        const slot = slotOf('a', ['c']);
+        if (slots[slots.length - 1] !== slot) slots.push(slot);
+      };
+      dragFrames('n2', path.map(([x, y]) => ({ x, y })), note);
+      const last = path[path.length - 1];
+      dragFrames('n2', Array.from({ length: 30 }, () => ({ x: last[0], y: last[1] })), note);
+      const held = where();
+      dragFrames('n2', Array.from({ length: 30 }, () => ({ x: last[0], y: last[1] })), () => { note(); expect(where()).toEqual(held); });
+      expect(slots[slots.length - 1]).toBe(0);
+      expect(slots, 'never the bottom slot mid-drag').toEqual(p.slots ?? (p.from === 'below' && slots.length > 1 ? [1, 0] : [0]));
+      drop('n2');
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where()).toEqual(held); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // GM r75.3: the band slot needs a new member of the column the carry is
   // drawn in. a and f share a chain (aimed at 290 and 300), f a step under
   // a. n1's header point, where c (on a port low on n1's left, drawn at
@@ -3735,6 +3918,79 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       for (const w of path) expect(w.a.y).toBeLessThan(w.f.y);
       drop('n2');
       for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where()).toEqual(held); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 4, layout LOW-2 B3: the column before the carry is read in chain
+  // space too. a rides n2 and aims at (555, 344), 15 right of n1's header
+  // point (540, 344), where c counts (its port is drawn at (454, 344)): c is
+  // in a's chain-space column before the carry and after it, so no band
+  // slot. Carried 30 left, a's drawn tip meets c's: they join one drawn
+  // column, in plain arrival order (a first), and nothing moves at the drop.
+  // Read before the carry in drawn space, c would count as new, and a would
+  // take the newest-arrival slot under it mid-drag.
+  it('a member already in the carry\'s chain-space column before the carry gives it no band slot (review 4, B3)', () => {
+    fakeTimers();
+    try {
+      n2At({ x: 455, y: 300 }); // a's target (555, 344)
+      const n1 = lookup.get('n1') as unknown as Entry & { internals: { handleBounds: unknown } };
+      lookupRef.current = new Map(lookupRef.current).set('n1', { ...n1, measured: { width: 280, height: 180 }, internals: { ...n1.internals, positionAbsolute: { x: 400, y: 300 },
+        handleBounds: { source: [{ id: 'text', x: 49, y: 39, width: 10, height: 10 }], target: [] } } } as never) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: 'text' }, since: 1000 }));
+      flush();
+      expect(where()).toEqual({ a: { x: 555, y: 344 }, c: { x: 454, y: 344 } });
+      const path: Record<string, { x: number; y: number }>[] = [];
+      dragFrames('n2', Array.from({ length: 15 }, (_, i) => ({ x: 453 - 2 * i, y: 300 })), () => path.push(where()));
+      settle(800);
+      const held = { a: { x: 525, y: 344 }, c: { x: 525, y: 344 + S } };
+      expect(where()).toEqual(held);
+      for (const w of path) expect(w.a.y).toBeLessThanOrEqual(w.c.y);
+      drop('n2');
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where()).toEqual(held); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r85 rule b, both sides of the band read: before the carry too, the
+  // chain-space column is the zoom-1 join, whatever the view's zoom. At
+  // zoom 0.25 a starts 110 canvas units above c (and 30 left): drawn, their
+  // labels already meet, so they share a column in plain arrival order (a
+  // first), but they are not in band range in canvas units. Carried down to
+  // 10 above c (still over 16 away: no chain), a comes into band range, c
+  // is a new member there, and a takes the newest-arrival slot (r62), under
+  // c. At the drop the backend counts no arrival, so a glides back to the
+  // head once, r52's one accepted motion. Read before the carry at the
+  // view's zoom, c would already count as in range and a would never move.
+  it('at zoom 0.25 the band range before the carry is the zoom-1 join too: a carry coming into it takes the band slot (r85 rule b)', () => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, 0.25];
+      n2At({ x: 370, y: 190 }); // a's target (470, 234): 30 left of c, 110 above
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { x: 500, y: 344 }, since: 1000 }));
+      flush();
+      settle(400);
+      expect(slotOf('a', ['c'])).toBe(0);
+      expect(where().a.x).toBe(where().c.x); // one drawn column already
+      const slots: number[] = [];
+      const note = () => {
+        const slot = slotOf('a', ['c']);
+        if (slots[slots.length - 1] !== slot) slots.push(slot);
+      };
+      dragFrames('n2', Array.from({ length: 50 }, (_, i) => ({ x: 370, y: 192 + 2 * i })), note);
+      dragFrames('n2', Array.from({ length: 48 }, () => ({ x: 370, y: 290 })), note);
+      expect(slots).toEqual([0, 1]);
+      drop('n2');
+      settle(CARRY_PREVIEW_HOLD_MS + 1000);
+      expect(slotOf('a', ['c'])).toBe(0);
     } finally {
       vi.useRealTimers();
     }
@@ -3919,6 +4175,50 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       });
       flush();
       expect(fieldOf().draggedNodes.has('n2')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 4, layout LOW-2 F2: one of two cursors on a dragged node
+  // forgotten keeps the node's drag: the other still rides it, and its drop
+  // is a drop. a and b ride n2 into d's chain and are previewed under d; the
+  // hand holds still past the preview's hold, then b leaves, and its view
+  // goes on the frame before the drop. The drop starts the wait for the
+  // backend's arrival there, so a keeps its slot until the arrival comes;
+  // were n2's drag dropped with b, the drop would go unseen and a would
+  // glide back at once, then again to the bottom on the arrival.
+  it('a dragged node keeps its drag while another cursor still rides it when one is forgotten (review 4, F2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      for (const [k, since, o] of [['a', 500, 3], ['b', 600, 4]] as const) {
+        send(event({ ...session(k, o), target: { nodeId: 'n2' }, since }));
+        flush();
+      }
+      send(event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000 }));
+      flush();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(CARRY_PREVIEW_HOLD_MS + 500);
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, a: { x: 500, y: 344 + S }, b: { x: 500, y: 344 + 2 * S } });
+      const field = fieldOf() as unknown as { released: Set<string>; draggedNodes: Set<string> };
+      act(() => {
+        const st = useAgentPresenceStore;
+        const agents = { ...st.getState().agents };
+        for (const k of Object.keys(agents)) if (agents[k].session?.key === 'b'.repeat(12)) delete agents[k];
+        st.setState({ agents });
+      });
+      // b fades out; its view goes (released, forgotten on the next read).
+      for (let i = 0; i < 200 && field.released.size === 0; i += 1) frame();
+      expect(field.released.size).toBe(1);
+      drop('n2');
+      // b's faded view may still be in the DOM: d's and a's spots only.
+      const da = () => { const w = where(); return { d: w.d, a: w.a }; };
+      const held = { d: { x: 500, y: 344 }, a: { x: 500, y: 344 + S } };
+      expect(da()).toEqual(held);
+      for (let ms = 0; ms < 1000; ms += 1000 / 60) { frame(); expect(da()).toEqual(held); }
+      arrive('a', 3, 9000);
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS; ms += 1000 / 60) { frame(); expect(da()).toEqual(held); }
     } finally {
       vi.useRealTimers();
     }

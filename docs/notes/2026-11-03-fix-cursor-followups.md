@@ -401,6 +401,96 @@ asked for the move to be pinned.
   takes f's label onto a port cursor's header point in chain space while that
   cursor is drawn far off. a keeps its order with f.
 
+## 2i. Round 3g (#219 review 4, GM - Design r85)
+
+- **The band joins in canvas units (r85 rule b).** The band's chain-space
+  read (`before` and `after` in `CursorField.layout`) runs deStackLayout at
+  zoom 1 (`BAND_ZOOM`) whatever the view's zoom, so its join is the zoom-1
+  join, a fixed radius in canvas units, as the chain's 16 is. In screen px
+  it grew as 1/zoom in canvas units: below about 0.6 a carry on a port
+  cursor's drawn tip reached that cursor's node header (120 to 160 canvas
+  units off), took the newest-arrival slot mid-drag, and swapped back at the
+  drop (42 to 45 screen px). Drawn overlap still forms the column at any
+  zoom, in plain arrival order (r75.3). The backend needed no change:
+  `carry_nodes` has no zoom and reads only the 16-unit chain, in canvas
+  units.
+- **Traces.** `cursor_chains.json` gains 17 traces, which Python and the tab
+  both run: zoom 0.25 and 0.1 onto the fixture's port tip from above, the
+  left and below, and onto a node header from above; and a left input near
+  the header (port box at y 62 on a 280 x 180 node) at 0.25, 0.5 and 1 from
+  the same three sides. Paths move one screen px a frame (at most 2 canvas
+  units), the last 40 canvas units 2 a frame. The tab side checks the slots,
+  and that the 60 held frames and the drop move nothing; both sides assert the
+  zoom set and the y-62 port. The two reviewers' probes are tests too
+  (PROBE3, PROBE4, PROBE5 and the live lens's PROBE5, 28 cases): no bottom
+  slot on the tip, the held frames still, nothing moving at the drop. One
+  exception, written into the test: PROBE4 from the left passes 14 under the
+  header on its way, which is in the header's chain (a real arrival if
+  dropped there), so `[0, 1, 0]` there is the r65 path both ways.
+- **The floor reads this frame's position (review 4, drag LOW-1).** `hold()`
+  returns early while the member above is still due to step in this frame,
+  so the floor is never read from last frame's position. That member's
+  `holdBelow` holds this one once it has stepped, in the same frame. Tests:
+  every frame's callbacks in reverse order (a flag in the test's rAF stub)
+  for r75.1's 50 k-probes, r75.2's crossing marks, and PROBE2 (only the
+  carry is marked in r65's head-to-bottom glide, e - d stays one step).
+- **A push on a member at rest can be a crossing too (my call, for GM).**
+  The reverse-order k = 0 probe still jumped d 8.59 px after the guard:
+  the frame that moved a ran after d's, so d never started its glide, and
+  on the next frame the floor set d, at rest on its slot, 8.6 px down in one
+  frame. A push of more than a pixel past a member's own slot is now a
+  crossing whether it glides or rests: at rest it stays on its slot, drawn
+  under the member above, until that one is a step over it again. Pushes in
+  lockstep (under a pixel a frame) and pushes toward its own slot (a head
+  leading its column down) still hold, as before. This is review 4's X4
+  mutant becoming the code; re-adding the `m.landing` guard now fails the
+  reverse-order k = 0 tests. Flagged for GM because r75.2 spoke of a
+  "member mid-glide".
+- **A crossing mark ends on a caught-up or stale frame (review 4, layout
+  LOW-1).** `field.snapped(key)` clears the crossing mark and the hold's
+  start on the caught-up branch (a stall or a hidden tab) and the stale or
+  replayed snap, which never went through `hold()`. Tests: the reviewer's
+  PROBE1 (1 s with no frames mid-crossing) and the same with d's event
+  replayed meanwhile.
+- **Crossings keep column order (r85 NIT).** A crossing cursor's z-index is
+  `calc(-1 - var(--agent-cursor-crossing-depth, 0))`; the depth is the number
+  of members above its slot, set from the layer. So two crossing at once draw
+  the upper on top, never by DOM order. Test: d and e both marked in
+  `[a, d, e]`, with e after d in the DOM.
+- **Mutant pins (review 4, layout LOW-2).** X4: see above. B3: a test where
+  the carry's chain-space column already holds a port cursor before the
+  carry and its drawn column takes it in mid-drag (no band slot). F2: one of
+  two cursors on a dragged node forgotten on the frame before the drop; the
+  drop still starts the arrival wait. X8: killed by the reverse-order r75.2
+  test now that a member can be judged in `holdBelow`. H2 and H3: equivalent
+  (marking the hover boxes stale one frame later changes nothing, since the
+  boxes are re-read only on a step's rest). They are gone with the code they
+  mutated, see the next item.
+- **Hover boxes by distance (NIT F4).** The stillHeld comment claimed a held
+  landing moves by hundredths of a pixel, which is false on a moving aim (a
+  node being dragged). The boxes now record where the tip was drawn when
+  they were read, and they are stale on rest once it is more than
+  `HOVER_STALE_PX` (1 screen px) off that spot. A held landing still reads
+  once (review 3's NIT-1 test). One held on a moving aim re-reads when it
+  rests. The `wasHeld`/`stillHeld` inference and its two mutants are gone.
+- **`before` at zoom 1 too.** The first mutation run left one survivor: the
+  band's `before` read at the view's zoom. A test pins it: at zoom 0.25 a
+  carry already drawn in a point cursor's column, but outside the zoom-1
+  join, takes the band slot when it comes into that join (r62), then glides
+  back once at the drop (r52).
+- **Round 3g checks.** tsc and `npm run lint` pass. The build and the budget
+  check pass: entry 447,836 B raw of 512,000. Vitest, explicit list of 123
+  files (`--maxWorkers=2`; cursor, log and presence tests, every test that
+  reads `src/` or styles from disk, the six ratchets): 2,523 passed. Backend,
+  isolated, 9 files: 371 passed. `person_gate.py` is byte-identical to main.
+  Mutation: 36 of 36 killed (14 for this round's code, 22 of review 4's on
+  today's code), after the `before` pin. Live (headless Chrome, isolated
+  backend on 8780, guarded): a carry dropped on a port's tip at 0.25 and
+  0.1, on an output and on a left input. a heads h's column from the frame
+  they join, nothing moves while held or after the drop (0.00 px over 5,000
+  to 7,000 frames each), and no arrival is counted. In Chrome the crossing
+  z-index computes to -1 - depth.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's

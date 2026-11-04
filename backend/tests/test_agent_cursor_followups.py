@@ -423,7 +423,9 @@ def test_the_shared_carry_traces_backend_side():
     from pathlib import Path
 
     traces = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["traces"]
-    assert {t["zoom"] for t in traces} == {0.5, 1, 2}
+    assert {t["zoom"] for t in traces} == {0.1, 0.25, 0.5, 1, 2}
+    # r85: a left input near the header (y 62) at 0.25, 0.5 and 1.
+    assert sorted(t["zoom"] for t in traces if t["h"]["port"]["x"] < 0 and t["h"]["port"]["y"] == 62) == [0.25] * 3 + [0.5] * 3 + [1] * 3
     assert sum(t["arrivalFrom"] is None for t in traces) >= 9
     assert sum(t["arrivalFrom"] is not None for t in traces) >= 3
     for trace in traces:

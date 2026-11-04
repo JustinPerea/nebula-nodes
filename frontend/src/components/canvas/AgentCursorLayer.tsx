@@ -402,8 +402,14 @@ class CursorField {
         // a join. Not read with it as the newest arrival: that slot moves
         // it down the column, and could make the join it then previews.
         // Both read in chain space: each cursor at its chain-input point.
-        const before = deStackLayout(entries(new Set(), true, true), zoom);
-        const after = deStackLayout(entries(new Set(), false, true), zoom);
+        // And in canvas units, as the chain is: the join deStackLayout makes
+        // at zoom 1, at every zoom. In screen px it would grow as 1/zoom in
+        // canvas units, and at zoom-out a carry on a port cursor's drawn tip
+        // would reach that cursor's node header, 120 or so canvas units off
+        // (GM - Design, #219 r85 rule b; review 4, MEDIUM-1). Drawn overlap
+        // at any zoom still forms the column, in arrival order (r75.3).
+        const before = deStackLayout(entries(new Set(), true, true), BAND_ZOOM);
+        const after = deStackLayout(entries(new Set(), false, true), BAND_ZOOM);
         const members = (laid: Map<string, StackSpot>, k: string) =>
           [...laid].filter(([, s]) => s.column === laid.get(k)!.column).map(([o]) => o);
         const now = spots;
@@ -465,6 +471,13 @@ class CursorField {
     const upKey = spot.above[spot.above.length - 1];
     const up = this.motions.get(upKey);
     if (!up || (!m.landing && !up.plan && !up.landing)) return false;
+    // The member above is still to step in this frame: its position is last
+    // frame's, and a floor read from it would count this one's own step in
+    // lockstep with it as a push past its slot (a crossing). Judged once it
+    // has stepped: its holdBelow holds this one then, in the same frame
+    // (review 4, drag LOW-1).
+    const upDue = this.dueAt.get(upKey);
+    if (this.steppedAt.get(upKey) !== this.frameTime && upDue !== undefined && upDue < this.frameTime) return false;
     // A merge can put a cursor under one it is drawn above now: it glides
     // past that member to its new slot, never floored there in one frame
     // (review 8, MEDIUM-1: nothing jumps), until it comes to rest.
@@ -484,16 +497,21 @@ class CursorField {
     // Opening out of a count cursor: it starts on the slot the member
     // above is gliding up from, and is held once they are a step apart.
     if (this.opening.has(key)) return false;
-    // Mid-glide, a push of more than a pixel past its own slot is a
-    // crossing, not a hold: the member above is below its slot and turned
-    // back toward it (a wobble back across the chain 1 to 3 frames after a
-    // crossing), and setting this one on the floor would jump it in one
-    // frame. It glides to its slot on the layout spring instead, drawn under
-    // the one above until it lands (GM - Design, #219 r75.2; review 3,
-    // MEDIUM-2). A push toward its own slot (a glide that ends on the floor,
-    // a head leading its column down) holds as before, and so does one in
-    // lockstep with the member above, a fraction of a pixel a frame.
-    if (m.landing && (floor - Math.max(m.pos.y, spot.at.y)) * zoom > CROSSING_PUSH_PX) {
+    // A push of more than a pixel past its own slot is a crossing, not a
+    // hold: the member above is below its slot and turned back toward it (a
+    // wobble back across the chain 1 to 3 frames after a crossing), and
+    // setting this one on the floor would jump it in one frame. Gliding, it
+    // glides to its slot on the layout spring instead; at rest, it stays on
+    // its slot. Either way it is drawn under the one above until it lands or
+    // the one above is a step over it again (GM - Design, #219 r75.2;
+    // review 3, MEDIUM-2). At rest too: when the frame that moved the
+    // member above ran after this one's (a browser's rAF order varies), this
+    // one never started the glide, and the floor would jump it 8.6 px
+    // (review 4, drag LOW-1, k = 0 in reverse order). A push toward its own
+    // slot (a glide that ends on the floor, a head leading its column down)
+    // holds as before, and so does one in lockstep with the member above, a
+    // fraction of a pixel a frame, at rest or gliding.
+    if ((floor - Math.max(m.pos.y, spot.at.y)) * zoom > CROSSING_PUSH_PX) {
       this.crossing.add(key);
       return false;
     }
@@ -507,6 +525,16 @@ class CursorField {
       this.wakers.get(key)?.();
     }
     return true;
+  }
+
+  /** This cursor came to rest outside a frame's own step (a caught-up frame
+   *  after a stall or a hidden tab, a stale or replayed event snapped to its
+   *  spot): no glide is left for it to pass the member above in, so its
+   *  crossing mark and its hold's start go with it, as on a landing in hold
+   *  (review 4, layout LOW-1). */
+  snapped(key: string): void {
+    this.crossing.delete(key);
+    this.heldSince.delete(key);
   }
 
   /** This cursor was just drawn at frame `time`: the members under it that
@@ -783,6 +811,13 @@ const CARRY_PREVIEW = 1e14;
  *  screen px, and hold it; further, the member crosses (CursorField.hold,
  *  GM r75.2). */
 const CROSSING_PUSH_PX = 1;
+/** How far, in screen px, a cursor is drawn off where its hover boxes were
+ *  read before they are read again when it comes to rest. */
+const HOVER_STALE_PX = 1;
+/** The zoom the band's chain-space join is measured at, whatever the view's
+ *  zoom: deStackLayout's join at zoom 1, a fixed radius in canvas units, as
+ *  the chain's 16 is (CursorField.layout, GM r85 rule b). */
+const BAND_ZOOM = 1;
 /** How long a carry's preview waits after the drop for the backend's
  *  arrival before it lets go (r47 Q1). */
 export const CARRY_PREVIEW_HOLD_MS = 1500;
@@ -1161,8 +1196,16 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       el.dataset.placed = 'true';
       // Gliding past or under the member above it: drawn under it, so the
       // one above draws on top and their labels never interleave (GM r75.2).
-      if (!leaving && field.crossing.has(cursor.key)) el.dataset.crossing = 'true';
-      else delete el.dataset.crossing;
+      // Two crossing at once keep their column's order between themselves,
+      // the upper one on top, not the DOM's (GM r85 NIT): its depth is how
+      // many members its slot has above it (agentCursor.css).
+      if (!leaving && field.crossing.has(cursor.key)) {
+        el.dataset.crossing = 'true';
+        el.style.setProperty('--agent-cursor-crossing-depth', String(field.layout(zoomRef.current).get(cursor.key)?.above.length ?? 0));
+      } else {
+        delete el.dataset.crossing;
+        el.style.removeProperty('--agent-cursor-crossing-depth');
+      }
     };
     place.current = apply;
     if (!leaving) field.placers.set(cursor.key, apply);
@@ -1190,9 +1233,19 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // landing, label change or viewport move, never per frame or per pointermove.
     let hoverBoxes: DOMRect[] | null = null;
     let hoverEpoch = -1;
-    // The tip moved since the boxes were read (a flight, or following its
-    // node): they are stale when it comes to rest (review 2, L1).
-    let movedSinceBoxes = false;
+    // Where the tip was drawn when the boxes were read: once it is more than
+    // HOVER_STALE_PX off that spot (a flight, following its node, a glide,
+    // a hold riding a dragged node), they are stale when it comes to rest
+    // (review 2, L1). Measured, not inferred from its state: a landing the
+    // column held moves by hundredths of a pixel, so it reads its boxes once
+    // (review 3, layout NIT-1), but one held on a moving aim can travel far
+    // while it counts as near rest (review 4, NIT F4).
+    let boxesAt: Point | null = null;
+    const boxesMoved = (): boolean => {
+      const m = motion.current;
+      return boxesAt !== null && m !== null
+        && Math.hypot(m.pos.x - boxesAt.x, m.pos.y - boxesAt.y) * zoomRef.current > HOVER_STALE_PX;
+    };
     // Its own rest was seen, held by the column or not (ownRest, below).
     let restNoted = false;
     let seenVisibility = field.visibilityEpoch;
@@ -1201,6 +1254,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         const parts = [pointerRef.current, ...(cursorRef.current?.querySelectorAll('.agent-cursor__name, .agent-cursor__say') ?? [])];
         hoverBoxes = parts.filter((part): part is Element => part !== null).map((part) => part.getBoundingClientRect());
         hoverEpoch = field.layoutEpoch;
+        boxesAt = motion.current ? { ...motion.current.pos } : null;
       }
       return hoverBoxes.some((rect) => overlaps(rect, x, y));
     };
@@ -1336,6 +1390,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         stepMotion(m, target, 0, { zoom: z, reduced: true, opacityTarget: opacityTarget() });
         if (fading) m.opacity = fading;
         field.landed(cursor.key);
+        field.snapped(cursor.key);
         firstSightAt.current = performance.now();
         if (ageMs >= AGENT_SAY_MS) setSayDoneSeq(cursor.seq);
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
@@ -1384,35 +1439,24 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         : undefined;
       const dragged = goal === target && anchor !== undefined && 'nodeId' in cursor.target
         && (Boolean(anchor.dragging) || placedByPerson(cursor.target.nodeId, anchor.position));
-      const fromX = m.pos.x;
-      const fromY = m.pos.y;
       const restAt = onPixels(goal);
       const restOffset = { x: restAt.x - goal.x, y: restAt.y - goal.y };
       const restGate = field.restGate(cursor.key, z, time);
-      // Held by its column at its own rest (r66): it moves by hundredths of
-      // a pixel until it lands, within the rest distance of its spot.
-      const wasHeld = m.landing !== null && !m.plan && m.nearRest === true;
       const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer, carrier, dragged, restOffset, shifted, restGate });
       let arrivedNow = false;
-      // A flight, a landing, or a ride carried by its node. Not a held
-      // landing still near rest, or its landing from there: its hover boxes,
-      // read on its own rest, still stand (well inside the 4 px slop), so a
-      // gated landing reads them once (review 3, layout NIT-1).
-      const stillHeld = wasHeld && !m.plan && (m.landing === null || m.nearRest === true);
-      if (!stillHeld && (m.plan || m.landing || m.pos.x !== fromX || m.pos.y !== fromY)) movedSinceBoxes = true;
 
       if (result.caughtUp) {
         // The tab was hidden, throttled or stalled mid-move: the tip lands,
         // and that's all. No ring, no wire, nothing shown as if it were now
         // (GM - Design, PR #211 r5; review 2, M1).
         phase.current = 'rest';
+        field.snapped(cursor.key);
         apply();
         updateWire(null);
         field.landed(cursor.key);
         updateLabel.current();
         lastTime.current = null;
         hoverBoxes = null;
-        movedSinceBoxes = false;
         onPointer();
         decideSay.current();
         if (sayPending()) request();
@@ -1434,7 +1478,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         setArrivedSeq(cursor.seq);
         field.landed(cursor.key);
         // No layout invalidation here: nothing else moved, and this
-        // cursor's own hover boxes go when it comes to rest (movedSinceBoxes).
+        // cursor's own hover boxes go when it comes to rest (boxesMoved).
       }
       // The column floor: held under the member above as it is drawn now,
       // and the members under this one held under it, in this frame.
@@ -1453,10 +1497,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const ownRest = result.atRest || (m.landing !== null && !m.plan && m.nearRest === true);
       if (phase.current === 'rest' && ownRest && !restNoted) {
         restNoted = true;
-        if (movedSinceBoxes) {
-          hoverBoxes = null;
-          movedSinceBoxes = false;
-        }
+        if (boxesMoved()) hoverBoxes = null;
         onPointer();
       }
       if (!ownRest) restNoted = false;
@@ -1464,10 +1505,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       if (phase.current === 'rest' && result.atRest && !sayPending()) {
         lastTime.current = null;
         field.landed(cursor.key);
-        if (movedSinceBoxes) {
-          hoverBoxes = null;
-          movedSinceBoxes = false;
-        }
+        if (boxesMoved()) hoverBoxes = null;
         onPointer(); // landed under a still pointer, or flew out from under it
         return; // At rest: sleep until the canvas, an event or a timer changes.
       }
