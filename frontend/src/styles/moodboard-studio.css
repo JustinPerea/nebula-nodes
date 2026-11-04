@@ -176,12 +176,23 @@ body.app-slava-restraint .moodboard-analysis__empty {
   font-size: 12px;
 }
 
+/* A line's fill is a tint (--mb-notice-fill, each kind sets its own), drawn
+   over what is behind it. In the List that is the panel. On the board it is
+   the canvas, and a line there can sit over cards (#210 round 6s, GM r105 3),
+   so the board's lines lay the same tint over the canvas colour: one solid
+   surface, the colour the line has over the empty canvas (the rule below;
+   tests/moodboardNoticeSurface.test.ts). */
 body.app-slava-restraint .moodboard-studio__notice {
+  --mb-notice-fill: rgba(255, 255, 255, 0.035);
   text-wrap: pretty;
   border-left: 2px solid currentColor;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--mb-notice-fill);
   font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-studio-view__board-notices > .moodboard-studio__notice {
+  background: linear-gradient(var(--mb-notice-fill), var(--mb-notice-fill)), var(--mb-board-bg);
 }
 
 body.app-slava-restraint .moodboard-studio__notice--warn {
@@ -193,9 +204,9 @@ body.app-slava-restraint .moodboard-studio__notice--warn {
    because-line look (neutral ink, control fill, strong edge). The header chip
    reads "Not saved" in the same neutral ink. */
 body.app-slava-restraint .moodboard-studio__notice--neutral {
+  --mb-notice-fill: var(--sr-surface-control);
   color: var(--sr-ink-light);
   border-left-color: var(--sr-edge-strong);
-  background: var(--sr-surface-control);
 }
 
 /* Round 6j (GM r18): a line with its own action (Restore for a deleted

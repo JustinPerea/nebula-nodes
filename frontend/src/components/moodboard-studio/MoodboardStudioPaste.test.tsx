@@ -5029,7 +5029,8 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     const line = rule('body.app-slava-restraint .moodboard-studio__notice--neutral');
     expect(line).toContain('color: var(--sr-ink-light)');
     expect(line).toContain('border-left-color: var(--sr-edge-strong)');
-    expect(line).toContain('background: var(--sr-surface-control)');
+    // Its fill as a tint (round 6s): the base rule draws it, over the canvas colour on the board (tests/moodboardNoticeSurface.test.ts).
+    expect(line).toContain('--mb-notice-fill: var(--sr-surface-control)');
     expect(rule('body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved')).toContain('color: var(--sr-ink-light)');
     expect(css).not.toMatch(/--neutral[^{]*,[^{]*\{[^}]*#e0796b/);
     expect(css).not.toMatch(/--not-saved[^{]*,[^{]*\{[^}]*#e0796b/);

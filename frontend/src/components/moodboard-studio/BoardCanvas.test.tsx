@@ -117,7 +117,7 @@ beforeEach(() => {
   moves = [];
   drops = [];
   targets = [];
-  useBoardCanvasStore.setState({ selection: {}, viewports: {}, frameRequest: null });
+  useBoardCanvasStore.setState({ selection: {}, viewports: {}, fitted: {}, placed: {}, frameRequest: null });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -400,10 +400,11 @@ describe('one view for every framing and placement (#213\'s shared insets)', () 
   });
 });
 
-// #210 round 6r (GM r101): the chip's press is a pan the person asked for,
-// so it clears "view is fitted" as their own pan does: a line then moves nothing.
-describe('the chip\'s press and a notice line (GM r101)', () => {
-  it('fitted, a line springs the board clear of it; after the chip\'s press, a line moves nothing', () => {
+// #210 round 6s (GM r105 1): the chip's press is a Show. It sets "view is
+// fitted" for the tiles it brings into view, so a line then springs the
+// camera to keep those tiles clear (round 6r had it clear the flag).
+describe('the chip\'s press and a notice line (GM r101, r105)', () => {
+  it('fitted, a line springs the board clear of it; after the chip\'s press, a line springs the shown tiles clear of it', () => {
     const stack = document.createElement('div');
     let stackHeight = 0;
     const observers: Array<{ cb: () => void; on: Set<Element> }> = [];
@@ -433,11 +434,29 @@ describe('the chip\'s press and a notice line (GM r101)', () => {
       // The band ends at 12 + 40 + 12: the fit is made in 1000 x (650 - 64), 64 px down.
       const below = getViewportForBounds({ x: 0, y: 0, width: 100, height: 100 }, 1000, 586, 0.02, 1, 0.12);
       expect(spring.calls.map((call) => call.to)).toEqual([{ ...below, y: below.y + 64 }]);
-      act(() => { chip.props!.onShow(tiles.rects, false); });
-      spring.calls = [];
       line(0);
+      spring.calls = [];
+      act(() => { chip.props!.onShow(tiles.rects, false); });
+      // The press frames the tiles in the view less the bar.
+      expect(spring.calls.map((call) => call.to)).toEqual([getViewportForBounds(tiles.rects[0], 1000, 650, 0.02, 1, 0.12)]);
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'area', bounds: tiles.rects[0] });
+      spring.calls = [];
       line(40);
-      expect(spring.calls).toEqual([]);
+      // A line now frames those tiles again, below it.
+      const tilesBelow = getViewportForBounds(tiles.rects[0], 1000, 586, 0.02, 1, 0.12);
+      expect(spring.calls.map((call) => call.to)).toEqual([{ ...tilesBelow, y: tilesBelow.y + 64 }]);
+      // It goes: back to the tiles' framing without it.
+      line(0);
+      expect(spring.calls.at(-1)!.to).toEqual(getViewportForBounds(tiles.rects[0], 1000, 650, 0.02, 1, 0.12));
+      // List and back (GM r105 2): the chip's flag comes back with the camera, so a line still frames the tiles.
+      view.unmount();
+      const back = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} notices={{ current: stack }} />);
+      (back.container.querySelector('.moodboard-board') as HTMLDivElement).getBoundingClientRect = wrapper.getBoundingClientRect;
+      (back.container.querySelector('[data-bottom-bar]') as HTMLElement).getBoundingClientRect = bar.getBoundingClientRect;
+      expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'area', bounds: tiles.rects[0] });
+      spring.calls = [];
+      line(40);
+      expect(spring.calls.map((call) => call.to)).toEqual([{ ...tilesBelow, y: tilesBelow.y + 64 }]);
     } finally {
       vi.unstubAllGlobals();
     }

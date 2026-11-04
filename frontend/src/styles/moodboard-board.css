@@ -96,12 +96,16 @@
   pointer-events: none;
 }
 
+/* A line can sit over cards, so its surface is solid (#210 round 6s, GM
+   r105 3): the panel tint laid over the canvas colour, the colour it has over
+   the empty canvas. The Slava skin's lines lay their own tint the same way
+   (moodboard-studio.css; tests/moodboardNoticeSurface.test.ts). */
 .moodboard-studio-view__board-notices > * {
   pointer-events: auto;
   padding: 6px 10px;
   border: 1px solid var(--mb-board-edge-strong);
   border-radius: 4px;
-  background: var(--mb-board-panel);
+  background: linear-gradient(var(--mb-board-panel), var(--mb-board-panel)), var(--mb-board-bg);
   font-size: 12px;
 }
 

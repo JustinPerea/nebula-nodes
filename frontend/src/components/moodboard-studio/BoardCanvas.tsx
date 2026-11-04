@@ -9,7 +9,7 @@ import type { MoodboardImage } from '../../types';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { springProgress, springViewport } from '../../lib/viewportSpring';
 import { placeholderLabel, placeholderSpokenName, type BoardPlaceholder } from './boardPlaceholder';
-import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasStore';
+import { useBoardCanvasStore, useBoardSelection, type BoardPlaced } from '../../store/boardCanvasStore';
 import { BoardCardNode } from './BoardCardNode';
 import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, isProvisionalCard, wideFrom, type BoardFill } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
@@ -21,7 +21,7 @@ import { OutsideChip } from './OutsideChip';
 import { offlineMark } from '../../lib/useBackendOffline';
 import { offlineDisabledReason } from '../../lib/errorCopy';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
-import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
+import { createBoardFitFollow, sameCamera, type BoardFitFollow } from './boardFitFollow';
 import { BOARD_FALLBACK_INSETS, frameInInsets, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
 import '../../styles/moodboard-board.css';
 
@@ -112,7 +112,7 @@ const NO_PLACEHOLDERS: BoardPlaceholder[] = [];
 export const KEY_MOVE_SETTLE_MS = 400;
 const FIT_PADDING = 0.12;
 /** The view is fitted to the whole board (BoardFlow's `placed`). */
-const WHOLE_BOARD = Object.freeze({ ids: null });
+const WHOLE_BOARD: BoardPlaced = Object.freeze({ kind: 'board' });
 // Low enough to fit a 300-reference board (about 2,500 x 22,000 board px) in view.
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 4;
@@ -216,7 +216,14 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // at (boardFitFollow): a fitted camera kept at another column size, or with
   // cards added since, would be a stale fit. A camera the person moved opens
   // exactly as kept.
-  const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true).current;
+  // "The view is fitted" travels with the kept camera (#210 round 6s, GM
+  // r105 2): List and back isn't a pan, so the flag comes back with it. A
+  // whole-board fit reopens fitted (above); a Show's or the chip's framing
+  // reopens where it was and frames its cards again if they changed while
+  // the view was away (reframeOnOpen).
+  const savedPlaced = useRef(savedViewport ? useBoardCanvasStore.getState().placed[boardKey] ?? null : null).current;
+  const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true
+    || savedPlaced?.kind === 'board').current;
 
   // Where cards being dragged or nudged are, until the move is sent.
   const [moving, setMoving] = useState<Record<string, { x: number; y: number }>>({});
@@ -474,13 +481,21 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   });
   // The view is fitted (#210 round 6r, GM r101): the camera is where the app
   // last framed it: a fit (Fit, Shift+1, the fit on open, a refit) frames the
-  // whole board (`ids` null), an Update's Show the cards it names. Only the
-  // person clears it, by moving the camera (a pan, a pinch, a wheel, the zoom
-  // buttons, a keyboard zoom, the chip's pan to its tiles); a refit or an
+  // whole board (`kind: 'board'`), an Update's Show the cards it names. Only
+  // the person clears it, by moving the camera (a pan, a pinch, a wheel, the
+  // zoom buttons, a keyboard zoom); a refit or an
   // agent's change to the board doesn't. While it is set, a notice line
   // appearing or going frames the same cards again in the new view insets
   // (followNotices); once cleared, a line never moves the camera (#213 r3).
-  const placed = useRef<{ ids: readonly string[] | null } | null>(null);
+  // The outside chip's press counts as a Show (round 6s, GM r105 1): it sets
+  // the flag for the area of the tiles it brings into view. The flag is kept
+  // with the camera for the visit (the store's `placed`), so it comes back
+  // with the camera from List (savedPlaced).
+  const placed = useRef<BoardPlaced | null>(savedPlaced);
+  const place = useCallback((value: BoardPlaced | null) => {
+    placed.current = value;
+    useBoardCanvasStore.getState().setPlaced(boardKey, value);
+  }, [boardKey]);
   /**
    * Spring the camera to `to`. A spring that lands on the fit is a fit (GM,
    * #213 round 3: Fit, a refit, or a zoom or Show that lands there), so a
@@ -522,6 +537,16 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (springTarget.current || closed.current) return;
     useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
   }, [boardKey, getViewport]);
+  /** The camera that frames what `at` names again in a column this size: the
+   *  whole board, a Show's cards (those still on the board), or the chip's
+   *  area. Null when there is nothing to frame. */
+  const framePlaced = useCallback((at: BoardPlaced, width: number, height: number): Viewport | null => {
+    if (at.kind === 'board') return fitFor(width, height);
+    if (at.kind === 'area') return frame(at.bounds, width, height);
+    const wanted = new Set(at.ids);
+    const targets = nodesRef.current.filter((node) => wanted.has(node.id));
+    return targets.length === 0 ? null : frame(getNodesBounds(targets), width, height);
+  }, [fitFor, frame, getNodesBounds]);
   /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
   const fit = useCallback((instant = false) => {
     const { width, height, panZoom } = flowStore.getState();
@@ -531,7 +556,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (instant && !panZoom) return false;
     const to = fitFor(width, height);
     if (!to) return false;
-    placed.current = WHOLE_BOARD;
+    // The fit on open of a camera kept from earlier in the visit keeps the
+    // flag it was kept with (GM r105 2): the fit doesn't make it the app's.
+    if (!instant || !savedViewport) place(WHOLE_BOARD);
     if (!instant) {
       springTo(to);
       return true;
@@ -540,13 +567,36 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     moveCamera(to);
     useBoardCanvasStore.getState().setViewport(boardKey, to, true);
     return true;
-  }, [flowStore, fitFor, springTo, moveCamera, boardKey]);
+  }, [flowStore, fitFor, springTo, moveCamera, boardKey, place, savedViewport]);
   fitRef.current = fit;
   // Cards that arrive after the board mounts (it opens before they load) get
   // the fit on open once there are some.
   const hasCards = nodes.length > 0;
+  // A camera a Show or the chip framed, kept from earlier in the visit (GM
+  // r105 2), opens where it was kept; if what it framed changed while the
+  // view was away (a card moved, the notice band changed), it is framed again
+  // at once, as a whole-board fit is on open. Once, when the view has its
+  // size, its camera and its cards; a move the person makes first clears
+  // the flag, so there is nothing to frame.
+  const reframePending = useRef(savedPlaced !== null && savedPlaced.kind !== 'board' && !startsFitted);
+  const reframeOnOpen = useCallback(() => {
+    const at = placed.current;
+    if (!reframePending.current || !at) return;
+    const { width, height, panZoom } = flowStore.getState();
+    if (!width || !height || !panZoom) return;
+    if (at.kind === 'cards' && nodesRef.current.length === 0) return;
+    reframePending.current = false;
+    const to = framePlaced(at, width, height);
+    if (!to || sameCamera(readCamera(), to)) return;
+    moveCamera(to);
+    useBoardCanvasStore.getState().setViewport(boardKey, to, follow.current!.onFit(to));
+  }, [flowStore, framePlaced, readCamera, moveCamera, boardKey]);
+  const reframeOnOpenRef = useRef(reframeOnOpen);
+  reframeOnOpenRef.current = reframeOnOpen;
   useEffect(() => {
-    if (hasCards) follow.current!.ready();
+    if (!hasCards) return;
+    follow.current!.ready();
+    reframeOnOpenRef.current();
   }, [hasCards]);
 
   // React Flow's camera (its d3 pan-zoom). It can make it again, at its
@@ -561,6 +611,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (!again) {
       seen.current = readCamera();
       follow.current!.ready();
+      reframeOnOpenRef.current();
       return;
     }
     stopSpring.current?.();
@@ -589,7 +640,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     follow.current!.resize(at.width, at.height);
     return flowStore.subscribe((state, previous) => {
       if (state.panZoom !== previous.panZoom) cameraMade(state.panZoom);
-      if (state.width !== previous.width || state.height !== previous.height) follow.current!.resize(state.width, state.height);
+      if (state.width !== previous.width || state.height !== previous.height) {
+        follow.current!.resize(state.width, state.height);
+        reframeOnOpenRef.current();
+      }
     });
   }, [flowStore, cameraMade]);
 
@@ -613,12 +667,12 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       const wanted = new Set(frameRequest.placementIds);
       const targets = nodesRef.current.filter((node) => wanted.has(node.id));
       if (!width || !height || targets.length === 0) return;
-      placed.current = { ids: targets.map((node) => node.id) };
+      place({ kind: 'cards', ids: targets.map((node) => node.id) });
       springTo(frame(getNodesBounds(targets), width, height));
     };
     request = window.requestAnimationFrame(attempt);
     return () => { if (request) window.cancelAnimationFrame(request); };
-  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo, frame]);
+  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo, frame, place]);
 
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = flowStore.getState();
@@ -627,9 +681,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     // Keep the centre of the view where it is.
     const cx = width / 2;
     const cy = height / 2;
-    placed.current = null;
+    place(null);
     springTo({ zoom, x: cx - ((cx - from.x) / from.zoom) * zoom, y: cy - ((cy - from.y) / from.zoom) * zoom });
-  }, [flowStore, getViewport, springTo]);
+  }, [flowStore, getViewport, springTo, place]);
 
   // A notice line appearing or going while the view is fitted (#210 round
   // 6r, GM r101): the same cards are framed again in the new view insets, on
@@ -639,16 +693,14 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const followNotices = useCallback(() => {
     const at = placed.current;
     if (!at || closed.current) return;
-    if (at.ids === null) {
+    if (at.kind === 'board') {
       fit(false);
       return;
     }
     const { width, height } = flowStore.getState();
-    const wanted = new Set(at.ids);
-    const targets = nodesRef.current.filter((node) => wanted.has(node.id));
-    if (!width || !height || targets.length === 0) return;
-    springTo(frame(getNodesBounds(targets), width, height));
-  }, [fit, flowStore, springTo, frame, getNodesBounds]);
+    const to = width && height ? framePlaced(at, width, height) : null;
+    if (to) springTo(to);
+  }, [fit, flowStore, springTo, framePlaced]);
   const followNoticesRef = useRef(followNotices);
   followNoticesRef.current = followNotices;
   useEffect(() => {
@@ -723,11 +775,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     stopSpring.current?.();
     stopSpring.current = null;
     springTarget.current = null;
-    placed.current = null;
+    place(null);
     follow.current!.taken();
     if (keep) keepCamera();
     else unkept.current = true;
-  }, [readCamera, keepCamera, moveCamera]);
+  }, [readCamera, keepCamera, moveCamera, place]);
   const onCameraMoveStart = useCallback((event: unknown) => {
     // d3 starts a drag gesture on the press (a right or middle button, or
     // the left with Space held); the camera's own moves start none.
@@ -988,9 +1040,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     };
   }, [handOff]);
 
-  /** The chip's press: the tiles into view on the board's fit spring (a pan
-   *  the person asked for; for a tile bigger than the view, a zoom out until
-   *  it is whole, GM r4 answer 9). With `focus`, focus goes to the first tile. */
+  /** The chip's press: the tiles into view on the board's fit spring (for a
+   *  tile bigger than the view, a zoom out until it is whole, GM r4 answer
+   *  9). It is a Show (round 6s, GM r105 1): the view is fitted to the
+   *  tiles' area, so a line then frames them again, clear of it. With
+   *  `focus`, focus goes to the first tile. */
   const showOutside = useCallback((rects: NodeRect[], focus: boolean) => {
     const { width, height } = flowStore.getState();
     if (!width || !height || rects.length === 0) return;
@@ -998,7 +1052,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     const y = Math.min(...rects.map((r) => r.y));
     const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
       height: Math.max(...rects.map((r) => r.y + r.height)) - y };
-    placed.current = null;
+    place({ kind: 'area', bounds });
     springTo(frame(bounds, width, height));
     if (!focus) return;
     // The board holds focus until the tile is drawn (it is culled until in view).
@@ -1010,7 +1064,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       window.requestAnimationFrame(tick);
     };
     window.requestAnimationFrame(tick);
-  }, [flowStore, springTo, focusBoard, focusFollowed, frame]);
+  }, [flowStore, springTo, focusBoard, focusFollowed, frame, place]);
 
   const [dropping, setDropping] = useState(false);
   const carriesFiles = (event: ReactDragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');

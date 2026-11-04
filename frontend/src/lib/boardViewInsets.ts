@@ -18,8 +18,9 @@ import { getViewportForBounds, type Rect, type Viewport } from '@xyflow/react';
  *   three-line line ran over the fitted card: the refit after the row opened
  *   centred the card in a column the row had shortened, under the line).
  *   While the view is fitted (BoardCanvas's
- *   `placed`: no pan or zoom by the person since the last fit, refit or
- *   Show; #210 round 6r, GM r101), a line coming or going frames the same
+ *   `placed`: no pan or zoom by the person since the last fit, refit,
+ *   Show or outside-chip press; #210 round 6r, GM r101; round 6s, GM r105:
+ *   kept with the camera through List and back), a line coming or going frames the same
  *   cards again in the new insets. Once the person has panned or zoomed,
  *   their coming and going never moves the camera (GM #213 round 3): they
  *   count in the next fit, refit, Show or placement.

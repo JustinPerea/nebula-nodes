@@ -50,6 +50,19 @@ export interface StudioBoard {
   imageIds: string[];
 }
 
+/**
+ * "The view is fitted" (#210 round 6r, GM r101): the camera is where the app
+ * last framed it, and which cards that framing was for: the whole board (a
+ * fit), the cards an Update's Show named, or the area of the tiles the
+ * outside chip brought into view (round 6s, GM r105 1). Null once the person
+ * has moved the camera. It travels with the kept camera (GM r105 2): going
+ * to List and back isn't a pan, so the Board view reopens with it.
+ */
+export type BoardPlaced =
+  | { kind: 'board' }
+  | { kind: 'cards'; ids: readonly string[] }
+  | { kind: 'area'; bounds: { x: number; y: number; width: number; height: number } };
+
 interface BoardCanvasState {
   view: MoodboardView;
   setView: (view: MoodboardView) => void;
@@ -62,6 +75,9 @@ interface BoardCanvasState {
    *  fitted refits when its column resizes; components/moodboard-studio/boardFitFollow.ts). */
   fitted: Record<string, boolean>;
   setViewport: (boardKey: string, viewport: Viewport, fitted: boolean) => void;
+  /** Whether that camera is where the app framed it, and for what (BoardPlaced), per board draft key. */
+  placed: Record<string, BoardPlaced | null>;
+  setPlaced: (boardKey: string, placed: BoardPlaced | null) => void;
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
@@ -94,6 +110,11 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   fitted: {},
   setViewport: (boardKey, viewport, fitted) => set((state) => ({ viewports: { ...state.viewports,
     [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } }, fitted: { ...state.fitted, [boardKey]: fitted } })),
+  placed: {},
+  setPlaced: (boardKey, placed) => {
+    if (get().placed[boardKey] === placed) return;
+    set((state) => ({ placed: { ...state.placed, [boardKey]: placed } }));
+  },
   studioBoard: null,
   setStudioBoard: (board) => {
     if (!sameBoard(get().studioBoard, board)) set({ studioBoard: board });
