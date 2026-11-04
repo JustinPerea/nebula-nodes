@@ -2414,7 +2414,8 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(kindAt('components/panels/MaskPainterModal.tsx', /^Clear$/)).toEqual(['red']);
     expect(kindAt('components/panels/ChatPanel.tsx', /^Remove image$/)).toEqual(['neutral']);
     expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Remove accent/)).toEqual(['neutral']);
-    expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
+    // The row's trigger and confirm, and Empty's confirm with one project (GM r102).
+    expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red', 'red']);
     expect(kindAt('components/asset-trash/AssetTrash.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
   });
 
