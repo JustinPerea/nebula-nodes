@@ -710,9 +710,9 @@ def test_two_messages_and_one_reply_keep_the_second_messages_span():
     # a gated push at 176 refused the moon turn's edit at 181.
     state = listening()
     state.agent_id = MINE["id"]
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
-    state.observe(resp(message(2, "and add a moon")), now=110.0)
+    sent(state, 2, 110.0, text="and add a moon")
     assert take(state, 110.0).wake == "message"
     _reply(state, 150.0)
     state.observe(resp(edit(3)), now=151.0)
@@ -729,9 +729,9 @@ def test_two_messages_and_one_reply_keep_the_second_messages_span():
 def test_the_same_for_shell_replies_naming_its_messages():
     state = listening()
     state.agent_id = MINE["id"]
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
-    state.observe(resp(message(2, "and add a moon")), now=110.0)
+    sent(state, 2, 110.0, text="and add a moon")
     assert take(state, 110.0).wake == "message"
     state.observe(resp(replied(3, "pt_a", reply_to="msg_2"), edit(4)), now=150.0)
     assert _first_gated(drain(state, 150.0, 400.0)) is None  # one of two answered
@@ -744,7 +744,7 @@ def test_a_sibling_sessions_reply_never_ends_the_span():
     # token. A's reply (its own message, same actor id) reaches B's feed.
     state = listening()
     state.agent_id = MINE["id"]
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     sibling = ev(3, mcp_channel.REPLY_KIND, actor=MINE,
                  data={"replyId": "pt_s", "text": "Done.", "nodeId": None, "replyTo": "msg_for_a"})
@@ -760,7 +760,7 @@ def test_a_sibling_sessions_reply_never_ends_the_span():
 def test_an_unrelated_resolve_pin_never_ends_a_message_span():
     # Review 3 HIGH-1 (P1c).
     state = listening()
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
     state.observe(resp(edit(2)), now=101.0)
     _pin_answer(state, 120.0, "pin_old")
@@ -813,7 +813,8 @@ def test_one_pin_pushed_to_two_sessions_a_siblings_answer_never_ends_the_other()
 
 def test_a_message_and_a_pin_in_one_push_need_both_answers():
     state = listening()
-    state.observe(resp(pin(1, "warmer"), message(2)), now=100.0)
+    state.observe(resp(pin(1, "warmer")), now=100.0)
+    sent(state, 2, 100.0)
     push = take(state, 101.0)  # the pin's merge is over: both in one push
     assert push.wake == "message" and "warmer" in push.content and "make the sky warmer" in push.content
     state.observe(resp(edit(3)), now=101.5)
@@ -825,14 +826,14 @@ def test_a_message_and_a_pin_in_one_push_need_both_answers():
 
 def test_the_cap_clears_what_waits_so_a_later_reply_never_reaches_back():
     state = listening()
-    state.observe(resp(message(1)), now=100.0)
+    sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
-    state.observe(resp(message(2)), now=101.0)
+    sent(state, 2, 101.0)
     assert take(state, 101.0).wake == "message"
     state.observe(resp(edit(3)), now=102.0)
     assert [(at, p.gate) for at, p in drain(state, 102.0, 702.0)] == [(701.5, True)]
     assert state._open_replies == 0
-    state.observe(resp(message(4)), now=800.0)
+    sent(state, 4, 800.0)
     assert take(state, 800.0).wake == "message"
     state.observe(resp(edit(5)), now=801.0)
     _reply(state, 810.0)  # one reply answers the one push since the cap
@@ -847,3 +848,5 @@ def test_the_instructions_say_to_answer_every_deliberate_wake():
     assert "Each is their request: answer a pin with resolve_pin" in text
     assert "A proposal, run or change wake that needs no word ends without a reply." in text
     assert "If nothing needs saying" not in text
+    # PR C: a message (and an answer) is answered with reply_to_person.
+    assert "Each is their request: answer a pin with resolve_pin, the others with reply_to_person." in text

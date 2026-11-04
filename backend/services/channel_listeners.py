@@ -86,6 +86,10 @@ SESSION_TAKEN_CODE = "listener_session_taken"
 SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
                       "session. Start each Claude Code with the launch command this prints, which gives each its own "
                       "session, then start this one again.\nnebula mcp connect claude-code --channel")
+# channel_status with no agent token (review 3, NIT-2: `nebula channel`
+# says the same in its own words, cli/commands/thread.NO_TOKEN_CHANNEL_LINE).
+NO_TOKEN_STATUS_LINE = ("This Nebula server has no agent token, so Nebula can’t tell which listeners are yours. Run "
+                        "this command, then start Claude Code as it says.\nnebula mcp connect claude-code --channel")
 APP_ID_PREFIX = "app:"
 # A listening entry heard from this recently is fresh: a crashed session's
 # leftover entry (up to TTL_SECONDS old) is not, so it never counts when a

@@ -249,7 +249,8 @@ def test_an_agent_replies_and_its_cursor_says_the_first_sentence_on_the_persons_
     assert cursor[0]["session"]["key"]
     assert thread.raw_others[-1]["say"] == "Done." and "session" not in thread.raw_others[-1]
     replied = [e for e in thread.journal._events if e["kind"] == person_thread.REPLY_EVENT]
-    assert len(replied) == 1 and replied[0]["data"] == {"replyId": reply["id"], "text": text, "nodeId": n1}
+    assert len(replied) == 1 and replied[0]["data"] == {"replyId": reply["id"], "text": text, "nodeId": n1,
+                                                     "replyTo": None}
     assert replied[0]["actor"]["kind"] == "agent"
 
 
@@ -323,7 +324,8 @@ def test_the_rule_is_one_switch(monkeypatch):
     assert person_thread.visible_to_agent(reply, "codex") and not person_thread.visible_to_agent(reply, "claude")
     assert not person_thread.visible_to_agent(pin, "claude")
     assert person_thread.message_event_data(message) == {"to": "ch_1"}
-    assert person_thread.reply_event_data(reply) == {"replyId": "pt_1"} and not person_thread.say_reaches_agents()
+    assert person_thread.reply_event_data(reply) == {"replyId": "pt_1", "replyTo": reply.get("replyTo")}
+    assert not person_thread.say_reaches_agents()
 
 
 # -- rows that point elsewhere -------------------------------------------------------------

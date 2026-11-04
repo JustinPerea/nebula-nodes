@@ -23,6 +23,7 @@ import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasP
 import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { reviewCanvasProposal } from '../../lib/canvasProposalReview';
+import { openThreadIn } from '../../lib/threadOpen';
 import { ghostBoxes } from '../../lib/canvasProposals';
 import { goToCanvas, onCanvas, whenReady } from '../../lib/goToCanvas';
 import { useUIStore } from '../../store/uiStore';
@@ -690,15 +691,17 @@ export function AgentNotesCorner({ sections, agents = null }: {
     }
     // Review leaves for where the proposal is decided; a Commons ask opens
     // in the Commons, another of its sections, which isn't leaving.
-    if (action.op.kind === 'proposal.review' && action.op.target !== 'commons'
+    if (((action.op.kind === 'proposal.review' && action.op.target !== 'commons') || action.op.kind === 'thread.open')
       && askingFirst(anchor, () => runAction(note, action, anchor))) return;
     useAgentNotesStore.getState().clearError();
     void Promise.resolve()
       .then(() => section.adapter.runAction(note, action))
       .then(() => {
-        // Review took the person to the strip: the list steps aside. (A
-        // Review that fails keeps the list open, with its reason.)
-        if (action.op.kind === 'proposal.review' && openRef.current) closeList(false);
+        // Review took the person to the strip, Open to the thread: the list
+        // steps aside. (One that fails keeps the list open, with its reason.)
+        if ((action.op.kind === 'proposal.review' || action.op.kind === 'thread.open') && openRef.current) {
+          closeList(false);
+        }
       })
       .catch(fail);
   }
@@ -1064,6 +1067,8 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         }
         // An asset proposal's Update (Q92 a): go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
+        // A reply saved in another project's thread (GM r100.3): open that thread.
+        if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId);
         const proposals = useCanvasProposalsStore.getState();
         const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
         if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);

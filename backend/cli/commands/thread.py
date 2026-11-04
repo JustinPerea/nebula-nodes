@@ -104,6 +104,9 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
         return 0
     where = f" Your cursor went to {args.node}." if args.node else ""
     print(f"Replied in the person’s Message box.{where}", file=out)
+    if response.get("note"):
+        # Round 5 (D2): Nebula saved it but couldn't tell which message it answers.
+        print(str(response["note"]), file=sys.stderr)
     return 0
 
 

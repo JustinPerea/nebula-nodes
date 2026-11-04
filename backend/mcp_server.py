@@ -1060,7 +1060,9 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     person, or a failure; /mcp > nebula-listen > Reconnect starts it again)
     or null (no --channel). `listeners`: your entries as Nebula sees them,
     one per session of yours ({listenerId, state, reason, projectId, since,
-    seenAt}); none means Nebula doesn't count you as connected.
+    seenAt}); none means Nebula doesn't count you as connected. With no
+    agent token here, `token` is false, `listeners` null and `detail` says
+    what to do, as `nebula channel` does (review 3, NIT-2).
     `thisServer.registerError`: why Nebula refused this listener (only an
     agent token from Settings › Connect your agent registers one, never an
     in-app agent's; `nebula mcp connect claude-code --channel` reads the
@@ -1075,6 +1077,12 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
         this = {"channel": True, "state": "stopped" if state.off else "listening",
                 "reason": state.off_reason if state.off else None, "listenerId": state.listener_id,
                 "registerError": getattr(state, "register_error", None)}
+    from nebula_api import has_token
+    from services.channel_listeners import NO_TOKEN_STATUS_LINE
+
+    if not has_token():
+        # Nebula can't tell which listeners are yours (the CLI's answer too).
+        return {"thisServer": this, "listeners": None, "token": False, "detail": NO_TOKEN_STATUS_LINE}
     try:
         seen = _canvas_call("GET", "/api/canvas/channel", ctx)
     except NebulaAPIError as exc:
@@ -1108,10 +1116,19 @@ def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None =
     Only an agent connected with a token from Settings › Connect your agent
     replies (code reply_no_token for a name alone, reply_in_app_token for an
     in-app agent, reply_token_invalid for a revoked token). Under the
-    channel, a message's (or an answer's) turn isn't gated until a reply
-    under your token reaches the person, from this tool or from `nebula
-    reply` in your session's shell, or 10 minutes after the push: reply
-    when you're done, not before."""
+    channel, each message (or answer) push wants one reply from this
+    session: until every one has it, the person's later edits don't gate
+    your turn (10 minutes at most after the latest push). One from this tool
+    counts; so does `nebula reply` in your session's own shell, which shares
+    this session (the launch command sets it). Reply when you're done, not
+    before; answer a pin with resolve_pin instead.
+
+    The reply goes to the thread of the message it answers (`projectId`
+    says which; the person may have opened another project since, and an
+    Update there points to it). With no message to answer and no project
+    open it is refused (code no_project) with "Nebula couldn’t post this
+    reply because no project is open. Ask the person to open one, then
+    reply again.". A `note` in the answer says what Nebula couldn't do."""
     body: dict[str, Any] = {"text": text}
     if node_id:
         body["nodeId"] = node_id

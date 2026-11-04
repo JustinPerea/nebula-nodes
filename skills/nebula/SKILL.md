@@ -874,13 +874,19 @@ listens through the Nebula channel (`nebula mcp connect claude-code
 arrives as a channel push with `wake="message"`. Answer it in the thread,
 not only in your terminal: the person reads the thread, not your terminal.
 Reply with the `reply_to_person` tool or with `nebula reply "<text>"` from
-your session's shell; under your token both are the same reply. Reply
-when you're done, since either one ends the turn's protection from gated
-pushes. Replying
+your session's shell; under your token both are the same reply. Answer
+every message push with a reply and every pin push with `resolve_pin` (or
+`nebula pin resolve`): each answer ends that push's protection from gated
+pushes, and only your own session's answers count. Replying
 takes a token from Settings › Connect your agent, the same as listening;
 the launch command `nebula mcp connect claude-code --channel` prints sets
-NEBULA_APP_TOKEN_FILE for the session, and `nebula` reads it, so your shell
-is the same agent as your tools. `--node` flies your cursor to
+NEBULA_APP_TOKEN_FILE and a fresh NEBULA_AGENT_SESSION for the session, and
+`nebula` reads both, so your shell is the same agent and the same session
+as your tools: your reply answers your own message and flies your own
+cursor. If the message was sent in another project, the reply goes to
+that project's thread and the person gets an Update to open it. With no
+project open, Nebula refuses the reply; ask the person to open one.
+`--node` flies your cursor to
 the node the answer is about and shows its first sentence there. `nebula
 thread` reads the thread; every connected agent can read it, as pins (a
 question's text only its asker). Replies are paced: 5 in a row, then one

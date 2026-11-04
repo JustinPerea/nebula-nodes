@@ -121,6 +121,24 @@ REPLY_IN_APP_LINE = ("Nebula couldn’t post this reply because it uses an in-ap
                      "in this chat instead.")
 REPLY_BAD_TOKEN_LINE = ("Nebula couldn’t post this reply because its token isn’t valid anymore. Copy a new one from "
                         "Settings › Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND)
+# GM r100 (verbatim): a reply that answers no message, with no project open.
+REPLY_NO_PROJECT_CODE = "no_project"
+REPLY_NO_PROJECT_LINE = ("Nebula couldn’t post this reply because no project is open. Ask the person to open one, then "
+                         "reply again.")
+# Round 5 (D2): a reply from a terminal that isn't a listening session of
+# this agent, while two or more of its sessions listen. Nebula saves it but
+# won't guess which message it answers (replyTo None).
+def reply_unmatched_line(name: str, count: int) -> str:
+    return (f"Nebula posted this reply but couldn’t tell which message it answers because {count} {name} sessions "
+            "are listening and this terminal isn’t one of them. Reply from the session the person messaged, or "
+            "start Claude Code with the launch command this prints, so its terminal shares the session.\n"
+            + CONNECT_CHANNEL_COMMAND)
+
+
+# GM r100: the Update a reply posts when it lands in another project's thread
+# than the open one (the thread of the message it answers).
+def replied_elsewhere_text(name: str, project_name: str) -> str:
+    return f"{name} replied in “{project_name}”."
 
 # THE read rule (Justin, 2026-11-03: every connected agent reads the thread,
 # as pins). False narrows the journal, the read tool and the cursor's say to
@@ -177,15 +195,19 @@ def message_event_data(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def reply_event_data(row: Mapping[str, Any]) -> dict[str, Any]:
-    """The thread.replied event's data: only the reply's id when narrowed.
+    """The thread.replied event's data: only the reply's id and the message
+    it answers when narrowed.
 
     Every saved reply is journaled, whatever the switch: the replying
-    agent's own channel listener ends its deliberate span on it (its reply
-    from any route, `nebula reply` in its shell too: Justin, 2026-11-04,
-    PR A's ownReplies=1). The id says nothing of what the reply says."""
+    agent's own channel listener counts it as an answer to the message it
+    pushed (``replyTo``, set by Nebula: round 5, D1; its reply from any
+    route, `nebula reply` in its shell too: Justin, 2026-11-04, PR A's
+    ownReplies=1). Never a session key or a listener id: this event reaches
+    every agent's feed. The ids say nothing of what the reply says."""
     if not AGENTS_READ_WHOLE_THREAD:
-        return {"replyId": row.get("id")}
-    return {"replyId": row.get("id"), "text": row.get("text"), "nodeId": row.get("nodeId")}
+        return {"replyId": row.get("id"), "replyTo": row.get("replyTo")}
+    return {"replyId": row.get("id"), "text": row.get("text"), "nodeId": row.get("nodeId"),
+            "replyTo": row.get("replyTo")}
 
 
 def say_reaches_agents() -> bool:
@@ -241,6 +263,13 @@ def first_sentence(text: str, limit: int = 140) -> str:
     if len(line) > limit:
         line = line[: limit - 1].rstrip() + "…"
     return line
+
+
+def _bump(row: dict[str, Any]) -> None:
+    """A row changed: its ``rev`` goes up, so a tab keeps the newer copy
+    whatever order a sync and a change reach it in (review 3, LOW-4)."""
+    rev = row.get("rev")
+    row["rev"] = (rev if isinstance(rev, int) and rev > 0 else 1) + 1
 
 
 def _new_id(prefix: str) -> str:
@@ -440,7 +469,7 @@ class PersonThread:
         """(project id, row, new). A resend with the same client id returns the
         first row. ``held``: the listener is sure to hold it (SendCap)."""
         row = {"id": _new_id("pm"), "kind": "message", "at": self._now_ms(), "text": text, "nodeIds": node_ids,
-               "to": to, "state": "held" if held else "sent", "acceptedAt": None}
+               "to": to, "state": "held" if held else "sent", "acceptedAt": None, "rev": 1}
         if client_id:
             row["clientId"] = client_id
 
@@ -470,6 +499,7 @@ class PersonThread:
                         and (row.get("to") or {}).get("listenerId") in own):
                     row["state"] = "accepted"
                     row["acceptedAt"] = at
+                    _bump(row)
                     changed.append(dict(row))
             return changed
 
@@ -486,6 +516,7 @@ class PersonThread:
                 if (row.get("kind") == "message" and row.get("id") in wanted and row.get("state") == "sent"
                         and (row.get("to") or {}).get("listenerId") in own):
                     row["state"] = "held"
+                    _bump(row)
                     changed.append(dict(row))
             return changed
 
@@ -502,6 +533,7 @@ class PersonThread:
             for row in rows:
                 if _in_flight(row) and (row.get("to") or {}).get("listenerId") in own:
                     row["state"] = DROPPED_STATE
+                    _bump(row)
                     changed.append(dict(row))
             return changed
 
@@ -509,26 +541,48 @@ class PersonThread:
 
     def add_reply(self, fields: Mapping[str, Any], listener_ids: Iterable[str]) -> tuple[str, dict[str, Any]]:
         """An agent's reply. ``replyTo``: the latest message to one of
-        ``listener_ids`` (the replying session's, else every listener of
-        that agent: main._reply_listener_ids) that its listener took. The
-        reply then carries that message's session (the person's form), so
-        a reply from the agent's own shell (`nebula reply`, another session
-        id than its MCP process: J2) reads as the session that took it."""
+        ``listener_ids`` (the replying session's: main._reply_listener_ids)
+        that its listener took, in any project. The reply goes to the thread
+        of that message (GM r100.3: the person may have opened another
+        project since), else to the open project's, and with no project open
+        it is refused (REPLY_NO_PROJECT_LINE). It then carries that message's
+        session (the person's form), so a reply from the agent's own shell
+        reads as the session that took it. Its ``nodeId`` stays only in the
+        open project's thread (the node was checked on the open canvas)."""
         own = set(listener_ids)
-        row = {"id": _new_id("pt"), "kind": "reply", "at": self._now_ms(), **fields, "replyTo": None}
-
-        def mutate(rows: list[dict[str, Any]]) -> None:
-            for old in reversed(rows):
-                if (old.get("kind") == "message" and old.get("state") == "accepted"
-                        and (old.get("to") or {}).get("listenerId") in own):
-                    row["replyTo"] = old.get("id")
-                    session = (old.get("to") or {}).get("session")
-                    if isinstance(session, Mapping) and session.get("key"):
-                        row["session"] = copy.deepcopy(dict(session))
-                    break
+        row = {"id": _new_id("pt"), "kind": "reply", "at": self._now_ms(), **fields, "replyTo": None, "rev": 1}
+        store = self._store()
+        with store.transaction() as catalog:
+            open_id = catalog.get("activeProjectId")
+            projects = catalog.get("projects") or {}
+            answered: tuple[Any, ...] | None = None  # (acceptedAt, at, project id, message)
+            for project_id, project in projects.items() if own else ():
+                rows = project.get(FIELD) if isinstance(project, dict) else None
+                for old in rows if isinstance(rows, list) else []:
+                    if (isinstance(old, dict) and old.get("kind") == "message" and old.get("state") == "accepted"
+                            and (old.get("to") or {}).get("listenerId") in own):
+                        key = (int(old.get("acceptedAt") or 0), int(old.get("at") or 0))
+                        if answered is None or key >= answered[:2]:
+                            answered = (*key, project_id, old)
+            if answered is not None:
+                project_id, message = answered[2], answered[3]
+                row["replyTo"] = message.get("id")
+                session = (message.get("to") or {}).get("session")
+                if isinstance(session, Mapping) and session.get("key"):
+                    row["session"] = copy.deepcopy(dict(session))
+            elif open_id and open_id in projects:
+                project_id = open_id
+            else:
+                raise ThreadError(409, REPLY_NO_PROJECT_LINE, REPLY_NO_PROJECT_CODE)
+            if project_id != open_id:
+                row["nodeId"] = None
+            project = projects[project_id]
+            rows = project.get(FIELD)
+            if not isinstance(rows, list):
+                rows = project[FIELD] = []
             rows.append(row)
-
-        project_id, _ = self._write(mutate)
+            trim(rows)
+            store.commit(catalog)
         return project_id, row
 
     def close_question(self, question_id: str, outcome: Mapping[str, Any], *,
@@ -543,6 +597,7 @@ class PersonThread:
             for row in rows:
                 if row.get("kind") == "question" and row.get("questionId") == question_id:
                     row["outcome"] = copy.deepcopy(kept)
+                    _bump(row)
                     changed.append(dict(row))
             return changed
 
@@ -554,7 +609,7 @@ class PersonThread:
     def add_row(self, kind: str, fields: Mapping[str, Any], *, project_id: str | None = None) -> tuple[str, dict[str, Any]]:
         if kind not in ROW_KINDS:
             raise ValueError(kind)
-        row = {"id": _new_id("pt"), "kind": kind, "at": self._now_ms(), **fields}
+        row = {"id": _new_id("pt"), "kind": kind, "at": self._now_ms(), **fields, "rev": 1}
         project_id, _ = self._write(lambda rows: rows.append(row), project_id)
         return project_id, row
 

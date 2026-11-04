@@ -303,7 +303,7 @@ function scanPairs(text: string, inside?: string): { open: { ch: string; own: bo
 /** What a cut drops before its ellipsis: a trailing comma, space or other
  * punctuation, but never a closing bracket or quote whose opener is in the
  * words (review 1, NIT-2: “Use (see n4)…”, not “Use (see n4…”; review 2,
- * NIT-1: `Use the "warm"…`). */
+ * NIT-1: `Use the "warm"…`), nor a possessive apostrophe (“the dogs’…”). */
 function cutTail(words: string, inside?: string): string {
   let out = words;
   for (;;) {
@@ -316,6 +316,9 @@ function cutTail(words: string, inside?: string): string {
       // (“Warm”, “Cool…”., not “Warm”, “Cool”…”.).
       const callers = inside !== undefined && last === CLOSER_OF[inside] && !scan.open.some((entry) => entry.ch === inside);
       if (scan.lastClosedOwn && !callers) return out;
+      // A ' or ’ at a word's end that closes no quote is a possessive
+      // apostrophe, part of the word (review 3, NIT-1: “the dogs’…”).
+      if (!scan.lastClosedOwn && (last === "'" || last === '’') && WORD_CHAR.test(out.slice(-2, -1))) return out;
     }
     out = out.slice(0, -1);
   }

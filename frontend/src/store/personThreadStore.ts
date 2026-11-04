@@ -6,6 +6,7 @@ import {
   countsAsReply,
   mergeRows,
   sanitizeListener,
+  syncRows,
   sanitizeRow,
   sessionKeyOf,
   type ChannelListener,
@@ -82,6 +83,9 @@ interface PersonThreadState {
   chosen: string | null;
   /** Replies that came while the panel was closed. */
   unread: number;
+  /** GM r100.3: replies saved in another project's thread (the message they
+   * answer is there), by project: that thread's unread once it opens. */
+  unreadElsewhere: Record<string, number>;
   /** The live region's latest words, once per reply. */
   announcement: { id: string; text: string } | null;
   pending: PendingSend | null;
@@ -111,6 +115,7 @@ function initial() {
     contextIds: [] as string[],
     chosen: null as string | null,
     unread: 0,
+    unreadElsewhere: {} as Record<string, number>,
     announcement: null as { id: string; text: string } | null,
     pending: null as PendingSend | null,
     failure: null as SendFailureState | null,
@@ -155,7 +160,16 @@ export function replyAnnouncement(row: ThreadRow): string {
 /** New rows from the socket: merged; each new reply (countsAsReply) counts as unread (panel closed) and is announced once. */
 export function receiveRows(projectId: string | null, incoming: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
-  if (state.projectId !== null && projectId !== null && projectId !== state.projectId) return;
+  if (state.projectId !== null && projectId !== null && projectId !== state.projectId) {
+    // A reply in another project's thread (GM r100.3): unread there, once.
+    const count = incoming.filter(countsAsReply).length;
+    if (count > 0) {
+      usePersonThreadStore.setState((s) => ({
+        unreadElsewhere: { ...s.unreadElsewhere, [projectId]: (s.unreadElsewhere[projectId] ?? 0) + count },
+      }));
+    }
+    return;
+  }
   const known = new Set(state.rows.map((row) => row.id));
   const replies = incoming.filter((row) => countsAsReply(row) && !known.has(row.id));
   const open = useUIStore.getState().agentLogOpen;
@@ -176,11 +190,15 @@ export function receiveSync(projectId: string | null, rows: ThreadRow[]): void {
   const known = new Set(state.rows.map((row) => row.id));
   const missed = same && state.rows.length > 0 && !useUIStore.getState().agentLogOpen
     ? rows.filter((row) => countsAsReply(row) && !known.has(row.id)).length : 0;
+  const { [projectId ?? '']: waiting = 0, ...elsewhere } = state.unreadElsewhere;
   usePersonThreadStore.setState({
     projectId,
-    rows,
-    // Another project's thread: nothing of the old one is unread.
-    unread: same ? state.unread + missed : 0,
+    // The same thread again (a reconnect, a stale hello): merged, never replaced (LOW-4).
+    rows: same ? syncRows(state.rows, rows) : rows,
+    // Another project's thread: nothing of the old one is unread, but what
+    // came for this one while another was open is (GM r100.3).
+    unread: same ? state.unread + missed : useUIStore.getState().agentLogOpen ? 0 : waiting,
+    unreadElsewhere: same ? state.unreadElsewhere : elsewhere,
   });
 }
 

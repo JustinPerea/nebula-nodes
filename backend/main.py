@@ -5442,7 +5442,11 @@ def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
     return agent_presence.point(identity, project_id=project_id, **kwargs)
 
 
-def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: Any) -> dict[str, Any] | None:
+_HEADERS_SESSION = object()
+
+
+def _person_form(event: dict[str, Any], identity: Any, headers: Any, *, session: Any = _HEADERS_SESSION,
+                 **kwargs: Any) -> dict[str, Any] | None:
     """agent_presence.person_form, built apart from the agent form, so a
     failure in the person's copy is logged and never silences the agent form
     or fails the route (review 1, LOW-1).
@@ -5452,14 +5456,16 @@ def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: A
     nothing for this event (None). Never the bare agent form: a tab reads an
     event with no session as the plain cursor, number 1, and would drop
     whichever session holds 1 (review 2, NIT-3)."""
+    if session is _HEADERS_SESSION:
+        session = presence_session(headers)
     try:
-        return agent_presence.person_form(event, identity, session=presence_session(headers), **kwargs)
+        return agent_presence.person_form(event, identity, session=session, **kwargs)
     except Exception:  # noqa: BLE001 - decoration: the agent form still goes out
         logging.getLogger("nebula.presence").exception("person form failed; sending the agent form only")
     if "target" not in event:
         return event  # the Agent log only: no cursor, so no number to get wrong
     try:
-        tag = agent_presence.session_tag(identity, presence_session(headers))
+        tag = agent_presence.session_tag(identity, session)
     except Exception:  # noqa: BLE001 - no number is better than a wrong one
         tag = None
     return {**event, "session": tag} if tag else None
@@ -6588,12 +6594,25 @@ def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[s
     return [entry.listener_id for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
 
 
+def _reply_listeners(identity: AgentIdentity, session: str | None) -> tuple[list[channel_listeners.Listener], int]:
+    """The listeners a reply answers for, and how many fresh ones it
+    wouldn't guess between. This session's own entry (the launch command
+    gives Claude Code's shell its listener's session, D2). Else the agent's
+    one fresh listening entry (a terminal started some other way); with two
+    or more, none: Nebula won't guess which session the reply is from
+    (round 5, D2), and the count says so. A crashed session's leftover entry
+    isn't fresh (channel_listeners.FRESH_SECONDS), so it never blocks one."""
+    own = [entry for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
+    if own:
+        return own, 0
+    fresh = channel_book.fresh_listening(identity.id)
+    if len(fresh) == 1:
+        return fresh, 0
+    return [], len(fresh)
+
+
 def _reply_listener_ids(identity: AgentIdentity, session: str | None) -> list[str]:
-    """The listeners a reply answers for: this session's, else every one of
-    this agent's (J2: `nebula reply` from the listening Claude's own shell
-    carries the CLI's session, not its MCP process's, but the same token)."""
-    return _thread_listener_ids(identity, session) or [entry.listener_id for entry in
-                                                         channel_book.for_agent(identity.id)]
+    return [entry.listener_id for entry in _reply_listeners(identity, session)[0]]
 
 
 @app.get("/api/canvas/thread")
@@ -6734,7 +6753,16 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     (reply_no_token, reply_in_app_token). Paced per token agent (ReplyPace:
     5 in a row, then one every 2 s): past it, 429 replies_rate_limited with
     retryAfter (s) and a line saying when it can reply again; nothing is
-    saved, and a reply Nebula refuses later never spends one."""
+    saved, and a reply Nebula refuses later never spends one.
+
+    Round 5: the reply answers the latest message this session's listener
+    took (D2: Claude Code's shell shares its listener's session; a terminal
+    started otherwise answers the agent's one fresh listener, and with two
+    or more Nebula won't guess: ``replyTo`` None and a ``note`` saying why).
+    It goes to that message's project's thread (GM r100.3), with an Update
+    on the open project when that is another one, and its cursor is the
+    session's that took the message (GM r100.1). No message answered and no
+    project open: 409 no_project (GM r100's line)."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None and is_person(headers):
@@ -6767,23 +6795,33 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
         return JSONResponse(status_code=429, headers={"Retry-After": str(retry)},
                             content={"detail": person_thread.reply_limited_detail(wait),
                                      "code": person_thread.REPLY_LIMITED_CODE, "retryAfter": retry})
+    listeners, unmatched = _reply_listeners(identity, session)
     try:
         fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
                   "session": _thread_session(identity, session)}
         project_id, row = await asyncio.to_thread(thread_book.add_reply, fields,
-                                                  _reply_listener_ids(identity, session))
+                                                  [entry.listener_id for entry in listeners])
     except person_thread.ThreadError as exc:
         thread_reply_pace.refund(identity.id)  # nothing was saved (live L1)
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
         thread_reply_pace.refund(identity.id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    # Always journaled (only its id when narrowed): its own listener ends a
-    # deliberate span on it, whatever route the reply took (PR A, J4).
-    _journal(person_thread.REPLY_EVENT, node_id=node_id, data=person_thread.reply_event_data(row),
+    # Always journaled (only its ids when narrowed): its own listener counts
+    # it as an answer to the message it names (PR A, J4; round 5, D1).
+    _journal(person_thread.REPLY_EVENT, node_id=row.get("nodeId"), data=person_thread.reply_event_data(row),
              summary="replied to the person", project_id=project_id)
     await _broadcast_thread(project_id, [row])
-    if node_id is not None:
+    open_id = _workspace_context()["activeProjectId"]
+    if project_id != open_id:
+        await _post_reply_elsewhere(identity, project_id)
+    # The cursor that flies is the session's that took the message (GM
+    # r100.1: one Claude is one cursor), so a reply from its own shell never
+    # makes a "· 2"; with no message answered, the caller's own.
+    # (_reply_listeners gives this session's entry or the one fresh one.)
+    taker = listeners[0] if listeners and row.get("replyTo") else None
+    cursor_session = (taker.session or None) if taker is not None else session
+    if node_id is not None:  # checked on the open canvas, where the person is
         try:
             # The first sentence goes on the person's tabs; on the agents'
             # form (and what look_at_canvas and the roster keep) only while
@@ -6792,13 +6830,36 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
             event = _point(identity, target={"nodeId": node_id}, action="move",
                            say=person_thread.first_sentence(text) if shared else "",
                            did=_did("Replied on", node_id))
-            person = _person_form(event, identity, headers)
+            person = _person_form(event, identity, headers, session=cursor_session)
             if person is not None:
                 person = {**person, "say": person_thread.first_sentence(text)}
             await _broadcast_presence(event, person)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
             pass
-    return {"projectId": project_id, "reply": person_thread.agent_view(row, identity.id)}
+    answer: dict[str, Any] = {"projectId": project_id, "reply": person_thread.agent_view(row, identity.id)}
+    if unmatched > 1:
+        answer["note"] = person_thread.reply_unmatched_line(identity.name, unmatched)
+    return answer
+
+
+async def _post_reply_elsewhere(identity: AgentIdentity, project_id: str) -> None:
+    """GM r100.3: the reply went to another project's thread (the message it
+    answers was sent there): an Update on the open project names that
+    project, and its Open action opens that project's thread. Decoration:
+    never fails the saved reply."""
+    try:
+        project = (project_store.read().get("projects") or {}).get(project_id) or {}
+        name = str(project.get("name") or "").strip() or "another project"
+        result = await asyncio.to_thread(
+            agent_notes.post_nebula, ("canvas", None), author={"kind": "agent", **identity.as_dict()},
+            about="other", text=person_thread.replied_elsewhere_text(identity.name, name),
+            actions=[{"label": "Open", "op": {"kind": "thread.open", "projectId": project_id}}])
+    except Exception:  # noqa: BLE001 - the reply is saved; the Update is a pointer to it
+        return
+    note = result["note"]
+    _journal_note(note, "canvas", project_id=result["projectId"])
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
 
 
 @app.post("/api/canvas/view")

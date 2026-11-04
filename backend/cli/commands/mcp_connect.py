@@ -351,6 +351,15 @@ CLAUDE_DEV_CHANNELS_TITLE = "WARNING: Loading development channels"
 CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
 
 
+# Round 5 (D2): each launch gives the session its own id, evaluated by the
+# shell every time the command runs (never a value printed once), shared by
+# the listener (the MCP server) and Claude's own shell (the `nebula` CLI):
+# one session, one cursor, one listener. "cc-" plus a UUID fits
+# cursor_actions.SESSION_RE.
+SESSION_ENV = "NEBULA_AGENT_SESSION"
+SESSION_ASSIGNMENT = f'{SESSION_ENV}="cc-$(uuidgen)"'
+
+
 def launch_command(path: Path, token_file: str | None = None) -> str:
     """The one command that starts Claude Code with the channel. The saved
     `nebula` server's copies of the tools are left out, so nebula-listen
@@ -359,9 +368,12 @@ def launch_command(path: Path, token_file: str | None = None) -> str:
     command sets NEBULA_APP_TOKEN_FILE to its path (never the token) for the
     session, so the `nebula` CLI in Claude's own shell reads the same token
     as the listener (J2, Justin 2026-11-04: `nebula reply` then answers the
-    person's message as the session that took it)."""
+    person's message as the session that took it). It always sets
+    NEBULA_AGENT_SESSION to a new id at each launch (SESSION_ASSIGNMENT), so
+    that shell is the listener's own session too (round 5, D2)."""
     command = (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
                f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
+    command = f"{SESSION_ASSIGNMENT} {command}"
     if token_file:
         command = f"{TOKEN_FILE_ENV}={shlex.quote(token_file)} {command}"
     return command

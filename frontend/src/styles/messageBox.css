@@ -51,13 +51,18 @@
 
 /* The person's height wins over the content's (r61 answer 1): up to the
    viewport less the top chrome (AgentLog clamps it), bounded by the shown
-   height only while a give is in force. */
+   height only while a give is in force. A drag counts from the press, so
+   the first drag already tracks the pointer past half the viewport (#225
+   review 3 live LOW-1). */
 .agent-log.agent-log--messaging.agent-log--open[data-sized][data-docked],
-.agent-log.agent-log--messaging.agent-log--open[data-sized][data-floating] {
+.agent-log.agent-log--messaging.agent-log--open[data-sized][data-floating],
+.agent-log.agent-log--messaging.agent-log--open[data-resizing][data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-resizing][data-floating] {
   max-height: max(var(--agent-log-shown-h), calc(100vh - var(--agent-log-top-chrome, 0px) - var(--agent-log-give) * 100000));
 }
 
-.agent-log.agent-log--messaging.agent-log--open[data-sized]:not([data-docked]):not([data-floating]) {
+.agent-log.agent-log--messaging.agent-log--open[data-sized]:not([data-docked]):not([data-floating]),
+.agent-log.agent-log--messaging.agent-log--open[data-resizing]:not([data-docked]):not([data-floating]) {
   max-height: calc(100vh - var(--agent-log-top-chrome, 0px));
 }
 

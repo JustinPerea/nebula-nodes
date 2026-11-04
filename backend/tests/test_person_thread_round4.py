@@ -156,9 +156,49 @@ def test_the_cli_sends_the_token_in_the_file_and_never_puts_it_in_the_environmen
     assert "NEBULA_APP_TOKEN" not in os.environ and nebula_api.has_token()
 
 
-def test_a_token_in_the_environment_wins_over_the_file(token_file, monkeypatch):
+def test_the_token_file_wins_over_a_token_in_the_environment(token_file, monkeypatch):
+    # D3 (round 5; review 3 LOW-1/LOW-3): the MCP server's order, so the
+    # shell and the listener are one agent even when an old NEBULA_APP_TOKEN
+    # is still exported.
     monkeypatch.setenv("NEBULA_APP_TOKEN", "from-env")
-    assert nebula_api.with_identity()["Authorization"] == "Agent from-env"
+    assert nebula_api.with_identity()["Authorization"] == "Agent nbl_app_" + "a" * 40
+    # A turn token (an in-app chat) still comes first, as in the MCP server.
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn")
+    assert nebula_api.with_identity()["Authorization"] == "Agent turn"
+
+
+def test_a_bad_token_file_fails_closed_even_with_a_good_token_in_the_environment(token_file, monkeypatch):
+    monkeypatch.setenv("NEBULA_APP_TOKEN", "from-env")
+    os.chmod(token_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH)
+    with pytest.raises(nebula_api.NebulaAPIError) as refused:
+        nebula_api.with_identity()
+    assert "because NEBULA_APP_TOKEN_FILE points to a file other users can read" in refused.value.detail
+    assert "from-env" not in refused.value.detail
+
+
+def test_has_token_is_true_only_when_a_token_is_sent(monkeypatch, tmp_path):
+    # Review 3 NIT: with a personal agent's NEBULA_AGENT_TOKEN_FILE set, the
+    # app file isn't read, so (with nothing else) no token goes.
+    assert not nebula_api.has_token({"NEBULA_AGENT_TOKEN_FILE": "/x", "NEBULA_APP_TOKEN_FILE": "/y"})
+    assert nebula_api.has_token({"NEBULA_AGENT_TOKEN_FILE": "/x", "NEBULA_APP_TOKEN": "t"})
+    assert nebula_api.has_token({"NEBULA_APP_TOKEN_FILE": "/y"})
+    assert nebula_api.has_token({"NEBULA_AGENT_TOKEN": "t"})
+    assert not nebula_api.has_token({"NEBULA_AGENT_TOKEN": "", "NEBULA_APP_TOKEN": ""})
+
+
+def test_a_personal_agents_token_file_keeps_the_app_file_unread(token_file, monkeypatch):
+    # Review 3 LOW-2/LOW-6 B2: the NEBULA_AGENT_TOKEN_FILE guard.
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN_FILE", "/nonexistent")
+    assert nebula_api.app_token_from_file() is None
+    assert "Authorization" not in nebula_api.with_identity({"X-Nebula-Agent": "Claude Code"})
+
+
+def test_the_file_token_is_cached_per_path(token_file, monkeypatch, tmp_path):
+    # Review 3 LOW-6 B1: a changed NEBULA_APP_TOKEN_FILE reads the new file.
+    assert nebula_api.app_token_from_file() == "nbl_app_" + "a" * 40
+    other = str(app_token_file.write(tmp_path / "other", "ba9876543210", "nbl_app_" + "b" * 40))
+    monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", other)
+    assert nebula_api.app_token_from_file() == "nbl_app_" + "b" * 40
 
 
 def test_a_token_file_open_to_others_fails_closed_without_the_token(token_file):
@@ -322,7 +362,11 @@ def _spanning(thread):
     assert state.inbox_to_fetch()
     inbox = thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()
     assert state.messages_fetched(inbox["messages"]) == 1
-    assert take(state, 100.0).wake == "message"
+    push = take(state, 100.0)
+    assert push.wake == "message"
+    # The listener marks what it pushed as taken (Listener._accept): a reply
+    # then names it (replyTo), which is what ends the span (round 5, D1).
+    thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": push.message_ids})
     assert state._reply_due_at is not None
     return state
 
@@ -370,7 +414,7 @@ def test_a_narrowed_thread_still_journals_the_replys_id(shell, thread, monkeypat
     state = _spanning(thread)
     assert _cli_reply(shell) == 0
     replied = [e for e in thread.journal._events if e["kind"] == person_thread.REPLY_EVENT]
-    assert len(replied) == 1 and set(replied[0]["data"]) == {"replyId"}
+    assert len(replied) == 1 and set(replied[0]["data"]) == {"replyId", "replyTo"}  # never a session or listener
     _feed(thread, state, 150.0)
     assert state._reply_due_at is None
 

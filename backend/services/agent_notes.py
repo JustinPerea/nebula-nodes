@@ -86,6 +86,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     # A question set's Update (Q125 item 1): opens the answer form in the
     # Updates corner. Only the person's canvas answers (services/agent_questions.py).
     "question.answer": {"labels": ("Answer",), "keys": {"questionId": str}},
+    # A reply that landed in another project's thread (GM r100.3): opens that
+    # project and its thread in the Agent log.
+    "thread.open": {"labels": ("Open",), "keys": {"projectId": str}},
 }
 
 # A board image ref inside saved text: private-use characters, which

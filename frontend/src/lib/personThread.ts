@@ -66,6 +66,8 @@ export interface ThreadRow {
   replyTo?: string | null;
   /** A question row, once its set closed (GM r79.5): the person's own record, never an agent's. */
   outcome?: QuestionOutcome;
+  /** Raised by each change to the row (review 3 LOW-4): the newer copy wins a merge. */
+  rev?: number;
 }
 
 export interface QuestionOutcome {
@@ -126,6 +128,7 @@ export function sanitizeRow(raw: unknown): ThreadRow | null {
   if (Array.isArray(row.nodeIds)) clean.nodeIds = row.nodeIds.filter((id): id is string => typeof id === 'string');
   if (row.state === 'sent' || row.state === 'held' || row.state === 'accepted' || row.state === 'dropped') clean.state = row.state;
   if (typeof row.acceptedAt === 'number') clean.acceptedAt = row.acceptedAt;
+  if (typeof row.rev === 'number' && Number.isFinite(row.rev)) clean.rev = row.rev;
   if (typeof row.clientId === 'string') clean.clientId = row.clientId;
   const to = row.to as Record<string, unknown> | undefined;
   const toAgent = cleanAgent(to?.agent);
@@ -189,8 +192,18 @@ export function sanitizeListener(raw: unknown): ChannelListener | null {
 /** Rows merged by id, oldest first (a changed row replaces its old copy). */
 export function mergeRows(current: readonly ThreadRow[], incoming: readonly ThreadRow[]): ThreadRow[] {
   const byId = new Map(current.map((row) => [row.id, row]));
-  for (const row of incoming) byId.set(row.id, row);
+  // A copy older than the one held (a lower rev) never replaces it (review 3 LOW-4).
+  for (const row of incoming) if ((byId.get(row.id)?.rev ?? 0) <= (row.rev ?? 0)) byId.set(row.id, row);
   return [...byId.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+}
+
+/** A sync of the thread the tab already holds: the snapshot, merged by rev,
+ * plus rows newer than anything in it (a reply that reached the tab after
+ * the snapshot was read), so a stale sync never drops one or moves a row back. */
+export function syncRows(current: readonly ThreadRow[], snapshot: readonly ThreadRow[]): ThreadRow[] {
+  const newest = snapshot.reduce((at, row) => Math.max(at, row.at), -Infinity);
+  const ids = new Set(snapshot.map((row) => row.id));
+  return mergeRows(current.filter((row) => ids.has(row.id) || row.at > newest), snapshot);
 }
 
 /** The last event of an agent session (by cursor key): when, and its action line. */

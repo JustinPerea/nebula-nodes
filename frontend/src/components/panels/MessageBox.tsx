@@ -15,6 +15,7 @@ import { cursorLabel, type SessionLike } from '../../lib/agentCursorLabel';
 import { AGENT_FALLBACK_COLOR, agentLogTones } from '../../lib/agentCursorColor';
 import { cardTitle } from '../../lib/worldLabsWaiting';
 import { isCanvasShortcutTarget } from '../../lib/canvasShortcutScope';
+import { springScrollTo } from '../../lib/scrollSpring';
 import {
   MESSAGE_MAX,
   PIN_SHOW_EVENT,
@@ -574,10 +575,43 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
     if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, []);
 
+  // GM r100.2: the person's own send always brings the thread to their sent
+  // row (the newest, with any failure line under it), on the scroll spring
+  // (a jump under reduced motion), wherever they had scrolled. The pill
+  // stays for agent rows only. Pinned from the start, so the row's state
+  // line and a failure line growing under it stay in view.
+  // Declared before r50's jump below, so a send's commit springs and never jumps.
+  const springing = useRef<(() => void) | null>(null);
+  const sending = pending?.clientId ?? null;
+  const [seenSending, setSeenSending] = useState(sending);
+  if (seenSending !== sending) {
+    setSeenSending(sending);
+    if (sending !== null) {
+      setAtBottom(true);
+      setPill(null);
+    }
+  }
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element || sending === null) return;
+    pinned.current = true;
+    springing.current?.();
+    let landed = false;
+    const stop = springScrollTo(element, () => element.scrollHeight - element.clientHeight, () => {
+      landed = true;
+      springing.current = null;
+      size.current = { height: element.scrollHeight, client: element.clientHeight };
+    });
+    // A jump (reduced motion) has landed already: nothing is springing.
+    springing.current = landed ? null : stop;
+  }, [sending]);
+  useEffect(() => () => springing.current?.(), []);
+
   // r50: new rows scroll into view only when the thread is already at the bottom.
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && atBottom) element.scrollTop = element.scrollHeight;
+    // While the send's spring runs it reaches the bottom itself (r100.2).
+    if (element && atBottom && !springing.current) element.scrollTop = element.scrollHeight;
     if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, [lastId, pending, atBottom]);
 
@@ -588,7 +622,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
     const element = scroller.current;
     if (!element || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(() => {
-      if (pinned.current) element.scrollTop = element.scrollHeight;
+      if (pinned.current && !springing.current) element.scrollTop = element.scrollHeight;
       size.current = { height: element.scrollHeight, client: element.clientHeight };
     });
     observer.observe(element);
@@ -598,7 +632,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
 
   function onScroll() {
     const element = scroller.current;
-    if (!element) return;
+    if (!element || springing.current) return;  // the spring moves it, not the person
     const resized = size.current.height > 0
       && (element.scrollHeight !== size.current.height || element.clientHeight !== size.current.client);
     size.current = { height: element.scrollHeight, client: element.clientHeight };

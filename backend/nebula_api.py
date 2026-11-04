@@ -96,15 +96,15 @@ _file_token: tuple[str, str] | None = None
 
 
 def app_token_from_file(environ: Any = None) -> str | None:
-    """The token in NEBULA_APP_TOKEN_FILE, for a caller with no token in its
-    environment (J2, Justin 2026-11-04): the `nebula` CLI run from the
-    listening Claude Code's own shell, whose launch command sets the path
-    the MCP config already names. Read with the MCP server's strict reader
-    (services/agent_token_file.read: a regular file of this user's, mode
-    600, no symlink), so the shell and the MCP tools are one agent. None
-    when the variable isn't set, or a personal agent's token file is
-    (load_app_token_file's order). Fails closed: a bad file raises
-    NebulaAPIError naming the variable and the reason, never the token."""
+    """The token in NEBULA_APP_TOKEN_FILE (J2, Justin 2026-11-04): the
+    `nebula` CLI run from the listening Claude Code's own shell, whose
+    launch command sets the path the MCP config already names. Read with
+    the MCP server's strict reader (services/agent_token_file.read: a
+    regular file of this user's, mode 600, no symlink), so the shell and
+    the MCP tools are one agent. None when the variable isn't set, or a
+    personal agent's token file is (load_app_token_file's order). Fails
+    closed: a bad file raises NebulaAPIError naming the variable and the
+    reason, never the token."""
     global _file_token
     env = os.environ if environ is None else environ
     path = env.get(APP_TOKEN_FILE_ENV)
@@ -128,22 +128,40 @@ def app_token_from_file(environ: Any = None) -> str | None:
     return token
 
 
+def _token_source(env: Any) -> str | None:
+    """Which variable with_identity sends a token from, in the MCP server's
+    order (mcp_server.load_app_token_file; D3, round 5): NEBULA_AGENT_TOKEN
+    (an in-app chat's turn token); else NEBULA_APP_TOKEN_FILE, unless a
+    personal agent's NEBULA_AGENT_TOKEN_FILE is set (the file replaces any
+    NEBULA_APP_TOKEN also set, and a bad one fails closed); else
+    NEBULA_APP_TOKEN (a config made before token files). None: no token."""
+    if env.get("NEBULA_AGENT_TOKEN"):
+        return "NEBULA_AGENT_TOKEN"
+    if env.get(APP_TOKEN_FILE_ENV) is not None and env.get("NEBULA_AGENT_TOKEN_FILE") is None:
+        return APP_TOKEN_FILE_ENV
+    if env.get("NEBULA_APP_TOKEN"):
+        return "NEBULA_APP_TOKEN"
+    return None
+
+
 def has_token(environ: Any = None) -> bool:
-    """Whether a request from here carries an agent token (with_identity's sources)."""
-    env = os.environ if environ is None else environ
-    return bool(env.get("NEBULA_AGENT_TOKEN") or env.get("NEBULA_APP_TOKEN") or env.get(APP_TOKEN_FILE_ENV))
+    """Whether a request from here sends an agent token (with_identity's
+    sources, in its order: NIT, review 3)."""
+    return _token_source(os.environ if environ is None else environ) is not None
 
 
 def with_identity(headers: dict[str, str] | None = None) -> dict[str, str]:
     """Add the caller's token (it outranks any name).
 
-    NEBULA_AGENT_TOKEN is an in-app chat's turn token. NEBULA_APP_TOKEN is one
-    the person made for an outside app in Settings > Connect your agent: it names
-    the app's own spending line (services/app_tokens.py). The turn token wins.
-    With neither set, the token in NEBULA_APP_TOKEN_FILE (app_token_from_file)."""
+    NEBULA_AGENT_TOKEN is an in-app chat's turn token. NEBULA_APP_TOKEN_FILE
+    names the token file of an outside app the person made in Settings >
+    Connect your agent (it names the app's own spending line,
+    services/app_tokens.py); NEBULA_APP_TOKEN is such a token itself. Their
+    order is the MCP server's (_token_source), so the CLI in the listening
+    Claude's shell and its MCP tools are always one agent (D3)."""
     headers = dict(headers or {})
-    token = (os.environ.get("NEBULA_AGENT_TOKEN") or os.environ.get("NEBULA_APP_TOKEN")
-             or app_token_from_file())
+    source = _token_source(os.environ)
+    token = app_token_from_file() if source == APP_TOKEN_FILE_ENV else (os.environ.get(source) if source else None)
     if token:
         headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
         headers["Authorization"] = f"Agent {token}"

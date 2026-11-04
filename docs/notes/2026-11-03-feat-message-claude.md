@@ -614,3 +614,129 @@ unverified reply author) is moot after J1 and not built.
   previews a pin answer as "Claude Code" / "replied to your note". Three
   shots, distinct md5s, nothing intercepted, no page errors.
 
+
+## Round 5 (review 3; coordinator D1-D3, adversarially checked; GM r100)
+
+Merged #223's round 5 (c43b3115) as ee0e96fe. The INSTRUCTIONS conflict
+kept #223's text and added "the others with reply_to_person" (#223 can't
+name a tool it doesn't serve). The budget is still within 4,096 with the
+server's instructions.
+
+### D1: a reply names the message it answers, never a session
+
+- `reply_event_data` carries `replyTo` in both forms (narrowed:
+  `{replyId, replyTo}`), never a session key or listener id, because
+  `thread.replied` reaches every agent's feed. #223's listener decrements
+  its count only for an own `thread.replied` whose `replyTo` is a message
+  it pushed. Tests from #223 were ported to this branch's inbox flow
+  (`sent()`), plus an assert on this branch's INSTRUCTIONS.
+- `nebula pin resolve` from the session's shell ends only that session's
+  pin span (LOW-2 parity). The route passes the caller's session into the
+  journal (#223's `_sessions`), and the test covers one pin pushed to two
+  sessions.
+
+### D2: the shell is its listener's session
+
+- `launch_command` adds `NEBULA_AGENT_SESSION="cc-$(uuidgen)"`, after the
+  token file and before `claude`. Each shell evaluates it per launch, it
+  matches `SESSION_RE`, and the printed text holds no literal id. Two
+  launches give two listener ids (live and test) and two cursors labelled
+  per session (test).
+- `_reply_listeners`: this session's own entry first. Else the agent's
+  one fresh listening entry (heard within 25 s, so a crashed leftover
+  never blocks). With two or more fresh entries, none: `replyTo` is None
+  and the answer's `note` is `reply_unmatched_line` (`nebula reply` prints
+  it to stderr).
+- The cursor that flies is the taking listener's session (GM r100.1):
+  `_person_form(..., session=)`. With no message answered it is the
+  caller's own. The echo match (review 3 live MEDIUM-1) follows, because
+  the say now comes from the listener's own cursor session.
+
+### D3: one token order
+
+- `nebula_api._token_source` uses the MCP server's order:
+  `NEBULA_AGENT_TOKEN`, then `NEBULA_APP_TOKEN_FILE` (unless
+  `NEBULA_AGENT_TOKEN_FILE`), then `NEBULA_APP_TOKEN`. `with_identity` and
+  `has_token` share it. A bad file fails closed even with a good
+  `NEBULA_APP_TOKEN`. The order test is flipped, and new tests cover the
+  bad file, `has_token`, the B2 guard (a personal agent's token file
+  leaves the app file unread) and the per-path cache (B1).
+
+### GM r100
+
+- q1 is above. The cursor flies on the open canvas, even when the reply
+  lands in another project's thread.
+- q2: the person's own send springs the thread to the sent row
+  (`lib/scrollSpring.ts`, SPRING_SOFT, a jump under reduced motion). The
+  person's wheel, touch, pointer or key ends it where it is. Three effects
+  had to agree:
+  - the r50 jump and the ResizeObserver both skip while the spring runs;
+  - the send effect is declared before r50's, so a send's commit springs
+    and never jumps;
+  - a reduced-motion jump that landed at once leaves nothing marked
+    springing.
+  The pill stays for agent rows only; the person's send clears it.
+- q3: `add_reply` picks the latest accepted message for the session's
+  listeners across every project, by (acceptedAt, at), in one store
+  transaction. The reply goes to that message's thread. Its `nodeId` is
+  dropped there, since the node was checked on the open canvas. With no
+  message and no project open it is refused with r100's line (`409
+  no_project`), and the pace is refunded. When the project is not the
+  open one, `_post_reply_elsewhere` posts a Nebula Update on the open
+  project, "Claude Code replied in “Coast”.", with an Open action
+  (`thread.open`, a new op in the closed ACTIONS set). The frontend:
+  - `receiveRows` counts another project's replies into `unreadElsewhere`;
+  - the sync that opens that project makes them its unread (0 when the
+    log is open);
+  - Open (`lib/threadOpen.ts`, in the Updates corner's deferred chunk)
+    opens the project, goes to the canvas and opens the Agent log with
+    focus on its header.
+
+### Review 3's LOWs and NITs
+
+- LOW-4: each row has a `rev`, raised by every change (`_bump`).
+  `mergeRows` keeps the higher rev. `syncRows` merges a same-project sync
+  and keeps rows newer than the snapshot, so a stale sync can't drop a
+  received reply or move a message state back.
+- LOW-1 (live): `[data-resizing]` lifts the 50vh cap as `[data-sized]`
+  does, so the first drag tracks the pointer. Live, the log went from 450
+  to 824 px during the first drag.
+- NIT-1 (parity): `cutAtWord` keeps a possessive apostrophe that closes no
+  quote ("the dogs’…").
+- NIT-2 (parity): `channel_status` with no agent token doesn't ask Nebula:
+  `token: false`, `listeners: null`, and `detail` is the `nebula channel`
+  line.
+- NIT-1 boundary / LOW-5 parity: MCP-SETUP quotes r97's token-file line
+  and lists its clauses.
+- NIT-2 live: the no-project refusal is in because-form (r100).
+- NIT-1 live: `has_token` (D3).
+- LOW-6 survivors: B1, B2, B6, B7, B13 and F5, F6 each have a test.
+- Judgment calls:
+  - a pin the person deletes keeps its span until the cap;
+  - an empty project name reads "another project" in the Update;
+  - the Update's action label is "Open".
+
+### Checks (round 5)
+
+- Backend, isolated: the gate's 18 files, 914 passed. `land_checks`: tsc
+  ok, ratchets 161 passed, 29 pytest files with 1,118 passed and 1
+  skipped, gate ok. `person_gate.py` is byte-identical to main.
+- Frontend: tsc and lint are clean. vitest on the explicit 19-file list,
+  239 passed. `pr_tests`: 119 files, 3,873 passed. Entry 476,057 B raw
+  (+494 on the committed merge).
+- Mutations: backend 24 of 24 killed (23 on the first pass; "node kept
+  elsewhere" was then killed by a test added for it). Frontend 21 of 21
+  killed (19 on the first pass; the sanitize rev and the spring's own
+  scroll events were then killed by tests added for them).
+- Live at 1440x900 (8967/5967, isolated, two simulated `serve_channel`
+  listeners on one Settings token file, the `nebula` CLI):
+  - B's reply left A's span open; A's shell reply closed it;
+  - A's shell reply flew A's own cursor, labelled "Claude Code";
+  - the person's send sprang through 26 distinct scroll positions to the
+    bottom;
+  - the first drag tracked the pointer;
+  - a reply after a switch to Harbor landed in Coast's thread with
+    "Claude Code replied in “Coast”." in Harbor's Updates, and Open
+    returned to Coast with the log open;
+  - the other way posted "Claude Code replied in “Harbor”." in Coast.
+  Five shots, distinct md5s, nothing intercepted, no page errors.
