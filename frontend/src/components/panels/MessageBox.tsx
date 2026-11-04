@@ -252,12 +252,36 @@ function useMessageStatus(row: ThreadRow | null, rows: readonly ThreadRow[]): St
 }
 
 function StatusView({ status, row, origin }: { status: StatusLine; row?: ThreadRow; origin?: RunOrigin }) {
+  // GM r117: a line swapped for another (sent → delivered, lapsed → dropped)
+  // changes the row's height on the box's layout spring, never a jump. The
+  // wrapper holds the measured height and messageBox.css transitions it
+  // (reduced motion jumps); the first measure sets it from auto, so a row
+  // that arrives doesn't animate. The thread's size observer keeps a thread
+  // read at the bottom pinned while the height moves.
+  const inner = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  const present = status !== null;
+  useLayoutEffect(() => {
+    const element = inner.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const next = element.offsetHeight;
+      if (next > 0) setHeight(next);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [present, status?.text]);
   if (!status) return null;
   const style = origin ? shade(origin.agent ?? undefined, origin.session) : shade(row?.to?.agent, row?.to?.session);
   return (
-    <div className={`message-box__status message-box__status--${status.kind}`} style={style}>
-      {(status.kind === 'waiting' || status.kind === 'working') && <span className="message-box__breath" aria-hidden="true" />}
-      <span>{status.text}</span>
+    <div className="message-box__status-wrap" style={height === null ? undefined : { height }}>
+      <div ref={inner} className={`message-box__status message-box__status--${status.kind}`} style={style}>
+        {(status.kind === 'waiting' || status.kind === 'working') && <span className="message-box__breath" aria-hidden="true" />}
+        <span>{status.text}</span>
+      </div>
     </div>
   );
 }

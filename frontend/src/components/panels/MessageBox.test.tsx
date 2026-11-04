@@ -262,6 +262,22 @@ describe('the thread', () => {
     expect(screen.getByText(HELD_LINE).closest('.message-box__status')?.querySelector('button')).toBeNull();
   });
 
+  it('a lapsed row says it will get the message if it reconnects, and never offers a resend; the dropped one does', () => {
+    usePersonThreadStore.setState({ listeners: [listener()] });
+    receiveSync('p1', [message({ state: 'sent', lapsed: true })]);
+    useUIStore.setState({ agentLogOpen: true });
+    const { container } = render(<AgentLog />);
+    const line = 'Claude stopped listening. It’ll get this message if it reconnects from the same terminal.';
+    const box = screen.getByText(line).closest('.message-box__status');
+    expect(box?.querySelector('button')).toBeNull();
+    expect(container.querySelector('.message-box__status--lapsed')).not.toBeNull();
+    expect(container.textContent ?? '').not.toMatch(/send it again|try again|resend/i);
+    expect(screen.queryByRole('button', { name: /again|resend/i })).toBeNull();
+    act(() => receiveRows('p1', [message({ state: 'dropped', rev: 5 })]));
+    expect(container.textContent).not.toContain('Claude stopped listening. It’ll');
+    expect(screen.getByText(LISTENER_DROPPED_LINE.replace('Claude Code', 'Claude'))).toBeTruthy();
+  });
+
   it('says what the session is doing after the message, and "Waiting for Claude" before', () => {
     usePersonThreadStore.setState({ listeners: [listener()] });
     receiveSync('p1', [message()]);

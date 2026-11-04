@@ -1337,6 +1337,14 @@ or on a Team org with Channels off, still reads "listening".
   `dropped`; the box says "Nebula couldn’t send your message because
   Claude Code stopped listening. Reconnect it in the terminal, then send it
   again."
+  A listener whose beats stop (never ended) keeps its in-flight messages
+  for 10 minutes, the send's own cap (`DELIBERATE_SPAN_CAP`): the row reads
+  "…It’ll get this message if it reconnects from the same terminal." and, if
+  the same terminal beats again inside them, the message is delivered once.
+  Beats go on while Claude works, so a lapse is a stopped process, not a long
+  task; after the 10 minutes the row is dropped for good and a resend is
+  offered, so a message is never delivered twice. (The 24 hours above is how
+  long Nebula keeps an unanswered push to match a late reply, a separate bound.)
 
 **The Message box.** The person messages a listening session from the
 canvas: the composer at the foot of the Agent log (`/` focuses it). Its

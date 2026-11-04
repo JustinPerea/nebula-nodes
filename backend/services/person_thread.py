@@ -601,21 +601,44 @@ class PersonThread:
             for row in rows:
                 if _in_flight(row) and ((row.get("to") or {}).get("agent") or {}).get("id") == own:
                     row["state"] = DROPPED_STATE
+                    row.pop("lapsed", None)
                     _bump(row)
                     changed.append(dict(row))
             return changed
 
         return self._write_all(mutate) if own else []
 
+    def lapse_route(self, agent_id: str, session: str | None, listener_id: str | None = None
+                    ) -> list[tuple[str, list[dict[str, Any]]]]:
+        """That listener's beats lapsed (round 5d): its messages still in
+        flight stay ``sent``, marked ``lapsed``, so the box says Claude
+        stopped listening and will get them if it reconnects, and asks for no
+        resend. ``revive_route`` clears the mark when the same agent and
+        session comes back; ``drop_route`` settles them for good when the
+        window ends."""
+        route = route_key(agent_id, session)
+        own = {listener_id} if listener_id else set()
+
+        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            changed = []
+            for row in rows:
+                if row.get("kind") == "message" and row.get("state") == "sent" and not row.get("lapsed") \
+                        and _for_listener(row, own, route):
+                    row["lapsed"] = True
+                    _bump(row)
+                    changed.append(dict(row))
+            return changed
+
+        return self._write_all(mutate)
+
     def drop_route(self, agent_id: str, session: str | None, listener_id: str | None = None
                    ) -> list[tuple[str, list[dict[str, Any]]]]:
-        """That one listener (agent and raw session) expired or stopped
-        before taking these (round 5c, LOW-2): its messages still in flight
-        settle as dropped, so the box reads its stopped line, not "Sent"
-        forever. Never touches an accepted message or another session's.
-        The row keeps ``lapsed``: the same session's listener coming back
-        (a sleep, a reconnect) takes it after all (``revive_route``), as a
-        message sent before a lapse always reached it."""
+        """That one listener (agent and raw session) is gone for good: its
+        lapse window ended, it ended or stopped on purpose, or it was pushed
+        out for room (round 5c, LOW-2; round 5d). Its messages still in
+        flight settle as dropped, never to come back, so the box reads
+        ``listenerDroppedLine`` and not "Sent" forever. Never touches an
+        accepted message or another session's."""
         route = route_key(agent_id, session)
         own = {listener_id} if listener_id else set()
 
@@ -624,7 +647,7 @@ class PersonThread:
             for row in rows:
                 if _in_flight(row) and _for_listener(row, own, route):
                     row["state"] = DROPPED_STATE
-                    row["lapsed"] = True
+                    row.pop("lapsed", None)
                     _bump(row)
                     changed.append(dict(row))
             return changed
@@ -632,17 +655,17 @@ class PersonThread:
         return self._write_all(mutate)
 
     def revive_route(self, agent_id: str, session: str | None) -> list[tuple[str, list[dict[str, Any]]]]:
-        """A listener of that agent and session is back: the messages
-        ``drop_route`` settled for its going away are sent again, so its
-        inbox reads them. A revoked agent's dropped rows never come back."""
+        """A listener of that agent and session is back inside its window:
+        the messages ``lapse_route`` marked lapsed read as sent again, and
+        its inbox serves them once. Only a lapsed row of that exact route
+        revives: a dropped row (window over, ended, evicted, revoked) never."""
         route = route_key(agent_id, session)
 
         def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             changed = []
             for row in rows:
-                if (row.get("kind") == "message" and row.get("state") == DROPPED_STATE and row.get("lapsed")
+                if (row.get("kind") == "message" and row.get("state") == "sent" and row.get("lapsed")
                         and row.get("route") == route):
-                    row["state"] = "sent"
                     row.pop("lapsed", None)
                     _bump(row)
                     changed.append(dict(row))
@@ -744,8 +767,9 @@ class PersonThread:
 
 
 # Never outside the backend: a message's route (a digest of its listener's
-# agent and raw session, route_key).
-_SERVER_ONLY_KEYS = ("route", "lapsed")
+# agent and raw session, route_key). ``lapsed`` is the person's form only:
+# their box words it; an agent's form never carries it.
+_SERVER_ONLY_KEYS = ("route",)
 
 
 def person_view(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -756,7 +780,7 @@ def person_view(row: Mapping[str, Any]) -> dict[str, Any]:
 
 # Never in an agent's form: the person's form only (cursor keys, listener
 # ids, the tab's client id, a question's outcome, which holds their answer).
-_PERSON_ONLY_KEYS = ("clientId", "session", "to", "outcome", *_SERVER_ONLY_KEYS)
+_PERSON_ONLY_KEYS = ("clientId", "session", "to", "outcome", "lapsed", *_SERVER_ONLY_KEYS)
 
 
 def agent_view(row: Mapping[str, Any], viewer_id: str | None = None) -> dict[str, Any]:

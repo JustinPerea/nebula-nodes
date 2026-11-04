@@ -6628,10 +6628,28 @@ def _start_channel_sweep() -> None:
     task.add_done_callback(_channel_sweeps.discard)
 
 
+_listener_settle_lock = asyncio.Lock()
+
+
 async def _settle_gone_listeners() -> None:
-    """Messages still in flight to a listener that expired, ended or stopped
-    settle as dropped (round 5c, LOW-2): the box reads its stopped line
-    instead of "Sent" forever."""
+    """Settle what the listener book saw go (round 5c LOW-2, round 5d).
+    Lapsed listeners (beats stopped, window open): their waiting messages
+    read "lapsed" (a comeback beat forgets a pending lapse under the same lock). Gone for
+    good (window over, ended, stopped, evicted): dropped. One lock orders this
+    against a comeback beat's revive, so a row is never dropped while its own
+    listener listens inside its window."""
+    async with _listener_settle_lock:
+        await _settle_gone_listeners_locked()
+
+
+async def _settle_gone_listeners_locked() -> None:
+    for agent_id, session, listener_id in channel_book.take_lapsed():
+        try:
+            lapsed = await asyncio.to_thread(thread_book.lapse_route, agent_id, session, listener_id)
+        except (ProjectStoreError, OSError):
+            continue
+        for project_id, rows in lapsed:
+            await _broadcast_thread(project_id, rows)
     for agent_id, session, listener_id in channel_book.take_gone():
         try:
             settled = await asyncio.to_thread(thread_book.drop_route, agent_id, session, listener_id)
@@ -6686,24 +6704,27 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
     nonce = channel_listeners.parse_nonce(body.get("nonce"))
     known = any(entry.session == (session or "") and entry.nonce == nonce
                 for entry in channel_book.for_agent(identity.id))
-    try:
-        entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id,
-                                           nonce=nonce)
-    except channel_listeners.SessionTaken as exc:
-        raise HTTPException(status_code=409, detail=str(exc),
-                            headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
-    if changed:
-        await _broadcast_channel_listeners()
-    await _settle_gone_listeners()
-    if state == "listening" and (not known or changed):
-        # Back after a lapse, in the same session: what was settled as dropped
-        # for its going away is sent again (round 5c, LOW-2).
+    async with _listener_settle_lock:
         try:
-            revived = await asyncio.to_thread(thread_book.revive_route, identity.id, session)
-        except (ProjectStoreError, OSError):
-            revived = []
-        for project_id, rows in revived:
-            await _broadcast_thread(project_id, rows)
+            entry, changed = channel_book.beat(identity, session, state=state, reason=reason,
+                                               project_id=project_id, nonce=nonce)
+        except channel_listeners.SessionTaken as exc:
+            raise HTTPException(status_code=409, detail=str(exc),
+                                headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
+        if changed:
+            await _broadcast_channel_listeners()
+        await _settle_gone_listeners_locked()
+        if state == "listening" and (not known or changed):
+            # Back inside its lapse window, in the same session: what was marked
+            # lapsed for its going away is served to it once (round 5d). A
+            # settle and this revive run under one lock, so a row is never
+            # dropped while its own listener is listening inside the window.
+            try:
+                revived = await asyncio.to_thread(thread_book.revive_route, identity.id, session)
+            except (ProjectStoreError, OSError):
+                revived = []
+            for project_id, rows in revived:
+                await _broadcast_thread(project_id, rows)
     _schedule_channel_expiry()
     answer: dict[str, Any] = {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
     if not known:

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeRow, type ThreadRow } from './personThread';
-import { listenerDroppedLine, messageStatus, nextStatusChange, runOrigin } from './personThreadBox';
+import { listenerDroppedLine, listenerLapsedLine, messageStatus, nextStatusChange, runOrigin } from './personThreadBox';
 
 /** #225 review 2, boundary LOW-1: the person revoked the listener's token before it took the message. */
 
@@ -30,5 +30,36 @@ describe('a message its listener can never take', () => {
 
   it('is never the open run its working fold waits on', () => {
     expect(runOrigin([dropped()], [])).toBeNull();
+  });
+});
+
+/** Round 5d: a listener that stopped beating may come back; its row says so, and offers no resend. */
+describe('a message its listener may still come back to', () => {
+  const lapsedRow = (state: string = 'sent', lapsed: boolean = true): ThreadRow => {
+    const row = sanitizeRow({
+      id: 'pm_2', kind: 'message', at: 1_000, text: 'warmer', nodeIds: [], state, lapsed,
+      to: { listenerId: 'ch_1', agent: CLAUDE_CODE, session: { key: '0123456789ab', ordinal: 1 } },
+    });
+    if (!row) throw new Error('row');
+    return row;
+  };
+
+  it('reads the neutral lapsed line with the agent’s own label, and never offers a resend', () => {
+    const status = messageStatus(lapsedRow(), 1_001, { replied: false, activity: null, label: 'Claude Code' });
+    expect(status).toEqual({ kind: 'lapsed', text: listenerLapsedLine('Claude Code') });
+    expect(status?.text).toBe('Claude Code stopped listening. It’ll get this message if it reconnects from the same terminal.');
+    expect(status?.text).not.toMatch(/send it again|try again|resend|send again/i);
+    expect(nextStatusChange(lapsedRow(), 1_001, null)).toBeNull();
+  });
+
+  it('switches to the dropped line when the window ends, and to normal when it comes back', () => {
+    const dropped = messageStatus(lapsedRow('dropped', false), 1_001, { replied: false, activity: null, label: 'Claude Code' });
+    expect(dropped).toEqual({ kind: 'dropped', text: listenerDroppedLine('Claude Code') });
+    const back = messageStatus(lapsedRow('sent', false), 1_001, { replied: false, activity: null, label: 'Claude Code' });
+    expect(back).toBeNull();
+  });
+
+  it('a dropped row never keeps a lapsed mark', () => {
+    expect(lapsedRow('dropped', true).lapsed).toBeUndefined();
   });
 });

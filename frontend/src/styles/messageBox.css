@@ -309,11 +309,19 @@
   white-space: nowrap;
 }
 
+/* GM r117: a status line swapped for another moves the row's height on the
+   layout spring, as the box's own height does; reduced motion jumps. The
+   gap above the line is padding (inside the measured height), not margin. */
+.message-box__status-wrap {
+  overflow: hidden;
+  transition: height 420ms var(--agent-log-spring);
+}
+
 .message-box__status {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  padding-top: 4px;
   font-size: var(--sr-type-label, 11px);
   color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
 }
@@ -720,6 +728,7 @@
   .agent-log.agent-log--messaging.agent-log--open[data-docked],
   .agent-log.agent-log--messaging.agent-log--open[data-floating],
   .agent-log__resize-grip,
+  .message-box__status-wrap,
   .message-box__fold-icon,
   .message-box__show,
   .message-box__option,

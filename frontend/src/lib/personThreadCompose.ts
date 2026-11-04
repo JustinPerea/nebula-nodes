@@ -10,7 +10,7 @@ import { MESSAGE_MAX, mergeRows, sanitizeRow, type ThreadRow } from './personThr
 import { usePersonThreadStore, type PendingSend } from '../store/personThreadStore';
 
 /** The heading a failed send is read under (apiRequest's, failureMessage's). */
-export const SEND_HEADING = "Couldn't send your message.";
+export const SEND_HEADING = "Couldn’t send your message.";
 
 /** The Sending… threshold and hold (r50: after 300 ms, held at least 400 ms). */
 export const SENDING_AFTER_MS = 300;

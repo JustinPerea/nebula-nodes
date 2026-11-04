@@ -69,6 +69,11 @@ export function listenerDroppedLine(label: string = DEFAULT_SESSION_LABEL): stri
   return `Nebula couldn’t send your message because ${label} stopped listening. Reconnect it in the terminal, then send it again.`;
 }
 
+/** A message whose listener stopped beating but may come back to it: neutral, no resend offered. */
+export function listenerLapsedLine(label: string = DEFAULT_SESSION_LABEL): string {
+  return `${label} stopped listening. It’ll get this message if it reconnects from the same terminal.`;
+}
+
 /** GM r79.6: the question was withdrawn while the person typed its answer. */
 export function withdrawnLine(label: string = DEFAULT_SESSION_LABEL): string {
   return `${label} withdrew the question. Send again to post your answer as a message every agent can read.`;
@@ -132,6 +137,7 @@ export { availability, availabilityLabel, mostRecent, type Availability } from '
 export type StatusLine =
   | { kind: 'held'; text: string }
   | { kind: 'dropped'; text: string }
+  | { kind: 'lapsed'; text: string }
   | { kind: 'waiting'; text: string }
   | { kind: 'working'; text: string }
   | { kind: 'sent'; text: string }
@@ -152,6 +158,7 @@ export function messageStatus(row: ThreadRow, now: number, options: {
   if (row.state === 'held') return { kind: 'held', text: HELD_LINE };
   // Its listener's token was revoked before it took this (#225 review 2): never delivered.
   if (row.state === 'dropped') return { kind: 'dropped', text: listenerDroppedLine(options.label) };
+  if (row.state === 'sent' && row.lapsed) return { kind: 'lapsed', text: listenerLapsedLine(options.label) };
   const event = options.activity && options.activity.at >= row.at ? options.activity : null;
   if (event && now - event.at < WORKING_SETTLE_MS) {
     return { kind: 'working', text: workingLine(options.label, event.line) };
@@ -164,7 +171,7 @@ export function messageStatus(row: ThreadRow, now: number, options: {
 
 /** When the line above may next change by itself (a timer, never polling the server). */
 export function nextStatusChange(row: ThreadRow, now: number, activity: SessionActivity | null): number | null {
-  if (row.kind !== 'message' || row.state === 'held' || row.state === 'dropped') return null;
+  if (row.kind !== 'message' || row.state === 'held' || row.state === 'dropped' || row.lapsed) return null;
   const event = activity && activity.at >= row.at ? activity : null;
   const times = [Math.max(row.at, event?.at ?? 0) + QUIET_SENT_MS];
   if (event) times.push(event.at + WORKING_SETTLE_MS);

@@ -52,6 +52,8 @@ export interface ThreadRow {
   to?: { listenerId: string; agent: ThreadAgent; session: AgentPresenceSession | null; sessionKey: string | null };
   state?: MessageState;
   acceptedAt?: number | null;
+  /** A sent message whose listener stopped beating but may still come back to it (its window is open). */
+  lapsed?: boolean;
   clientId?: string;
   /** Everything but a message and a pin: whose row it is. */
   agent?: ThreadAgent;
@@ -127,6 +129,7 @@ export function sanitizeRow(raw: unknown): ThreadRow | null {
   if (typeof row.nodeId === 'string') clean.nodeId = row.nodeId;
   if (Array.isArray(row.nodeIds)) clean.nodeIds = row.nodeIds.filter((id): id is string => typeof id === 'string');
   if (row.state === 'sent' || row.state === 'held' || row.state === 'accepted' || row.state === 'dropped') clean.state = row.state;
+  if (row.lapsed === true && clean.state === 'sent') clean.lapsed = true;
   if (typeof row.acceptedAt === 'number') clean.acceptedAt = row.acceptedAt;
   if (typeof row.rev === 'number' && Number.isFinite(row.rev)) clean.rev = row.rev;
   if (typeof row.clientId === 'string') clean.clientId = row.clientId;

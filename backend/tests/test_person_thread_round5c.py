@@ -110,11 +110,15 @@ def test_a_push_after_a_gap_past_the_cap_starts_a_new_period():
 
 # -- LOW-2 -----------------------------------------------------------------------------------
 
-def test_a_message_to_a_listener_that_expires_settles_as_dropped(thread):
+def test_a_message_to_a_listener_that_expires_settles_as_dropped_when_its_window_ends(thread):
+    from services import channel_listeners
     a = _listen(thread, SESSION_A)
     mine = _send(thread, a, "hello").json()["row"]["id"]
     thread.channel_clock.now += channel_ttl(thread) + 1
     import asyncio
+    asyncio.run(thread.main._sweep_channel_listeners())
+    assert _row(thread, mine)["state"] == "sent" and _row(thread, mine)["lapsed"]  # round 5d: lapsed, not dropped
+    thread.channel_clock.now += channel_listeners.LAPSE_WINDOW_SECONDS
     asyncio.run(thread.main._sweep_channel_listeners())
     assert _row(thread, mine)["state"] == person_thread.DROPPED_STATE
 
@@ -228,17 +232,17 @@ def json_of(thread, message_id: str) -> str:
     return json.dumps(person_thread.agent_view(_row(thread, message_id)))
 
 
-def test_a_dropped_message_comes_back_when_the_same_session_returns_but_not_another(thread):
+def test_a_lapsed_message_comes_back_when_the_same_session_returns_but_not_another(thread):
     a = _listen(thread, SESSION_A)
     mine = _send(thread, a, "while you were away").json()["row"]["id"]
     thread.channel_clock.now += channel_ttl(thread) + 1
     import asyncio
     asyncio.run(thread.main._sweep_channel_listeners())
-    assert _row(thread, mine)["state"] == person_thread.DROPPED_STATE
-    assert "lapsed" not in json_of(thread, mine)  # server only
+    assert _row(thread, mine)["lapsed"] and _row(thread, mine)["state"] == "sent"
+    assert "lapsed" not in json_of(thread, mine)  # the person's form only
     _listen(thread, {**SESSION_A, "X-Nebula-Agent-Session": "sess-new"})
-    assert _row(thread, mine)["state"] == person_thread.DROPPED_STATE  # a new session never takes it
+    assert _row(thread, mine)["lapsed"]  # a new session never takes it
     assert _listen(thread, SESSION_A) == a
-    assert _row(thread, mine)["state"] == "sent"
+    assert "lapsed" not in _row(thread, mine) and _row(thread, mine)["state"] == "sent"
     inbox = thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()["messages"]
     assert [m["messageId"] for m in inbox] == [mine]
