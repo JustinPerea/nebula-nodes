@@ -303,7 +303,7 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     need = "needs OPENAI_API_KEY in Settings > Providers"
     # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f).
     assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need,
-                                 "person": "GPT Image 2 needs your OpenAI API key. Add it in Settings."}]
+                                 "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings."}]
     assert {node["ref"]: node.get("missing") for node in cost["nodes"]} == {"+img": need, n1: None}
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "

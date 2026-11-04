@@ -116,3 +116,51 @@ def usd_amount(amount: Any) -> str:
     if cents < 1000:
         return _cents_text(cents)
     return f"${_half_up(value):,}"
+
+
+# -- a run chip's label ------------------------------------------------------
+# frontend/src/lib/pricing.ts chipEstimate and chipLabel, for the proposal's
+# plan line (canvas_proposals.plan_line): agents read the same price words
+# the person reads on the card. Both read contracts/fixtures/money/chips.json.
+
+CHIP_FLOOR_USD = 0.01
+UNPRICED_SUFFIX = " + unpriced"
+
+
+def _chip_usd(amount: Any, cents: bool = False) -> str:
+    """A chip's figure: cents under $10, whole dollars from $10, from the
+    rounded value; with ``cents``, cents at any size (the other end of a
+    range from under $10)."""
+    value = _clamped(amount)
+    rounded = _half_up(value * 100)
+    if rounded == 0:
+        return "$0"
+    return _cents_text(rounded) if rounded < 1000 or cents else f"${_half_up(value):,}"
+
+
+def _in_cents(amount: Any) -> bool:
+    return _half_up(_clamped(amount) * 100) < 1000
+
+
+def chip_label(low: Any, high: Any, open_: bool) -> str:
+    """"~$0.03", "Up to $0.43", "$0.05–0.43", "$0.07 + unpriced", "<$0.01",
+    "~$0": the run chip's label for a list-price range. ``open_``: part of
+    the run has no known price, so the total can be higher."""
+    if isinstance(high, bool) or not isinstance(high, (int, float)) or not math.isfinite(high):
+        return chip_label(low, _clamped(low), True)
+    more = UNPRICED_SUFFIX if open_ else ""
+    bottom = _clamped(low)
+    top = max(_clamped(high), bottom)
+    if top > CEILING_USD:
+        return f"{OVER_CEILING}{more}"
+    if top == 0:
+        return f"$0{more}" if open_ else "~$0"
+    if top < CHIP_FLOOR_USD:
+        return f"{UNDER_A_CENT}{more}"
+    if bottom < CHIP_FLOOR_USD:
+        return f"Up to {_chip_usd(top)}{more}"
+    cents = _in_cents(bottom) or _in_cents(top)
+    if _half_up(bottom * 100) == _half_up(top * 100) or (not cents and _half_up(bottom) == _half_up(top)):
+        amount = _chip_usd(top)
+        return f"{amount}{more}" if open_ else f"~{amount}"
+    return f"{_chip_usd(bottom, cents)}–{_chip_usd(top, cents)[1:]}{more}"

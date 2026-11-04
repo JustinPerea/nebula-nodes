@@ -236,6 +236,9 @@ const NO_OUTLINE: Record<string, string> = {
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
+  // The proposal card's scrolling body: its fade mask would clip its own ring,
+  // so the wrapper draws the token ring instead (pinned below).
+  'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
   // #208 GM r23: the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
@@ -274,6 +277,25 @@ describe('every focus rule uses the token (the sweep)', () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it('#216 round 3l (GM r69 Q2): the canvas draws the token ring inside its edge, on Tab arrival and after a keyboard decision', () => {
+    // It fills the window, so the baseline's ring (outside its box, offset
+    // 2px) was clipped away: Tab arrival showed nothing.
+    for (const selector of ['body.app-slava-restraint .canvas-wrapper:focus-visible', 'body.app-slava-restraint .canvas-wrapper[data-focus-decided]:focus']) {
+      const rule = rules.find((r) => r.selectors.includes(selector));
+      expect(rule, selector).toBeTruthy();
+      expect(decl(rule!, 'outline')).toBe('var(--sr-focus-outline)');
+      expect(decl(rule!, 'outline-offset')).toBe('-2px');
+    }
+    // On the canvas (black), at well over 3:1.
+    expect(contrast(over(canvas, ringColor('--sr-focus-outline')), over(canvas))).toBeGreaterThanOrEqual(3);
+    // Nothing clears the canvas's ring any more (3k's quiet mark).
+    expect(rules.filter((r) => r.selectors.some((sel) => /canvas-wrapper\[data-focus-quiet\]/.test(sel)))).toEqual([]);
+  });
+
+  it('the proposal card body\'s cleared ring is drawn on its scroll wrapper with the token', () => {
+    expect(tokenRingFor('.proposal-bar__scroll:has(> .proposal-bar__body:focus-visible)')).toBe(true);
   });
 
   it('never clears the outline on focus without putting the token ring back', () => {

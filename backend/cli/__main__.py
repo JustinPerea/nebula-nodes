@@ -306,7 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--rename +up=\"Hero, upscaled\" --run +up --wait --timeout 100. "
             "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
             "with {note, nodes, edges, params, run, rename}. A proposal can't move, remove, unwire or "
-            "arrange nodes, or rename existing ones: `nebula apply` does that directly. Each proposal also "
+            "arrange nodes, or rename existing ones: `nebula apply` does that directly. A --set of a "
+            "node's model whose new ports it knows drops the connections the new model can't take when "
+            "the person accepts, and lists them (`removes` lines, removedEdges in --json); a --set that "
+            "clears the model is refused, and `nebula apply` "
+            "still refuses that change until you --unwire them. Each proposal also "
             "posts an Update (\"Codex proposes 3 changes on the canvas\", with Review) that the person sees "
             "on every screen, so don't also send a `nebula note` about it; `nebula notes` shows how it ended."
         ),

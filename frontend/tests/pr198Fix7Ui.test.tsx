@@ -199,9 +199,62 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     const { unmount } = render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe(`${1180 - 820 + 8}px`);
+    // Its top edge plus the gap, for a proposal card that sits above it (PR #216 r1).
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
+    // Hidden: both go (review 1 LOW-6 of PR #216: the notice stack reads them).
+    act(() => { useUIStore.setState({ agentLogEnabled: false } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
+    act(() => { useUIStore.setState({ agentLogEnabled: true } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
     unmount();
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
+  });
+
+  it('giving way to the card (GM r6) never moves the line it writes: its top is the one it has with no give', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1180 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    // Squeezed to 200 of its own 344 (the person's resize, inline).
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect(820, 1164, 584, 784));
+    useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
+    const { container, unmount } = render(<AgentLog />);
+    const log = container.querySelector<HTMLElement>('.agent-log')!;
+    act(() => { log.style.height = '344px'; window.dispatchEvent(new Event('resize')); });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
+    expect(root.getPropertyValue('--agent-log-natural-h')).toBe('344px');
+    expect(root.getPropertyValue('--agent-log-floor')).not.toBe('');
+    expect(log.dataset.docked).toBe('true');
+    // Its floor: the header and 2 rows of the body, with the body's padding
+    // and the log's borders (37 + 8 + 8 + 2 × 20 + 2).
+    const head = log.querySelector<HTMLElement>('.agent-log__drag-row')!;
+    const body = log.querySelector<HTMLElement>('.agent-log__body')!;
+    Object.defineProperty(head, 'offsetHeight', { configurable: true, value: 37 });
+    Object.defineProperty(log, 'offsetHeight', { configurable: true, value: 344 });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 342 });
+    body.style.padding = '8px 0';
+    body.style.lineHeight = '20px';
+    for (const msg of log.querySelectorAll<HTMLElement>('.agent-log__msg')) msg.style.lineHeight = '20px';
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(root.getPropertyValue('--agent-log-floor')).toBe('95px');
+    unmount();
+    expect(root.getPropertyValue('--agent-log-natural-h')).toBe('');
+    expect(root.getPropertyValue('--agent-log-floor')).toBe('');
+    spy.mockRestore();
+  });
+
+  it('the log\'s body gives way on the spring, held at its foot, down to its floor (GM r6)', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(block).toMatch(/--agent-log-give: var\(--agent-log-squeeze, 0px\);/);
+    expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
+    // Bounded by the shown height while a give is in force (review 3 MEDIUM-2).
+    expect(block).toMatch(/max-height:\s*max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 10000000\)\)/);
+    expect(block).toMatch(/transition:\s*--agent-log-give 420ms var\(--agent-log-spring\)/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],/);
   });
 
   it('dragged to the top left: no clearance', () => {
@@ -211,11 +264,13 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
   });
 
   it('the region reads it', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
     expect(css).toMatch(/right:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\)\)/);
+    expect(css).toMatch(/bottom:\s*var\(--notice-region-bottom\)/);
   });
 });
