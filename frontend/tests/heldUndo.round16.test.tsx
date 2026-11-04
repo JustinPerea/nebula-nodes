@@ -71,6 +71,8 @@ const message = () => store().messageNotice?.text ?? null;
 /** The dropped-press line, wherever it shows (the notice, or the message beside an error). */
 const dropped = () => [notice(), message()].includes(DROPPED_UNDO_TEXT);
 const edgeIds = () => store().edges.map((edge) => `${edge.source}>${edge.target}`).sort();
+// delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
+// holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
 const redo = async () => { act(() => { store().redo(); }); await settle(); };
