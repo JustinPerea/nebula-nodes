@@ -83,7 +83,7 @@ COVER_REFUSED = ("coverImageId names no image on this board: use an image's id "
 
 # The side folders that keep a file per board id beside the boards (``.notes``:
 # Updates, services/agent_notes.py). Deleting a board for good removes its file
-# in each (``purge``, services/project_board_purge.py).
+# in each (``purge``, services/project_asset_purge.py).
 BOARD_SIDE_FOLDERS = (".notes",)
 
 # One lock per board: a write reads the file, changes it and writes it back

@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, 
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import { actorLabel } from '../../lib/trash';
+import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } from '../../lib/projectPurgeCopy';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
@@ -39,6 +40,8 @@ export interface TrashedProject extends ProjectSummary {
   purgeAt: string;
   /** Who deleted it: you, an agent by name, or an unnamed client. Missing on older entries. */
   deletedBy?: { kind: string; name: string };
+  /** What deleting it for good also deletes (its moodboards, characters and styles). Missing from an older backend. */
+  goesWith?: GoesWith;
 }
 
 export interface ProjectHomeProps {
@@ -282,8 +285,11 @@ function deletedByNote(entry: TrashedProject): string {
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
-  label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
+function ConfirmInline({ label, confirmLabel, prompt, detail, detailFirst = false, busy, onConfirm, className }: {
+  label: string; confirmLabel: string; prompt: string;
+  /** A line beside the prompt saying what else goes: before it with `detailFirst`, else after. */
+  detail?: string | null; detailFirst?: boolean;
+  busy: boolean; onConfirm: () => void; className?: string;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -294,10 +300,13 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
       onClick={() => setArmed(true)}>{label}</button>;
   }
   return (
-    <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
+    <span className="project-home__confirm" role="group"
+      aria-label={[detailFirst && detail, prompt, !detailFirst && detail].filter(Boolean).join(' ')} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
+      {detailFirst && detail && <span className="project-home__confirm-prompt">{detail}</span>}
       <span className="project-home__confirm-prompt">{prompt}</span>
+      {!detailFirst && detail && <span className="project-home__confirm-prompt">{detail}</span>}
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
     </span>
@@ -324,11 +333,11 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
           </button>
         </h2>
         {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
-          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
+          detail={emptyTrashLine(trash)} busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
       </div>
       {open && (
         <div id="recently-deleted-list">
-          <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
+          <p className="project-home__trash-note">{PROJECT_TRASH_NOTE}</p>
           <ul className="project-home__trash-list">
             {trash.map((entry) => (
               <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
@@ -336,7 +345,8 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
                 <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
                   <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
-                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
+                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone."
+                    detail={deleteForeverLine(entry.goesWith)} detailFirst busy={busy}
                     onConfirm={() => onPurge(entry.id)} />
                 </span>
               </li>

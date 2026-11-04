@@ -133,6 +133,36 @@ describe('ProjectHome', () => {
     expect(screen.getByRole('listitem', { name: 'By person' }).textContent).not.toContain(' by ');
   });
 
+  it('says what goes with a project deleted for good: the note, Delete forever and Empty', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const empty = { moodboards: [], characters: [], styles: [] };
+    render(<ProjectHome {...props({ trash: [
+      { ...project({ id: 'a', name: 'With boards' }), ...base, goesWith: { ...empty, moodboards: ['Rivers', 'Tide'] } },
+      { ...project({ id: 'b', name: 'Bare' }), ...base, goesWith: empty },
+    ] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText(/Deleting one for good also deletes its moodboards, characters and styles\./)).toBeTruthy();
+    const withBoards = screen.getByRole('listitem', { name: 'With boards' });
+    fireEvent.click(within(withBoards).getByRole('button', { name: 'Delete forever' }));
+    const confirm = within(withBoards).getByRole('group');
+    // Between the heading and "This can’t be undone.".
+    expect(confirm.textContent).toContain('Its moodboards “Rivers” and “Tide” are deleted with it.This can’t be undone.');
+    const bare = screen.getByRole('listitem', { name: 'Bare' });
+    fireEvent.click(within(bare).getByRole('button', { name: 'Delete forever' }));
+    expect(within(bare).getByRole('group', { name: 'This can’t be undone.' }).textContent).not.toContain('deleted with it');
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    expect(screen.getByRole('group', { name: 'Delete all 2 projects for good? Their moodboards are deleted with them.' })).toBeTruthy();
+  });
+
+  it('Empty says nothing more when none of the projects has a moodboard, character or style', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    render(<ProjectHome {...props({ trash: [{ ...project({ id: 'b', name: 'Bare' }), ...base,
+      goesWith: { moodboards: [], characters: [], styles: [] } }] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    expect(screen.getByRole('group', { name: 'Delete this project for good?' }).textContent).not.toContain('deleted with them');
+  });
+
   it('hides Recently deleted when the trash is empty', () => {
     render(<ProjectHome {...props({ trash: [] })} />);
     expect(screen.queryByRole('button', { name: /Recently deleted/ })).toBeNull();

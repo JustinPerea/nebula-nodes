@@ -96,7 +96,7 @@ from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
 from services.node_errors import NodeErrors
-from services import project_board_purge, project_cover
+from services import project_asset_purge, project_cover
 from services import graph_file_links, project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -3390,28 +3390,26 @@ async def _stamp_moodboard_transparency(stamp: Any) -> None:
 
 
 @app.on_event("startup")
-async def _project_board_purge_startup() -> None:
-    """Every start, before the re-home below: finish deleting the boards of
-    projects deleted for good (a purge that stopped part way), then, once
-    per install, delete the boards earlier purges left behind
-    (services/project_board_purge.py). Without it the re-home would move
-    those boards to Global."""
+async def _project_asset_purge_startup() -> None:
+    """Every start, before the re-home below: finish deleting the
+    moodboards, characters and styles of projects deleted for good (a purge
+    that stopped part way), then, once per install, delete what earlier
+    purges left behind (services/project_asset_purge.py). Without it the
+    re-home would move them to Global."""
     if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
         return
 
     def run() -> dict[str, Any]:
-        from services.moodboard_store import store_root
-
         if not project_store.path.exists():
-            return project_board_purge.sweep_orphans(store_root(), None, state_dir=_STATE_DIR)
+            return project_asset_purge.sweep_orphans(None, state_dir=_STATE_DIR)
         with project_store.transaction() as catalog:
-            _purge_noted_boards(catalog)
-            return project_board_purge.sweep_orphans(store_root(), catalog, state_dir=_STATE_DIR)
+            _purge_noted_assets(catalog)
+            return project_asset_purge.sweep_orphans(catalog, state_dir=_STATE_DIR)
 
     try:
         await asyncio.to_thread(run)
     except Exception as exc:  # never block startup; it runs again next start
-        print(f"[main] boards of deleted projects not swept: {type(exc).__name__}", flush=True)
+        print(f"[main] files of deleted projects not swept: {type(exc).__name__}", flush=True)
 
 
 @app.on_event("startup")
@@ -17244,7 +17242,7 @@ async def list_projects() -> dict[str, Any]:
                 _note_canvas_filed(*filed_from, _workspace_context())
         # Trash past its 30 days takes its boards (and a purge that stopped
         # part way finishes here).
-        boards_gone = _purge_noted_boards(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -17258,7 +17256,7 @@ async def list_projects() -> dict[str, Any]:
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
-    await _broadcast_boards_gone(boards_gone)
+    await _broadcast_assets_gone(assets_gone)
     return listing
 
 
@@ -18125,7 +18123,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             project_store.commit(catalog)
         result = {
             "deletedProjectId": project_id,
-            "trashedProject": trash_metadata(trashed),
+            "trashedProject": _trash_entry(trashed),
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
@@ -18137,40 +18135,54 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     return result
 
 
-def _purge_noted_boards(catalog: dict[str, Any]) -> list[str]:
+def _purge_noted_assets(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """After a commit that deleted projects for good (they're on the
-    catalog's ``boardPurges`` list, services/project_board_purge.py): delete
-    their boards, then take them off the list and commit again. Returns the
-    ids of the boards deleted, for _broadcast_boards_gone. Call it inside the
-    transaction, after the commit: a failure leaves the ids on the list, and
-    the next purge, listing or start finishes them. Never fails the route,
-    whose own change is already saved."""
-    if not project_board_purge.pending(catalog):
-        return []
+    catalog's ``assetPurges`` list, services/project_asset_purge.py): delete
+    their moodboards, characters and styles, then take them off the list and
+    commit again. Returns what went, by kind, for _broadcast_assets_gone.
+    Call it inside the transaction, after the commit: a failure leaves the
+    ids on the list, and the next purge, listing or start finishes them.
+    Never fails the route, whose own change is already saved."""
+    if not project_asset_purge.pending(catalog):
+        return {}
     try:
-        from services.moodboard_store import store_root
-
-        done, removed = project_board_purge.finish(store_root(), catalog)
+        done, removed = project_asset_purge.finish(catalog)
         if done:
-            project_board_purge.clear(catalog, done)
+            project_asset_purge.clear(catalog, done)
             project_store.commit(catalog)
     except Exception as exc:  # noqa: BLE001 - retried by the next purge, listing or start
-        logging.getLogger(__name__).warning("Boards of projects deleted for good not removed yet: %s",
+        logging.getLogger(__name__).warning("Files of projects deleted for good not removed yet: %s",
                                             type(exc).__name__)
-        return []
+        return {}
     return removed
 
 
-async def _broadcast_boards_gone(board_ids: list[str]) -> None:
-    """Tell canvases each board that went with its project is gone, before
-    projectsChanged, so a Studio that re-checks on either finds it gone."""
-    for board_id in board_ids:
-        await _broadcast_stored_asset("moodboard", None, board_id, deleted=True)
+async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) -> None:
+    """Tell canvases each moodboard, character and style that went with its
+    project is gone, before projectsChanged, so a Studio, card or list that
+    re-checks on either finds it gone. A style is journaled as deleted for
+    good too, as a Style purged from Recently deleted is."""
+    for kind in project_asset_purge.KINDS:
+        for item in removed.get(kind) or ():
+            if kind == "style":
+                _journal_style("purged", item, style_id=item["id"])
+            await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
 
 
 def _trash_listing(catalog: dict[str, Any]) -> list[dict[str, Any]]:
+    """Recently deleted projects, newest first. Each says what deleting it
+    for good also deletes (``goesWith``: the names of its ``moodboards``,
+    ``characters`` and ``styles``, live and trashed), for the Projects
+    screen's confirmation lines."""
     entries = (catalog.get("trash") or {}).values()
-    return sorted((trash_metadata(entry) for entry in entries), key=lambda entry: entry["deletedAt"], reverse=True)
+    stores = project_asset_purge.default_stores()
+    listed = [_trash_entry(entry, stores) for entry in entries]
+    return sorted(listed, key=lambda entry: entry["deletedAt"], reverse=True)
+
+
+def _trash_entry(entry: dict[str, Any], stores: list[Any] | None = None) -> dict[str, Any]:
+    """One Recently deleted project as listed, with ``goesWith`` (_trash_listing)."""
+    return {**trash_metadata(entry), "goesWith": project_asset_purge.names(entry["id"], stores)}
 
 
 def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
@@ -18193,12 +18205,12 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
-        boards_gone = _purge_noted_boards(catalog)  # trash past its 30 days took its boards
+        assets_gone = _purge_noted_assets(catalog)  # trash past its 30 days took its boards
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         agent_questions.keep_projects(kept)
-    await _broadcast_boards_gone(boards_gone)
+    await _broadcast_assets_gone(assets_gone)
     _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("restored", project_id)
     return result
@@ -18212,15 +18224,15 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
         # Its boards go with it: noted in this commit, deleted after it.
-        project_board_purge.note_purged(catalog, [project_id])
+        project_asset_purge.note_purged(catalog, [project_id])
         project_store.commit(catalog)
-        boards_gone = _purge_noted_boards(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
         result = {"trash": _trash_listing(catalog)}
     # Its question sets went with its record; the book forgets them too.
     agent_questions.keep_projects(kept)
-    await _broadcast_boards_gone(boards_gone)
+    await _broadcast_assets_gone(assets_gone)
     await _broadcast_projects_changed("purged", project_id)
     return result
 
@@ -18237,18 +18249,18 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         doomed = [project_id for project_id in trash if shown is None or project_id in shown]
         for project_id in doomed:
             del trash[project_id]
-        boards_gone: list[str] = []
+        assets_gone: dict[str, list[dict[str, Any]]] = {}
         if doomed:
             # Their boards go with them: noted in this commit, deleted after it.
-            project_board_purge.note_purged(catalog, doomed)
+            project_asset_purge.note_purged(catalog, doomed)
             project_store.commit(catalog)
-            boards_gone = _purge_noted_boards(catalog)
+            assets_gone = _purge_noted_assets(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
         kept = set(catalog["projects"]) | set(trash)
         result = {"trash": _trash_listing(catalog)}
     if doomed:
         agent_questions.keep_projects(kept)
-        await _broadcast_boards_gone(boards_gone)
+        await _broadcast_assets_gone(assets_gone)
         await _broadcast_projects_changed("purged")
     return result
 
@@ -20419,18 +20431,18 @@ def _trash_scope(scope: str | None, project_id: str | None) -> None:
 
 def _project_trash_items() -> tuple[list[dict[str, Any]], list[str]]:
     """Trashed projects as GET /api/trash lists them, and the ids of the
-    boards that went with any past their 30 days (for _broadcast_boards_gone)."""
+    boards that went with any past their 30 days (for _broadcast_assets_gone)."""
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         if expired:
             project_store.commit(catalog)
-        boards_gone = _purge_noted_boards(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         items = [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
-    return items, boards_gone
+    return items, assets_gone
 
 
 @app.get("/api/trash")
@@ -20450,9 +20462,9 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
     if kind in (None, "project") and scope is None:
-        trashed_projects, boards_gone = _project_trash_items()
+        trashed_projects, assets_gone = _project_trash_items()
         items.extend(trashed_projects)
-        await _broadcast_boards_gone(boards_gone)
+        await _broadcast_assets_gone(assets_gone)
     items.sort(key=lambda item: str(item.get("deletedAt") or ""), reverse=True)
     return {"items": items}
 
@@ -20545,19 +20557,19 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
             for project_id in doomed:
                 del trash[project_id]
-            boards_gone: list[str] = []
+            assets_gone: dict[str, list[dict[str, Any]]] = {}
             if doomed:
                 purged += len(doomed)
                 # Their boards go with them: noted in this commit, deleted after it.
-                project_board_purge.note_purged(catalog, doomed)
+                project_asset_purge.note_purged(catalog, doomed)
                 project_store.commit(catalog)
-                boards_gone = _purge_noted_boards(catalog)
+                assets_gone = _purge_noted_assets(catalog)
                 node_errors.keep_projects(set(catalog["projects"]) | set(trash))
             kept = set(catalog["projects"]) | set(trash)
         if doomed:
             # Their question sets went with their records; the book forgets them too.
             agent_questions.keep_projects(kept)
-            await _broadcast_boards_gone(boards_gone)
+            await _broadcast_assets_gone(assets_gone)
             await _broadcast_projects_changed("purged")
     return {"purged": purged}
 
