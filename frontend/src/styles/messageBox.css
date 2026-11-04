@@ -337,7 +337,16 @@
   margin: 0 2px;
 }
 
+/* GM r89.5: the chip's words are cut at a word (MessageBox's useWordCut, the
+   shared cut); the ellipsis and any closers ("on “Hero…”") sit after the
+   measured words, so they always show. */
 .message-box__fold-text {
+  display: inline-flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.message-box__fold-words {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

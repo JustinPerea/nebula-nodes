@@ -10,7 +10,7 @@
  * folds in lib/personThreadBox.ts, the draft and the send (the one API
  * call) in lib/personThreadCompose.ts.
  */
-import { cleanSession } from './agentCursorLabel';
+import { cleanSession, cursorLabel } from './agentCursorLabel';
 import type { AgentPresenceSession } from './wsClient';
 
 /** The person's tabs get the thread (on a verified hello: `sync`; then each new or changed row). */
@@ -38,7 +38,8 @@ export const UPDATES_OPEN_EVENT = 'nebula:updates-open';
 
 export interface ThreadAgent { id: string; name: string; color: string; verified: boolean }
 
-export type MessageState = 'sent' | 'held' | 'accepted';
+/** 'dropped': its listener's token was revoked before it took the message (never delivered). */
+export type MessageState = 'sent' | 'held' | 'accepted' | 'dropped';
 
 export interface ThreadRow {
   id: string;
@@ -86,6 +87,13 @@ export interface ChannelListener {
   session: AgentPresenceSession | null;
 }
 
+/** GM r89.1: THE one rule for what counts as a reply to the person: a reply
+ * and a pin answer (addressed to the person). The "New reply" pill, the
+ * "N unread replies" badge and the spoken "… replied." all read it. */
+export function countsAsReply(row: Pick<ThreadRow, 'kind'>): boolean {
+  return row.kind === 'reply' || row.kind === 'pinReply';
+}
+
 /** A session's cursor key ({key, ordinal}: the ordinal may be null). */
 export function sessionKeyOf(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -116,7 +124,7 @@ export function sanitizeRow(raw: unknown): ThreadRow | null {
   if (typeof row.text === 'string') clean.text = row.text;
   if (typeof row.nodeId === 'string') clean.nodeId = row.nodeId;
   if (Array.isArray(row.nodeIds)) clean.nodeIds = row.nodeIds.filter((id): id is string => typeof id === 'string');
-  if (row.state === 'sent' || row.state === 'held' || row.state === 'accepted') clean.state = row.state;
+  if (row.state === 'sent' || row.state === 'held' || row.state === 'accepted' || row.state === 'dropped') clean.state = row.state;
   if (typeof row.acceptedAt === 'number') clean.acceptedAt = row.acceptedAt;
   if (typeof row.clientId === 'string') clean.clientId = row.clientId;
   const to = row.to as Record<string, unknown> | undefined;
@@ -187,3 +195,49 @@ export function mergeRows(current: readonly ThreadRow[], incoming: readonly Thre
 
 /** The last event of an agent session (by cursor key): when, and its action line. */
 export interface SessionActivity { at: number; line: string | null }
+
+// -- availability (the Message box's and the shortcut sheet's, GM r89.4, r94.2) ------
+
+/** The product, named literally (r61 answer 3): the composer's label with no session to name (GM r89.4). */
+export const PRODUCT_LABEL = 'Claude Code';
+
+export type Availability =
+  | { kind: 'ready'; recipient: ChannelListener; listening: ChannelListener[] }
+  | { kind: 'notConnected' }
+  | { kind: 'stopped'; listener: ChannelListener }
+  /** `last`: the listener that was active most recently, if any (the composer's label names it). */
+  | { kind: 'offline'; last: ChannelListener | null };
+
+/** Which line locks the composer, if any. Offline wins (the app's row says it). */
+export function availability(listeners: readonly ChannelListener[], offline: boolean,
+  chosen: string | null, lastSeen: Readonly<Record<string, number>>): Availability {
+  if (offline) return { kind: 'offline', last: listeners.length > 0 ? mostRecent(listeners, lastSeen) : null };
+  const listening = listeners.filter((entry) => entry.state === 'listening');
+  if (listening.length === 0) {
+    // The session that stopped last is the one the line names.
+    return listeners.length === 0 ? { kind: 'notConnected' } : { kind: 'stopped', listener: mostRecent(listeners, lastSeen) };
+  }
+  const picked = chosen ? listening.find((entry) => entry.listenerId === chosen) : undefined;
+  return { kind: 'ready', recipient: picked ?? mostRecent(listening, lastSeen), listening };
+}
+
+/**
+ * GM r89.4: THE label the composer names its agent by, in every state: the
+ * field's placeholder and aria-label ("Message Claude Code") and the lock
+ * line ("Claude Code stopped listening…") read it, as the agent's rows do
+ * (its cursor label). Ready: the recipient. Stopped: the listener that
+ * stopped last. Offline: the listener active most recently, if any. Else
+ * (not connected, or offline with none) the product, as NOT_CONNECTED_LINE
+ * names it.
+ */
+export function availabilityLabel(state: Availability): string {
+  const who = state.kind === 'ready' ? state.recipient : state.kind === 'stopped' ? state.listener
+    : state.kind === 'offline' ? state.last : null;
+  return who ? cursorLabel(who.agent.name, who.session) : PRODUCT_LABEL;
+}
+
+/** The listening session that was active most recently: its last cursor event, else when it started listening. */
+export function mostRecent(listening: readonly ChannelListener[], lastSeen: Readonly<Record<string, number>>): ChannelListener {
+  const active = (entry: ChannelListener) => Math.max(entry.since, entry.sessionKey ? lastSeen[entry.sessionKey] ?? 0 : 0);
+  return [...listening].sort((a, b) => active(b) - active(a) || b.since - a.since)[0];
+}

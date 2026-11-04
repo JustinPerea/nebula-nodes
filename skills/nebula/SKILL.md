@@ -871,9 +871,16 @@ nebula channel                 # your channel listeners as Nebula sees them (MCP
 **The Message box.** The person can message a Claude Code session that
 listens through the Nebula channel (`nebula mcp connect claude-code
 --channel`) from the composer in the canvas's Agent log. Such a message
-arrives as a channel push with `wake="message"`. Answer it with `nebula
-reply "<text>"` (MCP `reply_to_person`), not only in your terminal: the
-person reads the thread, not your terminal. `--node` flies your cursor to
+arrives as a channel push with `wake="message"`. Answer it in the thread,
+not only in your terminal: the person reads the thread, not your terminal.
+Reply with the `reply_to_person` tool or with `nebula reply "<text>"` from
+your session's shell; under your token both are the same reply. Reply
+when you're done, since either one ends the turn's protection from gated
+pushes. Replying
+takes a token from Settings › Connect your agent, the same as listening;
+the launch command `nebula mcp connect claude-code --channel` prints sets
+NEBULA_APP_TOKEN_FILE for the session, and `nebula` reads it, so your shell
+is the same agent as your tools. `--node` flies your cursor to
 the node the answer is about and shows its first sentence there. `nebula
 thread` reads the thread; every connected agent can read it, as pins (a
 question's text only its asker). Replies are paced: 5 in a row, then one

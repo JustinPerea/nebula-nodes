@@ -45,7 +45,10 @@ describe('r73 item 3: cutAtWord', () => {
   });
 
   it('the joined answers of "You answered" cut the same way', () => {
-    expect(cutAtWord('Warm”, “Cool” and “Neutral please', byLength(16))).toBe('Warm”, “Cool…');
+    // The caller writes “ before and ”. after: its closer closes “Cool (GM r89.5's closers stay the caller's).
+    expect(cutAtWord('Warm”, “Cool” and “Neutral please', byLength(16), '“')).toBe('Warm”, “Cool…');
+    // Free-standing words keep the pair they close.
+    expect(cutAtWord('Warm”, “Cool” and “Neutral please', byLength(16))).toBe('Warm”, “Cool”…');
   });
 
   it('asks about far fewer candidates than there are words (halving)', () => {

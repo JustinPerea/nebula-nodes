@@ -5,9 +5,13 @@ channel from the canvas's Message box (the thread in the Agent log). The
 session answers there: `nebula reply` is MCP reply_to_person, `nebula thread`
 is MCP read_thread (services/person_thread.py), `nebula channel` is MCP
 channel_status's view of your listeners. Only the person sends messages;
-agents only reply. Every connected agent reads the thread, as pins; a
-question's text only its asker reads. Replies are paced (5 in a row, then
-one every 2 s): past that Nebula says when you can reply again.
+agents only reply, and only with a Settings agent token (J1, Justin
+2026-11-04): the CLI reads it from NEBULA_APP_TOKEN_FILE, which the launch
+command `nebula mcp connect claude-code --channel` prints sets for the
+session, so a reply from Claude's own shell is the listening session's
+(J2). Every connected agent reads the thread, as pins; a question's text
+only its asker reads. Replies are paced (5 in a row, then one every 2 s):
+past that Nebula says when you can reply again.
 """
 from __future__ import annotations
 
@@ -17,9 +21,28 @@ import sys
 from datetime import datetime
 from typing import Any, TextIO
 
+from nebula_api import has_token
+from services.canvas_pins import shown_text, text_length
+
 from ..client import NebulaClient
 
 MAX_TEXT = 2000
+# Review 2 live L3: an unnamed CLI with no token sends no agent marker, so
+# Nebula would answer with the person-only line; say how to name yourself.
+UNNAMED_THREAD_LINE = ("error: Nebula couldn’t show the thread because this agent has no name. Set NEBULA_AGENT_NAME "
+                       "or pass --as with a name, then read the thread again.")
+# J1/J2: only a Settings token listens, so with none Nebula can't tell
+# whose listeners to show (it used to say "no listener" to a listening
+# session's tokenless shell: review 2, live M1).
+NO_TOKEN_CHANNEL_LINE = ("This terminal has no agent token, so Nebula can’t tell which listeners are yours. Run this "
+                         "command, then start Claude Code as it says.\nnebula mcp connect claude-code --channel\n"
+                         "The nebula CLI in that session reads its token file.")
+
+
+def _named(args: argparse.Namespace) -> bool:
+    import os
+
+    return bool(has_token() or getattr(args, "agent_name", None) or os.environ.get("NEBULA_AGENT_NAME"))
 
 _KIND_LABELS = {
     "question": "asked",
@@ -65,8 +88,11 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
         print("error: Nebula couldn’t send this reply because it has no text. Put the text in quotes, like this.\n"
               'nebula reply "<text>" [--node nX]', file=sys.stderr)
         return 2
-    if len(text) > MAX_TEXT:
-        print(f"error: Nebula couldn’t send this reply because it’s {len(text):,} characters and the limit is "
+    # Counted as Nebula counts it (review 2, parity NIT-3): characters as
+    # a person sees them, so an emoji family or an accent is one.
+    length = text_length(shown_text(text, multiline=True).strip())
+    if length > MAX_TEXT:
+        print(f"error: Nebula couldn’t send this reply because it’s {length:,} characters and the limit is "
               f"{MAX_TEXT:,}. Shorten it, then run this command again.", file=sys.stderr)
         return 1
     body: dict[str, Any] = {"text": text}
@@ -83,6 +109,9 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
 
 def run_thread(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | None = None) -> int:
     out = out or sys.stdout
+    if not _named(args):
+        print(UNNAMED_THREAD_LINE, file=sys.stderr)
+        return 1
     response = client.get_thread(limit=args.limit, agent_name=args.agent_name)
     if args.json:
         print(json.dumps(response, ensure_ascii=False, indent=2), file=out)
@@ -99,6 +128,12 @@ def run_thread(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | 
 def run_channel(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | None = None) -> int:
     """`nebula channel`: your listener entries (GET /api/canvas/channel, your own only)."""
     out = out or sys.stdout
+    if not has_token():
+        if args.json:
+            print(json.dumps({"listeners": None, "token": False}, indent=2), file=out)
+        else:
+            print(NO_TOKEN_CHANNEL_LINE, file=out)
+        return 0
     response = client.get_channel(agent_name=args.agent_name)
     if args.json:
         print(json.dumps(response, ensure_ascii=False, indent=2), file=out)

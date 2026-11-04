@@ -130,7 +130,10 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       const entry = state.sets[setId];
       if (!entry) return {};
       const view: QuestionSetView = { ...entry.view, status, answers, closedAt: Date.now() };
+      // In the same update as the close: a set this tab closed was busy until
+      // it closed (the composer tells it from one closed in another tab).
       return {
+        busy: without(state.busy, setId),
         sets: { ...state.sets, [setId]: { view } },
         drafts: without(state.drafts, setId),
         errors: without(state.errors, setId),
@@ -219,9 +222,9 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         }));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       // The socket's questionsClosed brings the server's copy; until then, ours.
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'answered', localAnswers(entry.view, inputs));
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 
@@ -238,8 +241,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         }));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'dismissed', null);
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 

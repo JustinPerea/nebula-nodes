@@ -42,7 +42,8 @@ the same as pins: the person's messages and every agent's replies, through
 the journal (``person.message`` and ``thread.replied`` events) and the
 thread read tool (MCP read_thread, ``nebula thread``). Flipping the switch
 to False narrows all three at once to the person plus a row's own agent
-(the journal events then carry no data). Only the listener named in a
+(the journal events then carry only ids: a message's ``to``, a reply's
+``replyId``). Only the listener named in a
 message's ``to`` is woken, whatever the switch. It reads its messages back
 from ``inbox`` (the journal is not trusted to hold them), pushes them and
 says so (``accept``).
@@ -101,6 +102,25 @@ AGENT_ROWS = frozenset({"reply", "question", "proposal", "note", "pinReply"})
 REPLY_BURST = 5
 REPLY_EVERY = 2.0
 REPLY_LIMITED_CODE = "replies_rate_limited"
+# J1 (Justin, 2026-11-04): replying takes a Settings agent token, the same as
+# listening. A name alone, an in-app agent's turn token, or a token Nebula no
+# longer knows is refused (401) with one of these lines and codes. The token
+# middleware (agent_workspaces) answers the revoked one on REPLIES_PATH.
+REPLIES_PATH = "/api/canvas/thread/replies"
+AGENT_THREAD_PREFIX = "/api/agent/thread/"  # the listener's own routes (inbox, accepted, held)
+REPLY_NO_TOKEN_CODE = "reply_no_token"
+REPLY_IN_APP_CODE = "reply_in_app_token"
+REPLY_BAD_TOKEN_CODE = "reply_token_invalid"
+# GM r94 (verbatim): the command on its own line.
+CONNECT_CHANNEL_COMMAND = "nebula mcp connect claude-code --channel"
+REPLY_NO_TOKEN_LINE = ("Nebula couldn’t post this reply because this agent has no token. Copy one from Settings › "
+                       "Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND +
+                       "\nThe nebula CLI finds the token through NEBULA_APP_TOKEN_FILE, which this command sets up.")
+REPLY_IN_APP_LINE = ("Nebula couldn’t post this reply because it uses an in-app agent’s token, and only an agent "
+                     "connected from Settings › Connect your agent can reply in the Message box. Answer the person "
+                     "in this chat instead.")
+REPLY_BAD_TOKEN_LINE = ("Nebula couldn’t post this reply because its token isn’t valid anymore. Copy a new one from "
+                        "Settings › Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND)
 
 # THE read rule (Justin, 2026-11-03: every connected agent reads the thread,
 # as pins). False narrows the journal, the read tool and the cursor's say to
@@ -109,6 +129,10 @@ AGENTS_READ_WHOLE_THREAD = True
 
 # The person's lines (GM r50 and r55, verbatim; curly apostrophes).
 HELD_LINE = "Sends in a few minutes because you’ve sent 200 this hour."
+# A message whose listener's token the person revoked before it took the
+# message (boundary LOW-1): never delivered, so it settles as ``dropped``
+# (the box words it as the send-time "stopped listening" line).
+DROPPED_STATE = "dropped"
 STOPPED_LINE = ("Nebula couldn’t send your message because Claude stopped listening. Reconnect it in the "
                 "terminal, then send it again.")
 STOPPED_CODE = "listener_stopped"
@@ -152,10 +176,15 @@ def message_event_data(row: Mapping[str, Any]) -> dict[str, Any]:
             "to": to}
 
 
-def reply_event_data(row: Mapping[str, Any]) -> dict[str, Any] | None:
-    """The thread.replied event's data, or None (no event) when narrowed."""
+def reply_event_data(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The thread.replied event's data: only the reply's id when narrowed.
+
+    Every saved reply is journaled, whatever the switch: the replying
+    agent's own channel listener ends its deliberate span on it (its reply
+    from any route, `nebula reply` in its shell too: Justin, 2026-11-04,
+    PR A's ownReplies=1). The id says nothing of what the reply says."""
     if not AGENTS_READ_WHOLE_THREAD:
-        return None
+        return {"replyId": row.get("id")}
     return {"replyId": row.get("id"), "text": row.get("text"), "nodeId": row.get("nodeId")}
 
 
@@ -302,6 +331,15 @@ class ReplyPace:
             return wait
 
 
+    def refund(self, agent_id: str) -> None:
+        """Give back the reply take() counted, when Nebula then refused it
+        (no project, a store failure): a refusal never spends one (live L1)."""
+        with self._lock:
+            held = self._tokens.get(agent_id)
+            if held is not None:
+                self._tokens[agent_id] = (min(float(self.burst), held[0] + 1.0), held[1])
+
+
 def reply_limited_detail(wait: float) -> str:
     """The refusal an agent replying too fast gets: what happened, when it
     can reply again, and what to do instead."""
@@ -338,13 +376,25 @@ class PersonThread:
         return project_id, mine[-limit:]
 
     def inbox(self, listener_ids: Iterable[str]) -> tuple[str | None, list[dict[str, Any]]]:
-        """Messages to these listeners that no listener has taken yet."""
+        """Messages to these listeners that no listener has taken yet, in
+        every project (boundary LOW-2: the person may switch projects before
+        the listener reads), the open project's first. Each names its
+        project. Returns (the open project, messages)."""
         wanted = set(listener_ids)
-        project_id, rows = self.rows()
-        due = [row for row in rows if row.get("kind") == "message" and row.get("state") in ("sent", "held")
-               and (row.get("to") or {}).get("listenerId") in wanted]
-        return project_id, [{"messageId": row["id"], "text": row.get("text") or "",
-                             "nodeIds": list(row.get("nodeIds") or [])} for row in due]
+        catalog = self._store().read()
+        open_id = catalog.get("activeProjectId")
+        projects = catalog.get("projects") or {}
+        order = ([open_id] if open_id in projects else []) + [pid for pid in projects if pid != open_id]
+        due = []
+        for project_id in order:
+            project = projects.get(project_id)
+            rows = project.get(FIELD) if isinstance(project, dict) else None
+            for row in rows if isinstance(rows, list) else []:
+                if (isinstance(row, dict) and row.get("kind") == "message" and row.get("state") in ("sent", "held")
+                        and (row.get("to") or {}).get("listenerId") in wanted):
+                    due.append({"messageId": row["id"], "text": row.get("text") or "",
+                                "nodeIds": list(row.get("nodeIds") or []), "projectId": project_id})
+        return open_id, due
 
     # -- writing -----------------------------------------------------------
     def _write(self, mutate: Callable[[list[dict[str, Any]]], Any], project_id: str | None = None) -> tuple[str, Any]:
@@ -366,6 +416,25 @@ class PersonThread:
                 store.commit(catalog)
         return project_id, result
 
+    def _write_all(self, mutate: Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+                   ) -> list[tuple[str, list[dict[str, Any]]]]:
+        """``mutate`` each project's thread in one transaction; the
+        projects whose rows changed, with those rows (boundary LOW-2: a
+        message is found by id wherever it was sent)."""
+        store = self._store()
+        changed: list[tuple[str, list[dict[str, Any]]]] = []
+        with store.transaction() as catalog:
+            for project_id, project in (catalog.get("projects") or {}).items():
+                rows = project.get(FIELD) if isinstance(project, dict) else None
+                if not isinstance(rows, list) or not rows:
+                    continue
+                result = mutate(rows)
+                if result:
+                    changed.append((project_id, result))
+            if changed:
+                store.commit(catalog)
+        return changed
+
     def add_message(self, *, text: str, node_ids: list[str], to: dict[str, Any],
                     client_id: str | None = None, held: bool = False) -> tuple[str, dict[str, Any], bool]:
         """(project id, row, new). A resend with the same client id returns the
@@ -386,9 +455,10 @@ class PersonThread:
         project_id, (kept, new) = self._write(mutate)
         return project_id, kept, new
 
-    def accept(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> tuple[str, list[dict[str, Any]]]:
-        """The listener pushed these: mark them accepted. Only messages sent to
-        one of ``listener_ids`` (the caller's own) change."""
+    def accept(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
+        """The listener pushed these: mark them accepted, in whichever project
+        each was sent. Only messages sent to one of ``listener_ids`` (the
+        caller's own) change. Returns [(project id, changed rows)]."""
         wanted, own = set(message_ids), set(listener_ids)
         at = self._now_ms()
 
@@ -403,11 +473,11 @@ class PersonThread:
                     changed.append(dict(row))
             return changed
 
-        return self._write(mutate)
+        return self._write_all(mutate)
 
-    def hold(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> tuple[str, list[dict[str, Any]]]:
+    def hold(self, message_ids: Iterable[str], listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
         """The listener holds these at its runaway cap: mark them held (only
-        the caller's own, and only while not yet pushed)."""
+        the caller's own, and only while not yet pushed), in any project."""
         wanted, own = set(message_ids), set(listener_ids)
 
         def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -419,11 +489,31 @@ class PersonThread:
                     changed.append(dict(row))
             return changed
 
-        return self._write(mutate)
+        return self._write_all(mutate)
+
+    def drop_for(self, listener_ids: Iterable[str]) -> list[tuple[str, list[dict[str, Any]]]]:
+        """Those listeners are gone for good (their token was revoked,
+        boundary LOW-1): their messages still in flight settle as dropped,
+        in every project. Never touches an accepted message."""
+        own = set(listener_ids)
+
+        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            changed = []
+            for row in rows:
+                if _in_flight(row) and (row.get("to") or {}).get("listenerId") in own:
+                    row["state"] = DROPPED_STATE
+                    changed.append(dict(row))
+            return changed
+
+        return self._write_all(mutate) if own else []
 
     def add_reply(self, fields: Mapping[str, Any], listener_ids: Iterable[str]) -> tuple[str, dict[str, Any]]:
         """An agent's reply. ``replyTo``: the latest message to one of
-        ``listener_ids`` (the replying session's) that its listener took."""
+        ``listener_ids`` (the replying session's, else every listener of
+        that agent: main._reply_listener_ids) that its listener took. The
+        reply then carries that message's session (the person's form), so
+        a reply from the agent's own shell (`nebula reply`, another session
+        id than its MCP process: J2) reads as the session that took it."""
         own = set(listener_ids)
         row = {"id": _new_id("pt"), "kind": "reply", "at": self._now_ms(), **fields, "replyTo": None}
 
@@ -432,6 +522,9 @@ class PersonThread:
                 if (old.get("kind") == "message" and old.get("state") == "accepted"
                         and (old.get("to") or {}).get("listenerId") in own):
                     row["replyTo"] = old.get("id")
+                    session = (old.get("to") or {}).get("session")
+                    if isinstance(session, Mapping) and session.get("key"):
+                        row["session"] = copy.deepcopy(dict(session))
                     break
             rows.append(row)
 

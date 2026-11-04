@@ -111,7 +111,8 @@ def test_the_person_sends_and_only_the_listener_named_reads_it(thread):
     assert not any(m.get("type") == "personThread" for m in thread.others + thread.sent)
     # Session A reads it back; session B, Codex and the person's other session don't.
     inbox = thread.client.get("/api/agent/thread/inbox", headers=SESSION_A).json()["messages"]
-    assert inbox == [{"messageId": row["id"], "text": "line one\nline two", "nodeIds": [n1]}]
+    assert inbox == [{"messageId": row["id"], "text": "line one\nline two", "nodeIds": [n1],
+                      "projectId": thread.project_id}]
     assert thread.client.get("/api/agent/thread/inbox", headers=SESSION_B).json()["messages"] == []
     assert thread.client.get("/api/agent/thread/inbox", headers=CODEX_TOKEN).json()["messages"] == []
     # A name alone (no token) can't read any inbox (Justin, 2026-11-03).
@@ -265,11 +266,16 @@ def test_narrowed_a_reply_reaches_no_other_agent(thread, monkeypatch):
 
 def test_replies_are_an_agents_and_checked(thread):
     assert thread.client.post("/api/canvas/thread/replies", headers=PERSON, json={"text": "hi"}).status_code == 403
-    assert thread.client.post("/api/canvas/thread/replies", json={"text": "hi"}).status_code == 400
-    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE, json={"text": " "}).status_code == 422
-    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE,
+    # J1 (Justin, 2026-11-04): only a Settings token replies; a name alone,
+    # or nothing at all, gets the line that says what to do.
+    for headers in ({}, CLAUDE):
+        refused = thread.client.post("/api/canvas/thread/replies", headers=headers, json={"text": "hi"})
+        assert refused.status_code == 401 and refused.json()["detail"] == person_thread.REPLY_NO_TOKEN_LINE
+        assert refused.headers["X-Nebula-Code"] == "reply_no_token"
+    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE_TOKEN, json={"text": " "}).status_code == 422
+    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE_TOKEN,
                               json={"text": "hi", "nodeId": "n404"}).status_code == 422
-    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE, json={"text": "hi"}).status_code == 201
+    assert thread.client.post("/api/canvas/thread/replies", headers=CLAUDE_TOKEN, json={"text": "hi"}).status_code == 201
 
 
 def test_first_sentence():
@@ -317,7 +323,7 @@ def test_the_rule_is_one_switch(monkeypatch):
     assert person_thread.visible_to_agent(reply, "codex") and not person_thread.visible_to_agent(reply, "claude")
     assert not person_thread.visible_to_agent(pin, "claude")
     assert person_thread.message_event_data(message) == {"to": "ch_1"}
-    assert person_thread.reply_event_data(reply) is None and not person_thread.say_reaches_agents()
+    assert person_thread.reply_event_data(reply) == {"replyId": "pt_1"} and not person_thread.say_reaches_agents()
 
 
 # -- rows that point elsewhere -------------------------------------------------------------
@@ -493,7 +499,7 @@ def test_the_cli_commands_call_the_routes(capsys):
 
     args = SimpleNamespace(text="Done.", node="n1", json=False, agent_name=None)
     assert thread_cmd.run_reply(Client(), args) == 0
-    assert thread_cmd.run_thread(Client(), SimpleNamespace(limit=5, json=False, agent_name=None)) == 0
+    assert thread_cmd.run_thread(Client(), SimpleNamespace(limit=5, json=False, agent_name="Claude Code")) == 0
     assert calls == [("reply", {"text": "Done.", "nodeId": "n1"}), ("thread", 5)]
     out = capsys.readouterr().out
     assert "person [accepted]  warmer  (n1)" in out and "agent  Done.  (n1)" in out

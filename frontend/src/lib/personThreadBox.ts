@@ -15,7 +15,7 @@
  */
 import { quotedNames } from './errorCopy';
 import { cursorLabel } from './agentCursorLabel';
-import { MESSAGE_MAX, type ChannelListener, type SessionActivity, type ThreadAgent, type ThreadRow } from './personThread';
+import { MESSAGE_MAX, PRODUCT_LABEL, countsAsReply, type SessionActivity, type ThreadAgent, type ThreadRow } from './personThread';
 
 /** "N left" shows from here (the composer's counter, PromptDialog's form). */
 export const MESSAGE_COUNTER_FROM = 200;
@@ -25,20 +25,20 @@ export const COPY_COMMAND = 'nebula mcp connect claude-code --channel';
 
 /** One session's label when nothing names it (r61: one session is "Claude"). */
 export const DEFAULT_SESSION_LABEL = 'Claude';
+export { PRODUCT_LABEL } from './personThread';
 
 // GM r50, r55 and r61, verbatim (curly quotes and apostrophes, the single …).
 export const SENDING_LINE = 'Sending…';
 export const SENT_LINE = 'Sent';
 export const HELD_LINE = 'Sends in a few minutes because you’ve sent 200 this hour.';
-export const NOT_CONNECTED_LINE = 'Connect Claude Code with the Nebula channel to message it here.';
+export const NOT_CONNECTED_LINE = `Connect ${PRODUCT_LABEL} with the Nebula channel to message it here.`;
 export const SERVER_FAILED_LINE = 'Nebula couldn’t send your message because the server isn’t answering. Try again.';
 export const COPY_LABEL = 'Copy command';
 export const COPIED_LINE = 'Copied the command';
 export const NEW_REPLY_PILL = 'New reply';
-/** GM r79.4: the pill names the newest unseen agent row addressed to the person. */
+/** GM r79.4: the pill names the newest unseen agent row addressed to the person
+ * (a reply or a pin answer, countsAsReply's, reads NEW_REPLY_PILL). */
 export const NEW_ROW_PILLS = {
-  reply: 'New reply',
-  pinReply: 'New reply',
   question: 'New question',
   proposal: 'New proposal',
   note: 'New note',
@@ -74,8 +74,38 @@ export function withdrawnLine(label: string = DEFAULT_SESSION_LABEL): string {
   return `${label} withdrew the question. Send again to post your answer as a message every agent can read.`;
 }
 
+/** GM r89.3: answered or closed in another tab while the person typed its answer. */
+export const ANSWERED_ELSEWHERE_LINE = 'You answered this question in another tab. Send again to post your text as a message every agent can read.';
+export const CLOSED_ELSEWHERE_LINE = 'You closed this question in another tab. Send again to post your text as a message every agent can read.';
+
+/** GM r94.1: a set this tab no longer holds (F13). True whatever the cause. */
+export const GONE_ELSEWHERE_LINE = 'This question is closed. Send again to post your text as a message every agent can read.';
+
+/** 'gone': the set went and this tab can't say why (GONE_ELSEWHERE_LINE). */
+export type AnswerGoneCause = 'withdrawn' | 'answered' | 'closed' | 'gone';
+
+/** Why a question set is no longer answerable, from its status. Null while
+ * it is open, and for a set this tab no longer holds: Nebula doesn't know
+ * why it went, so the caller falls back to 'gone', whose line claims no
+ * cause (review 2, F13; GM r94.1). */
+export function answerGoneCause(status: string | undefined): AnswerGoneCause | null {
+  if (status === 'withdrawn') return 'withdrawn';
+  if (status === 'answered') return 'answered';
+  if (status === 'dismissed') return 'closed';
+  return null;
+}
+
+/** The composer's line for that cause (the withdrawn one names the asker). */
+export function answerGoneLine(gone: { cause: AnswerGoneCause; label: string }): string {
+  if (gone.cause === 'answered') return ANSWERED_ELSEWHERE_LINE;
+  if (gone.cause === 'closed') return CLOSED_ELSEWHERE_LINE;
+  if (gone.cause === 'gone') return GONE_ELSEWHERE_LINE;
+  return withdrawnLine(gone.label);
+}
+
 /** The pill's words for a row, or null for one that never raises it (the person's own, a fold). */
 export function pillFor(row: ThreadRow): string | null {
+  if (countsAsReply(row)) return NEW_REPLY_PILL;
   return (NEW_ROW_PILLS as Partial<Record<ThreadRow['kind'], string>>)[row.kind] ?? null;
 }
 
@@ -91,36 +121,17 @@ export const WORKING_SETTLE_MS = 20_000;
 export const QUIET_SENT_MS = 60_000;
 
 // -- availability ----------------------------------------------------------------
+// In personThread.ts (the store's module, already in the first load), so the
+// shortcut sheet's "/" label reads the same source without pulling this
+// module into the entry (GM r94.2). Re-exported here for the Message box.
+export { availability, availabilityLabel, mostRecent, type Availability } from './personThread';
 
-export type Availability =
-  | { kind: 'ready'; recipient: ChannelListener; listening: ChannelListener[] }
-  | { kind: 'notConnected' }
-  | { kind: 'stopped'; listener: ChannelListener }
-  | { kind: 'offline' };
-
-/** Which line locks the composer, if any. Offline wins (the app's row says it). */
-export function availability(listeners: readonly ChannelListener[], offline: boolean,
-  chosen: string | null, lastSeen: Readonly<Record<string, number>>): Availability {
-  if (offline) return { kind: 'offline' };
-  const listening = listeners.filter((entry) => entry.state === 'listening');
-  if (listening.length === 0) {
-    // The session that stopped last is the one the line names.
-    return listeners.length === 0 ? { kind: 'notConnected' } : { kind: 'stopped', listener: mostRecent(listeners, lastSeen) };
-  }
-  const picked = chosen ? listening.find((entry) => entry.listenerId === chosen) : undefined;
-  return { kind: 'ready', recipient: picked ?? mostRecent(listening, lastSeen), listening };
-}
-
-/** The listening session that was active most recently: its last cursor event, else when it started listening. */
-export function mostRecent(listening: readonly ChannelListener[], lastSeen: Readonly<Record<string, number>>): ChannelListener {
-  const active = (entry: ChannelListener) => Math.max(entry.since, entry.sessionKey ? lastSeen[entry.sessionKey] ?? 0 : 0);
-  return [...listening].sort((a, b) => active(b) - active(a) || b.since - a.since)[0];
-}
 
 // -- a message's state ------------------------------------------------------------
 
 export type StatusLine =
   | { kind: 'held'; text: string }
+  | { kind: 'dropped'; text: string }
   | { kind: 'waiting'; text: string }
   | { kind: 'working'; text: string }
   | { kind: 'sent'; text: string }
@@ -139,6 +150,8 @@ export function messageStatus(row: ThreadRow, now: number, options: {
 }): StatusLine {
   if (row.kind !== 'message' || options.replied) return null;
   if (row.state === 'held') return { kind: 'held', text: HELD_LINE };
+  // Its listener's token was revoked before it took this (#225 review 2): never delivered.
+  if (row.state === 'dropped') return { kind: 'dropped', text: listenerDroppedLine(options.label) };
   const event = options.activity && options.activity.at >= row.at ? options.activity : null;
   if (event && now - event.at < WORKING_SETTLE_MS) {
     return { kind: 'working', text: workingLine(options.label, event.line) };
@@ -151,7 +164,7 @@ export function messageStatus(row: ThreadRow, now: number, options: {
 
 /** When the line above may next change by itself (a timer, never polling the server). */
 export function nextStatusChange(row: ThreadRow, now: number, activity: SessionActivity | null): number | null {
-  if (row.kind !== 'message' || row.state === 'held') return null;
+  if (row.kind !== 'message' || row.state === 'held' || row.state === 'dropped') return null;
   const event = activity && activity.at >= row.at ? activity : null;
   const times = [Math.max(row.at, event?.at ?? 0) + QUIET_SENT_MS];
   if (event) times.push(event.at + WORKING_SETTLE_MS);
@@ -190,14 +203,22 @@ export function joinQuoted(words: readonly string[]): string {
   return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
 }
 
+/** GM r94: a quoted answer that ends its line already ending in . ? or !
+ * keeps its own mark, and the sentence drops its period:
+ * "You answered “From the other tab.”", never "…tab.”.". */
+export function closingPeriod(lastQuoted: string): string {
+  return /[.?!]$/.test(lastQuoted.trimEnd()) ? '' : '.';
+}
+
 /** r61 answer 4: the quiet line an answered question row keeps.
  * "You chose “Only this one”." and "You chose “All three” and “Keep 1:1”.";
- * words typed from the composer read "You answered “…”." */
+ * words typed from the composer read "You answered “…”." (GM r94: no
+ * period after a quote that ends in its own mark, closingPeriod). */
 export function answeredLine(answers: readonly { choices: readonly string[]; text: string | null }[]): string | null {
   const choices = answers.flatMap((answer) => answer.choices);
-  if (choices.length > 0) return `You chose ${joinQuoted(choices)}.`;
+  if (choices.length > 0) return `You chose ${joinQuoted(choices)}${closingPeriod(choices[choices.length - 1])}`;
   const typed = typedAnswers(answers);
-  return typed.length > 0 ? `You answered ${joinQuoted(typed)}.` : null;
+  return typed.length > 0 ? `You answered ${joinQuoted(typed)}${closingPeriod(typed[typed.length - 1])}` : null;
 }
 
 function typedAnswers(answers: readonly { text: string | null }[]): string[] {
@@ -207,17 +228,20 @@ function typedAnswers(answers: readonly { text: string | null }[]): string[] {
 /**
  * GM r70: "You answered “…”." on one line, the words cut with the ellipsis
  * inside the curly quotes: the line in three parts, the middle one the part
- * the CSS cuts (the closing quote and the full stop always show). Null for
- * a chosen answer, whose line is answeredLine's as it is.
+ * the CSS cuts (the closing quote and the full stop always show). `after`
+ * is for the whole words (GM r94: no period after their own . ? or !);
+ * `afterCut` for words cut short, which end in the ellipsis, not a mark.
+ * Null for a chosen answer, whose line is answeredLine's as it is.
  */
 export function answeredQuote(answers: readonly { choices: readonly string[]; text: string | null }[]):
-  { before: string; words: string; after: string } | null {
+  { before: string; words: string; after: string; afterCut: string } | null {
   if (answers.some((answer) => answer.choices.length > 0)) return null;
   const typed = typedAnswers(answers);
   if (typed.length === 0) return null;
   // “A”, “B” and “C”, less its outer quotes.
   const joined = joinQuoted(typed);
-  return { before: 'You answered “', words: joined.slice(1, -1), after: '”.' };
+  return { before: 'You answered “', words: joined.slice(1, -1), after: `”${closingPeriod(typed[typed.length - 1])}`,
+    afterCut: '”.' };
 }
 
 /** The question on one line, for the composer's "Answering “…”" chip (cutAtWord cuts it to the width). */
@@ -226,60 +250,134 @@ export function oneLine(text: string): string {
 }
 
 /** Closing brackets and quotes with their openers. */
-const PAIRS: Record<string, string> = { ')': '(', ']': '[', '}': '{', '”': '“', '’': '‘', '»': '«' };
+const OPENER_OF: Record<string, string> = { ')': '(', ']': '[', '}': '{', '”': '“', '’': '‘', '»': '«' };
+/** Openers with their closers; straight quotes pair with themselves (review 2, NIT-1). */
+const CLOSER_OF: Record<string, string> = { '(': ')', '[': ']', '{': '}', '“': '”', '‘': '’', '«': '»', '"': '"', "'": "'" };
 
-function count(text: string, ch: string): number {
-  return text.split(ch).length - 1;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/** Where a ' or ’ sits: inside a word (an apostrophe: don’t, it's), at a word's start or at its end. */
+function quoteEdge(text: string, i: number): 'inside' | 'start' | 'end' {
+  const before = i > 0 && WORD_CHAR.test(text[i - 1]);
+  const after = i + 1 < text.length && WORD_CHAR.test(text[i + 1]);
+  if (before && after) return 'inside';
+  return after ? 'start' : 'end';
+}
+
+/**
+ * The brackets and quotes `text` leaves open, oldest first, and whether its
+ * last character closed one of its own. `inside`: the opener the caller
+ * writes before the words (the chip's “): it starts open, and closing it is
+ * not closing one of the words' own.
+ */
+function scanPairs(text: string, inside?: string): { open: { ch: string; own: boolean }[]; lastClosedOwn: boolean } {
+  const open = inside ? [{ ch: inside, own: false }] : [];
+  let lastClosedOwn = false;
+  const close = (opener: string): boolean => {
+    for (let j = open.length - 1; j >= 0; j -= 1) {
+      if (open[j].ch === opener) return open.splice(j, 1)[0].own;
+    }
+    return false;
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    lastClosedOwn = false;
+    if (ch === '"') {
+      // Self-pairing: one already open closes, else it opens.
+      if (open.some((entry) => entry.ch === '"')) lastClosedOwn = close('"');
+      else open.push({ ch, own: true });
+    } else if (ch === "'" || ch === '’') {
+      // A quote only at a word's edge; inside a word it is an apostrophe.
+      const edge = quoteEdge(text, i);
+      if (edge === 'start' && ch === "'") open.push({ ch, own: true });
+      else if (edge === 'end') lastClosedOwn = close(ch === "'" ? "'" : '‘');
+    } else if (OPENER_OF[ch]) {
+      lastClosedOwn = close(OPENER_OF[ch]);
+    } else if (CLOSER_OF[ch]) {
+      open.push({ ch, own: true });
+    }
+  }
+  return { open, lastClosedOwn };
 }
 
 /** What a cut drops before its ellipsis: a trailing comma, space or other
  * punctuation, but never a closing bracket or quote whose opener is in the
- * words (review 1, NIT-2: “Use (see n4)…”, not “Use (see n4…”). */
-function cutTail(words: string): string {
+ * words (review 1, NIT-2: “Use (see n4)…”, not “Use (see n4…”; review 2,
+ * NIT-1: `Use the "warm"…`). */
+function cutTail(words: string, inside?: string): string {
   let out = words;
   for (;;) {
     const last = out.slice(-1);
     if (!last || !/[\s\p{P}]/u.test(last)) return out;
-    const opener = PAIRS[last];
-    if (opener && count(out, opener) >= count(out, last)) return out;
+    if (OPENER_OF[last] || last === '"' || last === "'") {
+      const scan = scanPairs(out, inside);
+      // A closer for `inside` with none of its kind left open leaves the
+      // caller's closer nothing to close: dropped, the caller's stands in
+      // (“Warm”, “Cool…”., not “Warm”, “Cool”…”.).
+      const callers = inside !== undefined && last === CLOSER_OF[inside] && !scan.open.some((entry) => entry.ch === inside);
+      if (scan.lastClosedOwn && !callers) return out;
+    }
     out = out.slice(0, -1);
   }
 }
 
+/** The closers for what the cut words leave open, innermost first (GM r89.5:
+ * “Hero…” keeps its closing quote). The caller's own closer (for `inside`)
+ * closes the outermost of its kind, so that one is left to it. */
+function closersFor(words: string, inside?: string): string {
+  const { open } = scanPairs(words, inside);
+  if (inside) {
+    const outer = open.findIndex((entry) => entry.ch === inside);
+    if (outer >= 0) open.splice(outer, 1);
+  }
+  return open.map((entry) => CLOSER_OF[entry.ch]).reverse().join('');
+}
+
 /**
- * GM r73: THE word-boundary cut, shared by the "Answering “…”" chip and
- * "You answered “…”.". The whole text when it fits; else the longest run of
- * whole words that fits with its ellipsis, less any trailing comma, space or
- * punctuation (“Use the same palette on the other three shots…”, never
- * “…shots, …”). The caller puts it inside the curly quotes, so the ellipsis
- * sits inside them. `fits` says whether a candidate fits (the box measures
- * the element; tests count characters); widths only grow with the words, so
- * the boundaries are searched by halving. When not even the first word fits,
- * the first word and its ellipsis; the CSS cut takes the rest.
+ * GM r73: THE word-boundary cut, shared by the "Answering “…”" chip, "You
+ * answered “…”." and the working fold (GM r89.5). The whole text when it
+ * fits; else the longest run of whole words that fits with its ellipsis,
+ * less any trailing comma, space or punctuation (“Use the same palette on
+ * the other three shots…”, never “…shots, …”), then a closer for each
+ * bracket or quote the kept words leave open (“Changed “Prompt” on “Hero…””).
+ * `inside`: the opener the caller puts before the words (the chip's “); its
+ * closer is the caller's, so the ellipsis sits inside it. `fits` says whether
+ * a candidate fits (the box measures the element; tests count characters);
+ * widths only grow with the words, so the boundaries are searched by
+ * halving. When not even the first word fits, the first word and its
+ * ellipsis; the CSS cut takes the rest.
  */
-export function cutAtWord(text: string, fits: (candidate: string) => boolean): string {
+export function cutAtWord(text: string, fits: (candidate: string) => boolean, inside?: string): string {
   const whole = oneLine(text);
   if (whole === '' || fits(whole)) return whole;
   const candidates: string[] = [];
   for (const match of whole.matchAll(/\s/g)) {
-    const words = cutTail(whole.slice(0, match.index));
+    const words = cutTail(whole.slice(0, match.index), inside);
     if (words && words !== candidates[candidates.length - 1]) candidates.push(words);
   }
   // One long word: as it is (the CSS cut takes it).
   if (candidates.length === 0) return whole;
+  const cut = (index: number) => `${candidates[index]}…${closersFor(candidates[index], inside)}`;
   let low = 0;
   let high = candidates.length - 1;
   let best = 0;
   while (low <= high) {
     const middle = (low + high) >> 1;
-    if (fits(`${candidates[middle]}…`)) {
+    if (fits(cut(middle))) {
       best = middle;
       low = middle + 1;
     } else {
       high = middle - 1;
     }
   }
-  return `${candidates[best]}…`;
+  return cut(best);
+}
+
+/** A cut's words and its tail (the ellipsis and any closers), or the words
+ * whole with no tail when nothing was cut. */
+export function cutParts(shown: string, text: string): { words: string; ellipsis: string } {
+  const at = shown.lastIndexOf('…');
+  return shown !== oneLine(text) && at >= 0 ? { words: shown.slice(0, at), ellipsis: shown.slice(at) } : { words: shown, ellipsis: '' };
 }
 
 // -- the typed answer's You row (GM r73 item 2) --------------------------------------
@@ -460,7 +558,9 @@ export function runOrigin(rows: readonly ThreadRow[], answers: readonly AnswerRo
   }
   const origin = best as RunOrigin | null;
   if (!origin) return null;
-  if (origin.kind === 'message') return origin.row && repliedAfter(origin.row, rows) ? null : origin;
+  if (origin.kind === 'message') {
+    return origin.row && (origin.row.state === 'dropped' || repliedAfter(origin.row, rows)) ? null : origin;
+  }
   // Answered: a reply (or, for a pin, its reply on the pin) from that session after it.
   const answered = rows.some((row) => row.at >= origin.at
     && (row.kind === 'reply' || (origin.kind === 'pin' && row.kind === 'pinReply' && row.pinId === origin.row?.pinId))

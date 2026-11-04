@@ -1103,7 +1103,15 @@ def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None =
     the reply isn't saved (code replies_rate_limited) and Nebula says "Nebula
     couldn’t post this reply because replies are paced at 5 in a row, then
     one every 2 s. You can reply again in N s, so put everything you have to
-    say in one reply.": wait, then send one reply with everything in it."""
+    say in one reply.": wait, then send one reply with everything in it.
+
+    Only an agent connected with a token from Settings › Connect your agent
+    replies (code reply_no_token for a name alone, reply_in_app_token for an
+    in-app agent, reply_token_invalid for a revoked token). Under the
+    channel, a message's (or an answer's) turn isn't gated until a reply
+    under your token reaches the person, from this tool or from `nebula
+    reply` in your session's shell, or 10 minutes after the push: reply
+    when you're done, not before."""
     body: dict[str, Any] = {"text": text}
     if node_id:
         body["nodeId"] = node_id

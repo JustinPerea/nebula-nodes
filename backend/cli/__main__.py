@@ -528,7 +528,11 @@ def build_parser() -> argparse.ArgumentParser:
         description=("Answer a message the person sent you from the canvas's Message box (the thread in the Agent "
                      "log). They read the thread, not your terminal. --node flies your cursor to a node and shows "
                      "the reply's first sentence there. 2,000 characters at most. Every connected agent can read "
-                     "the thread, as pins."))
+                     "the thread, as pins. Replying takes an agent token from Settings > Connect your agent: the "
+                     "CLI reads NEBULA_APP_TOKEN_FILE, which the launch command nebula mcp connect claude-code "
+                     "--channel prints sets for the session. From that session's shell it is the same reply as "
+                     "MCP reply_to_person, and it ends the turn's protection from gated pushes the same way, so "
+                     "reply when you're done."))
     reply_p.add_argument("text", help="Your answer (line breaks are kept)")
     reply_p.add_argument("--node", default=None, metavar="nX", help="A node the answer is about (on the open canvas)")
     reply_p.add_argument("--json", action="store_true", help="Print the raw JSON")

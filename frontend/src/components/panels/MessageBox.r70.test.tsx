@@ -97,7 +97,7 @@ describe('r70 strings', () => {
   it('"You answered “…”." keeps the closing quote and full stop outside the cut words', () => {
     const long = 'Keep the warm one for the hero, and use the cooler palette on the other three shots, all of them';
     const parts = answeredQuote([{ choices: [], text: `  ${long}\n` }])!;
-    expect(parts).toEqual({ before: 'You answered “', words: long, after: '”.' });
+    expect(parts).toEqual({ before: 'You answered “', words: long, after: '”.', afterCut: '”.' });
     expect(parts.before + parts.words + parts.after).toBe(answeredLine([{ choices: [], text: long }]));
     expect(answeredQuote([{ choices: [], text: 'A' }, { choices: [], text: 'B' }])!.words).toBe('A” and “B');
     expect(answeredQuote([{ choices: ['Only this one'], text: null }])).toBeNull();
@@ -112,6 +112,15 @@ describe('r70 strings', () => {
     const line = screen.getByText((_, el) => el?.classList.contains('message-box__answered') === true && el.textContent === 'You answered “Square, please”.');
     expect(line.classList.contains('message-box__answered--typed')).toBe(true);
     expect(line.querySelector('.message-box__answered-words')!.textContent).toBe('Square, please');
+  });
+
+  it.each(['.', '?', '!'])('GM r94: the typed row drops its period after words that end in “%s”', (mark) => {
+    openSet([{ id: 'x', text: 'Which crop?', options: [], multiple: false, allowText: true }],
+      { status: 'answered', answers: [{ questionId: 'x', answered: true, choices: [], text: `From the other tab${mark}` }] });
+    useUIStore.setState({ agentLogOpen: true });
+    render(<AgentLog />);
+    expect(screen.getByText((_, el) => el?.classList.contains('message-box__answered') === true
+      && el.textContent === `You answered “From the other tab${mark}”`)).toBeTruthy();
   });
 
   it('the × is "Stop answering"; with the chip gone, the words go as a plain message', async () => {

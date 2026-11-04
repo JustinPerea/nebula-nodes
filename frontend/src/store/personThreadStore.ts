@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { cursorLabel } from '../lib/agentCursorLabel';
 import {
+  countsAsReply,
   mergeRows,
   sanitizeListener,
   sanitizeRow,
@@ -11,6 +13,9 @@ import {
   type ThreadRow,
 } from '../lib/personThread';
 import type { SendFailure } from '../lib/personThreadCompose';
+import { useCanvasLock } from '../lib/canvasLock';
+import { availability, type Availability } from '../lib/personThread';
+import type { AnswerGoneCause } from '../lib/personThreadBox';
 import { useUIStore } from './uiStore';
 
 /**
@@ -52,6 +57,16 @@ export interface AnsweringState {
   question: string;
 }
 
+/** Why the "Answering" chip went while the person typed (GM r79.6, r89.3;
+ * 'gone' for a set this tab no longer holds, GM r94.1).
+ * `held`: the next Enter (or Send) only says so; the one after posts. */
+export interface AnswerGone {
+  cause: AnswerGoneCause;
+  /** The asker's cursor label (the withdrawn line names it). */
+  label: string;
+  held: boolean;
+}
+
 interface PersonThreadState {
   projectId: string | null;
   rows: ThreadRow[];
@@ -72,8 +87,9 @@ interface PersonThreadState {
   pending: PendingSend | null;
   failure: SendFailureState | null;
   answering: AnsweringState | null;
-  /** GM r79.6: the asker's label when it withdrew the question being answered (the composer's line). */
-  withdrawn: string | null;
+  /** GM r79.6, r89.3: the question being answered went (withdrawn, or answered
+   * or closed in another tab) with words in the draft: the composer's line. */
+  answerGone: AnswerGone | null;
   removeContext: () => void;
   choose: (listenerId: string | null) => void;
   markRead: () => void;
@@ -99,7 +115,7 @@ function initial() {
     pending: null as PendingSend | null,
     failure: null as SendFailureState | null,
     answering: null as AnsweringState | null,
-    withdrawn: null as string | null,
+    answerGone: null as AnswerGone | null,
   };
 }
 
@@ -114,7 +130,7 @@ export const usePersonThreadStore = create<PersonThreadState>((set) => ({
 
   clearFailure: () => set({ failure: null }),
 
-  answer: (target) => set({ answering: target, withdrawn: null }),
+  answer: (target) => set({ answering: target, answerGone: null }),
 
   stopAnswering: () => set({ answering: null }),
 
@@ -130,18 +146,18 @@ function cleanRows(raw: unknown[]): ThreadRow[] {
   return raw.map(sanitizeRow).filter((row): row is ThreadRow => row !== null);
 }
 
-/** "Claude replied. <text>": the reply's agent as its cursor names it. */
+/** "Claude replied. <text>": the reply's (or pin answer's) agent as its cursor names it. */
 export function replyAnnouncement(row: ThreadRow): string {
   const name = row.agent ? cursorLabel(row.agent.name, row.session ?? null) : 'Claude';
   return `${name} replied. ${row.text ?? ''}`.trim();
 }
 
-/** New rows from the socket: merged; each new reply counts as unread (panel closed) and is announced once. */
+/** New rows from the socket: merged; each new reply (countsAsReply) counts as unread (panel closed) and is announced once. */
 export function receiveRows(projectId: string | null, incoming: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
   if (state.projectId !== null && projectId !== null && projectId !== state.projectId) return;
   const known = new Set(state.rows.map((row) => row.id));
-  const replies = incoming.filter((row) => row.kind === 'reply' && !known.has(row.id));
+  const replies = incoming.filter((row) => countsAsReply(row) && !known.has(row.id));
   const open = useUIStore.getState().agentLogOpen;
   const latest = replies[replies.length - 1];
   usePersonThreadStore.setState({
@@ -159,7 +175,7 @@ export function receiveSync(projectId: string | null, rows: ThreadRow[]): void {
   // unread with the panel closed; a burst after a reconnect isn't spoken.
   const known = new Set(state.rows.map((row) => row.id));
   const missed = same && state.rows.length > 0 && !useUIStore.getState().agentLogOpen
-    ? rows.filter((row) => row.kind === 'reply' && !known.has(row.id)).length : 0;
+    ? rows.filter((row) => countsAsReply(row) && !known.has(row.id)).length : 0;
   usePersonThreadStore.setState({
     projectId,
     rows,
@@ -184,16 +200,22 @@ export function activityLine(event: AgentPresenceEvent): string | null {
   return did.label ? `${did.verb} “${did.label}”` : did.verb;
 }
 
+function oneSpace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 /** One event from an agent session: the "working" line reads it. */
 export function noteActivity(event: AgentPresenceEvent): void {
   const key = sessionKeyOf(event.session);
   if (!key) return;
   const at = Number.isFinite(event.at) && event.at > 0 ? event.at : now();
   const state = usePersonThreadStore.getState();
-  // GM r79.1: a reply's own cursor say ("Replied on …") is not an action.
-  const say = typeof event.say === 'string' ? event.say.replace(/…$/, '').trim() : '';
+  // GM r79.1: a reply's own cursor say ("Replied on …") is not an action. The
+  // say is the reply's first sentence with its whitespace collapsed (review 2
+  // LOW-3: "Made  it warmer."), so both sides are compared collapsed.
+  const say = typeof event.say === 'string' ? oneSpace(event.say.replace(/…$/, '')) : '';
   if (event.did?.verb?.startsWith('Replied') && say && state.rows.some((row) => row.kind === 'reply'
-    && row.sessionKey === key && (row.text ?? '').startsWith(say))) return;
+    && row.sessionKey === key && oneSpace(row.text ?? '').startsWith(say))) return;
   const said = activityLine(event);
   const previous = state.activity[key];
   if (previous && previous.at > at) return;
@@ -227,3 +249,18 @@ useUIStore.subscribe((state, previous) => {
     usePersonThreadStore.getState().markRead();
   }
 });
+
+/** Which listener gets a message, and whether the composer is locked: the
+ * Message box's, and the shortcut sheet's "/" label (GM r94.2), one source. */
+export function useMessageAvailability(): Availability {
+  const listeners = usePersonThreadStore((s) => s.listeners);
+  const chosen = usePersonThreadStore((s) => s.chosen);
+  const activity = usePersonThreadStore((s) => s.activity);
+  // The house rule (round22Surfaces): offline comes from the canvas lock.
+  const { offline } = useCanvasLock();
+  return useMemo(() => {
+    const lastSeen = Object.fromEntries(Object.entries(activity).map(([key, value]) => [key, value.at]));
+    return availability(listeners, offline, chosen, lastSeen);
+  }, [listeners, offline, chosen, activity]);
+}
+

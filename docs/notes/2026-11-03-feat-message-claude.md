@@ -418,3 +418,193 @@ Every string is in #225's own files, so #223 needed no change and no commit.
   of the names, survived at first; a test now covers it). The copy strings 6
   of 6 killed.
 - Entry: 469,331 B raw / 145,840 gzip, unchanged.
+
+## Round 4 (review 2; Justin 2026-11-04 J1-J4; GM r89)
+
+Merged feat/channel-deliberate-sends at 5ec108a4 (#223's round 4: J4's
+span-until-reply, J3, revoke drops listeners). Item M of round 3 (the
+resize ceiling) is still skipped: #226 hasn't merged. GM r89.2 (the
+unverified reply author) is moot after J1 and not built.
+
+- **J1, replies take a Settings token.** `POST /api/canvas/thread/replies`
+  refuses a name alone or nothing (`401 reply_no_token`), an in-app turn
+  token (`reply_in_app_token`), and the token middleware answers a revoked
+  token on that path with `reply_token_invalid`. The pace keys on the token
+  agent only (rotating names can't post at all). The listener's own routes
+  (`/api/agent/thread/*`) now get r81's `listener_token_invalid` from the
+  middleware too (parity NIT-2).
+- **J2, the CLI reads NEBULA_APP_TOKEN_FILE** (`nebula_api.app_token_from_file`)
+  when no token is in the environment, with the MCP server's strict reader,
+  keeping the token in process memory only and failing closed. Decision not
+  in the brief: the shell gets the path because the launch command
+  `--channel` prints now starts with `NEBULA_APP_TOKEN_FILE=<path>` (the
+  path only); the MCP config's env reaches only the MCP server, never
+  Claude's Bash. A reply from a session with no listener of its own (the
+  shell's cursor session differs from the MCP process's) answers for every
+  listener of that token agent (`_reply_listener_ids`), and the reply row
+  takes the session of the message it followed, so it reads as the same
+  "Claude Code" and settles it.
+- **`--channel` after a revoke** (parity LOW-2): a missing or bad listen
+  file falls through to the file Claude Code's saved server names; only
+  with none does the old error stand.
+- **J4's #225 half:** reply_to_person's docstring says the reply ends the
+  turn's span ("reply when you're done"); SKILL.md and MCP-SETUP say to
+  answer a push with the tool (a shell reply settles the message but the
+  listener never sees it, so the span runs to its 10-minute cap).
+- **Boundary LOW-1, messages in flight:** the revoke route settles that
+  listener's `sent`/`held` messages as `dropped` in every project and
+  broadcasts them; the box shows the existing send-time line
+  (listenerDroppedLine) under the message and never treats it as an open
+  run. Decision: reuse that GM line rather than invent one.
+- **Boundary LOW-2:** the inbox reads every project (open first; each
+  message names its `projectId`), and accept/hold mark a message wherever
+  it was sent (`_write_all`). The listener re-arms its inbox on a `gap` or
+  `reset` and after a read that failed all INBOX_TRIES. Decision: a
+  message sent before a switch is still pushed; Claude acts on the canvas
+  open now, as with any request.
+- **Live L1:** a reply Nebula refuses after the pace (409 no project, 503)
+  gives its slot back (`ReplyPace.refund`). **B7:** a test pins the burst
+  cap after a long quiet. Mutant "refund past the burst" is equivalent
+  (take re-caps the bucket).
+- **Parity NIT-3:** `nebula reply` counts characters as the server does
+  (text_length of shown_text). **Live L3:** an unnamed, tokenless `nebula
+  thread` prints r83.3's line without a request; a tokenless `nebula
+  channel` prints a new line (below) instead of "You have no listener".
+- **Frontend (GM r89, parity LOW-3/LOW-4/NIT-1; details in the builder's
+  notes):** `countsAsReply` is the one rule for pill, badge and
+  announcement (pinReply counts). Answered or closed in another tab: the
+  chip goes, the draft stays, the named-cause line shows, the first Enter
+  is held (the line goes to the polite region) and the next posts; the
+  hold applies to withdrawn too. A set that vanished with no known cause
+  gets no line and Enter posts (F13: no GM line for an unknown cause; GM
+  to confirm). `availabilityLabel` is the one label source for the
+  placeholder, aria-label and stopped line (not connected and offline with
+  no listener: "Claude Code"). The shared cut appends closers for openers
+  left open ("Changed “Prompt” on “Hero…”"), treats straight quotes as
+  self-pairing and apostrophes inside words as letters; the fold chip uses
+  it. The echo guard compares whitespace-collapsed text. The keyboard
+  shortcuts list still says "Message Claude" for "/" (not the composer).
+
+### Strings for GM (new or changed)
+
+- Reply refusals (agent-facing): see MCP-SETUP; the three lines are in
+  person_thread (REPLY_NO_TOKEN_LINE, REPLY_IN_APP_LINE, REPLY_BAD_TOKEN_LINE).
+- In-app listener refusal (#223): channel_listeners.IN_APP_TOKEN_LINE.
+- CLI: NO_TOKEN_CHANNEL_LINE; the token-file errors in nebula_api.
+- Person-facing: the two another-tab lines (r89.3 verbatim), "Message
+  Claude Code" when not connected, the cut fold chip.
+
+### Checks
+
+- tsc and lint clean. vitest: 145 files on an explicit list (every test
+  that reads files from disk, main's ratchets, every MessageBox,
+  personThread, messageBoxLog, personThreadEntry, agentQuestionsStore and
+  AgentLog test), 4,052 passed.
+- Backend, isolated: 77 files (every test reading MCP-SETUP, SKILL.md or
+  the channel, thread, CLI and connect modules, plus round20 fence,
+  unprivileged marker, ci shard, cli_api, agent_questions), 2,478 passed,
+  9 skipped. `person_gate.py` byte-identical to main in both worktrees.
+- Mutations: backend + dropped state 25 of 26 killed (one equivalent);
+  frontend (builder) 26 of 27 killed (one equivalent); #223 13 of 13.
+- Entry 469,467 B raw / 145,915 gzip (+136 B).
+- Live at 1440x900 (8967/5967, isolated, Settings token minted through the
+  person route, the real `nebula` CLI and the simulated listener): the
+  tokenless reply refused with J1's line; `nebula channel` from the shell
+  sees the listener; a token reply through the CLI from another cursor
+  session settles the message (replyTo set, same session); the locked
+  placeholder "Message Claude Code"; the answered-in-another-tab line, the
+  held first Enter and the posting second; a pin answer counted in the
+  badge ("1 unread reply") and announced; the cut fold chip "Changed
+  “Prompt” on “Hero…”"; a revoke locks the box at once and the CLI's
+  token-file error. Five shots, distinct md5s, nothing intercepted.
+
+## Round 4b (coordinator 2026-11-04: a shell reply ends the span; GM r94)
+
+### A reply under the listener's own token ends its span, by any route
+
+- Justin's rule: the deliberate span ends on Claude's reply, and `nebula
+  reply` from the listening session's own shell is that reply (the same
+  Settings token, so the same identity). Round 4 left it to the 10-minute
+  cap, because the listener's feed leaves out its own agent's events.
+- The mechanism is #223's (its notes, round 4b, say why this design over a
+  polled flag, `self=1` or session matching). The listener's long-poll asks
+  for `ownReplies=1`, so `/api/canvas/events` keeps the caller's own
+  `thread.replied` and nothing else of its own. The listener ends the span
+  on one whose actor is its own agent id (from the beat's answer).
+- This branch's part: every saved reply is journaled now, whatever the read
+  switch. Narrowed, the event carries only `{replyId}`, an id that says
+  nothing of the text (the old form sent no event at all, so a narrowed
+  thread would have left the span to the cap). A refused reply (no token,
+  in-app, revoked, paced, a bad body, no project) returns before the
+  journal, so it can't end the span. Another token's reply has another
+  actor id.
+- A tool reply's own late event is skipped once by its reply id (#223), so
+  it can't end a span a newer message started.
+- Docs and help no longer say to answer with the tool: the
+  `reply_to_person` docstring, the `nebula reply` help, SKILL.md and
+  MCP-SETUP say either route ends the span under your token.
+- Tests (test_person_thread_round4, through the real routes, the real CLI
+  command with a token file, and a ChannelState fed by
+  `/api/canvas/events?ownReplies=1`): a CLI reply under the listener's
+  token ends its span (and counts as its call); a paced CLI reply (429) and
+  a tokenless one (401) don't, and journal nothing; another token's reply
+  doesn't, its own after it does; narrowed, the event keeps only `replyId`
+  and still ends the span. The three #223 listener tests, ported to this
+  branch's inbox flow (`sent()`).
+
+### GM r94
+
+- F13: a question set this tab no longer holds now holds the first Enter
+  too, with "This question is closed. Send again to post your text as a
+  message every agent can read." (`GONE_ELSEWHERE_LINE`, cause `gone`); the
+  second Enter posts. The same when the set leaves the store while an
+  answer is sent. Typed answer text never goes out as a public message on
+  one silent Enter. (`QUESTION_CLOSED_LINE`, "This question is closed.",
+  is the row's own line and stays.)
+- The shortcut sheet's "/" reads `Message ${availabilityLabel(...)}`,
+  "Message Claude Code" with nothing connected and the session's cursor
+  label otherwise. One source: the availability helpers moved from
+  personThreadBox to personThread (already in the first load) and
+  `useMessageAvailability` to the store, which the Message box uses too.
+  personThreadBox re-exports them. Importing personThreadBox into the sheet
+  directly had cost 7 KB of entry (its top-level calls keep it whole).
+- A quoted answer that ends its line already ending in . ? or ! drops the
+  sentence's period: "You answered “From the other tab.”" and "You chose
+  “Keep it?”" (`closingPeriod`, on the last quote only). The typed row's
+  words cut short end in the ellipsis, so they keep "”." (`afterCut`).
+- Collapsed log: an answer on a pin previews as "Claude Code replied to
+  your note" (the expanded row keeps "replied on your note on “…”").
+- Agent-facing lines, GM r94 verbatim, each command on its own line:
+  REPLY_NO_TOKEN_LINE (three lines), REPLY_BAD_TOKEN_LINE (two),
+  REPLY_IN_APP_LINE, the CLI's NO_TOKEN_CHANNEL_LINE (three), the empty
+  NEBULA_APP_TOKEN_FILE line; #223's in-app listener line. Codes
+  unchanged. A ratchet test pins each.
+- Left as is (GM gave no new words): the token-file failure "NEBULA_APP_
+  TOKEN_FILE: <why>. Copy a new token from Settings › Connect your agent,
+  then run nebula mcp connect claude-code --channel again."
+
+### Checks (round 4b)
+
+- Backend, isolated: the gate's 77 files, 2,488 passed, 9 skipped; the 45
+  files that touch the events journal, 1,644 passed, 9 skipped.
+  `person_gate.py` byte-identical to main in both worktrees.
+- Frontend: tsc and lint clean; vitest on the gate's 146 files, 4,068
+  passed, plus KeyboardShortcuts (4). Entry 470,365 B raw / 146,262 gzip
+  (+898 B on round 4).
+- Mutations: backend 11 of 11 killed (narrowed reply not journaled, its
+  text leaked, the listener ignoring its own reply end to end, any agent's
+  reply ending it, the route ignoring ownReplies, a paced reply journaled,
+  and each r94 line reverted); frontend 11 of 11 (F13's hold, its send
+  race, the gone line, the period rule's three ways, the cut's period, the
+  typed row, the collapsed text, the sheet's label). #223's round 4b: 16
+  of 16.
+- Live at 1440x900 (8967/5967, isolated, the real `serve_channel` listener
+  with a Settings token file, the real `nebula` CLI): the shortcut sheet
+  reads "Message Claude Code"; the message push opens the span, a
+  tokenless shell reply is refused with r94's three lines and leaves it
+  open, and `nebula reply` under the token file ends it (the listener's own
+  state, read through the harness); an answer "Is golden hour too warm?"
+  reads "You answered “Is golden hour too warm?”"; the collapsed log
+  previews a pin answer as "Claude Code" / "replied to your note". Three
+  shots, distinct md5s, nothing intercepted, no page errors.
+

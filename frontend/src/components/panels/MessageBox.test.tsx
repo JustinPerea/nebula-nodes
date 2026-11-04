@@ -79,8 +79,9 @@ describe('the composer’s locks (r50)', () => {
     render(<AgentLog />);
     const box = field();
     expect(box.getAttribute('aria-disabled')).toBe('true');
-    expect(box.getAttribute('placeholder')).toBe('Message Claude');
-    expect(box.getAttribute('aria-label')).toBe('Message Claude');
+    // GM r89.4: not connected, the product as the lock line names it.
+    expect(box.getAttribute('placeholder')).toBe('Message Claude Code');
+    expect(box.getAttribute('aria-label')).toBe('Message Claude Code');
     expect(describedText(box)).toBe(NOT_CONNECTED_LINE);
     box.focus();
     expect(document.activeElement).toBe(box);
@@ -219,6 +220,20 @@ describe('the collapsed bar', () => {
     // Opening the panel clears the badge.
     fireEvent.click(screen.getByRole('button', { name: 'Agent log', expanded: false }));
     expect(screen.queryByRole('img', { name: /unread/ })).toBeNull();
+  });
+});
+
+describe('the collapsed bar, GM r94', () => {
+  it('an answer on a pin reads "Claude Code replied to your note"', () => {
+    usePersonThreadStore.setState({ listeners: [listener()] });
+    receiveSync('p1', [message()]);
+    const { container } = render(<AgentLog />);
+    act(() => receiveRows('p1', [{ id: 'pr1', kind: 'pinReply', at: Date.now(), pinId: 'pin1', text: 'Warmed it.',
+      agent: { ...CLAUDE, name: 'Claude Code' }, session: { key: KEY, ordinal: 1 }, sessionKey: KEY }]));
+    const preview = container.querySelector('.message-box__preview') as HTMLElement;
+    expect(preview.querySelector('.message-box__preview-name')!.textContent).toBe('Claude Code');
+    expect(preview.querySelector('.message-box__preview-text')!.textContent).toBe('replied to your note');
+    expect(preview.textContent).not.toContain('on the canvas');
   });
 });
 

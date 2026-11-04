@@ -351,13 +351,20 @@ CLAUDE_DEV_CHANNELS_TITLE = "WARNING: Loading development channels"
 CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
 
 
-def launch_command(path: Path) -> str:
+def launch_command(path: Path, token_file: str | None = None) -> str:
     """The one command that starts Claude Code with the channel. The saved
     `nebula` server's copies of the tools are left out, so nebula-listen
     serves both the tools and the pushes (the listener learns which proposals
-    and runs are Claude's from the calls it serves)."""
-    return (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
-            f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
+    and runs are Claude's from the calls it serves). With a token file, the
+    command sets NEBULA_APP_TOKEN_FILE to its path (never the token) for the
+    session, so the `nebula` CLI in Claude's own shell reads the same token
+    as the listener (J2, Justin 2026-11-04: `nebula reply` then answers the
+    person's message as the session that took it)."""
+    command = (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
+               f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
+    if token_file:
+        command = f"{TOKEN_FILE_ENV}={shlex.quote(token_file)} {command}"
+    return command
 
 
 def _listen_token_file(data: dict[str, Any]) -> str | None:
@@ -424,13 +431,21 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
     try:
         token, token_file = _token(args)
         again = _listen_token_file(before)
+        stale: TokenSourceError | None = None
         if token is None and not print_only and again:
             # Running it again: the token file the config already names.
-            token, token_file = _read_app_token_file(again), again
+            try:
+                token, token_file = _read_app_token_file(again), again
+            except TokenSourceError as exc:
+                # Revoked since (Nebula deleted the file): the saved nebula
+                # server may name the new one (review 2, parity LOW-2).
+                stale = exc
         saved = saved_claude_code_token_file(home) if token is None and not print_only else None
-        if saved:
-            # The first run: the token file Claude Code's saved nebula server names.
+        if saved and saved != again:
+            # The first run, or a new token: the file Claude Code's saved nebula server names.
             token, token_file = _read_app_token_file(saved), saved
+        if token is None and stale is not None:
+            raise stale
     except TokenSourceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -469,7 +484,7 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
     print()
     print("Start Claude Code with the Nebula channel from any folder with this command.")
     print()
-    print(launch_command(path))
+    print(launch_command(path, None if legacy else token_file))
     print()
     # Claude Code's own dialog, quoted exactly: its title and confirm label as
     # of Claude Code 2.1.317. If an update renames them, change both here.

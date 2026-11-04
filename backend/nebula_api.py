@@ -89,14 +89,59 @@ def _payload(response: httpx.Response) -> Any:
         return None
 
 
+APP_TOKEN_FILE_ENV = "NEBULA_APP_TOKEN_FILE"
+# The token read from NEBULA_APP_TOKEN_FILE, per path, for this process only:
+# never put back in the environment (a child process would inherit it).
+_file_token: tuple[str, str] | None = None
+
+
+def app_token_from_file(environ: Any = None) -> str | None:
+    """The token in NEBULA_APP_TOKEN_FILE, for a caller with no token in its
+    environment (J2, Justin 2026-11-04): the `nebula` CLI run from the
+    listening Claude Code's own shell, whose launch command sets the path
+    the MCP config already names. Read with the MCP server's strict reader
+    (services/agent_token_file.read: a regular file of this user's, mode
+    600, no symlink), so the shell and the MCP tools are one agent. None
+    when the variable isn't set, or a personal agent's token file is
+    (load_app_token_file's order). Fails closed: a bad file raises
+    NebulaAPIError naming the variable and the reason, never the token."""
+    global _file_token
+    env = os.environ if environ is None else environ
+    path = env.get(APP_TOKEN_FILE_ENV)
+    if path is None or env.get("NEBULA_AGENT_TOKEN_FILE") is not None:
+        return None
+    if _file_token is not None and _file_token[0] == path:
+        return _file_token[1]
+    from services import agent_token_file
+
+    if not path.strip():
+        raise NebulaAPIError(f"{APP_TOKEN_FILE_ENV} is empty. Unset it, or point it at the token file that Settings "
+                             "› Connect your agent saved.", kind="token")
+    try:
+        token = agent_token_file.read(path)
+    except agent_token_file.TokenFileError as exc:
+        raise NebulaAPIError(f"{APP_TOKEN_FILE_ENV}: {exc}. Copy a new token from Settings › Connect your agent, "
+                             "then run nebula mcp connect claude-code --channel again.", kind="token") from exc
+    _file_token = (path, token)
+    return token
+
+
+def has_token(environ: Any = None) -> bool:
+    """Whether a request from here carries an agent token (with_identity's sources)."""
+    env = os.environ if environ is None else environ
+    return bool(env.get("NEBULA_AGENT_TOKEN") or env.get("NEBULA_APP_TOKEN") or env.get(APP_TOKEN_FILE_ENV))
+
+
 def with_identity(headers: dict[str, str] | None = None) -> dict[str, str]:
     """Add the caller's token (it outranks any name).
 
     NEBULA_AGENT_TOKEN is an in-app chat's turn token. NEBULA_APP_TOKEN is one
     the person made for an outside app in Settings > Connect your agent: it names
-    the app's own spending line (services/app_tokens.py). The turn token wins."""
+    the app's own spending line (services/app_tokens.py). The turn token wins.
+    With neither set, the token in NEBULA_APP_TOKEN_FILE (app_token_from_file)."""
     headers = dict(headers or {})
-    token = os.environ.get("NEBULA_AGENT_TOKEN") or os.environ.get("NEBULA_APP_TOKEN")
+    token = (os.environ.get("NEBULA_AGENT_TOKEN") or os.environ.get("NEBULA_APP_TOKEN")
+             or app_token_from_file())
     if token:
         headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
         headers["Authorization"] = f"Agent {token}"

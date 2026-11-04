@@ -4,7 +4,7 @@ import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ScrollFade } from '../ScrollFade';
 import { AgentLogEntryRow } from './AgentLogEntryRow';
 import { OFFLINE_LINE_ID } from '../BackendConnectionStatus';
-import { usePersonThreadStore, type AnsweringState, type PendingSend } from '../../store/personThreadStore';
+import { useMessageAvailability, usePersonThreadStore, type AnsweringState, type PendingSend } from '../../store/personThreadStore';
 import { SENDING_AFTER_MS, sendMessage, setDraft } from '../../lib/personThreadCompose';
 import { ANSWER_TEXT_MAX, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
@@ -38,12 +38,12 @@ import {
   answerRows,
   answeredLine,
   answeredQuote,
-  availability,
   contextChipLabel,
   contextRemoveLabel,
   counterAnnouncement,
   counterLine,
   cutAtWord,
+  cutParts,
   foldActions,
   listenerDroppedLine,
   messageStatus,
@@ -58,7 +58,9 @@ import {
   stoppedListeningLine,
   unreadLabel,
   withRun,
-  withdrawnLine,
+  answerGoneCause,
+  answerGoneLine,
+  availabilityLabel,
   type AnswerRow,
   type RunOrigin,
   type Availability,
@@ -83,19 +85,6 @@ function shade(agent: ThreadAgent | undefined, session: SessionLike | null | und
   return { ['--msg-dot' as string]: tone.dot, ['--msg-name' as string]: tone.name };
 }
 
-/** Which listener gets the message, and whether the composer is locked. */
-function useAvailability(): Availability {
-  const listeners = usePersonThreadStore((s) => s.listeners);
-  const chosen = usePersonThreadStore((s) => s.chosen);
-  const activity = usePersonThreadStore((s) => s.activity);
-  // The house rule (round22Surfaces): offline comes from the canvas lock.
-  const { offline } = useCanvasLock();
-  return useMemo(() => {
-    const lastSeen = Object.fromEntries(Object.entries(activity).map(([key, value]) => [key, value.at]));
-    return availability(listeners, offline, chosen, lastSeen);
-  }, [listeners, offline, chosen, activity]);
-}
-
 function nodeNameList(ids: readonly string[]) {
   return (s: { nodes: { id: string; data?: { label?: unknown } }[] }) => ids.map((id) => cardTitle(s.nodes, id)).join('\u0000');
 }
@@ -115,7 +104,8 @@ function previewWords(row: ThreadRow, nodeName: (id: string) => string): { label
     case 'proposal': return { label: name, text: 'proposed a change' };
     case 'note': return { label: name, text: 'left a note in Updates' };
     case 'pin': return { label: 'You', text: `left a note ${pinWhere(row, nodeName)}` };
-    case 'pinReply': return { label: name, text: `replied on your note ${pinWhere(row, nodeName)}` };
+    // GM r94: the collapsed log reads "Claude Code replied to your note".
+    case 'pinReply': return { label: name, text: 'replied to your note' };
   }
 }
 
@@ -150,7 +140,7 @@ function useAnswerRows(rows: readonly ThreadRow[]): AnswerRow[] {
  * (the observer's first call too). Where nothing lays out (no widths), the
  * words show whole.
  */
-function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, container: string): string {
+function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, container: string, inside?: string): string {
   const [shown, setShown] = useState(() => oneLine(text));
   useLayoutEffect(() => {
     const element = ref.current;
@@ -163,10 +153,10 @@ function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, contai
         setShown(whole);
         return;
       }
-      // A cut shown now has its ellipsis after the element: that space is the cut's too.
+      // A cut shown now has its ellipsis (and closers) after the element: that space is the cut's too.
       const tail = element.nextSibling;
       let tailWidth = 0;
-      if (tail instanceof Text && tail.nodeValue === '…') {
+      if (tail instanceof Text && tail.nodeValue?.startsWith('…')) {
         range.selectNodeContents(tail);
         tailWidth = range.getBoundingClientRect().width;
       }
@@ -178,11 +168,12 @@ function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, contai
         range.selectNodeContents(node);
         return range.getBoundingClientRect().width;
       };
-      const ellipsis = width('…');
-      // A cut's words in the element, its ellipsis beside it: the two together within the room.
-      const fits = (candidate: string) => (candidate.endsWith('…') && candidate !== whole
-        ? width(candidate.slice(0, -1)) + ellipsis : width(candidate)) <= room + 0.01;
-      const cut = room > 0 ? cutAtWord(whole, fits) : whole;
+      // A cut's words in the element, its ellipsis and closers beside it: the two together within the room.
+      const fits = (candidate: string) => {
+        const parts = cutParts(candidate, whole);
+        return (parts.ellipsis ? width(parts.words) + width(parts.ellipsis) : width(candidate)) <= room + 0.01;
+      };
+      const cut = room > 0 ? cutAtWord(whole, fits, inside) : whole;
       node.nodeValue = before;
       setShown(cut);
     };
@@ -192,13 +183,8 @@ function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, contai
     const observer = new ResizeObserver(() => measure());
     observer.observe(box);
     return () => observer.disconnect();
-  }, [ref, text, container]);
+  }, [ref, text, container, inside]);
   return shown;
-}
-
-/** A cut's words (in the measured element) and its ellipsis (after it); see useWordCut. */
-function cutParts(shown: string, text: string): { words: string; ellipsis: string } {
-  return shown.endsWith('…') && shown !== oneLine(text) ? { words: shown.slice(0, -1), ellipsis: '…' } : { words: shown, ellipsis: '' };
 }
 
 // -- the collapsed bar's preview line ------------------------------------------------
@@ -365,7 +351,7 @@ function QuestionRow({ row }: { row: ThreadRow }) {
         );
       })}
       {answered && (typed
-        ? <TypedAnswerLine before={typed.before} words={typed.words} after={typed.after} />
+        ? <TypedAnswerLine before={typed.before} words={typed.words} after={typed.after} afterCut={typed.afterCut} />
         : <p className="message-box__answered">{answered}</p>)}
       {shut && <p className="message-box__answered">{QUESTION_CLOSED_LINE}</p>}
       {open && fromComposer && (
@@ -395,13 +381,15 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   );
 }
 
-/** GM r70/r73: "You answered “…”." on one line, the words cut at a word inside the quotes. */
-function TypedAnswerLine({ before, words, after }: { before: string; words: string; after: string }) {
+/** GM r70/r73: "You answered “…”." on one line, the words cut at a word inside
+ * the quotes. GM r94: whole words that end in . ? or ! take no period after
+ * the quote; cut words end in the ellipsis, so the period stays. */
+function TypedAnswerLine({ before, words, after, afterCut }: { before: string; words: string; after: string; afterCut: string }) {
   const wordsRef = useRef<HTMLSpanElement | null>(null);
-  const cut = cutParts(useWordCut(wordsRef, words, '.message-box__answered--typed'), words);
+  const cut = cutParts(useWordCut(wordsRef, words, '.message-box__answered--typed', '“'), words);
   return (
     <p className="message-box__answered message-box__answered--typed">
-      {before}<span ref={wordsRef} className="message-box__answered-words">{cut.words}</span>{cut.ellipsis}{after}
+      {before}<span ref={wordsRef} className="message-box__answered-words">{cut.words}</span>{cut.ellipsis}{cut.ellipsis ? afterCut : after}
     </p>
   );
 }
@@ -485,6 +473,10 @@ function ActionsFold({ entries, status, origin }: { entries: AgentLogEntry[]; st
   const [open, setOpen] = useState(false);
   const listId = useId();
   const lead = status && statusLeadsRun(status) ? status : null;
+  // GM r89.5: the chip's one line cut at a word by the shared cut, its closers kept ("on “Hero…”").
+  const wordsRef = useRef<HTMLSpanElement | null>(null);
+  const text = lead ? lead.text : actionsLabel(entries.length);
+  const cut = cutParts(useWordCut(wordsRef, text, '.message-box__actions'), text);
   if (entries.length === 0) {
     // The run's status with nothing to fold yet: the last row on its own.
     return lead && origin ? <StatusView status={lead} origin={origin} /> : null;
@@ -499,7 +491,9 @@ function ActionsFold({ entries, status, origin }: { entries: AgentLogEntry[]; st
         onClick={() => setOpen((value) => !value)}>
         <ChevronRight className="message-box__fold-icon" size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         {lead && <span className="message-box__breath" aria-hidden="true" />}
-        <span className="message-box__fold-text">{lead ? lead.text : actionsLabel(entries.length)}</span>
+        <span className="message-box__fold-text">
+          <span ref={wordsRef} className="message-box__fold-words">{cut.words}</span>{cut.ellipsis}
+        </span>
       </button>
       {open && (
         <ul id={listId} className="agent-log__list message-box__action-list">
@@ -740,6 +734,12 @@ function ReplyAnnouncer() {
   return <div className="message-box__announce" aria-live="polite" aria-atomic="true">{spoken?.text ?? ''}</div>;
 }
 
+/** The asking agent's cursor label, from its question row. */
+function askerLabel(setId: string): string {
+  const asked = usePersonThreadStore.getState().rows.find((row) => row.kind === 'question' && row.questionId === setId);
+  return agentLabel(asked?.agent, asked?.session);
+}
+
 /** The listener's cursor label, by id (a send's recipient may have gone). */
 function listenerLabel(listeners: readonly ChannelListener[], listenerId: string | null | undefined): string {
   const entry = listenerId ? listeners.find((one) => one.listenerId === listenerId) : undefined;
@@ -750,7 +750,7 @@ function listenerLabel(listeners: readonly ChannelListener[], listenerId: string
 function AnsweringChip({ answering }: { answering: AnsweringState }) {
   // GM r73: cut at a word, the ellipsis inside the quotes (the shared cut).
   const quoteRef = useRef<HTMLSpanElement | null>(null);
-  const cut = cutParts(useWordCut(quoteRef, answering.question, '.message-box__composer'), answering.question);
+  const cut = cutParts(useWordCut(quoteRef, answering.question, '.message-box__composer', '“'), answering.question);
   return (
     <div className="message-box__context message-box__context--answering">
       <span className="message-box__context-label">
@@ -771,18 +771,16 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   const failure = usePersonThreadStore((s) => s.failure);
   const listeners = usePersonThreadStore((s) => s.listeners);
   const answering = usePersonThreadStore((s) => s.answering);
-  const withdrawn = usePersonThreadStore((s) => s.withdrawn);
+  const answerGone = usePersonThreadStore((s) => s.answerGone);
   // The question still open here (answered elsewhere, the chip goes).
   const answerOpen = useAgentQuestionsStore((s) => {
     const entry = answering ? s.sets[answering.setId] : undefined;
     return Boolean(entry && entry.view.status === 'open' && entry.answerKey);
   });
-  const answerWithdrawn = useAgentQuestionsStore((s) => {
-    const entry = answering ? s.sets[answering.setId] : undefined;
-    return !entry || entry.view.status === 'withdrawn';
-  });
+  // Why it went: withdrawn, answered or closed (none for a set this tab no longer holds: 'gone').
+  const goneCause = useAgentQuestionsStore((s) => answerGoneCause(answering ? s.sets[answering.setId]?.view.status : undefined));
   const answerBusy = useAgentQuestionsStore((s) => Boolean(answering && s.busy[answering.setId]));
-  const state = useAvailability();
+  const state = useMessageAvailability();
   const names = useNodeNames(contextIds);
   const field = useRef<HTMLTextAreaElement | null>(null);
   const returnTo = useRef<HTMLElement | null>(null);
@@ -801,18 +799,30 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     else if (counterLine(draft.length, max) === null && announced) setAnnounced('');
   }
 
-  // Answered here or in the Agents panel, or closed: the chip goes, the draft
-  // stays. GM r79.6: withdrawn while the person typed (or as their answer
-  // went), the composer says so; the next send posts the words as a message.
+  // The sets this tab closed itself: a send or a dismiss (the composer's or
+  // the Agents panel's) in flight as the set closed. Those get no "another
+  // tab" line; the composer's own send says what happened (sendAnswer).
+  const closedHere = useRef(new Set<string>());
+  useEffect(() => useAgentQuestionsStore.subscribe((next, previous) => {
+    for (const [id, entry] of Object.entries(next.sets)) {
+      if (entry.view.status !== 'open' && previous.sets[id]?.view.status === 'open' && previous.busy[id]) closedHere.current.add(id);
+    }
+  }), []);
+
+  // The chip goes, the draft stays. GM r79.6, r89.3: withdrawn, or answered or
+  // closed in another tab while the person typed, the composer names why, and
+  // the next Enter only says so (answerGone.held): the one after posts the
+  // words as a message. A set this tab no longer holds holds the same way,
+  // with a line true whatever the cause (GM r94.1, F13): typed answer text
+  // never goes out as a public message on one silent Enter. Answered or
+  // closed from this tab: no line.
   useEffect(() => {
     if (!answering || answerOpen) return;
     const store = usePersonThreadStore.getState();
-    const asked = store.rows.find((row) => row.kind === 'question' && row.questionId === answering.setId);
     store.stopAnswering();
-    if (answerWithdrawn && store.draft.trim()) {
-      usePersonThreadStore.setState({ withdrawn: agentLabel(asked?.agent, asked?.session) });
-    }
-  }, [answering, answerOpen, answerWithdrawn]);
+    if (closedHere.current.has(answering.setId) || !store.draft.trim()) return;
+    usePersonThreadStore.setState({ answerGone: { cause: goneCause ?? 'gone', label: askerLabel(answering.setId), held: true } });
+  }, [answering, answerOpen, goneCause]);
 
   // "Answer" on a question row brings the person here (r61 answer 4).
   const answeringId = answeringNow?.questionId ?? null;
@@ -827,20 +837,21 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   const ready = state.kind === 'ready';
   // An answer goes to the question, not to a listener: only offline locks it.
   const live = answeringNow ? !offline : ready;
-  const recipientName = ready ? agentLabel(state.recipient.agent, state.recipient.session) : 'Claude';
-  const label = `Message ${recipientName}`;
+  // GM r89.4: one label for the field and the lock line, as the agent's rows name it.
+  const agentName = availabilityLabel(state);
+  const label = `Message ${agentName}`;
   const counter = counterLine(draft.length, max);
   // r61 answer 3: the product by name, a session by its cursor label.
   const lockLine = answeringNow ? null
     : state.kind === 'notConnected' ? NOT_CONNECTED_LINE
-      : state.kind === 'stopped' ? stoppedListeningLine(agentLabel(state.listener.agent, state.listener.session)) : null;
+      : state.kind === 'stopped' ? stoppedListeningLine(agentName) : null;
   const failureText = answeringNow || !failure ? null
     : failure.kind === 'server' ? SERVER_FAILED_LINE
       : failure.kind === 'stopped' ? listenerDroppedLine(listenerLabel(listeners, failure.to))
         : failure.line ?? SERVER_FAILED_LINE;
-  // GM r79.6: neutral, until the words go or the draft is cleared.
-  const withdrawnText = !answeringNow && withdrawn && draft.trim() ? withdrawnLine(withdrawn) : null;
-  const lineText = lockLine ?? failureText ?? withdrawnText;
+  // GM r79.6, r89.3: neutral, until the words go or the draft is cleared.
+  const goneText = !answeringNow && answerGone && draft.trim() ? answerGoneLine(answerGone) : null;
+  const lineText = lockLine ?? failureText ?? goneText;
   // Offline: the app's own row says it (the house pattern), no line here.
   const described = [state.kind === 'offline' ? OFFLINE_LINE_ID : lineText ? lineId : null, counter ? counterId : null]
     .filter(Boolean).join(' ') || undefined;
@@ -868,8 +879,18 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     questions.setText(target.setId, target.questionId, text);
     // A failure shows on the question's row (its own line); the words stay here.
     if (await questions.send(target.setId)) {
-      usePersonThreadStore.setState((current) => (current.draft.trim() === text ? { draft: '', contextIds: [], answering: null } : { answering: null }));
+      usePersonThreadStore.setState((current) => (current.draft.trim() === text
+        ? { draft: '', contextIds: [], answering: null, answerGone: null } : { answering: null, answerGone: null }));
+      return;
     }
+    // GM r79.6's race: the set closed first (withdrawn, or answered or closed
+    // in another tab) and nothing went out. The line names why; this Enter
+    // was the one that showed it, so the next one posts.
+    const status = useAgentQuestionsStore.getState().sets[target.setId]?.view.status;
+    if (status === 'open') return; // still open: its failure shows on the question's row
+    const cause = answerGoneCause(status) ?? 'gone';
+    usePersonThreadStore.setState((current) => ({ answering: null,
+      answerGone: current.draft.trim() ? { cause, label: askerLabel(target.setId), held: false } : null }));
   }
 
   function send() {
@@ -879,7 +900,14 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
       return;
     }
     if (state.kind !== 'ready') return;
-    usePersonThreadStore.setState({ withdrawn: null });
+    // GM r89.3: the first Enter after the chip went only says why (the line,
+    // spoken); the next posts the words as a message.
+    if (goneText && answerGone?.held) {
+      usePersonThreadStore.setState({ answerGone: { ...answerGone, held: false } });
+      setAnnounced(goneText);
+      return;
+    }
+    usePersonThreadStore.setState({ answerGone: null });
     void sendMessage(state.recipient.listenerId);
   }
 
@@ -930,7 +958,11 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           aria-describedby={described}
           maxLength={max}
           readOnly={false}
-          onChange={(event) => setDraft(event.target.value, answeringNow ? undefined : selectedIds)}
+          onChange={(event) => {
+            setDraft(event.target.value, answeringNow ? undefined : selectedIds);
+            // A cleared draft is a new start: no line, no held Enter.
+            if (!event.target.value.trim() && answerGone) usePersonThreadStore.setState({ answerGone: null });
+          }}
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

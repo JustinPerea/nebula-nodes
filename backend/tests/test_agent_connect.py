@@ -1016,8 +1016,9 @@ def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(
     assert mode(path) == 0o600 and TOKEN not in path.read_text()
     out = capsys.readouterr()
     assert TOKEN not in out.out + out.err
-    command = (f'claude --mcp-config {path} --dangerously-load-development-channels server:nebula-listen '
-               '--disallowedTools "mcp__nebula__*"')
+    # J2: the session's own shell gets the token file's path (never the token).
+    command = (f'NEBULA_APP_TOKEN_FILE={cli_env.file} claude --mcp-config {path} '
+               '--dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"')
     assert command in out.out.splitlines()
     # The copy rules: curly apostrophes, no parentheses or semicolons in what it prints.
     for line in out.out.splitlines():
@@ -1104,6 +1105,30 @@ def test_channel_first_run_reuses_the_token_file_claude_codes_saved_server_names
     assert cli_env.checked == [TOKEN]  # checked with Nebula, as --token-file is
     out = capsys.readouterr()
     assert TOKEN not in out.out + out.err and "--dangerously-load-development-channels" in out.out
+
+
+def test_channel_after_a_revoke_uses_the_new_file_claude_codes_saved_server_names(tmp_path, cli_env, monkeypatch,
+                                                                                 capsys, tmp_path_factory):
+    """Review 2 parity LOW-2: the listen config names a file Nebula deleted
+    at the revoke; the plain connect then saved the new token's file. The
+    bare --channel command (GM r81's "run this command again") works."""
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    os.unlink(cli_env.file)  # revoked: Nebula deletes the file
+    from services import app_token_file
+    fresh = str(app_token_file.write(tmp_path_factory.mktemp("state2"), "ba9876543210", TOKEN))
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {
+        "nebula": {"type": "stdio", "command": "python", "env": {"NEBULA_APP_TOKEN_FILE": fresh}}}}))
+    capsys.readouterr()
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    entry = json.loads(_listen(tmp_path).read_text())["mcpServers"]["nebula-listen"]
+    assert entry["env"]["NEBULA_APP_TOKEN_FILE"] == fresh
+    assert f"NEBULA_APP_TOKEN_FILE={fresh} claude" in capsys.readouterr().out
+    # With no saved server either, the stale file's own error stands.
+    os.unlink(fresh)
+    (tmp_path / ".claude.json").unlink()
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert "can't open the token file" in capsys.readouterr().err
 
 
 def test_channel_first_run_never_reuses_a_token_held_in_claude_codes_config(tmp_path, cli_env, monkeypatch, capsys):

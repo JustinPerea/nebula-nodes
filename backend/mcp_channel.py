@@ -648,6 +648,10 @@ class ChannelState:
         if lost:
             self._note_edit(now, wakes=True)
             self._lost.add(lost)
+            # A person.message naming this listener may be among the lost
+            # events: read the inbox again (boundary LOW-2).
+            if self.listener_id:
+                self._inbox_due = True
         for event in response.get("events") or []:
             if isinstance(event, Mapping):
                 self._observe_event(event, now)
@@ -772,6 +776,10 @@ class ChannelState:
         for message_id in due:
             _remember(self._held_said, message_id)
         return due
+
+    def inbox_failed(self) -> None:
+        """A read of the inbox failed every try: mark it due again."""
+        self._inbox_due = True
 
     def inbox_to_fetch(self) -> bool:
         """Whether the listener should read the inbox now (once per mark)."""
@@ -1905,6 +1913,11 @@ class Listener:
             self.state.messages_fetched(shown.get("messages") if isinstance(shown, Mapping) else None)
             self._nudge()
             return
+        # Every try failed: the messages still wait at Nebula, unsent. Read
+        # again at the next decision rather than at the next message
+        # (boundary LOW-2); each round of tries takes INBOX_TRIES backoffs.
+        self.state.inbox_failed()
+        self._nudge()
 
     async def _say_held(self, message_ids: list[str]) -> None:
         """Tell Nebula these wait at the runaway cap (best effort)."""

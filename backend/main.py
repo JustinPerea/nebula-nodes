@@ -4913,9 +4913,18 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
     # offering them, and a send to one is refused as stopped.
-    if channel_book.drop_agent(f"{channel_listeners.APP_ID_PREFIX}{app_id}"):
+    dropped = channel_book.drop_agent(f"{channel_listeners.APP_ID_PREFIX}{app_id}")
+    if dropped:
         await _broadcast_channel_listeners()
         _schedule_channel_expiry()
+        # Its messages still in flight can't be delivered any more (a new
+        # token is a new agent): they settle as dropped (#225 review 2).
+        try:
+            settled = await asyncio.to_thread(thread_book.drop_for, [entry.listener_id for entry in dropped])
+        except (ProjectStoreError, OSError):
+            settled = []
+        for project_id, rows in settled:
+            await _broadcast_thread(project_id, rows)
     return {"status": "revoked"}
 
 
@@ -6569,6 +6578,14 @@ def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[s
     return [entry.listener_id for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
 
 
+def _reply_listener_ids(identity: AgentIdentity, session: str | None) -> list[str]:
+    """The listeners a reply answers for: this session's, else every one of
+    this agent's (J2: `nebula reply` from the listening Claude's own shell
+    carries the CLI's session, not its MCP process's, but the same token)."""
+    return _thread_listener_ids(identity, session) or [entry.listener_id for entry in
+                                                         channel_book.for_agent(identity.id)]
+
+
 @app.get("/api/canvas/thread")
 async def read_person_thread(limit: int = 50) -> Any:
     """The open project's thread, newest last, at most ``limit`` (1-300).
@@ -6665,13 +6682,14 @@ async def accept_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
     listener_ids = _thread_listener_ids(identity, session)
     try:
-        project_id, rows = await asyncio.to_thread(thread_book.accept, ids, listener_ids)
+        changed = await asyncio.to_thread(thread_book.accept, ids, listener_ids)
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)  # type: ignore[return-value]
     except ProjectStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    await _broadcast_thread(project_id, rows)
-    return {"accepted": [row["id"] for row in rows]}
+    for project_id, rows in changed:  # wherever each was sent (boundary LOW-2)
+        await _broadcast_thread(project_id, rows)
+    return {"accepted": [row["id"] for _, rows in changed for row in rows]}
 
 
 @app.post("/api/agent/thread/held")
@@ -6685,13 +6703,14 @@ async def hold_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
     listener_ids = _thread_listener_ids(identity, session)
     try:
-        project_id, rows = await asyncio.to_thread(thread_book.hold, ids, listener_ids)
+        changed = await asyncio.to_thread(thread_book.hold, ids, listener_ids)
     except person_thread.ThreadError as exc:
         return _thread_refusal(exc)  # type: ignore[return-value]
     except ProjectStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    await _broadcast_thread(project_id, rows)
-    return {"held": [row["id"] for row in rows]}
+    for project_id, rows in changed:
+        await _broadcast_thread(project_id, rows)
+    return {"held": [row["id"] for _, rows in changed for row in rows]}
 
 
 @app.post("/api/canvas/thread/replies", status_code=201)
@@ -6699,15 +6718,23 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     """An agent answers the person in the thread: {text, nodeId?}. With a
     node, its cursor flies there and says the reply's first sentence (140
     characters at most), on the person's tabs only. The person can't post
-    here: they send messages. Paced per agent (ReplyPace: 5 in a row, then
-    one every 2 s): past it, 429 replies_rate_limited with retryAfter (s)
-    and a line saying when it can reply again; nothing is saved."""
+    here: they send messages. Only an agent with a Settings token replies
+    (J1, Justin 2026-11-04, the same as listening): a name alone or an
+    in-app agent's turn token gets 401 with a line saying what to do
+    (reply_no_token, reply_in_app_token). Paced per token agent (ReplyPace:
+    5 in a row, then one every 2 s): past it, 429 replies_rate_limited with
+    retryAfter (s) and a line saying when it can reply again; nothing is
+    saved, and a reply Nebula refuses later never spends one."""
     headers = current_request_headers()
     identity = identify_agent(headers)
-    if identity is None:
-        if is_person(headers):
-            raise HTTPException(status_code=403, detail="The person sends messages; replies are an agent's")
-        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    if identity is None and is_person(headers):
+        raise HTTPException(status_code=403, detail="The person sends messages; replies are an agent's")
+    if identity is None or not identity.verified:
+        raise HTTPException(status_code=401, detail=person_thread.REPLY_NO_TOKEN_LINE,
+                            headers={"X-Nebula-Code": person_thread.REPLY_NO_TOKEN_CODE})
+    if not channel_listeners.is_app_agent(identity):
+        raise HTTPException(status_code=401, detail=person_thread.REPLY_IN_APP_LINE,
+                            headers={"X-Nebula-Code": person_thread.REPLY_IN_APP_CODE})
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Send {text, nodeId?}")
     unknown = sorted(set(body) - {"text", "nodeId"})
@@ -6734,15 +6761,17 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
         fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
                   "session": _thread_session(identity, session)}
         project_id, row = await asyncio.to_thread(thread_book.add_reply, fields,
-                                                  _thread_listener_ids(identity, session))
+                                                  _reply_listener_ids(identity, session))
     except person_thread.ThreadError as exc:
+        thread_reply_pace.refund(identity.id)  # nothing was saved (live L1)
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
+        thread_reply_pace.refund(identity.id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    data = person_thread.reply_event_data(row)
-    if data is not None:
-        _journal(person_thread.REPLY_EVENT, node_id=node_id, data=data, summary="replied to the person",
-                 project_id=project_id)
+    # Always journaled (only its id when narrowed): its own listener ends a
+    # deliberate span on it, whatever route the reply took (PR A, J4).
+    _journal(person_thread.REPLY_EVENT, node_id=node_id, data=person_thread.reply_event_data(row),
+             summary="replied to the person", project_id=project_id)
     await _broadcast_thread(project_id, [row])
     if node_id is not None:
         try:

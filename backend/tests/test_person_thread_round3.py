@@ -25,7 +25,8 @@ from services import channel_listeners, person_thread
 from tests.conftest import PERSON
 from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, Clock  # noqa: F401
 from tests.test_canvas_proposals import api  # noqa: F401 - fixture
-from tests.test_person_thread import SESSION_A, SESSION_B, _listen, _send, thread  # noqa: F401 - fixture
+from tests.test_person_thread import (CLAUDE_TOKEN, CODEX_TOKEN, SESSION_A, SESSION_B, _listen, _send,  # noqa: F401
+                                      thread)
 
 
 @pytest.fixture
@@ -71,7 +72,7 @@ def test_a_looping_agent_never_pushes_out_the_persons_message(paced, monkeypatch
     statuses = []
     for n in range(60):  # Codex replies in a loop, as fast as the pace lets it
         paced.pace_clock.now += 2.0
-        statuses.append(_reply(paced, f"loop {n}", headers=CODEX).status_code)
+        statuses.append(_reply(paced, f"loop {n}", headers=CODEX_TOKEN).status_code)
     assert set(statuses) == {201}
     rows = _person_rows(paced)
     assert len(rows) == 20
@@ -92,7 +93,7 @@ def test_replies_are_paced_per_agent_with_a_line_saying_when(paced):
                               "every 2 s. You can reply again in 2 s, so put everything you have to say in one reply.")
     assert "one too many" not in json.dumps(_person_rows(paced))  # nothing saved
     # Another agent has its own pace.
-    assert _reply(paced, "from codex", headers=CODEX).status_code == 201
+    assert _reply(paced, "from codex", headers=CODEX_TOKEN).status_code == 201
     # One more every 2 s.
     paced.pace_clock.now += 1.0
     assert _reply(paced, "too soon").json()["retryAfter"] == 1
@@ -231,7 +232,8 @@ def test_a_reply_names_the_message_it_followed(thread):
     thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": [first]})
     assert _reply(thread, "about the first").json()["reply"]["replyTo"] == first
     thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": [second]})
-    # Another session's reply follows none of A's messages.
+    # Another listening session's reply follows none of A's messages.
+    _listen(thread, SESSION_B)
     assert _reply(thread, "from b", headers=SESSION_B).json()["reply"]["replyTo"] is None
     assert _reply(thread, "about the second").json()["reply"]["replyTo"] == second
 
@@ -301,7 +303,7 @@ def test_the_gated_turn_names_reply_to_person():
                                               now=3.0, gate=True, nth=1)
 
 
-def test_nebula_channel_prints_your_listeners(capsys):
+def test_nebula_channel_prints_your_listeners(capsys, monkeypatch):
     from cli.__main__ import build_parser
     from cli.commands import thread as thread_cmd
 
@@ -315,6 +317,7 @@ def test_nebula_channel_prints_your_listeners(capsys):
         def get_channel(self, agent_name=None):
             return {"projectId": "p", "listeners": self.listeners}
 
+    monkeypatch.setenv("NEBULA_APP_TOKEN", "tok-claude")
     entry = {"listenerId": "ch_0123456789abcdef", "state": "stopped", "reason": "idle", "since": 0, "seenAt": 0}
     assert thread_cmd.run_channel(Client([entry]), SimpleNamespace(json=False, agent_name=None)) == 0
     assert thread_cmd.run_channel(Client([]), SimpleNamespace(json=False, agent_name=None)) == 0
@@ -349,10 +352,10 @@ def test_nebula_reply_and_thread_say_what_happened_in_the_persons_words(capsys):
                                        "limit is 2,000. Shorten it, then run this command again.\n")
     client = Client()
     client.rows = []
-    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name=None)) == 0
+    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name="Claude Code")) == 0
     assert capsys.readouterr().out == "No messages in this project’s thread yet.\n"
     client.rows = [{"kind": "reply", "at": 0, "text": "Done.", "nodeId": "n7"}]
-    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name=None)) == 0
+    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name="Claude Code")) == 0
     assert capsys.readouterr().out.endswith("agent  Done.  (n7)\n")
 
 

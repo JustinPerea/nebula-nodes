@@ -910,9 +910,12 @@ config and the command without writing; `nebula mcp disconnect claude-code
 Then, each time (the command it prints, with the full path):
 
 ```bash
-claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
+NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
+`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's
+path (never the token), so `nebula reply` and the other `nebula` commands
+Claude runs there are the same agent as its tools (J2, below).
 `--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
 same tools out of the session, so `nebula-listen` serves both the tools and the
 pushes. It has to: the listener learns which proposals and runs are Claude's,
@@ -1217,12 +1220,41 @@ or on a Team org with Channels off, still reads "listening".
   (`ch_… stopped · idle since 12:14 last heard 12:10`); with none it says
   "You have no listener, so Nebula doesn’t count you as connected to the
   canvas. Run this command, then start Claude Code as it says." and the
-  command on the next line.
-- Only a listener with an agent token registers (above), and the routes a
-  listener reads its messages from and reports on
-  (`/api/agent/thread/inbox`, `accepted`, `held`) refuse a tokenless caller
-  the same way. A message sent before a Nebula restart and never pushed
-  stays "sent": the restarted Nebula gives the listener a new id.
+  command on the next line. With no agent token at all it doesn't ask
+  Nebula (no listener can be yours) and says "This terminal has no agent
+  token, so Nebula can’t tell which listeners are yours. Run this command,
+  then start Claude Code as it says." then the command on the next line,
+  then "The nebula CLI in that session reads its token file." (GM r94).
+- **The session's own shell is the same agent** (J2, Justin 2026-11-04).
+  The launch command `--channel` prints starts with
+  `NEBULA_APP_TOKEN_FILE=<the token file's path>` (the path, never the
+  token), so the `nebula` CLI in Claude's own Bash reads the same token as
+  the listener. The CLI reads `NEBULA_APP_TOKEN_FILE` whenever neither
+  `NEBULA_AGENT_TOKEN` nor `NEBULA_APP_TOKEN` is set, with the MCP server's
+  strict reader (a regular file of yours, mode 600, no symlink), keeps the
+  token in its own memory (never in its environment, argv or a log), and
+  fails closed on a bad file ("NEBULA_APP_TOKEN_FILE: <why>. Copy a new
+  token from Settings › Connect your agent, then run nebula mcp connect
+  claude-code --channel again."; set but empty: "NEBULA_APP_TOKEN_FILE is
+  empty. Unset it, or point it at the token file that Settings › Connect
+  your agent saved."). So `nebula reply`, `nebula thread` and `nebula
+  channel` from that session act as its MCP tools do, and a `nebula reply`
+  from it ends the listener's deliberate span like the tool (below).
+- Only a listener with a Settings agent token registers (above), and the
+  routes a listener reads its messages from and reports on
+  (`/api/agent/thread/inbox`, `accepted`, `held`) refuse any other caller
+  the same way, with the same codes (a revoked token there gets
+  `listener_token_invalid` and r81's line too). The inbox finds a message
+  in whichever project it was sent (each names its `projectId`), and
+  `accepted`/`held` mark it there, so a project switch before the listener
+  reads it never strands it. The listener reads its inbox again after
+  lost journal events (`gap`, `reset`) and after a read that failed every
+  try. A message sent before a Nebula restart and never pushed stays
+  "sent": the restarted Nebula gives the listener a new id. Revoking the
+  listener's token in Settings settles its messages still in flight as
+  `dropped`; the box says "Nebula couldn’t send your message because
+  Claude Code stopped listening. Reconnect it in the terminal, then send it
+  again."
 
 **The Message box.** The person messages a listening session from the
 canvas: the composer at the foot of the Agent log (`/` focuses it). Its
@@ -1251,16 +1283,43 @@ reload and every tab show the same rows.
   session: a session is named by its cursor label). Nebula never claims
   Claude read a message.
 - Claude answers with **MCP `reply_to_person(text, node_id?)`** or **`nebula
-  reply "<text>" [--node nX]`** (2,000 characters). With a node, its cursor
-  flies there and shows the reply's first sentence (140 characters). Only
-  agents reply. A reply is journaled as `thread.replied` (`data: {replyId,
-  text, nodeId}`). Replies are paced per agent: 5 in a row, then one every
+  reply "<text>" [--node nX]`** (2,000 characters, counted as a person sees
+  them). With a node, its cursor flies there and shows the reply's first
+  sentence (140 characters). Only agents reply, and **only with a Settings
+  agent token** (J1, Justin 2026-11-04, the same as listening). Refused with
+  `401` and a code:
+  - `reply_no_token` (a name alone, or nothing), three lines: "Nebula
+    couldn’t post this reply because this agent has no token. Copy one from
+    Settings › Connect your agent, run this command, then reply again.",
+    then `nebula mcp connect claude-code --channel`, then "The nebula CLI
+    finds the token through NEBULA_APP_TOKEN_FILE, which this command sets
+    up."
+  - `reply_in_app_token` (an in-app agent's turn token): "Nebula couldn’t
+    post this reply because it uses an in-app agent’s token, and only an
+    agent connected from Settings › Connect your agent can reply in the
+    Message box. Answer the person in this chat instead."
+  - `reply_token_invalid` (revoked or unknown): "Nebula couldn’t post this
+    reply because its token isn’t valid anymore. Copy a new one from
+    Settings › Connect your agent, run this command, then reply again.",
+    then the command on the next line.
+
+  Every saved reply is journaled as `thread.replied` (`data: {replyId,
+  text, nodeId}`; only `replyId` while the thread is narrowed, below), and
+  a refused one never is. Replies are paced per token agent: 5 in a row, then one every
   2 s. Past that the reply isn't saved: `429 replies_rate_limited` with
   `retryAfter` (seconds) and the line "Nebula couldn’t post this reply
   because replies are paced at 5 in a row, then one every 2 s. You can
-  reply again in 2 s, so put everything you have to say in one reply." A reply row's `replyTo` is the latest message
-  that session's listener had taken, so the box clears only that message's
-  status and the ones before it.
+  reply again in 2 s, so put everything you have to say in one reply." A
+  reply Nebula refuses for another reason (no project open) never spends
+  one. A reply row's `replyTo` is the latest message that session's
+  listener had taken (a session with no listener of its own, like the
+  `nebula` CLI in the listening Claude's shell, answers for its agent's
+  listeners), and the row then carries that message's session, so the box
+  clears only that message's status and the ones before it. Under the
+  channel, a message's turn isn't gated until a reply under the listener's
+  own token is saved, by `reply_to_person` or by `nebula reply` from the
+  session's own shell (the listener reads its own `thread.replied`, PR A's
+  `ownReplies=1`), or until the 10-minute cap.
 - The thread keeps at most 300 rows. Past that the oldest agent rows go
   first, then the person's settled rows; a message still `sent` or `held`
   is never trimmed. The person's tabs get each row in a `personThread` socket
@@ -1272,7 +1331,8 @@ reload and every tab show the same rows.
   for in `toAgent`; cursor keys and listener ids are the person's form only).
   The rule is one switch, `person_thread.AGENTS_READ_WHOLE_THREAD`: turned
   off, the read tool, the journal events and the cursor's say narrow at once
-  to the person plus each row's own agent. Questions stay owner-scoped: a
+  to the person plus each row's own agent (the events keep only ids: a
+  message's `to`, a reply's `replyId`). Questions stay owner-scoped: a
   question row names its set (`questionId`) and asker (`agent`) for every
   agent, but only the asker reads its `questions` (text and options), and no
   agent reads the person's answer there (`get_answers` is the asker's).
