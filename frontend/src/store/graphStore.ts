@@ -3337,11 +3337,19 @@ const DELETED_SCENES_KEPT = 32;
  *   copies held through a delete, rename drafts, and the labels in flight
  *   with what they were saved over (PR #221 review 1 LOW-1: fix17's Redo
  *   test left its restore's hold on n1 to the next test).
+ * - the person's saves still on their way (landingsOut): each names a node
+ *   and carries an `apply` that puts its edit on that node, which an agent
+ *   clear's Undo (lastSavedView) and the reconnect copy would otherwise take
+ *   for the next test's node of the same id (PR #221 review 2 NIT-1);
+ * - which run is this canvas's current run, the node marks of other tabs'
+ *   runs (forgetRunsOfReplacedGraph), and which positions the person placed
+ *   (forgetPersonPlaced), all keyed by node id.
  * A late answer to a request the test left unanswered can still arrive in the
  * next test; its write is no longer tracked, so it changes nothing there.
  * Not cleared: the store's own state and undo history (each test's
- * beforeEach sets them), and canvas-wide records that a replacement also
- * renews (the write queue, landings, runs), which hold no node's edits.
+ * beforeEach sets them), and the canvas-wide records a replacement renews
+ * rather than clears by node (the write queue, the replacement report, the
+ * steps in flight).
  * tests/sceneEditsResetRatchet.test.ts keeps every test file that uses
  * Cinema scenes with this store calling it in afterEach.
  */
@@ -3358,6 +3366,9 @@ export function resetDeletedSceneEditsForTests(): void {
   renameDrafts.clear();
   labelsInFlight.clear();
   labelsSavedBefore.clear();
+  landingsOut.clear();
+  forgetRunsOfReplacedGraph();
+  forgetPersonPlaced();
 }
 
 /** Nebula's scene for a node, as the last sync (or save answer) had it. */
