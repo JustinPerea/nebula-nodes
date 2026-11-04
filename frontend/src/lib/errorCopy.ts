@@ -510,6 +510,15 @@ export function shortReason(reason: string): string {
   return reason;
 }
 
+/** What `failure` says, as FailureLines shows it: '' when it says nothing (a write refused while offline: the banner
+ *  is its reason, failureCopy). A surface never shows a line or an alert for '' (#210 round 6t, GM r113 1). */
+export function failureText(failure: FailureCopy | string | null | undefined, retry = false): string {
+  if (!failure) return '';
+  if (typeof failure === 'string') return failure.trim();
+  const reason = retry ? shortReason(failure.reason) : failure.reason;
+  return [failure.heading, reason].map((part) => part.trim()).filter(Boolean).join(' ');
+}
+
 /** shortReason for a one-line string (a store keeps "<heading> <reason>"):
  * the same swap when the line ends with one of GM's two "try again" lines,
  * for a one-line surface whose own retry button sits beside it. */

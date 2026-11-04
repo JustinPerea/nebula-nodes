@@ -10,6 +10,9 @@ export interface BoardCardData extends Record<string, unknown> {
   /** Its board number: its place in `images` + 1 (plan C7). */
   number: number;
   setAside: boolean;
+  /** Fading in over the placeholder it just filled (GM r5): a primitive on
+   *  the card's own node, so only that card draws again (review 4, LOW-5). */
+  filling: boolean;
 }
 
 export type BoardCardNodeType = Node<BoardCardData, 'card'>;
@@ -30,6 +33,17 @@ export function wideFrom(widths: readonly number[], zoom: number): number {
 /** `wideFrom` for the board as it is now: a card at least this wide shows its file. */
 export const BoardWideContext = createContext<number>(Number.POSITIVE_INFINITY);
 
+/** How far the board's spring has brought each filling image in (0 to 1), by
+ *  image id (GM r5). A card reads it when it mounts, so a card React Flow
+ *  draws afresh mid-fade starts where the spring is, not at 0 (live, r4).
+ *  The value never changes, so no card draws again because of it; whether a
+ *  card is filling comes on its own node (`BoardCardData.filling`). */
+export interface BoardFill {
+  progress: (imageId: string) => number;
+}
+export const BoardFillContext = createContext<BoardFill>({ progress: () => 0 });
+const NO_FILL: ReadonlySet<string> = new Set();
+
 /** A card the server hasn't placed yet (an image dropped a moment ago): drawn, never moved. */
 export const isProvisionalCard = (placementId: string) => placementId.startsWith('new-');
 
@@ -43,16 +57,17 @@ export const isProvisionalCard = (placementId: string) => placementId.startsWith
  * React Flow then skips it (its `checkEquality`), and a drag over a
  * 300-card board re-renders only the cards that move. The size is given as
  * `measured` too, so React Flow never waits to measure a card before
- * fitting the view or culling what is off screen.
+ * fitting the view or culling what is off screen. `filling` holds the image
+ * ids fading in over a placeholder now: only their cards' nodes change.
  */
 export function createBoardNodeBuilder() {
   // Per card: what its node was built from. Compared field by field (no
   // string keys): this runs on every pointer move of a drag.
   interface Built { card: MoodboardPlacement; image: MoodboardImage; index: number; x: number; y: number;
-    selected: boolean; node: BoardCardNodeType }
+    selected: boolean; filling: boolean; node: BoardCardNodeType }
   let cache = new Map<string, Built>();
   return function build(images: MoodboardImage[], selected: ReadonlySet<string>,
-    moving: Readonly<Record<string, { x: number; y: number }>>): BoardCardNodeType[] {
+    moving: Readonly<Record<string, { x: number; y: number }>>, filling: ReadonlySet<string> = NO_FILL): BoardCardNodeType[] {
     const next = new Map<string, Built>();
     const nodes: BoardCardNodeType[] = [];
     images.forEach((image, index) => {
@@ -61,10 +76,11 @@ export function createBoardNodeBuilder() {
         const x = at ? at.x : card.x;
         const y = at ? at.y : card.y;
         const isSelected = selected.has(card.id);
+        const isFilling = filling.has(image.id);
         const cached = cache.get(card.id);
         let node: BoardCardNodeType;
         if (cached && cached.card === card && cached.image === image && cached.index === index && cached.x === x
-          && cached.y === y && cached.selected === isSelected) {
+          && cached.y === y && cached.selected === isSelected && cached.filling === isFilling) {
           node = cached.node;
         } else {
           const setAside = isSetAside(image);
@@ -78,10 +94,10 @@ export function createBoardNodeBuilder() {
             selected: isSelected,
             draggable: !isProvisionalCard(card.id),
             ariaLabel: `Reference #${index + 1}${setAside ? ', set aside' : ''}`,
-            data: { imageId: image.id, url: image.url, number: index + 1, setAside },
+            data: { imageId: image.id, url: image.url, number: index + 1, setAside, filling: isFilling },
           };
         }
-        next.set(card.id, { card, image, index, x, y, selected: isSelected, node });
+        next.set(card.id, { card, image, index, x, y, selected: isSelected, filling: isFilling, node });
         nodes.push(node);
       }
     });

@@ -3363,8 +3363,14 @@ async def _moodboard_brief_fields_startup() -> None:
     Then save the colour check (gap 18) on boards whose saved one is missing
     or stale, so it isn't run again on every generation and read. Then store
     whether each image of a board analyzed before alpha counted has
-    transparency (``stamp_transparency_once``)."""
-    from services.moodboard_store import migrate_brief_fields, save_colour_checks, stamp_transparency_once
+    transparency (``stamp_transparency_once``). First, the create request-id
+    records older than 7 days go (.creates/)."""
+    from services.moodboard_store import migrate_brief_fields, prune_create_records, save_colour_checks, stamp_transparency_once
+    try:
+        # Request-id records older than a week (services/moodboard_store.py).
+        await asyncio.to_thread(prune_create_records)
+    except Exception as exc:  # never block startup; a lookup ignores old records anyway
+        print(f"[main] moodboard create records not pruned: {type(exc).__name__}: {exc}", flush=True)
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
@@ -19421,6 +19427,16 @@ class MoodboardCreate(BaseModel):
     lastRead: Any = None
     # Updates are written only through /agent-notes (refused here by name).
     agentNotes: Any = None
+    # The client's id for this create (optional). Sent again with the same
+    # id, the create returns the board the first send made instead of a
+    # second one (services/moodboard_store.create_once). Any, so the store
+    # checks it and answers in its own words.
+    requestId: Any = None
+    # The Studio's count of its sends of this create (1 to 1,000,000), only
+    # with requestId. A repeat answers which attempt made the board
+    # (madeAttempt) and the version it was made at (madeVersion), so the
+    # Studio replays only what changed after that attempt. Agents leave it out.
+    attempt: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -19836,14 +19852,17 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
     _refuse_moodboard_layout(body)
-    from services.moodboard_store import NotesOptInProtected
+    from services.moodboard_store import (
+        REQUEST_BOARD_UNREADABLE, REQUEST_ID_OTHER_SCOPE, NotesOptInProtected, RequestBoardUnreadable,
+        RequestIdOtherScope,
+    )
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
         # Off the event loop: a new image's file is decoded to store its
         # transparency (services/moodboard_store._warm_new_files).
-        moodboard = await asyncio.to_thread(
-            store.create,
+        moodboard, earlier = await asyncio.to_thread(
+            store.create_or_repeat,
             name=body.name,
             # Only what was sent: an image's weight left out comes from its
             # placements, if it asks for any.
@@ -19862,11 +19881,28 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             sendNotes=body.sendNotes,
             coverImageId=body.coverImageId,
             by=_moodboard_author(),
+            requestId=body.requestId,
+            attempt=body.attempt,
         )
     except NotesOptInProtected as exc:
         _refuse_override_change(exc)
+    except RequestIdOtherScope:
+        # Never the other scope's board: the id is refused.
+        return JSONResponse(status_code=409, content={"detail": REQUEST_ID_OTHER_SCOPE,
+                                                      "code": "request_id_scope"})
+    except RequestBoardUnreadable:
+        raise HTTPException(status_code=500, detail=REQUEST_BOARD_UNREADABLE)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    if earlier is not None:
+        # A repeat of a create already made (same requestId) changed
+        # nothing, so nobody is told twice. `repeated` tells the client the
+        # board is the earlier send's, as it is now: what this send held
+        # beyond it (the draft moved on meanwhile) isn't on it yet.
+        # `madeAttempt` / `madeVersion` say which attempt made it, and at
+        # which version, so the Studio rebases on that attempt's sends.
+        return {**_moodboard_out(moodboard), "repeated": True,
+                "madeAttempt": earlier.get("attempt"), "madeVersion": earlier.get("version")}
     await _broadcast_stored_asset("moodboard", moodboard)
     await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)

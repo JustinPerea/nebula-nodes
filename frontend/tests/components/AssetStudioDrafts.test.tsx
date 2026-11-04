@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Character, Moodboard } from '../../src/types';
 
 const api = vi.hoisted(() => ({ characters: vi.fn(), boards: vi.fn(), character: vi.fn(), board: vi.fn(), createCharacter: vi.fn(),
-  updateCharacter: vi.fn(), createBoard: vi.fn(), updateBoard: vi.fn(), analyze: vi.fn(), upload: vi.fn() }));
+  updateCharacter: vi.fn(), createBoard: vi.fn(), updateBoard: vi.fn(), editBoard: vi.fn(), analyze: vi.fn(), upload: vi.fn() }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
   fetchCharacters: api.characters, fetchMoodboards: api.boards, fetchCharacter: api.character, fetchMoodboard: api.board,
   createCharacter: api.createCharacter,
-  updateCharacter: api.updateCharacter, createMoodboard: api.createBoard, updateMoodboard: api.updateBoard,
+  updateCharacter: api.updateCharacter, createMoodboard: api.createBoard, updateMoodboard: api.updateBoard, editMoodboard: api.editBoard,
   analyzeMoodboard: api.analyze }));
 // Only `/api/uploads` goes to the upload mock. The Studios' Recently deleted
 // list also fetches, and must get its own Response, not the upload's.
@@ -180,17 +180,30 @@ describe('asset studio workspace continuity', () => {
     expect(useUIStore.getState().moodboardEditorId).toBe('board-b');
   });
 
-  it('rejects a Moodboard upload belonging to an explicitly replaced new draft', async () => {
+  // GM on #210 review 5 (answer 1): New never drops a paste. A new board
+  // with an upload on its way counts as content: it is saved first, the
+  // upload lands on it, and the fresh draft stays empty.
+  it('New with a Moodboard upload on its way saves that board first; the upload lands there, not on the fresh draft', async () => {
     const upload = deferred<Response>(); api.upload.mockReturnValue(upload.promise);
+    api.editBoard.mockImplementation(async (id: string) => ({ board: { ...board(id), version: 2 }, version: 2, applied: [], undo: { ops: [] } }));
     useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL);
     render(<MoodboardStudioView />); await settle();
     fireEvent.change(screen.getByLabelText('Add Images'), { target: { files: [new File(['image'], 'a.png', { type: 'image/png' })] } });
-    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' })); await settle();
+    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+    // The save and the switch take a few turns (this file's timers are fake, so no waitFor).
+    for (let i = 0; i < 10; i += 1) await settle();
+    expect(api.createBoard).toHaveBeenCalledTimes(1);
+    expect(api.createBoard.mock.calls[0][0]).toMatchObject({ name: 'Untitled Moodboard' });
     change('Notes', 'Replacement draft');
-    await act(async () => upload.resolve(new Response(JSON.stringify({ url: '/discarded.png' })))); await settle();
+    await act(async () => upload.resolve(new Response(JSON.stringify({ url: '/kept.png' }))));
+    // The image's shape is read with a time limit (jsdom loads no image).
+    for (let i = 0; i < 10; i += 1) { await act(async () => { vi.advanceTimersByTime(1000); }); await settle(); }
+    expect(api.editBoard).toHaveBeenCalledTimes(1);
+    expect(api.editBoard.mock.calls[0][0]).toBe('created-board');
+    expect(api.editBoard.mock.calls[0][1]).toEqual([expect.objectContaining({ op: 'add', images: [expect.objectContaining({ url: '/kept.png' })] })]);
     expect(screen.getByText('Images (0)')).toBeTruthy();
     expect(screen.getByLabelText('Notes')).toHaveValue('Replacement draft');
-    expect(api.createBoard).not.toHaveBeenCalled();
+    expect(api.createBoard).toHaveBeenCalledTimes(1);
   });
 
   it('analyzes only on an explicit click and preserves edits made during the request', async () => {
