@@ -149,6 +149,7 @@ import { placeTiles, respot } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
+import { useAgentPresenceStore, type AgentCursor } from '../../store/agentPresenceStore';
 import { emptyAssetStudioEntry, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { MOODBOARD_VIEW_KEY, useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useBoardUndoStore } from '../../lib/boardUndo';
@@ -5399,7 +5400,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     seed(left('t1', 'A'), left('t2', 'B'), left('t3', 'C'), left('t4', 'D'));
     inTrash({ t1: { name: 'Rivers' }, t2: { name: 'Dusk' }, t3: { name: 'Sea' }, t4: { name: 'Moss' } });
     await openStudio();
-    const line = (await screen.findByText('Nebula couldn’t save your changes to 4 boards because they were deleted. Restore them to keep the changes.')).parentElement!;
+    const line = (await screen.findByText('Nebula couldn’t save your changes to 4 moodboards because they were deleted. Restore them to keep the changes.')).parentElement!;
     expect(line.getAttribute('title')).toBe('“Rivers”, “Dusk”, “Sea” and “Moss”');
     expect(screen.getByTestId('recently-deleted').getAttribute('data-open-request')).toBe('');
     // From the keyboard (a click with no pointer: detail 0): the list's first Restore is focused with its ring.
@@ -5808,8 +5809,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       lookups({ t1: trashedAs('t1', 'A'), t2: trashedAs('t2', 'B'), t3: trashedAs('t3', 'C'), t4: trashedAs('t4', 'D') });
       trash.rows = [{ id: 't1', name: 'A' }, { id: 't2', name: 'B' }, { id: 't3', name: 'C' }, { id: 't4', name: 'D' }];
       await openStudio();
-      await screen.findByText(/your changes to 4 boards/);
-      expect(screen.getByTestId('rail-confirm-empty').getAttribute('data-text')).toBe('Your unsaved changes to 4 boards will be lost too.');
+      await screen.findByText(/your changes to 4 moodboards/);
+      expect(screen.getByTestId('rail-confirm-empty').getAttribute('data-text')).toBe('Your unsaved changes to 4 moodboards will be lost too.');
     });
 
     it('one restored, the other deleted for good: the restored one still gets its confirmation', async () => {
@@ -6598,17 +6599,25 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(useUIStore.getState().moodboardEditorId).toBe('g1');
     });
 
-    /** pb1's kept edit: its notes, and a remove of `images` made a minute before the board changed them. */
-    const keptRemove = (images: string[]) => {
+    /** A board's kept edit (pb1's by default): its notes, and a remove of `images` made a minute before the board changed them. */
+    const keptRemove = (images: string[], board = 'pb1', name = 'Rivers') => {
       const at = Date.now() - 120_000;
       const state = (id: string) => ({ weight: 1, excluded: false, notes: '', privateNote: '', cards: [{ id: `c-${id}`, x: id === 'i2' ? 520 : 0, y: 0 }] });
-      return left('pb1', 'Rivers', { ops: [{ op: 'remove', images }], opMeta: [{ at, from: Object.fromEntries(images.map((id) => [id, state(id)])) }] });
+      return left(board, name, { ops: [{ op: 'remove', images }], opMeta: [{ at, from: Object.fromEntries(images.map((id) => [id, state(id)])) }] });
     };
     const changedBoard = (ids: string[]): Partial<Moodboard> => ({ updatedAt: later(-60_000), version: 4,
       images: [image('i1', ids.includes('i1') ? { weight: 0.4 } : {}), image('i2', { placements: [card('i2', 520, 0)], ...(ids.includes('i2') ? { weight: 0.4 } : {}) })] });
-    const agentChanged = (board: string, images: string[], name: string) => act(() => {
+    const agentChanged = (board: string, images: string[], name: string, id?: string) => act(() => {
       for (const listener of ws.listeners) listener({ type: 'storedAssetChanged', kind: 'moodboard', id: board, deleted: false,
-        edit: { actor: { kind: 'agent', name } }, touched: { images, frames: [], looks: [] } });
+        edit: { actor: { kind: 'agent', name, ...(id ? { id } : {}) } }, touched: { images, frames: [], looks: [] } });
+    });
+    /** Live cursors of the agent `id` here, one per session ordinal given (null: its one session-less cursor). */
+    const liveCursors = (id: string, name: string, ordinals: Array<number | null>) => act(() => {
+      useAgentPresenceStore.setState({ agents: Object.fromEntries(ordinals.map((ordinal, index) => {
+        const session = ordinal === null ? null : { key: `${index}`.padStart(12, 'a'), ordinal };
+        const key = session ? `${id}#${session.key}` : id;
+        return [key, { id, key, session, name } as unknown as AgentCursor];
+      })) });
     });
 
     it('GM r90.5: a kept remove of an image an agent changed after it: the image stays, and the confirmation says who', async () => {
@@ -6640,6 +6649,46 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await pressRestoreProject();
       await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved. #2 changed after you removed it, so it’s still on the board.',
         {}, { timeout: 3000 });
+    });
+
+    it('round 6q (GM r95.2): kept removes across two boards stay: counted, "still on their boards"', async () => {
+      seed(keptRemove(['i2'], 'pb1', 'Rivers'), keptRemove(['i1'], 'pb2', 'Tide'));
+      projectBoards({ pb1: { name: 'Rivers', project: 'p9', extra: changedBoard(['i2']) },
+        pb2: { name: 'Tide', project: 'p9', extra: changedBoard(['i1']) } }, { p9: 'Shore' });
+      await openStudio();
+      const two = /Nebula couldn’t save your changes to “Rivers” and “Tide”/;
+      await screen.findByText(two);
+      agentChanged('pb1', ['i2'], 'Claude Code');
+      agentChanged('pb2', ['i1'], 'Claude Code');
+      await pressRestoreProject(false, two);
+      await screen.findByText('Restored “Shore”. Your changes to “Rivers” and “Tide” are saved. Claude Code changed 2 images after you removed '
+        + 'them, so they’re still on their boards.', {}, { timeout: 3000 });
+    });
+
+    it('round 6q (GM r95.3): the changer is named by its Agent log label: its live session\'s number, else its name', async () => {
+      onTestFinished(() => useAgentPresenceStore.setState({ agents: {} }));
+      const run = async (ordinals: Array<number | null>, id: string | undefined, expected: string) => {
+        cleanup();
+        seed(keptRemove(['i2']));
+        projectBoards({ pb1: { name: 'Rivers', project: 'p9', extra: changedBoard(['i2']) } }, { p9: 'Shore' });
+        liveCursors('ext:claude-code', 'Claude Code', ordinals);
+        await openStudio();
+        await screen.findByText(LINE);
+        agentChanged('pb1', ['i2'], 'Claude Code', id);
+        await pressRestoreProject();
+        await screen.findByText(`Restored “Shore”. Your change to “Rivers” is saved. ${expected} changed #2 after you removed it, so it’s still on the board.`,
+          {}, { timeout: 3000 });
+      };
+      // One live session, the agent's second: the label its cursor and log rows show.
+      await run([2], 'ext:claude-code', 'Claude Code · 2');
+      // Its first session: the name alone, as the log shows it.
+      await run([1], 'ext:claude-code', 'Claude Code');
+      // Two live sessions (which one wrote can't be told), none, or another agent's cursor: the name alone.
+      await run([2, 3], 'ext:claude-code', 'Claude Code');
+      await run([], 'ext:claude-code', 'Claude Code');
+      await run([2], 'ext:other', 'Claude Code');
+      await run([2], undefined, 'Claude Code');
+      expect(document.body.textContent).not.toContain('(agent)');
     });
 
     it('review 11 LOW-1: Restore project pressed twice before it answers is one restore, and the confirmation names the board', async () => {

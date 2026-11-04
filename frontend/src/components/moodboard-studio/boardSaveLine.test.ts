@@ -188,7 +188,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'trashed').text)
       .toBe('Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted. Restore them to keep the changes.');
     expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea', 'Moss'], 'trashed')).toEqual({
-      text: 'Nebula couldn’t save your changes to 4 boards because they were deleted. Restore them to keep the changes.',
+      text: 'Nebula couldn’t save your changes to 4 moodboards because they were deleted. Restore them to keep the changes.',
       title: '“Rivers”, “Dusk”, “Sea” and “Moss”' });
   });
 
@@ -199,7 +199,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'purged').text)
       .toBe('Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted somewhere else.');
     expect(deletedBoardsLine(['a', 'b', 'c', 'd', 'e'], 'purged').text)
-      .toBe('Nebula couldn’t save your changes to 5 boards because they were deleted somewhere else.');
+      .toBe('Nebula couldn’t save your changes to 5 moodboards because they were deleted somewhere else.');
   });
 
   it('clips each name past 40 characters with the full names in the title; a blank name is Untitled', () => {
@@ -219,7 +219,7 @@ describe('a Restore\'s confirmation (round 6l, GM r20 A, r21 Q6)', () => {
     expect(restoredBoardsLine(['Rivers'], 1)).toEqual({ text: 'Restored “Rivers”. Your change is saved.', title: '“Rivers”' });
     expect(restoredBoardsLine(['Rivers', 'Harbor'], 2).text).toBe('Restored “Rivers” and “Harbor”. Your changes are saved.');
     expect(restoredBoardsLine(['Rivers', 'Harbor', 'Sea'], 3).text).toBe('Restored “Rivers”, “Harbor” and “Sea”. Your changes are saved.');
-    expect(restoredBoardsLine(['a', 'b', 'c', 'd'], 4)).toEqual({ text: 'Restored 4 boards. Your changes are saved.', title: '“a”, “b”, “c” and “d”' });
+    expect(restoredBoardsLine(['a', 'b', 'c', 'd'], 4)).toEqual({ text: 'Restored 4 moodboards. Your changes are saved.', title: '“a”, “b”, “c” and “d”' });
   });
 
   it('a plain Restore, or one with nothing left to send, is the first sentence alone', () => {
@@ -265,6 +265,29 @@ describe('kept edits whose boards\' project was deleted (GM r21 Q8; round 6p, GM
   });
 });
 
+// Round 6q (GM r95.5): every line that counts boards says "moodboards".
+describe('a count of boards says "moodboards" in every line (GM r95.5)', () => {
+  const four = ['a', 'b', 'c', 'd'];
+  it.each([
+    ['the Restore project confirmation', projectRestoredLine('Coast', four).text, 'Restored “Coast”. Your changes to 4 moodboards are saved.'],
+    ['the purged-on-Restore line', projectRestoreFailedLine('Coast', 'purged', four).text,
+      'Nebula couldn’t restore “Coast” because it was deleted for good. Your changes to 4 moodboards can’t be kept.'],
+    ['the project line', projectDeletedLine('Coast', four).text,
+      'Nebula couldn’t save your changes to 4 moodboards because their project “Coast” was deleted. Restore the project to keep the changes.'],
+    ['the project gone-for-good line', projectGoneLine('Coast', four).text,
+      'Nebula couldn’t keep your changes to 4 moodboards because their project “Coast” was deleted for good.'],
+    ['the deleted-boards line', deletedBoardsLine(four, 'trashed').text,
+      'Nebula couldn’t save your changes to 4 moodboards because they were deleted. Restore them to keep the changes.'],
+    ['the deleted-elsewhere line', deletedBoardsLine(four, 'purged').text,
+      'Nebula couldn’t save your changes to 4 moodboards because they were deleted somewhere else.'],
+    ['the boards Restore confirmation', restoredBoardsLine(four, 4).text, 'Restored 4 moodboards. Your changes are saved.'],
+    ['the lost-too sentence', lostTooLine(four)!.text, 'Your unsaved changes to 4 moodboards will be lost too.'],
+  ])('%s', (_name, text, expected) => {
+    expect(text).toBe(expected);
+    expect(text).not.toMatch(/\d boards/);
+  });
+});
+
 describe('a kept remove the board changed after (GM r90.5)', () => {
   it('names the numbers by the names rule, then counts them; by the agent\'s own label', () => {
     expect(changedAfterRemoveLine([], 'Claude')).toBe('');
@@ -274,8 +297,12 @@ describe('a kept remove the board changed after (GM r90.5)', () => {
     expect(changedAfterRemoveLine([1, 3, 5, 7], 'Claude')).toBe('Claude changed 4 images after you removed them, so they’re still on the board.');
     // The agent's label, never a fixed "Claude".
     expect(changedAfterRemoveLine([3], 'Codex')).toBe('Codex changed #3 after you removed it, so it’s still on the board.');
-    // Across boards, counted (a number names an image on one board only).
-    expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on the board.');
+    // Across boards, counted (a number names an image on one board only), and on their boards (round 6q, GM r95.2).
+    expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on their boards.');
+    expect(changedAfterRemoveLine([1, 2, 3, 4, 5], 'Claude Code', true))
+      .toBe('Claude Code changed 5 images after you removed them, so they’re still on their boards.');
+    expect(changedAfterRemoveLine([3, 3], null, true)).toBe('2 images changed after you removed them, so they’re still on their boards.');
+    expect(changedAfterRemoveLine([3, 5], 'Claude Code', false)).toBe('Claude Code changed #3 and #5 after you removed them, so they’re still on the board.');
     // No one known agent: the image is the subject.
     expect(changedAfterRemoveLine([3], null)).toBe('#3 changed after you removed it, so it’s still on the board.');
     expect(changedAfterRemoveLine([3, 5], ' ')).toBe('#3 and #5 changed after you removed them, so they’re still on the board.');
@@ -314,9 +341,9 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
     // From 4 boards the line counts; the title still lists every name, with no serial comma (GM r74).
     expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({
       title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Shore”',
-      text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 4 boards can’t be kept.' });
+      text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 4 moodboards can’t be kept.' });
     expect(projectRestoreFailedLine('Shore', 'purged', ['a', 'b', 'c', 'd', 'e'])).toEqual({ title: '“a”, “b”, “c”, “d” and “e” in “Shore”',
-      text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 5 boards can’t be kept.' });
+      text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 5 moodboards can’t be kept.' });
     const long = 'An exceptionally long project name that keeps going past forty';
     expect(projectRestoreFailedLine(long, 'noAnswer').text).toContain(`“${long.slice(0, 39)}…”`);
     expect(projectRestoreFailedLine(long, 'noAnswer').title).toBe(`“${long}”`);
@@ -333,9 +360,9 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
       text: 'Restored “Coast”. Your changes to “Rivers”, “Tide” and “Harbor” are saved.' });
     // From 4 boards the line counts; the title still lists every name, with no serial comma (GM r74).
     expect(projectRestoredLine('Coast', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({ title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”',
-      text: 'Restored “Coast”. Your changes to 4 boards are saved.' });
+      text: 'Restored “Coast”. Your changes to 4 moodboards are saved.' });
     expect(projectRestoredLine('Coast', ['a', 'b', 'c', 'd', 'e'])).toEqual({ title: '“a”, “b”, “c”, “d” and “e” in “Coast”',
-      text: 'Restored “Coast”. Your changes to 5 boards are saved.' });
+      text: 'Restored “Coast”. Your changes to 5 moodboards are saved.' });
     // Nothing saved (the boards kept every change): the project alone.
     expect(projectRestoredLine('Coast', [])).toEqual({ title: '“Coast”', text: 'Restored “Coast”.' });
     // Each name clipped as the other lines clip it (the title keeps it whole); a blank one is "Untitled".
@@ -360,7 +387,7 @@ describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
     expect(lostTooLine(['Rivers'])).toEqual({ text: 'Your unsaved change to “Rivers” will be lost too.', title: '“Rivers”' });
     expect(lostTooLine(['Rivers', 'Harbor'])?.text).toBe('Your unsaved changes to “Rivers” and “Harbor” will be lost too.');
     expect(lostTooLine(['Rivers', 'Harbor', 'Sea'])?.text).toBe('Your unsaved changes to “Rivers”, “Harbor” and “Sea” will be lost too.');
-    expect(lostTooLine(['a', 'b', 'c', 'd'])).toEqual({ text: 'Your unsaved changes to 4 boards will be lost too.', title: '“a”, “b”, “c” and “d”' });
+    expect(lostTooLine(['a', 'b', 'c', 'd'])).toEqual({ text: 'Your unsaved changes to 4 moodboards will be lost too.', title: '“a”, “b”, “c” and “d”' });
   });
 });
 

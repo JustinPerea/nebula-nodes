@@ -19,6 +19,7 @@ import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { agentActorLabel } from '../../lib/agentActorLabel';
 import { placeholderLabel } from './boardPlaceholder';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine,
   changedAfterRemoveLine, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectGoneLine, projectRestoreFailedLine,
@@ -2412,10 +2413,10 @@ export function MoodboardStudioView() {
   const recheckGone = useCallback(() => setGoneChecks((checks) => checks + 1), []);
   useEffect(() => wsClient.subscribe((event) => {
     if (event.type === 'storedAssetChanged') {
-      // Who changed a board's images while a kept edit waits on it (round 6p, GM r90.5): an agent by its own name.
+      // Who changed a board's images while a kept edit waits on it (round 6p, GM r90.5): an agent by the label its
+      // Agent log rows show (round 6q, GM r95.3: agentActorLabel).
       if (event.kind === 'moodboard' && event.touched?.images.length) {
-        const actor = event.edit?.actor;
-        noteKeptChange(event.id, event.touched.images, actor?.kind === 'agent' ? actor.name?.trim() || null : null);
+        noteKeptChange(event.id, event.touched.images, agentActorLabel(event.edit?.actor));
       }
       if (event.kind === 'moodboard' && keptEditsWaiting().some((kept) => kept.board === event.id)) recheckGone();
     } else if ((event.type === 'projectsChanged' || event.type === 'socketReconnected') && keptEditsWaiting().length) recheckGone();
@@ -2620,6 +2621,8 @@ export function MoodboardStudioView() {
   // out (another tab restored or purged the project), focus goes to <main>, never body (review 11 MEDIUM-1, cause B).
   const projectPress = useRef<{ projectId: string; keyboard: boolean } | null>(null);
   const mainRef = useRef<HTMLElement>(null);
+  // The notice stack over the board (#210 round 6q, GM r95): the board keeps its cards out of the stack's band.
+  const noticesRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const press = projectPress.current;
     if (!press || document.querySelector(`[data-gone="project"][data-project="${CSS.escape(press.projectId)}"]`)) return;
@@ -3175,8 +3178,8 @@ export function MoodboardStudioView() {
         <main ref={mainRef} className="moodboard-studio-view__board">
           {loading ? loadingBlock : (
             <>
-              <div className="moodboard-studio-view__board-notices">{notices}</div>
-              <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
+              <div ref={noticesRef} className="moodboard-studio-view__board-notices">{notices}</div>
+              <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles} notices={noticesRef}
                 pasteTarget={pasteTarget} placeholders={placeholders} onPlaceholdersFilled={dropFilled}
                 outside={outsideTiles} onOutsideDone={dismissOutside} offline={offline} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>

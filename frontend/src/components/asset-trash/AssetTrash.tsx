@@ -26,10 +26,13 @@ import type { LeaveProps } from '../../lib/noticeLeave';
 
 type AssetKind = 'moodboard' | 'character' | 'style';
 
-const NOUNS: Record<AssetKind, { one: string; many: string }> = {
-  moodboard: { one: 'board', many: 'boards' },
-  character: { one: 'character', many: 'characters' },
-  style: { one: 'style', many: 'styles' },
+/** `counted` is the noun after a number: a count of boards says "moodboards" in every person line (#210 round 6q,
+ *  GM r95.5; PR #228's word), "Delete all 4 moodboards for good?". `many` stays for the lines that don't count
+ *  ("Recently deleted boards", "Deleted boards stay here …", GM's own words). */
+const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> = {
+  moodboard: { one: 'board', many: 'boards', counted: 'moodboards' },
+  character: { one: 'character', many: 'characters', counted: 'characters' },
+  style: { one: 'style', many: 'styles', counted: 'styles' },
 };
 
 export const UNDO_VISIBLE_MS = 8000;
@@ -209,7 +212,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
         {open && items.length > 0 && (() => {
           const shown = items;
           const lost = atStake?.(shown) ?? null;
-          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${shown.length} ${noun.many} for good?`;
+          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${shown.length} ${noun.counted} for good?`;
           return <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} prompt={lost ? `${ask} ${lost.text}` : ask} title={lost?.title}
             onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, shown),
               () => onPurged?.(shown.map((item) => item.id)))} />;

@@ -511,8 +511,8 @@ function forgetChanges(board: string): void {
 }
 
 /**
- * An agent changed `images` on `board`, which holds a kept edit in this tab (round 6p, GM r90.5): remembered by its
- * own name, so a kept remove the change keeps from replaying says who changed the image. A later change by someone
+ * An agent changed `images` on `board`, which holds a kept edit in this tab (round 6p, GM r90.5): remembered by the
+ * label its Agent log rows show (lib/agentActorLabel, round 6q, GM r95.3), so a kept remove the change keeps from replaying says who changed the image. A later change by someone
  * else (the person, another client) forgets the name: the line then names only the image.
  */
 export function noteKeptChange(board: string, images: readonly string[], by: string | null): void {

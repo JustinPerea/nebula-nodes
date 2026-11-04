@@ -487,3 +487,96 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
     expect(stale.map((entry) => `${entry.file}: ${entry.text}`)).toEqual([]);
   });
 });
+
+/**
+ * #210 round 6q (GM r95.5): a person line that counts boards says
+ * "moodboards" ("Restored “Coast”. Your changes to 4 moodboards are saved.",
+ * "Delete all 4 moodboards for good?"), never "4 boards". Across src/ (not
+ * tests), read with the TypeScript parser, the person copy (string literals,
+ * template text, JSX text; never a comment, a pattern, the console or a
+ * module) counts boards when:
+ * - its text holds a number then "boards" ("4 boards");
+ * - its text right after an interpolation starts with "boards" or is "board"
+ *   before another (`${n} boards`, `${n} board${s}`), or JSX text after an
+ *   expression does (`{n} boards`);
+ * - it is the bare noun "boards", which a line could put after a count
+ *   (`${n} ${noun}`): each such literal is reviewed below as not a count; a
+ *   new one fails, and a listed one that's gone fails too (drop it).
+ */
+const BOARDS_REVIEWED: { file: string; text: string; why: string }[] = [
+  { file: 'components/asset-trash/AssetTrash.tsx', text: 'boards',
+    why: 'NOUNS.moodboard.many: "Recently deleted boards" and "Deleted boards stay here …" (GM\'s words), no count; the count reads `counted`' },
+  { file: 'components/moodboard-studio/MoodboardStudioView.tsx', text: 'boards', why: 'a Restore confirmation\'s slot key, not copy' },
+];
+
+/** The person copy in `text` that counts boards, as the literal's text. */
+function countedBoards(text: string): string[] {
+  const file = ts.createSourceFile('x.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const isCodeCall = (node: ts.Node) => {
+    if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
+    const callee = node.expression;
+    if (ts.isIdentifier(callee) && callee.text === 'RegExp') return true;
+    if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) return true;
+    return ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'console';
+  };
+  const hits: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isCodeCall(node)) return;
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
+      ts.forEachChild(node, (child) => { if (child !== node.moduleSpecifier) visit(child); });
+      return;
+    }
+    const literal = ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)
+      || ts.isTemplateMiddle(node) || ts.isTemplateTail(node) || ts.isJsxText(node);
+    if (literal) {
+      const afterSlot = ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
+      const jsxAfterExpression = ts.isJsxText(node) && (() => {
+        const siblings = (node.parent as ts.JsxElement | ts.JsxFragment).children;
+        const at = siblings ? siblings.indexOf(node) : -1;
+        return at > 0 && ts.isJsxExpression(siblings[at - 1]);
+      })();
+      const counts = /\d\s+boards\b/i.test(node.text)
+        || ((afterSlot || jsxAfterExpression) && /^\s*boards\b/i.test(node.text))
+        || (ts.isTemplateMiddle(node) && /^\s*board$/i.test(node.text))
+        || ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && /^\s*boards\s*$/i.test(node.text));
+      if (counts) hits.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return hits;
+}
+
+describe('ratchet: a person line counts "moodboards", never "boards" (#210 round 6q, GM r95.5)', () => {
+  it('the scanner sees each way a line could count boards', () => {
+    expect(countedBoards('const a = `Restored ${what}. Your changes to ${n} boards are saved.`;')).toEqual([' boards are saved.']);
+    expect(countedBoards("const a = 'Your changes to 4 boards are saved.';")).toEqual(['Your changes to 4 boards are saved.']);
+    expect(countedBoards('const a = `${n} board${n === 1 ? \'\' : \'s\'}`;')).toEqual([' board']);
+    expect(countedBoards('const a = <p>{count} boards</p>;')).toEqual([' boards']);
+    expect(countedBoards("const NOUN = { many: 'boards' };")).toEqual(['boards']);
+    // The noun `namedBoards` took before round 6q (its default), planted back: found.
+    expect(countedBoards("function namedBoards(names, noun = 'boards') { return `${names.length} ${noun}`; }")).toEqual(['boards']);
+    // Not a count: "moodboards", a board's own words, a comment, a pattern, a module.
+    expect(countedBoards('const a = `Restored ${what}. Your changes to ${n} moodboards are saved.`;')).toEqual([]);
+    expect(countedBoards("const a = 'Deleted boards stay here until you delete them for good.';")).toEqual([]);
+    expect(countedBoards('const a = <p>Deleted {noun} stay here</p>;')).toEqual([]);
+    expect(countedBoards('const a = `${who} changed ${what} after you removed them, so they’re still on their boards.`;')).toEqual([]);
+    expect(countedBoards('// "4 boards"\n/* 4 boards */ const a = 1;')).toEqual([]);
+    expect(countedBoards("const a = new RegExp('4 boards');")).toEqual([]);
+    expect(countedBoards("import x from './4 boards';")).toEqual([]);
+  });
+
+  it('none in src/ but the reviewed ones (a new one fails), and none stale', { timeout: 30_000 }, () => {
+    const root = join(__dirname, '../../src');
+    const files = sources(root).filter((path) => !path.endsWith('.d.ts'));
+    expect(files.length).toBeGreaterThan(100);
+    const found = files.flatMap((path) => {
+      const text = readFileSync(path, 'utf8');
+      return /boards?\b/i.test(text) ? countedBoards(text).map((hit) => ({ file: relative(root, path), text: hit })) : [];
+    });
+    const unknown = found.filter((hit) => !BOARDS_REVIEWED.some((entry) => entry.file === hit.file && entry.text === hit.text));
+    expect(unknown.map((hit) => `${hit.file}: ${JSON.stringify(hit.text)}`), 'a line that counts boards: say "moodboards"').toEqual([]);
+    const stale = BOARDS_REVIEWED.filter((entry) => !found.some((hit) => hit.file === entry.file && hit.text === entry.text));
+    expect(stale.map((entry) => `${entry.file}: ${entry.text}`)).toEqual([]);
+  });
+});

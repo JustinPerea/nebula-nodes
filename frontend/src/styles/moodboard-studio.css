@@ -207,8 +207,12 @@ body.app-slava-restraint .moodboard-studio__notice--action {
   gap: 12px;
 }
 
+/* Its resting ink and edge said here too (they are the toolbar button's), so the
+   shared paused look's contrast check (disabled-buttons.css, round 6q) reads them. */
 body.app-slava-restraint .moodboard-studio__notice-action {
   flex: none;
+  border-color: var(--sr-edge);
+  color: var(--sr-ink);
 }
 
 /* Round 6k (GM r19 1): the red line for a board deleted for good closes by

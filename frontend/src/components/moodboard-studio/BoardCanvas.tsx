@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent, MutableRefObject, PointerEvent as ReactPointerEvent } from 'react';
+import type { DragEvent as ReactDragEvent, MutableRefObject, PointerEvent as ReactPointerEvent, RefObject } from 'react';
 import {
-  Background, BackgroundVariant, Panel, ReactFlow, ReactFlowProvider, getViewportForBounds, useReactFlow, useStore, useStoreApi,
+  Background, BackgroundVariant, Panel, ReactFlow, ReactFlowProvider, useReactFlow, useStore, useStoreApi,
   type Node, type NodeChange, type NodeProps, type NodeTypes, type Rect, type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -22,7 +22,7 @@ import { offlineMark } from '../../lib/useBackendOffline';
 import { offlineDisabledReason } from '../../lib/errorCopy';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
-import { BOARD_FALLBACK_INSETS, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
+import { BOARD_FALLBACK_INSETS, frameInInsets, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
 import '../../styles/moodboard-board.css';
 
 /** A card moved on the board: where its top-left now is, in whole board pixels. */
@@ -57,6 +57,9 @@ export interface BoardCanvasProps {
   /** Nebula is offline (GM r12 2): editing is paused, so Add images is
    *  disabled with the offline reason and an empty board shows no drop hint. */
   offline?: boolean;
+  /** The Studio's notice stack over the board's top (#210 round 6q, GM r95): while a line shows, the band down to
+   *  its bottom is outside the view (lib/boardViewInsets), so a fit or a refit never frames a card under a line. */
+  notices?: RefObject<HTMLElement | null>;
 }
 
 /** Where new tiles go: the point they gather around and the visible board, in
@@ -199,7 +202,7 @@ function BoardDots() {
 }
 
 function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTargetRef,
-  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled, offline = false }: BoardCanvasProps) {
+  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled, offline = false, notices }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -429,21 +432,21 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     }
   }, [setViewport, readCamera]);
   // The view insets (lib/boardViewInsets, GM #213 round 3): the control
-  // bar's band is outside, so a fit or a Show frames its cards above it. The
-  // last measured insets are kept for when there is no layout to measure
-  // (the view closing).
+  // bar's band is outside, so a fit or a Show frames its cards above it, and
+  // so is the notice stack's band while a line shows (#210 round 6q, GM r95),
+  // measured when the fit is made. The last measured insets are kept for
+  // when there is no layout to measure (the view closing).
+  const noticesRef = useRef(notices);
+  noticesRef.current = notices;
   const insetsRef = useRef<ViewInsets | null>(null);
   const viewInsets = useCallback((): ViewInsets => {
-    const measured = measureBoardViewInsets(wrapperRef.current, controlsRef.current);
+    const measured = measureBoardViewInsets(wrapperRef.current, controlsRef.current, noticesRef.current?.current);
     if (measured) insetsRef.current = measured;
     return insetsRef.current ?? BOARD_FALLBACK_INSETS;
   }, []);
   /** The camera that frames `bounds` in a `width` x `height` column, inside the view insets. */
-  const frame = useCallback((bounds: Rect, width: number, height: number): Viewport => {
-    const inside = insideInsets(width, height, viewInsets());
-    const to = getViewportForBounds(bounds, inside.width, inside.height, MIN_ZOOM, 1, FIT_PADDING);
-    return { x: to.x + inside.x, y: to.y + inside.y, zoom: to.zoom };
-  }, [viewInsets]);
+  const frame = useCallback((bounds: Rect, width: number, height: number): Viewport =>
+    frameInInsets(bounds, width, height, viewInsets(), { minZoom: MIN_ZOOM, maxZoom: 1, padding: FIT_PADDING }), [viewInsets]);
   /**
    * The whole-board fit in a column this size: the one fit computation, for
    * Fit, the fit on open and the follower alike. Held spots count, as cards

@@ -168,7 +168,7 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
  *   and “B” because they were deleted. Restore them to keep the changes."
  * - Gone for good (red, no Retry): "Nebula couldn’t save your change to
  *   “Rivers” because the board was deleted somewhere else."; for several,
- *   "…your changes to 4 boards because they were deleted somewhere else."
+ *   "…your changes to 4 moodboards because they were deleted somewhere else."
  */
 export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'purged'): { text: string; title: string } {
   const { one, what, title } = namedBoards(names);
@@ -190,7 +190,7 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
  * Recently deleted, with no kept edit, is the first sentence alone.
  * - "Restored “Rivers”. Your change is saved."
  * - "Restored “Rivers” and “Harbor”. Your changes are saved."
- * - "Restored 4 boards. Your changes are saved."
+ * - "Restored 4 moodboards. Your changes are saved."
  * - "Restored “Rivers”."
  */
 export function restoredBoardsLine(names: readonly string[], saved: number, stayed = ''): { text: string; title: string } {
@@ -213,12 +213,10 @@ export function restoredBoardsLine(names: readonly string[], saved: number, stay
  * - "Nebula couldn’t save your changes to “Rivers” and “Tide” because their
  *   project “Coast” was deleted. Restore the project to keep the changes."
  * - "…your changes to 4 moodboards because their project “Coast” was deleted…"
- *   (the count says "moodboards", GM r90 addendum, matching PR #228)
  */
 export function projectDeletedLine(project: string, boards: readonly string[]): { text: string; title: string } {
   const { what, title } = namedBoards([project]);
-  // The count form says "moodboards" (GM r90 addendum, matching PR #228).
-  const kept = namedBoards(boards.length ? boards : [''], 'moodboards');
+  const kept = namedBoards(boards.length ? boards : ['']);
   // Each form spelled out whole.
   const text = kept.one
     ? `Nebula couldn’t save your change to ${kept.what} because its project ${what} was deleted. Restore the project to keep the change.`
@@ -240,8 +238,7 @@ export function projectDeletedLine(project: string, boards: readonly string[]): 
  */
 export function projectGoneLine(project: string, boards: readonly string[]): { text: string; title: string } {
   const { what, title } = namedBoards([project]);
-  // The count form says "moodboards" (GM r90 addendum, matching PR #228).
-  const lost = namedBoards(boards.length ? boards : [''], 'moodboards');
+  const lost = namedBoards(boards.length ? boards : ['']);
   // Each form spelled out whole.
   const text = lost.one ? `Nebula couldn’t keep your change to ${lost.what} because its project ${what} was deleted for good.`
     : `Nebula couldn’t keep your changes to ${lost.what} because their project ${what} was deleted for good.`;
@@ -254,22 +251,28 @@ export function projectGoneLine(project: string, boards: readonly string[]): { t
  * image stays on the board, and the line says who changed it, by the
  * agent's own label (clipped as a board name is). Numbers follow the names
  * rule ("#3", "#3 and #5"); from four, or across several boards, the count
- * counts them all. With no single known changer, the image is the subject.
- * - "Claude changed #3 after you removed it, so it’s still on the board."
- * - "Claude changed #3 and #5 after you removed them, so they’re still on the board."
- * - "Claude changed 4 images after you removed them, so they’re still on the board."
+ * counts them all, and across several boards they're "still on their boards"
+ * (round 6q, GM r95.2). With no single known changer, the image is the
+ * subject. `by` is the agent's label as the Agent log shows it
+ * (keptChangeLabel, round 6q, GM r95.3).
+ * - "Claude Code changed #3 after you removed it, so it’s still on the board."
+ * - "Claude Code changed #3 and #5 after you removed them, so they’re still on the board."
+ * - "Claude Code changed 4 images after you removed them, so they’re still on the board."
+ * - "Claude Code changed 2 images after you removed them, so they’re still on their boards." (across boards)
  * - "#3 changed after you removed it, so it’s still on the board."
  */
-export function changedAfterRemoveLine(numbers: readonly number[], by: string | null, counted = false): string {
+export function changedAfterRemoveLine(numbers: readonly number[], by: string | null, acrossBoards = false): string {
   if (!numbers.length) return '';
-  const one = numbers.length === 1 && !counted;
-  const what = one || (!counted && numbers.length <= MOST_NAMED) ? joinWithAnd(numbers.map((n) => `#${n}`)) : `${numbers.length} images`;
+  const one = numbers.length === 1 && !acrossBoards;
+  const what = one || (!acrossBoards && numbers.length <= MOST_NAMED) ? joinWithAnd(numbers.map((n) => `#${n}`)) : `${numbers.length} images`;
   const who = by?.trim() ? clipGraphemes(by.trim(), KEPT_NAME_MAX) : '';
   // Each form spelled out whole.
   if (who) {
+    if (acrossBoards) return `${who} changed ${what} after you removed them, so they’re still on their boards.`;
     return one ? `${who} changed ${what} after you removed it, so it’s still on the board.`
       : `${who} changed ${what} after you removed them, so they’re still on the board.`;
   }
+  if (acrossBoards) return `${what} changed after you removed them, so they’re still on their boards.`;
   return one ? `${what} changed after you removed it, so it’s still on the board.`
     : `${what} changed after you removed them, so they’re still on the board.`;
 }
@@ -283,7 +286,7 @@ export function changedAfterRemoveLine(numbers: readonly number[], by: string | 
  * colon (GM r74): "“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”".
  * - "Restored “Coast”. Your change to “Rivers” is saved."
  * - "Restored “Coast”. Your changes to “Rivers” and “Tide” are saved."
- * - "Restored “Coast”. Your changes to 4 boards are saved."
+ * - "Restored “Coast”. Your changes to 4 moodboards are saved."
  * - "Restored “Coast”."
  */
 export function projectRestoredLine(project: string, saved: readonly string[], stayed = ''): { text: string; title: string } {
@@ -315,7 +318,7 @@ export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFai
  *   Try again." (neutral, with Try again);
  * - "Nebula couldn’t restore “Shore” because it was deleted for good. Your
  *   change to “Rivers” can’t be kept." (red, with ×; "Your changes to
- *   “Rivers” and “Harbor”" or "to 4 boards" for several);
+ *   “Rivers” and “Harbor”" or "to 4 moodboards" for several);
  * - "Nebula couldn’t restore “Shore” because the server didn’t accept the
  *   request. Try again." (neutral, with Try again);
  * - "Nebula couldn’t restore “Coast” because it lost the connection. Try
@@ -346,7 +349,7 @@ export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the 
  * hold kept edits (round 6l, GM r21 Q2), or null when none does:
  * "Your unsaved change to “Rivers” will be lost too."; "Your unsaved changes
  * to “Rivers” and “Harbor” will be lost too."; "Your unsaved changes to 4
- * boards will be lost too."
+ * moodboards will be lost too."
  */
 export function lostTooLine(names: readonly string[]): { text: string; title: string } | null {
   if (!names.length) return null;
@@ -354,10 +357,12 @@ export function lostTooLine(names: readonly string[]): { text: string; title: st
   return { text: one ? `Your unsaved change to ${what} will be lost too.` : `Your unsaved changes to ${what} will be lost too.`, title };
 }
 
-/** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name. */
-function namedBoards(names: readonly string[], noun = 'boards'): { one: boolean; what: string; title: string } {
+/** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name.
+ *  The count says "moodboards" in every line (round 6q, GM r95.5; PR #228's word): "4 moodboards", never "4 boards"
+ *  (tests/lib/errorCopy.namedLine.test.ts's ratchet fails a person line that counts "boards"). */
+function namedBoards(names: readonly string[]): { one: boolean; what: string; title: string } {
   const shown = names.map((name) => name.trim() || 'Untitled');
-  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} ${noun}`;
+  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} moodboards`;
   return { one: shown.length === 1, what, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
 }
 

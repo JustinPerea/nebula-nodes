@@ -31,7 +31,9 @@
    styles live in many sheets with their own specificity (and some load with
    their studio's chunk); the disabled look wins over each of them, its
    hover included. PR #198's [data-offline-neutral] says the same for its
-   offline actions. */
+   offline actions. A Studio line's own action (.moodboard-studio__notice-action:
+   Restore project, aria-disabled offline so it keeps focus, #210 round 6q,
+   GM r95) is an outline button, so it is in the first list. */
 :root {
   /* white at 0.55 (--sr-ink-light): 6.3:1 on the canvas's black, 5.6:1 on
      the grey fill below; an enabled label (--sr-ink, 0.92) is 17.6:1. One
@@ -100,7 +102,8 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .moodboard-studio__notice-action
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -127,7 +130,8 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .moodboard-studio__notice-action
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;

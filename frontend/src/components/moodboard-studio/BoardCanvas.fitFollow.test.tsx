@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { StrictMode, type ReactNode } from 'react';
 import type { MoodboardImage, MoodboardPlacement } from '../../types';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // #209, GM (a): the Board view refits when its column resizes, only while the
 // camera is still where the last whole-board fit left it. React Flow is a
@@ -939,6 +941,80 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     const room = 300 - BOARD_BAR_BAND_PX;
     expect(short.y + 1000 * short.zoom).toBeLessThan(room);
     expect(short.y + 1000 * short.zoom).toBeGreaterThan(room - 0.12 * room);
+  });
+});
+
+// #210 round 6q (GM r95): at 1024 x 640 with the offline row up, a three-line
+// project line ran over the fitted card: the refit after the row opened
+// centred the cards in the shorter column, under the line. The notice stack's
+// band is outside the view (lib/boardViewInsets), measured at each fit.
+describe('the fit clears the Studio\'s notices (GM r95)', () => {
+  type Box = { top: number; height: number };
+  const boxes = { board: { top: 49, height: 591 } as Box, stack: { top: 61, height: 62 } as Box };
+  const rectOf = ({ top, height }: Box) => ({ top, bottom: top + height, height, left: 0, right: 870, width: 870, x: 0, y: top,
+    toJSON: () => ({}) }) as DOMRect;
+  let stackEl: HTMLDivElement;
+  beforeEach(() => {
+    stackEl = document.createElement('div');
+    boxes.board = { top: 49, height: 591 };
+    boxes.stack = { top: 61, height: 62 };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === stackEl) return rectOf(boxes.stack);
+      if (this.classList.contains('moodboard-board')) return rectOf(boxes.board);
+      if (this.classList.contains('moodboard-board__controls')) return rectOf({ top: boxes.board.top + boxes.board.height - 53, height: 38 });
+      return rectOf({ top: 0, height: 0 });
+    });
+  });
+  // The bar is measured here, so it publishes its clearance (lib/bottomBar), whose two-frame switch mark is
+  // module state: run it out before the next test's frames start again from id 1.
+  afterEach(() => { cleanup(); runFrames(); vi.restoreAllMocks(); });
+  const mountWithNotices = () => {
+    flow.state.width = 870;
+    flow.state.height = boxes.board.height;
+    return render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} notices={{ current: stackEl }} />);
+  };
+  /** Where the cards (the board's top row is at y 0) start, in the column, and where the notice band ends. */
+  const cardsTop = () => camera().y;
+  const bandEnd = () => boxes.stack.top + boxes.stack.height - boxes.board.top + 12;
+
+  it('the fit on open frames the cards below a line that shows', () => {
+    mountWithNotices();
+    expect(cardsTop()).toBeGreaterThanOrEqual(bandEnd() - 0.5);
+    expect(camera().y + 1000 * camera().zoom).toBeLessThanOrEqual(boxes.board.height - 53 + 0.5);
+  });
+
+  it('GM r95\'s case: the offline row opens (the column 49 px shorter): the refit keeps the cards below the line', () => {
+    mountWithNotices();
+    act(() => {
+      boxes.board = { top: 98, height: 542 };
+      boxes.stack = { top: 110, height: 62 };
+    });
+    resize(870, 542);
+    runFrames();
+    expect(bandEnd()).toBe(86);
+    expect(cardsTop()).toBeGreaterThanOrEqual(86 - 0.5);
+    expect(camera().y + 1000 * camera().zoom).toBeLessThanOrEqual(542 - 53 + 0.5);
+  });
+
+  it('the Studio hands the board its notice stack', () => {
+    const studio = readFileSync(resolve(__dirname, 'MoodboardStudioView.tsx'), 'utf8');
+    expect(studio).toMatch(/<div ref=\{noticesRef\} className="moodboard-studio-view__board-notices">\{notices\}<\/div>/);
+    expect(studio).toMatch(/<BoardCanvas [^>]*\bnotices=\{noticesRef\}/);
+  });
+
+  it('a line coming or going doesn\'t move the camera by itself (GM #213 round 3); the next fit counts it', () => {
+    act(() => { boxes.stack = { top: 61, height: 0 }; });
+    mountWithNotices();
+    const open = camera();
+    flow.setViewport.mockClear();
+    act(() => { boxes.stack = { top: 61, height: 62 }; });
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(open);
+    act(() => { fitButton().click(); });
+    runFrames();
+    expect(cardsTop()).toBeGreaterThanOrEqual(bandEnd() - 0.5);
+    expect(cardsTop()).toBeGreaterThan(open.y);
   });
 });
 

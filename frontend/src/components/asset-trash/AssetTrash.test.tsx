@@ -268,7 +268,7 @@ describe('RecentlyDeletedAssets, round 6l', () => {
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" atStake={lostToo} onPurged={onPurged} />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
-    expect(screen.getByRole('group', { name: 'Delete all 3 boards for good? Your unsaved changes to “Rivers” and “Harbor” will be lost too.' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Delete all 3 moodboards for good? Your unsaved changes to “Rivers” and “Harbor” will be lost too.' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
     await screen.findByRole('alert');
     expect(onPurged).not.toHaveBeenCalled();
