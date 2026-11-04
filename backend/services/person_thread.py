@@ -543,8 +543,9 @@ class PersonThread:
         (its ``route``, else one of ``listener_ids``). Returns [(project id,
         changed rows)]. ``counted`` gets, for the push ledger, each id that
         counts as this caller's push (id -> project): one it just accepted,
-        or a re-send of one already accepted for this agent (``agent_id``:
-        the listener reports its open pushes again after Nebula restarted)."""
+        or a re-send of one already accepted for this agent and this
+        ``route`` (the listener reports its open pushes again after Nebula
+        restarted, in the same session)."""
         wanted, own = set(message_ids), set(listener_ids)
         at = self._now_ms()
 
@@ -560,8 +561,11 @@ class PersonThread:
                     changed.append(dict(row))
                     if counted is not None:
                         counted[row["id"]] = project_id
-                elif (counted is not None and row.get("state") == "accepted" and agent_id
+                elif (counted is not None and row.get("state") == "accepted" and agent_id and route is not None
+                      and row.get("route") == route
                       and ((row.get("to") or {}).get("agent") or {}).get("id") == agent_id):
+                    # A re-report counts only from the session the row was sent to (round 5c,
+                    # MEDIUM-1): the route survives a restart, an invented session never matches.
                     counted[row["id"]] = project_id
             return changed
 
@@ -602,6 +606,49 @@ class PersonThread:
             return changed
 
         return self._write_all(mutate) if own else []
+
+    def drop_route(self, agent_id: str, session: str | None, listener_id: str | None = None
+                   ) -> list[tuple[str, list[dict[str, Any]]]]:
+        """That one listener (agent and raw session) expired or stopped
+        before taking these (round 5c, LOW-2): its messages still in flight
+        settle as dropped, so the box reads its stopped line, not "Sent"
+        forever. Never touches an accepted message or another session's.
+        The row keeps ``lapsed``: the same session's listener coming back
+        (a sleep, a reconnect) takes it after all (``revive_route``), as a
+        message sent before a lapse always reached it."""
+        route = route_key(agent_id, session)
+        own = {listener_id} if listener_id else set()
+
+        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            changed = []
+            for row in rows:
+                if _in_flight(row) and _for_listener(row, own, route):
+                    row["state"] = DROPPED_STATE
+                    row["lapsed"] = True
+                    _bump(row)
+                    changed.append(dict(row))
+            return changed
+
+        return self._write_all(mutate)
+
+    def revive_route(self, agent_id: str, session: str | None) -> list[tuple[str, list[dict[str, Any]]]]:
+        """A listener of that agent and session is back: the messages
+        ``drop_route`` settled for its going away are sent again, so its
+        inbox reads them. A revoked agent's dropped rows never come back."""
+        route = route_key(agent_id, session)
+
+        def mutate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            changed = []
+            for row in rows:
+                if (row.get("kind") == "message" and row.get("state") == DROPPED_STATE and row.get("lapsed")
+                        and row.get("route") == route):
+                    row["state"] = "sent"
+                    row.pop("lapsed", None)
+                    _bump(row)
+                    changed.append(dict(row))
+            return changed
+
+        return self._write_all(mutate)
 
     def reply_target(self, ledger: Any = None, key: tuple[str, str | None] | None = None) -> str | None:
         """The project a reply from this listener session would go to now,
@@ -698,7 +745,7 @@ class PersonThread:
 
 # Never outside the backend: a message's route (a digest of its listener's
 # agent and raw session, route_key).
-_SERVER_ONLY_KEYS = ("route",)
+_SERVER_ONLY_KEYS = ("route", "lapsed")
 
 
 def person_view(row: Mapping[str, Any]) -> dict[str, Any]:

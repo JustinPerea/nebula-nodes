@@ -1160,7 +1160,15 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   `reply_to_person` tool's own result can answer it. The listener learns
   of a shell reply from its own `thread.replied` event and of a shell pin
   answer from its own `pin.resolved`, which its long-poll asks for with
-  `ownReplies=1` (its other own events stay out of its feed). How long
+  `ownReplies=1` (its other own events stay out of its feed).
+  The 10 minutes end the protected turn only: Nebula keeps an unanswered
+  push for 24 hours, so a reply after 11 minutes still answers its message
+  and lands in its project. A listener holds a new push while 64 are
+  unanswered in that span (it goes once one is answered or the span ends),
+  and one agent's pushes are never pushed out by another agent's. A listener
+  that crashes after pushing a message but before reporting it to Nebula
+  pushes that message again after a restart in the same session (delivery is
+  at least once: a duplicate in the same session, never in another). How long
   Claude thinks or works in other tools between Nebula calls doesn't
   matter. After the last answer, an edit you made meanwhile goes as a gated
   push once Claude has been quiet for 20 s. A typed request still can be

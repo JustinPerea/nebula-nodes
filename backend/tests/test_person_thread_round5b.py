@@ -232,12 +232,13 @@ def test_11_the_cap_mirrors_the_listeners_span():
     ledger.record("app:a", "s", [("m1", push_ledger.MESSAGE, "p")])
     clock.now = start + 900.0  # one period (550 s apart): the t=0 push is still pickable
     assert ledger.peek("app:a", "s").reply_to() == "m0"
-    clock.now = start + 1200.0  # 650 s after the last push: past the cap, nothing
-    assert ledger.peek("app:a", "s") is None and ledger.open_pushes("app:a", "s") == []
+    clock.now = start + 1200.0  # 650 s after the last push: past the span, so the listener is told of none,
+    assert ledger.open_pushes("app:a", "s") == []  # but a late reply (round 5c, LOW-1) still answers m0
+    assert ledger.peek("app:a", "s").reply_to() == "m0"
     # Past the cap between two pushes: only the latest period is pickable.
-    ledger.record("app:a", "s", [("m2", push_ledger.MESSAGE, "p")])
     clock.now = start + 1900.0
     ledger.record("app:a", "s", [("m3", push_ledger.MESSAGE, "p")])
+    assert ledger.peek("app:a", "s").reply_to() == "m3"
     assert [p["ids"] for p in ledger.open_pushes("app:a", "s")] == [["m3"]]
 
 

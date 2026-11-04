@@ -102,11 +102,22 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
     if args.json:
         print(json.dumps(response, ensure_ascii=False, indent=2), file=out)
         return 0
-    where = f" Your cursor went to {args.node}." if args.node else ""
+    # Round 5c (NIT-1): say what happened. The cursor went only when the
+    # saved reply kept its node; a reply that went to another project's
+    # thread ignored it, and the server's note says so.
+    note = str(response.get("note") or "")
+    kept = (response.get("reply") or {}).get("nodeId")
+    if args.node and kept:
+        where = f" Your cursor went to {kept}."
+    elif args.node and note:
+        where = f" {note}"
+        note = ""
+    else:
+        where = ""
     print(f"Replied in the person’s Message box.{where}", file=out)
-    if response.get("note"):
+    if note:
         # Round 5 (D2): Nebula saved it but couldn't tell which message it answers.
-        print(str(response["note"]), file=sys.stderr)
+        print(note, file=sys.stderr)
     return 0
 
 

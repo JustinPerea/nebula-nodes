@@ -395,6 +395,10 @@ def test_the_201st_deliberate_send_in_an_hour_is_held_not_dropped():
         push = take(state, t)
         if push is not None:
             times.append(t)
+            # Answered at once, so only the hourly cap holds the 201st (64 unanswered would: round 5c).
+            assert state.tool_started("reply_to_person", {"text": "Done."}, t) is None
+            state.tool_finished("reply_to_person", {"text": "Done."},
+                                {"reply": {"id": f"pt_{n}", "replyTo": f"msg_{n}"}}, t)
     assert len(times) == 200 and times[-1] == 200.0
     assert "200th" in state._render("message", [], 0, [], [], [], [], [], [], [], set(), 0, held=0, now=200.0,
                                     gate=False, nth=0, deliberate_nth=200)

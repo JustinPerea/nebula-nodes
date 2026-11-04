@@ -223,6 +223,7 @@ MAX_LISTED = 20       # events written out per push; the rest are a count
 MAX_PENDING = 100     # pins, and changes, kept while waiting (each on its own); past this only a count
 MAX_TEXT = 200
 MAX_SEEN_RUNS = 256
+MAX_OPEN_PUSHES = 64  # deliberate pushes in span nobody has answered: a new one waits (push_ledger.MAX_PUSHES)
 MAX_OWN = 256  # proposal ids it made, and runs it started, kept to tell its own runs (oldest go first)
 _HIDDEN = frozenset({"Cc", "Cf", "Co", "Cs"})
 
@@ -991,6 +992,14 @@ class ChannelState:
             return False
         return True
 
+    def _pushes_full(self, now: float) -> bool:
+        """The span holds MAX_OPEN_PUSHES unanswered deliberate pushes: a new
+        one is held, never pushed in place of the oldest (round 5c, LOW-3: a
+        runaway holds, never drops). It goes once a reply answers one or the
+        span's cap clears them."""
+        self._ungated_turn(now)  # a span past its cap clears its groups
+        return len(self._open_groups) >= MAX_OPEN_PUSHES
+
     def _new_group(self, messages: list[str], questions: list[str]) -> str | None:
         """A deliberate push that carried messages or answers: its group."""
         ids = [*messages, *questions]
@@ -1342,9 +1351,11 @@ class ChannelState:
         while self._deliberate_history and now - self._deliberate_history[0] >= 3600.0:
             self._deliberate_history.popleft()
         cap = self.limits.deliberate_per_hour
-        if len(self._deliberate_history) >= cap:
-            return self._deliberate_history[-cap] + 3600.0
-        return now
+        at = self._deliberate_history[-cap] + 3600.0 if len(self._deliberate_history) >= cap else now
+        if self._pushes_full(now):  # held until a reply answers one, or the span's cap clears them
+            end = self._ungated_end()
+            at = max(at, end + 0.001 if end is not None and math.isfinite(end) else now + 1.0)
+        return at
 
     def _deliberate_wake(self, now: float, eligible: Mapping[str, dict]) -> str | None:
         """The wake of the deliberate push due now, if any, cap aside: a

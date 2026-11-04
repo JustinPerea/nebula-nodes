@@ -22,10 +22,21 @@ replies racing claim two different pushes.
 The cap mirrors the listener's (mcp_channel.DELIBERATE_SPAN_CAP; a test
 keeps them equal): pushes split into periods wherever the gap to the
 previous push is more than the cap. Only the latest period's pushes are
-pickable, and only while the last push is at most the cap old. Here that
-is one rule: once the last push is older than the cap the session's
-pushes are dropped, so a push after a longer gap starts a new period. Memory only: a restarted Nebula has none, and the listener
-reports its open pushes again after the journal reset.
+pickable. The cap ends the listener's protected turn only (round 5c, LOW-1):
+an unanswered push stays pickable for a late reply (an 11-minute edit still
+answers its message and lands in its project) for ``KEEP_SECONDS`` (24 h,
+long enough for any working session to come back, short enough that a
+forgotten push doesn't outlive the day), or until answered. The listener is
+only told of pushes still within the cap (``open_pushes``). Memory only: a
+restarted Nebula has none, and the listener reports its open pushes again
+after the journal reset.
+
+One agent's churn only ever evicts its own keys (MAX_KEYS_PER_AGENT, as
+channel_listeners.MAX_PER_AGENT), so no token can push another's open pushes
+out. Past MAX_PUSHES in a session, answered pushes go first, then unanswered
+ones whose span is over; while MAX_PUSHES are unanswered and in span a new
+push is not recorded (the listener holds it at the same count: a runaway
+holds, never drops the oldest).
 
 Sessions are a convenience boundary inside one token, not an auth
 boundary: any holder of the token can name any session. The ledger only
@@ -39,8 +50,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
 DELIBERATE_SPAN_CAP = 600.0  # mcp_channel.DELIBERATE_SPAN_CAP
-MAX_PUSHES = 64   # per (agent, session): the oldest go first
-MAX_KEYS = 256    # sessions kept: the least recently written go first
+MAX_PUSHES = 64   # per (agent, session); mcp_channel.MAX_OPEN_PUSHES holds a push at this many open
+MAX_KEYS_PER_AGENT = 8  # sessions kept per agent: its own least recently written go first
+KEEP_SECONDS = 24 * 3600.0  # an unanswered push stays pickable this long (a late reply)
 MESSAGE = "message"
 QUESTION = "question"
 
@@ -67,28 +79,38 @@ class LedgerPush:
 
 
 class PushLedger:
-    def __init__(self, clock: Callable[[], float] = time.time, cap: float = DELIBERATE_SPAN_CAP) -> None:
+    def __init__(self, clock: Callable[[], float] = time.time, cap: float = DELIBERATE_SPAN_CAP,
+                 keep: float = KEEP_SECONDS) -> None:
         self._clock = clock
         self.cap = cap
+        self.keep = keep
         self._lock = threading.Lock()
         self._pushes: dict[tuple[str, str], list[LedgerPush]] = {}
 
-    def _period(self, key: tuple[str, str], now: float) -> list[LedgerPush]:
-        """The pickable pushes of ``key`` (the latest period), pruning the rest (lock held)."""
-        pushes = self._pushes.get(key) or []
-        if not pushes or now - pushes[-1].at > self.cap:
-            # Past the cap: the whole period goes. A push recorded after a gap
-            # longer than the cap finds the key empty, so what is kept is only
-            # ever the latest period (no split needed).
+    def _live(self, key: tuple[str, str], now: float) -> list[LedgerPush]:
+        """The pushes of ``key`` still kept (lock held): none older than ``keep``."""
+        pushes = [push for push in self._pushes.get(key) or [] if now - push.at <= self.keep]
+        if pushes:
+            self._pushes[key] = pushes
+        else:
             self._pushes.pop(key, None)
-            return []
         return pushes
+
+    def _period(self, key: tuple[str, str], now: float) -> list[LedgerPush]:
+        """The pickable pushes of ``key``: the latest period, where a gap
+        longer than the cap to the previous push starts a new one (lock held)."""
+        pushes = self._live(key, now)
+        start = len(pushes)
+        while start > 0 and (start == len(pushes) or pushes[start].at - pushes[start - 1].at <= self.cap):
+            start -= 1
+        return pushes[start:]
 
     def record(self, agent_id: str, session: str | None,
                items: Iterable[tuple[str, str, str | None]]) -> bool:
         """One push the listener reported: (id, MESSAGE or QUESTION, project)
         in push order. A retry with the same id set (the report's own retry)
-        adds nothing. Returns whether a push was recorded."""
+        adds nothing. Returns whether a push was recorded (False too when the
+        session holds MAX_PUSHES unanswered pushes still in span)."""
         kept = [(str(i), kind, project) for i, kind, project in items if i and kind in (MESSAGE, QUESTION)]
         if not kept:
             return False
@@ -96,16 +118,24 @@ class PushLedger:
         key = (agent_id, session or "")
         now = self._clock()
         with self._lock:
-            pushes = self._period(key, now)
+            pushes = self._live(key, now)
             if any(set(push.ids) == set(ids) for push in pushes):
                 return False
+            if len(pushes) >= MAX_PUSHES:
+                # Make room: an answered push first, then an unanswered one
+                # whose span is over; never one still in span.
+                victim = next((p for p in pushes if p.answered is not None), None) or next(
+                    (p for p in pushes if p.pending is None and now - p.at > self.cap), None)
+                if victim is None:
+                    return False
+                pushes.remove(victim)
             pushes.append(LedgerPush(ids=ids, kinds={i: kind for i, kind, _ in kept},
                                      projects={i: project for i, _, project in kept}, at=now))
-            del pushes[:-MAX_PUSHES]
             self._pushes.pop(key, None)
             self._pushes[key] = pushes  # the most recently written last
-            while len(self._pushes) > MAX_KEYS:
-                del self._pushes[next(iter(self._pushes))]
+            own = [k for k in self._pushes if k[0] == agent_id]
+            for old in own[:max(0, len(own) - MAX_KEYS_PER_AGENT)]:  # only this agent's own keys go
+                del self._pushes[old]
             return True
 
     def _oldest(self, key: tuple[str, str], usable: Callable[[str | None], bool]) -> LedgerPush | None:
@@ -153,7 +183,8 @@ class PushLedger:
                      "messageIds": [i for i in push.ids if push.kinds.get(i) == MESSAGE],
                      "questionIds": [i for i in push.ids if push.kinds.get(i) == QUESTION],
                      "at": int(push.at * 1000), "ageSeconds": round(max(0.0, now - push.at), 3)}
-                    for push in self._period((agent_id, session or ""), now) if push.answered is None]
+                    for push in self._period((agent_id, session or ""), now)
+                    if push.answered is None and now - push.at <= self.cap]
 
     def forget_agent(self, agent_id: str) -> None:
         """Its token was revoked: its sessions' pushes go."""

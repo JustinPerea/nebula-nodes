@@ -158,6 +158,9 @@ class ListenerBook:
         self._clock = clock
         self._lock = threading.Lock()
         self._entries: dict[tuple[str, str], Listener] = {}
+        # Listeners that expired, ended or stopped, not yet settled by the
+        # caller (round 5c, LOW-2): (agent id, raw session, listener id).
+        self._gone: list[tuple[str, str, str]] = []
         self._secret = secrets.token_bytes(16)
         self.revision = 0
 
@@ -202,6 +205,8 @@ class ListenerBook:
                 if (entry.state, entry.reason) != (state, reason):
                     entry.state, entry.reason, entry.since = state, reason, now
                     changed = True
+                    if state == "stopped":
+                        self._gone.append((agent.id, key[1], entry.listener_id))
                 if entry.agent != agent or entry.project_id != project_id:
                     entry.agent, entry.project_id = agent, project_id
                     changed = True
@@ -230,6 +235,7 @@ class ListenerBook:
                 return False
             removed = self._entries.pop(key, None) is not None
             if removed:
+                self._gone.append((key[0], key[1], entry.listener_id))
                 self.revision += 1
             return removed
 
@@ -246,10 +252,19 @@ class ListenerBook:
     def _expire(self, now: float) -> bool:
         stale = [key for key, entry in self._entries.items() if now - entry.seen_at > TTL_SECONDS]
         for key in stale:
+            self._gone.append((key[0], key[1], self._entries[key].listener_id))
             del self._entries[key]
         if stale:
             self.revision += 1
         return bool(stale)
+
+    def take_gone(self) -> list[tuple[str, str, str]]:
+        """The listeners that expired, ended or stopped since the last call,
+        as (agent id, raw session, listener id): their messages still in
+        flight can't be taken any more."""
+        with self._lock:
+            gone, self._gone = self._gone, []
+            return gone
 
     def sweep(self) -> bool:
         """Drop entries past TTL_SECONDS. Returns whether any went."""
@@ -258,6 +273,8 @@ class ListenerBook:
 
     def next_deadline(self) -> float | None:
         with self._lock:
+            if self._gone:
+                return self._clock() - 0.5  # an expiry nobody settled yet: check again at once
             if not self._entries:
                 return None
             return min(entry.seen_at for entry in self._entries.values()) + TTL_SECONDS

@@ -6469,9 +6469,23 @@ def _start_channel_sweep() -> None:
     task.add_done_callback(_channel_sweeps.discard)
 
 
+async def _settle_gone_listeners() -> None:
+    """Messages still in flight to a listener that expired, ended or stopped
+    settle as dropped (round 5c, LOW-2): the box reads its stopped line
+    instead of "Sent" forever."""
+    for agent_id, session, listener_id in channel_book.take_gone():
+        try:
+            settled = await asyncio.to_thread(thread_book.drop_route, agent_id, session, listener_id)
+        except (ProjectStoreError, OSError):
+            continue
+        for project_id, rows in settled:
+            await _broadcast_thread(project_id, rows)
+
+
 async def _sweep_channel_listeners() -> None:
     if channel_book.sweep():
         await _broadcast_channel_listeners()
+    await _settle_gone_listeners()
     _schedule_channel_expiry()
 
 
@@ -6521,6 +6535,16 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
                             headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
     if changed:
         await _broadcast_channel_listeners()
+    await _settle_gone_listeners()
+    if state == "listening" and (not known or changed):
+        # Back after a lapse, in the same session: what was settled as dropped
+        # for its going away is sent again (round 5c, LOW-2).
+        try:
+            revived = await asyncio.to_thread(thread_book.revive_route, identity.id, session)
+        except (ProjectStoreError, OSError):
+            revived = []
+        for project_id, rows in revived:
+            await _broadcast_thread(project_id, rows)
     _schedule_channel_expiry()
     answer: dict[str, Any] = {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
     if not known:
@@ -6538,6 +6562,7 @@ async def end_channel_listener(nonce: str | None = None) -> dict[str, Any]:
     identity, session = _channel_caller()
     if channel_book.gone(identity, session, channel_listeners.parse_nonce(nonce)):
         await _broadcast_channel_listeners()
+    await _settle_gone_listeners()
     _schedule_channel_expiry()
     return {"listener": None}
 
