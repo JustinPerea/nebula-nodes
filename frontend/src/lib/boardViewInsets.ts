@@ -17,9 +17,12 @@ import { getViewportForBounds, type Rect, type Viewport } from '@xyflow/react';
  *   never puts a card under a line (at 1024 x 640 with the offline row up, a
  *   three-line line ran over the fitted card: the refit after the row opened
  *   centred the card in a column the row had shortened, under the line).
- *   Their coming and going still never moves the camera by itself (GM #213
- *   round 3): they count in the next fit, refit (a column resize, the
- *   offline row opening or closing), Show or placement, never as one.
+ *   While the view is fitted (BoardCanvas's
+ *   `placed`: no pan or zoom by the person since the last fit, refit or
+ *   Show; #210 round 6r, GM r101), a line coming or going frames the same
+ *   cards again in the new insets. Once the person has panned or zoomed,
+ *   their coming and going never moves the camera (GM #213 round 3): they
+ *   count in the next fit, refit, Show or placement.
  *
  * The band is measured from the bar itself (its height changes with the skin
  * and the font), the notice band from the stack. With no layout to measure

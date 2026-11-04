@@ -1001,20 +1001,246 @@ describe('the fit clears the Studio\'s notices (GM r95)', () => {
     expect(studio).toMatch(/<div ref=\{noticesRef\} className="moodboard-studio-view__board-notices">\{notices\}<\/div>/);
     expect(studio).toMatch(/<BoardCanvas [^>]*\bnotices=\{noticesRef\}/);
   });
+});
 
-  it('a line coming or going doesn\'t move the camera by itself (GM #213 round 3); the next fit counts it', () => {
-    act(() => { boxes.stack = { top: 61, height: 0 }; });
-    mountWithNotices();
-    const open = camera();
+// #210 round 6r (GM r101): one flag, "view is fitted", set by every fit,
+// refit and Show and cleared by any pan or zoom the person makes. While it is
+// set, a notice line appearing or going frames the same cards again in the new
+// view insets, on the board's spring (a jump under reduced motion); once
+// cleared, #213 round 3 holds: a line never moves the camera.
+describe('a line over a fitted view (GM r101)', () => {
+  type Box = { top: number; height: number };
+  const boxes = { board: { top: 49, height: 591 } as Box, stack: { top: 61, height: 0 } as Box };
+  const rectOf = ({ top, height }: Box) => ({ top, bottom: top + height, height, left: 0, right: 870, width: 870, x: 0, y: top,
+    toJSON: () => ({}) }) as DOMRect;
+  let stackEl: HTMLDivElement;
+  // The ResizeObservers watching the stack, as the browser's: each change of its size calls them.
+  let watching: Array<{ cb: ResizeObserverCallback; targets: Set<Element> }>;
+  beforeEach(() => {
+    stackEl = document.createElement('div');
+    boxes.board = { top: 49, height: 591 };
+    boxes.stack = { top: 61, height: 0 };
+    watching = [];
+    vi.stubGlobal('ResizeObserver', class {
+      entry: { cb: ResizeObserverCallback; targets: Set<Element> };
+      constructor(cb: ResizeObserverCallback) {
+        this.entry = { cb, targets: new Set() };
+        watching.push(this.entry);
+      }
+      observe(target: Element) { this.entry.targets.add(target); }
+      unobserve(target: Element) { this.entry.targets.delete(target); }
+      disconnect() { this.entry.targets.clear(); }
+    });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === stackEl) return rectOf(boxes.stack);
+      if (this.classList.contains('moodboard-board')) return rectOf(boxes.board);
+      if (this.classList.contains('moodboard-board__controls')) return rectOf({ top: boxes.board.top + boxes.board.height - 53, height: 38 });
+      return rectOf({ top: 0, height: 0 });
+    });
+  });
+  afterEach(() => { cleanup(); runFrames(); vi.restoreAllMocks(); });
+  const ui = (list: MoodboardImage[] = images) =>
+    <BoardCanvas boardKey="k1" images={list} onMove={() => {}} onDropFiles={() => {}} notices={{ current: stackEl }} />;
+  /** Mounted with no line showing, fit on open; the test watches the camera from here. */
+  const open = () => {
+    flow.state.width = 870;
+    flow.state.height = boxes.board.height;
+    const view = render(ui());
     flow.setViewport.mockClear();
-    act(() => { boxes.stack = { top: 61, height: 62 }; });
+    return view;
+  };
+  /** The stack changes size: a line `height` tall shows (0: it goes). */
+  const line = (height: number) => act(() => {
+    boxes.stack = { top: boxes.stack.top, height };
+    for (const { cb, targets } of watching) if (targets.has(stackEl)) cb([], {} as ResizeObserver);
+  });
+  const bandEnd = () => boxes.stack.top + boxes.stack.height - boxes.board.top + 12;
+  /** The whole-board fit inside the band and above the bar. */
+  const fitBelowLine = (boardWidth = 2000) => {
+    const top = boxes.stack.height > 0 ? bandEnd() : 0;
+    const to = getViewportForBounds({ x: 0, y: 0, width: boardWidth, height: 1000 }, 870, boxes.board.height - top - 53, 0.02, 1, 0.12);
+    return { x: to.x, y: to.y + top, zoom: to.zoom };
+  };
+  const expectClose = (at: View, to: View) => {
+    expect(at.x).toBeCloseTo(to.x, 6);
+    expect(at.y).toBeCloseTo(to.y, 6);
+    expect(at.zoom).toBeCloseTo(to.zoom, 9);
+  };
+  const dragPan = () => act(() => {
+    flow.props!.onMoveStart!(new MouseEvent('mousedown', { clientX: 0, clientY: 0 }), camera());
+    flow.camera.x += 120;
+    flow.props!.onMove!(new MouseEvent('mousemove', { clientX: 120, clientY: 0 }), camera());
+    flow.props!.onMoveEnd!(new MouseEvent('mouseup'), camera());
+  });
+  const pinch = () => act(() => {
+    flow.camera.zoom *= 1.1;
+    flow.props!.onMoveStart!(new WheelEvent('wheel', { deltaY: -10, ctrlKey: true }), camera());
+    flow.props!.onMoveEnd!(new WheelEvent('wheel', { deltaY: -10, ctrlKey: true }), camera());
+  });
+  const keyboardPan = () => autopan({ ...camera(), x: camera().x - 200 });
+
+  it('fitted, a line appears: the cards spring clear of it; it goes: they spring back to the fit without it', () => {
+    open();
+    const before = camera();
+    expect(before.y).toBeLessThan(bandEnd() + 62);
+    line(62);
+    expect(flow.setViewport).not.toHaveBeenCalled(); // on the spring, not a jump
+    runFrames();
+    expect(flow.setViewport.mock.calls.length).toBeGreaterThan(2);
+    expectClose(camera(), fitBelowLine());
+    expect(camera().y).toBeGreaterThanOrEqual(bandEnd() - 0.5);
+    expect(camera().y + 1000 * camera().zoom).toBeLessThanOrEqual(boxes.board.height - 53 + 0.5);
+    expect(kept().fitted).toBe(true);
+    flow.setViewport.mockClear();
+    line(0);
+    runFrames();
+    expectClose(camera(), before);
+    expect(kept().fitted).toBe(true);
+  });
+
+  it('fitted, under reduced motion: the line\'s refit jumps', () => {
+    open();
+    reduced = true;
+    line(62);
+    expect(flow.setViewport).toHaveBeenCalledTimes(1);
+    expectClose(camera(), fitBelowLine());
+  });
+
+  it('a line that wraps to more rows refits again while fitted', () => {
+    open();
+    line(26);
+    runFrames();
+    line(62);
+    runFrames();
+    expectClose(camera(), fitBelowLine());
+  });
+
+  it('the same band (the stack resized with no change to its bottom) moves nothing', () => {
+    open();
+    line(0);
     runFrames();
     expect(flow.setViewport).not.toHaveBeenCalled();
-    expect(camera()).toEqual(open);
+  });
+
+  for (const [name, move] of [['a drag pan', dragPan], ['a wheel notch', () => notch()], ['a pinch', pinch],
+    ['a keyboard pan (no source event)', keyboardPan]] as const) {
+    it(`after ${name} by the person: a line appearing or going leaves the camera (#213 round 3)`, () => {
+      open();
+      move();
+      const moved = camera();
+      flow.setViewport.mockClear();
+      line(62);
+      runFrames();
+      line(0);
+      runFrames();
+      expect(flow.setViewport).not.toHaveBeenCalled();
+      expect(camera()).toEqual(moved);
+    });
+  }
+
+  it('after the zoom buttons: a line leaves the camera', () => {
+    open();
+    press('Zoom in');
+    runFrames();
+    const zoomed = camera();
+    flow.setViewport.mockClear();
+    line(62);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(zoomed);
+  });
+
+  it('after the zoom buttons back onto the fit: still the person\'s camera, so a line leaves it', () => {
+    open();
+    press('Zoom in');
+    runFrames();
+    press('Zoom out');
+    runFrames();
+    const back = camera();
+    flow.setViewport.mockClear();
+    line(62);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(back);
+  });
+
+  it('a pan mid-spring stops the follow and clears the flag: the line going later moves nothing', () => {
+    open();
+    line(62);
+    step(16);
+    step(32);
+    const mid = camera();
+    expect(mid.y).not.toBeCloseTo(fitBelowLine().y, 3);
+    act(() => {
+      flow.camera.x += 40;
+      flow.props!.onMove!(wheel(), camera());
+    });
+    const panned = camera();
+    flow.setViewport.mockClear();
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(panned);
+    line(0);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(panned);
+  });
+
+  it('after a pan, Fit sets the flag again: the next line refits', () => {
+    open();
+    dragPan();
     act(() => { fitButton().click(); });
     runFrames();
-    expect(cardsTop()).toBeGreaterThanOrEqual(bandEnd() - 0.5);
-    expect(cardsTop()).toBeGreaterThan(open.y);
+    line(62);
+    runFrames();
+    expectClose(camera(), fitBelowLine());
+  });
+
+  it('a refit the app makes (the column resizes) keeps the flag: the next line refits', () => {
+    open();
+    act(() => { boxes.board = { top: 98, height: 542 }; boxes.stack = { top: 110, height: 0 }; });
+    resize(870, 542);
+    runFrames();
+    expectClose(camera(), fitBelowLine());
+    line(62);
+    runFrames();
+    expect(bandEnd()).toBe(86);
+    expectClose(camera(), fitBelowLine());
+    expect(camera().y).toBeGreaterThanOrEqual(86 - 0.5);
+  });
+
+  it('an agent\'s change to the board keeps the flag: the next line refits to every card there is now', () => {
+    const view = open();
+    const added = [...images, { id: 'd', url: '/api/outputs/d.png', weight: 1, notes: '', privateNote: '', excluded: false,
+      placements: [{ ...card('cd', 1560), placedBy: 'agent' as const }] }];
+    view.rerender(ui(added));
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    line(62);
+    runFrames();
+    expectClose(camera(), fitBelowLine(2520));
+  });
+
+  it('an Update\'s Show sets the flag: a line frames the shown card again, clear of it', () => {
+    open();
+    dragPan();
+    act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
+    runFrames();
+    flow.setViewport.mockClear();
+    line(62);
+    runFrames();
+    expect(flow.setViewport).toHaveBeenCalled();
+    const to = getViewportForBounds({ x: 0, y: 0, width: 480, height: 270 }, 870, boxes.board.height - bandEnd() - 53, 0.02, 1, 0.12);
+    expectClose(camera(), { x: to.x, y: to.y + bandEnd(), zoom: to.zoom });
+  });
+
+  it('a line before the view has any cards to fit moves nothing', () => {
+    flow.state.width = 870;
+    flow.state.height = boxes.board.height;
+    render(ui([]));
+    flow.setViewport.mockClear();
+    line(62);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
   });
 });
 

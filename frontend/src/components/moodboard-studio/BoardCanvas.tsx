@@ -111,6 +111,8 @@ const NO_PLACEHOLDERS: BoardPlaceholder[] = [];
 /** Arrow keys move the selected cards in 5 px steps; they go as one move this long after the last. */
 export const KEY_MOVE_SETTLE_MS = 400;
 const FIT_PADDING = 0.12;
+/** The view is fitted to the whole board (BoardFlow's `placed`). */
+const WHOLE_BOARD = Object.freeze({ ids: null });
 // Low enough to fit a 300-reference board (about 2,500 x 22,000 board px) in view.
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 4;
@@ -470,6 +472,15 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     fitFor: (width, height) => fitForRef.current(width, height),
     refit: (instant) => fitRef.current(instant),
   });
+  // The view is fitted (#210 round 6r, GM r101): the camera is where the app
+  // last framed it: a fit (Fit, Shift+1, the fit on open, a refit) frames the
+  // whole board (`ids` null), an Update's Show the cards it names. Only the
+  // person clears it, by moving the camera (a pan, a pinch, a wheel, the zoom
+  // buttons, a keyboard zoom, the chip's pan to its tiles); a refit or an
+  // agent's change to the board doesn't. While it is set, a notice line
+  // appearing or going frames the same cards again in the new view insets
+  // (followNotices); once cleared, a line never moves the camera (#213 r3).
+  const placed = useRef<{ ids: readonly string[] | null } | null>(null);
   /**
    * Spring the camera to `to`. A spring that lands on the fit is a fit (GM,
    * #213 round 3: Fit, a refit, or a zoom or Show that lands there), so a
@@ -520,6 +531,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (instant && !panZoom) return false;
     const to = fitFor(width, height);
     if (!to) return false;
+    placed.current = WHOLE_BOARD;
     if (!instant) {
       springTo(to);
       return true;
@@ -601,6 +613,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       const wanted = new Set(frameRequest.placementIds);
       const targets = nodesRef.current.filter((node) => wanted.has(node.id));
       if (!width || !height || targets.length === 0) return;
+      placed.current = { ids: targets.map((node) => node.id) };
       springTo(frame(getNodesBounds(targets), width, height));
     };
     request = window.requestAnimationFrame(attempt);
@@ -614,8 +627,43 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     // Keep the centre of the view where it is.
     const cx = width / 2;
     const cy = height / 2;
+    placed.current = null;
     springTo({ zoom, x: cx - ((cx - from.x) / from.zoom) * zoom, y: cy - ((cy - from.y) / from.zoom) * zoom });
   }, [flowStore, getViewport, springTo]);
+
+  // A notice line appearing or going while the view is fitted (#210 round
+  // 6r, GM r101): the same cards are framed again in the new view insets, on
+  // the board's spring (a jump under reduced motion), so the line never
+  // covers a card the app placed. Its band is read from the stack each time
+  // the stack changes size (a line comes, goes, or wraps to more rows).
+  const followNotices = useCallback(() => {
+    const at = placed.current;
+    if (!at || closed.current) return;
+    if (at.ids === null) {
+      fit(false);
+      return;
+    }
+    const { width, height } = flowStore.getState();
+    const wanted = new Set(at.ids);
+    const targets = nodesRef.current.filter((node) => wanted.has(node.id));
+    if (!width || !height || targets.length === 0) return;
+    springTo(frame(getNodesBounds(targets), width, height));
+  }, [fit, flowStore, springTo, frame, getNodesBounds]);
+  const followNoticesRef = useRef(followNotices);
+  followNoticesRef.current = followNotices;
+  useEffect(() => {
+    const stack = notices?.current;
+    if (!stack || typeof ResizeObserver !== 'function') return;
+    let band = viewInsets().top;
+    const observer = new ResizeObserver(() => {
+      const now = viewInsets().top;
+      if (now === band) return;
+      band = now;
+      followNoticesRef.current();
+    });
+    observer.observe(stack);
+    return () => observer.disconnect();
+  }, [notices, viewInsets]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -675,6 +723,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     stopSpring.current?.();
     stopSpring.current = null;
     springTarget.current = null;
+    placed.current = null;
     follow.current!.taken();
     if (keep) keepCamera();
     else unkept.current = true;
@@ -949,6 +998,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     const y = Math.min(...rects.map((r) => r.y));
     const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
       height: Math.max(...rects.map((r) => r.y + r.height)) - y };
+    placed.current = null;
     springTo(frame(bounds, width, height));
     if (!focus) return;
     // The board holds focus until the tile is drawn (it is culled until in view).

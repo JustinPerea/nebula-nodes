@@ -400,6 +400,50 @@ describe('one view for every framing and placement (#213\'s shared insets)', () 
   });
 });
 
+// #210 round 6r (GM r101): the chip's press is a pan the person asked for,
+// so it clears "view is fitted" as their own pan does: a line then moves nothing.
+describe('the chip\'s press and a notice line (GM r101)', () => {
+  it('fitted, a line springs the board clear of it; after the chip\'s press, a line moves nothing', () => {
+    const stack = document.createElement('div');
+    let stackHeight = 0;
+    const observers: Array<{ cb: () => void; on: Set<Element> }> = [];
+    vi.stubGlobal('ResizeObserver', class {
+      e = { cb: () => {}, on: new Set<Element>() };
+      constructor(cb: () => void) { this.e.cb = cb; observers.push(this.e); }
+      observe(target: Element) { this.e.on.add(target); }
+      unobserve() {}
+      disconnect() { this.e.on.clear(); }
+    });
+    try {
+      stack.getBoundingClientRect = () => ({ left: 0, top: 12, right: 1000, bottom: 12 + stackHeight, width: 1000, height: stackHeight }) as DOMRect;
+      const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+      const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+        outside={tiles} onOutsideDone={() => {}} notices={{ current: stack }} />);
+      const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+      wrapper.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 700, width: 1000, height: 700 }) as DOMRect;
+      const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
+      bar.getBoundingClientRect = () => ({ left: 15, top: 650, right: 300, bottom: 688, width: 285, height: 38 }) as DOMRect;
+      const line = (height: number) => act(() => {
+        stackHeight = height;
+        for (const o of observers) if (o.on.has(stack)) o.cb();
+      });
+      fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+      spring.calls = [];
+      line(40);
+      // The band ends at 12 + 40 + 12: the fit is made in 1000 x (650 - 64), 64 px down.
+      const below = getViewportForBounds({ x: 0, y: 0, width: 100, height: 100 }, 1000, 586, 0.02, 1, 0.12);
+      expect(spring.calls.map((call) => call.to)).toEqual([{ ...below, y: below.y + 64 }]);
+      act(() => { chip.props!.onShow(tiles.rects, false); });
+      spring.calls = [];
+      line(0);
+      line(40);
+      expect(spring.calls).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('the outside-the-view chip on the board', () => {
   it('shows for the tiles it is given; its press frames them on the board\'s spring', () => {
     const done = vi.fn();
