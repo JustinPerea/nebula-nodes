@@ -54,19 +54,6 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
 }
 
 /**
- * Where the floating Inspector opens beside its node: right of it, else left,
- * else under it, flipped above it when under would cross the bottom (GM -
- * Design, 2026-10-23: "When there's no room below the node, flip it up or
- * shift it, so its foot row is always whole"). Every placement then stays
- * between two measured lines (lib/bottomBar.ts): below the workspace header
- * and the selection toolbar, whichever is lower, and above the notice
- * region's reserved band over the bottom bar, so a notice never covers its
- * foot row and it never moves when a notice comes or goes (GM, round 2).
- * When the room between them is shorter than the panel, the panel gets
- * shorter and its body scrolls. Runs every frame while open, so a resize, a
- * pan, the toolbar coming or going, or the bar growing moves it at once.
- */
-/**
  * The height the panel needs to show its whole body (GM r68: "It grows to fit
  * its content"), or null before it is laid out. What the panel holds besides
  * its body's viewport (the header, the foot row, the borders: the panel's
@@ -93,6 +80,25 @@ function contentFitHeight(popover: HTMLElement | null): number | null {
 export const CONTENT_RESIZE_MS = 400;
 
 /**
+ * How long an open may last at most (GM r82): from the panel's mount, its
+ * content settling (an image decoding, the first late layout) counts as
+ * placing it, until every image in it is complete and its height has held
+ * for OPEN_STABLE_FRAMES frames, or this long, whichever comes first. After
+ * that, a change in its content holds its top (GM r72).
+ */
+export const OPEN_SETTLE_CAP_MS = 300;
+export const OPEN_STABLE_FRAMES = 2;
+
+/**
+ * Where the floating Inspector stands beside its node: right of it, else left,
+ * else under it, flipped above it when under would cross the bottom line (GM -
+ * Design, 2026-10-23: "When there's no room below the node, flip it up or
+ * shift it, so its foot row is always whole"). Every placement stays between
+ * two measured lines (lib/bottomBar.ts): 12 px under the floating top chrome
+ * and 12 px over the notice region's reserved band (GM r68, r72). Runs every
+ * frame while open, so a pan, a zoom or the toolbar coming or going moves it
+ * at once.
+ *
  * `panelNeed`: the height the panel needs to show its whole body
  * (contentFitHeight), or null when not yet known (300 px until then).
  * `heldTop`: where its top stays while its content changes height (GM r68:
@@ -140,14 +146,18 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   const own = panelNeed === null ? POPOVER_MIN_HEIGHT : Math.max(POPOVER_MIN_HEIGHT, Math.ceil(panelNeed));
   // Its content changed height while it stood still: the top stays, and only
   // the bottom edge moves, as far as the band's line (then the body scrolls).
-  // Placed afresh (opened, another node, the node moved), a node low on the
-  // screen shifts it up instead.
+  // Placed afresh (opened, its content settling while it opens, another
+  // node, the node moved, the window resized), a node low on the screen
+  // shifts it up instead.
   //
   // The order (GM r68's "anchored at the top, so the file row doesn't move
   // under the pointer", confirmed in r72): "don't move what's under the
-  // pointer" comes before the fit. Shift-up happens only on placement (open,
-  // another node, the node moving); after a content change the top holds and
-  // the extra scrolls, even on a low node that a fresh placement would shift.
+  // pointer" comes before the fit. Shift-up happens only on placement (the
+  // open, until its content is stable, GM r82; another node; the node moving;
+  // a window resize, r82); after a content change the top holds and the
+  // extra scrolls, even on a low node that a fresh placement would shift.
+  // Under or over its node (no room beside it) it follows the node, so it
+  // never holds a top.
   if (heldTop !== null && placement !== 'bottom') {
     const top = clamp(heldTop, topLimit, bottomLimit);
     const held = Math.max(0, Math.min(own, bottomLimit - top));
@@ -255,8 +265,10 @@ export function NodeInspectorPopover() {
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
   // GM r68: a height change from the content (an upload landing, "No
   // preview" collapsing, a section opening) runs on the layout spring, anchored
-  // at the top. Only then (review 7 M2 on #208): a pan, zoom, drag or resize
-  // moves the panel with its node at once.
+  // at the top. So do the open's own settling (GM r82), the held top let go by
+  // a window resize (r82) and its card growing while it stands under or over
+  // the node (r82, NIT-2). Only then (review 7 M2 on #208): a pan, zoom or
+  // drag moves the panel with its node at once.
   const [contentResizing, setContentResizing] = useState(false);
   const needRef = useRef<{ nodeId: string; need: number | null } | null>(null);
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -265,31 +277,67 @@ export function NodeInspectorPopover() {
   // attribute, so the panel jumps to where it was going), then tracks 1:1.
   const resizingRef = useRef(false);
   const anchorAtRef = useRef<string | null>(null);
-  // The top held while the content changes height, until the node moves.
+  // The node card's size, so its growing (a preview landing) is told from a move.
+  const anchorSizeRef = useRef<string | null>(null);
+  // The window's size, so a resize is told from a content change.
+  const viewportRef = useRef<string | null>(null);
+  // The top held while the content changes height, until the node moves, another
+  // node opens or the window resizes.
   const heldTopRef = useRef<{ nodeId: string; top: number } | null>(null);
+  // The open (GM r82): until its content is stable (every image complete,
+  // then OPEN_STABLE_FRAMES frames at one height) or OPEN_SETTLE_CAP_MS from
+  // the mount, a settle is placement: it may shift the panel up, on the spring.
+  const openRef = useRef<{ nodeId: string; settled: boolean; stable: number; lastNeed: number | null } | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One measuring step, also run straight after each render (below), so the
-  // panel opens at its content's height in its first painted frame.
-  const stepRef = useRef<(() => void) | null>(null);
+  // panel opens at its content's height in its first painted frame. `tick` is
+  // true for the once-a-frame step (the open counts its stable frames there).
+  const stepRef = useRef<((tick?: boolean) => void) | null>(null);
   useEffect(() => () => {
     if (resizeTimer.current) clearTimeout(resizeTimer.current);
+    if (openTimer.current) clearTimeout(openTimer.current);
   }, []);
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
+    if (openTimer.current) clearTimeout(openTimer.current);
+    openTimer.current = null;
     // Closed: the next open measures afresh.
     if (!visible || !selectedNodeId) {
       frameRef.current = null;
       needRef.current = null;
       anchorAtRef.current = null;
+      anchorSizeRef.current = null;
+      viewportRef.current = null;
       heldTopRef.current = null;
+      openRef.current = null;
       stepRef.current = null;
       return;
     }
 
+    // A new open (or another node): it settles as placement for a while.
+    const open = { nodeId: selectedNodeId, settled: false, stable: 0, lastNeed: null };
+    openRef.current = open;
+    openTimer.current = setTimeout(() => {
+      openTimer.current = null;
+      open.settled = true;
+    }, OPEN_SETTLE_CAP_MS);
+
     let raf = 0;
     let stopped = false;
 
-    const step = () => {
+    const startSpring = () => {
+      if (resizeTimer.current) clearTimeout(resizeTimer.current);
+      resizeTimer.current = setTimeout(() => {
+        resizeTimer.current = null;
+        resizingRef.current = false;
+        setContentResizing(false);
+      }, CONTENT_RESIZE_MS);
+      resizingRef.current = true;
+      setContentResizing(true);
+    };
+
+    const step = (tick = false) => {
       if (pinned) {
         const currentFrame = frameRef.current;
         const element = popoverRef.current;
@@ -315,6 +363,10 @@ export function NodeInspectorPopover() {
           // Where the node is: its card growing (a preview landing) is not a move.
           const at = `${selectedNodeId}:${box.left}:${box.top}`;
           const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
+          const size = `${selectedNodeId}:${box.width}:${box.height}`;
+          const grew = !moved && anchorSizeRef.current !== null && size !== anchorSizeRef.current;
+          const viewport = `${window.innerWidth}x${window.innerHeight}`;
+          const resized = viewportRef.current !== null && viewport !== viewportRef.current;
           if (resizingRef.current && moved) {
             if (resizeTimer.current) clearTimeout(resizeTimer.current);
             resizeTimer.current = null;
@@ -322,8 +374,15 @@ export function NodeInspectorPopover() {
             setContentResizing(false);
           }
           anchorAtRef.current = at;
-          // Moved, or another node: placed afresh beside it.
-          if (moved || heldTopRef.current?.nodeId !== selectedNodeId) heldTopRef.current = null;
+          anchorSizeRef.current = size;
+          viewportRef.current = viewport;
+          const wasHeld = heldTopRef.current?.nodeId === selectedNodeId;
+          // Placed afresh beside it: moved, another node, or the window
+          // resized (GM r82: "a window resize re-places and drops the held
+          // top").
+          if (moved || resized || !wasHeld) heldTopRef.current = null;
+          // Still opening (GM r82): its content settling is placement.
+          const opening = openRef.current?.nodeId === selectedNodeId && !openRef.current.settled;
           // The height its whole body needs (GM r68), read from the panel
           // as it is on screen; it holds while the spring runs (see
           // contentFitHeight), so the panel settles in one step and never
@@ -332,29 +391,45 @@ export function NodeInspectorPopover() {
           const need = popover && !popover.classList.contains('node-inspector-popover--pinned')
             ? contentFitHeight(popover) : null;
           // The content got taller or shorter on the same node, which hasn't
-          // moved: the top holds from here on (until the node moves), and the
-          // new height springs in the same render as that height. The first
-          // look at a node doesn't, nor a node that moved.
+          // moved: the new height springs in the same render as that height.
+          // Once the open has settled, the top holds from here on (until the
+          // node moves, another node opens or the window resizes); while it
+          // opens, it is placed afresh. The first look at a node doesn't
+          // spring, nor a node that moved.
           const seen = needRef.current;
           const shown = frameRef.current;
           const contentChanged = !moved && seen?.nodeId === selectedNodeId && seen.need !== null && need !== null
             && Math.ceil(need) !== Math.ceil(seen.need) && shown?.nodeId === selectedNodeId
             && shown.placement !== 'pinned-left';
-          if (contentChanged && !heldTopRef.current) {
+          if (contentChanged && !opening && !heldTopRef.current) {
             heldTopRef.current = { nodeId: selectedNodeId, top: Number(shown!.style.top) };
           }
           const nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null);
-          if (contentChanged && shown!.style.height !== nextFrame.style.height) {
-            if (resizeTimer.current) clearTimeout(resizeTimer.current);
-            resizeTimer.current = setTimeout(() => {
-              resizeTimer.current = null;
-              resizingRef.current = false;
-              setContentResizing(false);
-            }, CONTENT_RESIZE_MS);
-            resizingRef.current = true;
-            setContentResizing(true);
-          }
+          // What springs, never a move: a content change; the held top let
+          // go by a resize, and the resize after it while that glide runs,
+          // so it follows the resize live (GM r82); the card growing, which
+          // moves a panel under the node or flips it above (r82).
+          const glide = resized && !moved && (wasHeld || resizingRef.current);
+          const shifts = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
+            && (shown.style.height !== nextFrame.style.height || shown.style.top !== nextFrame.style.top);
+          if (shifts && (contentChanged || glide || grew)) startSpring();
           needRef.current = { nodeId: selectedNodeId, need };
+          // The open ends once every image in it is complete and its height
+          // has then held for OPEN_STABLE_FRAMES frames (or at the cap,
+          // above). Any step may restart the count; only a frame adds to it.
+          if (opening && openRef.current) {
+            const current = openRef.current;
+            const imagesDone = Boolean(popover)
+              && Array.from(popover!.querySelectorAll('img')).every((image) => image.complete);
+            const height = need === null ? null : Math.ceil(need);
+            if (!imagesDone || height === null || height !== current.lastNeed) {
+              current.stable = 0;
+              current.lastNeed = height;
+            } else if (tick) {
+              current.stable += 1;
+            }
+            if (current.stable >= OPEN_STABLE_FRAMES) current.settled = true;
+          }
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);
@@ -368,7 +443,7 @@ export function NodeInspectorPopover() {
     stepRef.current = step;
 
     const tick = () => {
-      step();
+      step(true);
       if (!stopped) {
         raf = window.requestAnimationFrame(tick);
       }
@@ -380,6 +455,12 @@ export function NodeInspectorPopover() {
       stopped = true;
       if (stepRef.current === step) stepRef.current = null;
       window.cancelAnimationFrame(raf);
+      // This open is over (closed, another node, pinned): a spring still
+      // running doesn't carry into the next open.
+      if (resizeTimer.current) clearTimeout(resizeTimer.current);
+      resizeTimer.current = null;
+      resizingRef.current = false;
+      setContentResizing(false);
     };
   }, [pinned, selectedNodeId, visible]);
 

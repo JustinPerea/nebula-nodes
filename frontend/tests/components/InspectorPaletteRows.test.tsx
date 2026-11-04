@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
@@ -19,6 +19,7 @@ vi.mock('../../src/lib/backend', async (original) => ({
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 
 import { Inspector } from '../../src/components/panels/Inspector';
+import { CONTENT_RESIZE_MS, NodeInspectorPopover, OPEN_STABLE_FRAMES } from '../../src/components/panels/NodeInspectorPopover';
 import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 
@@ -78,7 +79,102 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
 
 // The floating Inspector's height (it took the whole palette before its body
 // scrolled, GM r12) is now the same content-fit rule for every body (GM r68:
-// "Drop ... the palette exception"): NodeInspectorContentFit.test.tsx.
+// "Drop ... the palette exception"): NodeInspectorContentFit.test.tsx. Here,
+// with the real Inspector (review 1 LOW-4 on #226): its palette sits in the
+// box the popover measures, and swatches added on the real control change
+// the height the popover gives it.
+describe('the floating Inspector with the real Inspector and a palette (review 1 LOW-4)', () => {
+  // jsdom has no layout: the panel's header and foot are CHROME; the content
+  // box is as tall as the real rows rendered in it (ROW each, past a BASE).
+  const CHROME = 115;
+  const BASE = 180;
+  const ROW = 34;
+  let callbacks: Map<number, FrameRequestCallback>;
+  let nextRaf = 0;
+  const placed: HTMLElement[] = [];
+
+  function frames(n: number) {
+    for (let i = 0; i < n; i++) {
+      act(() => {
+        const pending = [...callbacks.values()];
+        callbacks.clear();
+        pending.forEach((cb) => cb(performance.now()));
+      });
+    }
+  }
+  const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
+  const bounds = () => ({ top: parseFloat(popover().style.top), height: parseFloat(popover().style.height) });
+  const rowsIn = (box: Element) => box.querySelectorAll('.inspector__palette-row').length;
+
+  beforeEach(() => {
+    callbacks = new Map();
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      callbacks.set(++nextRaf, cb);
+      return nextRaf;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    vi.stubGlobal('innerWidth', 1440);
+    vi.stubGlobal('innerHeight', 1400);
+    fireEvent(window, new Event('resize'));
+    const onScreen = (el: HTMLElement | null) => {
+      const h = parseFloat(el?.style.height ?? '');
+      return Number.isFinite(h) ? h : 0;
+    };
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('node-inspector-popover')) return onScreen(this);
+      if (this.classList.contains('node-inspector-popover__content')) return BASE + ROW * rowsIn(this);
+      return 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains('node-inspector-popover__body')) return 0;
+      return Math.max(0, onScreen(this.closest<HTMLElement>('.node-inspector-popover')) - CHROME);
+    });
+    const anchor = document.createElement('div');
+    anchor.dataset.nodeInspectorAnchor = 'n1';
+    anchor.getBoundingClientRect = () => new DOMRect(500, 200, 300, 200);
+    document.body.append(anchor);
+    placed.push(anchor);
+    useGraphStore.setState({ nodes: [colorNode(hexes(8))], edges: [], undoNotice: null });
+    useUIStore.getState().setInspectorPinned(false);
+    useUIStore.getState().selectNode('n1');
+    useUIStore.getState().setInspectorVisible(true);
+  });
+  afterEach(() => {
+    placed.splice(0).forEach((el) => el.remove());
+    vi.useRealTimers();
+  });
+
+  it('puts the real palette in the box it measures, and takes its whole body', () => {
+    render(<NodeInspectorPopover />);
+    frames(1);
+    const content = popover().querySelector('.node-inspector-popover__body > .node-inspector-popover__content')!;
+    expect(content).not.toBeNull();
+    expect(content.querySelector('.inspector__palette-list')).not.toBeNull();
+    expect(rowsIn(content)).toBe(8);
+    expect(bounds().height).toBe(BASE + ROW * 8 + CHROME);
+  });
+
+  it('grows on the spring, its top held, when swatches are added on the real control', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(<NodeInspectorPopover />);
+    frames(1 + OPEN_STABLE_FRAMES);
+    const before = bounds();
+    expect(popover().hasAttribute('data-content-resizing')).toBe(false);
+    // Add, on the real Inspector's palette row.
+    const add = [...popover().querySelectorAll<HTMLButtonElement>('.inspector__palette-actions button')]
+      .find((button) => button.textContent === 'Add')!;
+    expect(add).toBeDefined();
+    act(() => { add.click(); });
+    frames(1);
+    const count = (useGraphStore.getState().nodes[0].data.params.palette as string[]).length;
+    expect(count).toBe(9);
+    expect(rowsIn(popover())).toBe(9);
+    expect(bounds()).toEqual({ top: before.top, height: before.height + ROW });
+    expect(popover().hasAttribute('data-content-resizing')).toBe(true);
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    expect(popover().hasAttribute('data-content-resizing')).toBe(false);
+  });
+});
 
 describe("the palette's read-only × and Extract (GM r22, folded)", () => {
   const css = (name: string) => readFileSync(resolve(__dirname, `../../src/styles/${name}`), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

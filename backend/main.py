@@ -89,6 +89,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
+from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
@@ -3625,6 +3626,12 @@ async def upload_file_consolidated(
         # The input node it routes to (upload_client: `nebula upload`, MCP upload_file).
         "nodeType": node_type,
     }
+    # An image's size as shown, so its preview has its height before it
+    # decodes (services/preview_size.py; the Inspector keeps it as
+    # `_previewSize`, and a node made here gets it below).
+    shown_size = preview_size(content) if node_type == "image-input" else None
+    if shown_size is not None:
+        response["previewSize"] = shown_size
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
@@ -3642,6 +3649,8 @@ async def upload_file_consolidated(
             # URL. Only Image Input draws the preview; the shape matches the
             # Inspector's own upload for each of them.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
+            if shown_size is not None:
+                node_params["_previewSize"] = shown_size
         else:
             # video-input: probe at upload so the source owns its own
             # metadata. Downstream consumers (editor surface, edit handler,

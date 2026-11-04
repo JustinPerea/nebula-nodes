@@ -335,3 +335,68 @@ def test_nebula_upload_at_takes_a_negative_x(argv_at):
     args = build_parser().parse_args(["upload", "voice.wav", *argv_at])
     assert args.command == "upload" and args.file == "voice.wav"
     assert args.at == argv_at[-1].removeprefix("--at=")
+
+
+# An image's size as shown goes with its preview (services/preview_size.py,
+# #226 round 3): the Inspector's preview has its height before it decodes.
+def _image_bytes(fmt: str, size: tuple[int, int], orientation: int | None = None) -> bytes:
+    from PIL import Image
+
+    out = io.BytesIO()
+    image = Image.new("RGB", size, (40, 80, 120))
+    if orientation is None:
+        image.save(out, fmt)
+    else:
+        exif = Image.Exif()
+        exif[0x0112] = orientation
+        image.save(out, fmt, exif=exif.tobytes())
+    return out.getvalue()
+
+
+def test_an_image_upload_returns_its_size_and_its_node_keeps_it(client):
+    resp = client.post("/api/uploads", files={"file": ("wide.png", _image_bytes("PNG", (640, 360)), "image/png")},
+                       data={"create_node": "true"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["previewSize"] == {"width": 640, "height": 360}
+    node = main_module.cli_graph.nodes[body["nodeId"]]
+    assert node["params"]["_previewSize"] == {"width": 640, "height": 360}
+    # Without a node (the Inspector's own upload) the response still says it.
+    plain = client.post("/api/uploads", files={"file": ("tall.png", _image_bytes("PNG", (300, 500)), "image/png")})
+    assert plain.status_code == 200, plain.text
+    assert plain.json()["previewSize"] == {"width": 300, "height": 500}
+
+
+@pytest.mark.parametrize(("orientation", "shown"), [(1, (400, 200)), (3, (400, 200)), (6, (200, 400)), (8, (200, 400))])
+def test_an_image_turned_by_its_exif_reports_the_size_it_is_shown_at(client, orientation, shown):
+    data = _image_bytes("JPEG", (400, 200), orientation)
+    resp = client.post("/api/uploads", files={"file": ("photo.jpg", data, "image/jpeg")})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["previewSize"] == {"width": shown[0], "height": shown[1]}
+
+
+def test_sound_and_documents_carry_no_preview_size(client):
+    sound = client.post("/api/uploads", files={"file": ("tone.wav", _wav_bytes(), "audio/wav")},
+                        data={"create_node": "true"})
+    assert sound.status_code == 200, sound.text
+    assert "previewSize" not in sound.json()
+    assert "_previewSize" not in main_module.cli_graph.nodes[sound.json()["nodeId"]]["params"]
+    doc = client.post("/api/uploads", files={"file": ("notes.txt", b"plain notes for the doc", "text/plain")})
+    assert doc.status_code == 200, doc.text
+    assert "previewSize" not in doc.json()
+
+
+def test_an_image_whose_header_cannot_be_read_still_uploads_without_a_size(client):
+    # PNG magic, then nothing Pillow can read: stored as before, no size.
+    data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    resp = client.post("/api/uploads", files={"file": ("broken.png", data, "image/png")},
+                       data={"create_node": "true"})
+    assert resp.status_code == 200, resp.text
+    assert "previewSize" not in resp.json()
+    assert "_previewSize" not in main_module.cli_graph.nodes[resp.json()["nodeId"]]["params"]
+
+
+def test_agents_may_not_write_the_preview_size():
+    from services.agent_params import internal_keys
+
+    assert internal_keys({"_previewSize": {"width": 1, "height": 1}}) == ["_previewSize"]

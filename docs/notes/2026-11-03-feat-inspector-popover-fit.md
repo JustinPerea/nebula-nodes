@@ -1,7 +1,9 @@
 # feat/inspector-popover-fit
 
 GM r68 (2026-11-03): the unpinned Inspector beside a node grows to fit its
-content. Frontend only. Nothing in `Inspector.tsx` changed.
+content. Rounds 1 and 2 were frontend only, with `Inspector.tsx` untouched;
+Round 3 adds the preview's stored size (backend `/api/uploads`, the
+Inspector's preview `<img>`).
 
 ## The rule as built
 
@@ -119,3 +121,92 @@ content. Frontend only. Nothing in `Inspector.tsx` changed.
   After an upload: top, bottom and file row unchanged (no spring), the body
   scrolls (416 of 602).
 - No request left the lane.
+
+## Round 3 (review 1, GM r82)
+
+- **The open lasts until its content is stable (MEDIUM-1).** From the
+  panel's mount, until every `img` in it is `complete` and its measured
+  height has then held for 2 frames (`OPEN_STABLE_FRAMES`), capped at 300 ms
+  (`OPEN_SETTLE_CAP_MS`), a content change is placement: no held top, so a
+  low node shifts up. A settle that moves it runs on the same top-anchored
+  layout spring, never a jump. After the open, a change holds the top as
+  before (r72). Any step may restart the stable count; only a frame (the rAF
+  tick) adds to it, so the before-paint re-measure can't end an open early.
+- **The preview has its height before it decodes (the real fix).** Nothing
+  stored the dimensions, so `POST /api/uploads` now reads them from the
+  image's header with Pillow (`backend/services/preview_size.py`; lazy open,
+  no pixels decoded; EXIF orientations 5-8 swap width and height, as the
+  browser shows it). It returns them as `previewSize`, and a node it creates
+  (canvas drop, `nebula upload`, MCP `upload_file`) holds them as the private
+  param `_previewSize` next to `_previewUrl`. The Inspector's own upload
+  stores the same param from the response, and drops the last file's size
+  when the new one has none (an animated GIF, an unreadable header). The
+  preview `<img>` gets `width`/`height` (`lib/previewSize.ts` validates the
+  stored value) and the CSS adds `height: auto`, so the browser lays it out
+  at the stored ratio before it loads; once loaded its own ratio wins, so a
+  stale size can't distort it. MCP/CLI parity: agents read `_previewSize`
+  with a node's params and, like every `_` param, can't write it
+  (`agent_params.internal_keys`); their uploads get it the same way the
+  canvas's do. Saved nodes from before have no size and fall back to the
+  settle window.
+- **A window resize re-places (LOW-1).** A viewport size change drops the
+  held top. If a top was held, or a glide is already running, the change
+  runs on the spring and the spring is kept on for each further resize
+  frame, so the glide follows the resize live. With nothing held, a resize
+  still moves the panel at once, as before.
+- **Card growth under or over the node springs (NIT-2).** The node card's
+  size is tracked apart from its position. When it changes without a move
+  and the panel's top or height changes (only possible under or over the
+  node, including a flip), the change springs.
+- **A reopen starts afresh (LOW-2).** Closing (or another node, or a pin
+  toggle) now also ends a running spring, in the open effect's cleanup, so
+  an attribute left on from the last open can't carry into the next one.
+- **Tests (LOW-2, LOW-3, LOW-4).** `NodeInspectorContentFit.test.tsx` (40):
+  a content change 1 and 2 frames after opening a low node shifts it up on
+  the spring; images gate the open; an image that never loads stops placing
+  at 300 ms; two opens give 154-754 both times; another node is a new open;
+  a reopen starts afresh; the resize glide; the old survivors (body padding
+  via a stubbed `getComputedStyle`, move plus content change in one frame,
+  no spring when the height doesn't change, the held top clamped under a
+  taller toolbar, the 300 px floor on a held top, under-the-node never
+  holds, `CONTENT_RESIZE_MS` against the CSS spring's 360 ms); card growth
+  and a flip on the spring. `InspectorPaletteRows.test.tsx` renders the
+  real Inspector in the popover again: its palette sits in the measured box,
+  and Add on the real control grows the panel on the spring with the top
+  held. `Inspector.fileUpload.test.tsx`: the stored size, the dropped stale
+  size, broken values, and `height: auto`. Backend: sizes in the response
+  and on a created node, EXIF turns, none for sound or documents or an
+  unreadable header, and agents can't write it.
+- **NIT-1.** The orphaned "Where the floating Inspector opens" docblock is
+  folded into `measurePopoverFrame`'s, and the `panels.css` spring comment
+  now says when the top moves (r72, r82).
+- **Mutations.** Frontend 24 of 25 killed. The survivor (not clearing the
+  stored need on close) is equivalent now: the frame is cleared on close,
+  and the first step of an open measures no need. Backend 4 of 5 killed;
+  the survivor (reading a size for every upload kind) is equivalent, since
+  Pillow reads no size from sound or documents.
+
+### Round 3 live check (1440 wide, isolated backend 8968, Vite 5968, no provider calls, Run never clicked)
+
+- Style Reference, node at 784 (zoom 400%, the card runs past the bottom).
+  Empty, first open after a page load: placed at 223 to 754 (531 px). The
+  first-load late layout (about 10 px) lands during the open and settles on
+  the spring, top and height together, with no scroll left.
+- Upload through the Inspector (a 1200x900 PNG): `_previewSize` stored as
+  1200x900, and the `<img>` carries those attributes. The open had ended, so
+  the top held at 223 and the body scrolls (r72).
+- Cache off, page reloaded, first open: 154 to 754 (600 px) from the first
+  painted frame, no spring; the body scrolls 117 px (602 px of content in
+  a 485 px viewport). Second open:
+  the same, 154 to 754.
+- With the stored size removed, cache off: also 154 to 754 on frame one
+  (the local image arrived before the first measure), so the settle
+  backstop wasn't exercised live; the unit tests cover it.
+- Resize 900 to 700 to 900 in 20 px steps, nothing held: the panel follows
+  at once, 600 to 400 (154 to 554, band 566) and back to 600.
+- Held top, then a resize: collapsing the preview holds the top (154 to
+  685, 531 px). At 700 it is placed afresh on the spring: 154 to 554
+  (400 px). Back at 900, with nothing held any more: 223 to 754 (531 px),
+  placed afresh at once.
+- Blocked log: canary lines only. No request left the lane.
+
