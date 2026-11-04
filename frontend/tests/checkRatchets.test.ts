@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { discoverBackend, discoverFrontend, runPytest } from '../../scripts/check-ratchets.mjs';
+import { discoverBackend, discoverFrontend, diskHelpers, isolatedEnv, runPytest } from '../../scripts/check-ratchets.mjs';
 
 /**
  * scripts/check-ratchets.mjs (npm run check:ratchets) finds every test that reads the source or docs
@@ -18,6 +18,11 @@ describe('check-ratchets discovery', () => {
     expect(found).not.toContain('tests/agentCursor.test.ts');
   });
 
+  it('finds a test that reads the disk only through a tests/helpers module', () => {
+    expect(diskHelpers()).toContain('ratchetSource');
+    expect(discoverFrontend()).toContain('tests/moodboardNoticeSurface.test.ts');
+  });
+
   it('finds a known source-walking backend test, a docs-reading one, and the fixed list', () => {
     const found = discoverBackend();
     expect(found).toContain('tests/test_error_copy_round3c2.py');
@@ -27,6 +32,15 @@ describe('check-ratchets discovery', () => {
 });
 
 describe('check-ratchets isolated backend run', () => {
+  it('passes on no NEBULA_* variable from the shell: a connected agent’s token file, URL or project', () => {
+    const env = isolatedEnv({ PATH: '/bin', NEBULA_APP_TOKEN_FILE: '/real/token', NEBULA_URL: 'http://127.0.0.1:8000',
+      NEBULA_PROJECT_ID: 'p1', NEBULA_TEST_SHARD: '1/3' }, '/tmp/x');
+    expect(Object.keys(env).filter((k) => k.startsWith('NEBULA_')).sort())
+      .toEqual(['NEBULA_OUTPUT_ROOT', 'NEBULA_SETTINGS_PATH', 'NEBULA_STATE_DIR']);
+    expect(env.PATH).toBe('/bin');
+    expect(env.HOME).toBe('/tmp/x');
+  });
+
   it('runs pytest with a temp HOME and no shard, then deletes the temp dir', () => {
     const probeDir = mkdtempSync(path.join(tmpdir(), 'ratchet-probe-'));
     try {

@@ -15,3 +15,9 @@
 - That self-test reads no disk itself but imports the script, which does, so it is discovered by its own scan (intended; it is a ratchet on the ratchet).
 - Runtime on the maintainer's Mac: about 4.6 minutes (frontend 111 s, backend 164 s).
 - No root package.json exists, so the script is wired only from `frontend/package.json`.
+
+## After review
+- Every `NEBULA_*` variable from the caller's shell is cleared before the backend run, not only the shard. A shell an agent is connected from carries a real token file, URL and project id, and the tests must not see them.
+- A test that reads the disk only through a `tests/helpers` module that does (ratchetSource, cssCascade, logCascade, destructiveRule) is found too: 140 frontend files, up from 135.
+- `--help` prints usage, and any other argument exits 2 (it used to run everything). On Windows, npx runs through the shell, and a spawn that fails names its cause.
+- Not included: backend tests that read fixtures through `Path(__file__)` (about 60, mostly fixtures, not ratchets), and `desktop/tests` (the desktop pass is deferred).

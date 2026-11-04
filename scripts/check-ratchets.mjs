@@ -38,14 +38,28 @@ function walk(dir, keep, out = []) {
   return out;
 }
 
-/** Frontend test files (relative to frontend/) that read the disk. */
+/** Helper modules (not tests) under frontend/tests that read the disk: a test importing one reads it too. */
+export function diskHelpers(root = ROOT) {
+  return walk(path.join(root, 'frontend', 'tests'), (n) => /\.tsx?$/.test(n) && !/\.test\.tsx?$/.test(n))
+    .filter((f) => FRONTEND_DISK_PATTERN.test(readFileSync(f, 'utf8')))
+    .map((f) => path.basename(f).replace(/\.tsx?$/, ''));
+}
+
+/** Frontend test files (relative to frontend/) that read the disk, directly or through a disk-reading helper. */
 export function discoverFrontend(root = ROOT) {
   const frontend = path.join(root, 'frontend');
   const files = ['src', 'tests'].flatMap((d) =>
     walk(path.join(frontend, d), (n) => /\.test\.tsx?$/.test(n)),
   );
+  const helpers = diskHelpers(root);
+  const viaHelper = helpers.length
+    ? new RegExp(`from\\s+['"][^'"]*/(?:${helpers.join('|')})(?:\\.tsx?)?['"]`)
+    : null;
   return files
-    .filter((f) => FRONTEND_DISK_PATTERN.test(readFileSync(f, 'utf8')))
+    .filter((f) => {
+      const text = readFileSync(f, 'utf8');
+      return FRONTEND_DISK_PATTERN.test(text) || (viaHelper !== null && viaHelper.test(text));
+    })
     .map((f) => path.relative(frontend, f).split(path.sep).join('/'))
     .sort();
 }
@@ -69,10 +83,10 @@ export function pythonFor(root = ROOT) {
   return existsSync(venv) ? venv : 'python3';
 }
 
-/** The environment for a backend run: no shard, and HOME and every Nebula path inside `tmp`. */
+/** The environment for a backend run: no NEBULA_* variable from the caller's shell (no shard, and no
+ *  real token file, URL or project from a connected agent's shell), HOME and every Nebula path inside `tmp`. */
 export function isolatedEnv(base, tmp) {
-  const env = { ...base };
-  delete env.NEBULA_TEST_SHARD;
+  const env = Object.fromEntries(Object.entries(base).filter(([key]) => !key.startsWith('NEBULA_')));
   env.HOME = tmp;
   env.NEBULA_SETTINGS_PATH = path.join(tmp, 'settings.json');
   env.NEBULA_STATE_DIR = path.join(tmp, 'state');
@@ -95,7 +109,8 @@ export function runPytest(files, { cwd, python = pythonFor(), extraEnv = {}, std
         stdio,
       },
     );
-    return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}`, tmp };
+    const started = result.error ? `could not start ${python}: ${result.error.message}\n` : '';
+    return { status: result.status ?? 1, output: `${started}${result.stdout ?? ''}${result.stderr ?? ''}`, tmp };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -117,8 +132,9 @@ function runFrontend(root) {
     cwd: path.join(root, 'frontend'),
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
+    shell: process.platform === 'win32', // npx is npx.cmd there
   });
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  const output = `${result.error ? `could not start vitest: ${result.error.message}\n` : ''}${result.stdout ?? ''}${result.stderr ?? ''}`;
   const summary = output.split('\n').filter((l) => /^\s*(Test Files|Tests)\s/.test(l)).map((l) => l.trim().replace(/\s+/g, ' '));
   const ok = result.status === 0;
   return {
@@ -144,7 +160,19 @@ function runBackend(root) {
   };
 }
 
+const USAGE = `Usage: npm run check:ratchets   (or: node scripts/check-ratchets.mjs)
+
+Runs every test that reads the source tree or the docs from disk: frontend vitest files that read the
+disk (directly or through a tests/helpers module that does), then backend pytest files that walk the
+source or read the agent docs, in a temp HOME with no NEBULA_* variable from your shell. Takes no options.`;
+
 function main() {
+  const args = process.argv.slice(2);
+  if (args.length > 0) {
+    const help = args.every((a) => a === '--help' || a === '-h');
+    (help ? console.log : console.error)(help ? USAGE : `Unknown argument: ${args.join(' ')}\n\n${USAGE}`);
+    process.exit(help ? 0 : 2);
+  }
   let failedAny = false;
   for (const step of [runFrontend, runBackend]) {
     const started = Date.now();
