@@ -396,6 +396,9 @@ class ChannelState:
         self.listener_id: str | None = None
         # Why listening stopped (idle or error), for Nebula's readiness line.
         self.off_reason: str | None = None
+        # Why Nebula refused to register this listener (no token, or one it
+        # doesn't know: main._channel_caller), until a beat goes through.
+        self.register_error: str | None = None
         # Its proposals still waiting for the person (a decision on one
         # pushes), oldest first, at most MAX_OWN (one a Nebula restart closed
         # never gets a decision).

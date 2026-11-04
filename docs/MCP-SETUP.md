@@ -1132,7 +1132,30 @@ enforced either; after 5 minutes a gated turn's tool results say to wrap up.
 tells Nebula every 15 s (`POST /api/agent/channel`, as its own agent and
 session) and at once when listening stops, and deletes its entry when the
 session ends; Nebula drops an entry it hasn't heard from for 45 s
-(`backend/services/channel_listeners.py`). So the canvas tells three states
+(`backend/services/channel_listeners.py`).
+
+**Only an agent token registers a listener** (Justin, 2026-11-03). The
+listener must hold a valid agent token from Settings › Connect your agent;
+`nebula mcp connect claude-code --channel` makes one and writes the token
+file the listener reads. The agent is the token's: a name header beside it
+changes nothing, so one agent's token never registers as another. A
+listener with no token, or with a token Nebula no longer knows (revoked),
+is refused (`401`, `X-Nebula-Code: listener_no_token` or
+`listener_token_invalid`) and never gets a listener id, so the person's
+messages never reach it. The server prints the reason once on stderr:
+
+- "error: Nebula couldn’t connect this listener because it has no token.
+  Copy one from Settings › Connect your agent, then run this command again."
+- "error: Nebula couldn’t connect this listener because its token isn’t
+  valid anymore. Copy a new one from Settings › Connect your agent, then run
+  this command again."
+
+`channel_status` shows it as `thisServer.registerError` until a beat goes
+through. The canvas keeps its "Connect Claude Code…" state meanwhile. A
+listener's `listenerId` is stable for its (agent, session) while Nebula
+runs (an HMAC under a secret made at launch), so a lapsed beat or an
+eviction never strands the messages sent to it; a restarted Nebula gives
+new ids. Entries are capped per agent (8) and in all (64). So the canvas tells three states
 apart, per agent session:
 
 - no entry: **not connected** (never started with the channel, or its

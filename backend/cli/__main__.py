@@ -626,8 +626,9 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_connect_p.add_argument("--yes", action="store_true", help="Apply without asking")
     mcp_connect_p.add_argument("--channel", action="store_true",
                                help="Claude Code only: write the session-only nebula-listen config "
-                                    "(~/.nebula-listen.mcp.json) for the Nebula channel and print the command "
-                                    "that starts Claude Code with it")
+                                    "(~/.nebula-listen.mcp.json) for the Nebula channel, with the agent token file a "
+                                    "listener needs (Nebula refuses a listener with no token), and print the "
+                                    "command that starts Claude Code with it")
     mcp_disconnect_p = mcp_sub.add_parser("disconnect", help="Remove Nebula's MCP server from an app")
     mcp_disconnect_p.add_argument("client", choices=list(CLIENTS))
     mcp_disconnect_p.add_argument("--yes", action="store_true", help="Apply without asking")

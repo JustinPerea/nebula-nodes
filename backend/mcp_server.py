@@ -1038,7 +1038,10 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     person, or a failure; /mcp > nebula-listen > Reconnect starts it again)
     or null (no --channel). `listeners`: your entries as Nebula sees them,
     one per session of yours ({listenerId, state, reason, projectId, since,
-    seenAt}); none means Nebula doesn't count you as connected. Nebula can't
+    seenAt}); none means Nebula doesn't count you as connected.
+    `thisServer.registerError`: why Nebula refused this listener (only an
+    agent token from Settings › Connect your agent registers one; `nebula mcp
+    connect claude-code --channel` makes and saves it). Nebula can't
     tell whether Claude Code delivers a push, so "listening" means Nebula
     pushes, not that the session took it."""
     if _channel is None:
@@ -1046,7 +1049,8 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     else:
         state = _channel.state
         this = {"channel": True, "state": "stopped" if state.off else "listening",
-                "reason": state.off_reason if state.off else None, "listenerId": state.listener_id}
+                "reason": state.off_reason if state.off else None, "listenerId": state.listener_id,
+                "registerError": getattr(state, "register_error", None)}
     try:
         seen = _canvas_call("GET", "/api/canvas/channel", ctx)
     except NebulaAPIError as exc:
@@ -3021,8 +3025,12 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
     session runs: the canvas's readiness (services/channel_listeners.py).
     Nebula's answer names this listener (``listenerId``), which a message
     the person sends it names in turn. A failed beat is tried again at the
-    next one; it never stops the listener or the tools."""
+    next one; it never stops the listener or the tools. Only an agent token
+    registers (Justin, 2026-11-03): a refusal (no token, or one Nebula
+    doesn't know) is printed once to stderr after "error: ", and
+    channel_status says it (``registerError``) until a beat goes through."""
     said: tuple[Any, ...] | None = None
+    refused: str | None = None
     last = -math.inf
     while True:
         shown = ("stopped" if state.off else "listening", state.off_reason if state.off else None)
@@ -3033,9 +3041,17 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
             try:
                 answer = await _channel_fetch("/api/agent/channel", {}, 5.0, agent["name"], method="POST",
                                               json_body=body)
+            except NebulaAPIError as exc:
+                if exc.status == 401:
+                    if exc.detail != refused:
+                        print(f"error: {exc.detail}", file=sys.stderr, flush=True)
+                    refused = exc.detail
+                    state.register_error = exc.detail
             except Exception:  # noqa: BLE001 - Nebula down or older: readiness only, tried again soon
                 pass
             else:
+                refused = None
+                state.register_error = None
                 listener = answer.get("listener") if isinstance(answer.get("listener"), dict) else {}
                 if listener.get("listenerId"):
                     state.listener_id = str(listener["listenerId"])
