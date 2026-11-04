@@ -500,6 +500,7 @@ connect `+mb:moodboard` to a generator's `moodboard` input to style it.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard new "Dusk" ./refs --request-id dusk-board-0001   # safe to run again; use a new id for each board
 nebula moodboard show "Nature + tech"          # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png ./more-refs
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5
@@ -527,6 +528,16 @@ nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
 
+- `--request-id <id>` (MCP `request_id`) makes `new` safe to run again
+  after a lost answer: the same id gives back the board it first made, as
+  it is now, instead of a second board, even after Nebula restarts. Use a
+  new id for each board. A reused id returns the board it first made
+  whatever the name, images and settings say: `new` then prints `Board
+  “X” was already made by an earlier call with this request id.` (MCP
+  `moodboard_create`: `repeated: true` and that line in `note`), and the
+  image count isn't checked against this run's sources. An id already used
+  for a board in another project (or in Global) is refused (409,
+  `request_id_scope`): pick a new one. Ids are kept for 7 days.
 - Before connecting a board to a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
   card's ("Board images: on · up to 10 to Image Style Refs", or the brief as

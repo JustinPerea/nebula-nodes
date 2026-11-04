@@ -89,6 +89,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
+from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
@@ -2535,6 +2536,148 @@ def _preset_thumbnail_path_from_ref(value: str) -> Path | None:
     return path if path.is_file() else None
 
 
+def _ref_file_name(value: Any) -> str | None:
+    """The file a path or served URL names (its last part), or None."""
+    if not isinstance(value, str) or not value:
+        return None
+    return PurePosixPath(urlsplit(value).path).name or None
+
+
+def _ref_identity(value: Any) -> tuple[str, str] | None:
+    """Which file a path or served URL names, or None when it resolves to none.
+
+    A ref under the output root (a served URL, with or without the backend's
+    origin, a path under the root, or one under a root the outputs moved
+    from) is its root-relative path; any other path is the file it resolves
+    to, when that file exists. Two refs with the same name in different
+    folders (a node's ``{id}_final.png`` in two run folders, ``~/a/photo.png``
+    and ``~/b/photo.png``) are different files (#226 review 4, LOW-1)."""
+    if not isinstance(value, str) or not value:
+        return None
+    ref = value
+    if ref.startswith(("http://", "https://")):
+        ref = urlsplit(ref).path
+        if not ref.startswith(_OUTPUTS_URL_PREFIX):
+            return ("url", value)
+    rel = _output_relative_from_ref(ref)
+    if rel is not None:
+        return ("output", rel.as_posix())
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return None
+    try:
+        return ("path", str(Path(ref).expanduser().resolve(strict=True)))
+    except (OSError, RuntimeError):
+        return None
+
+
+def _ref_local_file(identity: tuple[str, str]) -> Path | None:
+    """The local file an identity stands for, or None (an outside URL)."""
+    kind, value = identity
+    if kind == "output":
+        return OUTPUT_ROOT / value
+    if kind == "path":
+        return Path(value)
+    return None
+
+
+def _unresolved_ref_key(value: str) -> tuple[str, str]:
+    """What is left of a ref whose file is gone (it names nothing on disk).
+
+    A ref into an output folder (a served URL, or a path under any directory
+    named like the output root or ``output``, the root the outputs moved from)
+    is its path under that folder: the folder itself is what is gone, the
+    rest still says which output it was. Any other path is the path itself,
+    absolute and in the filesystem's own case spelling, so ``a/photo.png``
+    and ``b/photo.png`` stay two files after both are deleted (#226 review 5,
+    NIT-3)."""
+    ref = urlsplit(value).path if value.startswith(("http://", "https://")) else value
+    if ref is not value and not ref.startswith(_OUTPUTS_URL_PREFIX):
+        # An outside URL is its whole URL, as _ref_identity reads it: never a
+        # local path that happens to share its path (#226 6d check, LOW).
+        return ("url", value)
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return ("output", ref[len(_OUTPUTS_URL_PREFIX):])
+    parts = Path(ref).parts
+    names = {OUTPUT_ROOT.name, "output"}
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx] in names and parts[idx + 1:]:
+            return ("output", PurePosixPath(*parts[idx + 1:]).as_posix())
+    return ("path", os.path.normcase(os.path.abspath(os.path.expanduser(ref))))
+
+
+def _same_ref_file(old: Any, new: Any) -> bool:
+    """Whether two refs name the same file: by what they resolve to (the same
+    file on disk however it is spelled: a symlink, a ``..``, a differently
+    cased name on a case-insensitive filesystem, as ``os.path.samefile``
+    reads it), and, when the old one no longer resolves (outputs moved from a
+    root that is gone, a file deleted), by what is left of its path."""
+    if _ref_file_name(old) is None or _ref_file_name(new) is None:
+        return _ref_file_name(old) == _ref_file_name(new)
+    old_id = _ref_identity(old)
+    new_id = _ref_identity(new)
+    if old_id is None:
+        old_key = _unresolved_ref_key(old)
+        return old_key == new_id or old_key == _unresolved_ref_key(new)
+    if old_id == new_id:
+        return True
+    if new_id is None:
+        return False
+    old_file, new_file = _ref_local_file(old_id), _ref_local_file(new_id)
+    if old_file is None or new_file is None:
+        return False
+    try:
+        return os.path.samefile(old_file, new_file)
+    except OSError:
+        return False
+
+
+def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:
+    """A `_previewSize` belongs to the file it was read from (services/preview_size.py).
+    When the preview now names another file, or none, the size goes with the
+    old one (#226 review 2, NIT-2). A move of the same file keeps it."""
+    if "_previewSize" not in after:
+        return
+    shown = _ref_file_name(after.get("_previewUrl"))
+    if shown is None or shown != _ref_file_name(before.get("_previewUrl")):
+        after.pop("_previewSize", None)
+
+
+def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent: Mapping[str, Any]) -> None:
+    """After a merge of ``sent`` into an Image Input's params, the preview
+    follows the file (#226 review 3, NIT-2). An agent or the CLI that names
+    another ``filePath`` without a ``_previewUrl`` gets the new file's served
+    URL as its preview, or no preview when the file isn't under the output
+    root (the canvas sync's normalizer imports it and fills one in). One that
+    names another file (``filePath``, ``_previewUrl``) also leaves the old
+    file's ``_previewSize`` behind, so it goes (#226 review 2, NIT-2). The
+    Inspector's own upload sends the new file's URL and size with it, and
+    keeps them."""
+    node = graph.nodes.get(node_id)
+    if not node or node.get("definitionId") != "image-input":
+        return
+    params = node.get("params")
+    if not isinstance(params, dict):
+        return
+    changed = False
+    file_path = params.get("filePath")
+    if ("filePath" in sent and "_previewUrl" not in sent
+            and not _same_ref_file(before.get("filePath"), file_path)):
+        url = _output_url_from_ref(file_path) if isinstance(file_path, str) and file_path else None
+        if url is not None and params.get("_previewUrl") != url:
+            params["_previewUrl"] = url
+            changed = True
+        elif url is None and "_previewUrl" in params:
+            params.pop("_previewUrl")
+            changed = True
+    if "_previewSize" not in sent and "_previewSize" in params and any(
+            key in sent and not _same_ref_file(before.get(key), params.get(key))
+            for key in ("filePath", "_previewUrl")):
+        params.pop("_previewSize")
+        changed = True
+    if changed:
+        graph._maybe_persist()
+
+
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
     validate_file_references(params)
@@ -2587,6 +2730,7 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
                 rewritten["_previewUrl"] = preview_url
                 break
 
+    _drop_stale_preview_size(params, rewritten)
     return rewritten
 
 
@@ -3378,8 +3522,14 @@ async def _moodboard_brief_fields_startup() -> None:
     Then save the colour check (gap 18) on boards whose saved one is missing
     or stale, so it isn't run again on every generation and read. Then store
     whether each image of a board analyzed before alpha counted has
-    transparency (``stamp_transparency_once``)."""
-    from services.moodboard_store import migrate_brief_fields, save_colour_checks, stamp_transparency_once
+    transparency (``stamp_transparency_once``). First, the create request-id
+    records older than 7 days go (.creates/)."""
+    from services.moodboard_store import migrate_brief_fields, prune_create_records, save_colour_checks, stamp_transparency_once
+    try:
+        # Request-id records older than a week (services/moodboard_store.py).
+        await asyncio.to_thread(prune_create_records)
+    except Exception as exc:  # never block startup; a lookup ignores old records anyway
+        print(f"[main] moodboard create records not pruned: {type(exc).__name__}: {exc}", flush=True)
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
@@ -3666,6 +3816,13 @@ async def upload_file_consolidated(
         # The input node it routes to (upload_client: `nebula upload`, MCP upload_file).
         "nodeType": node_type,
     }
+    # An image's size as shown, so its preview has its height before it
+    # decodes (services/preview_size.py; the Inspector keeps it as
+    # `_previewSize`, and a node made here gets it below). Header only, and
+    # off the event loop (#226 review 2, MEDIUM-2).
+    shown_size = await asyncio.to_thread(preview_size, content) if node_type == "image-input" else None
+    if shown_size is not None:
+        response["previewSize"] = shown_size
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
@@ -3683,6 +3840,8 @@ async def upload_file_consolidated(
             # URL. Only Image Input draws the preview; the shape matches the
             # Inspector's own upload for each of them.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
+            if shown_size is not None:
+                node_params["_previewSize"] = shown_size
         else:
             # video-input: probe at upload so the source owns its own
             # metadata. Downstream consumers (editor surface, edit handler,
@@ -8505,7 +8664,9 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
+            before = copy.deepcopy(node.get("params") or {})
             candidate.update_params(change.node_id, update)
+            _preview_follows_file(candidate, change.node_id, before, update)
     names = spec.names
     raw_nodes = [
         {
@@ -14442,6 +14603,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _scene_write_gone(node_id)
+            _preview_follows_file(cli_graph, node_id, params_before, params)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -20168,6 +20330,16 @@ class MoodboardCreate(BaseModel):
     lastRead: Any = None
     # Updates are written only through /agent-notes (refused here by name).
     agentNotes: Any = None
+    # The client's id for this create (optional). Sent again with the same
+    # id, the create returns the board the first send made instead of a
+    # second one (services/moodboard_store.create_once). Any, so the store
+    # checks it and answers in its own words.
+    requestId: Any = None
+    # The Studio's count of its sends of this create (1 to 1,000,000), only
+    # with requestId. A repeat answers which attempt made the board
+    # (madeAttempt) and the version it was made at (madeVersion), so the
+    # Studio replays only what changed after that attempt. Agents leave it out.
+    attempt: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -20583,14 +20755,17 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
     _refuse_moodboard_layout(body)
-    from services.moodboard_store import NotesOptInProtected
+    from services.moodboard_store import (
+        REQUEST_BOARD_UNREADABLE, REQUEST_ID_OTHER_SCOPE, NotesOptInProtected, RequestBoardUnreadable,
+        RequestIdOtherScope,
+    )
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
         # Off the event loop: a new image's file is decoded to store its
         # transparency (services/moodboard_store._warm_new_files).
-        moodboard = await asyncio.to_thread(
-            store.create,
+        moodboard, earlier = await asyncio.to_thread(
+            store.create_or_repeat,
             name=body.name,
             # Only what was sent: an image's weight left out comes from its
             # placements, if it asks for any.
@@ -20609,11 +20784,28 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             sendNotes=body.sendNotes,
             coverImageId=body.coverImageId,
             by=_moodboard_author(),
+            requestId=body.requestId,
+            attempt=body.attempt,
         )
     except NotesOptInProtected as exc:
         _refuse_override_change(exc)
+    except RequestIdOtherScope:
+        # Never the other scope's board: the id is refused.
+        return JSONResponse(status_code=409, content={"detail": REQUEST_ID_OTHER_SCOPE,
+                                                      "code": "request_id_scope"})
+    except RequestBoardUnreadable:
+        raise HTTPException(status_code=500, detail=REQUEST_BOARD_UNREADABLE)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    if earlier is not None:
+        # A repeat of a create already made (same requestId) changed
+        # nothing, so nobody is told twice. `repeated` tells the client the
+        # board is the earlier send's, as it is now: what this send held
+        # beyond it (the draft moved on meanwhile) isn't on it yet.
+        # `madeAttempt` / `madeVersion` say which attempt made it, and at
+        # which version, so the Studio rebases on that attempt's sends.
+        return {**_moodboard_out(moodboard), "repeated": True,
+                "madeAttempt": earlier.get("attempt"), "madeVersion": earlier.get("version")}
     await _broadcast_stored_asset("moodboard", moodboard)
     await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)

@@ -2306,6 +2306,7 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def moodboard_create(name: str, sources: list[str] | None = None, project_id: str | None = None,
                            mode: str = "look", strength: float = 0.7, notes: str = "",
+                           request_id: str | None = None,
                            ctx: Context | None = None) -> dict[str, Any]:
     """Make a moodboard (it shows in Moodboard Studio) from image sources.
 
@@ -2322,6 +2323,13 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     Character or a Style takes: an outside link (http, https, data:) sent to
     POST/PUT /api/moodboards or a board edit directly is refused with a 422
     and nothing is saved, so pass links here and this tool uploads them.
+    `request_id` (optional, 8 to 128 letters, digits, '-' or '_'): your own id
+    for this create. If a call's answer is lost and you call again with the
+    same id, you get the board the first call made (same id, as it is now)
+    instead of a second board, even after Nebula restarts. Use a new id for
+    each board: a reused id returns the board it first made whatever the
+    other arguments say, with `repeated: true` and `note` saying so, and an
+    id already used in another project (or in Global) is refused.
     """
     import moodboard_client as boards
 
@@ -2329,7 +2337,9 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     # Downloads can take a while, so these use the wait pool.
     board, skipped = await _offload(lambda: _board_call(
         boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
-        strength=strength, notes=notes, headers=headers), waits=True)
+        strength=strength, notes=notes, request_id=request_id, headers=headers), waits=True)
+    if board.get("repeated") is True:
+        return {**boards.brief(board), "note": boards.repeated_line(board)}
     return {**boards.brief(board), "duplicatesSkipped": skipped}
 
 

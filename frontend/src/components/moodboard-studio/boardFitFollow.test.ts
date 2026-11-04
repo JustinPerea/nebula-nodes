@@ -460,3 +460,37 @@ describe('a move within the tolerance keeps the anchor, reported or not (GM r5)'
     expect(follow.fitted).toBe(false);
   });
 });
+
+// #210 round 6t (GM r113 4, 5): the Board view decides whether a resize refits
+// from its own "view is fitted" flag (`follows`), given what the camera says.
+describe('follows: the caller decides whether a resize refits', () => {
+  const withFollows = (follows: (fitted: boolean) => boolean) => {
+    const frames: Array<() => void> = [];
+    const camera: FitCamera = { ...FIT };
+    const refit = vi.fn<(instant: boolean) => boolean>(() => true);
+    const decide = vi.fn(follows);
+    const follow = createBoardFitFollow({ fitted: false, refit, fitFor: fitAt, camera: () => ({ ...camera }), follows: decide,
+      requestFrame: (cb) => frames.push(cb), cancelFrame: (id) => { frames[id - 1] = () => {}; } });
+    follow.resize(870, 851);
+    return { follow, refit, decide, camera, frames, flush: () => { for (const cb of frames.splice(0)) cb(); } };
+  };
+
+  it('a view that is not on the fit (a Show) refits when the caller says so', () => {
+    const { follow, refit, decide, camera, flush } = withFollows(() => true);
+    camera.x += 200;
+    follow.aside();
+    follow.resize(430, 851);
+    flush();
+    expect(decide).toHaveBeenCalledWith(false);
+    expect(refit).toHaveBeenCalledWith(false);
+  });
+
+  it('a camera on the fit does not refit when the caller says no (a panned view back on the fit)', () => {
+    const { follow, refit, decide, flush } = withFollows(() => false);
+    expect(follow.fitted).toBe(true);
+    follow.resize(430, 851);
+    flush();
+    expect(decide).toHaveBeenCalledWith(true);
+    expect(refit).not.toHaveBeenCalled();
+  });
+});

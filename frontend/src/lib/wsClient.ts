@@ -185,7 +185,7 @@ export interface StoredAssetChangedEvent {
   version?: number;
   /** Who wrote it (`tab` only for the person's own tab: the Studio skips its
    *  own echo), what it touched, and its undo (null over 200 ops, or a PUT). */
-  edit?: { actor?: { kind?: string; name?: string } | null; tab?: string | null } | null;
+  edit?: { actor?: { kind?: string; id?: string; name?: string } | null; tab?: string | null } | null;
   touched?: { images: string[]; frames: string[]; looks: string[] } | null;
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }

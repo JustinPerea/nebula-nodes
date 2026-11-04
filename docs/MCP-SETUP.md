@@ -4890,6 +4890,7 @@ Studio shows. Both use `backend/moodboard_client.py`.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard new "Dusk" ./refs --request-id dusk-board-0001   # safe to run again; use a new id for each board
 nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5 --strength 0.6
@@ -4913,6 +4914,21 @@ nebula character move <character> --to "Shoot B"
 nebula moodboard delete <board>
 ```
 
+- Request ids: `nebula moodboard new --request-id <id>` / `moodboard_create(...,
+  request_id=...)` (the API's `requestId` on `POST /api/moodboards`) make a
+  create safe to send again after a lost answer: the same id returns the
+  board it first made, as it is now, instead of a second board, even after
+  Nebula restarts. Use a new id for each board. A reused id returns the
+  board it first made whatever the other arguments say, marked `repeated:
+  true` (the CLI prints `Board “X” was already made by an earlier call with
+  this request id.`, MCP puts that line in `note`), and the image count
+  isn't checked against this call's sources. An id already used for a board
+  in another project (or in Global) is refused with 409 and `code:
+  "request_id_scope"`, never answered with that board. Ids are kept beside
+  the boards (`.creates/`, which no scan, export or import reads) for 7
+  days, and go when their board is deleted for good. Moodboard Studio also
+  sends `attempt` (1 to 1,000,000) with its id; a repeat then answers
+  `madeAttempt` and `madeVersion`. Agents leave it out.
 - "Project" is a canvas project, the same one the app's Project tabs show:
   `--project current` (`project_id="current"`) is the one open on the canvas,
   otherwise an id from `nebula projects` / `list_projects`. An id that isn't a

@@ -224,6 +224,10 @@ describe('A: one source for the read-only state', () => {
     'components/commons/CommonsReview.tsx',
     'components/commons/CommonsSettings.tsx',
     'components/commons/CommonsView.tsx',
+    // PR #210 round 6c (GM r11 4): the Studio's autosave waits while offline
+    // (a write would be refused) and sends on reconnect. A network wait, not a
+    // canvas edit: following an agent's switch mustn't stop it.
+    'components/moodboard-studio/MoodboardStudioView.tsx',
     'components/panels/ChatPanel.tsx',
     'components/panels/ForgetRecoveryConfirm.tsx',
     'components/panels/PermissionCard.tsx',
