@@ -3,7 +3,12 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { discoverBackend, discoverFrontend, diskHelpers, isolatedEnv, runPytest } from '../../scripts/check-ratchets.mjs';
+import { spawnSync } from 'node:child_process';
+import { discoverBackend, discoverFrontend, diskHelpers, isolatedEnv, pythonFor, runPytest } from '../../scripts/check-ratchets.mjs';
+
+// The probe needs a Python with pytest. CI's frontend job has none (its backend jobs run pytest);
+// locally, check:ratchets runs this file with the backend's venv, so the probe runs there.
+const HAS_PYTEST = spawnSync(pythonFor(), ['-c', 'import pytest'], { stdio: 'ignore' }).status === 0;
 
 /**
  * scripts/check-ratchets.mjs (npm run check:ratchets) finds every test that reads the source or docs
@@ -41,7 +46,7 @@ describe('check-ratchets isolated backend run', () => {
     expect(env.HOME).toBe('/tmp/x');
   });
 
-  it('runs pytest with a temp HOME and no shard, then deletes the temp dir', () => {
+  it.skipIf(!HAS_PYTEST)('runs pytest with a temp HOME and no shard, then deletes the temp dir', () => {
     const probeDir = mkdtempSync(path.join(tmpdir(), 'ratchet-probe-'));
     try {
       writeFileSync(
