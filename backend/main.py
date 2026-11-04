@@ -6410,11 +6410,19 @@ async def _sweep_channel_listeners() -> None:
 
 
 def _channel_caller() -> tuple[AgentIdentity, str | None]:
+    """The listener's agent, by its token only. A tokenless caller (a name
+    alone) or a token Nebula doesn't know is refused (401) with GM r81's
+    line and a code: listener_no_token or listener_token_invalid. The
+    identity comes from the token, so one agent's token never registers as
+    another (a name header beside it is ignored)."""
     headers = current_request_headers()
     identity = identify_agent(headers)
-    if identity is None:
-        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports here (name it with "
-                                                    "NEBULA_AGENT_NAME)")
+    if identity is None or not identity.verified:
+        lower = {k.lower(): v for k, v in (headers or {}).items()}
+        presented = lower.get("authorization", "").startswith("Agent ") and lower["authorization"][6:].strip()
+        code, line = ((channel_listeners.BAD_TOKEN_CODE, channel_listeners.BAD_TOKEN_LINE) if presented
+                      else (channel_listeners.NO_TOKEN_CODE, channel_listeners.NO_TOKEN_LINE))
+        raise HTTPException(status_code=401, detail=line, headers={"X-Nebula-Code": code})
     return identity, presence_session(headers)
 
 

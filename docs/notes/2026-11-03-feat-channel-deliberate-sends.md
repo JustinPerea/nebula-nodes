@@ -131,3 +131,31 @@ failure states" and "Recipient".
 - Mutations (deliberate + channel files): 8 mutants on the span and the two
   survivors, 8 killed. The one that first survived (take_push's ride-along
   ignoring the span) is now killed by the accept-inside-the-turn test.
+
+## Round 3, item N (Justin, 2026-11-03: channel listeners require a token)
+
+- `POST/DELETE /api/agent/channel` (`main._channel_caller`) take only a
+  verified identity, which only a valid agent token gives. A name alone
+  gets `401` with GM r81's line and `X-Nebula-Code: listener_no_token`. An
+  unknown or revoked token is stopped earlier, by the token middleware
+  (`agent_workspaces.AgentWorkspaceContext`); for this one path it now
+  answers with r81's "isn’t valid anymore" line and
+  `listener_token_invalid` instead of its generic line. The route's own
+  "token presented" branch is unreachable today (any token the middleware
+  passes is verified): a mutation there survives as equivalent.
+- The identity is the token's, so a name header beside one agent's token
+  never registers it as another (tested).
+- With no tokenless listener, the LRU half of boundary LOW-1 is closed in
+  `channel_listeners.py`: ids are an HMAC of (agent, session) under a
+  launch secret (a lapse or eviction keeps the id), and entries are capped
+  per agent (8) as well as in all (64).
+- The MCP server prints the refusal once on stderr after "error: " and
+  `channel_status` shows it as `thisServer.registerError`. The listener
+  keeps running (pins and edits still reach it through the journal, as on
+  main); only the person's messages, which name a listener id, can't.
+- End to end: `tests/test_agent_connect.py` makes a Settings token, reads
+  its token file the way the server does at start (NEBULA_APP_TOKEN_FILE),
+  and runs the server's own beat against the app: registered and verified.
+  Tokenless: refused, one stderr line. Revoked: r81's second line.
+- Mutations: 6; 4 killed at first, the stderr-once mutant killed after the
+  test ran three beats, the token-presented branch equivalent (above).

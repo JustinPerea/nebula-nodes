@@ -22,15 +22,28 @@ or one whose org keeps Channels off, still reads "listening". The docs say so.
 
 Each entry is one agent session: the agent identity plus the session its
 requests name (agent_presence.presence_session), the same pair that gives it
-its own cursor. Nebula gives each a ``listenerId`` (random, kept while the
-entry lives): a message the person sends one session names it, and only that
-listener wakes. The person's tabs also get the session's cursor key and
+its own cursor. Nebula gives each a ``listenerId``: a message the person
+sends one session names it, and only that listener wakes. The id is an HMAC
+of (agent, session) under a secret this backend process makes at launch, so
+it stays the same when the entry lapses and comes back (a beat gap past the
+TTL, an eviction) and the person's sent or held messages to it still reach
+it (review 1 of #225, boundary LOW-1). It can't be worked back to the
+session, and a restarted Nebula gives new ids: messages sent before a
+restart and never pushed stay "sent" (the notes say so).
+
+Only an agent holding a valid agent token registers (Justin, 2026-11-03;
+main._channel_caller refuses a name alone), so every entry is a token's
+agent. Entries are capped per agent identity (MAX_PER_AGENT, its own least
+recently heard goes) and in all (MAX_LISTENERS, the least recently heard
+goes): one token's sessions can't push out another agent's listener. The person's tabs also get the session's cursor key and
 number, so "Message Claude · 2" names the cursor it reaches; agents only ever
 read their own entries, without cursor keys (those are the person's form).
 Memory only, never saved.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import secrets
 import threading
 import time
@@ -42,7 +55,20 @@ from services.agent_presence import AgentIdentity
 BEAT_SECONDS = 15.0  # how often a listener says it is there
 TTL_SECONDS = 45.0   # an entry with no word this long is gone (three beats)
 MAX_LISTENERS = 64   # entries kept; past this the least recently heard goes
+MAX_PER_AGENT = 8    # entries kept per agent identity; past this its own least recently heard goes
 STATES = ("listening", "stopped")
+# Justin, 2026-11-03: only an agent holding a valid agent token (Settings ›
+# Connect your agent) registers, so only a token's agent is ever addressed by
+# the person's messages. GM r81's lines (the listener prints them after
+# "error: "); an unknown token is refused this way by the token middleware
+# (agent_workspaces.AgentWorkspaceContext) before the route runs.
+CHANNEL_PATH = "/api/agent/channel"
+NO_TOKEN_CODE = "listener_no_token"
+BAD_TOKEN_CODE = "listener_token_invalid"
+NO_TOKEN_LINE = ("Nebula couldn’t connect this listener because it has no token. Copy one from Settings › Connect "
+                 "your agent, then run this command again.")
+BAD_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token isn’t valid anymore. Copy a new one from "
+                  "Settings › Connect your agent, then run this command again.")
 REASONS = ("idle", "error")
 
 
@@ -84,7 +110,21 @@ class ListenerBook:
         self._clock = clock
         self._lock = threading.Lock()
         self._entries: dict[tuple[str, str], Listener] = {}
+        self._secret = secrets.token_bytes(16)
         self.revision = 0
+
+    def listener_id(self, agent_id: str, session: str) -> str:
+        """The stable id of (agent, session) for this backend process."""
+        digest = hmac.new(self._secret, f"{agent_id}\0{session}".encode("utf-8"), hashlib.sha256).hexdigest()
+        return "ch_" + digest[:16]
+
+    def _evict_for(self, agent: AgentIdentity) -> None:
+        """Make room for one more entry of ``agent`` (lock held)."""
+        own = [k for k in self._entries if k[0] == agent.id]
+        if len(own) >= MAX_PER_AGENT:
+            del self._entries[min(own, key=lambda k: self._entries[k].seen_at)]
+        if len(self._entries) >= MAX_LISTENERS:
+            del self._entries[min(self._entries, key=lambda k: self._entries[k].seen_at)]
 
     def now(self) -> float:
         return self._clock()
@@ -100,10 +140,8 @@ class ListenerBook:
             entry = self._entries.get(key)
             changed = False
             if entry is None:
-                if len(self._entries) >= MAX_LISTENERS:
-                    oldest = min(self._entries, key=lambda k: self._entries[k].seen_at)
-                    del self._entries[oldest]
-                entry = Listener(listener_id="ch_" + secrets.token_hex(8), agent=agent, session=key[1],
+                self._evict_for(agent)
+                entry = Listener(listener_id=self.listener_id(*key), agent=agent, session=key[1],
                                  state=state, reason=reason, project_id=project_id, since=now, seen_at=now)
                 self._entries[key] = entry
                 changed = True

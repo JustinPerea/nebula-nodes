@@ -1139,3 +1139,64 @@ def test_the_cli_parses_channel_on_connect_and_disconnect():
     assert parser.parse_args(["mcp", "connect", "claude-code", "--channel"]).channel is True
     assert parser.parse_args(["mcp", "disconnect", "claude-code", "--channel"]).channel is True
     assert parser.parse_args(["mcp", "connect", "claude-code"]).channel is False
+
+
+# -- channel listeners need a token (Justin, 2026-11-03) ------------------------------------
+
+def _beat_once(monkeypatch, env, main_app, seconds=0.5):
+    """mcp_server's own beat (with_identity, the token file read as `nebula mcp
+    connect claude-code --channel` writes it) against this backend, one beat."""
+    import anyio
+    import httpx
+
+    import mcp_channel
+    import mcp_server
+
+    for name in ("NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", "NEBULA_AGENT_TOKEN_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    loaded = dict(env)
+    mcp_server.load_app_token_file(loaded)  # as the server reads it at start, into its own env
+    for name, value in loaded.items():
+        monkeypatch.setenv(name, value)
+    real = getattr(httpx.AsyncClient, "_real", httpx.AsyncClient)
+
+    def asgi_client(**kw):
+        return real(transport=httpx.ASGITransport(app=main_app), **kw)
+
+    asgi_client._real = real
+    monkeypatch.setattr(mcp_server.httpx, "AsyncClient",
+                        asgi_client)
+    monkeypatch.setattr(mcp_server, "_current_url", lambda: "http://testserver")
+    state = mcp_channel.ChannelState(now=0.0)
+
+    async def run():
+        with anyio.move_on_after(seconds):
+            await mcp_server._channel_beats(state, {"name": "Claude Code"}, lambda: 0.0)
+
+    anyio.run(run)
+    return state
+
+
+def test_a_channel_listener_registers_with_its_token_file_and_not_without(client, monkeypatch, capsys):
+    import main
+
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    state = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert state.listener_id and state.listener_id.startswith("ch_") and state.register_error is None
+    seen = client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]
+    assert [entry["listenerId"] for entry in seen] == [state.listener_id]
+    assert seen[0]["agent"]["verified"] is True
+    # Tokenless (a name only): refused, said once on stderr after "error: ".
+    capsys.readouterr()
+    tokenless = _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=2.5)  # 3 beats
+    assert tokenless.listener_id is None
+    assert tokenless.register_error == ("Nebula couldn’t connect this listener because it has no token. Copy one "
+                                        "from Settings › Connect your agent, then run this command again.")
+    assert capsys.readouterr().err.count("error: Nebula couldn’t connect this listener because it has no token.") == 1
+    # Revoked: its token isn't valid anymore.
+    assert client.delete(f"/api/agent/spend/apps/{made['app']['id']}", headers=PERSON).status_code == 200
+    revoked = client.post("/api/agent/channel", headers={"Authorization": f"Agent {made['token']}"},
+                          json={"state": "listening"})
+    assert revoked.status_code == 401 and revoked.json()["detail"] == (
+        "Nebula couldn’t connect this listener because its token isn’t valid anymore. Copy a new one from "
+        "Settings › Connect your agent, then run this command again.")
