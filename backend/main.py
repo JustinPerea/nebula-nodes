@@ -2576,6 +2576,10 @@ def _unresolved_ref_key(value: str) -> tuple[str, str]:
     and ``b/photo.png`` stay two files after both are deleted (#226 review 5,
     NIT-3)."""
     ref = urlsplit(value).path if value.startswith(("http://", "https://")) else value
+    if ref is not value and not ref.startswith(_OUTPUTS_URL_PREFIX):
+        # An outside URL is its whole URL, as _ref_identity reads it: never a
+        # local path that happens to share its path (#226 6d check, LOW).
+        return ("url", value)
     if ref.startswith(_OUTPUTS_URL_PREFIX):
         return ("output", ref[len(_OUTPUTS_URL_PREFIX):])
     parts = Path(ref).parts

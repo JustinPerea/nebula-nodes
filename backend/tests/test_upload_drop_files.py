@@ -782,6 +782,16 @@ def test_two_outside_urls_with_one_basename_are_two_files():
     assert main_module._same_ref_file("https://a.example.com/x/photo.png", "https://a.example.com/x/photo.png")
 
 
+def test_a_deleted_local_file_is_not_an_outside_url_with_the_same_path(tmp_path):
+    gone = tmp_path / "gone" / "photo.png"
+    url = f"https://cdn.example.com{gone.as_posix()}"
+    assert main_module._ref_identity(str(gone)) is None
+    assert not main_module._same_ref_file(str(gone), url)
+    assert main_module._unresolved_ref_key(url) == ("url", url)
+    # Nor is an outside URL whose path has an "output" folder one of Nebula's outputs.
+    assert main_module._unresolved_ref_key("https://cdn.example.com/output/run1/n1.png")[0] == "url"
+
+
 # #226 review 5, NIT-3: the corners of the same-file rule.
 def test_a_deleted_outside_file_is_not_another_file_of_the_same_name(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
