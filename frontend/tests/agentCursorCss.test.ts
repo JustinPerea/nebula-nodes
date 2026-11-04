@@ -83,4 +83,12 @@ describe('ratchets the look depends on (review 1, F5)', () => {
   it('the hidden name keeps its box at opacity 0', () => {
     expect(rule(".agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__name")).toMatch(/opacity:\s*0;/);
   });
+  it('a crossing member draws under every live cursor, inside the layer, so the one above draws on top (GM r75.2)', () => {
+    expect(rule(".agent-cursor[data-crossing='true']")).toMatch(/z-index:\s*-1;/);
+    // The layer is its own stacking context (positioned, with a z-index):
+    // the -1 stays above nodes and edges.
+    expect(rule('.agent-cursor-layer')).toMatch(/position:\s*absolute;/);
+    expect(rule('.agent-cursor-layer')).toMatch(/z-index:\s*\d+;/);
+    expect(rule('.agent-cursor')).not.toMatch(/z-index/);
+  });
 });

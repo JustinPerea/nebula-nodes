@@ -45,6 +45,15 @@
   opacity: 0;
 }
 
+/* A column member gliding past or under the member above it (a crossing:
+   CursorField.hold) draws under every live cursor, so the one above draws
+   on top while it passes and their labels overlap cleanly, never
+   interleaved (GM - Design, #219 r75.2). Under 0 inside the layer's own
+   stacking context (its z-index), so still above nodes and edges. */
+.agent-cursor[data-crossing='true'] {
+  z-index: -1;
+}
+
 /* A leaving cursor whose name a live cursor now shows (a number taken over)
    hides its pill at once, for the rest of its exit: one name never shows
    twice (PR #211 reviews 4 and 5). */

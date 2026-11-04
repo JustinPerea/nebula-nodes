@@ -324,6 +324,83 @@ asked for the move to be pinned.
   moving. Test: 2 s of wobble inside d's chain, where d and e each wait close
   to 300 ms and never past it.
 
+## 2h. Round 3f (#219 review 3, GM - Design r75)
+
+- **No snap on the gate's frame (r75.1).** The rest gate is read from the
+  last frame's steps, so a spot that moved on the gate's frame (a crossing, a
+  say, a join or a leave, or the 300 ms cap firing then) was landed on in one
+  frame: 101 px for a, 25 for d and e. `stepMotion` no longer forces a
+  landing. With the gate open (`true`) a cursor rests as it does with no
+  column, on the step it is within the rest distance and speed on this
+  frame; held (`false`) it doesn't. So it lands only if it is still near rest
+  after this frame's steps, as GM approved, and review 3's two near-equivalent
+  mutants (the forced landing, gate-true `mayRest`) can't exist. Tests: the
+  reviewer's probe, k = 0 to 49 frames after r65's head-to-bottom move, and
+  r66's wobble crossing back on each of frames 20 to 60 (the cap's frames
+  among them). No frame moves a cursor more than its spring step: the
+  largest step the land spring takes in the clean glide (a about 11.7 px, d and e
+  about 2.9), with 2% for a glide that reverses.
+- **A wobble back mid-glide glides (r75.2).** In `hold()`, a gliding member
+  that the column floor would push more than a pixel past its own slot is
+  crossing: it glides to its slot on the layout spring instead of being set
+  on the floor (37.6 px in one frame before). A push toward its own slot (a
+  glide that ends on the floor, a head leading its column down) still holds,
+  and so does a push in lockstep (a fraction of a pixel a frame); measuring
+  the push past the slot keeps those. A crossing member is drawn under every
+  live cursor (`data-crossing`, `z-index: -1` inside the layer's own stacking
+  context), so the one above draws on top while it passes and the labels
+  overlap cleanly. Crossing now ends when the glide ends however it ends,
+  including when the cursor heads its column. This also covers the merge
+  crossing that existed before (a member gliding past the one now above it):
+  it draws under that one too. The same push fixed a 34 px floor jump in the
+  test setup's band entry. Tests: back 0, 1 and 2 frames into the glide (in
+  the k probe), the paint order on each such frame, and r65's wobble test
+  extended with reversals 1, 2 and 3 frames after a crossing, both ways.
+- **The band in chain space (r75.3).** The newest-arrival band slot now needs
+  a member that is both new to the carry's drawn column and new to its column
+  read in chain space, each cursor at its chain-input point (a port cursor at
+  its node's header point, r62). A carry that meets a port cursor's drawn tip
+  joins its column in plain arrival order, which is what the backend's
+  arrival order gives at the drop, so nothing moves there. For node cursors
+  the two spaces are one, so every node-cursor case is as before. The
+  backend needed no change: `carry_nodes` counts an arrival from the chain
+  alone and never reads drawn overlap, so at the drop a drawn overlap is
+  plain arrival order already. Agents read nothing new.
+- **Shared traces.** `cursor_chains.json` has a `traces` list: a carried
+  onto h's drawn tip from above, the left and below, and onto h's node
+  header, at zoom 0.5, 1 and 2. The backend drops at every path point through
+  `carry_nodes` (a arrives exactly from `arrivalFrom` on: never for the tip,
+  within 16 of the header); the tab drags along the path and checks a's slots
+  and that nothing moves at the drop or through the hold.
+- **From below** (for GM): onto the tip from below, a's slot changes once
+  mid-drag, `[1, 0]`. In the band a aims more than 16 below h, so the r24
+  insert puts h above it; within 16 a heads by arrival. That is the insert's
+  own geometry, the same for any cursor, and the backend's order at the drop
+  is the same, so nothing moves there. Before this round the same approach
+  stayed at slot 1 and swapped at the drop. From above and from the left a's
+  slot never changes.
+- **Review 3's LOWs and NITs.**
+  - R4 (stopped loop): a member whose node is deleted mid-glide holds no one;
+    d and e land within a frame of their own rest.
+  - C3/C4 (chainOff only): a node widened under a port cursor on its left
+    moves its chain point only. That now bumps the layout and wakes the other
+    cursors (they could lay out before it reported, and then sleep). Test: a
+    carry previewed under c leaves the preview once n1's header moves away.
+  - N2: the delete's frame sets the preview's wait (was left to the earlier
+    carry's timer).
+  - R6: gone with r75.1's change (gate-true rest is the code now); the
+    mutants that remain there (no rest on true, gate ignored) are killed.
+  - NIT, double hover read: a held landing that is still near rest, or lands
+    from there, doesn't mark the hover boxes stale; it reads them once, on
+    its own rest.
+  - NIT, `heldSince`: cleared when the cursor lands.
+  - NIT, `draggedNodes`: a node whose every cursor is forgotten mid-drag is
+    dropped from it.
+- **A test the band rule needed.** The drawn-column condition had no test
+  (a mutant that dropped it survived): a and f share a chain, and a carry
+  takes f's label onto a port cursor's header point in chain space while that
+  cursor is drawn far off. a keeps its order with f.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's
@@ -365,3 +442,11 @@ carry. No MCP tool or doc changed.
 - `where()` in the layer tests reads where cursors are drawn. `landed()`
   wakes no other cursor, so a test that checks a column's order after a
   landing pans once to wake every cursor.
+- `fieldOf()` in the layer tests reads the layer's `CursorField` through a
+  cursor view's props, for bookkeeping no frame shows (`heldSince`,
+  `draggedNodes`).
+- Session keys in the layer tests must be hex (`session('h', …)` makes no
+  session): the r75.3 traces call h `c` there.
+- Live frame sampling in headless Chrome needs `--disable-gpu-vsync
+  --disable-frame-rate-limit` (and the backgrounding flags); without them rAF
+  ran at about 5 fps, which hides one-frame jumps.

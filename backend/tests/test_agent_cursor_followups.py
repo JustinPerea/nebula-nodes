@@ -411,6 +411,45 @@ def test_the_shared_chain_fixture_backend_side():
         assert chains == case["chains"], case["name"]
 
 
+def test_the_shared_carry_traces_backend_side():
+    """GM r75.3: the drop's arrival on the traces the tab runs too
+    (frontend/tests/agentCursorLayer.test.tsx). a, arrived first, rides n2;
+    h, arrived second, points at a port on n1. Dropped at each point of the
+    path, a arrives (its chain changes) exactly from ``arrivalFrom`` on: never
+    onto h's drawn tip, which counts at n1's header (r62), and onto the header
+    once within ARRIVAL_RADIUS of it. h never arrives (n1 didn't move). With no
+    arrival a keeps its place: plain arrival order, which is what the tab
+    lays out for a drawn overlap during the drag too."""
+    from pathlib import Path
+
+    traces = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["traces"]
+    assert {t["zoom"] for t in traces} == {0.5, 1, 2}
+    assert sum(t["arrivalFrom"] is None for t in traces) >= 9
+    assert sum(t["arrivalFrom"] is not None for t in traces) >= 3
+    for trace in traces:
+        h_node, carry, path = trace["h"]["node"], trace["carry"], trace["path"]
+        arrived_at = []
+        for i, (x, y) in enumerate(path):
+            clock = Clock()
+            presence = AgentPresence(clock)
+            presence.report_view({"viewport": {"x": 0, "y": 0, "zoom": trace["zoom"]}, "nodes": [
+                {"id": "n1", "x": h_node["x"], "y": h_node["y"], "width": h_node["width"], "height": h_node["height"]},
+                {"id": "n2", "x": path[0][0], "y": path[0][1], "width": carry["width"], "height": carry["height"]},
+            ]})
+            assert presence.carry_nodes(_boxes(n1=(h_node["x"], h_node["y"]), n2=tuple(path[0]))) == []
+            a = _form(presence, "a", {"nodeId": "n2"})
+            clock.now += 1
+            h = _form(presence, "h", {"nodeId": "n1", "handle": trace["h"]["handle"]})
+            clock.now += 1
+            updates = presence.carry_nodes(_boxes(n1=(h_node["x"], h_node["y"]), n2=(x, y)))
+            keys = {u["key"] for u in updates}
+            assert h["session"]["key"] not in keys, trace["name"]
+            if a["session"]["key"] in keys:
+                arrived_at.append(i)
+        expected = [] if trace["arrivalFrom"] is None else list(range(trace["arrivalFrom"], len(path)))
+        assert arrived_at == expected, trace["name"]
+
+
 # -- #219 review 2 (round 3c) ----------------------------------------------------
 
 def test_an_expired_cursor_joins_no_chain():

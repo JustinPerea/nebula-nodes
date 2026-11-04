@@ -3227,12 +3227,47 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
+  // Review 3's probe (GM r75.1 and r75.2), kept as a test: r65's
+  // head-to-bottom move, then k plain frames, then the hand crosses back
+  // one unit (a's target 328 -> 327: the head again). Every k from 0 to 49
+  // crosses on some frame of the glide: k = 0 to 2 are r75.2's wobble back
+  // mid-glide (the column floor's push), the gate frame (about k = 30) and
+  // the frames the 300 ms cap fires on are r75.1's. No frame moves any
+  // cursor more than its spring step: the largest one-frame step the land
+  // spring takes in the clean head-to-bottom glide, for a (101 px) and for d
+  // and e (25 px), with 2% for a glide that reverses (a back from past its
+  // slot goes a little further than 101 px).
+  const springSteps = () => {
+    fakeTimers();
+    try {
+      const view = render(<AgentCursorLayer />);
+      headToBottom();
+      const out: Record<string, number> = { a: 0, d: 0, e: 0 };
+      let prev = where();
+      for (let i = 0; i < 120; i += 1) {
+        frame();
+        const w = where();
+        for (const k of ['a', 'd', 'e']) out[k] = Math.max(out[k], Math.abs(w[k].y - prev[k].y));
+        prev = w;
+      }
+      view.unmount();
+      return out;
+    } finally {
+      // The run leaves no trace for the test that reads it.
+      useAgentPresenceStore.getState().clear();
+      lookupRef.current = lookup;
+      frames = [];
+      frameIds = [];
+      vi.useRealTimers();
+    }
+  };
   // GM r65: wobbling across the 16 boundary follows the hand, with no
   // hysteresis. a's target goes back and forth over 328 (16 from d), with
   // steps that stay on one side in between. Each crossing is exactly one
   // move (one unbroken run of frames for the members); a step that crosses
   // nothing moves no member; and once a move settles, nothing moves.
-  it('a wobble across the 16 boundary: each crossing is one move, nothing moves between crossings, no hysteresis (r65)', () => {
+  it('a wobble across the 16 boundary: each crossing is one move, nothing moves between crossings, no hysteresis (r65), and a wobble back 1 to 3 frames on moves nothing past its spring step (r75.2)', () => {
+    const spring = springSteps();
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3264,6 +3299,124 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
           : { a: { x: 500, y: next }, d: { x: 500, y: next + S }, e: { x: 500, y: next + 2 * S } });
         aT = next;
       }
+      // The hand back across the boundary 1, 2 and 3 frames after a
+      // crossing, both ways (GM r75.2): no frame moves a cursor more than
+      // its spring step, and each pair ends where the hand is.
+      for (const back of [1, 2, 3]) {
+        for (const [there, home] of [[328, 327], [327, 328]]) {
+          let prev = where();
+          const rec = () => {
+            const w = where();
+            for (const k of ['a', 'd', 'e']) expect(Math.abs(w[k].y - prev[k].y), `${k}: ${home} -> ${there} -> ${home} in ${back}`).toBeLessThanOrEqual(spring[k] * 1.02);
+            prev = w;
+          };
+          dragFrames('n2', [{ x: 400, y: there - 44 }], rec);
+          for (let i = 1; i < back; i += 1) { frame(); rec(); }
+          dragFrames('n2', [{ x: 400, y: home - 44 }], rec);
+          for (let i = 0; i < 90; i += 1) { frame(); rec(); }
+          expect(where()).toEqual(home >= 328
+            ? { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } }
+            : { a: { x: 500, y: home }, d: { x: 500, y: home + S }, e: { x: 500, y: home + 2 * S } });
+          // Back on its slot: no member is drawn under the others any more.
+          expect(cursors().filter((el) => el.dataset.crossing === 'true')).toEqual([]);
+          // The next pair starts from the other side.
+          dragFrames('n2', [{ x: 400, y: there - 44 }], () => {});
+          for (let i = 0; i < 90; i += 1) frame();
+        }
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(Array.from({ length: 50 }, (_, k) => k))('the hand crosses back %s frames into the head-to-bottom glide: no frame moves a cursor more than its spring step (r75.1, r75.2)', (k) => {
+    const bound = springSteps();
+    // The clean glide's steps: a's is 101 px of spring, d's and e's 25.
+    expect(bound.a).toBeGreaterThan(8);
+    expect(bound.d).toBeLessThan(4);
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      let prev = where();
+      const worst: Record<string, number> = { a: 0, d: 0, e: 0 };
+      const rec = () => {
+        const w = where();
+        for (const key of ['a', 'd', 'e']) worst[key] = Math.max(worst[key], Math.abs(w[key].y - prev[key].y));
+        prev = w;
+      };
+      for (let i = 0; i < k; i += 1) { frame(); rec(); }
+      dragFrames('n2', [{ x: 400, y: 283 }], rec);
+      for (let i = 0; i < 80; i += 1) { frame(); rec(); }
+      for (const key of ['a', 'd', 'e']) expect(worst[key], `${key} at k=${k}`).toBeLessThanOrEqual(bound[key] * 1.02);
+      // And it ends where the hand is: a heads the column again.
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r75.2: mid-glide, a member may sit less than a step under the one
+  // above; the one above draws on top. d and e glide back under a with no
+  // floor push, and every frame one of them is less than a step under the
+  // member above (or passed by it), it is marked as crossing, which draws
+  // it under every live cursor (agentCursor.css). Landed, the mark is gone.
+  it.each([0, 1, 2])('the hand back %s frames into the head-to-bottom glide: a member less than a step under the one above draws under it (r75.2)', (k) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      for (let i = 0; i < k; i += 1) frame();
+      let close = 0;
+      const check = () => {
+        const w = where();
+        for (const [up, k2] of [['a', 'd'], ['d', 'e']] as const) {
+          if (w[k2].y - w[up].y < S - 0.5) {
+            close += 1;
+            expect(byKey(k2).dataset.crossing, `${k2} under ${up} at ${w[k2].y - w[up].y}`).toBe('true');
+            expect(byKey(up).dataset.crossing).toBeUndefined();
+          }
+        }
+      };
+      dragFrames('n2', [{ x: 400, y: 283 }], check);
+      for (let i = 0; i < 80; i += 1) { frame(); check(); }
+      expect(close).toBeGreaterThan(3);
+      expect(cursors().filter((el) => el.dataset.crossing === 'true')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The cap's frame (r75.1): r66's wobble inside d's chain keeps the carry
+  // gliding, so d and e are held until the 300 ms cap lands them on their
+  // own. The hand crosses back to the head on frame n of the wobble, for
+  // every n from 20 to 60: the frames the cap fires on are among them. No
+  // frame moves d or e more than their spring step, and a no more than its
+  // own plus the unit a frame the hand moves its node.
+  it.each(Array.from({ length: 41 }, (_, i) => 20 + i))('the hand crosses back on frame %s of a wobble held by the cap: no frame moves a cursor more than its spring step (r75.1)', (n) => {
+    const bound = springSteps();
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      let prev = where();
+      const worst: Record<string, number> = { a: 0, d: 0, e: 0 };
+      const rec = () => {
+        const w = where();
+        for (const key of ['a', 'd', 'e']) worst[key] = Math.max(worst[key], Math.abs(w[key].y - prev[key].y));
+        prev = w;
+      };
+      const path = Array.from({ length: n }, (_, i) => {
+        const k = i % 24;
+        return { x: 400, y: 284 + (k < 12 ? k : 24 - k) };
+      });
+      dragFrames('n2', path, rec);
+      dragFrames('n2', [{ x: 400, y: 283 }], rec);
+      for (let i = 0; i < 80; i += 1) { frame(); rec(); }
+      expect(worst.d, `d at n=${n}`).toBeLessThanOrEqual(bound.d * 1.02);
+      expect(worst.e, `e at n=${n}`).toBeLessThanOrEqual(bound.e * 1.02);
+      expect(worst.a, `a at n=${n}`).toBeLessThanOrEqual(bound.a * 1.02 + 1);
+      expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
     } finally {
       vi.useRealTimers();
     }
@@ -3456,13 +3609,15 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, MEDIUM (r62): a cursor on a port is drawn on the port, and
-  // counts as its node's header point for the chain, on both sides. a is
-  // carried to 2 px above c's drawn point: their drawn targets join one
-  // column, but a's chain (c at n1's header, 107 away) doesn't change, so
-  // the backend sends no arrival. The tab doesn't wait 1.5 s for one: a
-  // takes its arrival-order slot at the drop, with the band's one glide.
-  it('a carry onto a port cursor\'s drawn point: no chain preview (the port counts at its node\'s header), so the drop needs no arrival (r62)', () => {
+  // Review 2, MEDIUM (r62), as r75.3 rules it: a cursor on a port is drawn
+  // on the port, and counts as its node's header point for the chain, on
+  // both sides. a is carried to 2 px above c's drawn point: their drawn
+  // targets join one column, but a's chain (c at n1's header, 107 away)
+  // doesn't change, so the backend sends no arrival. The band is measured
+  // in chain space too: a is nowhere near c's header, so it joins c's
+  // column in plain arrival order (a first), mid-drag as at the drop.
+  // Nothing moves at the drop (review 3, drag MEDIUM-1: it swapped there).
+  it('a carry onto a port cursor\'s drawn point: no chain preview and no band slot (the port counts at its node\'s header), so nothing moves at the drop (r62, r75.3)', () => {
     fakeTimers();
     try {
       const n1 = lookup.get('n1') as unknown as Entry & { internals: { handleBounds: unknown } };
@@ -3476,13 +3631,294 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       expect(where()).toEqual({ a: { x: 1000, y: 344 }, c: { x: 590, y: 405 } });
       dragHeld('n2', { x: 490, y: 359 }); // a at (590, 403)
       settle(800);
-      expect(where()).toEqual({ c: { x: 590, y: 405 }, a: { x: 590, y: 405 + S } });
-      drop('n2');
-      for (let i = 0; i < 45; i += 1) frame();
-      // Three quarters of a second on, before the hold ends: a's own slot.
       const order = { a: { x: 590, y: 403 }, c: { x: 590, y: 403 + S } };
       expect(where()).toEqual(order);
+      drop('n2');
       for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r75.3, the shared traces (backend/tests/fixtures/cursor_chains.json,
+  // also run by test_agent_cursor_followups.py through carry_nodes): a,
+  // arrived first, carried by n2 frame by frame along the path, then held
+  // there and dropped; h, a port cursor on n1, arrived second. Onto h's
+  // drawn tip from any side, a's chain never changes (h counts at its
+  // node's header) and the band is measured in chain space, so a joins h's
+  // column in plain arrival order: its slot is the one the drop gives,
+  // mid-drag as after it. Onto h's node header, r65's head-then-bottom path
+  // holds, and the backend's arrival at the drop moves nothing. (h is c
+  // here: session keys are hex.)
+  type Box = { x: number; y: number; width: number; height: number };
+  type Trace = { name: string; zoom: number; h: { node: Box; handle: string; port: Box }; carry: { width: number; height: number };
+    path: [number, number][]; arrivalFrom: number | null; slots: number[] };
+  const traces = (JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/fixtures/cursor_chains.json'), 'utf8')) as { traces: Trace[] }).traces;
+  it('the shared fixture holds the r75.3 traces at zoom 0.5, 1 and 2', () => {
+    expect(new Set(traces.map((t) => t.zoom))).toEqual(new Set([0.5, 1, 2]));
+    expect(traces.filter((t) => t.arrivalFrom === null).length).toBeGreaterThanOrEqual(9);
+    expect(traces.filter((t) => t.arrivalFrom !== null).length).toBeGreaterThanOrEqual(3);
+  });
+  it.each(traces.map((t) => [t.name, t] as const))('%s (r75.3)', (_name, t) => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, t.zoom];
+      const n1 = { id: 'n1', measured: { width: t.h.node.width, height: t.h.node.height },
+        internals: { positionAbsolute: { x: t.h.node.x, y: t.h.node.y }, handleBounds: { source: [{ id: t.h.handle, ...t.h.port }], target: [] } } };
+      const n2 = { id: 'n2', measured: { ...t.carry },
+        internals: { positionAbsolute: { x: t.path[0][0], y: t.path[0][1] }, handleBounds: { source: [], target: [] } } };
+      lookupRef.current = new Map([['n1', n1], ['n2', n2]]) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: t.h.handle }, since: 1000 }));
+      flush();
+      const slots: number[] = [];
+      let frameAt = -1;
+      let bottomAt: number | null = null;
+      dragFrames('n2', t.path.map(([x, y]) => ({ x, y })), () => {
+        frameAt += 1;
+        const slot = slotOf('a', ['c']);
+        if (slots[slots.length - 1] !== slot) slots.push(slot);
+        if (slot === 1 && bottomAt === null) bottomAt = frameAt;
+      });
+      // Onto the header: a starts for the bottom on the frame its chain
+      // takes h in (the backend's arrival from there on), never before, and
+      // is drawn past h within the glide (a few frames on).
+      if (t.arrivalFrom !== null) {
+        expect(bottomAt, t.name).toBeGreaterThanOrEqual(t.arrivalFrom);
+        expect(bottomAt, t.name).toBeLessThanOrEqual(t.arrivalFrom + 12);
+      }
+      // Held there, still dragging, past every glide: its mid-drag slot.
+      dragFrames('n2', Array.from({ length: 60 }, () => ({ x: t.path[t.path.length - 1][0], y: t.path[t.path.length - 1][1] })), () => {
+        const slot = slotOf('a', ['c']);
+        if (slots[slots.length - 1] !== slot) slots.push(slot);
+      });
+      expect(slots, t.name).toEqual(t.slots);
+      const held = where();
+      drop('n2');
+      if (t.arrivalFrom !== null) arrive('a', 3, 9000);
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where(), t.name).toEqual(held); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r75.3: the band slot needs a new member of the column the carry is
+  // drawn in. a and f share a chain (aimed at 290 and 300), f a step under
+  // a. n1's header point, where c (on a port low on n1's left, drawn at
+  // (400, 451)) counts, is at (500, 380). a carried 20 down to 310 takes f
+  // down with it, and in chain space f's label now meets c's header point:
+  // c joins a's column there, new. But c is drawn far off, so a's drawn
+  // column is still just f's, no chain changed, and its order stays plain
+  // arrival order (a first). Nothing swaps, mid-drag or at the drop.
+  it('a carry whose chain-space column takes in a cursor drawn elsewhere keeps its drawn column\'s arrival order (r75.3)', () => {
+    fakeTimers();
+    try {
+      n2At({ x: 400, y: 246 }); // a's target (500, 290)
+      const n1 = lookup.get('n1') as unknown as Entry & { internals: { handleBounds: unknown } };
+      lookupRef.current = new Map(lookupRef.current).set('n1', { ...n1, internals: { ...n1.internals, positionAbsolute: { x: 400, y: 336 },
+        handleBounds: { source: [{ id: 'text', x: -5, y: 110, width: 10, height: 10 }], target: [] } } } as never) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('f', 2), target: { x: 500, y: 300 }, since: 1000 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: 'text' }, since: 1500 }));
+      flush();
+      expect(where()).toEqual({ a: { x: 500, y: 290 }, f: { x: 500, y: 290 + S }, c: { x: 400, y: 451 } });
+      const path: Record<string, { x: number; y: number }>[] = [];
+      dragFrames('n2', Array.from({ length: 10 }, (_, i) => ({ x: 400, y: 248 + 2 * i })), () => path.push(where()));
+      settle(800);
+      const held = { a: { x: 500, y: 310 }, f: { x: 500, y: 310 + S }, c: { x: 400, y: 451 } };
+      expect(where()).toEqual(held);
+      for (const w of path) expect(w.a.y).toBeLessThan(w.f.y);
+      drop('n2');
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where()).toEqual(held); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** The layer's shared field, read through a cursor's view (its props):
+   *  for the bookkeeping no frame shows. */
+  const fieldOf = () => {
+    const el = cursors()[0] as unknown as Record<string, unknown>;
+    let fiber = el[Object.keys(el).find((k) => k.startsWith('__reactFiber$'))!] as { memoizedProps?: { field?: unknown }; return: unknown } | null;
+    while (fiber && !fiber.memoizedProps?.field) fiber = fiber.return as typeof fiber;
+    return fiber!.memoizedProps!.field as { heldSince: Map<string, number>; draggedNodes: Set<string> };
+  };
+
+  // Review 3, layout LOW-1 R4: a member whose loop stopped (its node
+  // deleted mid-glide) doesn't hold the column's rest. a, gliding to the
+  // bottom, loses n2 three frames in: d and e land on their own rest, not
+  // held to the 300 ms cap by a cursor that will never step again.
+  it('a member whose node goes mid-glide holds no one: the others land on their own rest (review 3, R4)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      for (let i = 0; i < 3; i += 1) frame();
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      const slot = { d: 344, e: 344 + S };
+      const ownRest = { d: -1, e: -1 };
+      const landed = { d: -1, e: -1 };
+      let prev = where();
+      for (let i = 0; i < 60; i += 1) {
+        frame();
+        const w = where();
+        for (const k of ['d', 'e'] as const) {
+          const y = w[k].y;
+          if (ownRest[k] < 0 && Math.abs(y - slot[k]) < 0.2 && Math.abs(y - prev[k].y) * 60 < 2) ownRest[k] = i;
+          if (landed[k] < 0 && byKey(k).style.willChange === 'auto' && y === slot[k]) landed[k] = i;
+        }
+        prev = w;
+      }
+      for (const k of ['d', 'e'] as const) {
+        expect(landed[k], k).toBeGreaterThanOrEqual(0);
+        // Within a frame of its own rest (the cap would be 18 frames on).
+        expect(landed[k] - Math.max(ownRest[k], 0), k).toBeLessThanOrEqual(2);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 3, layout LOW-1 C3/C4: a node widened under a port cursor on its
+  // left side leaves the port (its drawn point) where it was, but moves its
+  // header point, where the chain counts it. That alone must reach the
+  // layout. n1, 60 wide, has c on its left input port, drawn at (400, 340),
+  // its header at (430, 340). a, carried onto (430, 344), takes c into its
+  // chain: the preview lays it out last, under c. n1 widened to 300 puts
+  // c's header at (550, 340): a's chain is empty again, as it was before the
+  // carry, and nothing in the band, so a heads c's column in plain arrival
+  // order, and the drop moves nothing.
+  it('a node resized under a port cursor moves its chain point only, and the carry beside it follows that (review 3, C3 and C4)', () => {
+    fakeTimers();
+    try {
+      const n1 = { id: 'n1', measured: { width: 60, height: 80 },
+        internals: { positionAbsolute: { x: 400, y: 300 }, handleBounds: { source: [{ id: 'in', x: -5, y: 35, width: 10, height: 10 }], target: [] } } };
+      lookupRef.current = new Map(lookup).set('n1', n1 as never) as never;
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('c', 1), target: { nodeId: 'n1', handle: 'in' }, since: 1000 }));
+      flush();
+      expect(where().c).toEqual({ x: 400, y: 340 });
+      dragHeld('n2', { x: 330, y: 300 }); // a at (430, 344)
+      settle(800);
+      expect(slotOf('a', ['c'])).toBe(1);
+      const wide = new Map(lookupRef.current);
+      wide.set('n1', { ...n1, measured: { width: 300, height: 80 } });
+      lookupRef.current = wide;
+      notifyStore();
+      settle(800);
+      const order = { a: { x: 430, y: 344 }, c: { x: 430, y: 344 + S } };
+      expect(where()).toEqual(order);
+      drop('n2');
+      for (let ms = 0; ms < CARRY_PREVIEW_HOLD_MS + 1000; ms += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 3, layout LOW-1 N2: a node deleted mid-drag ends its drag on the
+  // frame its cursor sees it gone, and the wait for the backend starts
+  // there: the settle is set on that frame, not left to a timer set for an
+  // earlier carry.
+  it('a node deleted mid-drag starts the preview\'s wait on that frame (review 3, N2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(200);
+      const settles = settleTimers();
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      tickFrames(1);
+      expect(settles()).toBeGreaterThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 3, layout NIT-1: a landing the column held reads the hover boxes
+  // once, on the cursor's own rest, not again when the column lands.
+  it('a held landing reads its hover boxes on one frame only (review 3, NIT-1)', () => {
+    fakeTimers();
+    pane.dom = document.createElement('div');
+    document.body.appendChild(pane.dom);
+    const reads: Element[] = [];
+    const rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === pane.dom) return new DOMRect(0, 0, 1440, 900);
+      reads.push(this);
+      const cursor = this.closest<HTMLElement>('.agent-cursor');
+      const p = cursor ? at(cursor) : { x: -999, y: -999 };
+      if (this.classList.contains('agent-cursor__pointer')) return new DOMRect(p.x, p.y, 20, 22);
+      if (this.classList.contains('agent-cursor__name')) return new DOMRect(p.x + 15, p.y + 17, 60, 20);
+      return new DOMRect(0, 0, 0, 0);
+    });
+    try {
+      render(<AgentCursorLayer />);
+      act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: 505, clientY: 350 })); });
+      headToBottom();
+      const d = byKey('d');
+      let readFrames = 0;
+      let landedAt = -1;
+      for (let i = 0; i < 90; i += 1) {
+        reads.length = 0;
+        frame();
+        if (reads.some((el) => d.contains(el))) readFrames += 1;
+        if (landedAt < 0 && d.style.willChange === 'auto') landedAt = i;
+      }
+      expect(landedAt).toBeGreaterThan(0);
+      expect(readFrames).toBe(1);
+    } finally {
+      rects.mockRestore();
+      pane.dom.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 3, drag NIT-1: a cursor that lands holds nothing: its hold's
+  // start goes with the landing, not on its next glide.
+  it('the column lands and no cursor keeps a hold (review 3, drag NIT-1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      for (let i = 0; i < 90; i += 1) frame();
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+      expect([...fieldOf().heldSince.keys()]).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 3, layout NIT-2: every cursor on a dragged node forgotten mid-drag
+  // ends that node's drag: no cursor will report it again.
+  it('a dragged node whose cursors are all forgotten mid-drag is no longer held (review 3, NIT-2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 300 });
+      settle(200);
+      expect(fieldOf().draggedNodes.has('n2')).toBe(true);
+      act(() => {
+        const st = useAgentPresenceStore;
+        const agents = { ...st.getState().agents };
+        for (const k of Object.keys(agents)) if (agents[k].session?.key === 'a'.repeat(12)) delete agents[k];
+        st.setState({ agents });
+      });
+      flush();
+      expect(fieldOf().draggedNodes.has('n2')).toBe(false);
     } finally {
       vi.useRealTimers();
     }

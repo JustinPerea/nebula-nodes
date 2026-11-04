@@ -246,7 +246,13 @@ class CursorField {
     if (before && before.target.x === target.x && before.target.y === target.y) {
       if (before.node !== node || before.seq !== seq || !samePoint(before.nodeAt, nodeAt) || !samePoint(before.chainOff, chainOff)) {
         this.targets.set(key, { ...before, node, seq, nodeAt, chainOff });
-        if (!samePoint(before.chainOff, chainOff)) this.version += 1;
+        if (!samePoint(before.chainOff, chainOff)) {
+          // Its chain point moved on its own (a node resized under a port
+          // cursor): the others' previews and band read it, so they lay out
+          // again now, whichever cursor's frame ran first (review 3, C3/C4).
+          this.version += 1;
+          changed = true;
+        }
       }
     } else {
       // Carried only when its node itself moved: a node measured or resized
@@ -354,9 +360,10 @@ class CursorField {
       // newest arrival (r24 insert) for now, in its own order among the
       // cursors one node carries (r47). Not the literal bottom slot (r52).
       const preview = this.previewed();
-      const entries = (later: ReadonlySet<string>, was = false) => [...this.targets].map(([k, v]) => ({
+      const shift = (p: Point, off: Point | null | undefined) => (off ? { x: p.x + off.x, y: p.y + off.y } : p);
+      const entries = (later: ReadonlySet<string>, was = false, chain = false) => [...this.targets].map(([k, v]) => ({
         key: k,
-        target: was ? this.carriedFrom.get(k) ?? v.target : v.target,
+        target: shift(was ? this.carriedFrom.get(k) ?? v.target : v.target, chain ? v.chainOff : null),
         since: v.since !== Infinity ? (later.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
         // A backend arrival never ties (it strictly increases), and when
         // two did, the key breaks it in every tab alike; this tab's landing
@@ -376,6 +383,14 @@ class CursorField {
       // only, and it ends at the drop: the backend counts no arrival for it,
       // so its slot follows its arrival order, with one glide if that
       // differs (r52 Q1's one accepted motion).
+      // The band is measured in chain space, as the chain is: only a member
+      // whose chain-input point (a port cursor's: its node's header point,
+      // r62) the carry's own comes within band range of gives it that slot.
+      // A carry that meets a port cursor's drawn tip, far from its node's
+      // header, joins its column (drawn overlap) in plain arrival order,
+      // which is what the backend's arrival order gives at the drop: nothing
+      // moves mid-drag or there (GM - Design, #219 r75.3; review 3,
+      // drag MEDIUM-1). For node cursors the two spaces are one.
       const dragged = [...this.carriedFrom.keys()].filter((k) => {
         const node = this.targets.get(k)?.node;
         return !preview.has(k) && node != null && this.draggedNodes.has(node);
@@ -386,13 +401,17 @@ class CursorField {
         // arrival, against its column before the carry: any new member is
         // a join. Not read with it as the newest arrival: that slot moves
         // it down the column, and could make the join it then previews.
-        const before = deStackLayout(entries(new Set(), true), zoom);
+        // Both read in chain space: each cursor at its chain-input point.
+        const before = deStackLayout(entries(new Set(), true, true), zoom);
+        const after = deStackLayout(entries(new Set(), false, true), zoom);
         const members = (laid: Map<string, StackSpot>, k: string) =>
           [...laid].filter(([, s]) => s.column === laid.get(k)!.column).map(([o]) => o);
         const now = spots;
         const joined = dragged.filter((k) => {
           const had = new Set(members(before, k));
-          return members(now, k).some((o) => !had.has(o));
+          const near = new Set(members(after, k).filter((o) => !had.has(o)));
+          // A new member of the column it is drawn in, in band range of it.
+          return members(now, k).some((o) => near.has(o));
         });
         if (joined.length > 0) spots = deStackLayout(entries(new Set([...preview, ...joined])), zoom);
       }
@@ -426,12 +445,23 @@ class CursorField {
   hold(key: string, zoom: number): boolean {
     const m = this.motions.get(key);
     const entry = this.targets.get(key);
+    // A crossing lasts until the glide ends, however it ends (it landed, it
+    // flies on an event of its own, it heads its column now): its paint
+    // order goes back with it. So does a hold's start (restGate): a landed
+    // cursor holds nothing (review 3, drag NIT-1).
+    if (m && !m.landing) {
+      this.crossing.delete(key);
+      this.heldSince.delete(key);
+    }
     if (!m || !entry || m.plan || entry.since === Infinity) return false;
     // Not stepped at this zoom yet (a zoom's frame, before its own turn):
     // its own step carries it to this zoom first, then holds it.
     if (m.lastZoom !== null && m.lastZoom !== zoom) return false;
     const spot = this.layout(zoom).get(key);
-    if (!spot || spot.collapsedInto || spot.above.length === 0) return false;
+    if (!spot || spot.collapsedInto || spot.above.length === 0) {
+      this.crossing.delete(key); // nobody above it now to pass
+      return false;
+    }
     const upKey = spot.above[spot.above.length - 1];
     const up = this.motions.get(upKey);
     if (!up || (!m.landing && !up.plan && !up.landing)) return false;
@@ -454,6 +484,19 @@ class CursorField {
     // Opening out of a count cursor: it starts on the slot the member
     // above is gliding up from, and is held once they are a step apart.
     if (this.opening.has(key)) return false;
+    // Mid-glide, a push of more than a pixel past its own slot is a
+    // crossing, not a hold: the member above is below its slot and turned
+    // back toward it (a wobble back across the chain 1 to 3 frames after a
+    // crossing), and setting this one on the floor would jump it in one
+    // frame. It glides to its slot on the layout spring instead, drawn under
+    // the one above until it lands (GM - Design, #219 r75.2; review 3,
+    // MEDIUM-2). A push toward its own slot (a glide that ends on the floor,
+    // a head leading its column down) holds as before, and so does one in
+    // lockstep with the member above, a fraction of a pixel a frame.
+    if (m.landing && (floor - Math.max(m.pos.y, spot.at.y)) * zoom > CROSSING_PUSH_PX) {
+      this.crossing.add(key);
+      return false;
+    }
     m.pos.y = floor;
     if (m.vel.y < up.vel.y) m.vel.y = up.vel.y;
     if (!m.landing) {
@@ -477,7 +520,10 @@ class CursorField {
       // Still to step in this frame: it holds itself after its own step.
       const due = this.dueAt.get(other);
       if (this.steppedAt.get(other) !== time && due !== undefined && due < time) continue;
-      if (this.hold(other, zoom)) this.placers.get(other)?.();
+      // Drawn again when it moved, or when it started crossing (its paint
+      // order changes on this frame, not its next).
+      const crossing = this.crossing.has(other);
+      if (this.hold(other, zoom) || this.crossing.has(other) !== crossing) this.placers.get(other)?.();
       this.holdBelow(other, zoom, time, depth + 1);
     }
   }
@@ -697,6 +743,13 @@ class CursorField {
   }
 
   forget(key: string): void {
+    // A node being dragged whose every cursor is forgotten mid-drag: no
+    // cursor reports it again, so its drag ends with them. Otherwise a node
+    // that reuses its id later (another project) would count as a drop on
+    // its first report (review 3, layout NIT-2).
+    const node = this.targets.get(key)?.node;
+    if (node != null && this.draggedNodes.has(node)
+      && ![...this.targets].some(([other, v]) => other !== key && v.node === node)) this.draggedNodes.delete(node);
     this.carriedFrom.delete(key);
     this.heldSince.delete(key);
     this.targets.delete(key);
@@ -726,6 +779,10 @@ const UNLANDED = 1e15;
 /** A previewed carry's place: after every landed cursor, before any still
  *  on its way (r47 Q1). */
 const CARRY_PREVIEW = 1e14;
+/** How far past its own slot the column floor may push a gliding member, in
+ *  screen px, and hold it; further, the member crosses (CursorField.hold,
+ *  GM r75.2). */
+const CROSSING_PUSH_PX = 1;
 /** How long a carry's preview waits after the drop for the backend's
  *  arrival before it lets go (r47 Q1). */
 export const CARRY_PREVIEW_HOLD_MS = 1500;
@@ -1102,6 +1159,10 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       if (pointerRef.current) pointerRef.current.style.transform = m.lean.x === 0 ? '' : `rotate(${m.lean.x}deg)`;
       // Set outside React so a re-render never hides a placed cursor again.
       el.dataset.placed = 'true';
+      // Gliding past or under the member above it: drawn under it, so the
+      // one above draws on top and their labels never interleave (GM r75.2).
+      if (!leaving && field.crossing.has(cursor.key)) el.dataset.crossing = 'true';
+      else delete el.dataset.crossing;
     };
     place.current = apply;
     if (!leaving) field.placers.set(cursor.key, apply);
@@ -1328,10 +1389,17 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const restAt = onPixels(goal);
       const restOffset = { x: restAt.x - goal.x, y: restAt.y - goal.y };
       const restGate = field.restGate(cursor.key, z, time);
+      // Held by its column at its own rest (r66): it moves by hundredths of
+      // a pixel until it lands, within the rest distance of its spot.
+      const wasHeld = m.landing !== null && !m.plan && m.nearRest === true;
       const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer, carrier, dragged, restOffset, shifted, restGate });
       let arrivedNow = false;
-      // A flight, a landing, or a ride carried by its node.
-      if (m.plan || m.landing || m.pos.x !== fromX || m.pos.y !== fromY) movedSinceBoxes = true;
+      // A flight, a landing, or a ride carried by its node. Not a held
+      // landing still near rest, or its landing from there: its hover boxes,
+      // read on its own rest, still stand (well inside the 4 px slop), so a
+      // gated landing reads them once (review 3, layout NIT-1).
+      const stillHeld = wasHeld && !m.plan && (m.landing === null || m.nearRest === true);
+      if (!stillHeld && (m.plan || m.landing || m.pos.x !== fromX || m.pos.y !== fromY)) movedSinceBoxes = true;
 
       if (result.caughtUp) {
         // The tab was hidden, throttled or stalled mid-move: the tip lands,

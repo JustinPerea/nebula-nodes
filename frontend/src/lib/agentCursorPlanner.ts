@@ -528,9 +528,11 @@ export function stepMotion(
     shifted?: boolean;
     /** The cursors gliding in its column come to rest together (the layer's
      *  CursorField.restGate, GM - Design #219 r65): false holds its landing
-     *  on the spring past its own rest; true lands it on its spot this frame
-     *  (each of them is within the rest distance and speed). Default: it
-     *  rests on its own. */
+     *  on the spring past its own rest; true (each of them was within the
+     *  rest distance and speed on the last frame) lets it rest, as it does
+     *  with no column: on the step it is within them on this frame, so a
+     *  spot that moved on the gate's frame is never snapped to (r75.1).
+     *  Default: it rests on its own. */
     restGate?: boolean;
   },
 ): StepResult {
@@ -653,19 +655,17 @@ export function stepMotion(
       at.x = glideFrom.x + (live.x - glideFrom.x) * f;
       at.y = glideFrom.y + (live.y - glideFrom.y) * f;
     }
-    const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate === undefined);
+    // Held by its column (false), it stays on the spring past its own rest;
+    // otherwise it rests on its own the step it is within the rest distance
+    // and speed. So on the gate's frame (true) it lands only if it is still
+    // near rest on this frame's steps: a spot that moved on the gate's frame
+    // (a crossing, a say, a join or a leave then, or the cap firing) starts
+    // a fresh glide, never a snap (#219 review 3, MEDIUM-1; GM r75.1).
+    const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate !== false);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
   }
   m.carry = Math.max(0, m.carry);
-  if (opts.restGate === true && m.landing && !m.plan) {
-    // The column's glide is over: it lands on its spot with the others.
-    m.pos = { x: live.x + rest.x, y: live.y + rest.y };
-    m.vel = { x: 0, y: 0 };
-    m.landing = null;
-    m.nearRest = false;
-    m.attached = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX && !m.awaiting ? { x: 0, y: 0 } : null;
-  }
   const atRest = settled(m, opacityTarget);
   if (atRest) {
     m.lean = { x: 0, v: 0 };
