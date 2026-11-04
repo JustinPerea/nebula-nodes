@@ -962,7 +962,7 @@ const HAIRLINE_SELECTOR = (() => {
   const restraint = readFileSync(resolve(__dirname, '../../src/styles/slava-restraint.css'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
   const shown = [...restraint.matchAll(/([^{}]+)\{([^}]*)\}/g)]
-    .filter(([, selector, block]) => selector.includes('node-inspector-popover__foot::before') && /opacity:\s*1;/.test(block));
+    .filter(([, selector, block]) => /node-inspector-popover__foot[^\s]*::before/.test(selector) && /opacity:\s*1;/.test(block));
   expect(shown).toHaveLength(1);
   return shown[0][1].trim().replace(/^body\.app-slava-restraint\s+/, '').replace(/::before$/, '');
 })();
@@ -976,8 +976,9 @@ const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popov
  * and 820 cases); at the end it's gone."
  *
  * The hairline is the foot's ::before, shown by
- * `.node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot`
- * (styles/slava-restraint.css; its CSS is pinned in inspectorBodyFade.test.tsx).
+ * `.node-inspector-popover__foot[data-more-below]` (styles/slava-restraint.css;
+ * its CSS is pinned in inspectorBodyFade.test.tsx), which the popover sets
+ * from the body's overflow (GM r98: held through a height spring).
  * jsdom draws no pseudo-elements, so these tests check that the rule's
  * selector matches the foot. It reads the scroll position only, never where
  * the cut falls: review 2 measured the low Style Reference's cut between
@@ -1189,6 +1190,9 @@ describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
       useUIStore.getState().selectNode('n2');
       useUIStore.getState().setInspectorVisible(true);
     });
+    // Committed for n2, before any frame: not n1's line.
+    expect(panel()).not.toBeNull();
+    expect(hairline()).toBe(false);
     frames(1);
     relayout();
     expect(more()).toBe(true);
@@ -1221,6 +1225,132 @@ describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
     body().scrollTop = body().scrollHeight - body().clientHeight;
     fireEvent.scroll(body());
     frames(1);
+    expect(hairline()).toBe(false);
+  });
+});
+
+/**
+ * GM r98: "HOLD the line's state while a height spring runs, rather than
+ * hiding it. If the line is already showing (body scrolled partway, more
+ * below) when a growth spring starts, it stays on, no blink. If it's off, it
+ * stays off. When the spring rests, check again and spring to the new state.
+ * ... Test: line on, then an image lands -> the line stays at 1 through the
+ * spring and ends at whatever the rest state says."
+ *
+ * An upload in a Style Reference whose body scrolls: its "No preview" row
+ * goes (416 px of content, the panel springs shorter, so mid-spring nothing
+ * is below) and the image lands (the panel springs back taller, the body
+ * scrolling again, or not, at rest). Each frame of the spring gives the
+ * panel's height on screen (`animated`), so the body's overflow mid-spring is
+ * the spring's lag; a line that read it live would blink.
+ */
+describe('the hairline holds its state through a height spring (GM r98)', () => {
+  const more = () => body().getAttribute('data-scroll-more') === 'true';
+  const relayout = () => {
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    frames(1);
+  };
+  /** Steps the spring's on-screen height through `from` -> `to`, checking the line at each frame. */
+  function springThrough(from: number, to: number, line: boolean, seen: { more: number; less: number }) {
+    const step = from < to ? 7 : -7;
+    for (let shown = from; step > 0 ? shown < to : shown > to; shown += step) {
+      animated = shown;
+      relayout();
+      if (more()) seen.more += 1; else seen.less += 1;
+      expect(panel().hasAttribute('data-content-resizing'), `at ${shown}`).toBe(true);
+      expect(hairline(), `at ${shown}`).toBe(line);
+    }
+  }
+  /** A Style Reference whose body scrolls (602 px in 600 - CHROME), scrolled partway: the line is on. */
+  function scrolledPartway() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    contentHeight = 602;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds()).toEqual({ top: 154, height: 600, bottom: 754 });
+    body().scrollTop = 50;
+    fireEvent.scroll(body());
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(true);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  }
+
+  for (const landed of [602, 470]) {
+    const after = landed === 602 ? 'still more below: it stays on' : 'nothing below now: it goes once the spring rests';
+    it(`line on, an image lands: on through the spring; at rest, ${after}`, () => {
+      scrolledPartway();
+      const seen = { more: 0, less: 0 };
+      // The "No preview" row goes: the panel springs from 600 to 531 px, its top held.
+      contentHeight = 416;
+      animated = 600;
+      frames(1);
+      expect(bounds()).toEqual({ top: 154, height: 531, bottom: 685 });
+      springThrough(600, 531, true, seen);
+      // The image lands mid-spring: the panel springs taller again.
+      contentHeight = landed;
+      const target = Math.min(600, landed + CHROME);
+      frames(1);
+      expect(bounds().height).toBe(target);
+      springThrough(531, target, true, seen);
+      // The body's overflow came and went under it (a live read would have blinked).
+      expect(seen.less).toBeGreaterThan(0);
+      animated = null;
+      relayout();
+      act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS - 1); });
+      relayout();
+      expect(panel().hasAttribute('data-content-resizing')).toBe(true);
+      expect(hairline()).toBe(true);
+      // Rested: read again.
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+      expect(more()).toBe(landed === 602);
+      expect(hairline()).toBe(landed === 602);
+      relayout();
+      expect(hairline()).toBe(landed === 602);
+    });
+  }
+
+  it('line off, a growth spring: off through it, whatever the body shows mid-spring, then on at rest', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    contentHeight = 300;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds()).toEqual({ top: 192, height: 415, bottom: 607 });
+    expect(hairline()).toBe(false);
+    const seen = { more: 0, less: 0 };
+    // An upload: the top holds, the panel springs to the band's line (562 px) and the rest scrolls.
+    contentHeight = 602;
+    animated = 415;
+    frames(1);
+    expect(bounds()).toEqual({ top: 192, height: 562, bottom: 754 });
+    springThrough(415, 562, false, seen);
+    expect(seen.more).toBeGreaterThan(0);
+    animated = null;
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS - 1); });
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(false);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(hairline()).toBe(true);
+  });
+
+  it('a move mid-spring ends the hold with the spring: the line reads the body at once', () => {
+    scrolledPartway();
+    contentHeight = 416;
+    animated = 600;
+    frames(1);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(true);
+    expect(hairline()).toBe(true);
+    // The node is dragged: rigid, the spring is over, and nothing is below the 531 px panel.
+    animated = null;
+    anchorRect = rect(560, 240, 82, 56);
+    frames(1);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    relayout();
+    expect(more()).toBe(false);
     expect(hairline()).toBe(false);
   });
 });

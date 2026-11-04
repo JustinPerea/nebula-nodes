@@ -340,3 +340,69 @@ Inspector's preview `<img>`).
   `person_gate.py` is unchanged. Build budget: 471,068 bytes raw (cap 512,000).
 - Mutation check: frontend 14 of 14 killed (11 in the component, 3 in the
   CSS); backend 8 of 8 killed.
+
+## Round 5b (GM r98)
+
+- **The hairline holds its state through a height spring.** Round 5 hid the
+  line with CSS while `data-content-resizing` was set. GM r98 replaces that
+  with a hold. `NodeInspectorPopover.tsx` now decides when the line shows and
+  marks the foot with `data-more-below`, which the CSS draws. No rule hides it
+  on the popover's open or spring marks, and a source test checks this.
+  - During the open, the line is off.
+  - When a spring starts, the line's current state is latched
+    (`lineHeldRef`), so a line that's on stays on and a line that's off stays
+    off.
+  - When the spring rests (the `CONTENT_RESIZE_MS` timer), the latch is
+    released and the body is read again. The line then goes to the new state
+    on the pop or soft spring.
+  - A move that ends a spring (rigid wins) releases the latch at once.
+  - Each step runs its spring decision first and updates the line after, so
+    a spring that starts in a frame latches the line from before that frame.
+  - The body is read with `hasMoreBelow` (`lib/scrollMore.ts`), the formula
+    ScrollFade's fade also uses (moved out so ScrollFade.tsx exports only
+    components).
+  - The open still starts off and stays off: a spring that starts during the
+    open latches "off".
+  - A newly selected node resets the line while rendering, so it never shows
+    the last node's line for a frame.
+- **Where it can matter.** With the window size fixed, an image landing under
+  a body that already scrolls doesn't spring at all. The panel is already as
+  tall as its room, and the top is held, so its box doesn't change (live
+  case D below). The hold applies to the springs that do run with the line
+  on: a window resize's glide of a held top, and a shrink to fit (a file
+  cleared, "No preview" collapsing). In the shrink, the body stops
+  overflowing on the spring's first frame, so a line read live would go
+  early. The jsdom tests model GM's case as a shrink and then a growth in one
+  spring: the "No preview" row goes and the image lands mid-spring. The line
+  stays 1 throughout and ends at the rest state.
+- **Equivalent mutant removed.** Round 5b first latched with `??=` so a
+  restarted spring would keep the first spring's state. Mid-spring, the line
+  already shows the held state, so plain `=` does the same. It is now `=`.
+
+### Round 5b live check (isolated backend 8968, Vite 5968, Run never clicked)
+
+Frames were sampled with `getComputedStyle(foot, '::before').opacity` on
+every animation frame, on an empty Style Reference beside its node at
+y 160.
+
+| Case | Result |
+|---|---|
+| D. 1440x800, body scrolled 12 px (line on), image lands | 91 frames, no spring (already at the cap, top held), line 1 in every frame, 205 px below at the end |
+| E. 1440x850, line off, image lands | 24 spring frames (531 to 550 px) with more below and the line at 0 in each, then it pops to 1 at rest |
+| F. Same panel scrolled 12 px (line on), window to 830 | The held top's glide (550 to 530 px), 24 spring frames, line 1 in each, still 1 at rest |
+| G. 1440x850 scrolled 12 px (line on), file cleared | 24 spring frames (550 to 531 px), nothing below from the first one, line held at 1. At rest it goes on the soft spring (0.95, 0.84 ... 0) |
+
+- The blocked log has canary lines only. Every off-lane request in the page
+  was blocked.
+
+### Round 5b gates
+
+- `tsc -b --noEmit` and lint pass.
+- `pr_tests.sh`: 118 files, 3930 tests passed.
+- `land_checks.sh` (with `tests/test_upload_drop_files.py`): tsc and the
+  ratchets (161) pass. pytest on 30 files: 1178 passed, 1 skipped.
+  `person_gate.py` is unchanged.
+- The build passes the budget: 471,093 bytes raw (cap 512,000), 146,511
+  gzip.
+- Mutation check: 14 of 14 killed (12 in the component, 2 in the CSS). The
+  restart mutant was equivalent, and the code now uses `=`.

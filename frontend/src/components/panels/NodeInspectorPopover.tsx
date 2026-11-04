@@ -6,6 +6,7 @@ import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
+import { hasMoreBelow } from '../../lib/scrollMore';
 import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
 import { springCssVars } from '../../lib/springs';
 
@@ -290,10 +291,22 @@ export function NodeInspectorPopover() {
   // Reset as it closes or another node opens (set while rendering, as above).
   const [settledFor, setSettledFor] = useState<string | null>(null);
   const [openFor, setOpenFor] = useState<string | null>(null);
+  // The foot's "more below" hairline (GM r87), decided here and drawn by
+  // data-more-below on the foot (styles/slava-restraint.css). Off through the
+  // open (GM r92 Q3). GM r98: while a height spring runs it holds the state
+  // it had when the spring started (on stays on, off stays off; the body's
+  // overflow mid-spring is the spring's lag, not the content), and when the
+  // spring rests it is read again and springs to the new state.
+  const [line, setLine] = useState(false);
+  // What the line shows now (null: not yet decided for this open), and the
+  // state latched at a spring's start, released when it rests.
+  const lineRef = useRef<boolean | null>(null);
+  const lineHeldRef = useRef<boolean | null>(null);
   const openNow = visible ? selectedNodeId : null;
   if (openNow !== openFor) {
     setOpenFor(openNow);
     setSettledFor(null);
+    setLine(false);
   }
   // The foot under the scrolling body that holds the Run / Duplicate / Delete row (InspectorFoot.tsx).
   const [foot, setFoot] = useState<HTMLDivElement | null>(null);
@@ -341,6 +354,9 @@ export function NodeInspectorPopover() {
     if (!pinned) pinnedPreferenceRef.current = null;
     if (openTimer.current) clearTimeout(openTimer.current);
     openTimer.current = null;
+    // Every open decides its line afresh, with no spring held over.
+    lineRef.current = null;
+    lineHeldRef.current = null;
     // Closed: the next open measures afresh (the frame state is cleared
     // as it closes, above).
     if (!visible || !selectedNodeId) {
@@ -358,10 +374,30 @@ export function NodeInspectorPopover() {
     // A new open (or another node): it settles as placement for a while.
     const open = { nodeId: selectedNodeId, settled: false, stable: 0, last: null };
     openRef.current = open;
+
+    // The hairline (GM r92 Q3, r98): off until the open has settled; then the
+    // state held by a running spring, else whether the body has more below.
+    const updateLine = () => {
+      const body = popoverRef.current?.querySelector<HTMLElement>('.node-inspector-popover__body');
+      const next = open.settled && openRef.current === open
+        && (lineHeldRef.current ?? (body ? hasMoreBelow(body) : false));
+      if (next !== lineRef.current) {
+        lineRef.current = next;
+        setLine(next);
+      }
+    };
+    // The spring has rested (or a move ended it): let go of the held state
+    // and read the body again.
+    const releaseLine = () => {
+      lineHeldRef.current = null;
+      updateLine();
+    };
+
     openTimer.current = setTimeout(() => {
       openTimer.current = null;
       open.settled = true;
       setSettledFor(open.nodeId);
+      updateLine();
     }, OPEN_SETTLE_CAP_MS);
 
     let raf = 0;
@@ -373,7 +409,11 @@ export function NodeInspectorPopover() {
         resizeTimer.current = null;
         resizingRef.current = false;
         setContentResizing(false);
+        releaseLine();
       }, CONTENT_RESIZE_MS);
+      // GM r98: the line keeps what it shows as this spring starts. A
+      // spring restarted mid-run shows the held state, so it keeps it too.
+      lineHeldRef.current = lineRef.current ?? false;
       resizingRef.current = true;
       setContentResizing(true);
     };
@@ -439,6 +479,7 @@ export function NodeInspectorPopover() {
             resizeTimer.current = null;
             resizingRef.current = false;
             setContentResizing(false);
+            lineHeldRef.current = null;
           }
           anchorAtRef.current = at;
           anchorSizeRef.current = size;
@@ -497,6 +538,9 @@ export function NodeInspectorPopover() {
           setFrame(null);
         }
       }
+      // After this step's spring decision, so a spring that starts here
+      // holds the line it had before it.
+      updateLine();
     };
     stepRef.current = step;
 
@@ -519,6 +563,7 @@ export function NodeInspectorPopover() {
       resizeTimer.current = null;
       resizingRef.current = false;
       setContentResizing(false);
+      lineHeldRef.current = null;
     };
   }, [pinned, selectedNodeId, visible]);
 
@@ -642,8 +687,10 @@ export function NodeInspectorPopover() {
         </ScrollFade>
       </InspectorFootContext.Provider>
       {/* Its top edge shows a hairline while the body can scroll further
-          down (GM r87), on the house springs (styles/slava-restraint.css). */}
-      <div ref={setFoot} className="node-inspector-popover__foot" style={FOOT_SPRINGS} />
+          down (GM r87), on the house springs (styles/slava-restraint.css),
+          held through a height spring (GM r98, updateLine above). */}
+      <div ref={setFoot} className="node-inspector-popover__foot" style={FOOT_SPRINGS}
+        data-more-below={line ? '' : undefined} />
     </div>,
     document.body,
   );

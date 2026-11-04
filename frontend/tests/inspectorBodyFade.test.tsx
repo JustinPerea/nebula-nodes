@@ -97,9 +97,10 @@ describe("the foot row's hairline (GM r87)", () => {
     .map(([, selector, block]) => ({ selectors: selector.split(',').map((one) => one.trim()), block }));
   const FOOT = 'body.app-slava-restraint .node-inspector-popover__foot';
   const HIDDEN = `${FOOT}::before`;
-  // GM r92 Q3: only once the open has settled (no data-opening on the
-  // popover) and the layout spring has stopped (no data-content-resizing).
-  const SHOWN = 'body.app-slava-restraint .node-inspector-popover:not([data-opening]):not([data-content-resizing]) .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before';
+  // GM r92 Q3, r98: NodeInspectorPopover.tsx decides when it shows (off
+  // through the open, held through a height spring) and marks the foot with
+  // data-more-below; the CSS only draws that state.
+  const SHOWN = 'body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before';
   const only = (text: string, selector: string) => {
     const found = rules(text).filter((rule) => rule.selectors.includes(selector));
     expect(found, selector).toHaveLength(1);
@@ -122,13 +123,13 @@ describe("the foot row's hairline (GM r87)", () => {
     expect(line).toMatch(/pointer-events:\s*none/);
   });
 
-  it('shows only while the body has more below (data-scroll-more), on the house springs, never a timed fade', () => {
+  it('shows only while the foot is marked data-more-below, on the house springs, never a timed fade', () => {
     const shown = only(outside, SHOWN);
     expect(shown).toMatch(/opacity:\s*1;/);
     expect(shown).toMatch(/transition:\s*opacity var\(--spring-pop-ms\) var\(--spring-pop\)/);
     expect(only(outside, HIDDEN)).toMatch(/transition:\s*opacity var\(--spring-soft-ms\) var\(--spring-soft\)/);
     // Nothing else turns it on, and no stock easing runs it.
-    const showing = rules(outside).filter((rule) => rule.selectors.some((one) => one.includes('node-inspector-popover__foot::before'))
+    const showing = rules(outside).filter((rule) => rule.selectors.some((one) => /node-inspector-popover__foot[^\s]*::before/.test(one))
       && /opacity:\s*1/.test(rule.block));
     expect(showing).toHaveLength(1);
     for (const rule of rules(outside).filter((one) => one.selectors.some((selector) => selector.includes('node-inspector-popover__foot')))) {
@@ -136,17 +137,19 @@ describe("the foot row's hairline (GM r87)", () => {
     }
   });
 
-  it('waits for the open to settle, and shows on the pinned Inspector too (GM r92 Q2, Q3)', () => {
+  it('draws a held state, never a CSS hide, and shows on the pinned Inspector too (GM r92 Q2, r98)', () => {
     const footRules = rules(bare).filter((rule) => rule.selectors.some((one) => one.includes('node-inspector-popover__foot')));
     expect(footRules.length).toBeGreaterThan(0);
     for (const rule of footRules) {
       // Wherever a body scrolls, the same cue: nothing keeps it off the pinned one.
       expect(rule.selectors.join(','), 'no pinned exception').not.toMatch(/pinned/);
+      // GM r98: the open and a running spring hold its state in the
+      // component; no rule hides it on the popover's open or spring marks.
+      expect(rule.selectors.join(','), 'no hide on the open or the spring').not.toMatch(/data-opening|data-content-resizing|:not\(/);
     }
-    // Every rule that turns it on waits for the open and the layout spring.
     const on = footRules.filter((rule) => /opacity:\s*1/.test(rule.block));
     expect(on).toHaveLength(1);
-    for (const selector of on[0].selectors) expect(selector).toContain('.node-inspector-popover:not([data-opening]):not([data-content-resizing]) ');
+    expect(on[0].selectors).toEqual([SHOWN]);
   });
 
   it('jumps for reduced motion', () => {
@@ -178,7 +181,7 @@ describe("the foot row's hairline (GM r87)", () => {
         expect(foot.style.getPropertyValue(name), name).toBe(springs[name]);
       }
       expect(foot.style.getPropertyValue('--spring-pop')).toMatch(/^linear\(0, /);
-      // The hairline's selector: the body, then the foot right after it.
+      // The foot sits right after the scrolling body whose overflow it marks.
       expect(foot.previousElementSibling).toHaveClass('node-inspector-popover__body');
     } finally {
       useUIStore.setState(previous, true);
