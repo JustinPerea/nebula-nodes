@@ -370,3 +370,51 @@ GM r79.7 / boundary LOW-2 are not built (held).
   an option-pick card; "This question is closed."; the withdrawn line with
   the draft kept and no push; "New question" and its jump; a node-anchored
   reply with no trailing fold. Six shots, six distinct md5s.
+
+## Round 3b (GM r83: copy, and the Updates-card check)
+
+Every string is in #225's own files, so #223 needed no change and no commit.
+
+- **r83.1 working-line edit labels** (`main._edit_log_line`): one node
+  names up to three settings ("Changed “Prompt”, “Seed” and “Size” on
+  “Hero shot”"), from four it counts ("Changed 4 settings on “Hero shot”").
+  Several nodes are named and their settings dropped ("Changed “Hero shot”
+  and “Sky”"), from four "Changed 4 nodes". The "and N more nodes" hybrid
+  is gone. The caller now passes the other nodes as (verb, name).
+  Decision not in r83: several nodes keep the verb they all share ("Moved
+  “Hero shot” and “Sky”"); mixed verbs read "Changed". A setting with no card
+  label is still counted, never named by its key ("Changed a setting on …").
+- **r83.2-4:** the pace refusal, the unnamed reader's line, and "reply to
+  the person with reply_to_person" in the gated refusal, verbatim.
+- **r83.5 CLI:** the no-listener line with the command on its own line,
+  " · {reason}" on listener rows, and the empty and too-long reply errors
+  (n with a comma). Curly apostrophes in "Replied in the person’s Message box."
+  and "No messages in this project’s thread yet." Thread rows keep "(n7)".
+- **Ratchet:** #204's test_flag_parens_copy isn't on this branch. A sibling
+  check in test_person_thread_round3 scans cli/commands/thread.py for
+  straight apostrophes, a colon that introduces a command, and a reason in
+  parens. Run against this tree, #204's own checks find nothing in
+  thread.py except the "(n7)" row parens GM keeps.
+- **MCP parity:** reply_to_person's docstring and MCP-SETUP quote the
+  pace line, the unnamed-reader line, `nebula channel`'s output and the edit
+  labels.
+- **CHECK (shot 6): harness, not a bug.** Every ask posts its own Update
+  (`_post_question_update`; the route refuses the ask if it can't). The
+  corner shows one card at a time and holds each for 4 s, with the next
+  queued behind it. In the shot, "Updates 1" is the new question's unread
+  Update and the badge is its open question. The card on screen was the
+  earlier question's, re-texted when that question closed during its hold.
+  Pinned by test_a_new_question_posts_its_own_update_while_an_answered_one_reads_past_tense.
+
+### Checks (round 3b)
+
+- tsc and lint are clean. vitest: 148 files on an explicit list (every
+  disk-reading test, main's three ratchets, the errorCopy, failureLines and
+  tryAgainLines tests, and the box, thread and log tests): 4,347 passed.
+- Backend, isolated: 57 files (the named tests plus every test that reads
+  MCP-SETUP or SKILL.md), 2,000 passed. `person_gate.py` is byte-identical
+  to main.
+- Mutations: the label builder 10 of 10 killed (M10, a removed node left out
+  of the names, survived at first; a test now covers it). The copy strings 6
+  of 6 killed.
+- Entry: 469,331 B raw / 145,840 gzip, unchanged.

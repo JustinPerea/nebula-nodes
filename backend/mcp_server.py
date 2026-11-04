@@ -1099,9 +1099,10 @@ def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None =
     pins), so don't put anything there you wouldn't pin.
 
     Replies are paced per agent: 5 in a row, then one every 2 s. Past that
-    the reply isn't saved and Nebula says in how many seconds you can reply
-    again (code replies_rate_limited): wait, then send one reply with
-    everything in it."""
+    the reply isn't saved (code replies_rate_limited) and Nebula says "Nebula
+    couldn’t post this reply because replies are paced at 5 in a row, then
+    one every 2 s. You can reply again in N s, so put everything you have to
+    say in one reply.": wait, then send one reply with everything in it."""
     body: dict[str, Any] = {"text": text}
     if node_id:
         body["nodeId"] = node_id

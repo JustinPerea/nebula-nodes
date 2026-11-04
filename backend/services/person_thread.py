@@ -306,8 +306,8 @@ def reply_limited_detail(wait: float) -> str:
     """The refusal an agent replying too fast gets: what happened, when it
     can reply again, and what to do instead."""
     seconds = max(1, int(-(-wait // 1)))
-    return (f"Too many replies at once: you can reply again in {seconds} s. Replies are paced at {REPLY_BURST} in "
-            f"a row, then one every {REPLY_EVERY:g} s, so put everything you have to say in one reply.")
+    return (f"Nebula couldn’t post this reply because replies are paced at {REPLY_BURST} in a row, then one every "
+            f"{REPLY_EVERY:g} s. You can reply again in {seconds} s, so put everything you have to say in one reply.")
 
 
 class PersonThread:

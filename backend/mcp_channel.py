@@ -131,7 +131,7 @@ Nebula channel (experiment): this session listens to the person's canvas. Pushes
 
 # A gated turn (Q42 a, Q51 a) may call these: look (the read tools), point
 # and say (point_at), post an Update (post_note), reply to the person
-# (reply_to_person), answer a pin and propose
+# with reply_to_person, answer a pin and propose
 # (on the canvas, or a cover, a board's notes or the Commons). Any other tool,
 # including one added later, is refused until the turn ends.
 CHANGE_TURN_TOOLS = frozenset({
@@ -860,7 +860,7 @@ class ChannelState:
         if gated:
             return ("This turn was woken by the person's own edit, or by a proposal of yours they didn't accept "
                     "(Nebula channel experiment), so it may look, point, post an Update (post_note), reply to the "
-                    "person (reply_to_person), answer pins and propose, but not change the canvas, run, switch projects or write boards: "
+                    "person with reply_to_person, answer pins and propose, but not change the canvas, run, switch projects or write boards: "
                     f"{name} is refused. Propose it instead (propose_change, or propose_asset_change for a cover, a "
                     "board's notes or the Commons), and they decide.")
         self.in_flight += 1

@@ -6567,8 +6567,9 @@ async def read_person_thread(limit: int = 50) -> Any:
     if identity is None and has_agent_marker(headers) and not is_person(headers):
         # An agent that didn't say who it is (review 1, NIT-3): the thread is
         # read by name, so say how to give one.
-        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as to read the "
-                                                    "thread")
+        raise HTTPException(status_code=400, detail=(
+            "Nebula couldn’t show the thread because this agent has no name. Set NEBULA_AGENT_NAME or pass --as "
+            "with a name, then read the thread again."))
     limit = max(1, min(int(limit), person_thread.MAX_ROWS))
     try:
         if identity is not None:
@@ -14203,25 +14204,39 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     return updated
 
 
-def _edit_log_line(verb: str, node_id: str, keys: Sequence[str], others: int) -> str:
-    """An edit_canvas with no note, as the Agent log words it (GM r79.2;
-    never the bubble's terse "changed 1"): "Changed “Prompt” on “Hero
-    shot”", "Changed “Prompt” and “Seed” on “Hero shot”", "Changed 3
-    settings on “Hero shot”", else the verb and the node ("Moved “Hero
-    shot”"); "and 2 more nodes" when the edit touched others."""
+def _names_and(names: Sequence[str]) -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C” (GM r83: no serial comma)."""
+    names = list(names)
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
+                   others: Sequence[tuple[str, str]] = ()) -> str:
+    """An edit_canvas with no note, as the Agent log and the Message box's
+    working line word it (GM r83.1; never the bubble's terse "changed 1",
+    never an "and N more" hybrid). ``others`` are the edit's other nodes, as
+    (verb, name). One node names its settings: "Changed “Prompt” on “Hero
+    shot”", "Changed “Prompt” and “Seed” on “Hero shot”", "Changed
+    “Prompt”, “Seed” and “Size” on “Hero shot”", from 4 "Changed 4 settings
+    on “Hero shot”"; else the verb and the node ("Moved “Hero shot”").
+    Several nodes name the nodes and drop the settings: "Changed “Hero
+    shot” and “Sky”", "Changed “Hero shot”, “Sky” and “Prompt”", from 4
+    "Changed 4 nodes". Their verb is the one they all share, else
+    "Changed"."""
     node = _quoted(_node_label(node_id))
-    line = f"{verb} {node}"
-    if verb == "Changed" and keys:
-        record = cli_graph.nodes.get(node_id) or {}
-        definition = node_registry.get(str(record.get("definitionId") or "")) or {}
-        labels = [label for label in (_card_label(definition, record, key) for key in keys) if label]
-        if len(labels) in (1, 2) and len(labels) == len(keys):
-            line = f"Changed {' and '.join(f'“{label}”' for label in labels)} on {node}"
-        else:
-            line = f"Changed {'a setting' if len(keys) == 1 else f'{len(keys)} settings'} on {node}"
     if others:
-        line += f" and {others} more {'node' if others == 1 else 'nodes'}"
-    return line
+        verbs = {verb, *(other_verb for other_verb, _ in others)}
+        word = verb if len(verbs) == 1 else "Changed"
+        names = [node, *(_quoted(name) for _, name in others)]
+        return f"{word} {len(names)} nodes" if len(names) >= 4 else f"{word} {_names_and(names)}"
+    if verb != "Changed" or not keys:
+        return f"{verb} {node}"
+    record = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get(str(record.get("definitionId") or "")) or {}
+    labels = [label for label in (_card_label(definition, record, key) for key in keys) if label]
+    if len(labels) == len(keys) and len(labels) <= 3:
+        return f"Changed {_names_and([f'“{label}”' for label in labels])} on {node}"
+    return f"Changed {'a setting' if len(keys) == 1 else f'{len(keys)} settings'} on {node}"
 
 
 def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
@@ -15314,13 +15329,17 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 else "Renamed" if focus in renamed else "Moved")
         # A param value change is typing, as through PUT (GM - Design, PR
         # #211 r2): the person's tabs show `type`; agents still read `click`.
-        touched = set(added) | set(changed) | set(renamed) | set(moves) | {gone["id"] for gone in removed}
+        # The edit's other nodes, each with its own verb, for the log line
+        # (GM r83.1: several nodes are named, never "and N more").
+        others = [("Added" if key in added else "Changed" if key in (changed or ()) else "Renamed"
+                   if key in renamed else "Moved", _node_label(key))
+                  for key in dict.fromkeys([*added, *changed, *renamed, *moves]) if key != focus]
+        others += [("Removed", str(gone["name"])) for gone in removed if gone["id"] != focus]
         # With no note the bubble keeps the terse summary ("changed 1"); the
         # Agent log and the Message box's working line get the person's
         # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
-                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []),
-                                                                len(touched - {focus})),
+                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others),
                           shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)

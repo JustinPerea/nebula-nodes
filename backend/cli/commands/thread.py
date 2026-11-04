@@ -62,10 +62,12 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
     out = out or sys.stdout
     text = (args.text or "").strip()
     if not text:
-        print('error: a reply needs text: nebula reply "<text>" [--node nX]', file=sys.stderr)
+        print("error: Nebula couldn’t send this reply because it has no text. Put the text in quotes, like this.\n"
+              'nebula reply "<text>" [--node nX]', file=sys.stderr)
         return 2
     if len(text) > MAX_TEXT:
-        print(f"error: keep a reply to {MAX_TEXT} characters (it is {len(text)})", file=sys.stderr)
+        print(f"error: Nebula couldn’t send this reply because it’s {len(text):,} characters and the limit is "
+              f"{MAX_TEXT:,}. Shorten it, then run this command again.", file=sys.stderr)
         return 1
     body: dict[str, Any] = {"text": text}
     if args.node:
@@ -75,7 +77,7 @@ def run_reply(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | N
         print(json.dumps(response, ensure_ascii=False, indent=2), file=out)
         return 0
     where = f" Your cursor went to {args.node}." if args.node else ""
-    print(f"Replied in the person's Message box.{where}", file=out)
+    print(f"Replied in the person’s Message box.{where}", file=out)
     return 0
 
 
@@ -87,7 +89,7 @@ def run_thread(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | 
         return 0
     rows = response.get("rows") or []
     if not rows:
-        print("No messages in this project's thread yet.", file=out)
+        print("No messages in this project’s thread yet.", file=out)
         return 0
     for row in rows:
         print(format_row(row), file=out)
@@ -103,12 +105,12 @@ def run_channel(client: NebulaClient, args: argparse.Namespace, *, out: TextIO |
         return 0
     listeners = response.get("listeners") or []
     if not listeners:
-        print("No listener of yours: Nebula doesn't count you as connected to the canvas. Connect with "
-              "`nebula mcp connect claude-code --channel`, then start Claude Code as it says.", file=out)
+        print("You have no listener, so Nebula doesn’t count you as connected to the canvas. Run this command, "
+              "then start Claude Code as it says.\nnebula mcp connect claude-code --channel", file=out)
         return 0
     for entry in listeners:
         state = str(entry.get("state") or "")
-        reason = f" ({entry['reason']})" if entry.get("reason") else ""
+        reason = f" · {entry['reason']}" if entry.get("reason") else ""
         print(f"{entry.get('listenerId', '')}  {state}{reason}  since {_clock(entry.get('since'))}  "
               f"last heard {_clock(entry.get('seenAt'))}", file=out)
     return 0

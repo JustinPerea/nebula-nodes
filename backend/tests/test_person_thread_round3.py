@@ -88,8 +88,8 @@ def test_replies_are_paced_per_agent_with_a_line_saying_when(paced):
     assert refused.status_code == 429 and refused.headers["Retry-After"] == "2"
     body = refused.json()
     assert body["code"] == person_thread.REPLY_LIMITED_CODE and body["retryAfter"] == 2
-    assert body["detail"] == ("Too many replies at once: you can reply again in 2 s. Replies are paced at 5 in a "
-                              "row, then one every 2 s, so put everything you have to say in one reply.")
+    assert body["detail"] == ("Nebula couldn’t post this reply because replies are paced at 5 in a row, then one "
+                              "every 2 s. You can reply again in 2 s, so put everything you have to say in one reply.")
     assert "one too many" not in json.dumps(_person_rows(paced))  # nothing saved
     # Another agent has its own pace.
     assert _reply(paced, "from codex", headers=CODEX).status_code == 201
@@ -184,6 +184,32 @@ def test_an_answer_racing_a_withdrawal_is_refused_and_nothing_goes_out(thread):
     assert a
 
 
+
+def test_a_new_question_posts_its_own_update_while_an_answered_one_reads_past_tense(thread):
+    """GM r83 CHECK (shot 6): a question asked after another was answered
+    posts its own Update, "has a question." with Answer, unread; the
+    answered one keeps "asked a question." and "Answered.", read. The shot's
+    card was the earlier Update still up (the corner shows one card at a
+    time, each held 4 s, the next queued behind it): Updates read 1 and the
+    badge 1, the new question's."""
+    _listen(thread, SESSION_A)
+    first, key = _ask(thread, questions=[{"text": "Square hero?", "options": ["Yes", "No"]}])
+    answered = thread.client.post(f"/api/canvas/questions/{first}/answer", headers={**PERSON, KEY: key},
+                                  json={"answers": [{"questionId": "q1", "choices": ["Yes"]}]})
+    assert answered.status_code == 200, answered.text
+    second, _ = _ask(thread, questions=[{"text": "Warmer sky?", "options": ["Yes", "No"]}])
+    notes = thread.client.get("/api/canvas/agent-notes", headers=PERSON).json()["notes"]
+    questions = [n for n in notes if n.get("about") == "question"]
+    assert [n["questions"]["id"] for n in questions] == [second, first]  # newest first, one each
+    new, old = questions
+    assert new["text"] == "Claude Code has a question." and [a["label"] for a in new["actions"]] == ["Answer"]
+    assert old["text"] == "Claude Code asked a question." and old["resolvedAt"]
+    unread = thread.client.get("/api/canvas/agent-notes", headers=PERSON, params={"unread": 1}).json()["notes"]
+    assert [n["id"] for n in unread if n.get("about") == "question"] == [new["id"]]
+    added = [m["note"]["questions"]["id"] for m in thread.browser + thread.sent
+             if m.get("type") == "agentNotes" and m.get("op") == "added" and (m.get("note") or {}).get("questions")]
+    assert added == [first, second]  # each set's own Update reached the tabs
+
 # -- the LOWs -------------------------------------------------------------------------------
 
 def test_a_listener_keeps_its_id_through_a_lapse_and_its_messages_still_reach_it(thread):
@@ -212,7 +238,9 @@ def test_a_reply_names_the_message_it_followed(thread):
 
 def test_an_unnamed_agent_reading_the_thread_is_told_to_name_itself(thread):
     unnamed = thread.client.get("/api/canvas/thread", headers={"X-Nebula-Client": "cli"})
-    assert unnamed.status_code == 400 and "NEBULA_AGENT_NAME" in unnamed.json()["detail"]
+    assert unnamed.status_code == 400
+    assert unnamed.json()["detail"] == ("Nebula couldn’t show the thread because this agent has no name. Set "
+                                        "NEBULA_AGENT_NAME or pass --as with a name, then read the thread again.")
     assert thread.client.get("/api/canvas/thread").status_code == 403  # anonymous: still the person's
 
 
@@ -265,7 +293,8 @@ def test_the_gated_turn_names_reply_to_person():
     state = mcp_channel.ChannelState(now=0.0)
     state._window_at = 0.0
     refusal = state.tool_started("edit_canvas", {}, 1.0)
-    assert refusal and "reply to the person (reply_to_person)" in refusal
+    assert refusal and "reply to the person with reply_to_person, answer pins" in refusal
+    assert "(reply_to_person)" not in refusal
     assert state.tool_started("reply_to_person", {}, 2.0) is None
     assert "reply_to_person" in mcp_channel.INSTRUCTIONS
     assert "reply_to_person" in state._render("change", [], 0, [], [], [], [], [], [], [], set(), 0, held=0,
@@ -290,8 +319,41 @@ def test_nebula_channel_prints_your_listeners(capsys):
     assert thread_cmd.run_channel(Client([entry]), SimpleNamespace(json=False, agent_name=None)) == 0
     assert thread_cmd.run_channel(Client([]), SimpleNamespace(json=False, agent_name=None)) == 0
     out = capsys.readouterr().out
-    assert "ch_0123456789abcdef  stopped (idle)" in out
-    assert "No listener of yours: Nebula doesn't count you as connected" in out
+    assert "ch_0123456789abcdef  stopped · idle  since" in out and "(idle)" not in out
+    assert ("You have no listener, so Nebula doesn’t count you as connected to the canvas. Run this command, then "
+            "start Claude Code as it says.\nnebula mcp connect claude-code --channel\n") in out
+
+
+def test_nebula_reply_and_thread_say_what_happened_in_the_persons_words(capsys):
+    """GM r83.5: curly apostrophes; an empty or too-long reply says why and
+    what to do, the command on its own line; thread rows keep "(n7)"."""
+    from cli.commands import thread as thread_cmd
+
+    class Client:
+        def reply_to_person(self, body, agent_name=None):
+            return {"reply": {"kind": "reply", **body}}
+
+        def get_thread(self, limit=20, agent_name=None):
+            return {"rows": self.rows}
+
+    def args(text, node=None):
+        return SimpleNamespace(text=text, node=node, json=False, agent_name=None)
+
+    assert thread_cmd.run_reply(Client(), args("Done.")) == 0
+    assert capsys.readouterr().out == "Replied in the person’s Message box.\n"
+    assert thread_cmd.run_reply(Client(), args(" ")) == 2
+    assert capsys.readouterr().err == ("error: Nebula couldn’t send this reply because it has no text. Put the text "
+                                       "in quotes, like this.\nnebula reply \"<text>\" [--node nX]\n")
+    assert thread_cmd.run_reply(Client(), args("x" * 2345)) == 1
+    assert capsys.readouterr().err == ("error: Nebula couldn’t send this reply because it’s 2,345 characters and the "
+                                       "limit is 2,000. Shorten it, then run this command again.\n")
+    client = Client()
+    client.rows = []
+    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name=None)) == 0
+    assert capsys.readouterr().out == "No messages in this project’s thread yet.\n"
+    client.rows = [{"kind": "reply", "at": 0, "text": "Done.", "nodeId": "n7"}]
+    assert thread_cmd.run_thread(client, SimpleNamespace(limit=5, json=False, agent_name=None)) == 0
+    assert capsys.readouterr().out.endswith("agent  Done.  (n7)\n")
 
 
 # -- GM r79.2: an edit with no note is logged in the person's words ----------------------------
@@ -315,8 +377,143 @@ def test_an_edit_with_no_note_logs_the_persons_words_never_the_terse_summary(thr
     before = len(_presence(thread))
     thread.client.post("/api/graph/apply", headers=CLAUDE,
                        json={"params": [{"nodeId": n1, "params": {"value": "x"}}, {"nodeId": n2, "params": {"value": "y"}}]})
-    assert _presence(thread)[before:][-1]["log"].endswith(" and 1 more node")
+    # GM r83.1: several nodes are named, never "and 1 more node".
+    assert _presence(thread)[before:][-1]["log"] == "Changed “Hero shot” and “Text Input”"
     noted = thread.client.post("/api/graph/apply", headers=CLAUDE,
                                json={"note": "Cooler sky", "params": [{"nodeId": n1, "params": {"value": "z"}}]})
     assert noted.status_code == 200 and _presence(thread)[-1]["say"] == "Cooler sky" and "log" not in _presence(thread)[-1]
     assert not any(re.search(r"\b(changed|moved) \d", e.get("log") or "") for e in _presence(thread))
+    assert not any("more node" in (e.get("log") or "") for e in _presence(thread))
+
+
+# -- GM r83.1: the working line's edit labels, one per count -----------------------------------
+
+def _named_nodes(api, *names):
+    ids = [api.graph.add_node("text-input", {"value": name}) for name in names]
+    api.client.post("/api/graph/apply", headers=CLAUDE, json={"rename": dict(zip(ids, names))})
+    return ids
+
+
+@pytest.fixture
+def labelled(thread, monkeypatch):
+    labels = {"prompt": "Prompt", "seed": "Seed", "size": "Size", "steps": "Steps"}
+    monkeypatch.setattr(thread.main, "_card_label", lambda _definition, _node, key: labels.get(key))
+    (n1,) = _named_nodes(thread, "Hero shot")
+    return lambda verb, keys: thread.main._edit_log_line(verb, n1, keys)
+
+
+def test_one_setting_on_one_node(labelled):
+    assert labelled("Changed", ["prompt"]) == "Changed “Prompt” on “Hero shot”"
+
+
+def test_two_settings_on_one_node(labelled):
+    assert labelled("Changed", ["prompt", "seed"]) == "Changed “Prompt” and “Seed” on “Hero shot”"
+
+
+def test_three_settings_on_one_node(labelled):
+    assert labelled("Changed", ["prompt", "seed", "size"]) == "Changed “Prompt”, “Seed” and “Size” on “Hero shot”"
+
+
+def test_four_settings_on_one_node_are_counted(labelled):
+    assert labelled("Changed", ["prompt", "seed", "size", "steps"]) == "Changed 4 settings on “Hero shot”"
+
+
+def test_a_setting_with_no_card_label_is_counted_never_named_by_its_key(labelled):
+    assert labelled("Changed", ["_hidden"]) == "Changed a setting on “Hero shot”"
+    assert labelled("Changed", ["prompt", "_hidden"]) == "Changed 2 settings on “Hero shot”"
+    assert labelled("Moved", []) == "Moved “Hero shot”"
+    assert labelled("Changed", []) == "Changed “Hero shot”"
+
+
+def _apply_log(api, body):
+    before = len(_presence(api))
+    applied = api.client.post("/api/graph/apply", headers=CLAUDE, json=body)
+    assert applied.status_code == 200, applied.text
+    return _presence(api)[before:][-1]["log"]
+
+
+def _params(ids):
+    return {"params": [{"nodeId": node, "params": {"value": f"new {node}"}} for node in ids]}
+
+
+def test_two_nodes_are_named_without_their_settings(thread):
+    ids = _named_nodes(thread, "Hero shot", "Sky")
+    assert _apply_log(thread, _params(ids)) == "Changed “Hero shot” and “Sky”"
+
+
+def test_three_nodes_are_named_without_their_settings(thread):
+    ids = _named_nodes(thread, "Hero shot", "Sky", "Prompt")
+    assert _apply_log(thread, _params(ids)) == "Changed “Hero shot”, “Sky” and “Prompt”"
+
+
+def test_four_nodes_are_counted(thread):
+    ids = _named_nodes(thread, "Hero shot", "Sky", "Prompt", "Seed")
+    assert _apply_log(thread, _params(ids)) == "Changed 4 nodes"
+
+
+def test_several_nodes_keep_a_shared_verb_else_changed(thread):
+    hero, sky = _named_nodes(thread, "Hero shot", "Sky")
+    moves = {"move": {hero: {"x": 900, "y": 900}, sky: {"x": 1200, "y": 900}}}
+    assert _apply_log(thread, moves) == "Moved “Hero shot” and “Sky”"
+    mixed = {**_params([hero]), "move": {sky: {"x": 40, "y": 40}}}
+    assert _apply_log(thread, mixed) == "Changed “Hero shot” and “Sky”"
+    (gone,) = _named_nodes(thread, "Old sky")
+    removed = {"params": [{"nodeId": hero, "params": {"value": "a third take"}}], "remove": [gone]}
+    assert _apply_log(thread, removed) == "Changed “Hero shot” and “Old sky”"  # a removed node is named too
+    for line in (e.get("log") or "" for e in _presence(thread)):
+        assert not re.search(r"\b(changed|moved) \d", line) and "more node" not in line
+
+
+# -- GM r83.5: the CLI's thread lines follow the person-copy rules ---------------------------------
+# A sibling of #204's test_flag_parens_copy (not on this branch yet): the lines `nebula reply`,
+# `nebula thread` and `nebula channel` print use curly apostrophes, never introduce a command with a
+# colon (the command goes on its own line), and put a listener's reason after " · ", not in
+# parentheses. Help text and docstrings are exempt by surface; "error:" is a terminal prefix.
+
+import ast  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+_THREAD_CLI = Path(__file__).resolve().parents[1] / "cli" / "commands" / "thread.py"
+_STRAIGHT = re.compile(r"\w'\w|^'\w")
+_COLON_COMMAND = re.compile(r"(?<=[\w}`’”)]):[ \t]*(?:$|\n|[`~/$]|--|nebula\b)", re.MULTILINE)
+_REASON_IN_PARENS = re.compile(r"\(\{[^}]*reason[^}]*\}\)")
+
+
+def _cli_line_offenders(source: str) -> list[str]:
+    tree = ast.parse(source)
+    skipped: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                skipped.add(id(body[0].value))
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg in {"help", "description", "epilog", "usage"}:
+                    skipped.update(id(inner) for inner in ast.walk(keyword.value))
+    found = []
+    for node in ast.walk(tree):
+        if id(node) in skipped:
+            continue
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            text = node.value.removeprefix("error:")
+            if _STRAIGHT.search(text) or _COLON_COMMAND.search(text):
+                found.append(f"{node.lineno}: {node.value!r}")
+        elif isinstance(node, ast.JoinedStr) and _REASON_IN_PARENS.search(ast.unparse(node)):
+            found.append(f"{node.lineno}: {ast.unparse(node)}")
+    return found
+
+
+def test_the_thread_cli_lines_follow_the_person_copy_rules():
+    assert _cli_line_offenders(_THREAD_CLI.read_text(encoding="utf-8")) == []
+
+
+def test_the_thread_cli_check_catches_the_old_forms():
+    assert _cli_line_offenders("print(\"Replied in the person's Message box.\")\n")
+    assert _cli_line_offenders("print('error: a reply needs text: nebula reply \"<text>\"')\n")
+    assert _cli_line_offenders("print('Connect with `nebula mcp connect claude-code --channel`.')\n") == []
+    assert _cli_line_offenders("print('Connect with: `nebula mcp connect claude-code --channel`.')\n")
+    assert _cli_line_offenders("reason = f\" ({entry['reason']})\"\n")
+    assert not _cli_line_offenders("reason = f\" · {entry['reason']}\"\n")
+    assert not _cli_line_offenders("p.add_argument('--x', help=\"it doesn't: nebula x\")\n")
+    assert not _cli_line_offenders('"""It doesn\'t: nebula x."""\n')

@@ -749,7 +749,12 @@ when a change is only those, the cursor moves without words and the log says
 "Changed a setting on “<node>”" or "Changed 3 settings on “<node>”". No
 action is left out: the presence event carries `log`, the Agent log's line,
 when it differs from `say`, and an action with no words at all is listed in
-the Agents panel's words ("Changed “Hero”"). Moodboard writes are listed there too
+the Agents panel's words ("Changed “Hero”"). An `edit_canvas` with no `note`
+is logged as the Message box's working line shows it: one node names up to
+three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot”", from
+four "Changed 4 settings on “Hero shot”"); several nodes are named without
+their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
+nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -1189,7 +1194,11 @@ or on a Team org with Channels off, still reads "listening".
 - An agent: `GET /api/canvas/channel` returns only its own entries, without
   `session`; MCP `channel_status` adds `thisServer` (whether this server
   runs with `--channel`, and its listener's state). **`nebula channel
-  [--json]`** prints the same entries from the terminal.
+  [--json]`** prints the same entries from the terminal, one per line
+  (`ch_… stopped · idle since 12:14 last heard 12:10`); with none it says
+  "You have no listener, so Nebula doesn’t count you as connected to the
+  canvas. Run this command, then start Claude Code as it says." and the
+  command on the next line.
 - Only a listener with an agent token registers (above), and the routes a
   listener reads its messages from and reports on
   (`/api/agent/thread/inbox`, `accepted`, `held`) refuse a tokenless caller
@@ -1228,8 +1237,9 @@ reload and every tab show the same rows.
   agents reply. A reply is journaled as `thread.replied` (`data: {replyId,
   text, nodeId}`). Replies are paced per agent: 5 in a row, then one every
   2 s. Past that the reply isn't saved: `429 replies_rate_limited` with
-  `retryAfter` (seconds) and a line saying when it can reply again (put
-  everything in one reply). A reply row's `replyTo` is the latest message
+  `retryAfter` (seconds) and the line "Nebula couldn’t post this reply
+  because replies are paced at 5 in a row, then one every 2 s. You can
+  reply again in 2 s, so put everything you have to say in one reply." A reply row's `replyTo` is the latest message
   that session's listener had taken, so the box clears only that message's
   status and the ones before it.
 - The thread keeps at most 300 rows. Past that the oldest agent rows go
@@ -1247,8 +1257,9 @@ reload and every tab show the same rows.
   question row names its set (`questionId`) and asker (`agent`) for every
   agent, but only the asker reads its `questions` (text and options), and no
   agent reads the person's answer there (`get_answers` is the asker's).
-  An agent that reads with a marker but no name gets `400` "Name yourself
-  with NEBULA_AGENT_NAME or --as".
+  An agent that reads with a marker but no name gets `400` "Nebula couldn’t
+  show the thread because this agent has no name. Set NEBULA_AGENT_NAME or
+  pass --as with a name, then read the thread again."
 - While a session listens, its `ask_person` questions, proposals, Updates and
   pin replies, and the person's new pins, also add a row to the thread that
   points at them (the card stays the only place to Accept; a question is
