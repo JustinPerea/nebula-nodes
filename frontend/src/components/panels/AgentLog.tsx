@@ -4,6 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
+import { LOG_CARD_FOLD_DESCRIPTION, LOG_COLLAPSE_VAR, LOG_HELD_ATTR, LOG_HOLD_ATTR } from '../../lib/noticeStackPlace';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   clamp,
@@ -32,7 +33,43 @@ function chatLauncherRect(): Rect | null {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
 }
 
-/** The log's layout size, ignoring the transform its entry spring applies. */
+/** A length token's px, read off a probe since it may be a clamp(). */
+const heightProbes = new Map<string, HTMLDivElement>();
+function probeHeight(token: string): number {
+  let probe = heightProbes.get(token);
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText = `position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:var(${token})`;
+    heightProbes.set(token, probe);
+  }
+  if (!probe.isConnected) document.body.appendChild(probe);
+  return probe.offsetHeight;
+}
+
+/** The open log's height with no give: the person's resize (inline), else
+ * the state's --agent-log-h. */
+function naturalLogHeight(log: HTMLElement): number {
+  const inline = Number.parseFloat(log.style.height);
+  if (Number.isFinite(inline) && inline > 0) return inline;
+  return Math.min(probeHeight('--agent-log-h'), window.innerHeight * 0.8);
+}
+
+/** The floor it gives way to (GM r6): its header and 2 rows of the body,
+ * with the body's padding and the log's borders. */
+function logFloor(log: HTMLElement): number {
+  const head = log.querySelector<HTMLElement>('.agent-log__drag-row');
+  const body = log.querySelector<HTMLElement>('.agent-log__body');
+  if (!head || !body) return log.offsetHeight;
+  const style = getComputedStyle(body);
+  const row = log.querySelector<HTMLElement>('.agent-log__msg') ?? body;
+  const rowStyle = getComputedStyle(row);
+  const line = Number.parseFloat(rowStyle.lineHeight) || (Number.parseFloat(rowStyle.fontSize) || 12) * 1.4;
+  const borders = log.offsetHeight - log.clientHeight;
+  return head.offsetHeight + (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
+    + 2 * line + Math.max(0, borders);
+}
+
 function layoutSize(el: HTMLElement | null): { width: number; height: number } | null {
   if (!el) return null;
   return { width: el.offsetWidth, height: el.offsetHeight };
@@ -114,7 +151,23 @@ export function AgentLog() {
   // when the log unmounts (leaving the canvas), as its local state did.
   const open = useUIStore((s) => s.agentLogOpen);
   const setOpen = useUIStore((s) => s.setAgentLogOpen);
-  useEffect(() => () => useUIStore.getState().setAgentLogOpen(false), []);
+  // Collapsed for the proposal card (GM r7 step 4), or reopened over that by
+  // the person: the region's measure stays the open log's while the card
+  // holds it, and its collapse is offered only while it may collapse.
+  const cardHold = useUIStore((s) => s.agentLogCardHold);
+  const cardFolded = cardHold === 'card' && !open;
+  const openSize = useRef<{ natural: number; floor: number } | null>(null);
+  // The drag in progress ends here (its listeners and the hold), from any
+  // of its ends (round 3l, GM r69 b).
+  const endDragRef = useRef<(() => void) | null>(null);
+  // The pointer that pressed the header, captured once a drag starts.
+  const pointerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    useUIStore.getState().setAgentLogOpen(false);
+    // Unmounted mid-drag: the drag and its hold go with it.
+    endDragRef.current?.();
+    document.documentElement.removeAttribute(LOG_HELD_ATTR);
+  }, []);
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
   const entries = useAgentLogStore((s) => s.entries);
@@ -230,20 +283,85 @@ export function AgentLog() {
   // the log while it sits on the right edge, low enough for a toast to reach
   // it: --agent-log-clearance is the room it takes from the right
   // (noticeRegion.css), 0 otherwise. Measured, since the log can be dragged
-  // and resized.
+  // and resized. --agent-log-top is how far its top edge (plus the gap)
+  // sits above the window's bottom: a proposal card too narrow beside the
+  // log sits above it instead (GM - Design, PR #216 r1; canvasProposals.css).
+  // The log never moves for the card; at short heights its body gives way
+  // (GM r6, below).
+  // Dragged off the dock, its box goes on the root as --agent-log-float-*
+  // (window px): the proposal card clears it when it sits in the card's
+  // column (GM - Design, PR #216 r4 6; lib/noticeStackPlace.ts).
+  // GM - Design, PR #216 r6: at short heights the docked, open log's body
+  // gives way to a proposal card, down to a floor of its header and 2 rows
+  // (the notice region writes --agent-log-squeeze; layouts.css). So that
+  // giving way never moves the line the region measures, --agent-log-top is
+  // the top the log has with no give (its own height, --agent-log-natural-h),
+  // and --agent-log-floor is how short it may get.
   useEffect(() => {
     const root = document.documentElement;
     const log = logRef.current;
+    const clear = (names: string[]) => names.forEach((name) => root.style.removeProperty(name));
+    const set = (name: string, value: string) => {
+      if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+    };
+    const DOCK = ['--agent-log-clearance', '--agent-log-top'];
+    const GIVE = ['--agent-log-natural-h', '--agent-log-floor', LOG_COLLAPSE_VAR];
+    const FLOAT = ['--agent-log-float-top', '--agent-log-float-bottom', '--agent-log-float-left', '--agent-log-float-right'];
     if (!visible || !log) {
-      root.style.removeProperty('--agent-log-clearance');
+      clear([...DOCK, ...GIVE, ...FLOAT]);
       return undefined;
     }
     const measure = () => {
       const rect = log.getBoundingClientRect();
       const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
-      if (docked) root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
-      else root.style.removeProperty('--agent-log-clearance');
+      // The height it has with no give, and its floor of header and 2 rows:
+      // the open log's own, kept while the card holds it collapsed (GM r7);
+      // a log the person collapsed is its header and gives nothing.
+      const held = !open && cardHold === 'card' && openSize.current;
+      if (open) {
+        const natural = naturalLogHeight(log) || rect.height;
+        openSize.current = { natural, floor: Math.min(natural, logFloor(log)) };
+      }
+      const { natural, floor } = open || held ? openSize.current! : { natural: rect.height, floor: rect.height };
+      // Its collapse to the header frees the rest, while it may collapse.
+      // (At its floor it is the floor's whole px tall, as layouts.css draws it.)
+      const collapse = (open && cardHold !== 'refused') || held ? Math.max(0, Math.ceil(floor) - Math.ceil(probeHeight('--agent-h-closed'))) : 0;
+      set('--agent-log-natural-h', `${Math.ceil(natural)}px`);
+      set('--agent-log-floor', `${Math.ceil(floor)}px`);
+      set(LOG_COLLAPSE_VAR, `${collapse}px`);
+      // Its box is read again once those and its marks are written: a re-run
+      // of this effect clears them first, and a top-pinned log's shift and
+      // its height are drawn from them, so a box read before is off by that
+      // (round 3f: read at -16 px, the card collapsed and reopened the log in
+      // a loop).
+      if (docked) {
+        clear(FLOAT);
+        log.dataset.docked = 'true';
+        delete log.dataset.floating;
+        const box = log.getBoundingClientRect();
+        set('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
+        set('--agent-log-top', `${Math.ceil(window.innerHeight - (box.bottom - natural) + AGENT_LOG_GAP_PX)}px`);
+      } else {
+        delete log.dataset.docked;
+        clear(DOCK);
+        // A floating log gives way held at the edge away from the card (GM
+        // r7, r11; the region writes which on the root): layouts.css moves a
+        // log pinned by the other edge by exactly what it gives.
+        log.dataset.floating = position?.anchorY === 'bottom' && typeof position.offsetY === 'number' ? 'bottom' : 'top';
+        const box = log.getBoundingClientRect();
+        if (box.width > 0 && box.height > 0) {
+          // Its box with no give: the held edge stays where it is.
+          const heldTop = root.getAttribute(LOG_HOLD_ATTR) === 'top';
+          const top = heldTop ? box.top : box.bottom - natural;
+          root.style.setProperty('--agent-log-float-top', `${Math.floor(top)}px`);
+          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(top + natural)}px`);
+          root.style.setProperty('--agent-log-float-left', `${Math.floor(box.left)}px`);
+          root.style.setProperty('--agent-log-float-right', `${Math.ceil(box.right)}px`);
+        } else {
+          clear(FLOAT);
+        }
+      }
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -252,9 +370,9 @@ export function AgentLog() {
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
-      root.style.removeProperty('--agent-log-clearance');
+      clear([...DOCK, ...GIVE, ...FLOAT]);
     };
-  }, [visible, open, position]);
+  }, [visible, open, position, cardHold]);
 
   // The notice leaves after a few seconds unless it is hovered or focused;
   // Settings > Preferences stays the way back after that.
@@ -304,8 +422,10 @@ export function AgentLog() {
     // Ignore right-click. Allow drag to start anywhere on the row — the
     // click handler later checks justDraggedRef to decide whether to fire.
     if (e.button !== 0) return;
+    endDragRef.current?.();
 
-    const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    const row = e.currentTarget;
+    const rect = (row.parentElement as HTMLElement).getBoundingClientRect();
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -319,9 +439,24 @@ export function AgentLog() {
     function onMove(ev: MouseEvent) {
       const d = dragRef.current;
       if (!d) return;
+      // The button came up where no mouseup reached the page (released over
+      // another app, or a system sheet took the press): this move is the drop.
+      if ((ev.buttons & 1) === 0) { onUp(); return; }
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
       if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      // GM r57 Q1: the person's hand wins. While held, the log rises above
+      // the proposal card and the card holds still; it places once at the
+      // drop (NoticeRegion).
+      if (!d.moved) {
+        document.documentElement.setAttribute(LOG_HELD_ATTR, '');
+        // Captured from here, so a lost capture ends the hold too; only from
+        // here, so a plain click still lands on the header's toggle.
+        const id = pointerRef.current;
+        if (id !== null && typeof row.setPointerCapture === 'function') {
+          try { row.setPointerCapture(id); } catch { /* the pointer is already up */ }
+        }
+      }
       d.moved = true;
       const left = clamp(d.originLeft + dx, 0, Math.max(0, window.innerWidth - d.width));
       const top = clamp(d.originTop + dy, 0, Math.max(0, window.innerHeight - d.height));
@@ -335,19 +470,45 @@ export function AgentLog() {
       persistPosition(next);
     }
 
+    // Round 3l (GM r69 b): the hold ends on the drop and on every way a
+    // drop can be lost: the window losing focus (Cmd-Tab, a system dialog),
+    // the pointer cancelled or its capture lost, and the page hidden. A lost
+    // hold would stop the card and the notices placing until the next click.
+    function onHidden() {
+      if (document.visibilityState === 'hidden') onUp();
+    }
+
     function onUp() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('blur', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      row.removeEventListener('lostpointercapture', onUp);
+      document.removeEventListener('visibilitychange', onHidden);
+      if (endDragRef.current === onUp) endDragRef.current = null;
+      document.documentElement.removeAttribute(LOG_HELD_ATTR);
       const d = dragRef.current;
       if (d?.moved) {
-        // Tell the click handler that fires next to bail out.
+        // Tell the click handler that fires next to bail out. A drop that
+        // brings no click (its release landed off the header) lets go after
+        // this task, so the person's next click on the header still toggles.
         justDraggedRef.current = true;
+        window.setTimeout(() => { justDraggedRef.current = false; }, 0);
+        const id = pointerRef.current;
+        if (id !== null && typeof row.hasPointerCapture === 'function') {
+          try { if (row.hasPointerCapture(id)) row.releasePointerCapture(id); } catch { /* gone */ }
+        }
       }
       dragRef.current = null;
     }
 
+    endDragRef.current = onUp;
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('blur', onUp);
+    window.addEventListener('pointercancel', onUp);
+    row.addEventListener('lostpointercapture', onUp);
+    document.addEventListener('visibilitychange', onHidden);
   }
 
   function handleToggleClick() {
@@ -355,6 +516,8 @@ export function AgentLog() {
       justDraggedRef.current = false;
       return;
     }
+    // The person's own toggle: a collapse they make is never undone for the
+    // card, and their reopening over the card's collapse holds (uiStore).
     setOpen(!open);
   }
 
@@ -434,9 +597,11 @@ export function AgentLog() {
       }
       style={containerStyle}
       data-status={statusLabel}
+      {...(cardFolded ? { 'data-card-collapsed': '' } : {})}
     >
       <div
         className="agent-log__drag-row"
+        onPointerDown={(event) => { pointerRef.current = event.pointerId; }}
         onMouseDown={handleHeaderMouseDown}
         title="Drag to move"
       >
@@ -445,8 +610,14 @@ export function AgentLog() {
           type="button"
           className="agent-log__header"
           onClick={handleToggleClick}
-          title={open ? 'Collapse agent log' : 'Expand agent log'}
+          // GM r57 Q5: folded for the card, a sighted person reads why too;
+          // after their own collapse it is "Expand agent log" again.
+          title={open ? 'Collapse agent log' : cardFolded ? LOG_CARD_FOLD_DESCRIPTION : 'Expand agent log'}
           aria-expanded={open}
+          // GM r11: folded for the proposal card is not the person's collapse,
+          // and doesn't read as one to a screen reader or an agent reading
+          // the accessibility tree.
+          {...(cardFolded ? { 'aria-description': LOG_CARD_FOLD_DESCRIPTION } : {})}
         >
           <span className="agent-log__title">
             <Activity
