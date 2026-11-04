@@ -712,6 +712,25 @@ describe('the card growing under the panel (GM r82)', () => {
     expect(bounds().top).toBe(480 - 10 - 300);
   });
 
+  it('under the node, the card growing holds no top: a resize after it moves the panel at once (GM r92 is beside only)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 1400);
+    contentHeight = 185;
+    openBeside(rect(200, 500, 1100, 56));
+    settle();
+    anchorRect = rect(200, 500, 1100, 156);
+    frames(1);
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    expect(panel().dataset.placement).toBe('bottom');
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    // Too short for it under the node now: it flips above, at once.
+    windowAt(1440, 1000);
+    frames(1);
+    expect(panel().dataset.placement).toBe('top');
+    expect(bounds().top).toBe(500 - 10 - 300);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  });
+
   it('beside the node, the card growing moves nothing and starts no spring', () => {
     chromeAt(1440, 900);
     contentHeight = 300;
@@ -765,6 +784,136 @@ describe('a move that comes with a size change (review 2 LOW-1)', () => {
 });
 
 /**
+ * Review 3 MEDIUM-1, GM r92: "hold the top, as r68 says. A move is read from
+ * the node's own box. A card offset change inside a node that hasn't moved
+ * counts as growth: the top holds, the height springs, and the file row
+ * stays under the pointer."
+ *
+ * The card (`.model-node__card`, the anchor) sits in its React Flow node
+ * (`.react-flow__node`) on the canvas (`.react-flow__viewport`, its pan and
+ * zoom in its transform). Review 3 measured an Image Input upload live at
+ * 1440x1000: the node stays at 156.5, while its card goes from 200 + 56 to
+ * 236.6 + 180 (the preview raises the node's top padding), and the panel's
+ * need from 300 to 486 px.
+ */
+describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM r92)', () => {
+  const rowTop = () => bounds().top + 72;
+  let nodeRect: DOMRect;
+  let canvas: HTMLElement;
+
+  /** The canvas, the node on it and its card, which the panel opens beside. */
+  function openInNode(node: DOMRect, card: DOMRect) {
+    nodeRect = node;
+    anchorRect = card;
+    canvas = place({ class: 'react-flow__viewport' }, () => rect(0, 0, innerWidth, innerHeight));
+    canvas.style.transform = 'translate(0px, 0px) scale(1)';
+    const flowNode = document.createElement('div');
+    flowNode.className = 'react-flow__node';
+    flowNode.getBoundingClientRect = () => nodeRect;
+    const anchor = document.createElement('div');
+    anchor.className = 'model-node__card';
+    anchor.dataset.nodeInspectorAnchor = 'n1';
+    anchor.getBoundingClientRect = () => anchorRect;
+    flowNode.append(anchor);
+    canvas.append(flowNode);
+    render(<NodeInspectorPopover />);
+    frames(1);
+  }
+
+  for (const together of [false, true]) {
+    it(`holds its top and springs its height${together ? ', the card and the body changing in one frame' : ''}`, () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      openInNode(rect(560, 156.5, 82, 121.7), rect(560, 200, 82, 56));
+      settle();
+      expect(bounds()).toEqual({ top: 192, height: 300, bottom: 492 });
+      const row = rowTop();
+      if (!together) {
+        // The preview's first frame: the card's top shifts inside the node, the body not yet taller.
+        nodeRect = rect(560, 156.5, 82, 103.9);
+        anchorRect = rect(560, 236.6, 82, 23.8);
+        frames(1);
+        expect(bounds()).toEqual({ top: 192, height: 300, bottom: 492 });
+        expect(rowTop()).toBe(row);
+      }
+      nodeRect = rect(560, 156.5, 82, 309.8);
+      anchorRect = rect(560, 236.6, 82, 180);
+      contentHeight = 486 - CHROME;
+      frames(1);
+      // The top holds, the new height is on the spring, the file row is where it was.
+      expect(bounds()).toEqual({ top: 192, height: 486, bottom: 678 });
+      expect(panel().hasAttribute('data-content-resizing')).toBe(true);
+      expect(rowTop()).toBe(row);
+      act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+      frames(2);
+      expect(bounds()).toEqual({ top: 192, height: 486, bottom: 678 });
+      expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    });
+  }
+
+  it('a card whose top shifts at the same size is growth too, not a move', () => {
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(560, 156.5, 82, 121.7), rect(560, 200, 82, 56));
+    settle();
+    anchorRect = rect(560, 236.6, 82, 56);
+    frames(2);
+    expect(bounds().top).toBe(192);
+  });
+
+  it('a real move still places it afresh by the card, at once (a drag, an agent move, an undo)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(560, 156.5, 82, 121.7), rect(560, 200, 82, 56));
+    settle();
+    // The preview lands: the top is held at 192.
+    nodeRect = rect(560, 156.5, 82, 309.8);
+    anchorRect = rect(560, 236.6, 82, 180);
+    contentHeight = 486 - CHROME;
+    frames(1);
+    expect(bounds().top).toBe(192);
+    // The node moves 40 px down: the held top goes, it is placed by the card, rigid.
+    nodeRect = rect(560, 196.5, 82, 309.8);
+    anchorRect = rect(560, 276.6, 82, 180);
+    frames(1);
+    expect(bounds()).toEqual({ top: 268.6, height: 486, bottom: 754.6 });
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  });
+
+  it('a zoom about the node\'s corner is a move (the canvas transform), not growth', () => {
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(560, 156.5, 82, 121.7), rect(560, 200, 82, 56));
+    settle();
+    // The node's corner stays put; the canvas scales, so the card's offset and size grow.
+    canvas.style.transform = 'translate(-112px, -31.3px) scale(1.2)';
+    nodeRect = rect(560, 156.5, 98.4, 146);
+    anchorRect = rect(560, 208.7, 98.4, 67.2);
+    frames(1);
+    expect(bounds().top).toBe(200.7);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+  });
+
+  it('a window resize still re-places it', () => {
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(560, 156.5, 82, 121.7), rect(560, 200, 82, 56));
+    settle();
+    nodeRect = rect(560, 156.5, 82, 309.8);
+    anchorRect = rect(560, 236.6, 82, 180);
+    contentHeight = 486 - CHROME;
+    frames(1);
+    expect(bounds().top).toBe(192);
+    windowAt(1440, 900);
+    frames(1);
+    // Placed afresh by the card: its top at 236.6 - 8.
+    expect(bounds().top).toBeCloseTo(228.6, 5);
+  });
+});
+
+/**
  * Review 2 LOW-2: closing clears the frame, so a reopen never paints the last
  * open's frame (for one frame, or for good when the node has no card on
  * screen to place it by).
@@ -804,6 +953,22 @@ describe('closing clears the frame (review 2 LOW-2)', () => {
 });
 
 /**
+ * The rule that shows the foot's hairline, read from the stylesheet (its CSS
+ * is pinned in inspectorBodyFade.test.tsx): the one foot::before rule at
+ * opacity 1, less the theme's body class and the pseudo-element, so the
+ * foot `matches` it exactly when the line shows.
+ */
+const HAIRLINE_SELECTOR = (() => {
+  const restraint = readFileSync(resolve(__dirname, '../../src/styles/slava-restraint.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
+  const shown = [...restraint.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter(([, selector, block]) => selector.includes('node-inspector-popover__foot::before') && /opacity:\s*1;/.test(block));
+  expect(shown).toHaveLength(1);
+  return shown[0][1].trim().replace(/^body\.app-slava-restraint\s+/, '').replace(/::before$/, '');
+})();
+const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popover__foot')!.matches(HAIRLINE_SELECTOR);
+
+/**
  * GM r87 (review 2 MEDIUM-1): "A 1 px hairline in the Restraint border token
  * on the top edge of the Run/Duplicate/Delete foot row whenever the body can
  * scroll further down; gone at the end. ... Test: a capped body not scrolled
@@ -822,8 +987,6 @@ describe('closing clears the frame (review 2 LOW-2)', () => {
  */
 describe("the foot row's hairline while there is more below (GM r87)", () => {
   const LOW = () => rect(560, 784, 82, 56);
-  const SELECTOR = '.node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot';
-  const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popover__foot')!.matches(SELECTOR);
   const left = () => body().scrollHeight - body().clientHeight - body().scrollTop;
   /** The body's size changed: ScrollFade re-measures (a ResizeObserver in the
    *  app; jsdom has none, so its window listener stands in). */
@@ -883,6 +1046,181 @@ describe("the foot row's hairline while there is more below (GM r87)", () => {
     settle();
     relayout();
     expect(left()).toBe(0);
+    expect(hairline()).toBe(false);
+  });
+});
+
+/**
+ * GM r92 Q3 (review 3 LOW-1): "the line waits until the open has settled.
+ * It's hidden during the open (images complete + 2 frames, 300 ms cap), then
+ * shows if there's more to scroll, on the pop spring. Add a test that an
+ * empty Style Reference open never shows the line." Q2: "keep the hairline
+ * on the pinned Inspector. Wherever a body scrolls, it's the same cue."
+ *
+ * Review 3 measured the empty Style Reference open live: the panel holds 531
+ * px while its content settles, overflowing by 10 px down to 1 over about 10
+ * frames, and the line read 1 from the first painted frame.
+ */
+describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
+  const LOW = () => rect(560, 784, 82, 56);
+  const relayout = () => {
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    frames(1);
+  };
+  const more = () => body().getAttribute('data-scroll-more') === 'true';
+
+  it('an empty Style Reference open never shows it, though its body overflows while it settles', () => {
+    chromeAt(1440, 900);
+    contentHeight = 426;
+    // The panel holds 531 px on screen while its content settles from 426 px to 416.
+    animated = 531;
+    openBeside(rect(560, 200, 82, 56));
+    let overflowed = 0;
+    for (let content = 426; content >= 416; content -= 1) {
+      contentHeight = content;
+      relayout();
+      if (more()) overflowed += 1;
+      expect(panel().hasAttribute('data-opening'), `at ${content}`).toBe(true);
+      expect(hairline(), `at ${content}`).toBe(false);
+    }
+    // The body did overflow while it settled: 10 px down to 2 (ScrollFade
+    // counts more than 1 px as more below).
+    expect(overflowed).toBe(9);
+    // Settled at 531, nothing below: still none.
+    animated = null;
+    settle();
+    relayout();
+    expect(panel().hasAttribute('data-opening')).toBe(false);
+    expect(more()).toBe(false);
+    expect(hairline()).toBe(false);
+  });
+
+  it('waits for the open\'s own spring too: the body overflows while the panel springs to its content (measured live)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    // Live, on an empty Style Reference: the content's late 10 px lands in
+    // the open, so the panel springs from 521 to 531 px; the body overflows
+    // by the spring's lag (10 px down to 0 over about 10 frames) while the
+    // height it needs already holds, so the open itself ends in 2 frames.
+    contentHeight = 406;
+    openBeside(rect(560, 200, 82, 56));
+    contentHeight = 416;
+    let overflowed = 0;
+    let afterOpen = 0;
+    for (let shown = 521; shown <= 531; shown += 1) {
+      animated = shown;
+      relayout();
+      if (more()) overflowed += 1;
+      if (more() && !panel().hasAttribute('data-opening')) afterOpen += 1;
+      expect(panel().hasAttribute('data-content-resizing'), `at ${shown}`).toBe(true);
+      expect(hairline(), `at ${shown}`).toBe(false);
+    }
+    expect(overflowed).toBe(9);
+    // The open ended while the spring still ran and the body overflowed.
+    expect(afterOpen).toBeGreaterThan(0);
+    animated = null;
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    relayout();
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    expect(hairline()).toBe(false);
+  });
+
+  it('after a growth spring that ends with more below, it shows once the spring stops', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    contentHeight = 300;
+    openBeside(rect(560, 200, 82, 56));
+    settle();
+    expect(bounds()).toEqual({ top: 192, height: 415, bottom: 607 });
+    // An upload: the top holds, the panel springs to the band's line (562 px) and the rest scrolls.
+    contentHeight = 602;
+    animated = 415;
+    frames(1);
+    relayout();
+    expect(bounds()).toEqual({ top: 192, height: 562, bottom: 754 });
+    expect(more()).toBe(true);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(true);
+    expect(hairline()).toBe(false);
+    animated = null;
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(true);
+  });
+
+  it('a long body shows it once the open has settled', () => {
+    chromeAt(1440, 900);
+    contentHeight = 602;
+    openBeside(LOW());
+    relayout();
+    expect(more()).toBe(true);
+    expect(panel().hasAttribute('data-opening')).toBe(true);
+    expect(hairline()).toBe(false);
+    settle();
+    expect(panel().hasAttribute('data-opening')).toBe(false);
+    expect(hairline()).toBe(true);
+  });
+
+  it(`with an image still loading, it shows at the ${OPEN_SETTLE_CAP_MS} ms cap`, () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 900);
+    mock.image = true;
+    imageLoaded = false;
+    contentHeight = 602;
+    openBeside(LOW());
+    frames(6);
+    relayout();
+    expect(more()).toBe(true);
+    act(() => { vi.advanceTimersByTime(OPEN_SETTLE_CAP_MS - 1); });
+    expect(hairline()).toBe(false);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(hairline()).toBe(true);
+  });
+
+  it('another node, and a reopen, wait again', () => {
+    chromeAt(1440, 900);
+    contentHeight = 602;
+    openBeside(LOW());
+    settle();
+    relayout();
+    expect(hairline()).toBe(true);
+    place({ 'data-node-inspector-anchor': 'n2' }, () => LOW());
+    act(() => {
+      useUIStore.getState().selectNode('n2');
+      useUIStore.getState().setInspectorVisible(true);
+    });
+    frames(1);
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(false);
+    settle();
+    expect(hairline()).toBe(true);
+    setVisible(false);
+    act(() => useUIStore.getState().setInspectorVisible(true));
+    frames(1);
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(false);
+    settle();
+    expect(hairline()).toBe(true);
+  });
+
+  it('the pinned Inspector shows it too, after the same settle', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    chromeAt(1440, 900);
+    contentHeight = 2000;
+    openBeside(rect(560, 200, 82, 56));
+    relayout();
+    expect(panel()).toHaveClass('node-inspector-popover--pinned');
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(false);
+    frames(1 + OPEN_STABLE_FRAMES);
+    expect(panel().hasAttribute('data-opening')).toBe(false);
+    expect(hairline()).toBe(true);
+    // At the end of the scroll it goes, as on the floating one.
+    body().scrollTop = body().scrollHeight - body().clientHeight;
+    fireEvent.scroll(body());
+    frames(1);
     expect(hairline()).toBe(false);
   });
 });

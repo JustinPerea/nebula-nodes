@@ -270,3 +270,73 @@ Inspector's preview `<img>`).
   Hairline 1; at the end 0.
 - Blocked log: canary lines only. The page's own canary requests were all
   blocked.
+
+
+## Round 5 (review 3, GM r92)
+
+- **A preview landing is growth, not a move (MEDIUM-1, GM r92 Q1).** A move
+  is now read from the React Flow node's own box (its rect's left/top) and
+  the canvas's transform (`.react-flow__viewport`), not from the card
+  (`nodePlace` in `NodeInspectorPopover.tsx`). When an Image Input's preview
+  lands, the node's top padding grows, so the card's top moves 36.6 px inside
+  a node that hasn't moved. A change in the card's size or in its offset
+  inside the node is growth: beside the node, the top is held (as for a
+  content change), and the height springs. Under or over the node, the panel
+  still follows the card on the spring and holds no top (r82). A drag, an
+  agent move, an undo, a pan or a zoom (even one about the node's own corner,
+  through the transform) all still re-place the panel at once, and so does a
+  window resize. A node with no React Flow box falls back to reading its card.
+- **The hairline waits for the open to settle (LOW-1, GM r92 Q3).** While the
+  open hasn't settled (every image complete, then 2 stable frames, 300 ms at
+  most), the popover carries `data-opening`, and the line's rule requires
+  `:not([data-opening])`. After that, it shows on the pop spring if there is
+  more to scroll. The open is tracked in state (`settledFor`), and it is
+  reset while rendering when the panel closes or another node opens.
+  **Beyond the brief:** the rule also requires `:not([data-content-resizing])`.
+  Live, the empty Style Reference's overflow didn't come from the open's
+  layout. It came from the open's own layout spring: the panel springs from
+  521 to 531 px for the content's late 10 px, and the body overflows by the
+  spring's lag for about 10 frames. The open had already settled after
+  2 frames, because the height it needs held. Without that second condition
+  the line still rose to 0.57. A growth spring that ends with more below now
+  shows the line once the spring stops.
+- **The pinned Inspector keeps the hairline (NIT-1, GM r92 Q2).** It waits for
+  the same open (the content's own height counts as stable there). A test pins
+  it, and a source test checks that no foot rule names `pinned`.
+- **Backend survivors pinned (LOW-2).**
+  - B3: a CLI PUT of `_previewUrl` alone drops the size.
+  - B4: the PUT's own save is checked by reloading the persisted graph.
+  - B5: the normalizer keeps the size for the served URL, the file under the
+    current root and the same file under a moved root.
+  - These tests run with `OUTPUT_ROOT` set to the test's temp folder. Otherwise
+    the canvas sync's normalizer imports the outside-root upload, and its own
+    save and preview hide the rule under test.
+- **The preview follows the file (NIT-2).** `_drop_preview_size_on_file_change`
+  is now `_preview_follows_file`. When an agent or the CLI names another
+  `filePath` without a `_previewUrl`, the preview becomes the new file's
+  served URL. If the file isn't under the output root, the preview is removed,
+  and the canvas sync's normalizer imports the file and gives it one. Clearing
+  the file clears the preview. The Inspector's own upload still sends its URL
+  and size, and they are kept as sent.
+
+### Round 5 live check (isolated backend 8968, Vite 5968, Run never clicked)
+
+- Image Input upload from the Inspector, with the pointer on the file row:
+  - 1440x1000 and 1440x900 behave the same way. The node stays at 158.1 while
+    the card goes from 200.0+75.5 to 235.3+221.6.
+  - The panel top holds at 192 in every frame (90 frames).
+  - The height springs from 300 to 486: 310.8, 329.7, ... 488.6 (overshoot),
+    486.
+  - The file row stays at 308, and the pointer is over it in every frame.
+- Empty Style Reference, first and second open: 10 frames with
+  `data-scroll-more`, and the line's opacity is 0 in every frame.
+- Long body (Topaz Generative Enhance, 20 fields):
+  - `data-opening` is set for the first 2 frames, with the line at 0.
+  - The line then rises on the pop spring from frame 4 and rests at 1.
+  - The panel spans 154 to 754 at 1440x900 and 154 to 854 at 1440x1000.
+- Blocked log: canary lines only.
+- Gates: tsc and lint pass. vitest on 126 listed files: 3918 passed.
+  `land_checks.sh` passes, with pytest at 1178 passed and 1 skipped (30 files).
+  `person_gate.py` is unchanged. Build budget: 471,068 bytes raw (cap 512,000).
+- Mutation check: frontend 14 of 14 killed (11 in the component, 3 in the
+  CSS); backend 8 of 8 killed.

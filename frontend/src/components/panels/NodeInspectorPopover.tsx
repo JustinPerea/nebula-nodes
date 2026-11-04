@@ -43,6 +43,24 @@ function getInspectorAnchor(nodeId: string) {
   return Array.from(anchors).find((anchor) => anchor.dataset.nodeInspectorAnchor === nodeId) ?? null;
 }
 
+/**
+ * Where the node is (GM r92): the React Flow node's own box and the canvas's
+ * transform, never its card's box. A card's top shifts inside a node that
+ * hasn't moved when its preview lands (an Image Input's padding grows), which
+ * is growth, not a move. A node with no React Flow box (none in some tests)
+ * reads its card.
+ */
+function nodePlace(nodeId: string, anchor: HTMLElement, card: DOMRect) {
+  const node = anchor.closest<HTMLElement>('.react-flow__node') ?? anchor;
+  const box = node === anchor ? card : node.getBoundingClientRect();
+  const canvas = anchor.closest<HTMLElement>('.react-flow__viewport')?.style.transform ?? '';
+  return {
+    at: `${nodeId}:${box.left}:${box.top}:${canvas}`,
+    // The card inside it: its size and its offset from the node's corner.
+    card: `${nodeId}:${card.width}:${card.height}:${card.left - box.left}:${card.top - box.top}`,
+  };
+}
+
 function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
   if (!a || a.nodeId !== b.nodeId || a.placement !== b.placement || a.suspended !== b.suspended) return false;
   return (
@@ -266,6 +284,17 @@ export function NodeInspectorPopover() {
   // the node had no card on screen, past every line). Set while rendering,
   // so the closed render is the one React commits.
   if ((!visible || !selectedNodeId) && frame !== null) setFrame(null);
+  // The node whose open has settled (GM r92 Q3): until then the popover
+  // carries data-opening and the foot's "more below" hairline waits, so a
+  // body that overflows only while its content settles never shows it.
+  // Reset as it closes or another node opens (set while rendering, as above).
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const openNow = visible ? selectedNodeId : null;
+  if (openNow !== openFor) {
+    setOpenFor(openNow);
+    setSettledFor(null);
+  }
   // The foot under the scrolling body that holds the Run / Duplicate / Delete row (InspectorFoot.tsx).
   const [foot, setFoot] = useState<HTMLDivElement | null>(null);
   const frameRef = useRef<PopoverFrame | null>(null);
@@ -286,7 +315,8 @@ export function NodeInspectorPopover() {
   // attribute, so the panel jumps to where it was going), then tracks 1:1.
   const resizingRef = useRef(false);
   const anchorAtRef = useRef<string | null>(null);
-  // The node card's size, so its growing (a preview landing) is told from a move.
+  // The node card's size and its offset in the node, so its growing (a
+  // preview landing, its top shifting inside the node) is told from a move.
   const anchorSizeRef = useRef<string | null>(null);
   // The window's size, so a resize is told from a content change.
   const viewportRef = useRef<string | null>(null);
@@ -296,7 +326,7 @@ export function NodeInspectorPopover() {
   // The open (GM r82): until its content is stable (every image complete,
   // then OPEN_STABLE_FRAMES frames at one height) or OPEN_SETTLE_CAP_MS from
   // the mount, a settle is placement: it may shift the panel up, on the spring.
-  const openRef = useRef<{ nodeId: string; settled: boolean; stable: number; lastNeed: number | null } | null>(null);
+  const openRef = useRef<{ nodeId: string; settled: boolean; stable: number; last: number | null } | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One measuring step, also run straight after each render (below), so the
   // panel opens at its content's height in its first painted frame. `tick` is
@@ -326,11 +356,12 @@ export function NodeInspectorPopover() {
     }
 
     // A new open (or another node): it settles as placement for a while.
-    const open = { nodeId: selectedNodeId, settled: false, stable: 0, lastNeed: null };
+    const open = { nodeId: selectedNodeId, settled: false, stable: 0, last: null };
     openRef.current = open;
     openTimer.current = setTimeout(() => {
       openTimer.current = null;
       open.settled = true;
+      setSettledFor(open.nodeId);
     }, OPEN_SETTLE_CAP_MS);
 
     let raf = 0;
@@ -345,6 +376,27 @@ export function NodeInspectorPopover() {
       }, CONTENT_RESIZE_MS);
       resizingRef.current = true;
       setContentResizing(true);
+    };
+
+    // The open ends once every image in it is complete and its height has
+    // then held for OPEN_STABLE_FRAMES frames (or at the cap, above). Any
+    // step may restart the count; only a frame adds to it.
+    const advanceOpen = (popover: HTMLElement | null, need: number | null, tick: boolean) => {
+      const current = openRef.current;
+      if (!current || current.nodeId !== selectedNodeId || current.settled) return;
+      const imagesDone = Boolean(popover)
+        && Array.from(popover!.querySelectorAll('img')).every((image) => image.complete);
+      const height = need === null ? null : Math.ceil(need);
+      if (!imagesDone || height === null || height !== current.last) {
+        current.stable = 0;
+        current.last = height;
+      } else if (tick) {
+        current.stable += 1;
+      }
+      if (current.stable >= OPEN_STABLE_FRAMES) {
+        current.settled = true;
+        setSettledFor(current.nodeId);
+      }
     };
 
     const step = (tick = false) => {
@@ -366,14 +418,19 @@ export function NodeInspectorPopover() {
           frameRef.current = nextFrame;
           setFrame(nextFrame);
         }
+        // Its open settles the same way (GM r92 Q2, Q3: the same hairline,
+        // after the same settle), on its content's own height.
+        const popover = popoverRef.current;
+        advanceOpen(popover, popover?.querySelector<HTMLElement>('.node-inspector-popover__content')?.offsetHeight ?? null,
+          tick);
       } else {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
-          const box = anchor.getBoundingClientRect();
-          // Where the node is: its card growing (a preview landing) is not a move.
-          const at = `${selectedNodeId}:${box.left}:${box.top}`;
+          // Where the node is, from its own box and the canvas's transform
+          // (GM r92): its card growing or its top shifting inside it (a
+          // preview landing) is not a move.
+          const { at, card: size } = nodePlace(selectedNodeId, anchor, anchor.getBoundingClientRect());
           const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
-          const size = `${selectedNodeId}:${box.width}:${box.height}`;
           const grew = !moved && anchorSizeRef.current !== null && size !== anchorSizeRef.current;
           const viewport = `${window.innerWidth}x${window.innerHeight}`;
           const resized = viewportRef.current !== null && viewport !== viewportRef.current;
@@ -411,7 +468,13 @@ export function NodeInspectorPopover() {
           const contentChanged = !moved && seen?.nodeId === selectedNodeId && seen.need !== null && need !== null
             && Math.ceil(need) !== Math.ceil(seen.need) && shown?.nodeId === selectedNodeId
             && shown.placement !== 'pinned-left';
-          if (contentChanged && !opening && !heldTopRef.current) {
+          // So does the card growing in a node that hasn't moved, beside it
+          // (GM r92: a preview landing shifts the card's top inside the
+          // node), so the panel doesn't follow the card's top. Under or over
+          // the node it follows the card (r82).
+          const besideGrew = grew && shown?.nodeId === selectedNodeId
+            && (shown.placement === 'left' || shown.placement === 'right');
+          if ((contentChanged || besideGrew) && !opening && !heldTopRef.current) {
             heldTopRef.current = { nodeId: selectedNodeId, top: Number(shown!.style.top) };
           }
           const nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null);
@@ -424,22 +487,7 @@ export function NodeInspectorPopover() {
             && (shown.style.height !== nextFrame.style.height || shown.style.top !== nextFrame.style.top);
           if (shifts && (contentChanged || glide || grew)) startSpring();
           needRef.current = { nodeId: selectedNodeId, need };
-          // The open ends once every image in it is complete and its height
-          // has then held for OPEN_STABLE_FRAMES frames (or at the cap,
-          // above). Any step may restart the count; only a frame adds to it.
-          if (opening && openRef.current) {
-            const current = openRef.current;
-            const imagesDone = Boolean(popover)
-              && Array.from(popover!.querySelectorAll('img')).every((image) => image.complete);
-            const height = need === null ? null : Math.ceil(need);
-            if (!imagesDone || height === null || height !== current.lastNeed) {
-              current.stable = 0;
-              current.lastNeed = height;
-            } else if (tick) {
-              current.stable += 1;
-            }
-            if (current.stable >= OPEN_STABLE_FRAMES) current.settled = true;
-          }
+          if (opening) advanceOpen(popover, need, tick);
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);
@@ -530,6 +578,7 @@ export function NodeInspectorPopover() {
       className={`node-inspector-popover${pinned ? ' node-inspector-popover--pinned' : ''}`}
       data-placement={frame.placement}
       data-content-resizing={contentResizing && !pinned ? '' : undefined}
+      data-opening={settledFor !== selectedNodeId ? '' : undefined}
       hidden={Boolean(frame.suspended)}
       inert={Boolean(frame.suspended)}
       style={frame.style}

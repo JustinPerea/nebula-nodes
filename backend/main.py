@@ -2539,21 +2539,39 @@ def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> N
         after.pop("_previewSize", None)
 
 
-def _drop_preview_size_on_file_change(graph: Any, node_id: str, before: dict[str, Any],
-                                     sent: Mapping[str, Any]) -> None:
-    """After a merge of ``sent`` into an Image Input's params: an agent or the
-    CLI that names another file (``filePath``, ``_previewUrl``) leaves the old
+def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent: Mapping[str, Any]) -> None:
+    """After a merge of ``sent`` into an Image Input's params, the preview
+    follows the file (#226 review 3, NIT-2). An agent or the CLI that names
+    another ``filePath`` without a ``_previewUrl`` gets the new file's served
+    URL as its preview, or no preview when the file isn't under the output
+    root (the canvas sync's normalizer imports it and fills one in). One that
+    names another file (``filePath``, ``_previewUrl``) also leaves the old
     file's ``_previewSize`` behind, so it goes (#226 review 2, NIT-2). The
-    Inspector's own upload sends the new file's size with it, and keeps it."""
+    Inspector's own upload sends the new file's URL and size with it, and
+    keeps them."""
     node = graph.nodes.get(node_id)
-    if not node or node.get("definitionId") != "image-input" or "_previewSize" in sent:
+    if not node or node.get("definitionId") != "image-input":
         return
     params = node.get("params")
-    if not isinstance(params, dict) or "_previewSize" not in params:
+    if not isinstance(params, dict):
         return
-    if any(key in sent and _ref_file_name(params.get(key)) != _ref_file_name(before.get(key))
-           for key in ("filePath", "_previewUrl")):
-        params.pop("_previewSize", None)
+    changed = False
+    file_path = params.get("filePath")
+    if ("filePath" in sent and "_previewUrl" not in sent
+            and _ref_file_name(file_path) != _ref_file_name(before.get("filePath"))):
+        url = _output_url_from_ref(file_path) if isinstance(file_path, str) and file_path else None
+        if url is not None and params.get("_previewUrl") != url:
+            params["_previewUrl"] = url
+            changed = True
+        elif url is None and "_previewUrl" in params:
+            params.pop("_previewUrl")
+            changed = True
+    if "_previewSize" not in sent and "_previewSize" in params and any(
+            key in sent and _ref_file_name(params.get(key)) != _ref_file_name(before.get(key))
+            for key in ("filePath", "_previewUrl")):
+        params.pop("_previewSize")
+        changed = True
+    if changed:
         graph._maybe_persist()
 
 
@@ -7856,7 +7874,7 @@ def _stage_proposal(
         else:
             before = copy.deepcopy(node.get("params") or {})
             candidate.update_params(change.node_id, update)
-            _drop_preview_size_on_file_change(candidate, change.node_id, before, update)
+            _preview_follows_file(candidate, change.node_id, before, update)
     names = spec.names
     raw_nodes = [
         {
@@ -13765,7 +13783,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _scene_write_gone(node_id)
-            _drop_preview_size_on_file_change(cli_graph, node_id, params_before, params)
+            _preview_follows_file(cli_graph, node_id, params_before, params)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})

@@ -97,7 +97,9 @@ describe("the foot row's hairline (GM r87)", () => {
     .map(([, selector, block]) => ({ selectors: selector.split(',').map((one) => one.trim()), block }));
   const FOOT = 'body.app-slava-restraint .node-inspector-popover__foot';
   const HIDDEN = `${FOOT}::before`;
-  const SHOWN = 'body.app-slava-restraint .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before';
+  // GM r92 Q3: only once the open has settled (no data-opening on the
+  // popover) and the layout spring has stopped (no data-content-resizing).
+  const SHOWN = 'body.app-slava-restraint .node-inspector-popover:not([data-opening]):not([data-content-resizing]) .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before';
   const only = (text: string, selector: string) => {
     const found = rules(text).filter((rule) => rule.selectors.includes(selector));
     expect(found, selector).toHaveLength(1);
@@ -132,6 +134,19 @@ describe("the foot row's hairline (GM r87)", () => {
     for (const rule of rules(outside).filter((one) => one.selectors.some((selector) => selector.includes('node-inspector-popover__foot')))) {
       expect(rule.block).not.toMatch(/ease|cubic-bezier|\d+ms/);
     }
+  });
+
+  it('waits for the open to settle, and shows on the pinned Inspector too (GM r92 Q2, Q3)', () => {
+    const footRules = rules(bare).filter((rule) => rule.selectors.some((one) => one.includes('node-inspector-popover__foot')));
+    expect(footRules.length).toBeGreaterThan(0);
+    for (const rule of footRules) {
+      // Wherever a body scrolls, the same cue: nothing keeps it off the pinned one.
+      expect(rule.selectors.join(','), 'no pinned exception').not.toMatch(/pinned/);
+    }
+    // Every rule that turns it on waits for the open and the layout spring.
+    const on = footRules.filter((rule) => /opacity:\s*1/.test(rule.block));
+    expect(on).toHaveLength(1);
+    for (const selector of on[0].selectors) expect(selector).toContain('.node-inspector-popover:not([data-opening]):not([data-content-resizing]) ');
   });
 
   it('jumps for reduced motion', () => {

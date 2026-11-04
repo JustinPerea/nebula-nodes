@@ -599,3 +599,104 @@ def test_an_agent_apply_that_sets_another_file_drops_the_old_size(client, monkey
     assert resp.status_code == 200, resp.text
     assert _params(node_id)["filePath"] == other["filePath"]
     assert "_previewSize" not in _params(node_id)
+
+
+# #226 review 3, LOW-2: the round 4 rules review 3's mutants showed untested.
+def test_the_cli_that_sets_only_another_preview_drops_the_old_size(client, tmp_path, monkeypatch):
+    # Under the output root, so the canvas sync's normalizer leaves the
+    # preview as sent (it imports a file from outside and names its own).
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    node_id, other = _uploaded_node(client)
+    resp = client.put(f"/api/graph/node/{node_id}", json={"params": {"_previewUrl": other["url"]}})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == other["url"]
+    assert "_previewSize" not in _params(node_id)
+
+
+def test_the_dropped_size_stays_dropped_after_a_restart(client, tmp_path, monkeypatch):
+    # Under the output root, so the canvas sync's normalizer changes nothing
+    # and saves nothing after the PUT: the save under test is the PUT's own.
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    saved = tmp_path / "graph.json"
+    main_module.cli_graph = CLIGraph(persist_path=saved)
+    node_id, other = _uploaded_node(client)
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": other["filePath"]}})
+    assert resp.status_code == 200, resp.text
+    # What the next launch loads.
+    reloaded = CLIGraph()
+    reloaded.load(saved)
+    assert reloaded.nodes[node_id]["params"]["filePath"] == other["filePath"]
+    assert "_previewSize" not in reloaded.nodes[node_id]["params"]
+
+
+def test_the_normalizer_keeps_the_size_when_an_old_root_names_the_same_file(tmp_path, monkeypatch):
+    root = tmp_path / "output"
+    (root / "chat-uploads").mkdir(parents=True)
+    name = "b" * 64 + ".png"
+    (root / "chat-uploads" / name).write_bytes(_image_bytes("PNG", (30, 20)))
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", root)
+    size = {"width": 30, "height": 20}
+    # The served URL, the file under the current root, and the same file under
+    # a root the outputs were moved from: each is rewritten to the served URL
+    # and names the same file, so the size stays.
+    for preview in (f"/api/outputs/chat-uploads/{name}", str(root / "chat-uploads" / name),
+                    f"/Users/old/nebula/output/chat-uploads/{name}"):
+        kept = main_module._normalize_image_input_params({"_previewUrl": preview, "_previewSize": size})
+        assert kept["_previewUrl"] == f"/api/outputs/chat-uploads/{name}", preview
+        assert kept["_previewSize"] == size, preview
+
+
+# #226 review 3, NIT-2: the preview follows the file. An agent that names
+# another file gets that file's preview, not the old one's.
+def test_an_agent_that_sets_another_file_gets_its_preview(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    node_id, other = _uploaded_node(client)
+    assert _params(node_id)["_previewUrl"] != other["url"]
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": other["filePath"]}})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == other["url"]
+    assert resp.json()["params"]["_previewUrl"] == other["url"]
+    assert "_previewSize" not in _params(node_id)
+
+
+def test_an_agent_apply_that_sets_another_file_gets_its_preview(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    monkeypatch.setattr(main_module, "_check_workspace_revision", lambda: None)
+    node_id, other = _uploaded_node(client)
+    resp = client.post("/api/graph/apply", headers=AGENT, json={
+        "note": "Swap the picture", "params": [{"nodeId": node_id, "params": {"filePath": other["filePath"]}}]})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == other["url"]
+
+
+def test_a_file_with_no_served_url_leaves_no_stale_preview(client, monkeypatch):
+    # The uploads here sit outside the output root, and the import that would
+    # give them a served URL fails: the old file's preview goes, not shown
+    # for the new one.
+    monkeypatch.setattr(main_module, "_import_external_image_to_output_root", lambda _path: None)
+    node_id, other = _uploaded_node(client)
+    assert main_module._output_url_from_ref(other["filePath"]) is None
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": other["filePath"]}})
+    assert resp.status_code == 200, resp.text
+    assert "_previewUrl" not in _params(node_id)
+    # Clearing the file clears the preview too.
+    node_id, _other = _uploaded_node(client)
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": ""}})
+    assert resp.status_code == 200, resp.text
+    assert "_previewUrl" not in _params(node_id)
+
+
+def test_the_preview_and_size_stay_when_the_file_does_or_the_url_is_sent(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    node_id, other = _uploaded_node(client)
+    before = dict(_params(node_id))
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": before["filePath"]}})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == before["_previewUrl"]
+    assert _params(node_id)["_previewSize"] == before["_previewSize"]
+    # The Inspector's own upload names its preview: that one is kept as sent.
+    sent = "http://127.0.0.1:8000" + other["url"]
+    resp = client.put(f"/api/graph/node/{node_id}", json={"params": {
+        "filePath": other["filePath"], "_previewUrl": sent, "_previewSize": other["previewSize"]}})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == sent

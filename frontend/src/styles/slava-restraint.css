@@ -677,7 +677,13 @@ body.app-slava-restraint .node-inspector-popover__foot {
    data-scroll-more), a 1 px hairline in the border token sits on the foot
    row's top edge, gone at the end. The 12 px fade alone shows nothing when
    the cut falls between fields. It comes on the pop spring and goes on the
-   soft one (lib/springs.ts, set on the foot by NodeInspectorPopover.tsx). */
+   soft one (lib/springs.ts, set on the foot by NodeInspectorPopover.tsx).
+   GM r92: it waits until the open has settled (data-opening: every image
+   complete and 2 stable frames, 300 ms at most) and the layout spring has
+   stopped (data-content-resizing), so a body that overflows only while the
+   panel springs to its content (live: the open's own 10 px settle, 10 px
+   of overflow on an empty Style Reference) never shows it. Pinned or not:
+   wherever a body scrolls, it's the same cue (r92 Q2). */
 body.app-slava-restraint .node-inspector-popover__foot::before {
   content: '';
   position: absolute;
@@ -691,14 +697,14 @@ body.app-slava-restraint .node-inspector-popover__foot::before {
   transition: opacity var(--spring-soft-ms) var(--spring-soft);
 }
 
-body.app-slava-restraint .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before {
+body.app-slava-restraint .node-inspector-popover:not([data-opening]):not([data-content-resizing]) .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before {
   opacity: 1;
   transition: opacity var(--spring-pop-ms) var(--spring-pop);
 }
 
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .node-inspector-popover__foot::before,
-  body.app-slava-restraint .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before {
+  body.app-slava-restraint .node-inspector-popover:not([data-opening]):not([data-content-resizing]) .node-inspector-popover__body[data-scroll-more="true"] + .node-inspector-popover__foot::before {
     transition: none;
   }
 }
