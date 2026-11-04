@@ -153,6 +153,7 @@ from services.agent_presence import (
 )
 from services.canvas_events import (
     MOVE_THRESHOLD_PX,
+    OWN_REPLY_KIND,
     TooManyWaiters,
     actor_for_headers,
     actor_for_identity,
@@ -226,6 +227,7 @@ from services.agent_questions import (
 from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
+from services import channel_listeners
 from services import pending_nodes
 from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
@@ -338,6 +340,8 @@ agent_notes = AgentNotes(lambda: project_store)
 agent_questions = QuestionBook(store=lambda: project_store)
 # Each agent's status line (Q125 item 2): in memory only, like cursors.
 agent_status = AgentStatusBook()
+# Which --channel listeners are around (services/channel_listeners.py). Memory only.
+channel_book = channel_listeners.ListenerBook()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -4112,6 +4116,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
+                # Who listens to the canvas (channel readiness), person form (before
+                # the pins and the replay, which stay the last syncs).
+                await websocket.send_text(json.dumps(_channel_listeners_message()))
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
                 # Every live cursor, person form, for this tab only (GM -
@@ -4924,6 +4931,11 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
+    # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
+    # offering them, and a send to one is refused as stopped.
+    if channel_book.drop_agent(f"{channel_listeners.APP_ID_PREFIX}{app_id}"):
+        await _broadcast_channel_listeners()
+        _schedule_channel_expiry()
     return {"status": "revoked"}
 
 
@@ -5578,6 +5590,7 @@ def _journal(
     summary: str = "",
     actor: dict[str, Any] | None = None,
     project_id: str | None | Any = ...,
+    session: str | None = None,
 ) -> None:
     """Record a canvas change for `nebula watch`; never fails the route that called it.
 
@@ -5596,6 +5609,7 @@ def _journal(
             summary=summary,
             edit=_canvas_edit_link.get(),
             **({"project_id": project_id} if project_id is not ... else {}),
+            **({"session": session} if session else {}),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -6369,6 +6383,144 @@ async def list_canvas_agents() -> dict[str, Any]:
     return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
 
 
+# ---------- Channel readiness (services/channel_listeners.py) ----------
+#
+# Whether a Claude Code session listens to the canvas (mcp_server.py
+# --channel), per agent session: the Message box's lines read it (PR C).
+# The person's tabs get every listener, with its cursor's key and number,
+# in a channelListeners message on each change and after a verified hello;
+# an agent reads only its own (GET /api/canvas/channel, MCP channel_status).
+
+_channel_expiry: asyncio.TimerHandle | None = None
+_channel_sweeps: set[asyncio.Task] = set()
+
+
+def _channel_person_view(entry: channel_listeners.Listener) -> dict[str, Any]:
+    tag = agent_presence.session_tag(entry.agent, entry.session or None)
+    session = {"key": agent_presence.session_key(entry.agent.id, entry.session),
+               "ordinal": tag["ordinal"] if tag else None}
+    return channel_listeners.view(entry, session=session)
+
+
+def _channel_listeners_message() -> dict[str, Any]:
+    """The person's form: every listener, oldest first, with the open project."""
+    return {"type": "channelListeners", "projectId": _workspace_context()["activeProjectId"],
+            "listeners": [_channel_person_view(entry) for entry in channel_book.entries()],
+            "rev": channel_book.revision}
+
+
+async def _broadcast_channel_listeners() -> None:
+    try:
+        await manager.broadcast_browser(_channel_listeners_message())
+    except Exception:  # noqa: BLE001 - a tab that missed it gets the next one, or reads the GET
+        pass
+
+
+def _schedule_channel_expiry() -> None:
+    """Check again just after the oldest listener would run out (a beat that
+    came meanwhile moves that out, and the check schedules itself again)."""
+    global _channel_expiry
+    if _channel_expiry is not None:
+        _channel_expiry.cancel()
+        _channel_expiry = None
+    deadline = channel_book.next_deadline()
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _channel_expiry = loop.call_later(max(0.0, deadline - channel_book.now()) + 0.5, _start_channel_sweep,
+                                      context=Context())
+
+
+def _start_channel_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_channel_listeners())
+    _channel_sweeps.add(task)
+    task.add_done_callback(_channel_sweeps.discard)
+
+
+async def _sweep_channel_listeners() -> None:
+    if channel_book.sweep():
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+
+
+def _channel_caller() -> tuple[AgentIdentity, str | None]:
+    """The listener's agent, by its Settings app token only. A tokenless
+    caller (a name alone) or a token Nebula doesn't know is refused (401)
+    with GM r81's line and a code: listener_no_token or
+    listener_token_invalid. An in-app agent's turn token is refused too
+    (J3, Justin 2026-11-04: listener_in_app_token): only a token from
+    Settings › Connect your agent listens. The identity comes from the
+    token, so one agent's token never registers as another (a name header
+    beside it is ignored)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None or not identity.verified:
+        lower = {k.lower(): v for k, v in (headers or {}).items()}
+        presented = lower.get("authorization", "").startswith("Agent ") and lower["authorization"][6:].strip()
+        code, line = ((channel_listeners.BAD_TOKEN_CODE, channel_listeners.BAD_TOKEN_LINE) if presented
+                      else (channel_listeners.NO_TOKEN_CODE, channel_listeners.NO_TOKEN_LINE))
+        raise HTTPException(status_code=401, detail=line, headers={"X-Nebula-Code": code})
+    if not channel_listeners.is_app_agent(identity):
+        raise HTTPException(status_code=401, detail=channel_listeners.IN_APP_TOKEN_LINE,
+                            headers={"X-Nebula-Code": channel_listeners.IN_APP_TOKEN_CODE})
+    return identity, presence_session(headers)
+
+
+@app.post("/api/agent/channel")
+async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
+    """A --channel listener's beat: {state: listening|stopped, reason?:
+    idle|error, projectId?, nonce?}. Answers with its entry, whose listenerId a
+    person.message names to reach it. ``nonce`` is the listener process's
+    own (D2): a second process naming the same agent session gets 409
+    listener_session_taken while the first's entry lives."""
+    identity, session = _channel_caller()
+    try:
+        state, reason, project_id = channel_listeners.parse_beat(body)
+    except channel_listeners.ListenerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id,
+                                           nonce=channel_listeners.parse_nonce(body.get("nonce")))
+    except channel_listeners.SessionTaken as exc:
+        raise HTTPException(status_code=409, detail=str(exc),
+                            headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
+    if changed:
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+    return {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
+
+
+@app.delete("/api/agent/channel")
+async def end_channel_listener(nonce: str | None = None) -> dict[str, Any]:
+    """Its session ended: the canvas shows it as not connected. ``nonce``:
+    the listener process's own (D2), so another process's entry stays."""
+    identity, session = _channel_caller()
+    if channel_book.gone(identity, session, channel_listeners.parse_nonce(nonce)):
+        await _broadcast_channel_listeners()
+    _schedule_channel_expiry()
+    return {"listener": None}
+
+
+@app.get("/api/canvas/channel")
+async def read_channel_listeners() -> dict[str, Any]:
+    """Who listens. The person: every listener with its cursor's {key,
+    ordinal} (the channelListeners message's form). An agent: only its own
+    entries, without cursor keys. No entry for a session means it isn't
+    connected; state "stopped" means its listener stopped."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    project_id = _workspace_context()["activeProjectId"]
+    if identity is not None:
+        return {"projectId": project_id,
+                "listeners": [channel_listeners.view(entry) for entry in channel_book.for_agent(identity.id)]}
+    require_person(headers)
+    message = _channel_listeners_message()
+    return {key: value for key, value in message.items() if key != "type"}
+
+
 @app.post("/api/canvas/view")
 async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
     """The browser's latest viewport, node bounds and run states (never persisted)."""
@@ -6615,10 +6767,14 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     Query: after (seq; default "from now"), journal (id from a previous
     response), wait (seconds, capped at 25), limit (1-100), kinds (comma
     list of groups or exact kinds), self=1 to include the caller's own
-    events. Resume with after=<cursor>.
+    events, ownReplies=1 to include only its own thread.replied, and its own
+    pin.resolved made from this same session (a channel listener: its reply
+    by any route ends its deliberate span, and its pin answer the span that
+    pin's push opened; a sibling session's never does). Resume with
+    after=<cursor>.
     """
     query = request.query_params
-    known = {"after", "journal", "wait", "limit", "kinds", "self"}
+    known = {"after", "journal", "wait", "limit", "kinds", "self", "ownReplies"}
     await _sweep_proposals()
     unknown = sorted(set(query) - known)
     if unknown:
@@ -6636,6 +6792,9 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     include_self = (query.get("self") or "0").lower()
     if include_self not in {"0", "1", "true", "false"}:
         raise HTTPException(status_code=422, detail="self must be 1 or 0")
+    own_replies = (query.get("ownReplies") or "0").lower()
+    if own_replies not in {"0", "1", "true", "false"}:
+        raise HTTPException(status_code=422, detail="ownReplies must be 1 or 0")
     identity = identify_agent(current_request_headers())
     exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
     try:
@@ -6647,6 +6806,10 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
             limit=int(limit) if limit is not None else 50,
             kinds=kinds,
             exclude_actor_id=exclude,
+            keep_own=frozenset({OWN_REPLY_KIND}) if own_replies in {"1", "true"} else frozenset(),
+            # ...and its own pin answers, from this same session only (round 5, D1).
+            own_session=(presence_session(current_request_headers()) if identity is not None
+                         and own_replies in {"1", "true"} else None),
         )
     except TooManyWaiters as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -7277,6 +7440,9 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         data={"pinId": pin_id, "text": event_text(pin.get("text")), "reply": event_text(reply, multiline=False)},
         summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
+        # Its own session's listener ends the span this pin's push opened
+        # (canvas_events.OWN_SESSION_KINDS, round 5 D1); kept beside the journal.
+        session=presence_session(current_request_headers()),
     )
     await _broadcast_pins()
     try:

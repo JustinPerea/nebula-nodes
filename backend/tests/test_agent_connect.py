@@ -997,3 +997,275 @@ def test_cli_default_url_reads_the_url_file(tmp_path, monkeypatch):
     assert default_url({}) == "http://localhost:8000"
     with pytest.raises(SystemExit):
         default_url({"NEBULA_URL_FILE": str(tmp_path / "missing")})
+
+
+# -- `nebula mcp connect claude-code --channel` (the Nebula channel's listen config) ----
+
+def _listen(tmp_path: Path) -> Path:
+    return mcp_connect.listen_config_path(tmp_path)
+
+
+def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    assert path == tmp_path / ".nebula-listen.mcp.json"
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    data = json.loads(path.read_text())
+    entry = data["mcpServers"]["nebula-listen"]
+    assert entry["args"][-1] == "--channel" and entry["args"][0].endswith("backend/mcp_server.py")
+    assert entry["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": cli_env.file}
+    assert mode(path) == 0o600 and TOKEN not in path.read_text()
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err
+    command = (f'claude --mcp-config {path} --dangerously-load-development-channels server:nebula-listen '
+               '--disallowedTools "mcp__nebula__*"')
+    assert command in out.out.splitlines()
+    # The copy rules: curly apostrophes, no parentheses or semicolons in what it prints.
+    for line in out.out.splitlines():
+        if line == command:
+            continue
+        assert "'" not in line and "(" not in line and ")" not in line and ";" not in line, line
+    # GM r55: no colon to introduce the command; the dialog quoted exactly
+    # as Claude Code 2.1.317 shows it (title and confirm label).
+    lines = out.out.splitlines()
+    assert "Start Claude Code with the Nebula channel from any folder with this command." in lines
+    assert not any(line.rstrip().endswith(":") for line in lines if line != command)
+    assert ("Claude Code first shows “WARNING: Loading development channels”. "
+            "Choose “I am using this for local development”.") in lines
+
+
+def test_channel_connect_twice_changes_nothing_and_reuses_its_token_file(tmp_path, cli_env, monkeypatch, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    first = path.read_text()
+    capsys.readouterr()
+    # No token given the second time: the token file the config names.
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert path.read_text() == first and not list(tmp_path.glob(".nebula-listen.mcp.json.nebula-backup-*"))
+    out = capsys.readouterr().out
+    assert "already has this nebula-listen entry" in out and "--dangerously-load-development-channels" in out
+
+
+def test_channel_connect_keeps_other_servers_and_never_runs_claude(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    path.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
+    calls = []
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path,
+                                   runner=lambda *a, **k: calls.append(a)) == 0
+    data = json.loads(path.read_text())
+    assert set(data["mcpServers"]) == {"other", "nebula-listen"} and calls == []
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert json.loads(path.read_text())["mcpServers"] == {"other": {"command": "x"}}
+
+
+def test_channel_disconnect_removes_the_listen_config(tmp_path, cli_env, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert not path.exists()
+    assert mcp_connect.run_disconnect(args("claude-code", channel=True), home=tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "nothing to remove" in out
+    for line in out.splitlines():
+        assert "'" not in line and "(" not in line and ";" not in line, line
+
+
+def test_channel_connect_with_a_pasted_token_masks_it(tmp_path, legacy_env, capsys):
+    path = _listen(tmp_path)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    assert json.loads(path.read_text())["mcpServers"]["nebula-listen"]["env"]["NEBULA_APP_TOKEN"] == TOKEN
+    assert mode(path) == 0o600
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err and "holds the token itself" in out.out
+
+
+def test_channel_is_claude_code_only_and_needs_a_token(tmp_path, monkeypatch, cli_env, capsys):
+    assert mcp_connect.run_connect(args("codex", channel=True), home=tmp_path) == 1
+    assert mcp_connect.run_disconnect(args("cursor", channel=True), home=tmp_path) == 1
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert not _listen(tmp_path).exists()
+    err = capsys.readouterr().err
+    assert "Claude Code only" in err and "no token" in err
+
+
+def test_channel_connect_writes_nothing_when_nebula_cant_be_reached(tmp_path, cli_env, monkeypatch, capsys):
+    monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: None)
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert not _listen(tmp_path).exists()
+
+
+def test_channel_print_writes_nothing(tmp_path, cli_env, capsys):
+    assert mcp_connect.run_connect(args("claude-code", channel=True, print_only=True), home=tmp_path) == 0
+    assert not _listen(tmp_path).exists()
+    out = capsys.readouterr().out
+    assert "--channel" in out and "server:nebula-listen" in out and TOKEN not in out
+
+
+def test_the_cli_parses_channel_on_connect_and_disconnect():
+    from cli.__main__ import build_parser
+
+    parser = build_parser()
+    assert parser.parse_args(["mcp", "connect", "claude-code", "--channel"]).channel is True
+    assert parser.parse_args(["mcp", "disconnect", "claude-code", "--channel"]).channel is True
+    assert parser.parse_args(["mcp", "connect", "claude-code"]).channel is False
+
+
+# -- channel listeners need a token (Justin, 2026-11-03) ------------------------------------
+
+def _beat_once(monkeypatch, env, main_app, seconds=0.5, clock=None, state=None):
+    """mcp_server's own beat (with_identity, the token file read as `nebula mcp
+    connect claude-code --channel` writes it) against this backend, one beat."""
+    import anyio
+    import httpx
+
+    import mcp_channel
+    import mcp_server
+
+    for name in ("NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", "NEBULA_AGENT_TOKEN_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    loaded = dict(env)
+    mcp_server.load_app_token_file(loaded)  # as the server reads it at start, into its own env
+    for name, value in loaded.items():
+        monkeypatch.setenv(name, value)
+    real = getattr(httpx.AsyncClient, "_real", httpx.AsyncClient)
+
+    def asgi_client(**kw):
+        return real(transport=httpx.ASGITransport(app=main_app), **kw)
+
+    asgi_client._real = real
+    monkeypatch.setattr(mcp_server.httpx, "AsyncClient",
+                        asgi_client)
+    monkeypatch.setattr(mcp_server, "_current_url", lambda: "http://testserver")
+    state = state if state is not None else mcp_channel.ChannelState(now=0.0)
+
+    async def run():
+        with anyio.move_on_after(seconds):
+            await mcp_server._channel_beats(state, {"name": "Claude Code"}, clock or (lambda: 0.0))
+
+    anyio.run(run)
+    return state
+
+
+def _stepping(*times):
+    """A beat-loop clock: one value per loop step, the last kept."""
+    left = list(times)
+
+    def clock():
+        return left.pop(0) if len(left) > 1 else left[0]
+    return clock
+
+
+def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(client, monkeypatch, capsys):
+    # Round 5, D2: one session is one process (each beat carries its nonce).
+    # GM r112.5: it first waits quietly (a restart's leftover entry times
+    # out within 45 s); still refused after 60 s, it is a real second
+    # process, and Nebula's line (GM r108, string 4) says so, once.
+    import main
+    import mcp_server
+    from services import channel_listeners
+
+    monkeypatch.setattr(main, "channel_book", channel_listeners.ListenerBook())  # its own, left behind
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    first = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert first.listener_id and first.register_error is None
+    capsys.readouterr()
+    monkeypatch.setattr(mcp_server, "_CHANNEL_NONCE", "another-process-0002")
+    waiting = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=2.5,
+                         clock=_stepping(0.0, 30.0, 59.0))
+    assert waiting.listener_id is None and waiting.register_error is None  # nothing shown to the person
+    err = capsys.readouterr().err
+    assert err == ("Nebula is waiting for this session’s previous listener to time out, then this one connects "
+                   "by itself.\n")
+    second = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=3.5,
+                        clock=_stepping(0.0, 30.0, 60.0, 70.0))
+    assert second.listener_id is None and second.register_error == channel_listeners.SESSION_TAKEN_LINE
+    err = capsys.readouterr().err
+    assert err.count("error: Nebula couldn’t connect this listener because another process") == 1
+    assert err.endswith("then start this listener again.\nnebula mcp connect claude-code --channel\n")
+    assert channel_listeners.SESSION_TAKEN_LINE == (
+        "Nebula couldn’t connect this listener because another process is already listening as this session. "
+        "Start each Claude Code with this command, which gives each one its own session, then start this listener "
+        "again.\nnebula mcp connect claude-code --channel")
+    assert len(client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]) == 1
+
+
+def test_a_successor_on_the_same_session_connects_by_itself_once_the_old_entry_lapses(client, monkeypatch, capsys):
+    # GM r112.5 (review 4 live LOW-1): Claude Code restarted its MCP server
+    # (a crash, /mcp reconnect): the old process's entry lives until its
+    # TTL. The successor waits, says only the wait line, and registers by
+    # itself, with no error left for channel_status.
+    import main
+    import mcp_server
+    from services import channel_listeners
+
+    now = {"t": 0.0}
+    monkeypatch.setattr(main, "channel_book", channel_listeners.ListenerBook(clock=lambda: now["t"]))
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    first = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert first.listener_id
+    capsys.readouterr()
+    monkeypatch.setattr(mcp_server, "_CHANNEL_NONCE", "successor-process-03")
+    times = [10.0, 20.0, 47.0, 52.0]
+
+    def clock():
+        now["t"] = times.pop(0) if len(times) > 1 else times[0]
+        return now["t"]
+
+    successor = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app, seconds=3.5,
+                           clock=clock)
+    assert successor.listener_id == first.listener_id and successor.register_error is None
+    err = capsys.readouterr().err
+    assert err == ("Nebula is waiting for this session’s previous listener to time out, then this one connects "
+                   "by itself.\n")
+
+
+def test_a_refused_beat_is_tried_again_every_5_s_not_every_second(client, monkeypatch):
+    # Review 4 NIT-2: the docs say how often; the loop now does that.
+    import main
+    import mcp_server
+
+    calls = []
+    real = mcp_server._channel_fetch
+
+    async def counting(path, *a, **kw):
+        calls.append(path)
+        return await real(path, *a, **kw)
+
+    monkeypatch.setattr(mcp_server, "_channel_fetch", counting)
+    # A clock one second per step, like the loop's own sleep: 0..9 s.
+    _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=3.5,
+               clock=_stepping(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
+    assert mcp_server.CHANNEL_RETRY_SECONDS == 5.0
+    assert len(calls) == 1  # 0..3 s: the first try only
+    calls.clear()
+    _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=7.5,
+               clock=_stepping(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
+    assert len(calls) == 2  # at 0 and at 5
+
+
+def test_a_channel_listener_registers_with_its_token_file_and_not_without(client, monkeypatch, capsys):
+    import main
+
+    made = client.post("/api/agent/spend/apps", json={"name": "Claude Code"}, headers=PERSON).json()
+    state = _beat_once(monkeypatch, {"NEBULA_APP_TOKEN_FILE": made["tokenFile"]}, main.app)
+    assert state.listener_id and state.listener_id.startswith("ch_") and state.register_error is None
+    seen = client.get("/api/canvas/channel", headers=PERSON).json()["listeners"]
+    assert [entry["listenerId"] for entry in seen] == [state.listener_id]
+    assert seen[0]["agent"]["verified"] is True
+    # Its agent as Nebula names it: a thread.replied by it ends its span (J4).
+    assert state.agent_id == seen[0]["agent"]["id"] and state.agent_id.startswith("app:")
+    # Tokenless (a name only): refused, said once on stderr after "error: ".
+    capsys.readouterr()
+    tokenless = _beat_once(monkeypatch, {"NEBULA_AGENT_NAME": "Claude Code"}, main.app, seconds=2.5)  # 3 beats
+    assert tokenless.listener_id is None and tokenless.agent_id is None
+    assert tokenless.register_error == ("Nebula couldn’t connect this listener because it has no token. Copy one "
+                                        "from Settings › Connect your agent, then run this command again.")
+    assert capsys.readouterr().err.count("error: Nebula couldn’t connect this listener because it has no token.") == 1
+    # Revoked: its token isn't valid anymore.
+    assert client.delete(f"/api/agent/spend/apps/{made['app']['id']}", headers=PERSON).status_code == 200
+    revoked = client.post("/api/agent/channel", headers={"Authorization": f"Agent {made['token']}"},
+                          json={"state": "listening"})
+    assert revoked.status_code == 401 and revoked.json()["detail"] == (
+        "Nebula couldn’t connect this listener because its token isn’t valid anymore. Copy a new one from "
+        "Settings › Connect your agent, then run this command again.")

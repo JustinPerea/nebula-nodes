@@ -835,7 +835,11 @@ Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 `GET /api/canvas/events` is a long-poll. Query: `after` (an event cursor;
 default "from now"), `journal` (the id from a previous response), `wait`
 (seconds, capped at 25), `limit` (1–100), `kinds` (groups like `node` or
-exact kinds like `node.params`) and `self=1` to include your own events. It
+exact kinds like `node.params`), `self=1` to include your own events, and
+`ownReplies=1` to include, of your own events, only your `thread.replied`
+and your `pin.resolved` made from this same session (a channel listener uses
+it: its reply from any route, or its pin answer from its own shell, answers
+a deliberate push; a sibling session's pin answer never shows). It
 answers at once when newer events exist, otherwise waits. Resume with
 `after=<cursor>`: the cursor also moves past events filtered out for you, so
 your own edits never wake you. `gap: true` means the 500-event buffer
@@ -849,8 +853,8 @@ snapshot, and outputs never appear.
 ### Claude Code channels (experiment)
 
 With `--channel`, Nebula's MCP server pushes into a running Claude Code
-session, so Claude hears your pins and edits without sitting in
-`wait_for_canvas_change`. It is built on [Claude Code
+session, so Claude hears your messages, pins, answers and edits without
+sitting in `wait_for_canvas_change`. It is built on [Claude Code
 channels](https://code.claude.com/docs/en/channels-reference), a research
 preview: the flags, the protocol and this section may change, and a Claude
 Code update can break it. The code is `backend/mcp_channel.py` (what to push
@@ -859,10 +863,24 @@ and when) and `serve_channel` in `backend/mcp_server.py` (how it hooks into the 
 It is off unless you start a session with it. Without `--channel` the server
 is exactly the one above: same capabilities, instructions and tools.
 
-**Try it.** Write a session-only MCP config, for example
-`~/.nebula-listen.mcp.json` (mode 600, outside any repo). Copy the command,
-args and env of your saved `nebula` server (`claude mcp get nebula` shows
-them) and add `--channel`; it names your token file, never the token:
+**Try it.** One command writes the session-only MCP config and prints the
+command that starts Claude Code with it:
+
+```bash
+nebula mcp connect claude-code --channel --token-file <the file Settings shows>
+```
+
+It takes the token the same way `nebula mcp connect` does (`--token-file`,
+`$NEBULA_APP_TOKEN_FILE`, or for a token made before token files
+`$NEBULA_APP_TOKEN` / `--paste-token`), checks it with Nebula, and writes
+`~/.nebula-listen.mcp.json` (mode 600, outside any repo) with one
+`nebula-listen` server: the same command, args and env as the saved `nebula`
+server, plus `--channel`. It names your token file, never the token, and
+prints no token. Running it again is safe: with no token given it reuses the
+token file the config already names, and an unchanged config isn't
+rewritten. It never touches Claude Code's own config. `--print` shows the
+config and the command without writing; `nebula mcp disconnect claude-code
+--channel` removes it. What it writes, if you'd rather write it by hand:
 
 ```json
 {
@@ -879,12 +897,10 @@ them) and add `--channel`; it names your token file, never the token:
 }
 ```
 
-Then, each time:
+Then, each time (the command it prints, with the full path):
 
 ```bash
-claude --mcp-config ~/.nebula-listen.mcp.json \
-  --dangerously-load-development-channels server:nebula-listen \
-  --disallowedTools "mcp__nebula__*"
+claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
 `--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
@@ -921,10 +937,36 @@ tools work but nothing is pushed. (Nebula's own Team org keeps it off for
 now; the experiment is tried on individual accounts.) It doesn't work with
 `claude -p` or the Agent SDK: Claude Code ignores the flag there.
 
-**What wakes Claude:**
+**What wakes Claude.** Two kinds of wake, with different pacing (Justin,
+2026-11-03): what you send on purpose reaches Claude at once, and what
+Claude only notices keeps the limits below.
 
-- a pin you add, at once (pins under 1 s apart go together), as long as it
-  is still open when it goes (below);
+*Deliberate sends*, at once:
+
+- a message you send it from the canvas (the Message box, event
+  `person.message`): only the session it is addressed to wakes, by the
+  `listenerId` Nebula gave that session's listener (readiness, below);
+- a pin you add (pins under 1 s apart go together), as long as it is still
+  open when it goes (below);
+- your answer to questions this session asked with `ask_person`
+  (`question.answered`): only the session that asked wakes, with your
+  answers in the push. The journal never holds answers, so the listener
+  reads them back first (`GET /api/canvas/questions/{id}`, which only the
+  asker may read); if that fails, the push says to call `get_answers`. An
+  answer it is already waiting for in `get_answers` doesn't push, and a set
+  wakes it once. A dismissed or withdrawn set doesn't wake it.
+
+A deliberate send skips every pacing limit: no 30 s spacing, no 20 an hour,
+no wait while Claude is mid-turn, and no wait for a gated turn's window,
+which it ends (below). Its only limit is a runaway cap of 200 in a rolling
+hour, counted on its own; past it they wait for the hour, never dropped,
+and arrive marked `held`. Whatever passive waits rides along in the same
+push, however recent (your edits, its proposals' decisions, run ends), and a
+deliberate push never counts toward the passive limits, so it never delays
+the next passive wake.
+
+*Passive wakes*, under the limits:
+
 - your decision on one of its own proposals (accepted, rejected, expired or
   invalidated), from `propose_change` or `propose_asset_change`, unless it is
   already waiting for it in `get_proposal` or withdrew it. One an undo
@@ -960,10 +1002,14 @@ accepted proposal applies are not counted as your edits (Nebula marks them
 with `proposalId`; a node's name can't pass for one), nor is the board write
 of an accepted `propose_asset_change` of Claude's own (turning on a board's
 Send notes to generators, marked the same way). Another agent's accepted
-board proposal still adds a line, since you made it happen. At most 20 wakes an
-hour, 30 s apart; anything past a limit arrives with the next one (`held` says
-how many waited), and past 100 waiting edits (or 100 pins) the push gives a
-count and asks for `look_at_canvas`; a pile of edits never pushes a pin out.
+board proposal still adds a line, since you made it happen. At most 20 passive
+wakes an hour, 30 s apart; anything past a limit arrives with the next one
+(`held` says how many waited), and past 100 waiting edits (or 100 pins, or
+100 messages) the push gives a count and asks for `look_at_canvas`; a pile of
+edits never pushes a pin out. The `NEBULA_CHANNEL_<FIELD>` variables on the
+listener (its `env` block) override any of `mcp_channel.Limits`, the
+deliberate cap included (`NEBULA_CHANNEL_DELIBERATE_PER_HOUR`); they exist for
+tests.
 After 2 hours with no activity from you (selections
 and moves count) it stops listening, and the next Nebula tool result says so;
 in Claude Code, /mcp > nebula-listen > Reconnect starts it again. If the
@@ -972,9 +1018,11 @@ result says so) and the tools keep working. If Nebula keeps failing to answer
 for one of Claude's runs (10 errors in a row, about 6 minutes), the listener
 stops following it and the next result says to read it with `get_run`.
 
-A push arrives as `<channel source="nebula-listen" wake="pin|proposal|run|change"
-count="…" cursor="…" journal="…" project_id="…">`, with `held="…"` and
-`gate="change"` when they apply. The text is written from the same events
+A push arrives as `<channel source="nebula-listen"
+wake="message|answer|pin|proposal|run|change" count="…" cursor="…"
+journal="…" project_id="…">`, with `held="…"` and `gate="change"` when they
+apply. A deliberate push's wake names the most specific thing it carries: a
+message, else an answer, else a pin. The text is written from the same events
 `wait_for_canvas_change` returns: event summaries (redacted param values never
 appear, only which params changed), the pin's text, a proposal's note and the
 reason you gave, a run's status and how many nodes ran. Nothing else is
@@ -993,10 +1041,17 @@ Commons, `get_proposal`, `withdraw_proposal`). Edits, runs, project
 switches, board writes and any tool not on that list are refused for that
 turn, so it offers instead of editing under your hands. Which pushes:
 
-- **Never gated:** a push that holds a pin of yours still open (whatever
-  else it carries), and one for your accepting its proposal or for its own
-  run's end. Those act
-  like any turn, and none of them ends a gated turn's window early.
+- **Never gated, and it ends a gated window:** a deliberate send (a
+  message, an answer, a pin of yours still open), whatever else rides with
+  it. Its turn acts like any turn and is never refused for pacing.
+- **Never gated:** a push for your accepting its proposal or for its own
+  run's end. Those act like any turn, and none of them ends a gated turn's
+  window early.
+- **Its turn is never gated after the fact:** no gated push goes while the
+  turn an ungated push started (a deliberate send, an accept, its own run's
+  end) seems under way, by the same guess as a gated window: at least 60 s
+  after that push, then 20 s with no Nebula call and none running. Edits
+  you make while Claude reads your message wait and ride a later push.
 - **Always gated:** a push for a proposal you rejected, that expired or that
   was invalidated (it may only offer again), and a push carrying your edits:
   a change, the end of your run, a moodboard or canvas line, or lost events.
@@ -1004,24 +1059,23 @@ turn, so it offers instead of editing under your hands. Which pushes:
   run's end is gated, since the edits are your hands on the canvas.
 
 A gated push goes only when Claude isn't mid-turn, so the gate never lands
-on a turn already running. No push ever closes or shortens a gated turn's
-window: a push that isn't gated (a pin too) waits until the window has
-ended on its own terms, at least 60 s after the gated push and then 20 s
-with no Nebula call and none running. A Nebula call still running (a
-`get_proposal` or `wait_for_canvas_change` wait) keeps the window open,
-however long it waits. The cost: a pin you add during a gated turn's window
-waits for that window's end, at least a minute after the change push and
-longer while that turn keeps calling Nebula. While a pin waits, no other
+on a turn already running. No passive push ever closes or shortens a gated
+turn's window: one that isn't gated (an accept, its own run's end) waits
+until the window has ended on its own terms, at least 60 s after the gated
+push and then 20 s with no Nebula call and none running. A Nebula call still
+running (a `get_proposal` or `wait_for_canvas_change` wait) keeps the window
+open, however long it waits.
+
+A deliberate send doesn't wait for the window: it goes at once and ends it,
+so the turn it starts can do what you asked (until 2026-11-03 a pin waited
+for the window's end, at least a minute, and a request in it was refused).
+The cost, accepted: Claude Code queues pushes that arrive while Claude is
+busy for its next turn, so a change turn still running when it goes is
+freed to edit. After it, no gated push goes until its own turn has ended
+(the same 60 s and 20 s guess), so a nudge you make while Claude is still
+reading your message never gates the turn the message started. While a pin waits for its 1 s merge and its check, no other
 gated push goes, unless Nebula can't answer the check (below): a proposal
-you reject meanwhile, and the edits you make meanwhile, go with the pin
-when it does, in one push that isn't gated (it holds a pin). Edits from
-your last 8 s before it goes are the exception: they aren't due yet (the
-8 s quiet time), so they follow in a gated push of their own, at least
-30 s later and once Claude has made no Nebula call for 20 s. So a pin waits
-only for the window it came in, however long you keep editing. Claude
-Code wouldn't give it to the running turn anyway (pushes that arrive while
-Claude is busy are delivered together on its next turn), so sending it
-sooner could only have freed the change turn to edit.
+you reject meanwhile, and the edits you make meanwhile, ride along with it.
 
 **Only a pin still open lifts the gate.** A pin wake needs a pin of yours
 that is still open when it goes. A pin you delete, one any agent answers
@@ -1055,9 +1109,38 @@ can't see where a Claude Code turn ends, so the timing is guessed from when
 Nebula sends the push: the window lasts at least 60 s after it and until
 Nebula has had no call for 20 s. That guess can miss both ways:
 
-- A turn you type can be refused. If you type a request to Claude within
-  that minute, it is refused the same way (in the live check Claude proposed
-  the edit instead).
+- A turn you type in the terminal can be refused. If you type a request to
+  Claude within that minute, it is refused the same way (in the live check
+  Claude proposed the edit instead): the gate can't tell your typed turn
+  from the change turn, since Nebula never sees the terminal. A request you
+  send from the canvas (a message, a pin or an answer) is never refused
+  this way: it ends the window as it goes, and no gated push goes until
+  that session has answered every request it got from you, or 10 minutes
+  after the latest if it hasn't (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04).
+  The listener keeps, per session (one listener is one session), the
+  pushes it hasn't seen answered, one group of ids per push that carried
+  messages or answers. It reports each push to Nebula, which records it
+  for that session (`POST /api/agent/thread/accepted`, with the message ids
+  and the question set ids). A reply then answers that session's oldest
+  unanswered push, and Nebula names it in the reply (`replyTo`: the push's
+  newest message, else its first question set); the listener removes that
+  group, whichever route the reply took (`reply_to_person`, or `nebula
+  reply` from the session's own shell). Each pin is answered by that
+  session's own answer on that pin (`resolve_pin`, or `nebula pin resolve`
+  from its shell), or once you delete the pin. So two messages need two
+  replies, and a reply to the first never ends the second's span. A reply
+  or pin answer from another session under the same token, from another
+  token, or one Nebula refused (never journaled) answers nothing here.
+  When Nebula never heard of a push (its report failed, or Nebula
+  restarted before the listener reported it again), only the
+  `reply_to_person` tool's own result can answer it. The listener learns
+  of a shell reply from its own `thread.replied` event and of a shell pin
+  answer from its own `pin.resolved`, which its long-poll asks for with
+  `ownReplies=1` (its other own events stay out of its feed). How long
+  Claude thinks or works in other tools between Nebula calls doesn't
+  matter. After the last answer, an edit you made meanwhile goes as a gated
+  push once Claude has been quiet for 20 s. A typed request still can be
+  refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
   turn; if that is more than a minute later, the window has already ended
@@ -1070,6 +1153,92 @@ them in that turn, but nothing stops it. A later version moves the gate into
 Nebula itself, where it covers every client. "5 minutes per turn" can't be
 enforced either; after 5 minutes a gated turn's tool results say to wrap up.
 
+**Is it listening? (readiness).** Once Claude Code is ready, the listener
+tells Nebula every 15 s (`POST /api/agent/channel`, as its own agent and
+session) and at once when listening stops, and deletes its entry when the
+session ends; Nebula drops an entry it hasn't heard from for 45 s
+(`backend/services/channel_listeners.py`). One session is one process:
+each beat carries the process's own nonce, and while an entry lives a
+second process naming the same agent and session is refused (`409`,
+`X-Nebula-Code: listener_session_taken`) and its goodbye never removes the
+first's entry. It prints:
+
+- "error: Nebula couldn’t connect this listener because another process is
+  already listening as this session. Start each Claude Code with this
+  command, which gives each one its own session, then start this listener
+  again." then `nebula mcp connect claude-code --channel` on its own line.
+
+That line is for a real second process only. A refused process first takes
+the other entry for a restart's leftover (Claude Code restarted its MCP
+server, and the old process's entry lives up to 45 s): it waits quietly,
+nothing shown on the canvas, and prints only "Nebula is waiting for this
+session’s previous listener to time out, then this one connects by
+itself." It asks again every 5 s, so once the other entry is gone (its
+goodbye, or 45 s after a crash) it registers. Still refused after 60 s, it prints the line above.
+A beat Nebula refuses for its token, or never answers, is also tried again
+every 5 s.
+
+**Only a Settings agent token registers a listener** (Justin, 2026-11-03
+and 2026-11-04). The listener must hold a valid agent token from Settings ›
+Connect your agent. `nebula mcp connect claude-code --channel` doesn't make
+one: it reads the token file Settings saved (or the one Claude Code's
+saved `nebula` server names) and points the listener at it. The agent is
+the token's: a name header beside it changes nothing, so one agent's token
+never registers as another. An in-app agent's turn token (the Claude, Codex
+and other agents Nebula runs itself) is verified but can't listen. A
+listener with no token, with a token Nebula no longer knows (revoked), or
+with an in-app agent's token is refused (`401`, `X-Nebula-Code:
+listener_no_token`, `listener_token_invalid` or `listener_in_app_token`)
+and never gets a listener id, so the person's messages never reach it. The
+server prints the reason once on stderr:
+
+- "error: Nebula couldn’t connect this listener because it has no token.
+  Copy one from Settings › Connect your agent, then run this command again."
+- "error: Nebula couldn’t connect this listener because its token isn’t
+  valid anymore. Copy a new one from Settings › Connect your agent, then run
+  this command again."
+- "error: Nebula couldn’t connect this listener because it uses an in-app
+  agent’s token, and only a token from Settings › Connect your agent can
+  listen. Copy one there, then run this command again."
+
+Revoking the token in Settings drops its listeners at once: the canvas
+stops offering them, and a message sent to one is refused as stopped.
+
+`channel_status` shows it as `thisServer.registerError` until a beat goes
+through. The canvas keeps its "Connect Claude Code…" state meanwhile. A
+listener's `listenerId` is stable for its (agent, session) while Nebula
+runs (an HMAC under a secret made at launch), so a lapsed beat or an
+eviction never strands the messages sent to it; a restarted Nebula gives
+new ids. Entries are capped per agent (8) and in all (64). So the canvas tells three states
+apart, per agent session:
+
+- no entry: **not connected** (never started with the channel, or its
+  session ended);
+- `state: "stopped"` (`reason`: `idle` after 2 hours with nothing from you,
+  or `error`): **the listener stopped** while the session runs on; /mcp >
+  nebula-listen > Reconnect starts it again;
+- `state: "listening"`: connected, and Nebula pushes to it.
+
+Nebula can't see whether Claude Code delivers a push (it never acknowledges
+one): a session started without `--dangerously-load-development-channels`,
+or on a Team org with Channels off, still reads "listening".
+
+- The person's tabs: a `channelListeners` socket message on every change and
+  after a verified hello, and `GET /api/canvas/channel` with the person
+  token: `{projectId, listeners: [{listenerId, agent: {id, name, color,
+  verified}, state, reason, projectId, since, seenAt, session: {key,
+  ordinal}}], rev}`. `session` is the session's cursor (`key` as the
+  cursor events carry it, `ordinal` its number, null with no live cursor),
+  so "Message Claude · 2" names the cursor it reaches. `projectId` on a
+  listener is the project it last saw open; a listener always follows the
+  open project.
+- An agent: `GET /api/canvas/channel` returns only its own entries, without
+  `session`; MCP `channel_status` adds `thisServer` (whether this server
+  runs with `--channel`, and its listener's state). A message to a session
+  is a `person.message` journal event, `data: {messageId, text, nodeIds,
+  to: <listenerId>}`, from the person: the Message box (PR C) posts it, and
+  only the listener named in `to` wakes.
+
 **Stop** by restarting Claude Code without the flag.
 
 **Nothing arrives?** Start with `claude --debug-file <file> …` and look for
@@ -1080,8 +1249,7 @@ is "negotiated a modern protocol revision", set
 newest revision 2025-11-25) the connection stays on the earlier handshake and
 registers without it. The server writes a line to stderr when it starts
 listening and when it stops. `NEBULA_CHANNEL_TRACE=<file>` appends the
-client's `initialize` request to a file; the `NEBULA_CHANNEL_*` timing
-variables in `mcp_channel.Limits` exist for tests.
+client's `initialize` request to a file.
 
 ### Who counts as the person
 
