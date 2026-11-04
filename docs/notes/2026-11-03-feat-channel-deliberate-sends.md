@@ -211,3 +211,61 @@ failure states" and "Recipient".
   mcp_channel or channel_listeners, plus round20 fence, unprivileged
   marker, ci shard, cli_api, agent_questions): 1,721 passed, 9 skipped.
   `person_gate.py` untouched.
+
+## Round 4b (coordinator, 2026-11-04: a shell reply ends the span; GM r94)
+
+- **The gap closed.** `nebula reply` from the listening session's own shell
+  carries the same Settings token, so it is the same identity and Claude's
+  reply. It used to leave the span to the 10-minute cap, because the
+  listener's feed leaves out its own agent's events. Now the listener learns
+  of every reply saved under its token, whatever the route.
+- **How, and why this way.** The listener's long-poll sends `ownReplies=1`.
+  `/api/canvas/events` then keeps the caller's own events of one kind only,
+  `thread.replied` (`canvas_events.OWN_REPLY_KIND`, a `keep_own` set on
+  `matches`/`read`/`wait`). The listener ends the span on a `thread.replied`
+  whose actor is an agent with its own id (`ChannelState.agent_id`, set from
+  the beat's answer, `listener.agent.id`, the `app:<id>` of its token).
+  Considered and rejected:
+  - A per-listener "replied" flag the listener polls: a second channel to keep
+    in step with the push loop, and it misses the order of events.
+  - `self=1` on the listener's poll: its own edits would reach its feed and
+    read as the person's changes.
+  - Matching on the reply's `session`: shell calls carry no MCP session, and
+    the token is already the identity Justin named.
+  Why it holds: a refused reply (no token, paced, a bad body) is never
+  journaled, so it can't end the span. Another token has another actor id.
+  A reply made before the listener has registered (`agent_id` None) ends
+  nothing. A journal gap loses the event and leaves the span to the cap,
+  which is the safe direction.
+- **The tool's own event.** A tool reply ends the span when its answer
+  comes back, and its `thread.replied` arrives a moment later. If a newer
+  message had started a new span meanwhile, that late event would end it.
+  The tool's reply id is remembered (`_tool_reply_ids`, at most MAX_OWN),
+  and its event is skipped once.
+- A shell reply also counts as the agent's call at that moment
+  (`last_call`), like the tool's. The next gated push waits `agent_quiet`
+  after it.
+- `thread.replied` is PR C's kind. On this branch the tests add it to
+  `EVENT_KINDS` with monkeypatch. PR C must journal it for every saved
+  reply, with the `replyId` even when the thread is narrowed.
+- An older backend refuses `ownReplies` (422, unknown parameter). The
+  listener and the backend ship from the same repo, so that pairing doesn't
+  happen.
+- **GM r94:** the in-app listener line now reads "Nebula couldn’t connect
+  this listener because it uses an in-app agent’s token, and only a token
+  from Settings › Connect your agent can listen. Copy one there, then run
+  this command again." Constant, readiness test and MCP-SETUP updated.
+- Docs: MCP-SETUP's J4 paragraph no longer says to answer with the tool,
+  and `ownReplies` is listed with the events query.
+- Tests: the route keeps only the caller's own `thread.replied` with the
+  opt-in (and wakes a waiting poll); the poll sends it; the beat sets
+  `agent_id` (none without a token); an own shell reply ends the span;
+  another token's reply, a person-kind actor or an unregistered listener
+  don't; the tool's late event doesn't end a newer span, but a later shell
+  reply does.
+- Mutations: 16 of 16 killed (own reply ignored, any agent ends it, None id
+  matches, kind check dropped, tool id not remembered, dedupe skips all,
+  not counted as a call, poll param dropped, beat id not set, keep_own
+  keeps all, keep_own ignored, route ignores or always applies the opt-in,
+  wait drops it on resume, no validation, in-app line reverted).
+

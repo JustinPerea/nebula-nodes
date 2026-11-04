@@ -73,8 +73,9 @@ BAD_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token isn
 # agent's turn token (commons.actors.agent_registry: the in-app Claude, Codex
 # and the rest) is verified too, but is refused here with this line.
 IN_APP_TOKEN_CODE = "listener_in_app_token"
-IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token is an in-app agent’s, and only a token "
-                     "from Settings › Connect your agent can listen. Copy one there, then run this command again.")
+IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because it uses an in-app agent’s token, and only a "
+                     "token from Settings › Connect your agent can listen. Copy one there, then run this command "
+                     "again.")
 APP_ID_PREFIX = "app:"
 REASONS = ("idle", "error")
 

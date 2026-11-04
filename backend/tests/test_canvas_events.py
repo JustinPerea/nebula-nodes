@@ -15,6 +15,7 @@ from services.agent_presence import AgentPresence
 from services.canvas_events import (
     MAX_EVENT_BYTES,
     MAX_WAITERS,
+    OWN_REPLY_KIND,
     CanvasEventJournal,
     TooManyWaiters,
     actor_for_headers,
@@ -432,6 +433,49 @@ def test_events_endpoint_validates_and_filters_own_events(api):
     assert [e["seq"] for e in mine_skipped["events"]] == [2] and mine_skipped["cursor"] == 2
     with_self = client.get("/api/canvas/events?after=0&self=1", headers=AGENT).json()
     assert [e["seq"] for e in with_self["events"]] == [1, 2]
+
+
+def _with_reply_kind(monkeypatch):
+    # thread.replied is PR C's (#225) kind; this branch only filters on it.
+    import services.canvas_events as module
+    monkeypatch.setattr(module, "EVENT_KINDS", frozenset(module.EVENT_KINDS) | {OWN_REPLY_KIND})
+
+
+def test_own_replies_opt_in_keeps_only_the_callers_own_thread_replied(api, monkeypatch):
+    # A channel listener's own reply, by any route, must reach its feed (it
+    # ends the deliberate span: Justin, 2026-11-04); its own edits stay out.
+    _with_reply_kind(monkeypatch)
+    client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+    other = {"kind": "agent", "id": "ext:codex", "name": "Codex"}
+    journal.publish("node.added", actor=mine)
+    journal.publish("thread.replied", actor=mine, data={"replyId": "pt_1"})
+    journal.publish("thread.replied", actor=other, data={"replyId": "pt_2"})
+    journal.publish("node.added", actor=PERSON)
+    plain = client.get("/api/canvas/events?after=0", headers=AGENT).json()
+    assert [e["seq"] for e in plain["events"]] == [3, 4]
+    opted = client.get("/api/canvas/events?after=0&ownReplies=1", headers=AGENT).json()
+    assert [e["seq"] for e in opted["events"]] == [2, 3, 4]
+    off = client.get("/api/canvas/events?after=0&ownReplies=0", headers=AGENT).json()
+    assert [e["seq"] for e in off["events"]] == [3, 4]
+    assert client.get("/api/canvas/events?ownReplies=maybe").status_code == 422
+
+
+def test_own_replies_wakes_a_waiting_poll(api, monkeypatch):
+    _with_reply_kind(monkeypatch)
+    _client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+
+    async def run():
+        waiting = asyncio.ensure_future(journal.wait(after=0, wait=5, exclude_actor_id="ext:claude-code",
+                                                     keep_own=frozenset({OWN_REPLY_KIND})))
+        await asyncio.sleep(0.05)
+        journal.publish("node.added", actor=mine)
+        journal.publish(OWN_REPLY_KIND, actor=mine, data={"replyId": "pt_1"})
+        return await asyncio.wait_for(waiting, 2)
+
+    result = asyncio.run(run())
+    assert [(e["seq"], e["kind"]) for e in result["events"]] == [(2, "thread.replied")]
 
 
 def test_events_endpoint_times_out(api):

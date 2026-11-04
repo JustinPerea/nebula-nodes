@@ -142,7 +142,7 @@ def test_only_an_agent_token_registers_a_listener(ready):
     assert ready.client.get("/api/canvas/channel", headers=CLAUDE_TOKEN).json()["listeners"] == []
 
 
-IN_APP_LINE = ("Nebula couldn’t connect this listener because its token is an in-app agent’s, and only a token "
+IN_APP_LINE = ("Nebula couldn’t connect this listener because it uses an in-app agent’s token, and only a token "
                "from Settings › Connect your agent can listen. Copy one there, then run this command again.")
 
 

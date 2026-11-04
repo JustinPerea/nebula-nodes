@@ -277,12 +277,22 @@ def param_changes(before: Mapping[str, Any] | None, after: Mapping[str, Any] | N
     return {"keys": keys[:MAX_LISTED_IDS], "values": values}
 
 
-def matches(event: Mapping[str, Any], kinds: set[str] | None, exclude_actor_id: str | None) -> bool:
+# A reply saved in the person's thread (PR C's person_thread.REPLY_EVENT).
+# A channel listener asks for its own (``ownReplies=1``): one under its token
+# by any route (the tool, `nebula reply` in its session's shell) is Claude's
+# reply and ends its deliberate span (Justin, 2026-11-04). Only this kind:
+# the own-event filter still hides the listener's own edits from it.
+OWN_REPLY_KIND = "thread.replied"
+
+
+def matches(event: Mapping[str, Any], kinds: set[str] | None, exclude_actor_id: str | None,
+            keep_own: frozenset[str] = frozenset()) -> bool:
     kind = str(event.get("kind", ""))
     if kinds and kind not in kinds and kind.split(".", 1)[0] not in kinds:
         return False
     actor = event.get("actor") or {}
-    if exclude_actor_id is not None and actor.get("kind") == "agent" and actor.get("id") == exclude_actor_id:
+    if (exclude_actor_id is not None and actor.get("kind") == "agent" and actor.get("id") == exclude_actor_id
+            and kind not in keep_own):
         return False
     return True
 
@@ -432,6 +442,7 @@ class CanvasEventJournal:
         limit: int = DEFAULT_BATCH,
         kinds: set[str] | None = None,
         exclude_actor_id: str | None = None,
+        keep_own: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         limit = max(1, min(int(limit), MAX_BATCH))
         reset = journal is not None and journal != self.journal_id
@@ -449,7 +460,7 @@ class CanvasEventJournal:
         for event in self._events:
             if event["seq"] <= after:
                 continue
-            if not matches(event, kinds, exclude_actor_id):
+            if not matches(event, kinds, exclude_actor_id, keep_own):
                 if len(events) < limit:
                     cursor = event["seq"]
                 continue
@@ -482,11 +493,12 @@ class CanvasEventJournal:
         limit: int = DEFAULT_BATCH,
         kinds: set[str] | None = None,
         exclude_actor_id: str | None = None,
+        keep_own: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         """Read, and if nothing matches yet, wait up to `wait` seconds for a matching event."""
         wait = max(0.0, min(float(wait), WAIT_CAP_SECONDS))
         result = self.read(after=after, journal=journal, limit=limit, kinds=kinds,
-                           exclude_actor_id=exclude_actor_id)
+                           exclude_actor_id=exclude_actor_id, keep_own=keep_own)
         if result["events"] or result["reset"] or result["gap"] or wait <= 0:
             return result
         if len(self._waiters) >= MAX_WAITERS:
@@ -510,7 +522,7 @@ class CanvasEventJournal:
             # Resume after what we already scanned, so skipped events (our own,
             # or other kinds) never wake us into a busy loop.
             result = self.read(after=result["cursor"], journal=self.journal_id, limit=limit,
-                               kinds=kinds, exclude_actor_id=exclude_actor_id)
+                               kinds=kinds, exclude_actor_id=exclude_actor_id, keep_own=keep_own)
             if result["events"] or result["gap"]:
                 return result
 

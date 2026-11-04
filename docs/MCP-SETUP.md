@@ -835,7 +835,9 @@ Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 `GET /api/canvas/events` is a long-poll. Query: `after` (an event cursor;
 default "from now"), `journal` (the id from a previous response), `wait`
 (seconds, capped at 25), `limit` (1–100), `kinds` (groups like `node` or
-exact kinds like `node.params`) and `self=1` to include your own events. It
+exact kinds like `node.params`), `self=1` to include your own events, and
+`ownReplies=1` to include only your own `thread.replied` (a channel listener
+uses it: its reply from any route ends its deliberate span). It
 answers at once when newer events exist, otherwise waits. Resume with
 `after=<cursor>`: the cursor also moves past events filtered out for you, so
 your own edits never wake you. `gap: true` means the 500-event buffer
@@ -1111,14 +1113,17 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   from the change turn, since Nebula never sees the terminal. A request you
   send from the canvas (a message, a pin or an answer) is never refused
   this way: it ends the window as it goes, and no gated push goes until
-  that session replies to you (its own `reply_to_person`, or `resolve_pin`
-  for a pin, that Nebula saved), or 10 minutes after the push if no reply
-  comes (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04). How long Claude thinks
-  or works in other tools between Nebula calls doesn't matter. Another
-  agent's reply doesn't end it, and neither does a `nebula reply` from a
-  shell (the listener never sees its own agent's events), so answer a push
-  with the tool. After the reply, an edit you made meanwhile goes as a
-  gated push once Claude has been quiet for 20 s. A typed request still can
+  that session replies to you (a reply Nebula saved under the listener's
+  own token, by any route: `reply_to_person`, or `nebula reply` from the
+  session's own shell; or `resolve_pin` for a pin), or 10 minutes after the
+  push if no reply comes (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04). The
+  listener learns of a shell reply from its own `thread.replied` event,
+  which its long-poll asks for with `ownReplies=1` (its other own events
+  stay out of its feed). How long Claude thinks or works in other tools
+  between Nebula calls doesn't matter. A reply under another token doesn't
+  end it, and neither does one Nebula refused (it is never journaled).
+  After the reply, an edit you made meanwhile goes as a gated push once
+  Claude has been quiet for 20 s. A typed request still can
   be refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
@@ -1157,8 +1162,8 @@ server prints the reason once on stderr:
 - "error: Nebula couldn’t connect this listener because its token isn’t
   valid anymore. Copy a new one from Settings › Connect your agent, then run
   this command again."
-- "error: Nebula couldn’t connect this listener because its token is an
-  in-app agent’s, and only a token from Settings › Connect your agent can
+- "error: Nebula couldn’t connect this listener because it uses an in-app
+  agent’s token, and only a token from Settings › Connect your agent can
   listen. Copy one there, then run this command again."
 
 Revoking the token in Settings drops its listeners at once: the canvas

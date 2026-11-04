@@ -522,6 +522,63 @@ def test_another_agents_reply_never_ends_the_span():
     assert _first_gated(drain(state, 101.0, 400.0)) is None
 
 
+MINE = {"kind": "agent", "id": "app:0123456789", "name": "Claude Code", "verified": True}
+
+
+def replied(seq: int, reply_id: str = "pt_9", actor=None) -> dict:
+    """A thread.replied in its feed (asked for with ownReplies=1)."""
+    return ev(seq, mcp_channel.REPLY_KIND, actor=actor or MINE,
+              data={"replyId": reply_id, "text": "Done.", "nodeId": None})
+
+
+def test_its_own_reply_from_the_shell_ends_the_span():
+    # `nebula reply` from the session's own shell, under the listener's
+    # Settings token: no tool call, but its thread.replied by this agent
+    # (Justin, 2026-11-04: that is Claude's reply).
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    state.observe(resp(replied(3)), now=150.0)
+    pushes = drain(state, 150.0, 171.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(170.0, "change", True)]
+
+
+def test_another_tokens_reply_or_an_unregistered_listener_never_ends_the_span():
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    other = {**MINE, "id": "app:9999999999"}
+    state.observe(resp(edit(2), replied(3, actor=other), replied(4, actor={**MINE, "kind": "person"})), now=101.0)
+    assert _first_gated(drain(state, 101.0, 400.0)) is None
+    # Not registered yet (no agent_id): nothing names its own replies.
+    unnamed = listening()
+    unnamed.observe(resp(message(1)), now=100.0)
+    assert take(unnamed, 100.0).wake == "message"
+    unnamed.observe(resp(edit(2), replied(3)), now=101.0)
+    assert _first_gated(drain(unnamed, 101.0, 400.0)) is None
+
+
+def test_its_tool_replys_own_event_never_ends_a_newer_span():
+    # The tool's answer ended the first span; its thread.replied arrives after
+    # a newer message started another, which it must not end.
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    _reply(state, 110.0)  # {"reply": {"id": "pt_1"}}
+    state.observe(resp(message(2, "and the sea")), now=111.0)
+    assert take(state, 111.0).wake == "message"
+    state.observe(resp(replied(3, "pt_1"), edit(4)), now=112.0)
+    assert _first_gated(drain(state, 112.0, 400.0)) is None
+    # A later shell reply (another id) still ends it.
+    state.observe(resp(replied(5, "pt_2")), now=400.0)
+    pushes = drain(state, 400.0, 421.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(420.0, "change", True)]
+
+
 def test_the_cap_ends_the_span_when_no_reply_comes():
     state = listening()
     assert state.limits.deliberate_span == mcp_channel.DELIBERATE_SPAN_CAP == 600.0
