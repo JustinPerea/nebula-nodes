@@ -702,9 +702,9 @@ function pushUndo(
  * known; a later step depends on nothing it holds, so it may land above
  * steps taken while the add was out. */
 function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
-  params: OwnParamChange[] = [], accepted?: Node<NodeData>[]): OwnAdd | null {
-  const step = ownAddStep(nodeIds, params, accepted);
-  if (step.nodeIds.length === 0 && !step.params) return null;
+  params: OwnParamChange[] = [], accepted?: Node<NodeData>[], unwired: Edge[] = []): OwnAdd | null {
+  const step = ownAddStep(nodeIds, params, accepted, unwired);
+  if (step.nodeIds.length === 0 && !step.params && !step.unwired) return null;
   breakUndoDebounce();
   const undoStack = [...get().undoStack, step];
   if (undoStack.length > UNDO_CAP) undoStack.shift();
@@ -1174,7 +1174,9 @@ interface GraphState {
     nodes: Node<NodeData>[];
     edges: Edge[];
     updatedNodes: Node<NodeData>[];
-  }, options?: { undoStep?: object; synced?: ReadonlySet<string> }) => void;
+  }, options?: { undoStep?: object; synced?: ReadonlySet<string>;
+    /** The wires Accept removed (the view's removedEdges), for its Undo. */
+    unwired?: ReadonlyArray<Pick<Edge, 'source' | 'sourceHandle' | 'target' | 'targetHandle'>> }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -3337,11 +3339,19 @@ const DELETED_SCENES_KEPT = 32;
  *   copies held through a delete, rename drafts, and the labels in flight
  *   with what they were saved over (PR #221 review 1 LOW-1: fix17's Redo
  *   test left its restore's hold on n1 to the next test).
+ * - the person's saves still on their way (landingsOut): each names a node
+ *   and carries an `apply` that puts its edit on that node, which an agent
+ *   clear's Undo (lastSavedView) and the reconnect copy would otherwise take
+ *   for the next test's node of the same id (PR #221 review 2 NIT-1);
+ * - which run is this canvas's current run, the node marks of other tabs'
+ *   runs (forgetRunsOfReplacedGraph), and which positions the person placed
+ *   (forgetPersonPlaced), all keyed by node id.
  * A late answer to a request the test left unanswered can still arrive in the
  * next test; its write is no longer tracked, so it changes nothing there.
  * Not cleared: the store's own state and undo history (each test's
- * beforeEach sets them), and canvas-wide records that a replacement also
- * renews (the write queue, landings, runs), which hold no node's edits.
+ * beforeEach sets them), and the canvas-wide records a replacement renews
+ * rather than clears by node (the write queue, the replacement report, the
+ * steps in flight).
  * tests/sceneEditsResetRatchet.test.ts keeps every test file that uses
  * Cinema scenes with this store calling it in afterEach.
  */
@@ -3358,6 +3368,9 @@ export function resetDeletedSceneEditsForTests(): void {
   renameDrafts.clear();
   labelsInFlight.clear();
   labelsSavedBefore.clear();
+  landingsOut.clear();
+  forgetRunsOfReplacedGraph();
+  forgetPersonPlaced();
 }
 
 /** Nebula's scene for a node, as the last sync (or save answer) had it. */
@@ -13169,7 +13182,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // and is dropped).
     const stack = get().undoStack;
     const onTop = step !== undefined && stack.indexOf(step) === stack.length - 1;
-    const own = pushOwnAdd(set, get, incoming.map((node) => node.id), changes, rewriteBackendAssetUrls(incoming));
+    // The wires its model changes removed, as the canvas had them before, so
+    // its Undo puts them back (PR #216 r3).
+    const removedKeys = new Set((options?.unwired ?? []).map((edge) => edgeKey(edge)));
+    const beforeEdges = (snapshot && 'edges' in snapshot && Array.isArray(snapshot.edges) ? snapshot.edges : get().edges) as Edge[];
+    const unwired = removedKeys.size === 0 ? []
+      : (options?.unwired ?? []).map((ends) => beforeEdges.find((edge) => edgeKey(edge) === edgeKey(ends))
+        ?? ({ id: `e-${edgeKey(ends)}`, type: 'typed-edge', ...ends } as Edge));
+    const own = pushOwnAdd(set, get, incoming.map((node) => node.id), changes, rewriteBackendAssetUrls(incoming), unwired);
     if (step) {
       if (own && onTop) stepSuccessors.set(step, own);
       set((state) => (state.undoStack.includes(step)
@@ -13196,7 +13216,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const synced = options?.synced ?? new Set<string>();
       return {
         nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id))],
-        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
+        edges: [...state.edges.filter((edge) => !removedKeys.has(edgeKey(edge))),
+          ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
       };
     });
   },

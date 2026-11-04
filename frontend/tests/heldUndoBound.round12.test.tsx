@@ -63,6 +63,8 @@ const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.da
 const stacks = () => ({ undo: store().undoStack.length, redo: store().redoStack.length });
 /** Whether GM's dropped-undo line shows, in either notice place. */
 const dropped = () => store().undoNotice?.text === DROPPED_UNDO_TEXT || store().messageNotice?.text === DROPPED_UNDO_TEXT;
+// delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
+// holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
 const redo = async () => { act(() => { store().redo(); }); await settle(); };
