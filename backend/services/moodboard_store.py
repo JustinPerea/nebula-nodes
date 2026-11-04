@@ -81,6 +81,11 @@ LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layou
 COVER_REFUSED = ("coverImageId names no image on this board: use an image's id "
                  "(GET /api/moodboards/{id} lists them), or null for no cover")
 
+# The side folders that keep a file per board id beside the boards (``.notes``:
+# Updates, services/agent_notes.py). Deleting a board for good removes its file
+# in each (``purge``, services/project_board_purge.py).
+BOARD_SIDE_FOLDERS = (".notes",)
+
 # One lock per board: a write reads the file, changes it and writes it back
 # as one step, whichever thread it runs on.
 _LOCKS: dict[str, threading.RLock] = {}
@@ -1065,7 +1070,8 @@ class MoodboardStore:
         asset_trash.purge(_moodboard_root(), moodboard_id)
         # Its Updates go with it (services/agent_notes.py); Recently deleted
         # kept them, since a restore brings the same id back.
-        (_moodboard_root() / ".notes" / f"{moodboard_id}.json").unlink(missing_ok=True)
+        for folder in BOARD_SIDE_FOLDERS:
+            (_moodboard_root() / folder / f"{moodboard_id}.json").unlink(missing_ok=True)
 
 
 def migrate_brief_fields() -> dict[str, Any]:

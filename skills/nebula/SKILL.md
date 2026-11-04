@@ -79,7 +79,8 @@ with `nebula apply` (shorter params, removals), asking the person before
 deleting their work. Run history is theirs to clear.
 Recently deleted: `nebula trash list` (`--kind`; `nebula trash list --scope
 global` or `--project current` narrows boards, characters and Styles) and
-`nebula trash restore [kind] <id>`.
+`nebula trash restore [kind] <id>`. A project deleted for good (by the
+person, or after its 30 days) takes its moodboards with it.
 
 A mistyped command or option gets "Did you mean ...?" with that command's
 usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula

@@ -21,7 +21,8 @@ home, so Restore puts it there.
 
 Which folders count as old: any project folder (not ``_global``, not a dot
 folder such as ``.trash``) whose name isn't the id of a canvas project in the
-catalog. A folder named for a project in the catalog's Recently deleted is a
+catalog, nor of one deleted for good whose boards are still being deleted
+(``boardPurges``, services/project_board_purge.py). A folder named for a project in the catalog's Recently deleted is a
 canvas project's folder too and is left alone (restoring the project brings
 its assets back with it).
 
@@ -386,7 +387,11 @@ def rehome_legacy_assets(
         return report
     projects = catalog.get("projects") or {}
     trash = catalog.get("trash") or {}
-    canvas_ids = set(projects) | set(trash)
+    # A project deleted for good whose boards are still being deleted
+    # (services/project_board_purge.py) isn't an old-style folder: its boards
+    # are going, never to Global.
+    pending = catalog.get("boardPurges")
+    canvas_ids = set(projects) | set(trash) | {pid for pid in (pending if isinstance(pending, list) else ()) if isinstance(pid, str)}
     pending = [spec for spec in roots
                if _legacy_folders(spec.root, canvas_ids) or (spec.has_trash and _legacy_trash(spec.root, canvas_ids))]
     state = _read_state(state_dir)

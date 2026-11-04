@@ -3,7 +3,8 @@
 Anyone may restore, agents included: a restore undoes a delete. Deleting for
 good can't be undone, so it is the person's alone and has no CLI command; the
 person does it in Nebula (Moodboard Studio, Character Studio, the Assets
-panel's Styles tab or Projects).
+panel's Styles tab or Projects). A project deleted for good (by the person,
+or after its 30 days) takes its moodboards with it, trashed ones too.
 
 `list` is MCP list_trash, through project_client.py: `--kind`, `--scope` and
 `--project` (`--project-id`, the tool's name, works too) are its kind, scope
@@ -73,7 +74,8 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
         scope = ""
         if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
-        expiry = f", removed for good after {str(item['purgeAt'])[:10]}" if item.get("purgeAt") else ""
+        expiry = (f", removed for good with its boards after {str(item['purgeAt'])[:10]}"
+                  if item.get("purgeAt") else "")
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
               f"  (deleted {_when(item)} by {_who(item)}{expiry})", file=out)
     first = items[0]

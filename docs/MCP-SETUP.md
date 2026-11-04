@@ -1150,8 +1150,9 @@ Person-only, refused with 403 `person_required` otherwise:
   workspace or agent token is minted without the person;
 - deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
   `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
-  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
-  agent it can restore instead (see Recently deleted below);
+  `POST /api/projects/trash/empty`). It can't be undone, and a project takes
+  its moodboards with it. The refusal tells an agent it can restore instead
+  (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -3184,6 +3185,19 @@ Boards, characters and Styles stay until the person deletes them for good:
 there is no timer. Projects keep their 30-day expiry. Files live in
 `<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
 (`backend/services/asset_trash.py`).
+
+A project deleted for good (Delete forever, Empty, or past its 30 days) takes
+its moodboards with it: the boards filed under it and the ones deleted from it
+that wait in Recently deleted, with their Updates. They are gone like any
+board deleted for good: `GET /api/moodboards/{id}` answers 404 without
+`code: "in_trash"`, a Moodboard node says the board was deleted for good, and
+`storedAssetChanged` (`deleted: true`) goes out for each before
+`projectsChanged`. Board images stay in the outputs folder, as every
+generated file does. Global boards and Characters are not touched. A purge
+that stops part way finishes on the next purge, project listing or start
+(`backend/services/project_board_purge.py`), and once per install a start
+deletes the boards that projects deleted for good before this change left
+behind (the count is logged, never names).
 
 ### Building and running over MCP
 
