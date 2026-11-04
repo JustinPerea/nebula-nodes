@@ -83,4 +83,26 @@ describe('ratchets the look depends on (review 1, F5)', () => {
   it('the hidden name keeps its box at opacity 0', () => {
     expect(rule(".agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__name")).toMatch(/opacity:\s*0;/);
   });
+  // GM r106: three layers inside the cursor layer's stacking context, the
+  // wires (0), every resting or gliding cursor (1 and up), any flying
+  // cursor (r103, 11 and up). A crossing or an ordered column sorts its own
+  // members in a band over every unmarked cursor and every wire (r75.2,
+  // r85, r95), so it never drops under another column's cursors or a wire.
+  it('the wires at the bottom, then the cursors, then the flights: no z-index under the wire layer (GM r106)', () => {
+    expect(rule('.agent-cursor-layer')).toMatch(/position:\s*absolute;/);
+    expect(rule('.agent-cursor-layer')).toMatch(/z-index:\s*\d+;/);
+    expect(main).toMatch(/\n\.agent-cursor__wire-layer \{\s*z-index:\s*0;\s*\}/);
+    expect(main).toMatch(/\n\.agent-cursor \{\s*z-index:\s*1;\s*\}/);
+    // No negative z-index anywhere in the layer.
+    expect(css).not.toMatch(/z-index:\s*calc\(\s*-/);
+    expect(css).not.toMatch(/z-index:\s*-/);
+  });
+  it('a crossing and a column in order share one band over every unmarked cursor, the head on top (r85, r95, r106)', () => {
+    expect(rule(".agent-cursor:is([data-crossing='true'], [data-column-order='true'])")).toMatch(/z-index:\s*calc\(10 - var\(--agent-cursor-crossing-depth, 0\)\);/);
+  });
+  it('a flight draws over every cursor and every wire, the later-started on top, until it lands and its column is at rest (GM r103)', () => {
+    expect(rule(".agent-cursor[data-aloft='true']")).toMatch(/z-index:\s*calc\(11 \+ var\(--agent-cursor-aloft, 0\)\);/);
+    // After the crossing and column-order rule: it wins over either.
+    expect(css.indexOf("[data-aloft='true']")).toBeGreaterThan(css.indexOf("[data-column-order='true']"));
+  });
 });

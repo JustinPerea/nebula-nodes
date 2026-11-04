@@ -96,7 +96,7 @@ from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
 from services.node_errors import NodeErrors
-from services import project_cover
+from services import project_asset_purge, project_cover
 from services import graph_file_links, project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -3394,6 +3394,29 @@ async def _stamp_moodboard_transparency(stamp: Any) -> None:
 
 
 @app.on_event("startup")
+async def _project_asset_purge_startup() -> None:
+    """Every start, before the re-home below: finish deleting the
+    moodboards, characters and styles of projects deleted for good whose
+    purge stopped part way (services/project_asset_purge.py). Without it the
+    re-home would leave them in their folders (it skips a listed id). Only
+    ids on the catalog's own list are deleted: an asset filed under an id the
+    catalog doesn't know is the re-home's, which moves it to Global."""
+    if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
+        return
+
+    def run() -> None:
+        if not project_store.path.exists():
+            return
+        with project_store.transaction() as catalog:
+            _purge_noted_assets(catalog)
+
+    try:
+        await asyncio.to_thread(run)
+    except Exception as exc:  # never block startup; it runs again next start
+        print(f"[main] files of deleted projects not removed yet: {type(exc).__name__}", flush=True)
+
+
+@app.on_event("startup")
 async def _asset_project_rehome_startup() -> None:
     """Every start: move project Characters, Moodboards and Styles saved under
     an old-style project id (not a canvas project) into canvas projects or
@@ -5490,6 +5513,7 @@ async def _show_agent(
     did: dict[str, Any] | None = None,
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
+    person_say: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5505,7 +5529,9 @@ async def _show_agent(
 
     ``shows`` is what the edit really was on the person's tabs (``type`` for
     a param edit, ``run``, ``propose``, ``error``); ``action`` stays the
-    value agents read in the snapshot and on /ws, as before.
+    value agents read in the snapshot and on /ws, as before. ``person_say``
+    is the same for the words: the person's tabs (the bubble, the Agent log
+    and a reload's replay) show it, and agents read ``say`` as before.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -5524,6 +5550,10 @@ async def _show_agent(
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         person = _person_form(event, identity, headers, shown=shows)
+        if person is not None and person is not event and person_say:
+            # In place: the slot keeps this dict for the replay.
+            person["say"] = clean_say(person_say)
+            person.pop("log", None)
         await _broadcast_presence(event, person)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -12358,6 +12388,9 @@ async def _broadcast_graph_sync(
     # (_broadcast_admitted_run) is paid by this one.
     global _graph_sync_owed
     _graph_sync_owed = False
+    # Every node move goes out in a sync, whichever route made it: the one
+    # place session cursors are carried (#219 review 1, MEDIUM-1).
+    await _carry_cursors()
     if not graph_replaced:
         await _follow_renamed_proposals()
     if graph_replaced:
@@ -14275,6 +14308,50 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     return {"status": "updated", "count": len(normalized)}
 
 
+def _edit_say(parts: list[tuple[Any, ...]]) -> str:
+    """An edit's counts as person copy: each with what it counts, in the
+    singular or plural, one verb per run ("Added 2 nodes and 1 connection,
+    moved 1 node"). Parts are (verb, count, noun[, after the noun])."""
+    said: list[tuple[str, list[str]]] = []
+    for verb, count, noun, *after in parts:
+        if not count:
+            continue
+        phrase = f"{count} {noun}{'' if count == 1 else 's'}{after[0] if after else ''}"
+        if said and said[-1][0] == verb:
+            said[-1][1].append(phrase)
+        else:
+            said.append((verb, [phrase]))
+    text = ", ".join(f"{verb} {' and '.join(phrases)}" for verb, phrases in said) or "no change"
+    return text[:1].upper() + text[1:]
+
+
+async def _carry_cursors() -> None:
+    """The session cursors on nodes a graph sync moved (a drag, an arrange,
+    `nebula move`, an apply or edit_canvas move, an undo or redo): one
+    whose target chain the move changed arrives now
+    (agent_presence.carry_nodes, GM - Design, #219 r24 Q2), and the
+    person's tabs get its new arrival so they, and a reload, stack it the
+    same way. Called from _broadcast_graph_sync, so no route that moves
+    nodes can miss it. The positions are read now, in one step with no
+    await, so syncs that overlap can't hand it an older graph after a newer
+    one. A replaced graph needs nothing more: forget_graph, earlier in the
+    same sync, already dropped the old positions; a cleared one has no nodes
+    to compare. Person tabs only: no agent reads it. Decoration: it never
+    fails the write that synced."""
+    try:
+        nodes = list(cli_graph.nodes.values())
+        positions = _display_positions(nodes)
+        # Nodes with no stored position keep their last box: their computed
+        # spot shifts with their siblings, and an open canvas doesn't move
+        # them for it (#219 review 2, LOW-3).
+        placed = {n["id"] for n in nodes if isinstance(n.get("position"), dict)}
+        updates = agent_presence.carry_nodes(positions, placed)
+        if updates:
+            await manager.broadcast_browser({"type": "agentPresenceArrival", "cursors": updates})
+    except Exception:  # noqa: BLE001 - decoration must not break a graph sync
+        logging.getLogger("nebula.presence").exception("cursor carry failed")
+
+
 def _require_clear_intent(force: bool) -> None:
     """Clearing a project that has nodes needs an explicit ``force``, from
     every caller (Justin's D3, 2026-10-18). This is a check of intent, not of
@@ -15001,6 +15078,15 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         f"made {len(made_ready)} ready" if made_ready else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
+    # The person's copy of it, on the agent's cursor and in the Agent log:
+    # what each count is of ("Moved 1 node"). Agents keep reading `summary`.
+    said = _edit_say([
+        ("added", len(added), "node"), ("added", len(edge_ids), "connection"),
+        ("changed", len(changed), "node"), ("renamed", len(renamed), "node"),
+        ("moved", len(moves), "node"), ("removed", len(removed), "node"),
+        ("removed", len(spec.unwire), "connection"),
+        ("made", len(made_pending), "placeholder"), ("made", len(made_ready), "node", " ready"),
+    ])
     if made_pending:
         _schedule_pending_expiry()
     publish_action(f"{identity.name} edited the canvas: {summary}")
@@ -15011,6 +15097,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # A param value change is typing, as through PUT (GM - Design, PR
         # #211 r2): the person's tabs show `type`; agents still read `click`.
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          person_say=None if note else said,
                           shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
@@ -17383,6 +17470,9 @@ async def list_projects() -> dict[str, Any]:
             _adopt_run_canvases(adopted)
             if filed_from is not None:
                 _note_canvas_filed(*filed_from, _workspace_context())
+        # Trash past its 30 days takes its boards (and a purge that stopped
+        # part way finishes here).
+        assets_gone = _purge_noted_assets(catalog)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -17396,6 +17486,7 @@ async def list_projects() -> dict[str, Any]:
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     return listing
 
 
@@ -18262,7 +18353,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             project_store.commit(catalog)
         result = {
             "deletedProjectId": project_id,
-            "trashedProject": trash_metadata(trashed),
+            "trashedProject": _trash_entry(trashed),
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
@@ -18274,9 +18365,63 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     return result
 
 
+def _purge_noted_assets(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """After a commit that deleted projects for good (they're on the
+    catalog's ``assetPurges`` list, services/project_asset_purge.py): delete
+    their moodboards, characters and styles, then take them off the list and
+    commit again. Returns what went, by kind, for _broadcast_assets_gone.
+    Call it inside the transaction, after the commit: a failure leaves the
+    ids on the list, and the next purge, listing or start finishes them.
+    Never fails the route, whose own change is already saved."""
+    if not project_asset_purge.pending(catalog):
+        return {}
+    try:
+        done, removed = project_asset_purge.finish(catalog, state_dir=_catalog_folder())
+        if done:
+            project_asset_purge.clear(catalog, done)
+            project_store.commit(catalog)
+    except Exception as exc:  # noqa: BLE001 - retried by the next purge, listing or start
+        logging.getLogger(__name__).warning("Files of projects deleted for good not removed yet: %s",
+                                            type(exc).__name__)
+        return {}
+    return removed
+
+
+async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) -> None:
+    """Tell canvases each moodboard, character and style that went with its
+    project is gone, before projectsChanged, so a Studio, card or list that
+    re-checks on either finds it gone. A style is journaled as deleted for
+    good too, as a Style purged from Recently deleted is."""
+    for kind in project_asset_purge.KINDS:
+        for item in removed.get(kind) or ():
+            if kind == "style":
+                _journal_style("purged", item, style_id=item["id"])
+            await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
+
+
+def _catalog_folder() -> Path:
+    """The folder holding the catalog's ``projects/`` (``~/.nebula``, or the
+    desktop app's ``<data>/state``): a store's files are deleted with a
+    project only when the store sits beside it
+    (project_asset_purge.roots_paired)."""
+    return project_store.root.parent
+
+
 def _trash_listing(catalog: dict[str, Any]) -> list[dict[str, Any]]:
-    entries = (catalog.get("trash") or {}).values()
-    return sorted((trash_metadata(entry) for entry in entries), key=lambda entry: entry["deletedAt"], reverse=True)
+    """Recently deleted projects, newest first. Each says what deleting it
+    for good also deletes (``goesWith``: the names of its ``moodboards``,
+    ``characters`` and ``styles``, live and trashed), for the Projects
+    screen's confirmation lines. One read of each store for the whole list."""
+    entries = list((catalog.get("trash") or {}).values())
+    goes = project_asset_purge.goes_with([entry["id"] for entry in entries], state_dir=_catalog_folder())
+    listed = [{**trash_metadata(entry), "goesWith": goes[entry["id"]]} for entry in entries]
+    return sorted(listed, key=lambda entry: entry["deletedAt"], reverse=True)
+
+
+def _trash_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """One Recently deleted project as listed, with ``goesWith`` (_trash_listing)."""
+    return {**trash_metadata(entry),
+            "goesWith": project_asset_purge.names(entry["id"], state_dir=_catalog_folder())}
 
 
 def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
@@ -18299,10 +18444,12 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)  # trash past its 30 days took its boards
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("restored", project_id)
     return result
@@ -18315,12 +18462,16 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
+        # Its boards go with it: noted in this commit, deleted after it.
+        project_asset_purge.note_purged(catalog, [project_id])
         project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
         result = {"trash": _trash_listing(catalog)}
     # Its question sets went with its record; the book forgets them too.
     agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     await _broadcast_projects_changed("purged", project_id)
     return result
 
@@ -18337,13 +18488,18 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         doomed = [project_id for project_id in trash if shown is None or project_id in shown]
         for project_id in doomed:
             del trash[project_id]
+        assets_gone: dict[str, list[dict[str, Any]]] = {}
         if doomed:
+            # Their boards go with them: noted in this commit, deleted after it.
+            project_asset_purge.note_purged(catalog, doomed)
             project_store.commit(catalog)
+            assets_gone = _purge_noted_assets(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
         kept = set(catalog["projects"]) | set(trash)
         result = {"trash": _trash_listing(catalog)}
     if doomed:
         agent_questions.keep_projects(kept)
+        await _broadcast_assets_gone(assets_gone)
         await _broadcast_projects_changed("purged")
     return result
 
@@ -20512,17 +20668,20 @@ def _trash_scope(scope: str | None, project_id: str | None) -> None:
         raise HTTPException(status_code=400, detail="projectId is required for scope=project")
 
 
-def _project_trash_items() -> list[dict[str, Any]]:
+def _project_trash_items() -> tuple[list[dict[str, Any]], list[str]]:
+    """Trashed projects as GET /api/trash lists them, and the ids of the
+    boards that went with any past their 30 days (for _broadcast_assets_gone)."""
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         if expired:
             project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         items = [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
-    return items
+    return items, assets_gone
 
 
 @app.get("/api/trash")
@@ -20530,19 +20689,32 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
                      projectId: str | None = None) -> dict[str, Any]:
     """What's in Recently deleted, newest first. ``kind`` narrows it to
     moodboards, characters or projects; ``scope`` (global, or project with
-    ``projectId``) narrows boards and characters the way their lists do."""
+    ``projectId``) narrows boards and characters the way their lists do.
+    A board, character or style that goes when its project is deleted for
+    good has ``goesWithProject: true`` (deleted from that project's own
+    folder, in a store beside this catalog: project_asset_purge)."""
     if kind is not None:
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     items: list[dict[str, Any]] = []
+    paired_kinds: set[str] | None = None
     for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             try:
-                items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
+                records = _asset_store(asset_kind).list_trash(scope=scope, projectId=projectId)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if paired_kinds is None:
+                paired, _unpaired = project_asset_purge.paired_stores(_catalog_folder())
+                paired_kinds = {store.kind for store in paired}
+            for record in records:
+                pid = record.get("projectId")
+                items.append({**record, "goesWithProject": True} if (
+                    asset_kind in paired_kinds and pid and record.get("scopeDir") == pid) else record)
     if kind in (None, "project") and scope is None:
-        items.extend(_project_trash_items())
+        trashed_projects, assets_gone = _project_trash_items()
+        items.extend(trashed_projects)
+        await _broadcast_assets_gone(assets_gone)
     items.sort(key=lambda item: str(item.get("deletedAt") or ""), reverse=True)
     return {"items": items}
 
@@ -20635,14 +20807,19 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
             for project_id in doomed:
                 del trash[project_id]
+            assets_gone: dict[str, list[dict[str, Any]]] = {}
             if doomed:
                 purged += len(doomed)
+                # Their boards go with them: noted in this commit, deleted after it.
+                project_asset_purge.note_purged(catalog, doomed)
                 project_store.commit(catalog)
+                assets_gone = _purge_noted_assets(catalog)
                 node_errors.keep_projects(set(catalog["projects"]) | set(trash))
             kept = set(catalog["projects"]) | set(trash)
         if doomed:
             # Their question sets went with their records; the book forgets them too.
             agent_questions.keep_projects(kept)
+            await _broadcast_assets_gone(assets_gone)
             await _broadcast_projects_changed("purged")
     return {"purged": purged}
 

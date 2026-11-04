@@ -341,7 +341,7 @@ def test_the_no_session_cursor_takes_part_and_carries_its_number_to_the_person()
     assert person["session"] == {"key": alone.session_key(AGENT.id, ""), "ordinal": 1}
     # And when its cursor came there (r21): person-only, for the stack order.
     assert person["since"] == int(clock.now * 1000)
-    assert {k: v for k, v in person.items() if k not in ("session", "since")} == event
+    assert {k: v for k, v in person.items() if k not in ("session", "since", "eventId")} == event
     assert json.dumps(event) == before  # the agent form, byte for byte
 
     presence = AgentPresence(clock)
@@ -454,10 +454,15 @@ def test_the_shown_action_changes_only_the_person_form():
     assert same["action"] == "click"
 
 
-def test_an_agent_log_only_event_has_one_form():
+def test_an_agent_log_only_event_has_one_form_for_agents():
     presence = AgentPresence(Clock())
     event = presence.point(AGENT, target=None, say="Made “Desert light”")
-    assert presence.person_form(event, AGENT, session="a", shown="type") is event
+    before = dict(event)
+    person = presence.person_form(event, AGENT, session="a", shown="type")
+    # The same line, with only its id for the person's Agent log (#211
+    # follow-up, LOW-5): the agent form is untouched.
+    assert {k: v for k, v in person.items() if k != "eventId"} == event == before
+    assert isinstance(person["eventId"], str) and "eventId" not in event
     assert presence.live_sessions(AGENT.id) == []
 
 
@@ -517,6 +522,7 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
     plain = json.loads(plain)
     assert plain.pop("session")["ordinal"] == 1
     assert isinstance(plain.pop("since"), int)  # its arrival, person-only (r21)
+    assert isinstance(plain.pop("eventId"), str)  # the log's id for it, person-only (#211 follow-up)
     assert json.dumps(plain) == expected
 
     def reads(headers: dict) -> list[str]:
@@ -535,6 +541,7 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
         form = json.loads(person)
         session_field = form.pop("session")
         assert isinstance(form.pop("since"), int)
+        assert isinstance(form.pop("eventId"), str)  # the log's id for it, person-only (#211 follow-up)
         assert json.dumps(form) == expected
         assert set(session_field) == {"key", "ordinal"}
         assert next(iter(session.values())) not in person  # never the raw id
@@ -545,6 +552,7 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
     # cursor's arrival (r21).
     for text in [*reads(CLAUDE), *_presence_frames(api.listener)]:
         assert '"session"' not in text and '"ordinal"' not in text and '"since"' not in text
+        assert '"eventId"' not in text  # the Agent log's id, person-only (#211 follow-up)
 
 
 def test_decision_4_the_start_bundle_is_the_same_with_session_headers(sockets):
@@ -631,6 +639,7 @@ def test_an_edit_with_no_session_reaches_the_person_with_its_number_and_agents_u
     person = json.loads(person_frame)
     assert person.pop("session")["ordinal"] == 1
     assert isinstance(person.pop("since"), int)
+    assert isinstance(person.pop("eventId"), str)  # the log's id for it, person-only (#211 follow-up)
     assert "since" not in json.loads(agent_frame)
     assert json.dumps(person) == agent_frame
 
@@ -1129,12 +1138,13 @@ def test_each_cursor_carries_when_it_came_to_where_it_is_and_the_replay_keeps_it
     form("s3", {"x": 10, "y": 10})
     clock.now += 1
     assert form("s3", {"x": 10 + ARRIVAL_RADIUS, "y": 10})["since"] == 5_005_000
-    # Somewhere new: it arrives now.
+    # Somewhere new: it arrives now. Two in the same millisecond get two
+    # arrivals, in order (#211 follow-up, LOW-2).
     clock.now += 1
     assert form("s3", {"x": 10 + 3 * ARRIVAL_RADIUS, "y": 10})["since"] == 5_007_000
-    assert form("s1", {"nodeId": "n2"})["since"] == 5_007_000
+    assert form("s1", {"nodeId": "n2"})["since"] == 5_007_001
     # The replay (a reload, another tab) carries the same arrivals.
     replayed = {c["session"]["ordinal"]: c["since"] for c in presence.replay()}
-    assert replayed == {1: 5_007_000, 2: 5_002_000, 3: 5_007_000}
+    assert replayed == {1: 5_007_001, 2: 5_002_000, 3: 5_007_000}
     # The agent form never carries it.
     assert "since" not in _event(presence)
