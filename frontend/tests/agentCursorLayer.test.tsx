@@ -2258,7 +2258,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       return [700 * (1 - z), 400 * (1 - z), z] as [number, number, number];
     }) : [])],
   ];
-  it.each(zoomRuns)('%s, starting one frame after a say: the steps stay in screen px while the column glides, nothing meets', (_name, zoomAt) => {
+  const zoomGlide = (zoomAt: (f: number) => [number, number, number][]) => {
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
@@ -2288,6 +2288,25 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(meetFrames).toBe(0);
     expect(screenY('b') - screenY('a')).toBeCloseTo(SS, 6);
     expect(screenY('c') - screenY('b')).toBeCloseTo(S, 6);
+  };
+  it.each(zoomRuns)('%s, starting one frame after a say: the steps stay in screen px while the column glides, nothing meets', (_name, zoomAt) => {
+    zoomGlide(zoomAt);
+  });
+  // #219 r3h: the same, with performance.now() as a browser has it, a little
+  // past the last frame's timestamp and later on each read. A zoom's carry
+  // read the clock once per cursor, so the member above stepped at t and
+  // this one at t + a few µs: hold() took the one above for one still to
+  // step and left this one off the floor, 40.89 px apart (CI part 3, whose
+  // worker clock had run past the frames' clock; a fresh local worker's
+  // hadn't). The carry steps every cursor in the frame it happens in.
+  it.each(zoomRuns)('%s, starting one frame after a say, the clock past the frame: the steps stay in screen px while the column glides, nothing meets', (_name, zoomAt) => {
+    let reads = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock + 4 + (reads += 0.001));
+    try {
+      zoomGlide(zoomAt);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   // Review 7, MEDIUM-4: a pill measured before its font loaded.

@@ -562,6 +562,17 @@ class CursorField {
   readonly dueAt = new Map<string, number>();
   frameTime = -Infinity;
 
+  /** The time a zoom's carry steps a cursor at: the frame it happens in,
+   *  one value for every cursor it carries. A clock read per cursor gives
+   *  each its own frame (the one above stepped at t, this one at t + a few
+   *  µs), so hold() took the member above for one still to step and left
+   *  this one off the floor, 1.1 px under the step mid-zoom on CI's slower
+   *  clock (#219 r3h). A clock read can also be past the next frame's
+   *  timestamp, and that frame would then not move frameTime on. */
+  carryTime(): number {
+    return Number.isFinite(this.frameTime) ? this.frameTime : performance.now();
+  }
+
   /**
    * Is there room for this cursor's say pill on `side`, drawn at `at`
    * (where the cursor is this frame)? Against every other cursor as it is
@@ -1546,7 +1557,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         if (frame.current !== null) cancelAnimationFrame(frame.current);
         frame.current = null;
         field.dueAt.delete(cursor.key);
-        tick(resting || lastTime.current === null ? performance.now() : lastTime.current);
+        tick(resting || lastTime.current === null ? field.carryTime() : lastTime.current);
         // The next frame's step counts from that frame, not from now.
         if (resting) lastTime.current = null;
         return;

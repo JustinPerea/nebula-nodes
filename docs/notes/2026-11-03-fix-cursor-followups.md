@@ -491,6 +491,63 @@ asked for the move to be pinned.
   to 7,000 frames each), and no arrival is counted. In Chrome the crossing
   z-index computes to -1 - depth.
 
+## 2j. Round 3h (CI after round 3g)
+
+CI's "Frontend tests (part 3 of 3)" failed two of r17's zoom tests on
+df0f53e8: setViewport 1 → 0.5 (b to c 40.89 px) and the pinch (41.62 px),
+both under the 42 px step, on the first carry of the zoom.
+
+- **Cause: the zoom's carry read the clock once per cursor, not r85's
+  band.** BAND_ZOOM is read only while a node is dragged, and the zoom tests
+  drag nothing, so r85 and r17 don't conflict. The zoom's store subscription re-ticks each
+  resting cursor, and one that is woken but hasn't stepped, at
+  `performance.now()`. Each read is a little later than the one before:
+  b stepped at t and c at t + a few µs, and each advanced `frameTime`. When
+  c held itself, round 3g's "wait for the member above to step in this
+  frame" (drag LOW-1) found `steppedAt(b) !== frameTime` with b's `dueAt`
+  older than `frameTime`, so it took b for one still to step. b's
+  `holdBelow` had already skipped c for the same reason, so c kept its
+  zoom-1 canvas offset: 42.06 canvas units at zoom 0.972 is 40.89 px. The
+  frame after, c was back on the floor.
+- **Why the local runs passed.** The tests' frames run on their own clock
+  (1/60 s a frame, about 2,367 ms by that test), while `performance.now()`
+  is the worker's real clock. That's Node's own clock, not jsdom's. Locally
+  the worker had run about 1.8 s when it got to that test, behind the frame
+  clock, so `frameTime` never moved and the gate let c through. On CI's
+  slower runner the worker's clock had passed 2,367 ms. Measured locally:
+  perfNow 1,802 to 1,826 against frameClock 2,367. The file was in round
+  3g's list and the merge with main changed no cursor code. Removing r3g's
+  `upDue` line passes the CI trace again, so the gate is the trigger. In a
+  browser the same thing happens: an event's clock is always past the last
+  frame's timestamp, and each read is later.
+- **Fix.** `CursorField.carryTime()`: a zoom's carry steps every cursor at
+  the frame it happens in (`frameTime`), one value for all of them. It reads
+  the clock only before any frame has run. A glide still steps no time
+  (`lastTime`). `frameTime` stays on the frames' timeline, so a carry no
+  longer sets it past the next frame's timestamp.
+- **Test.** The three r17 zoom runs again, with `performance.now()` as a
+  browser has it: 4 ms past the last frame and later on each read. Without
+  the fix they fail with CI's exact numbers (40.891583397633724 and
+  41.619971450617356). The r17 body is shared (`zoomGlide`) and its
+  assertions are unchanged.
+- **r89 item 2 is kept.** The crossing rule at rest in `hold()` is
+  untouched, and the reverse-order and r75/r85 traces pass.
+- **Mutation.** 3 of 3 killed (the carry reads the clock per cursor; the
+  zoom tick back on `performance.now()`; only resting cursors on the
+  carry time). The 4th, which drops `resting ||`, is equivalent: a resting
+  cursor's `lastTime` is always null.
+- **Not covered.** With every `performance.now()` read (React's included)
+  stepping 3 ms or more, which is about 3 s of wall time for a 60-frame
+  test, one frame still meets. That happens before the fix too and comes
+  from the say's 600 ms cap reading wall time while the frames run on
+  their own clock. CI's real timings (about 70 ms a test) don't reach it.
+- **Round 3h checks.** tsc and `npm run lint` pass. The build and the budget
+  check pass: entry 471,107 B raw of 512,000. Vitest, an explicit list of
+  22 files (every test that names the cursors, plus the three ratchets),
+  `--maxWorkers=2`: 825 passed. Backend, isolated, 5 files: 169 passed. No
+  live run: the change is only on a zoom's carry, and r3g's held and
+  after-drop shots have no zoom.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's
