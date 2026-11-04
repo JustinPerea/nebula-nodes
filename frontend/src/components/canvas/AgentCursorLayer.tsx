@@ -160,6 +160,16 @@ class CursorField {
   /** The members of every column one of whose cursors glides now: drawn in
    *  column order, the head on top (inOrder). */
   readonly ordered = new Set<string>();
+  /** Cursors drawn over every other cursor and wire (GM - Design, #219
+   *  r103): from the frame a flight starts until it has landed and its
+   *  column's glide is at rest (aloftRank). Each with the order its flight
+   *  started in, so of two flights that overlap the later one is on top. */
+  readonly aloft = new Map<string, { seq: number; flight: object | null }>();
+  private flightSeq = 0;
+  /** Cursors whose loop stopped with their node gone (the view's tick finds
+   *  no target): they glide and fly no more, so they hold no column order,
+   *  no crossing and no place on top (#219 review 6, NIT-1). */
+  readonly stalled = new Set<string>();
   /** Count cursors on their way out, by key, with the members they stood
    *  for: the count that takes their slot (one of those members) waits,
    *  unseen, until they are gone, so a column never shows more than three
@@ -326,9 +336,14 @@ class CursorField {
   }
 
   /** The cursor visibly landed: it takes its place in the stack now, so the
-   *  one that lands second moves aside (GM - Design, PR #211 r5). No other
-   *  cursor needs waking: its stamp is the newest, so every landed cursor
-   *  keeps its spot, and those still on their way are awake already. */
+   *  one that lands second moves aside (GM - Design, PR #211 r5). When its
+   *  stamp is the newest, every landed cursor keeps its spot, and those
+   *  still on their way are awake already. When it isn't (an older backend
+   *  arrival landing after a newer one: two agents sent to one node a
+   *  moment apart, the far one landing second), the column re-sorts under
+   *  it: the others wake and glide to their new slots on the layout spring,
+   *  never left on their old ones until it reaches its own (#219 review 6,
+   *  LOW-3). */
   landed(key: string): void {
     const entry = this.targets.get(key);
     if (!entry || entry.since !== Infinity) return;
@@ -336,6 +351,8 @@ class CursorField {
     // reload (r21).
     this.targets.set(key, { ...entry, since: entry.rank, landedSeq: (this.arrivals += 1), at: { ...entry.target } });
     this.version += 1;
+    const newer = [...this.targets].some(([other, v]) => other !== key && v.since !== Infinity && v.since >= entry.rank);
+    if (newer) for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
   spot(key: string, zoom: number): Point | undefined {
@@ -463,6 +480,11 @@ class CursorField {
       this.heldSince.delete(key);
     }
     if (!m || !entry || m.plan || entry.since === Infinity) return false;
+    // Its loop stopped (its node gone): it is moved and marked no more.
+    if (this.stalled.has(key)) {
+      this.crossing.delete(key);
+      return false;
+    }
     // Not stepped at this zoom yet (a zoom's frame, before its own turn):
     // its own step carries it to this zoom first, then holds it.
     if (m.lastZoom !== null && m.lastZoom !== zoom) return false;
@@ -530,41 +552,107 @@ class CursorField {
     return true;
   }
 
+  /** `orderZoom`: the zoom the order is read at, the store's, one value for
+   *  every view (the layer passes it). Each view's own zoom changes at its
+   *  own tick, so two views read in one moment could see two layouts, one
+   *  ordering the column and the other not, and each repaint undo the
+   *  other's without end (#219 review 6, drag-live HIGH-1). */
+  readonly orderZoom: () => number;
+  constructor(orderZoom: () => number = () => 1) {
+    this.orderZoom = orderZoom;
+  }
+  /** Each view's paint of its marks (aloft, crossing, column order) from
+   *  the field's state as it is: it never works the order out again
+   *  (syncOrder), so a repaint from there can't re-enter it. */
+  readonly markers = new Map<string, () => void>();
+  private syncing = false;
+
   /**
-   * Column order while a glide lasts (GM - Design, #219 r95): while any
-   * member of a column glides on the land spring, every member of it draws
-   * in column order, the head on top, so a gliding cursor never draws under
-   * a member it passes, however far down the column (a carry going from the
-   * bottom slot back to the head passes two; the crossing mark only ever
-   * judges the member right above, review 5, drag-live LOW-1). After the
-   * glide the column's normal order returns. A flight is not a glide (it
-   * passes over by design), nor is a ride, and a member whose loop stopped
-   * (its node gone) glides no more. A cursor alone in its column has no
-   * order to keep. True when `key` is in a column drawn in order now; any
-   * other member whose state this changes is drawn again here.
+   * The draw order's state, worked out once, at the store's zoom, for every
+   * cursor at once (GM - Design, #219 r95, r103 and r106):
+   *
+   * - **Aloft.** A flight stays on top until it lands: from the frame its
+   *   flight starts, the cursor draws over every column member, every other
+   *   cursor and every wire, and it takes its column's order only once it
+   *   has landed (its own landing glide over) and its column's glide is at
+   *   rest, so the z swap happens with nothing moving and it never falls
+   *   under a member still passing. Of two flights that overlap, the
+   *   later-started one is on top: a new event's flight (a new plan) starts
+   *   again on top of the others.
+   * - **Column order.** While any member of a column of two or more glides
+   *   on the land spring, or is marked crossing, every member of it draws in
+   *   column order, the head on top, so a gliding cursor never draws under
+   *   a member it passes, however far down the column (a carry going from
+   *   the bottom slot back to the head passes two; the crossing mark only
+   *   ever judges the member right above). After the glide the column's
+   *   normal order returns. A flight is not a glide, nor is a ride, and a
+   *   member whose loop stopped (its node gone) glides no more. A cursor
+   *   alone in its column has no order to keep.
+   *
+   * Every other cursor whose marks this changes is repainted here, by its
+   * marker, which only reads this state. Re-entry (a marker can't reach it,
+   * but nothing else may either) returns at once.
    */
-  inOrder(key: string, zoom: number): boolean {
-    const laid = this.layout(zoom);
+  syncOrder(key: string): void {
+    if (this.syncing) return;
+    this.syncing = true;
+    try {
+      const laid = this.layout(this.orderZoom());
+      const { size, gliding } = this.glides(laid);
+      const changed = new Set<string>();
+      for (const k of new Set([...this.aloft.keys(), ...this.motions.keys()])) {
+        const m = this.motions.get(k);
+        const entry = this.aloft.get(k);
+        const stalled = this.stalled.has(k);
+        if (m?.plan && !stalled) {
+          if (entry?.flight !== m.plan) {
+            this.aloft.set(k, { seq: (this.flightSeq += 1), flight: m.plan });
+            changed.add(k);
+          }
+          continue;
+        }
+        if (!entry) continue;
+        entry.flight = null;
+        const column = laid.get(k)?.column;
+        if (m && !stalled && (m.landing || (column !== undefined && gliding.has(column)))) continue;
+        this.aloft.delete(k);
+        changed.add(k);
+      }
+      if (this.aloft.size === 0) this.flightSeq = 0;
+      const want = new Set<string>();
+      for (const [k, spot] of laid) {
+        if (spot.column !== undefined && !spot.collapsedInto && gliding.has(spot.column) && size.get(spot.column)! > 1) want.add(k);
+      }
+      for (const k of new Set([...this.ordered, ...want])) if (want.has(k) !== this.ordered.has(k)) changed.add(k);
+      this.ordered.clear();
+      for (const k of want) this.ordered.add(k);
+      for (const k of changed) if (k !== key) this.markers.get(k)?.();
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  /** The columns one of whose members glides on the land spring now (not a
+   *  flight, a ride, or a member whose loop stopped) or is marked crossing,
+   *  and each column's size. */
+  private glides(laid: Map<string, StackSpot>): { size: Map<string, number>; gliding: Set<string> } {
     const size = new Map<string, number>();
     const gliding = new Set<string>();
     for (const [k, spot] of laid) {
       if (spot.column === undefined || spot.collapsedInto) continue;
       size.set(spot.column, (size.get(spot.column) ?? 0) + 1);
+      if (this.stalled.has(k)) continue;
       const m = this.motions.get(k);
       const stepped = this.steppedAt.get(k);
-      if (m?.landing && !m.plan && stepped !== undefined && this.frameTime - stepped < 100) gliding.add(spot.column);
+      if (this.crossing.has(k) || (m?.landing && !m.plan && stepped !== undefined && this.frameTime - stepped < 100)) gliding.add(spot.column);
     }
-    const want = new Set<string>();
-    for (const [k, spot] of laid) {
-      if (spot.column !== undefined && !spot.collapsedInto && gliding.has(spot.column) && size.get(spot.column)! > 1) want.add(k);
-    }
-    const changed = [...new Set([...this.ordered, ...want])].filter((k) => want.has(k) !== this.ordered.has(k));
-    if (changed.length > 0) {
-      this.ordered.clear();
-      for (const k of want) this.ordered.add(k);
-      for (const k of changed) if (k !== key) this.placers.get(k)?.();
-    }
-    return want.has(key);
+    return { size, gliding };
+  }
+
+  /** How many members sit above this cursor's slot, read at the order's
+   *  zoom: its place in its column's order (0 for the head). */
+  depthOf(key: string): number {
+    return this.layout(this.orderZoom()).get(key)?.above.length ?? 0;
   }
 
   /** This cursor came to rest outside a frame's own step (a caught-up frame
@@ -839,10 +927,14 @@ class CursorField {
     this.wakers.delete(key);
     this.paint.delete(key);
     this.placers.delete(key);
+    this.markers.delete(key);
     this.names.delete(key);
     this.revs.delete(key);
     this.opening.delete(key);
     this.crossing.delete(key);
+    this.ordered.delete(key);
+    this.aloft.delete(key);
+    this.stalled.delete(key);
     this.steppedAt.delete(key);
     this.dueAt.delete(key);
     this.version += 1;
@@ -853,6 +945,11 @@ class CursorField {
 /** A new say pill waits at most this long for the room under it to clear;
  *  the cursors below need about 230 ms on the land spring. */
 const SAY_WAIT_MAX_MS = 600;
+
+/** The depths the order band has room for (agentCursor.css: a marked
+ *  cursor draws at 10 - depth, over an unmarked one at 1). A column shows
+ *  at most three, so a deeper slot isn't drawn. */
+const AGENT_CURSOR_ORDER_DEPTHS = 8;
 
 /** De-stacking order for cursors still on their way: after every landed one. */
 // Past any backend arrival (wall-clock ms).
@@ -1251,24 +1348,47 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       // one above draws on top and their labels never interleave (GM r75.2).
       // Two crossing at once keep their column's order between themselves,
       // the upper one on top, not the DOM's (GM r85 NIT): its depth is how
-      // many members its slot has above it (agentCursor.css).
-      // And while any member of its column glides, the whole column draws
-      // in that order, so a glide never passes under a member it is drawn
-      // over (GM r95; CursorField.inOrder).
-      const crossing = !leaving && field.crossing.has(cursor.key);
-      const ordered = !leaving && field.inOrder(cursor.key, zoomRef.current);
+      // many members its slot has above it (agentCursor.css). And while any
+      // member of its column glides, the whole column draws in that order
+      // (GM r95). The order is worked out once for every cursor, at one
+      // zoom (CursorField.syncOrder), then this one's marks are painted
+      // from it.
+      if (!leaving) field.syncOrder(cursor.key);
+      paintMarks();
+    };
+    // Its marks only, from the field's state: what syncOrder repaints.
+    // A flight draws over everything until it has landed and its column is
+    // at rest (GM r103): no crossing and no column order show while it is
+    // aloft. Crossing and column order share one band inside the cursor
+    // layer, over the wires, the head on top (r106; agentCursor.css).
+    const paintMarks = () => {
+      const el = cursorRef.current;
+      if (!el) return;
+      const aloft = leaving ? null : field.aloft.get(cursor.key)?.seq ?? null;
+      const crossing = aloft === null && !leaving && field.crossing.has(cursor.key);
+      const ordered = aloft === null && !leaving && field.ordered.has(cursor.key);
+      if (aloft !== null) {
+        el.dataset.aloft = 'true';
+        el.style.setProperty('--agent-cursor-aloft', String(aloft));
+      } else {
+        delete el.dataset.aloft;
+        el.style.removeProperty('--agent-cursor-aloft');
+      }
       if (crossing) el.dataset.crossing = 'true';
       else delete el.dataset.crossing;
       if (ordered) el.dataset.columnOrder = 'true';
       else delete el.dataset.columnOrder;
       if (crossing || ordered) {
-        el.style.setProperty('--agent-cursor-crossing-depth', String(field.layout(zoomRef.current).get(cursor.key)?.above.length ?? 0));
+        el.style.setProperty('--agent-cursor-crossing-depth', String(Math.min(AGENT_CURSOR_ORDER_DEPTHS, field.depthOf(cursor.key))));
       } else {
         el.style.removeProperty('--agent-cursor-crossing-depth');
       }
     };
     place.current = apply;
-    if (!leaving) field.placers.set(cursor.key, apply);
+    if (!leaving) {
+      field.placers.set(cursor.key, apply);
+      field.markers.set(cursor.key, paintMarks);
+    }
     const updateWire = (start: Point | null, arrivedNow = false) => {
       const line = wireRef.current;
       const m = motion.current;
@@ -1388,8 +1508,19 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
         if ('nodeId' in cursor.target) field.nodeGone(cursor.target.nodeId);
+        if (motion.current && !field.stalled.has(cursor.key)) {
+          // Its loop stops where it is (its node gone mid-glide or
+          // mid-flight): no crossing, column order or place on top outlives
+          // it, and its column's order ends now if it was the one gliding
+          // (#219 review 6, NIT-1).
+          field.stalled.add(cursor.key);
+          field.snapped(cursor.key);
+          apply();
+        }
         return; // Node not drawn yet; the store subscription wakes us.
       }
+      // Back on a drawn node (an undo): its loop runs again.
+      field.stalled.delete(cursor.key);
       // The zoom this frame, from the store: a zoom in progress carries the
       // column at its screen-px steps on this very frame (review 6, item 5).
       const z = store.getState().transform?.[2] ?? zoomRef.current;
@@ -1629,6 +1760,12 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         if (frame.current !== null) cancelAnimationFrame(frame.current);
         frame.current = null;
         field.dueAt.delete(cursor.key);
+        // Woken and not stepped yet, it steps no time here either: its
+        // clock is the carry's for this one step, so each zoom update
+        // before its first frame moves it by the zoom alone, never by a
+        // frame's travel each (N updates were N frames at once: #219
+        // review 6, LOW-2). One at rest steps as before.
+        if (fresh && !resting) lastTime.current = field.carryTime();
         tick(fresh ? field.carryTime() : lastTime.current!, true);
         // The next frame's step counts from that frame, not from now.
         if (fresh) lastTime.current = null;
@@ -1640,6 +1777,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       unsubscribe();
       field.pointerListeners.delete(onPointer);
       if (field.placers.get(cursor.key) === apply) field.placers.delete(cursor.key);
+      if (field.markers.get(cursor.key) === paintMarks) field.markers.delete(cursor.key);
       field.dueAt.delete(cursor.key);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
@@ -1759,7 +1897,11 @@ export function AgentCursorLayer() {
   const agents = useAgentPresenceStore((s) => s.agents);
   const prune = useAgentPresenceStore((s) => s.prune);
   const zoom = useStore((s) => s.transform[2]);
-  const [field] = useState(() => new CursorField());
+  // One zoom for the draw order, the store's, read when it is worked out
+  // (CursorField.syncOrder). The store's API is the same object for the
+  // layer's life.
+  const orderStore = useStoreApi<Node<NodeData>>();
+  const [field] = useState(() => new CursorField(() => orderStore.getState().transform?.[2] ?? 1));
   useEffect(() => () => field.dispose(), [field]);
   // Fonts that finish loading can widen a pill measured with the fallback:
   // every cursor measures again (review 7, MEDIUM-4).

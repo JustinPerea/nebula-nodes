@@ -647,6 +647,132 @@ both under the 42 px step, on the first carry of the zoom.
   from the frame clock: all pass. Build and budget: entry 471,107 B raw
   (146,495 gzip) of 512,000.
 
+## 2l. Round 3j (review 6, GM r103 and r106)
+
+- **HIGH-1 (drag-live), the order recursed without end.** `inOrder()` read
+  the column order at the zoom each view passed. Each view's `zoomRef`
+  changes at its own tick, so during a zoom one view saw a gliding column
+  and ordered it while the other saw two columns and un-ordered it. Each
+  repainted the other through `placers` (a full `apply()` that ran
+  `inOrder()` again), until RangeError. Thrown during render it took the
+  whole layer down. Fixed at the structure:
+  - `CursorField.syncOrder()` works out the order (aloft, column order)
+    once, for every cursor, at one zoom: the store's, passed to the field
+    by the layer (`orderZoom`). No view's zoom goes into it.
+  - It repaints the cursors whose marks changed through `markers`: each
+    view's `paintMarks()`, which only reads `field.aloft`, `field.ordered`
+    and `field.crossing`. `apply()` = position, then `syncOrder()`, then
+    `paintMarks()`. A marker can't reach `syncOrder()`.
+  - Backstop: `syncOrder()` returns at once when re-entered (`syncing`).
+  - Tests: R6PROBE_P kept (6 gap/zoom pairs x k = 2-30, 48 cases): no
+    throw, and on every frame each cursor's `data-column-order` equals the
+    one field state. A source ratchet finds every field method that calls
+    a view back (placers, markers, wakeAll, and what calls them) and fails
+    if `apply()` reaches any but `syncOrder()`, if `paintMarks()` reaches
+    any, if `syncOrder()` names `placers`, or if its guard goes.
+  - Live (isolated 8780/5780, headless Chrome, 1440 and 1024): a ctrl+wheel
+    zoom-out during a flight into a column, 12 tries, 0 errors, cursors all
+    drawn. Only the first try of each run changed the zoom (the script's
+    reset didn't take), so this is 2 real cases; the test carries the 48.
+- **A. GM r103, a flight stays on top until it lands.** `data-aloft` with
+  `--agent-cursor-aloft` (the order its flight started in) from the frame
+  its flight starts (a plan). It stays aloft through its landing glide and
+  while its column still glides, and comes down on the first frame its
+  column is at rest, so the z swap happens with nothing moving. A new plan
+  (a new event mid-flight) takes a new rank: of two flights that overlap,
+  the later-started one is on top. No crossing or column-order mark shows
+  while aloft. The rank counter resets when no cursor is aloft. Tests: the
+  ratchet (a flight into the column while a say makes it glide, say at
+  0/6/12/30, both rAF orders): aloft and over every other cursor on every
+  frame anything moves, z 1 from the first frame of rest. Two overlapping
+  flights (both orders), and a new event mid-flight.
+- **GM r106, three layers.** Wires at z 0, every resting or gliding cursor
+  at 1, a crossing or an ordered column at `10 - depth` (depth capped at
+  8), a flight at `11 + rank`. No negative z-index anywhere, so an ordered
+  column never drops under a wire or another column's cursor. Tradeoff:
+  the band puts an ordered column over unmarked cursors of other columns
+  while it glides (raised, never lowered). With CSS z-index alone the
+  at-rest order between columns can't be kept exactly when two columns'
+  DOM orders interleave (a column member over a neighbour over another
+  member makes a cycle); columns don't overlap at rest, so nothing shows.
+  A crossing now orders its whole column too (`glides()` counts a crossing
+  member), so a crossing member never sits over the unmarked member above
+  it. Tests: CSS (no negative z, wires 0, cursors 1, the band, aloft over
+  it and after it), and a full glide down and back with a cursor of
+  another column and a flight: every cursor over the wires on every frame,
+  an ordered member never under the other column's resting cursor.
+  Two shots for GM, md5-distinct (live, isolated, headless Chrome at 1440,
+  page time slowed to 1/20 and rAF held for each shot): e and g gliding up
+  a step over a drag wire while d flies off on top (e z 10, g z 9, d z 14,
+  wire 0), and the same column at rest over a wire (all at 1, wire 0).
+- **B. LOW-3, an older arrival's landing re-sorted with a jump.** `landed()`
+  wakes the other cursors when any landed one has a stamp at or after its
+  own (it isn't the newest). They glide to their new slots on the layout
+  spring. R6P_FLIGHT kept (since 100 and 1500, both orders): largest frame
+  for d and e 4.9 px (was a 42 px jump), end slots as the backend's order
+  says, no frame pending. The wake alone gives the glide; nothing else was
+  needed.
+- **C. LOW-2, N zoom updates before a woken cursor's first frame.** The
+  carry of a cursor woken and not yet stepped now steps no time
+  (`lastTime = carryTime()` for that tick, reset after); a resting one
+  steps as before (zero-stepping it broke r4d's zoom carries, as review 6
+  said). R6P_MULTIZOOM kept for 1, 3 and 6 updates: first step 6.73 px
+  against 6.70 with none (was 23.7 / 74 / 159).
+- **D. NIT-1, a cursor whose node goes mid-glide kept its crossing.** On
+  the `!resolved` path the view marks itself `stalled`, clears its
+  crossing (`snapped`) and repaints. A stalled cursor counts as no glide,
+  holds no crossing (`hold` returns early) and comes down from aloft. Its
+  next resolved frame clears `stalled`. Tests: R6P_GONE kept (k 1-16,
+  both orders): no mark or depth on any cursor, no frame pending; and a
+  flight whose node goes mid-air comes down from on top.
+- **E. Mutation (42 mutants on the final code: review 6's 16, adapted
+  where the code moved, and 26 of mine; 7 test files).** Killed 27: N3,
+  N5, N7, N8, N11, N12, N14, N15, N16; A1 (never aloft), A5 (rank kept on
+  a new event), A6 (marks shown while aloft), A7 (rank never counts); B1
+  (no wake); C1 (carry steps a frame); D1, D3, D5 (stall never ends, killed
+  by a test added for it), D7; H1 (no re-entry guard), H2 (paint re-enters),
+  H3 (order at zoom 1, killed by a test added for it), H4 (repaint through
+  placers); X1 (a crossing doesn't order its column, killed by a test added
+  for it); S1-S3 (CSS: negative band, cursors back to auto, aloft under the
+  band). Survived 15, each equivalent or unreachable:
+  - N1, N2 (collapsed members ordered or counted): a collapsed member isn't
+    drawn, and a column with one is full, so its size is over 1 anyway.
+  - N4 (a leaving cursor read as ordered): a leaving key is released, so
+    it is never in `ordered`.
+  - N6 (no `steppedAt` on the stale path): the members under it read the
+    stale cursor's `dueAt`, already deleted, so they hold either way.
+  - N9 (a lone glider gets a rest gate): its gate is its own `nearRest`,
+    which is the rest it reaches alone.
+  - N10 (`forget` keeps a crossing): the key is gone from the layout, so
+    `glides()` and hold never read it; a cursor coming back under the same
+    key gets a fresh mark on its first hold.
+  - N13 (the 100 ms glide window as 1000): a stepped member's `landing`
+    ends on its rest frame, so the window only matters for a stopped loop,
+    which is now `stalled` (D) and skipped before the window is read.
+  - A2, A3 (aloft ends at the hand-off when the column isn't gliding, or
+    at its own rest whatever the column): a landing cursor in a column
+    makes its column glide itself (A2); and r65's rest gate lands a
+    column's gliders on one frame, so its own rest and the column's agree
+    except past the 300 ms cap (A3).
+  - A4, A8 (a change of aloft not repainted from another cursor's sync):
+    a flight starts in its own tick, which paints it; and an aloft cursor
+    that comes down when its column stops gliding also leaves `ordered`,
+    which repaints it.
+  - D2, D6 (the stall not snapped, or not repainted on its own): `hold`
+    on a stalled cursor clears its crossing, and the store change that
+    made it stall wakes every view, whose sync repaints it.
+  - D4 (a stalled member still counts as gliding): the 100 ms window ends
+    it after six frames; nothing shows in between that the tests sample.
+  - X2 (depth not capped at 8): a drawn column has at most three members.
+- **Round 3j checks.** `tsc -b --noEmit` and `npm run lint` pass. pr_tests
+  (the PR's test files plus every source-reading test, 116 files): 4,191
+  passed. land_checks with test_agent_cursor_followups: tsc, the three
+  ratchets (161), isolated pytest over 30 files (1,125 passed, 1 skipped),
+  person_gate unchanged. Every agentCursor*/cursor* file (7): 680 passed.
+  The zoom tests (382) with `performance.now()` skewed +4, +50, -4 and
+  -50 ms from the frame clock: all pass. Build and budget: entry 471,107 B
+  raw (146,505 gzip) of 512,000.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's

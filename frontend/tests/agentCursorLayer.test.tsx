@@ -3442,7 +3442,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // between themselves, the upper on top, whatever the DOM's order. In
   // [a, d, e], d and e both marked crossing: e comes after d in the DOM (it
   // would draw on top by DOM order), but d's depth is 1 and e's 2, so d's
-  // z-index (-1 - depth, agentCursor.css) is over e's. Unmarked, no depth.
+  // z-index (10 - depth, agentCursor.css) is over e's. Unmarked, no depth.
   it('two crossing members draw in column order, the upper on top, not in DOM order (r85 NIT)', () => {
     fakeTimers();
     try {
@@ -3453,13 +3453,17 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
       const field = fieldOf() as unknown as { crossing: Set<string>; placers: Map<string, () => void> };
       const keyOf = (k: string) => [...field.placers.keys()].find((x) => x.endsWith(k.repeat(12)))!;
-      const z = (k: string) => -1 - Number(byKey(k).style.getPropertyValue('--agent-cursor-crossing-depth'));
+      const z = (k: string) => 10 - Number(byKey(k).style.getPropertyValue('--agent-cursor-crossing-depth'));
       expect(cursors().indexOf(byKey('e'))).toBeGreaterThan(cursors().indexOf(byKey('d')));
       for (const k of ['d', 'e']) field.crossing.add(keyOf(k));
       act(() => { for (const k of ['e', 'd']) field.placers.get(keyOf(k))!(); });
       expect(byKey('d').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('1');
       expect(byKey('e').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('2');
       expect(z('d')).toBeGreaterThan(z('e'));
+      // A crossing orders its whole column (r106: one band, over every
+      // unmarked cursor): the head a, above both, draws over them too.
+      expect(byKey('a').dataset.columnOrder).toBe('true');
+      expect(zOf(byKey('a'))).toBeGreaterThan(zOf(byKey('d')));
       for (const k of ['d', 'e']) field.crossing.delete(keyOf(k));
       act(() => { for (const k of ['d', 'e']) field.placers.get(keyOf(k))!(); });
       for (const k of ['d', 'e']) {
@@ -4651,7 +4655,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // reverse order: d is marked crossing at rest (r89). Then 1 s with no
   // frames (a stall, a hidden tab), or a replay of a's event meanwhile:
   // a lands on its caught-up frame, or snaps to its spot, and neither went
-  // through holdBelow, so d kept its mark (and its negative z-index) at
+  // through holdBelow, so d kept its mark (and its order z-index) at
   // rest with no frame of its own to end it.
   it.each(['stall', 'replay'] as const)('a member marked crossing at rest loses its mark when the one above lands on a %s (review 5, LOW-1 and LOW-2)', (how) => {
     fakeTimers();
@@ -4695,12 +4699,13 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // lasts the whole column draws in column order, the head on top: a over d
   // over e, whatever the DOM's order; after it, normal order returns.
   /** How this cursor paints against the others in the layer: its z-index
-   *  (agentCursor.css: -1 - depth when marked, else auto, as 0), then the
+   *  (agentCursor.css: 10 - depth when marked, 11 + rank aloft, else 1), then the
    *  DOM's order. */
   const paintRank = (k: string): [number, number] => {
     const el = byKey(k);
     const marked = el.dataset.crossing === 'true' || el.dataset.columnOrder === 'true';
-    const z = marked ? -1 - Number(el.style.getPropertyValue('--agent-cursor-crossing-depth')) : 0;
+    const z = el.dataset.aloft === 'true' ? 11 + Number(el.style.getPropertyValue('--agent-cursor-aloft'))
+      : marked ? 10 - Number(el.style.getPropertyValue('--agent-cursor-crossing-depth')) : 1;
     return [z, cursors().indexOf(el)];
   };
   const drawnOver = (up: string, down: string) => {
@@ -4786,6 +4791,416 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // ===== #219 round 3j (review 6, GM r103) =====
+  /** The z-index a cursor draws at in the layer (agentCursor.css, r106):
+   *  aloft, 11 + its rank; crossing or in column order, 10 - its depth;
+   *  else 1. Every wire is at WIRE_Z. */
+  const WIRE_Z = 0;
+  const zOf = (el: HTMLElement) => {
+    if (el.dataset.aloft === 'true') return 11 + Number(el.style.getPropertyValue('--agent-cursor-aloft'));
+    if (el.dataset.crossing === 'true' || el.dataset.columnOrder === 'true') return 10 - Number(el.style.getPropertyValue('--agent-cursor-crossing-depth'));
+    return 1;
+  };
+  const pairAgent = { id: 'pair', name: 'Pair', color: '#FF9F43', verified: true };
+  type Motions = { motions: Map<string, { landing: unknown; plan: unknown }>; placers: Map<string, () => void>; aloft: Map<string, unknown> };
+
+  // GM r103 (review 6, LOW-1): g flies into the column d, e while d's say
+  // makes e glide (on its first frame, or 6 or 12 frames in). While g flies,
+  // and after it lands while anything in the column still moves, it draws
+  // over every member, every other cursor and every wire; on the first
+  // frame the column is at rest it takes the column's order, and never
+  // before. Either frame order.
+  it.each([[0, false], [0, true], [6, false], [6, true], [12, false], [30, true]] as const)('a flight draws over the column for its whole flight and takes column order on the first frame of rest (GM r103; say at %s, reversed: %s)', (sayAt, reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      settle(400);
+      reverseFrames = reversed;
+      const field = fieldOf() as unknown as Motions;
+      send(event({ ...session('g', 1), agent: pairAgent, target: { x: 500, y: 344 }, since: 3000 }));
+      const g = () => cursors().find((el) => el.dataset.agent === 'pair')!;
+      const gKey = [...field.placers.keys()].find((x) => !['a', 'd', 'e'].some((c) => x.endsWith(c.repeat(12))))!;
+      let flew = 0;
+      let restAt = -1;
+      for (let i = 0; i < 120; i += 1) {
+        if (i === sayAt) send(event({ ...session('d', 1), target: { x: 500, y: 344 }, since: 1000, say: 'Looking at the prompt node now' }));
+        frame();
+        const mine = field.motions.get(gKey)!;
+        const moving = [...field.motions.values()].some((m) => m.plan !== null || m.landing !== null);
+        if (moving || restAt < 0 && (mine.plan !== null || mine.landing !== null)) {
+          if (mine.plan !== null) flew += 1;
+          // On top: over every other cursor, and over every wire (auto).
+          expect(g().dataset.aloft, `frame ${i}`).toBe('true');
+          expect(zOf(g()), `frame ${i}`).toBeGreaterThan(10);
+          for (const el of cursors()) if (el !== g()) expect(zOf(g()), `over ${el.dataset.session} frame ${i}`).toBeGreaterThan(zOf(el));
+          expect(g().dataset.columnOrder, `frame ${i}`).toBeUndefined();
+          expect(g().dataset.crossing, `frame ${i}`).toBeUndefined();
+        } else {
+          if (restAt < 0) restAt = i;
+          // From the first frame of rest: its column-order z, the column's
+          // normal order with nothing gliding.
+          expect(g().dataset.aloft, `frame ${i}`).toBeUndefined();
+          expect(g().style.getPropertyValue('--agent-cursor-aloft'), `frame ${i}`).toBe('');
+          expect(zOf(g()), `frame ${i}`).toBe(1);
+        }
+      }
+      expect(flew).toBeGreaterThan(8);
+      expect(restAt).toBeGreaterThan(0);
+      expect(field.aloft.size).toBe(0);
+      expect(at(g()).y).toBe(at(byKey('e')).y + S);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r103 item 3: two flights that overlap, the later-started one on top,
+  // whatever their DOM order.
+  it.each([false, true])('of two overlapping flights the later-started one draws on top (GM r103; reversed: %s)', (reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      const h = { id: 'h', name: 'Hal', color: '#4F8EF7', verified: true };
+      const f = { id: 'f', name: 'Fay', color: '#FF9F43', verified: true };
+      const el = (id: string) => cursors().find((c) => c.dataset.agent === id)!;
+      send(event({ agent: h, target: { x: 200, y: 200 } }));
+      send(event({ agent: f, target: { x: 900, y: 200 } }));
+      settle(800);
+      expect(cursors().filter((c) => c.dataset.aloft === 'true')).toEqual([]);
+      reverseFrames = reversed;
+      // h starts first, f a few frames later; they cross mid-way.
+      send(event({ agent: h, target: { x: 900, y: 260 } }));
+      for (let i = 0; i < 4; i += 1) frame();
+      send(event({ agent: f, target: { x: 200, y: 260 } }));
+      let both = 0;
+      for (let i = 0; i < 90; i += 1) {
+        frame();
+        if (el('h').dataset.aloft === 'true' && el('f').dataset.aloft === 'true') {
+          both += 1;
+          expect(zOf(el('f')), `frame ${i}`).toBeGreaterThan(zOf(el('h')));
+        }
+      }
+      expect(both).toBeGreaterThan(5);
+      expect(cursors().filter((el) => el.dataset.aloft === 'true')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // And a new event mid-flight starts a new flight: h, flying second, goes
+  // under f once f's agent sends it somewhere new.
+  it('a new event mid-flight puts that flight on top of one started before it (GM r103)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      const h = { id: 'h', name: 'Hal', color: '#4F8EF7', verified: true };
+      const f = { id: 'f', name: 'Fay', color: '#FF9F43', verified: true };
+      const el = (id: string) => cursors().find((c) => c.dataset.agent === id)!;
+      send(event({ agent: h, target: { x: 200, y: 200 } }));
+      send(event({ agent: f, target: { x: 900, y: 200 } }));
+      settle(800);
+      send(event({ agent: f, target: { x: 200, y: 600 } }));
+      for (let i = 0; i < 3; i += 1) frame();
+      send(event({ agent: h, target: { x: 900, y: 600 } }));
+      for (let i = 0; i < 3; i += 1) frame();
+      expect(zOf(el('h'))).toBeGreaterThan(zOf(el('f')));
+      send(event({ agent: f, target: { x: 250, y: 650 } }));
+      for (let i = 0; i < 3; i += 1) {
+        frame();
+        expect(el('h').dataset.aloft).toBe('true');
+        expect(zOf(el('f')), `frame ${i}`).toBeGreaterThan(zOf(el('h')));
+      }
+      settle(1500);
+      expect(cursors().filter((c) => c.dataset.aloft === 'true')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 6, LOW-3 (R6P_FLIGHT, kept): g's backend arrival is older than
+  // d's and e's (two agents sent to one node a moment apart, the far one
+  // landing second), so on landing it re-sorts to the head (since 100) or
+  // the middle (1500). The members it now sits above wake and glide to
+  // their new slots on the layout spring: no frame moves any cursor further
+  // than a one-step glide's largest frame. Before, they stayed on their old
+  // slots until g reached its own, then jumped 42 px in one frame.
+  it.each([[100, false], [100, true], [1500, false], [1500, true]] as const)('a flight landing as an older arrival re-sorts the column with a glide, never a jump (review 6, LOW-3; since %s, reversed: %s)', (since, reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      settle(400);
+      reverseFrames = reversed;
+      const g = () => cursors().find((el) => el.dataset.agent === 'pair')!;
+      send(event({ ...session('g', 1), agent: pairAgent, target: { x: 500, y: 344 }, since }));
+      frame();
+      const field = fieldOf() as unknown as Motions;
+      const gKey = [...field.placers.keys()].find((x) => !['a', 'd', 'e'].some((c) => x.endsWith(c.repeat(12))))!;
+      const ys = () => ({ d: at(byKey('d')), e: at(byKey('e')), g: at(g()) });
+      let landedAt = -1;
+      let prev = ys();
+      let worst = 0;
+      for (let i = 0; i < 150; i += 1) {
+        frame();
+        const w = ys();
+        if (landedAt < 0 && field.motions.get(gKey)!.plan === null) landedAt = i;
+        for (const k of ['d', 'e'] as const) worst = Math.max(worst, Math.abs(w[k].y - prev[k].y));
+        prev = w;
+      }
+      const end = since === 100
+        ? { g: 344, d: 344 + S, e: 344 + 2 * S }
+        : { d: 344, g: 344 + S, e: 344 + 2 * S };
+      expect({ g: prev.g.y, d: prev.d.y, e: prev.e.y }).toEqual(end);
+      expect(landedAt).toBeGreaterThan(0);
+      // One frame's travel on a one-step glide (the layout spring), with a
+      // margin; the jump was a whole step.
+      expect(worst).toBeLessThan(S / 3);
+      expect(frames.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 6, LOW-2 (R6P_MULTIZOOM, kept): n zoom updates between an
+  // agent's event and its cursor's first frame (wheel or pinch input not
+  // aligned to rAF). Each carry steps no time, so the first frame shows
+  // one frame's step of the flight, never n frames at once.
+  it.each([1, 3, 6])('%s zoom updates before a woken cursor\'s first frame move it by the zoom alone (review 6, LOW-2)', (n) => {
+    let reads = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock + 4 + (reads += 0.001));
+    try {
+      const control = (zooms: number) => {
+        const view = render(<AgentCursorLayer />);
+        send(event({ ...session('a', 1), target: { x: 300, y: 300 } }));
+        flush();
+        const x0 = at(byKey('a')).x;
+        clock += 2000;
+        send(event({ ...session('a', 1), target: { x: 700, y: 300 }, action: 'click' }));
+        for (let i = 0; i < zooms; i += 1) { pane.transform = [0, 0, 1 - 0.01 * (i + 1)]; notifyStore(); }
+        const xs: number[] = [];
+        let rippled = false;
+        for (let i = 0; i < 120 && frames.length > 0; i += 1) { tickFrames(1); xs.push(at(byKey('a')).x); if (ripple()) rippled = true; }
+        view.unmount();
+        useAgentPresenceStore.getState().clear();
+        frames = [];
+        frameIds = [];
+        pane.transform = [0, 0, 1];
+        return { first: xs[0] - x0, end: xs[xs.length - 1], rippled, inFlight: xs.filter((x) => x > x0 + 5 && x < 695).length };
+      };
+      const none = control(0);
+      const zoomed = control(n);
+      expect(zoomed.rippled).toBe(true);
+      expect(zoomed.end).toBe(700);
+      expect(zoomed.inFlight).toBeGreaterThan(15);
+      // Under two frames' travel of the flight with no zoom.
+      expect(zoomed.first).toBeLessThan(2 * none.first);
+    } finally {
+      vi.restoreAllMocks();
+      pane.transform = [0, 0, 1];
+    }
+  });
+
+  // Review 6, NIT-1 (R6P_GONE, kept): a's node is deleted k frames into
+  // r65's head-to-bottom glide. Its loop stops where it is; no crossing
+  // mark, column order or place on top outlives it, on any cursor, and no
+  // frame is left pending. Either frame order.
+  it.each([1, 2, 4, 6, 9, 12, 16].flatMap((k) => [[k, false], [k, true]] as const))('a cursor whose node is deleted %s frames into a glide keeps no crossing or column order (review 6, NIT-1; reversed: %s)', (k, reversed) => {
+    fakeTimers();
+    reverseFrames = reversed;
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      for (let i = 0; i < k; i += 1) frame();
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      for (let i = 0; i < 90; i += 1) frame();
+      for (const c of ['a', 'd', 'e']) {
+        expect(byKey(c).dataset.crossing, c).toBeUndefined();
+        expect(byKey(c).dataset.columnOrder, c).toBeUndefined();
+        expect(byKey(c).dataset.aloft, c).toBeUndefined();
+        expect(byKey(c).style.getPropertyValue('--agent-cursor-crossing-depth'), c).toBe('');
+      }
+      expect(frames.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // And a flight whose node goes mid-air: it stops there, off the top.
+  it('a cursor whose node is deleted mid-flight comes down from on top (review 6, NIT-1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      settle(400);
+      send(event({ ...session('d', 1), target: { nodeId: 'n2' }, since: 1000 }));
+      for (let i = 0; i < 4; i += 1) frame();
+      expect(byKey('d').dataset.aloft).toBe('true');
+      const next = new Map(lookupRef.current);
+      next.delete('n2');
+      lookupRef.current = next;
+      notifyStore();
+      for (let i = 0; i < 60; i += 1) frame();
+      expect(cursors().filter((el) => el.dataset.aloft || el.dataset.crossing || el.dataset.columnOrder)).toEqual([]);
+      expect(frames.length).toBe(0);
+      // The node back (an undo): its loop runs again, and its next flight
+      // is on top as any is.
+      lookupRef.current = lookup;
+      notifyStore();
+      for (let i = 0; i < 60; i += 1) frame();
+      send(event({ ...session('d', 1), target: { x: 900, y: 600 }, since: 1000 }));
+      for (let i = 0; i < 3; i += 1) frame();
+      expect(byKey('d').dataset.aloft).toBe('true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // HIGH-1's other half: the order is read at the store's zoom. d rests and
+  // e lands 120 canvas units under it: one column at zoom 0.25 (30 screen
+  // px apart), two at 1. At 0.25, while e glides, d draws in column order;
+  // at 1 it never does.
+  it.each([[0.25, true], [1, false]] as const)('the column order is read at the store\'s zoom (%s: a column: %s) (review 6, drag-live HIGH-1)', (z2, column) => {
+    fakeTimers();
+    try {
+      pane.transform = [0, 0, z2];
+      render(<AgentCursorLayer />);
+      send(event({ ...session('d', 1), target: { x: 500, y: 300 }, since: 1000 }));
+      settle(800);
+      send(event({ ...session('e', 2), target: { x: 500, y: 420 }, since: 2000 }));
+      let ordered = 0;
+      for (let i = 0; i < 120; i += 1) { frame(); if (byKey('d').dataset.columnOrder === 'true') ordered += 1; }
+      if (column) expect(ordered).toBeGreaterThan(0);
+      else expect(ordered).toBe(0);
+    } finally {
+      pane.transform = [0, 0, 1];
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r106 ratchet: no cursor's z ever goes under the wire layer, and an
+  // ordered column never drops under another column's resting cursor,
+  // sampled on every frame of r65's head-to-bottom glide and the carry back
+  // to the head, with a cursor of another column (h) resting nearby and a
+  // flight (f) crossing the canvas. Either frame order.
+  it.each([false, true])('no cursor draws under the wires, and a gliding column never under another column\'s cursor, through a full glide (GM r106; reversed: %s)', (reversed) => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      send(event({ agent: { id: 'h', name: 'Hal', color: '#4F8EF7', verified: true }, target: { x: 650, y: 340 } }));
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      reverseFrames = reversed;
+      let ordered = 0;
+      const check = (label: string) => {
+        const all = cursors().filter((el) => el.dataset.leaving !== 'true');
+        const h = all.find((el) => el.dataset.agent === 'h')!;
+        for (const el of all) {
+          expect(zOf(el), `${el.dataset.session ?? el.dataset.agent} ${label}`).toBeGreaterThan(WIRE_Z);
+          if (el.dataset.columnOrder === 'true') {
+            ordered += 1;
+            if (h.dataset.aloft !== 'true') expect(zOf(el), `${el.dataset.session} over h ${label}`).toBeGreaterThanOrEqual(zOf(h));
+          }
+        }
+      };
+      dragFrames('n2', [{ x: 400, y: 284 }], () => check('to the bottom'));
+      for (let i = 0; i < 60; i += 1) { frame(); check(`down ${i}`); }
+      send(event({ agent: { id: 'f', name: 'Fay', color: '#FF9F43', verified: true }, target: { x: 100, y: 600 } }));
+      dragFrames('n2', [{ x: 400, y: 283 }], () => check('drag'));
+      for (let i = 0; i < 90; i += 1) { frame(); check(`back ${i}`); }
+      expect(ordered).toBeGreaterThan(10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 6, drag-live HIGH-1 (R6PROBE_P, kept): d rests, e flies in to
+  // rest under it, and k frames in the zoom goes to z2 and back. Each view
+  // read the column order at its own zoom, set at its own tick: one view
+  // ordered the column and repainted the other, which un-ordered it at its
+  // older zoom and repainted the first, without end (RangeError). The order
+  // is worked out once, at the store's zoom: no throw, and every cursor's
+  // marks agree with the one field state.
+  it.each([[60, 0.25], [80, 0.25], [120, 0.25], [80, 0.5], [120, 0.4], [200, 0.2]] as const)('two views holding different zooms agree on one column order and never recurse (review 6, drag-live HIGH-1; gap %s, zoom %s)', (gap, z2) => {
+    for (const k of [2, 6, 10, 14, 18, 22, 26, 30]) {
+      cleanup();
+      useAgentPresenceStore.getState().clear();
+      frames = [];
+      frameIds = [];
+      pane.transform = [0, 0, 1];
+      try {
+        render(<AgentCursorLayer />);
+        send(event({ ...session('d', 1), target: { x: 500, y: 300 }, since: 1000 }));
+        flush();
+        send(event({ ...session('e', 2), target: { x: 900, y: 300 }, since: 2000 }));
+        flush();
+        send(event({ ...session('e', 2), target: { x: 500, y: 300 + gap }, since: 2000 }));
+        const field = fieldOf() as unknown as { ordered: Set<string>; aloft: Map<string, unknown>; placers: Map<string, () => void> };
+        const agree = (label: string) => {
+          for (const key of field.placers.keys()) {
+            const el = cursors().find((c) => key.endsWith(c.dataset.session ?? '\0'))!;
+            const shown = el.dataset.columnOrder === 'true';
+            const want = field.ordered.has(key) && !field.aloft.has(key);
+            expect(shown, `${key.slice(-1)} k=${k} ${label}`).toBe(want);
+          }
+        };
+        expect(() => {
+          for (let i = 0; i < k; i += 1) tickFrames(1);
+          pane.transform = [0, 0, z2];
+          notifyStore();
+          agree('zoomed');
+          for (let i = 0; i < 10 && frames.length > 0; i += 1) { tickFrames(1); agree(`out ${i}`); }
+          pane.transform = [0, 0, 1];
+          notifyStore();
+          for (let i = 0; i < 10 && frames.length > 0; i += 1) { tickFrames(1); agree(`back ${i}`); }
+          flush();
+        }, `k=${k}`).not.toThrow();
+        expect(cursors().length, `k=${k}`).toBe(2);
+      } finally {
+        pane.transform = [0, 0, 1];
+      }
+    }
+  });
+
+  // HIGH-1's ratchet, on the source: apply() and the marks it paints reach
+  // no CursorField method that calls a view back (placers or markers), save
+  // syncOrder, which repaints through markers only (they read the field's
+  // state) and returns at once when re-entered.
+  it('no field method that calls views back can be reached again from apply (review 6, drag-live HIGH-1)', () => {
+    const src = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    const cls = src.slice(src.indexOf('class CursorField {'), src.indexOf('\n}\n', src.indexOf('class CursorField {')));
+    const methods = [...cls.matchAll(/\n {2}(?:private |readonly )?([a-zA-Z]+)\([^)]*\)(?::[^{\n]+)? \{\n([\s\S]*?)\n {2}\}\n/g)].map((m) => ({ name: m[1], body: m[2] }));
+    expect(methods.length).toBeGreaterThan(20);
+    const callsBack = new Set(methods.filter((m) => /\.(placers|markers)\.get\(/.test(m.body) || /this\.wakeAll\(/.test(m.body)).map((m) => m.name));
+    // Grow it through the field's own calls.
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const m of methods) {
+        if (callsBack.has(m.name)) continue;
+        if ([...callsBack].some((n) => new RegExp(`this\\.${n}\\(`).test(m.body))) { callsBack.add(m.name); grew = true; }
+      }
+    }
+    expect(callsBack.has('syncOrder')).toBe(true);
+    const body = (start: string) => {
+      const at = src.indexOf(start);
+      expect(at, start).toBeGreaterThan(0);
+      return src.slice(at, src.indexOf('\n    };\n', at));
+    };
+    const apply = body('    const apply = () => {');
+    const paint = body('    const paintMarks = () => {');
+    for (const name of callsBack) {
+      expect(paint, `paintMarks calls field.${name}`).not.toMatch(new RegExp(`field\\.${name}\\(`));
+      if (name !== 'syncOrder') expect(apply, `apply calls field.${name}`).not.toMatch(new RegExp(`field\\.${name}\\(`));
+    }
+    // syncOrder calls back through markers only, and guards re-entry.
+    const sync = methods.find((m) => m.name === 'syncOrder')!.body;
+    expect(sync).not.toMatch(/placers/);
+    expect(sync).toMatch(/if \(this\.syncing\) return;/);
   });
 
   it('the count cursor never draws its own say; its member\'s say is in the log only (r18, review 8 V2)', () => {
