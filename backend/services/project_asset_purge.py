@@ -67,14 +67,30 @@ there (in no tab, and never moved to Global) and the id stays on the list.
 Linking the whole ``~/.nebula`` or the desktop app's data folder still
 purges: the store and the catalog are then both followed to the same place.
 
+Two more checks on a store that does pair. Its folder is the very folder
+the catalog expects by device and inode, and the store sits on that
+folder's own device: a bind mount or container volume of the real store
+inside a copy resolves like a plain path, so paths alone can't refuse it.
+(A store on a disk of its own, mounted at its folder, is therefore unpaired
+too, the same accepted cost as a linked store.) And the folder must be
+shown to be a store: an empty folder where the store should be (the mount
+point of a disk that is out) says nothing about what the project had, so
+the id stays listed until the folder holds a real folder of any kind (a
+project's, ``_global``, ``.trash``; ``has_evidence``). Otherwise, once the
+disk is back, the re-home would move the boards the purge never saw to
+Global.
+
 An unpaired store is left alone: the id stays on the list (the re-home
 keeps skipping it, so nothing is hidden or moved: the project's files stay
 where they were, and the count is logged once per start, never a name).
-There is no fallback to Global: a copy's purge would otherwise move the real
-project's files. ``goesWith`` lists only what a paired store holds, so a
-line never promises more than goes. Inside a paired store a ``.trash`` or
-side folder (a board's ``.notes``) that is itself a symlink is never
-followed, as a symlinked ``<root>/P`` isn't.
+The same holds when part of a paired store was passed over for being a link
+(``_linked``): a ``.trash``, side folder or ``<root>/P`` that is a symlink is
+never followed, and the id stays listed. Clearing it would let the re-home,
+which follows a linked ``.trash``, move a trashed board that may be the
+person's real one to Global. There is no fallback to Global: a copy's purge
+would otherwise move the real project's files. ``goesWith`` lists only what
+a paired store holds, so a line never promises more than goes
+(``goes_with_project`` says the same of a trashed asset).
 
 A project merely absent from the catalog is never a reason to delete: only
 ids this catalog put on its own list are purged. Assets filed under an id
@@ -167,32 +183,74 @@ def _logged_once(exc: BaseException) -> None:
                        "is deleted with a project", type(exc).__name__)
 
 
+# Once per start, the line for a stray other catalog (see ``_pairing``).
+_OTHER_CATALOG_LOGGED: set[str] = set()
+
+
+def _ident(path: Path) -> tuple[int, int]:
+    """A folder's device and inode: what it is, whatever path reaches it
+    (``resolve()`` follows links but can't see a mount)."""
+    stat = os.stat(path)
+    return stat.st_dev, stat.st_ino
+
+
+def _pairing(state_dir: Path, store_root: Path, explicit: bool) -> str | None:
+    """Why ``store_root`` doesn't belong with the catalog under ``state_dir``,
+    or None when it does: ``"unresolved"``, ``"not beside"``, ``"another
+    catalog"`` or ``"mounted elsewhere"``."""
+    try:
+        if store_root.is_symlink() and not store_root.is_dir():
+            return "not beside"  # dangling, a disk that isn't mounted, or a loop
+        state = state_dir.resolve()
+        home = store_root.resolve().parent
+        if home == state:
+            expected = state
+        elif explicit and state.name == "state" and home == state.parent:
+            expected = state.parent
+        else:
+            return "not beside"
+        # Resolved paths can't see a mount: a copy's folder with the real
+        # store bind-mounted into it resolves to a plain path beside the
+        # copy's catalog. The folder holding the store must be the very
+        # folder it is expected to be (device and inode), and the store must
+        # sit on that folder's own device (a mount boundary says it doesn't).
+        if (expected.exists() and _ident(home) != _ident(expected)) or (
+                store_root.exists() and _ident(store_root)[0] != _ident(home)[0]):
+            return "mounted elsewhere"
+        own = (state / "projects" / "catalog.json").resolve()
+        for catalog in (home / "projects" / "catalog.json", home / "state" / "projects" / "catalog.json"):
+            if catalog.exists() and catalog.resolve() != own:
+                return "another catalog"  # another catalog's stores
+        return None
+    except (OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop (Python 3.12)
+        _logged_once(exc)
+        return "unresolved"
+
+
 def roots_paired(state_dir: Path, store_root: Path, *, explicit: bool = False) -> bool:
     """Whether a store root belongs with the catalog under ``state_dir`` (the
     folder holding the catalog's ``projects/``). The store is followed to
     its real folder, and that folder's parent (``home``) must be the
     catalog's real folder (``~/.nebula`` holds both), or, for a root set
     explicitly (``explicit``: its NEBULA_*_ROOT), the desktop app's data
-    folder holding ``state/`` (the catalog's) beside it. Never paired: a
-    store root that is a link to nothing (an unmounted disk) or a loop, a
-    path that can't be resolved, or a ``home`` that holds another catalog
-    (``projects/catalog.json`` or ``state/projects/catalog.json`` that
-    isn't this one's)."""
-    try:
-        if store_root.is_symlink() and not store_root.is_dir():
-            return False  # dangling, a disk that isn't mounted, or a loop
-        state = state_dir.resolve()
-        home = store_root.resolve().parent
-        if not (home == state or (explicit and state.name == "state" and home == state.parent)):
-            return False
-        own = (state / "projects" / "catalog.json").resolve()
-        for catalog in (home / "projects" / "catalog.json", home / "state" / "projects" / "catalog.json"):
-            if catalog.exists() and catalog.resolve() != own:
-                return False  # another catalog's stores
-        return True
-    except (OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop (Python 3.12)
-        _logged_once(exc)
-        return False
+    folder holding ``state/`` (the catalog's) beside it. And ``home`` must be
+    that very folder by device and inode, with the store on its device (a
+    bind mount or a volume of the real store inside a copy resolves like a
+    plain path, but not like that). Never paired: a store root that is a link
+    to nothing (an unmounted disk) or a loop, a path that can't be resolved,
+    or a ``home`` that holds another catalog (``projects/catalog.json`` or
+    ``state/projects/catalog.json`` that isn't this one's: logged once per
+    start, a stray one left by a test harness silently turns every purge and
+    re-home off otherwise; never deleted for you). This is the one rule the
+    purge and the start-up re-home (services/asset_project_rehome.py) share."""
+    reason = _pairing(state_dir, store_root, explicit)
+    if reason == "another catalog" and reason not in _OTHER_CATALOG_LOGGED:
+        _OTHER_CATALOG_LOGGED.add(reason)
+        logger.warning("Another project catalog (projects/catalog.json) sits beside the moodboard, character "
+                       "or style folders, so nothing in them is deleted or moved with a project. If it is a "
+                       "stray left by a test run or a copied data folder, remove it by hand; nothing removes "
+                       "it for you")
+    return reason is None
 
 
 def paired_stores(state_dir: Path, stores: list[AssetStore] | None = None) -> tuple[list[AssetStore], list[AssetStore]]:
@@ -201,20 +259,6 @@ def paired_stores(state_dir: Path, stores: list[AssetStore] | None = None) -> tu
     stores = stores if stores is not None else default_stores()
     paired = [store for store in stores if roots_paired(state_dir, store.root, explicit=store.explicit)]
     return paired, [store for store in stores if store not in paired]
-
-
-# Once per start (per process): the unpaired-store line is logged the first
-# time it applies, then not again.
-_UNPAIRED_LOGGED: set[str] = set()
-
-
-def _log_unpaired(unpaired: list[AssetStore], waiting: int) -> None:
-    kinds = [PLURAL[store.kind] for store in unpaired if store.kind not in _UNPAIRED_LOGGED]
-    if not kinds:
-        return
-    _UNPAIRED_LOGGED.update(store.kind for store in unpaired)
-    logger.warning("%d project(s) deleted for good keep their %s for now: that folder isn't beside "
-                   "this project catalog, so nothing in it is deleted", waiting, ", ".join(kinds))
 
 
 # -- the journal (in the catalog) --------------------------------------------------
@@ -433,19 +477,95 @@ def _left(store: AssetStore, project_id: str) -> bool:
     return store.root.is_dir() and bool(_live_of(store, project_id) or _trashed_of(store, project_id))
 
 
+def _linked(store: AssetStore, project_id: str) -> bool:
+    """Whether any part of the store was passed over for being a link: its
+    ``.trash``, the project's own folder, or a side folder. A link may be
+    another store's, so it is never followed, and what it holds can't be
+    judged: the id stays listed, as for an unpaired store. Taking it off the
+    list would let the start-up re-home (which follows a linked ``.trash``)
+    move a trashed board that may be the person's real one to Global."""
+    if not store.root.is_dir():
+        return False
+    return any((store.root / name).is_symlink() for name in (TRASH_DIR, project_id, *store.side_folders))
+
+
+def has_evidence(store: AssetStore) -> bool:
+    """Whether this folder is a store that has held assets, rather than an
+    empty folder standing where the store should be (a mount point with the
+    disk out, a folder made by hand). The stores only ever put folders at
+    their root (a project's, ``_global``, ``.trash``, a board's side
+    folders), so a real folder inside it is the evidence. Without it an empty
+    folder would read as "the project has nothing here" and the id would come
+    off the list; once the disk is back, the boards filed under it would be
+    moved to Global by the re-home. A store that never held anything keeps
+    such an id listed instead: nothing is lost by that, and it clears the
+    first time the folder holds a board, character or style."""
+    try:
+        return any(sub.is_dir() and not sub.is_symlink() for sub in store.root.iterdir())
+    except OSError:
+        return False
+
+
+def _keep_evidence(store: AssetStore) -> None:
+    """Make sure a store that has shown it is real keeps showing it after its
+    last project folder is removed: the stores' own ``_global`` folder
+    (where Global assets live) is made if it isn't there. Otherwise a purge
+    that finished but crashed before its id was cleared would read an emptied
+    store, next start, as an unproven one and keep the id listed for good."""
+    try:
+        (store.root / "_global").mkdir(exist_ok=True)
+    except OSError:
+        pass  # a link or a file in the way: evidence isn't needed that badly
+
+
 def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: Path,
-                          stores: list[AssetStore] | None = None) -> tuple[bool, Removed]:
+                          stores: list[AssetStore] | None = None,
+                          evidenced: Container[str] | None = None) -> tuple[bool, Removed]:
     """``delete_store_assets`` in every store that is the catalog's. Returns
     ``(complete, removed)``: ``complete`` is False when a store was skipped
-    as not the catalog's, or when anything of the project's is still there
-    after the last pass (a store busy the whole time); the id then stays on
-    the list and the next purge, listing or start goes on. And what went, by kind."""
+    as not the catalog's, when part of a store was skipped for being a link
+    (``_linked``), when a store is an empty folder with no sign it was ever
+    the store (``has_evidence``; ``evidenced`` is the kinds already checked
+    before anything was deleted, as ``finish`` does for the whole list), or
+    when anything of the project's is still there after the last pass (a
+    store busy the whole time); the id then stays on the list and the next
+    purge, listing or start goes on. And what went, by kind."""
     paired, unpaired = paired_stores(state_dir, stores)
+    if evidenced is None:
+        evidenced = {store.kind for store in paired if has_evidence(store)}
     removed = _empty_removed()
     for store in paired:
+        if store.kind in evidenced:
+            _keep_evidence(store)
         removed[store.kind].extend(delete_store_assets(store, project_id, keep=keep))
-    left = any(_left(store, project_id) for store in paired)
+    left = any(_left(store, project_id) or _linked(store, project_id) or (
+        store.root.is_dir() and store.kind not in evidenced) for store in paired)
     return not unpaired and not left, removed
+
+
+# Once per start (per process): why a project's files are kept, by store
+# kind, is logged the first time it applies.
+_WAITING_LOGGED: set[tuple[str, str]] = set()
+
+
+def _log_waiting(state_dir: Path, stores: list[AssetStore], evidenced: Container[str],
+                 project_ids: list[str], waiting: int) -> None:
+    paired, unpaired = paired_stores(state_dir, stores)
+    reasons = {
+        "isn't beside this project catalog": [store.kind for store in unpaired],
+        "has a linked folder inside it (a link is never followed)": [
+            store.kind for store in paired if any(_linked(store, pid) for pid in project_ids)],
+        "is empty with nothing to show it ever held assets (a disk that isn't mounted?)": [
+            store.kind for store in paired if store.root.is_dir() and store.kind not in evidenced],
+    }
+    for reason, kinds in reasons.items():
+        fresh = [kind for kind in kinds if (reason, kind) not in _WAITING_LOGGED]
+        if not fresh:
+            continue
+        _WAITING_LOGGED.update((reason, kind) for kind in fresh)
+        logger.warning("%d project(s) deleted for good keep their %s for now: that folder %s, so "
+                       "nothing there is deleted or moved", waiting, ", ".join(PLURAL[kind] for kind in fresh),
+                       reason)
 
 
 def finish(catalog: dict[str, Any], *, state_dir: Path,
@@ -454,20 +574,23 @@ def finish(catalog: dict[str, Any], *, state_dir: Path,
     stores that are this catalog's (``state_dir`` is the folder holding the
     catalog's ``projects/``). Returns ``(done, removed)``: the project ids now
     finished (the caller takes them off the list and commits) and what went,
-    by kind. A project whose files couldn't all be deleted, or that a store
-    not beside this catalog may still hold, stays on the list."""
+    by kind. A project whose files couldn't all be deleted, that a store
+    not beside this catalog (or linked, or empty, see ``delete_project_assets``)
+    may still hold, stays on the list."""
     keep = known_projects(catalog)
     stores = stores if stores is not None else default_stores()
+    paired = paired_stores(state_dir, stores)[0]
+    evidenced = {store.kind for store in paired if has_evidence(store)}  # before anything is deleted
     done: list[str] = []
     removed = _empty_removed()
-    waiting = 0
-    unpaired: list[AssetStore] = []
+    waiting: list[str] = []
     for project_id in pending(catalog):
         if project_id in keep:
             done.append(project_id)  # back in the catalog: its files are its own again
             continue
         try:
-            complete, went = delete_project_assets(project_id, keep=keep, state_dir=state_dir, stores=stores)
+            complete, went = delete_project_assets(project_id, keep=keep, state_dir=state_dir, stores=stores,
+                                                   evidenced=evidenced)
         except OSError as exc:
             logger.warning("A deleted project's moodboards, characters or styles weren't all removed (%s); "
                            "trying again later", type(exc).__name__)
@@ -477,8 +600,27 @@ def finish(catalog: dict[str, Any], *, state_dir: Path,
         if complete:
             done.append(project_id)
         else:
-            waiting += 1
-            unpaired = paired_stores(state_dir, stores)[1]
+            waiting.append(project_id)
     if waiting:
-        _log_unpaired(unpaired, waiting)
+        _log_waiting(state_dir, stores, evidenced, waiting, len(waiting))
     return done, removed
+
+
+def purging_trash_kinds(state_dir: Path, stores: list[AssetStore] | None = None) -> set[str]:
+    """The kinds whose Recently deleted a project's purge reaches: the store
+    is the catalog's and its ``.trash`` is not a link (a linked one is never
+    followed)."""
+    paired, _unpaired = paired_stores(state_dir, stores)
+    return {store.kind for store in paired if not (store.root / TRASH_DIR).is_symlink()}
+
+
+def goes_with_project(kind: str, record: dict[str, Any], purging: Container[str]) -> bool:
+    """Whether a trashed asset's record says it goes when its project is
+    deleted for good: it was deleted from that project's own folder, the
+    project id is catalog-shaped (``note_purged`` never lists another, so an
+    old-style id waits for the re-home instead), and its kind is one the
+    purge reaches (``purging_trash_kinds``). ``GET /api/trash`` flags records
+    with this, so a line never promises more than goes."""
+    project_id = record.get("projectId")
+    return (isinstance(project_id, str) and bool(_PROJECT_ID.fullmatch(project_id))
+            and record.get("scopeDir") == project_id and kind in purging)

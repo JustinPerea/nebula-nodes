@@ -27,6 +27,18 @@ project in the catalog's Recently deleted is a canvas project's folder too
 and is left alone (restoring the project brings its assets back with it).
 
 Safety:
+- Only a store that is this catalog's is touched. A root is re-homed only
+  when ``roots_paired`` holds for it, the rule the purge of a deleted
+  project's files uses (services/project_asset_purge.py): the store's real
+  folder sits beside the catalog's own folder (``~/.nebula``), or, for a
+  root set explicitly (the desktop app), the data folder holding ``state/``
+  and the stores side by side. Without that, a backend running on a copy
+  of the catalog (``NEBULA_STATE_DIR`` set, ``HOME`` left real, or a store
+  linked to the real one) would see the person's real boards of every
+  project the copy lacks as "unknown" and move them to Global, with the
+  backup in the copy's tree. An unpaired root is left exactly as it is
+  (nothing is read for the move, nothing written) and the start logs the
+  count of old-style assets it left, once, without a path.
 - Every file it changes is copied first to ``<root>/../<kind>-backups/
   project-rehome-<time>/`` (same relative path as under the root), and
   ``migration-log.json`` there lists each asset: kind, id, name, from, to and
@@ -60,6 +72,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from uuid import uuid4
 
+from services.project_asset_purge import roots_paired
+
 logger = logging.getLogger(__name__)
 
 GLOBAL_DIR = "_global"
@@ -81,17 +95,21 @@ class AssetRoot:
     kind: str            # "moodboard" | "character" | "preset"
     root: Path
     has_trash: bool
+    # The root came from its NEBULA_*_ROOT, not the ~/.nebula default (the
+    # pairing rule, services/project_asset_purge.roots_paired).
+    explicit: bool = False
 
 
 def default_roots() -> list[AssetRoot]:
     """The three stores' roots, from each store's own resolver."""
     from services import character_store, moodboard_store, preset_store
+    from services.project_asset_purge import _explicit
 
     return [
-        AssetRoot("moodboard", moodboard_store.store_root(), True),
-        AssetRoot("character", character_store.store_root(), True),
+        AssetRoot("moodboard", moodboard_store.store_root(), True, _explicit("moodboard")),
+        AssetRoot("character", character_store.store_root(), True, _explicit("character")),
         # Styles have had Recently deleted since 2026-10-20 (Q53 a).
-        AssetRoot("preset", preset_store.store_root(), True),
+        AssetRoot("preset", preset_store.store_root(), True, _explicit("style")),
     ]
 
 
@@ -362,6 +380,34 @@ def _read_state(state_dir: Path) -> dict[str, Any]:
     return {"version": 2, "knownSkips": {kind: dict(value) for kind, value in skips.items() if isinstance(value, dict)}}
 
 
+# Once per start (per process): the kinds whose unpaired-root line is logged.
+_UNPAIRED_LOGGED: set[str] = set()
+
+
+def _paired_roots(roots: list[AssetRoot], state_dir: Path, canvas_ids: set[str]) -> list[AssetRoot]:
+    """The roots that are this catalog's (``roots_paired``). The rest are only
+    listed, to log how many old-style assets they hold that stay where they
+    are, once per start per kind, with no path or name."""
+    paired = []
+    for spec in roots:
+        if roots_paired(state_dir, spec.root, explicit=spec.explicit):
+            paired.append(spec)
+            continue
+        if spec.kind in _UNPAIRED_LOGGED:
+            continue
+        try:
+            held = sum(len(list(folder.glob("*.json"))) for folder in _legacy_folders(spec.root, canvas_ids))
+            held += len(_legacy_trash(spec.root, canvas_ids)) if spec.has_trash else 0
+        except OSError:
+            held = 0
+        if held:
+            _UNPAIRED_LOGGED.add(spec.kind)
+            logger.warning("%d %s asset(s) under a project this catalog doesn't know stay where they are: "
+                           "that folder isn't this project catalog's own, so none is moved to Global",
+                           held, spec.kind)
+    return paired
+
+
 # -- entry point --------------------------------------------------------------------
 
 def rehome_legacy_assets(
@@ -393,6 +439,7 @@ def rehome_legacy_assets(
     purging = catalog.get("assetPurges")
     canvas_ids = set(projects) | set(trash) | {
         pid for pid in (purging if isinstance(purging, list) else ()) if isinstance(pid, str)}
+    roots = _paired_roots(roots, state_dir, canvas_ids)
     pending = [spec for spec in roots
                if _legacy_folders(spec.root, canvas_ids) or (spec.has_trash and _legacy_trash(spec.root, canvas_ids))]
     state = _read_state(state_dir)

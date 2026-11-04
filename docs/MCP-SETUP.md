@@ -3641,11 +3641,24 @@ or the desktop app's data folder, whose `NEBULA_*_ROOT` it sets; linking the
 whole `~/.nebula` or data folder elsewhere still counts). A store folder
 linked on its own to another place, a link to nothing, or a folder beside
 another catalog is left alone: the project stays on the list and its files
-stay where they are (never moved to Global). A moodboard, character or style
-in Recently deleted with `goesWithProject: true` goes when its project is
-deleted for good (`nebula trash list` says "removed for good with its
-project"; without the flag it says nothing). Anything filed under a project the
-catalog doesn't know (for example from before this change) is moved to
+stay where they are (never moved to Global). The same rule gates the
+start-up move of old-style assets to Global
+(`backend/services/asset_project_rehome.py`): a store that isn't beside this
+project catalog is not touched, so a backend started on a copy of a catalog
+never moves the person's real boards of a project the copy lacks. The count
+it left is logged once per start, with no path. The project also stays on the
+list, and its files stay, when part of a store was a link (its `.trash`, a
+side folder or the project's folder: never followed), when the store folder is
+empty with nothing to show it ever held assets (a disk that isn't mounted),
+or when the store sits on another device than its folder (a mount). A stray
+`projects/catalog.json` beside the stores (left by a test run or a copied data
+folder) turns the purge and the move off for those stores; the backend logs
+it once per start, and it has to be removed by hand. A moodboard, character or
+style in Recently deleted with `goesWithProject: true` goes when its project is
+deleted for good (the flag is false for a record under a linked `.trash` or
+whose project id isn't a catalog id; `nebula trash list` says "removed for good
+with its project"; without the flag it says nothing). Anything filed under a project the
+catalog doesn't know (for example from before this change), in a store beside it, is moved to
 Global at start, with a backup, as before; never deleted.
 
 ### Building and running over MCP

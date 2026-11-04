@@ -21497,20 +21497,18 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     items: list[dict[str, Any]] = []
-    paired_kinds: set[str] | None = None
+    purging: set[str] | None = None
     for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             try:
                 records = _asset_store(asset_kind).list_trash(scope=scope, projectId=projectId)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            if paired_kinds is None:
-                paired, _unpaired = project_asset_purge.paired_stores(_catalog_folder())
-                paired_kinds = {store.kind for store in paired}
+            if purging is None:
+                purging = project_asset_purge.purging_trash_kinds(_catalog_folder())
             for record in records:
-                pid = record.get("projectId")
-                items.append({**record, "goesWithProject": True} if (
-                    asset_kind in paired_kinds and pid and record.get("scopeDir") == pid) else record)
+                items.append({**record, "goesWithProject": True}
+                             if project_asset_purge.goes_with_project(asset_kind, record, purging) else record)
     if kind in (None, "project") and scope is None:
         trashed_projects, assets_gone = _project_trash_items()
         items.extend(trashed_projects)
