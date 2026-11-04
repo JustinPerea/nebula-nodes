@@ -700,3 +700,93 @@ def test_the_preview_and_size_stay_when_the_file_does_or_the_url_is_sent(client,
         "filePath": other["filePath"], "_previewUrl": sent, "_previewSize": other["previewSize"]}})
     assert resp.status_code == 200, resp.text
     assert _params(node_id)["_previewUrl"] == sent
+
+
+# #226 review 4, LOW-1: the preview follows the file, not its name. Two files
+# with one name in different folders (a node's `{id}_final.png` in two run
+# folders, `~/a/photo.png` and `~/b/photo.png`) are different files.
+def _image_input_at(client, path) -> str:
+    made = client.post("/api/graph/node", json={"definitionId": "image-input", "params": {"filePath": str(path)}})
+    assert made.status_code == 200, made.text
+    return made.json().get("id") or made.json()["nodeId"]
+
+
+def test_an_agent_that_sets_a_same_named_file_in_another_run_gets_its_preview(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    for run, size in (("run1", (640, 360)), ("run2", (300, 500))):
+        (tmp_path / run).mkdir()
+        (tmp_path / run / "n1_final.png").write_bytes(_image_bytes("PNG", size))
+    node_id = _image_input_at(client, tmp_path / "run1" / "n1_final.png")
+    _params(node_id)["_previewSize"] = {"width": 640, "height": 360}
+    assert _params(node_id)["_previewUrl"] == "/api/outputs/run1/n1_final.png"
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT,
+                      json={"params": {"filePath": str(tmp_path / "run2" / "n1_final.png")}})
+    assert resp.status_code == 200, resp.text
+    assert _params(node_id)["_previewUrl"] == "/api/outputs/run2/n1_final.png"
+    assert "_previewSize" not in _params(node_id)
+
+
+def test_a_same_named_file_outside_the_root_is_another_file(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (a / "photo.png").write_bytes(_image_bytes("PNG", (30, 20)))
+    (b / "photo.png").write_bytes(_image_bytes("PNG", (20, 30)))
+    assert not main_module._same_ref_file(str(a / "photo.png"), str(b / "photo.png"))
+    # The same file, however it is spelled, is the same file.
+    assert main_module._same_ref_file(str(a / "photo.png"), str(a / "." / "photo.png"))
+
+
+def test_a_same_named_preview_url_in_another_run_drops_the_old_size(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    for run in ("run1", "run2"):
+        (tmp_path / run).mkdir()
+        (tmp_path / run / "n1_final.png").write_bytes(_image_bytes("PNG", (30, 20)))
+    node_id = _image_input_at(client, tmp_path / "run1" / "n1_final.png")
+    _params(node_id)["_previewSize"] = {"width": 30, "height": 20}
+    resp = client.put(f"/api/graph/node/{node_id}", json={"params": {"_previewUrl": "/api/outputs/run2/n1_final.png"}})
+    assert resp.status_code == 200, resp.text
+    assert "_previewSize" not in _params(node_id)
+
+
+def test_the_same_file_spelled_another_way_keeps_its_preview_and_size(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    (tmp_path / "run1").mkdir()
+    (tmp_path / "run1" / "n1_final.png").write_bytes(_image_bytes("PNG", (30, 20)))
+    node_id = _image_input_at(client, tmp_path / "run1" / "n1_final.png")
+    _params(node_id)["_previewSize"] = {"width": 30, "height": 20}
+    before = dict(_params(node_id))
+    # Its served URL, and its path through a `..`: the same file.
+    for same in ("/api/outputs/run1/n1_final.png", str(tmp_path / "run1" / ".." / "run1" / "n1_final.png")):
+        resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"filePath": same}})
+        assert resp.status_code == 200, resp.text
+        assert _params(node_id)["_previewUrl"] == before["_previewUrl"], same
+        assert _params(node_id)["_previewSize"] == before["_previewSize"], same
+
+
+def test_an_old_root_that_no_longer_resolves_falls_back_to_the_name():
+    gone = "/Users/old/nebula/output/run1/n1_final.png"
+    assert main_module._ref_identity(gone) is None
+    assert main_module._same_ref_file(gone, "/elsewhere/output/run1/n1_final.png")
+    assert not main_module._same_ref_file(gone, "/elsewhere/output/run1/other.png")
+
+
+# #226 review 4, NIT-2: only an Image Input's preview follows its file. An
+# Audio or Document Input's filePath write leaves its params as sent (a
+# `_previewUrl` there would be read by the mask source's fallback).
+@pytest.mark.parametrize("kind, ext", [("audio-input", "mp3"), ("document-input", "pdf")])
+def test_another_input_kind_gets_no_preview_from_its_file(client, tmp_path, monkeypatch, kind, ext):
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+    for name in ("one", "two"):
+        (tmp_path / f"{name}.{ext}").write_bytes(b"x" * 16)
+    made = client.post("/api/graph/node", json={"definitionId": kind, "params": {"filePath": str(tmp_path / f"one.{ext}")}})
+    assert made.status_code == 200, made.text
+    node_id = made.json().get("id") or made.json()["nodeId"]
+    _params(node_id)["_previewSize"] = {"width": 1, "height": 1}
+    resp = client.put(f"/api/graph/node/{node_id}", headers=AGENT,
+                      json={"params": {"filePath": str(tmp_path / f"two.{ext}")}})
+    assert resp.status_code == 200, resp.text
+    params = _params(node_id)
+    assert params["filePath"] == str(tmp_path / f"two.{ext}")
+    assert "_previewUrl" not in params
+    assert params["_previewSize"] == {"width": 1, "height": 1}

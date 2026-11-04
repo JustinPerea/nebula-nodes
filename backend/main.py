@@ -2528,6 +2528,45 @@ def _ref_file_name(value: Any) -> str | None:
     return PurePosixPath(urlsplit(value).path).name or None
 
 
+def _ref_identity(value: Any) -> tuple[str, str] | None:
+    """Which file a path or served URL names, or None when it resolves to none.
+
+    A ref under the output root (a served URL, with or without the backend's
+    origin, a path under the root, or one under a root the outputs moved
+    from) is its root-relative path; any other path is the file it resolves
+    to, when that file exists. Two refs with the same name in different
+    folders (a node's ``{id}_final.png`` in two run folders, ``~/a/photo.png``
+    and ``~/b/photo.png``) are different files (#226 review 4, LOW-1)."""
+    if not isinstance(value, str) or not value:
+        return None
+    ref = value
+    if ref.startswith(("http://", "https://")):
+        ref = urlsplit(ref).path
+        if not ref.startswith(_OUTPUTS_URL_PREFIX):
+            return ("url", value)
+    rel = _output_relative_from_ref(ref)
+    if rel is not None:
+        return ("output", rel.as_posix())
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return None
+    try:
+        return ("path", str(Path(ref).expanduser().resolve(strict=True)))
+    except (OSError, RuntimeError):
+        return None
+
+
+def _same_ref_file(old: Any, new: Any) -> bool:
+    """Whether two refs name the same file: by what they resolve to, and by
+    name only when the old one no longer resolves (outputs moved from a root
+    that is gone: the name is all that is left of it)."""
+    if _ref_file_name(old) is None or _ref_file_name(new) is None:
+        return _ref_file_name(old) == _ref_file_name(new)
+    old_id = _ref_identity(old)
+    if old_id is None:
+        return _ref_file_name(old) == _ref_file_name(new)
+    return old_id == _ref_identity(new)
+
+
 def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:
     """A `_previewSize` belongs to the file it was read from (services/preview_size.py).
     When the preview now names another file, or none, the size goes with the
@@ -2558,7 +2597,7 @@ def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent
     changed = False
     file_path = params.get("filePath")
     if ("filePath" in sent and "_previewUrl" not in sent
-            and _ref_file_name(file_path) != _ref_file_name(before.get("filePath"))):
+            and not _same_ref_file(before.get("filePath"), file_path)):
         url = _output_url_from_ref(file_path) if isinstance(file_path, str) and file_path else None
         if url is not None and params.get("_previewUrl") != url:
             params["_previewUrl"] = url
@@ -2567,7 +2606,7 @@ def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent
             params.pop("_previewUrl")
             changed = True
     if "_previewSize" not in sent and "_previewSize" in params and any(
-            key in sent and _ref_file_name(params.get(key)) != _ref_file_name(before.get(key))
+            key in sent and not _same_ref_file(before.get(key), params.get(key))
             for key in ("filePath", "_previewUrl")):
         params.pop("_previewSize")
         changed = True

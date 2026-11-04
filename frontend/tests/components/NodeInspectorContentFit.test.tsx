@@ -911,6 +911,196 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     // Placed afresh by the card: its top at 236.6 - 8.
     expect(bounds().top).toBeCloseTo(228.6, 5);
   });
+
+  /**
+   * GM r104 (review 4 MEDIUM-1): the panel keeps its gap to the card. On a
+   * resize of the card's own content its facing edge follows the card's edge
+   * on the layout spring, with the height, as one motion; a real move stays
+   * rigid. The ratchet: on a content resize the panel's x and y never change
+   * by more than the spring's per-frame step. jsdom runs no transitions, so
+   * `onScreen` plays panels.css's own spring (its duration, its linear()
+   * points, the properties it transitions) on the values the panel is given,
+   * frame by frame, as the browser would.
+   */
+  const FRAME_MS = 1000 / 60;
+  const springRule = (() => {
+    const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
+    const block = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .find(([, selector]) => selector.trim() === '.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)')![2];
+    const [, ms, points] = block.match(/--inspector-layout-spring:\s*(\d+)ms linear\(([^)]*)\)/)!;
+    const transition = block.match(/transition:\s*([^;]*);/)![1];
+    const props = transition.split(',').map((part) => part.trim().split(/\s+/)[0]);
+    return { ms: Number(ms), points: points.split(',').map(Number), props };
+  })();
+  /** The spring's progress at a share of its duration (linear(): evenly spaced points). */
+  const curve = (share: number) => {
+    const { points } = springRule;
+    const at = Math.min(1, Math.max(0, share)) * (points.length - 1);
+    const i = Math.min(points.length - 2, Math.floor(at));
+    return points[i] + (points[i + 1] - points[i]) * (at - i);
+  };
+  /** The largest share of the distance the spring covers in one frame. */
+  const SPRING_FRAME_STEP = (() => {
+    let most = 0;
+    for (let t = 0; t <= springRule.ms; t += 1) {
+      most = Math.max(most, Math.abs(curve((t + FRAME_MS) / springRule.ms) - curve(t / springRule.ms)));
+    }
+    return most;
+  })();
+
+  type Run = { from: number; to: number; start: number };
+  /** What the browser paints: each property eases on the spring while it is transitioned, else jumps. */
+  function onScreen() {
+    let now = 0;
+    const runs = new Map<string, Run>();
+    const value = (run: Run, transitioned: boolean) => (transitioned
+      ? run.from + (run.to - run.from) * curve((now - run.start) / springRule.ms) : run.to);
+    return {
+      /** Advances one frame and reads the panel. */
+      frame() {
+        frames(1);
+        now += FRAME_MS;
+        const resizing = panel().hasAttribute('data-content-resizing');
+        const shown: Record<string, number> = {};
+        for (const prop of ['left', 'top', 'height']) {
+          const target = parseFloat(panel().style.getPropertyValue(prop));
+          const transitioned = resizing && springRule.props.includes(prop);
+          const run = runs.get(prop);
+          if (!run) runs.set(prop, { from: target, to: target, start: now });
+          else if (run.to !== target) {
+            runs.set(prop, transitioned ? { from: value(run, true), to: target, start: now } : { from: target, to: target, start: now });
+          } else if (!transitioned) run.from = target;
+          shown[prop] = value(runs.get(prop)!, transitioned);
+        }
+        return { left: shown.left, top: shown.top, height: shown.height, resizing };
+      },
+    };
+  }
+  /** The largest per-frame change in left and top over a run of frames, and where it ended. */
+  function track(screen: ReturnType<typeof onScreen>, n: number) {
+    let last = screen.frame();
+    const first = last;
+    let left = 0;
+    let top = 0;
+    for (let i = 1; i < n; i++) {
+      const next = screen.frame();
+      left = Math.max(left, Math.abs(next.left - last.left));
+      top = Math.max(top, Math.abs(next.top - last.top));
+      last = next;
+    }
+    return { first, last, left, top };
+  }
+
+  it('the spring the ratchet plays is panels.css\'s, and it carries left', () => {
+    expect(springRule.ms).toBe(360);
+    expect(springRule.props).toEqual(['height', 'top', 'left']);
+    // A step well short of a jump: about a seventh of the way per frame.
+    expect(SPRING_FRAME_STEP).toBeGreaterThan(0.05);
+    expect(SPRING_FRAME_STEP).toBeLessThan(0.2);
+  });
+
+  for (const order of ['together', 'card first', 'card only']) {
+    it(`placed right, the card widening as its preview lands (${order}): the left edge follows it on the spring, never a one-frame jump`, () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      // Review 4's live case: 1440x1000, the panel right of an Image Input
+      // whose card widens 179.5 -> 215.4 px as the preview lands.
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      openInNode(rect(500, 156.5, 179.5, 121.7), rect(500, 200, 179.5, 56));
+      settle();
+      expect(panel().dataset.placement).toBe('right');
+      const screen = onScreen();
+      const before = screen.frame();
+      expect(before).toMatchObject({ left: 689.5, top: 192, height: 300 });
+      const row = rowTop();
+      if (order === 'card first') {
+        nodeRect = rect(500, 156.5, 215.4, 103.9);
+        anchorRect = rect(500, 228.7, 215.4, 23.8);
+        screen.frame();
+      }
+      nodeRect = rect(500, 156.5, 215.4, 309.8);
+      anchorRect = rect(500, 228.7, 215.4, 180);
+      if (order !== 'card only') contentHeight = 486 - CHROME;
+      const { first, last, left, top } = track(screen, 30);
+      expect(first.resizing).toBe(true);
+      // Where it ends: the gap to the card kept, the top held, the file row where it was.
+      expect(parseFloat(panel().style.left)).toBeCloseTo(500 + 215.4 + 10, 5);
+      expect(last.left).toBeCloseTo(725.4, 5);
+      expect(last.top).toBe(192);
+      expect(rowTop()).toBe(row);
+      // The ratchet: no frame moves it further than the spring's own step.
+      expect(left).toBeLessThanOrEqual(SPRING_FRAME_STEP * 35.9 + 1e-6);
+      expect(left).toBeGreaterThan(0);
+      expect(top).toBe(0);
+      act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+      expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+      expect(screen.frame()).toMatchObject({ left: 725.4, top: 192, height: order === 'card only' ? 300 : 486 });
+    });
+  }
+
+  it('placed left, the card widening moves nothing: its left edge, which the panel faces, stays put', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(1100, 156.5, 179.5, 121.7), rect(1100, 200, 179.5, 56));
+    settle();
+    expect(panel().dataset.placement).toBe('left');
+    const screen = onScreen();
+    expect(screen.frame().left).toBe(1100 - 10 - 260);
+    nodeRect = rect(1100, 156.5, 215.4, 309.8);
+    anchorRect = rect(1100, 228.7, 215.4, 180);
+    contentHeight = 486 - CHROME;
+    const { last, left, top } = track(screen, 30);
+    expect(left).toBe(0);
+    expect(top).toBe(0);
+    expect(last).toMatchObject({ left: 830, top: 192 });
+  });
+
+  it('a real move mid-spring stays rigid: its left jumps with the node, the spring cancelled', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(500, 156.5, 179.5, 121.7), rect(500, 200, 179.5, 56));
+    settle();
+    const screen = onScreen();
+    screen.frame();
+    nodeRect = rect(500, 156.5, 215.4, 309.8);
+    anchorRect = rect(500, 228.7, 215.4, 180);
+    contentHeight = 486 - CHROME;
+    screen.frame();
+    expect(screen.frame().resizing).toBe(true);
+    // The node is dragged 100 px right: at once, by the card.
+    nodeRect = rect(600, 156.5, 215.4, 309.8);
+    anchorRect = rect(600, 228.7, 215.4, 180);
+    const moved = screen.frame();
+    expect(moved.resizing).toBe(false);
+    expect(moved.left).toBeCloseTo(825.4, 5);
+    expect(moved.top).toBeCloseTo(220.7, 5);
+  });
+
+  it('a window resize mid-spring re-places it, and the re-place takes the spring, left included (GM r82, r104)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chromeAt(1440, 1000);
+    contentHeight = 300 - CHROME;
+    openInNode(rect(500, 156.5, 179.5, 121.7), rect(500, 200, 179.5, 56));
+    settle();
+    const screen = onScreen();
+    screen.frame();
+    nodeRect = rect(500, 156.5, 215.4, 309.8);
+    anchorRect = rect(500, 228.7, 215.4, 180);
+    contentHeight = 486 - CHROME;
+    screen.frame();
+    screen.frame();
+    // Too narrow for it on the right now: it re-places on the left, on the spring.
+    windowAt(940, 1000);
+    const { last, left, top } = track(screen, 30);
+    expect(panel().dataset.placement).toBe('left');
+    expect(last.left).toBeCloseTo(500 - 10 - 260, 5);
+    const distance = 725.4 - 230;
+    expect(left).toBeLessThanOrEqual(SPRING_FRAME_STEP * distance + 1e-6);
+    expect(top).toBeLessThanOrEqual(SPRING_FRAME_STEP * 40 + 1e-6);
+  });
 });
 
 /**
@@ -1353,6 +1543,35 @@ describe('the hairline holds its state through a height spring (GM r98)', () => 
     expect(more()).toBe(false);
     expect(hairline()).toBe(false);
   });
+
+  /** Reduced motion on: the panel jumps (panels.css), so no spring runs. */
+  function reducedMotion() {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: /prefers-reduced-motion:\s*reduce/.test(query), media: query,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {},
+    }));
+  }
+
+  it('under reduced motion nothing waits for a spring: the line reads the body in the same frame (review 4 NIT-1)', () => {
+    reducedMotion();
+    scrolledPartway();
+    // The "No preview" row goes: the panel jumps to 531 px; nothing is below now.
+    contentHeight = 416;
+    frames(1);
+    expect(bounds()).toEqual({ top: 154, height: 531, bottom: 685 });
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    relayout();
+    expect(more()).toBe(false);
+    expect(hairline()).toBe(false);
+    // An image lands: the panel jumps back to the band's line and the body has more below, at once.
+    contentHeight = 602;
+    frames(1);
+    expect(bounds().height).toBe(600);
+    expect(panel().hasAttribute('data-content-resizing')).toBe(false);
+    relayout();
+    expect(more()).toBe(true);
+    expect(hairline()).toBe(true);
+  });
 });
 
 describe('the pinned Inspector (GM r68: unchanged)', () => {
@@ -1380,7 +1599,7 @@ describe("the layout spring's CSS", () => {
     const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.block));
     expect(moving).toHaveLength(1);
     expect(moving[0].selector).toBe('.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)');
-    expect(moving[0].block).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\)/);
+    expect(moving[0].block).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\),\s*left var\(--inspector-layout-spring\);/);
     // The sampled spring, never a stock easing.
     expect(moving[0].block).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);
     expect(moving[0].block).not.toMatch(/ease|cubic-bezier/);

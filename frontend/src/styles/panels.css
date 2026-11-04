@@ -194,10 +194,15 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
    resize letting go of a held top, or the card growing under it (r82). Only
    then (review 7 M2): the popover carries data-content-resizing while the
    change settles (NodeInspectorPopover.tsx), and otherwise moves with its
-   node at once on a pan, zoom or drag. */
+   node at once on a pan, zoom or drag. GM r104: its left edge rides the
+   same spring, so the edge facing a card that widens in place (an Image
+   Input's preview landing, the panel on its right) follows the card's edge
+   with the height, as one motion; on the left the card's left edge doesn't
+   move, so neither does the panel's. */
 .node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned) {
   --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
-  transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
+  transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring),
+    left var(--inspector-layout-spring);
 }
 
 /* GM r22 Q5 on #208: rigid wins. With the attribute gone (a pan or drag

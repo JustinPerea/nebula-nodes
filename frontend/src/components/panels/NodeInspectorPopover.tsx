@@ -404,6 +404,19 @@ export function NodeInspectorPopover() {
     let stopped = false;
 
     const startSpring = () => {
+      // Reduced motion: the panel jumps (panels.css), so no spring runs and
+      // nothing waits for one; the line reads the body at once (review 4
+      // NIT-1). A spring already running is ended with it.
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        if (resizeTimer.current) clearTimeout(resizeTimer.current);
+        resizeTimer.current = null;
+        if (resizingRef.current) {
+          resizingRef.current = false;
+          setContentResizing(false);
+        }
+        lineHeldRef.current = null;
+        return;
+      }
       if (resizeTimer.current) clearTimeout(resizeTimer.current);
       resizeTimer.current = setTimeout(() => {
         resizeTimer.current = null;
@@ -524,8 +537,12 @@ export function NodeInspectorPopover() {
           // so it follows the resize live (GM r82); the card growing, which
           // moves a panel under the node or flips it above (r82).
           const glide = resized && !moved && (wasHeld || resizingRef.current);
+          // GM r104: the edge facing the card follows it on the same spring,
+          // so a card widening beside the panel (an Image Input's preview
+          // landing) moves its left edge on the spring, never in one frame.
           const shifts = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
-            && (shown.style.height !== nextFrame.style.height || shown.style.top !== nextFrame.style.top);
+            && (shown.style.height !== nextFrame.style.height || shown.style.top !== nextFrame.style.top
+              || shown.style.left !== nextFrame.style.left);
           if (shifts && (contentChanged || glide || grew)) startSpring();
           needRef.current = { nodeId: selectedNodeId, need };
           if (opening) advanceOpen(popover, need, tick);

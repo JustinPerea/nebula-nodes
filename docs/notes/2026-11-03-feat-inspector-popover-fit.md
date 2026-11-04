@@ -406,3 +406,61 @@ y 160.
   gzip.
 - Mutation check: 14 of 14 killed (12 in the component, 2 in the CSS). The
   restart mutant was equivalent, and the code now uses `=`.
+
+## Round 6 (review 4, GM r104)
+
+- **The panel's left edge follows a widening card on the layout spring (review 4 MEDIUM-1, GM r104 option a).**
+  `left` joins `height` and `top` in the `[data-content-resizing]` transition
+  (panels.css). A change of `left` now counts as a shift that starts the
+  spring, as `top` and `height` already did. Without that, a card that widens
+  with no height change would still move the panel in one frame.
+  - Right placement: the panel keeps its 10 px gap, and its left edge follows
+    the card's right edge, on the same spring and timing as the height.
+  - Left placement: the card's left edge doesn't move, so the panel holds.
+  - A real move, pan or zoom is still rigid, because the attribute is cleared
+    on a move.
+  - A window-resize re-place (r82) that lands mid-spring takes over the spring.
+    A flip to the left also springs sideways. The pinned panel never springs.
+- **Seen live (worth GM's eye):** the card widens in one frame (52 px at 130 %
+  zoom). The panel's edge then catches up over about 22 frames, so mid-spring
+  the card runs under the panel's left edge. This is inherent to option (a).
+  Option (b) would hold the panel's left edge instead.
+- **The preview follows the file, not its name (review 4 LOW-1).**
+  - `_preview_follows_file` now compares refs with `_same_ref_file`, not by
+    basename. Refs under the output root compare by their root-relative path:
+    a served URL (with or without the backend's origin), a path under the
+    root, or a path under a root the outputs moved from. Other refs compare by
+    the file they resolve to.
+  - The name is the fallback only when the old ref no longer resolves to
+    anything.
+  - The normalizer's `_drop_stale_preview_size` still compares names. There,
+    before and after differ only by normalization, or by an import to a
+    digest name.
+- **Reduced motion (review 4 NIT-1):** `startSpring` returns before it latches
+  anything when `prefers-reduced-motion: reduce` matches, and it ends any spring
+  still running. The panel jumps (panels.css), so the line reads the body in
+  the same frame.
+- **The Image Input guard is pinned (review 4 NIT-2).** Audio and Document
+  Input `filePath` writes are left as sent: no `_previewUrl` appears, and
+  their `_previewSize` stays.
+
+### Round 6 live check (isolated backend 8968, Vite 5968, Run never clicked)
+
+1440x1000, Image Input at 500,200 (canvas zoom 130 %), panel on the right, ref.png uploaded from the Inspector's file control. Per-frame records are in `scratchpad/pr226r6/live-frames.json`.
+
+| Case | Result |
+|---|---|
+| A. Right placement | Left 770.7 → 822.8 (card right 760.7 → 812.8) over 22 spring frames. The largest step is 7.3 px per frame, against a 52.1 px jump before. Top held at 192, file row y 308 in every frame, height 300 → 488.6 → 486. At rest the gap is 10 px. |
+| B. Left placement (node at 1150,200) | Left 880 in every frame. Top 192. The height springs the same way. |
+| C. Reduced motion, low node | No `data-content-resizing` frame. The line comes on in the same frame as the jump. |
+
+### Round 6 gates
+
+- `tsc -b --noEmit` and lint pass.
+- The 9 Inspector and popover files pass: 159 tests.
+- `pr_tests.sh`: 118 files, 3938 passed.
+- `land_checks.sh` (with `tests/test_upload_drop_files.py`): tsc and the
+  ratchets (161) pass. pytest on 30 files: 1185 passed, 1 skipped.
+  `person_gate.py` is unchanged. `test_upload_drop_files.py` alone: 82 passed.
+- Build and budget pass: 471,093 bytes raw (cap 512,000), 146,505 gzip.
+- Mutation check: 12 of 12 killed (6 frontend, 6 backend).
