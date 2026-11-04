@@ -464,3 +464,102 @@ y 160.
   `person_gate.py` is unchanged. `test_upload_drop_files.py` alone: 82 passed.
 - Build and budget pass: 471,093 bytes raw (cap 512,000), 146,505 gzip.
 - Mutation check: 12 of 12 killed (6 frontend, 6 backend).
+
+## Round 6b (GM r107)
+
+Round 6 sprang the panel's edge, but the card still widened in one frame, so
+mid-spring the panel covered the card's right edge, its id label and its
+output port. Now the card springs too, and the panel follows it.
+
+- **The card's width springs (r107 item 1).** `lib/cardWidthSpring.ts`
+  (`useCardWidthSpring`, on the card in ModelNode and DynamicNode). A
+  ResizeObserver reads the card's own layout width, so a move, pan or zoom
+  never counts as a change. When the width changes from the card's content,
+  it runs a Web Animation from the old width to the new one. It uses the
+  layout spring (`LAYOUT_SPRING_MS`, `LAYOUT_SPRING_EASING`, which a test
+  keeps equal to panels.css's `--inspector-layout-spring`). The animation
+  starts in the observer's callback, after layout and before paint, so the
+  card is never painted at its new width first. While the spring runs, the
+  card carries `data-width-spring`. Under reduced motion the card jumps, and
+  so does the panel.
+- **The panel follows the card's edge every frame (items 1, 3).** While the
+  card it is anchored to carries `data-width-spring`, the panel's
+  once-a-frame step commits with `flushSync`. That step runs in
+  requestAnimationFrame, before that frame's layout and paint, so the panel's
+  edge is where the card's edge is on screen, never a frame behind. The panel
+  then carries `data-follows-card`, and panels.css leaves only its height on
+  the spring. The panel follows through the frame the card's spring ends in,
+  where the card lands from the spring's last overshoot. Only a frame lets go
+  of the follow: the re-measure straight after a commit is the same frame.
+  Without that last frame, the panel springs its last 0.1 px on its own.
+- **No panel jump comes back (item 3).** A card that jumps (no spring on it)
+  still moves the panel on the round 6 spring.
+- **Preview and port (item 2).** The preview is `width: 100%; height: auto`,
+  so it scales with the card and keeps its ratio. Live, it held 1.333 in
+  every frame. The port sits on the card's edge. React Flow measures the node
+  on each size change, so the wire follows.
+- **One frame of wire lag, fixed (found live).** React Flow's own
+  ResizeObserver reports before the card's. It has already measured the card
+  at its new width by the time the card's spring puts it back at the old
+  width. An observer reports a shallower element only once a frame, so React
+  Flow would hear of that only in the next frame. For that one frame the wire
+  ended 47 px to the right of the port. `useNodeRemeasure` makes the card's
+  spring call React Flow's `updateNodeInternals` for the node, forced, as the
+  spring starts. The node is then measured at the width the spring starts
+  from. `useUpdateNodeInternals` waits a frame, so it doesn't help here.
+
+### Round 6b tests
+
+- `tests/lib/cardWidthSpring.test.tsx` (9 tests):
+  - the spring is panels.css's;
+  - a 200 → 240 change springs from old to new, marked while it runs, and its own frames start nothing more;
+  - a later change springs from where it rested, and shrinking springs too;
+  - a first look or a sub-pixel change starts no spring;
+  - reduced motion jumps;
+  - unmounting mid-spring cancels the spring;
+  - `onStart` runs in the same callback, with the spring already on;
+  - `useNodeRemeasure` measures the card's React Flow node at once, forced, and does nothing outside a node.
+- `NodeInspectorContentFit.test.tsx`, "the card springs its width and the
+  panel follows its edge, the gap held every frame (GM r107)". It plays the
+  browser frame by frame: time, the step (rAF), the ResizeObserver feeding
+  the card's real hook, then the paint (the card at its spring's width, the
+  panel by panels.css's transitions).
+  - Right placement, with and without the body growing: on every frame,
+    `|panel left - card right - 10| <= 1`. While following, the panel's left
+    is committed inside the frame's callback. The x/y step ratchet holds. At
+    rest the gap is 10, the top stays 192 and the file row is unmoved.
+  - Left placement: left stays 830 in every frame.
+- The CSS tests name the follow rule, which springs the height only. The
+  reduced-motion block names it too, because it is more specific than the
+  base rule.
+
+### Round 6b live check (isolated backend 8968, Vite 5968, Run never clicked)
+
+1440x1000, Image Input n1 at 500,200 (zoom 130 %), wired to an Image Compare,
+panel on the right, ref.png uploaded from the Inspector. Each record is read
+in a ResizeObserver made after the app's own observers, so it shows the frame
+as it is painted.
+
+| | Result |
+|---|---|
+| Card right / panel left | 760.7 / 770.7 → 812.8 / 822.8 over 22 spring frames (peak 813.6 / 823.6). Gap 9.98 to 10.00 in every frame. |
+| Steps | Largest per frame: card 7.25 px, panel 7.26 px. Top 192 in every frame. |
+| Port, wire | Port centre at card right + 18.25 in every frame. The wire's end sits 5.21 px left of the port centre at the same y in every frame. |
+| Preview | Ratio 1.333 in every frame (ref.png is 1200x900). |
+| Left placement (n3 at 1150,200) | Card springs (23 frames). Panel left 880 in every frame. |
+| Reduced motion | No spring or follow frame. Card, panel and wire jump together in one frame, gap 9.99. |
+
+Seen, not changed: at rest, the output port's handle box (card right + 5 to
++31) sits mostly under the panel, whose edge is at card right + 10. Only part
+of the port's dot shows beside the panel. This was already true before 6b
+(the same numbers are in round 6's records). Fixing it means widening the
+10 px gap, which r104 approved.
+
+### Round 6b gates
+
+- `tsc -b --noEmit` and lint pass.
+- The 9 Inspector and popover files: 162 passed. `cardWidthSpring.test.tsx`: 9 passed. The 16 test files that render ModelNode or DynamicNode: 284 passed.
+- `pr_tests.sh`: 119 files, 3950 passed. It takes committed test files only, so the new hook test ran on its own, above.
+- `land_checks.sh` (with `tests/test_upload_drop_files.py`): tsc and the ratchets (161) pass. pytest on 77 files: 2803 passed, 1 skipped. `person_gate.py` is unchanged.
+- Build and budget pass: 472,331 bytes raw (cap 512,000), 147,026 gzip. That is 1,238 bytes over round 6.
+- Mutation check: 13 of 13 killed. The mutants: the card jumps; no flushSync; the follow CSS rule removed; the finish frame not followed; the re-measure ends the follow; the card's own frames restart its spring; reduced motion springs; a sub-pixel change springs; onStart is dropped; the re-measure is not forced; the popover ignores the springing card; the reduced-motion line misses the follow rule; the spring constants drift from panels.css.

@@ -205,6 +205,15 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
     left var(--inspector-layout-spring);
 }
 
+/* GM r107: while the card's own width springs (lib/cardWidthSpring.ts, the
+   same spring), the panel follows the card's edge frame by frame
+   (NodeInspectorPopover.tsx), so its left and top ride no spring of their
+   own: one on top would lag the card and open the gap or close it. A content
+   height change still springs its height. */
+.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned) {
+  transition: height var(--inspector-layout-spring);
+}
+
 /* GM r22 Q5 on #208: rigid wins. With the attribute gone (a pan or drag
    mid-spring, NodeInspectorPopover.tsx), no property is transitioned, so a
    running spring is cancelled and the panel is at its end layout at once
@@ -214,7 +223,8 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned) {
+  .node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned),
+  .node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned) {
     transition: none;
   }
 }

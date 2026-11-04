@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { Pin, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
@@ -9,6 +9,7 @@ import { ScrollFade } from '../ScrollFade';
 import { hasMoreBelow } from '../../lib/scrollMore';
 import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
 import { springCssVars } from '../../lib/springs';
+import { CARD_WIDTH_SPRING_ATTR } from '../../lib/cardWidthSpring';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
@@ -321,6 +322,12 @@ export function NodeInspectorPopover() {
   // the node (r82, NIT-2). Only then (review 7 M2 on #208): a pan, zoom or
   // drag moves the panel with its node at once.
   const [contentResizing, setContentResizing] = useState(false);
+  // GM r107: while the card's own width springs (lib/cardWidthSpring.ts), the
+  // panel's edge follows the card's edge as it is on screen, in the same
+  // frame, so the gap between them holds every frame. Its left then rides
+  // no spring of its own (panels.css).
+  const [followsCard, setFollowsCard] = useState(false);
+  const followsCardRef = useRef(false);
   const needRef = useRef<{ nodeId: string; need: number | null } | null>(null);
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // GM r22 Q5 on #208: rigid wins. A pan or drag that starts mid-spring
@@ -483,6 +490,7 @@ export function NodeInspectorPopover() {
           // (GM r92): its card growing or its top shifting inside it (a
           // preview landing) is not a move.
           const { at, card: size } = nodePlace(selectedNodeId, anchor, anchor.getBoundingClientRect());
+          const following = anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR);
           const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
           const grew = !moved && anchorSizeRef.current !== null && size !== anchorSizeRef.current;
           const viewport = `${window.innerWidth}x${window.innerHeight}`;
@@ -546,10 +554,27 @@ export function NodeInspectorPopover() {
           if (shifts && (contentChanged || glide || grew)) startSpring();
           needRef.current = { nodeId: selectedNodeId, need };
           if (opening) advanceOpen(popover, need, tick);
-          if (!frameEquals(frameRef.current, nextFrame)) {
-            frameRef.current = nextFrame;
-            setFrame(nextFrame);
-          }
+          const changed = !frameEquals(frameRef.current, nextFrame);
+          if (changed) frameRef.current = nextFrame;
+          // The frame the card's spring ends in still follows: the card
+          // lands at rest there, off the spring's last overshoot, and the
+          // panel takes that last step with it, not on a spring of its own.
+          // Only a frame lets go (the re-measure straight after a commit is
+          // the same frame).
+          const wasFollowing = followsCardRef.current;
+          const follow = following || (wasFollowing && (changed || !tick));
+          const followChanged = follow !== wasFollowing;
+          followsCardRef.current = follow;
+          const commit = () => {
+            if (changed) setFrame(nextFrame);
+            if (followChanged) setFollowsCard(follow);
+          };
+          // Following the card: commit before this frame is painted (a
+          // once-a-frame step runs in requestAnimationFrame, before the
+          // browser lays out and paints that frame), so the panel's edge is
+          // where the card's is on screen, never a frame behind it.
+          if (tick && (follow || followChanged) && (changed || followChanged)) flushSync(commit);
+          else commit();
         } else if (frameRef.current !== null) {
           frameRef.current = null;
           setFrame(null);
@@ -580,6 +605,8 @@ export function NodeInspectorPopover() {
       resizeTimer.current = null;
       resizingRef.current = false;
       setContentResizing(false);
+      followsCardRef.current = false;
+      setFollowsCard(false);
       lineHeldRef.current = null;
     };
   }, [pinned, selectedNodeId, visible]);
@@ -640,6 +667,7 @@ export function NodeInspectorPopover() {
       className={`node-inspector-popover${pinned ? ' node-inspector-popover--pinned' : ''}`}
       data-placement={frame.placement}
       data-content-resizing={contentResizing && !pinned ? '' : undefined}
+      data-follows-card={followsCard && !pinned ? '' : undefined}
       data-opening={settledFor !== selectedNodeId ? '' : undefined}
       hidden={Boolean(frame.suspended)}
       inert={Boolean(frame.suspended)}

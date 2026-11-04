@@ -6,6 +6,8 @@ import {
   CONTENT_RESIZE_MS, NodeInspectorPopover, OPEN_SETTLE_CAP_MS, OPEN_STABLE_FRAMES,
 } from '../../src/components/panels/NodeInspectorPopover';
 import { useUIStore } from '../../src/store/uiStore';
+import { useRef } from 'react';
+import { CARD_WIDTH_SPRING_ATTR, useCardWidthSpring } from '../../src/lib/cardWidthSpring';
 
 /**
  * GM r68 (2026-11-03), the unpinned Inspector beside a node:
@@ -1101,6 +1103,208 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     expect(left).toBeLessThanOrEqual(SPRING_FRAME_STEP * distance + 1e-6);
     expect(top).toBeLessThanOrEqual(SPRING_FRAME_STEP * 40 + 1e-6);
   });
+
+  /**
+   * GM r107: the card's width springs too (lib/cardWidthSpring.ts), on the
+   * same spring, and the panel's facing edge follows it frame by frame, so
+   * the gap between them holds every frame (never the panel over the card's
+   * edge, its label or its port). The ratchet: on every frame of the content
+   * resize, |panel left - card right| stays within 1 px of the 10 px gap at
+   * rest, and the panel's x and y still never move by more than the spring's
+   * per-frame step.
+   *
+   * The browser, played frame by frame: the frame's time advances; the
+   * panel's once-a-frame step reads the card (requestAnimationFrame); then
+   * the ResizeObserver reports the card's layout width to the card's real
+   * hook, which starts its spring there, before paint; then the frame is
+   * painted: the card at its spring's width, the panel by panels.css (its
+   * own transitions on the values it was given). The card's spring starts
+   * one frame after `animate` (a pending animation resolves its start time on
+   * the next frame) and ends with a `finish` event before that frame's step.
+   */
+  describe('the card springs its width and the panel follows its edge, the gap held every frame (GM r107)', () => {
+    const followRule = (() => {
+      const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
+      const block = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, selector]) => selector.trim()
+        === '.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)')?.[2];
+      return block ? block.match(/transition:\s*([^;]*);/)![1].split(',').map((part) => part.trim().split(/\s+/)[0]) : null;
+    })();
+
+    type Spring = { from: number; to: number; start: number | null; listeners: Map<string, Array<() => void>> };
+    let now: number;
+    let natural: number;
+    let spring: Spring | null;
+    let reported: number | null;
+    let observe: ((width: number) => void) | null;
+
+    function SpringOn({ element }: { element: HTMLElement }) {
+      const ref = useRef<HTMLElement | null>(element);
+      useCardWidthSpring(ref);
+      return null;
+    }
+
+    /** The card's layout width on screen now: its spring's, else its content's. */
+    function cardWidth() {
+      if (!spring) return natural;
+      const share = spring.start === null ? 0 : (now - spring.start) / springRule.ms;
+      return spring.from + (spring.to - spring.from) * curve(share);
+    }
+
+    beforeEach(() => {
+      now = 0;
+      spring = null;
+      reported = null;
+      observe = null;
+      vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query }));
+      vi.stubGlobal('ResizeObserver', class {
+        callback: ResizeObserverCallback;
+        constructor(callback: ResizeObserverCallback) { this.callback = callback; }
+        observe(target: Element) {
+          observe = (width) => this.callback([{ target, borderBoxSize: [{ inlineSize: width, blockSize: 0 }] } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+        unobserve() {}
+        disconnect() { observe = null; }
+      });
+      HTMLElement.prototype.animate = function (keyframes: Keyframe[]) {
+        const listeners = new Map<string, Array<() => void>>();
+        spring = { from: parseFloat(String(keyframes[0].width)), to: parseFloat(String(keyframes[1].width)), start: null, listeners };
+        return {
+          addEventListener: (type: string, listener: () => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+          cancel: () => { spring = null; },
+        } as unknown as Animation;
+      } as HTMLElement['animate'];
+    });
+    afterEach(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
+    });
+
+    /** Opens beside an Image Input whose card is 179.5 px wide, with the card's own spring on it. */
+    function openOnCard(left: number) {
+      natural = 179.5;
+      openInNode(rect(left, 156.5, 179.5, 121.7), rect(left, 200, 179.5, 56));
+      nodeRect = rect(left, 156.5, 179.5, 121.7);
+      const anchor = document.querySelector<HTMLElement>('[data-node-inspector-anchor="n1"]')!;
+      // Where the card is now, as the browser would lay it out (the node grows with it).
+      let top = 200;
+      let height = 56;
+      anchor.getBoundingClientRect = () => rect(left, top, cardWidth(), height);
+      nodeRect = rect(left, 156.5, 179.5, 121.7);
+      (anchor.closest('.react-flow__node') as HTMLElement).getBoundingClientRect = () => rect(left, 156.5, cardWidth(), height + (top - 156.5));
+      render(<SpringOn element={anchor} />);
+      act(() => observe?.(cardWidth()));
+      reported = cardWidth();
+      settle();
+      return {
+        anchor,
+        land(width: number, cardTop: number, cardHeight: number) { natural = width; top = cardTop; height = cardHeight; },
+      };
+    }
+
+    /** One frame: time moves, the step runs, the observer reports, the frame is painted. */
+    function play(screen: { runs: Map<string, Run> }, anchor: HTMLElement) {
+      now += FRAME_MS;
+      if (spring && spring.start === null && spring.listeners.size) spring.start = now - FRAME_MS;
+      if (spring?.start !== null && spring && now - spring.start >= springRule.ms) {
+        const done = spring;
+        spring = null;
+        act(() => (done.listeners.get('finish') ?? []).forEach((listener) => listener()));
+      }
+      // The once-a-frame step, and what it committed before this frame's paint.
+      let committedLeft = NaN;
+      act(() => {
+        const pending = [...callbacks.values()];
+        callbacks.clear();
+        pending.forEach((callback) => callback(performance.now()));
+        committedLeft = parseFloat(panel().style.left);
+      });
+      // The observer, after layout, before paint (it may start the card's spring).
+      for (let i = 0; i < 3 && reported !== cardWidth(); i++) {
+        reported = cardWidth();
+        act(() => observe?.(reported!));
+      }
+      const resizing = panel().hasAttribute('data-content-resizing');
+      const follows = panel().hasAttribute('data-follows-card');
+      const props = resizing ? (follows ? (followRule ?? springRule.props) : springRule.props) : [];
+      const shown: Record<string, number> = {};
+      for (const prop of ['left', 'top', 'height']) {
+        const target = parseFloat(panel().style.getPropertyValue(prop));
+        const transitioned = props.includes(prop);
+        const value = (run: Run) => (transitioned
+          ? run.from + (run.to - run.from) * curve((now - run.start) / springRule.ms) : run.to);
+        const run = screen.runs.get(prop);
+        if (!run) screen.runs.set(prop, { from: target, to: target, start: now });
+        else if (run.to !== target) {
+          screen.runs.set(prop, transitioned ? { from: value(run), to: target, start: now } : { from: target, to: target, start: now });
+        } else if (!transitioned) run.from = target;
+        shown[prop] = value(screen.runs.get(prop)!);
+      }
+      const card = anchor.getBoundingClientRect();
+      return { ...shown, cardRight: card.right, committedLeft, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR) };
+    }
+
+    for (const together of [true, false]) {
+      it(`placed right, a preview landing${together ? ' with the panel\'s body growing' : ' (the card only)'}: the gap holds within 1 px every frame`, () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        chromeAt(1440, 1000);
+        contentHeight = 300 - CHROME;
+        const { anchor, land } = openOnCard(500);
+        expect(panel().dataset.placement).toBe('right');
+        const screen = { runs: new Map<string, Run>() };
+        const before = play(screen, anchor);
+        expect(before.left - before.cardRight).toBeCloseTo(10, 5);
+        const row = rowTop();
+        land(215.4, 228.7, 180);
+        if (together) contentHeight = 486 - CHROME;
+        const seen: ReturnType<typeof play>[] = [];
+        for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+        // The card sprang (it was marked, and the panel followed it).
+        expect(seen.some((f) => f.marked && f.follows)).toBe(true);
+        const widths = seen.map((f) => f.cardRight);
+        expect(new Set(widths.map((w) => w.toFixed(2))).size).toBeGreaterThan(10);
+        // D: the gap, every frame.
+        const gaps = seen.map((f) => f.left - f.cardRight);
+        for (const gap of gaps) expect(Math.abs(gap - 10)).toBeLessThanOrEqual(1);
+        // Following, the panel's edge is committed in the frame the card is read, never a frame later.
+        for (const f of seen.filter((x) => x.follows)) expect(f.committedLeft).toBeCloseTo(f.left, 5);
+        // The x/y ratchet still holds: no step past the spring's own.
+        let left = 0;
+        let top = 0;
+        for (let i = 1; i < seen.length; i++) {
+          left = Math.max(left, Math.abs(seen[i].left - seen[i - 1].left));
+          top = Math.max(top, Math.abs(seen[i].top - seen[i - 1].top));
+        }
+        expect(left).toBeGreaterThan(0);
+        expect(left).toBeLessThanOrEqual(SPRING_FRAME_STEP * 35.9 + 1e-6);
+        expect(top).toBe(0);
+        // At rest: the card at its width, the gap 10, unmarked; the top and the file row held.
+        const last = seen[seen.length - 1];
+        expect(last.cardRight).toBeCloseTo(715.4, 5);
+        expect(last.left).toBeCloseTo(725.4, 5);
+        expect(last.marked).toBe(false);
+        expect(last.follows).toBe(false);
+        expect(last.top).toBe(192);
+        expect(rowTop()).toBe(row);
+        if (together) expect(last.height).toBe(486);
+      });
+    }
+
+    it('placed left, the card springs and the panel holds: the card\'s left edge, which it faces, does not move', () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      chromeAt(1440, 1000);
+      contentHeight = 300 - CHROME;
+      const { anchor, land } = openOnCard(1100);
+      expect(panel().dataset.placement).toBe('left');
+      const screen = { runs: new Map<string, Run>() };
+      play(screen, anchor);
+      land(215.4, 228.7, 180);
+      contentHeight = 486 - CHROME;
+      const seen: ReturnType<typeof play>[] = [];
+      for (let i = 0; i < 40; i++) seen.push(play(screen, anchor));
+      expect(seen.some((f) => f.marked)).toBe(true);
+      for (const f of seen) expect(f.left).toBe(830);
+    });
+  });
 });
 
 /**
@@ -1597,8 +1801,12 @@ describe("the layout spring's CSS", () => {
 
   it('springs the floating popover only while data-content-resizing is on, never the pinned one', () => {
     const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.block));
-    expect(moving).toHaveLength(1);
-    expect(moving[0].selector).toBe('.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)');
+    // The spring, and (GM r107) the same spring on its height alone while it follows a card springing its width.
+    expect(moving.map((r) => r.selector)).toEqual([
+      '.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)',
+      '.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)',
+    ]);
+    expect(moving[1].block.trim()).toBe('transition: height var(--inspector-layout-spring);');
     expect(moving[0].block).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\),\s*left var\(--inspector-layout-spring\);/);
     // The sampled spring, never a stock easing.
     expect(moving[0].block).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);
@@ -1612,8 +1820,11 @@ describe("the layout spring's CSS", () => {
   });
 
   it('jumps for reduced motion', () => {
-    const off = rules(reduced).filter((r) => r.selector === '.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)');
+    const off = rules(reduced).filter((r) => r.selector.split(',').map((part) => part.trim()).includes('.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)'));
     expect(off).toHaveLength(1);
+    // The rule that follows a springing card is more specific, so it is named too (GM r107).
+    expect(off[0].selector.split(',').map((part) => part.trim()))
+      .toContain('.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)');
     expect(off[0].block).toMatch(/transition:\s*none/);
   });
 
