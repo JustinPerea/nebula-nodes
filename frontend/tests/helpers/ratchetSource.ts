@@ -96,7 +96,9 @@ const isModule = (node: ts.Node | undefined, specifier: RegExp): boolean =>
 
 /**
  * What a file takes from a module: the local names bound to its exports
- * (a named import, or a destructured `await import(…)`), whether it takes the
+ * (a named import, a default import as `default`, or a destructured
+ * `await import(…)`), the names bound to the whole module (`import * as N`,
+ * `const M = await import(…)` or vi.importActual), whether it takes the
  * module at all (any non-type import, export, `import(…)`, vi.importActual or
  * require), and whether a vi.mock or vi.doMock replaces it whole (no factory,
  * or one that never reaches importOriginal or importActual).
@@ -115,6 +117,7 @@ export function moduleUse(file: ts.SourceFile, specifier: RegExp) {
     if (ts.isImportDeclaration(node) && isModule(node.moduleSpecifier, specifier) && !node.importClause?.isTypeOnly) {
       takes = true;
       const named = node.importClause?.namedBindings;
+      if (node.importClause?.name) bindings.set(node.importClause.name.text, 'default');
       if (named && ts.isNamedImports(named)) {
         for (const element of named.elements) {
           if (!element.isTypeOnly) bindings.set(element.name.text, (element.propertyName ?? element.name).text);
@@ -153,5 +156,7 @@ export function moduleUse(file: ts.SourceFile, specifier: RegExp) {
   visit(file);
   /** Whether a bare name is this module's `exported`, imported once and never shadowed. */
   const isExport = (name: string, exported: string) => bindings.get(name) === exported && declarations.get(name) === 1;
-  return { takes, fullMock, isExport };
+  /** Every local name bound to one of `exported`, shadowed or not (a mount check errs toward naming). */
+  const localsOf = (exported: ReadonlySet<string>) => new Set([...bindings].filter(([, from]) => exported.has(from)).map(([local]) => local));
+  return { takes, fullMock, isExport, localsOf, namespaces: namespaces as ReadonlySet<string> };
 }

@@ -125,9 +125,11 @@ describe('GM r8: no toast cuts a sentence', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
       .map((rule) => `${rule.file}: ${rule.selector}`);
-    // The one exception, GM - Design, PR #216 r8: an Undo notice carrying
-    // the fold's count ("Moved “Hero shot” · Undo · 3 more") cuts its name
-    // so Undo and "3 more" fit on one line.
-    expect(cut).toEqual(['styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text']);
+    // The exceptions, GM - Design, PR #216: an Undo notice carrying the
+    // fold's count ("Moved “Hero shot” · Undo · 3 more", r8) cuts its name
+    // so Undo and "3 more" fit on one line; and one kept to one line where
+    // its full height leaves the proposal card short of Accept and Reject
+    // (r76, its full text in its aria-label).
+    expect(cut).toEqual(['styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,\n.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text']);
   });
 });

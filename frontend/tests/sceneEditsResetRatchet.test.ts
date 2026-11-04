@@ -57,7 +57,13 @@ function readFile(source: string, fileName?: string) {
     if (isReset(hook)) return true;
     return isFunctionLike(hook) && some(hook.body, (node) => ts.isCallExpression(node) && isReset(node.expression));
   };
-  /** Whether a scope's own statements register the reset after each test. */
+  /**
+   * Whether a scope's own statements register the reset after each test. An
+   * afterEach registered inside a beforeAll or beforeEach doesn't count:
+   * vitest (4.1.11) never runs it (PR #221 review 2 NIT-4 took it for a
+   * false fail; a probe test with `beforeAll(() => { afterEach(…) })` saw
+   * the hook run 0 times), so naming it is right.
+   */
   const resetsAfterEach = (statements: readonly ts.Statement[]) => statements.some((statement) => {
     if (!ts.isExpressionStatement(statement)) return false;
     const call = unwrap(statement.expression);
@@ -108,6 +114,8 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['the reset only in a string', `${STATIC}${SCENE}const why = 'afterEach(() => resetDeletedSceneEditsForTests())';\n${TEST}`],
     ['the reset in beforeAll (once, not after each)', `${STATIC}${SCENE}beforeAll(() => resetDeletedSceneEditsForTests());\n${TEST}`],
     ['the reset in afterAll', `${STATIC}${SCENE}afterAll(resetDeletedSceneEditsForTests);\n${TEST}`],
+    // Review 2 NIT-4: vitest never runs an afterEach registered from a beforeAll.
+    ['afterEach registered inside beforeAll', `${STATIC}${SCENE}beforeAll(() => { afterEach(resetDeletedSceneEditsForTests); });\n${TEST}`],
     ['the reset only inside a test', `${STATIC}${SCENE}it('x', () => { resetDeletedSceneEditsForTests(); });\n${TEST}`],
     ['the reset named but never called', `${STATIC}${SCENE}afterEach(() => { void resetDeletedSceneEditsForTests; });\n${TEST}`],
     ['a local function with the same name', `${NAMESPACE}${SCENE}const resetDeletedSceneEditsForTests = () => {};\nafterEach(resetDeletedSceneEditsForTests);\n${TEST}`],

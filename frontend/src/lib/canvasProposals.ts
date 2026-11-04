@@ -455,3 +455,10 @@ export const PROPOSAL_GATE_COPY = {
   accept: 'You can accept proposals when this tab is connected as you.',
   reject: 'You can reject proposals when this tab is connected as you.',
 } as const;
+
+/** What the notice region's polite line says once a keyboard Accept or
+ * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
+ * is (ProposalBar). */
+export function decisionLine(kind: 'accept' | 'reject', agent: string): string {
+  return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agent}.`;
+}

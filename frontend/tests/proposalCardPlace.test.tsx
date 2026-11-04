@@ -97,12 +97,22 @@ describe('the notice stack and the Agent log', () => {
     ['the selection toolbar showing', measure({ topLine: 150, card: { chrome: CHROME, body: 900, items: [46] } })],
   ])('%s: the card top is at or below the inset and its footer fully shows', (_name, m) => {
     const place = placeNoticeStack(m);
-    const { card } = stackGeometry(m, place);
+    const { card, rows } = stackGeometry(m, place);
     expect(place.squeeze).toBe(0);
     expect(card!.top).toBeGreaterThanOrEqual(m.topLine);
     expect(card!.bottom).toBeLessThanOrEqual(m.viewportH);
-    // Header, at least one line of body and footer always show.
-    expect(card!.bottom - card!.top).toBeGreaterThanOrEqual(CHROME + 20);
+    // GM r76 (r6 step 5 amended): the card's foot never comes down over the
+    // docked log; it stops at the log's line (its top less the gap).
+    expect(place.over).toBe(0);
+    if (place.aboveLog) expect(card!.bottom).toBeLessThanOrEqual(m.viewportH - m.logTop);
+    // Header, at least one line of body and footer show while they fit;
+    // short of that (the log dragged up), the card caps there and scrolls,
+    // Accept and Reject pinned (GM r69 Q1's `tight`).
+    // With no room for its footer and the row over it, the stack caps at
+    // the room and scrolls, the card at its foot (GM r76).
+    if (place.stackCap) expect(stackGeometry(m, place).line - place.stackCap).toBe(m.topLine);
+    else if (place.tight) expect(Math.min(card!.top, ...rows.map((row) => row.top))).toBe(m.topLine);
+    else expect(card!.bottom - card!.top).toBeGreaterThanOrEqual(CHROME + 20);
   });
 
   it('under 400 px beside the log, the whole stack goes above it; at 400 it stays beside', () => {
@@ -335,11 +345,15 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack(at(470, 2))).toMatchObject({ collapse: true, underFade: true, over: 0 });
     // A log the person reopened over the card's collapse (no collapse offered): step 5 at once.
     expect(placeNoticeStack(at(500, 2, { logCollapse: 0 }))).toMatchObject({ squeeze: LIVE.logSpare, collapse: false, underFade: true });
-    // A log with no give at all: the body goes under the fade, down to one line, then the foot.
+    // A log with no give at all: the body goes under the fade, down to one line, then the card caps.
     const stiff = placeNoticeStack(at(560, 2, { logSpare: 0, logCollapse: 0 }));
     expect(stiff).toMatchObject({ squeeze: 0, collapse: false, underFade: true, cap: roomAt(560) - 40 });
+    // Past one line (GM r76, r6 step 5 amended): the foot never comes over
+    // the log; the card caps under the top line and scrolls (tight).
     const tight = placeNoticeStack(at(460, 2, { logSpare: 0, logCollapse: 0 }));
-    expect(tight).toMatchObject({ underFade: true, cap: 89 + 20, over: 89 + 20 - (roomAt(460) - 40) });
+    // The "2 notices" row over it leaves 36 px, short of its footer: the
+    // stack caps at the room and scrolls, the card keeping its footer (GM r76).
+    expect(tight).toMatchObject({ underFade: true, cap: LIVE_CARD.foot, over: 0, tight: true, lift: BASE, stackCap: roomAt(460) });
     // One line of body, shorter than the plan line: the plan line from the body's top.
     const { card } = stackGeometry(at(460, 2, { logSpare: 0, logCollapse: 0 }), tight);
     expect(card!.first!.top).toBe(card!.headBottom);
@@ -1169,7 +1183,9 @@ describe('the jump frame', () => {
   });
 
   it('the region watches its root marks and wires the jump and the glide in', () => {
-    expect(REGION).toMatch(/applyNoticeStack\(region, stack, next\.place, stackJumps\(last, next\), dropped \|\| stepChanged\(last\?\.place \?\? null, next\.place\), place\)/);
+    // Round 3l (GM r69 Q5): a glide's end lets the log's raise go, then places again.
+    expect(REGION).toMatch(/applyNoticeStack\(region, stack, next\.place, stackJumps\(last, next\), dropped \|\| stepChanged\(last\?\.place \?\? null, next\.place\), settled\)/);
+    expect(REGION).toMatch(/function settled\(\) \{\s*settle\(\);\s*place\(\);\s*\}/);
   });
 });
 

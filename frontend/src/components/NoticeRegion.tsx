@@ -5,9 +5,10 @@ import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
 import { useUIStore } from '../store/uiStore';
 import { setNoticeMore, setNoticeMoreToggle } from '../lib/noticeMore';
+import { SAY_ATTR } from '../lib/noticeSay';
 import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
 import {
-  LOG_HELD_ATTR, MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
+  GLIDE_MS, LOG_HELD_ATTR, LOG_SETTLING_ATTR, MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
 } from '../lib/noticeStackPlace';
 import '../styles/noticeRegion.css';
 
@@ -74,9 +75,35 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
     // above the card and the stack holds still (no glide, no chasing); at
     // the drop it places once, on the layout spring.
     let held = false;
+    // GM r69 Q3: the region's sides as last placed, frozen inline for the
+    // whole drag: a drag off the dock clears the log's clearance at once
+    // (AgentLog), and the card would re-centre mid-drag with no spring. The
+    // drop's place lifts them for its measure and writes its own (an inset,
+    // or none: setInset), so nothing needs putting back.
+    let sides: { left: number; right: number } | null = null;
+    // GM r69 Q5: from the drop, the log stays above the card until the
+    // card's glide rests; then the stacking drops back.
+    let settling: ReturnType<typeof setTimeout> | null = null;
+    const root = document.documentElement;
+    const settle = () => {
+      if (settling !== null) clearTimeout(settling);
+      settling = null;
+      root.removeAttribute(LOG_SETTLING_ATTR);
+    };
+    function settled() {
+      settle();
+      place();
+    }
     function place() {
       if (!region || !stack) return;
-      if (document.documentElement.hasAttribute(LOG_HELD_ATTR)) { held = true; return; }
+      if (root.hasAttribute(LOG_HELD_ATTR)) {
+        if (!held && sides) {
+          region.style.left = `${sides.left}px`;
+          region.style.right = `${sides.right}px`;
+        }
+        held = true;
+        return;
+      }
       const dropped = held;
       held = false;
       // A top bar mounted since (the selection toolbar's panel) joins the watch.
@@ -88,12 +115,25 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
         logTop: measured.logTop, floatTop: measured.floating?.top ?? 0,
       };
       if (!next.place.expanded) expanded.current = false;
+      if (dropped) {
+        settle();
+        root.setAttribute(LOG_SETTLING_ATTR, '');
+      }
       // A layout switch (above the log or back, the log moved) lands with no
       // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4);
       // a give-way step glides from where each row was (GM r5).
       // Review 3 MEDIUM-3: once a glide ends, it places again from where the
       // rows came to rest (a notice left showing as the card goes).
-      applyNoticeStack(region, stack, next.place, stackJumps(last, next), dropped || stepChanged(last?.place ?? null, next.place), place);
+      const inFlight = applyNoticeStack(region, stack, next.place, stackJumps(last, next), dropped || stepChanged(last?.place ?? null, next.place), settled);
+      // Nothing glides (reduced motion, nothing moved, or a newer place took
+      // the glide over and moved nothing): the stacking drops back now. A
+      // glide whose finish never comes lets go after twice its length.
+      if (root.hasAttribute(LOG_SETTLING_ATTR)) {
+        if (!inFlight) settle();
+        else if (dropped) settling = setTimeout(settle, GLIDE_MS * 2);
+      }
+      const box = region.getBoundingClientRect();
+      sides = { left: box.left, right: window.innerWidth - box.right };
       last = next;
       // Step 4 (GM r7): the log collapses to its header for the card, and
       // reopens when the card leaves; uiStore never undoes the person's own.
@@ -128,6 +168,7 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       region.removeEventListener('transitionend', place);
       window.removeEventListener('resize', place);
       replace.current = () => {};
+      settle();
       setNoticeMoreToggle(() => {});
       setNoticeMore({ host: null, count: 0, expanded: false });
     };
@@ -155,6 +196,9 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   return createPortal(
     <div ref={regionRef} className="notice-region" data-notice-region="">
       <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
+      {/* Round 3l (GM r69 a): what a decision did, said politely (lib/noticeSay.ts).
+          A live region with no role: the notices own the region's statuses. */}
+      <div className="notice-region__say" aria-live="polite" aria-atomic="true" {...{ [SAY_ATTR]: '' }} />
       <div ref={stackRef} className="notice-region__stack">
         {/* GM r5 3: the older notices folded into one row when there is no
             room above the card for them all; its words and aria-expanded

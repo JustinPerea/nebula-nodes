@@ -33,7 +33,7 @@ const layout = { drawnLeft: 560, noticeW: 243, regionLeft: 64 };
 let moves: Array<{ element: Element; finish: () => void }> = [];
 
 // The region's notices are a deferred chunk: load it before any render
-// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 2b).
+// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 3l).
 beforeAll(regionNoticesReady);
 
 beforeEach(() => {
@@ -196,21 +196,21 @@ describe('GM r57 Q1: the person\'s hand wins', () => {
     const row = container.querySelector<HTMLElement>('.agent-log__drag-row')!;
     fireEvent.mouseDown(row, { button: 0, clientX: 310, clientY: 310 });
     // A press is not a drag: under the threshold, no mark.
-    fireEvent.mouseMove(window, { clientX: 311, clientY: 311 });
+    fireEvent.mouseMove(window, { clientX: 311, clientY: 311, buttons: 1 });
     expect(root().hasAttribute(LOG_HELD_ATTR)).toBe(false);
-    fireEvent.mouseMove(window, { clientX: 340, clientY: 330 });
+    fireEvent.mouseMove(window, { clientX: 340, clientY: 330, buttons: 1 });
     expect(root().hasAttribute(LOG_HELD_ATTR)).toBe(true);
     fireEvent.mouseUp(window);
     expect(root().hasAttribute(LOG_HELD_ATTR)).toBe(false);
     // Unmounted mid-drag: the mark goes with it.
     fireEvent.mouseDown(row, { button: 0, clientX: 310, clientY: 310 });
-    fireEvent.mouseMove(window, { clientX: 360, clientY: 330 });
+    fireEvent.mouseMove(window, { clientX: 360, clientY: 330, buttons: 1 });
     expect(root().hasAttribute(LOG_HELD_ATTR)).toBe(true);
     unmount();
     expect(root().hasAttribute(LOG_HELD_ATTR)).toBe(false);
     window.localStorage.removeItem('nebula:agentLog:pos');
     useUIStore.setState({ agentLogOpen: false } as never);
     const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).toMatch(/:root\[data-agent-log-held\] \.agent-log \{\s*z-index: calc\(var\(--sr-layer-notice, 20010\) \+ 1\);\s*\}/);
+    expect(css).toMatch(/:root\[data-agent-log-held\] \.agent-log,\s*:root\[data-agent-log-settling\] \.agent-log \{\s*z-index: calc\(var\(--sr-layer-notice, 20010\) \+ 1\);\s*\}/);
   });
 });
