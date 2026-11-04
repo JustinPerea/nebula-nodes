@@ -36,7 +36,10 @@ const cell = (over: Partial<StackMeasure>): StackMeasure => ({ ...BASE, ...over 
 /** Every box the stack draws, and the invariants GM r69 Q1 holds at rest. */
 function boxes(m: StackMeasure, place: StackPlace) {
   const geo = stackGeometry(m, place);
-  return [geo.card!, ...geo.rows];
+  // GM r76: a stack capped at its room scrolls; what it scrolls out of view
+  // is drawn nowhere (its top edge is the cap's).
+  const from = place.stackCap !== null && place.stackCap !== undefined ? geo.line - place.stackCap : Number.NEGATIVE_INFINITY;
+  return [geo.card!, ...geo.rows].map((box) => ({ ...box, top: Math.max(box.top, from) })).filter((box) => box.bottom > box.top);
 }
 function clearOfBannerAndHeader(m: StackMeasure, place: StackPlace) {
   for (const box of boxes(m, place)) {
@@ -57,7 +60,9 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
   it('review 4 logic LOW-2\'s cell (784x431, banner line 199, a collapsed log at 190-234): under the log, not above it over the banner', () => {
     const m = cell({ viewportW: 784, viewportH: 431, topLine: 199, column: { left: 92, right: 692 }, floating: { top: 190, bottom: 234, left: 92, right: 692 } });
     const place = placeNoticeStack(m);
-    expect(place).toMatchObject({ float: 'under', tight: false });
+    // GM r76: 19 px of body holds no whole line, so the card scrolls as a
+    // whole (tight), Accept and Reject pinned.
+    expect(place).toMatchObject({ float: 'under', tight: true });
     const { card } = stackGeometry(m, place);
     // 242-350: its header and footer whole, 19 px of body.
     expect([card!.top, card!.bottom]).toEqual([234 + FLOAT_GAP_PX, 431 - 81]);
@@ -95,8 +100,9 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
             });
             const place = placeNoticeStack(m);
             clearOfBannerAndHeader(m, place);
-            // Capped under its own header and footer only when nothing else fits.
-            if (place.tight) expect(place.cap!).toBeLessThan(CARD.chrome);
+            // Capped under header, one line and footer only when nothing
+            // else fits (GM r76: under one line, the card scrolls whole).
+            if (place.tight) expect(place.cap!).toBeLessThan(CARD.chrome + CARD.line);
           });
         }
       }
@@ -107,23 +113,31 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
       // under it 57; nothing to cross.
       const m = cell({ topLine: 220, floating: { top: 230, bottom: 274, left: 100, right: 700 } });
       const place = placeNoticeStack(m);
-      expect(place).toMatchObject({ float: 'under', tight: true, cap: 339 - 282 });
+      // 57 px: room for the footer and 3 px of the header's line, which
+      // would cut it; the footer alone (GM r76, snapTight).
+      expect(place).toMatchObject({ float: 'under', tight: true, cap: CARD.foot });
       clearOfBannerAndHeader(m, place);
       // With no log at all, a banner over most of the window: the same cap.
       const none = cell({ topLine: 300, floating: null });
       const nonePlace = placeNoticeStack(none);
       expect(nonePlace).toMatchObject({ tight: true, cap: 339 - 300 });
       clearOfBannerAndHeader(none, nonePlace);
-      // A docked log under it: the card comes down over the log's top edge
-      // first (step 5), then caps under the banner.
-      const docked = cell({ topLine: 300, logClearance: 360, logTop: 200, floating: null, viewportW: 800 });
+      // A docked log under it (GM r76, r6 step 5 amended): the card never
+      // comes down over the log; it caps between the banner and the log's
+      // line (its top less the gap).
+      const docked = cell({ topLine: 200, logClearance: 360, logTop: 160, floating: null, viewportW: 800 });
       const dockedPlace = placeNoticeStack(docked);
-      expect(dockedPlace.tight).toBe(true);
-      for (const box of boxes(docked, dockedPlace)) expect(box.top).toBeGreaterThanOrEqual(300);
+      // 60 px there: the footer, and too little of the header's line to show it whole.
+      expect(dockedPlace).toMatchObject({ tight: true, over: 0, cap: CARD.foot });
+      expect(420 - 160 - 200).toBe(60);
+      for (const box of boxes(docked, dockedPlace)) {
+        expect(box.top).toBeGreaterThanOrEqual(200);
+        expect(box.bottom).toBeLessThanOrEqual(420 - 160);
+      }
     });
   });
 
-  it('a seeded sweep of short windows with the banner: nothing at rest over the banner or a floating log\'s header', () => {
+  it('a seeded sweep of short windows with the banner, Undo notices in every cell (GM r76): nothing at rest over the banner or a floating log\'s header', () => {
     let seed = 216_3;
     const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
     const pick = <T,>(list: readonly T[]) => list[Math.floor(rand() * list.length)];
@@ -151,16 +165,15 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
       });
       // The log's header itself under the banner's line: the person put it there.
       if (top < topLine) continue;
-      // Notices that never fold (Undo) with no room for them and the card's
-      // footer on either side: out of this rule's reach (see the notes).
-      const rows = undo.reduce((total, u) => total + (u ? 54 : 0), 0) + (undo.some((u) => !u) ? MORE_ROW_PX + 8 : 0);
-      const line0 = viewportH - 81;
-      const room = Math.max(top - FLOAT_GAP_PX - topLine, line0 - Math.max(topLine, top + HEADER + FLOAT_GAP_PX));
-      if (rows + CARD.foot > room) continue;
+      // GM r76 (round 3m): the cells 3l skipped, Undo notices with no room
+      // for them and the card's footer, are in: they keep their line (cut
+      // with "…"), and past that the stack caps at its room and scrolls.
       const place = placeNoticeStack(m);
       clearOfBannerAndHeader(m, place);
-      // Capped, Accept and Reject (its footer) still in view.
-      if (place.tight) expect(place.cap!).toBeGreaterThanOrEqual(CARD.foot);
+      // Capped, Accept and Reject (its footer) still in view, while the room holds them.
+      const geo = stackGeometry(m, place);
+      const room = geo.line - (place.float === 'under' ? place.topLine ?? topLine : topLine);
+      if (place.tight) expect(place.cap!).toBeGreaterThanOrEqual(Math.min(CARD.foot, room) - 0.5);
       checked += 1;
     }
     expect(checked).toBeGreaterThan(2000);

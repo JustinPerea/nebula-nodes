@@ -890,11 +890,17 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 /* Carrying the fold's count (GM r8), the name gives way on one line. Its
    one unbroken line would otherwise widen the notice past the region (its
    min-content), so the notice is held to its slot as every other row is. */
-.canvas-undo-notice[data-notice-more-host] {
+/* GM r76: the other place, an Undo notice kept to one line where its full
+   height leaves the proposal card short of Accept and Reject (lib/
+   noticeStackPlace.ts, `clip`): it keeps its line and buttons, its text cut
+   with "…", the full text in its aria-label. */
+.canvas-undo-notice[data-notice-more-host],
+.canvas-undo-notice[data-notice-clipped] {
   max-width: min(var(--notice-max-w, 560px), 100%);
 }
 
-.canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text {
+.canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,
+.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

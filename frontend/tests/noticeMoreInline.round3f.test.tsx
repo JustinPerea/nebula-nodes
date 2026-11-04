@@ -77,10 +77,11 @@ describe('wired into the canvas notice and the region', () => {
   });
   it('the name gives way with an ellipsis so Undo and the count fit on one line', () => {
     const css = read('styles/canvasProposals.css');
-    expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\] \.canvas-undo-notice__text \{[^}]*overflow: hidden;[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis;/);
+    // (GM r76: one rule with the Undo notice kept to one line, data-notice-clipped.)
+    expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\] \.canvas-undo-notice__text(?:,\s*[^{,]+)*\s*\{[^}]*overflow: hidden;[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis;/);
     expect(css).toMatch(/\.canvas-undo-notice__more-button \{[^}]*white-space: nowrap;/);
     // Its one unbroken line never widens it past the region (round 3f, live
     // at 420: 388 px wide in a 340 px column): held to its slot.
-    expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\] \{\s*max-width: min\(var\(--notice-max-w, 560px\), 100%\);\s*\}/);
+    expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\](?:,\s*[^{,]+)*\s*\{\s*max-width: min\(var\(--notice-max-w, 560px\), 100%\);\s*\}/);
   });
 });

@@ -867,3 +867,48 @@ Review 4 (both lenses) found no HIGH or MEDIUM. This round folds in its LOWs and
 | q2-keyboard-decision-canvas-ring | A keyboard Reject of the only proposal: the canvas has focus and `data-focus-decided`, the ring inside the window's edge (17.46:1); the polite line says "Rejected the proposal from Codex." |
 | probe-tab-canvas-before / after, q2-tab-arrival-canvas-ring | Tab arrival on the canvas: nothing visible before, the ring after. |
 
+
+## Round 3m (GM - Design's r76, 2026-11-03)
+
+GM r76 passed Q1, Q2 and Q5 and ruled on round 3l's two open items. origin/main is still bee7ebe0 (nothing to merge).
+
+**1. Undo notices follow the card's place; kept to one line when they must be.**
+- They still never fold. They stand where the card's place puts them: under the banner, and under a floating log into its body, never its header.
+- `placeNoticeStack` places once (`placeOnce`, the old body), then checks the result (`stackOverflows`): the stack's top past its limit (the top line, or under a floating log the line its place allows, `stackLimit`), or the card under its floor (`tightFloor`: its footer and its header's line, the 205-capped card). If so, every Undo notice that is taller on one line is kept to one line (`clip`) and the stack is placed again with those heights.
+- The page: `data-notice-clipped` on the notice; canvasProposals.css cuts its text with "…" (the same rule as the r8 fold host's, which pr198Fix6Copy now lists as the second exception) and holds it to its slot. Its full text is written as its `aria-label` (the notice is `role="status"`), and lifted with the clip. A label the notice had of its own is never replaced or lifted.
+- The measure reads a clipped notice unclipped and each Undo notice clipped (`noticeHeights`), then puts each back, so a clip never feeds back into the measure. A clip coming or going is a step (it glides).
+- **Decided here, for GM:** past even that (the rows on one line still leave the card short of its floor), the card takes what the rows leave down to its footer alone (no line cut, `snapTight`); short of even its footer, the card keeps its footer and the stack caps at its room and scrolls (r69 Q4's `stackCap`), scrolled to its foot, the notices over the card in the scroll. Only windows far shorter than the app's reach it. Order: banner and log header never covered, then Accept and Reject, then the Undo notice's line, then the card's header line.
+- **Also decided here:** a capped card whose body can't show one whole line now scrolls as a whole (`tight` below header + one line + footer, was below header + footer), so a 0-19 px body sliver never shows. Round 3l's 784×431 cell (19 px of body) is now tight. And a capped card with room for its footer and only part of its header's line shows its footer alone (`snapTight`): round 3l's "capped at 57" cell is now 54.
+- Live, the Undo notice in Restraint is 48 px with two lines of text and 46 on one (its 28 px buttons), so one line saves 2 px there; with three lines (64) it saves 18.
+
+**2. Docked at 800×420: the card's foot never comes over the docked log (r6 step 5 amended).**
+- The step-5 foot crossing (`over`) is gone: the stack never comes below the docked log's line (its top less the gap, come down by its give). Short of header, one line and footer, the card caps there and scrolls as a whole, Accept and Reject pinned (`tight`). `over` stays in the type and is always 0.
+- Tests: the old step-5 cases now expect the cap (proposalCardPlace "4:" and "the log dragged up"; 3l's docked case), and the 3m docked cell (round 3l's live numbers: the log gives its body and collapses, the stack's line at 288, the card 199-288, tight).
+
+**The sweep.** Round 3l's seeded sweep no longer skips the Undo cells: all 4,000 run, every box drawn clear of the banner and the floating log's header, and a capped card's height at least its footer while the room holds it. A new 6,000-cell sweep (round 3m) adds 62 px Undo notices, docked logs and no log: nothing drawn over the banner, a floating log's header, or a docked log; an Undo notice never folds; a notice with no Undo is never cut.
+
+**Found, not fixed (pre-existing on main):** AgentLog counts a log as docked when it is within 64 px of the right edge and its bottom within 360 px of the window's foot. At 800×420 that is almost anywhere on the right: a log dragged to the top right (60-104, its right edge at 770) reads as docked, `--agent-log-top` becomes 360, and the stack's line goes to 52 px from the top. Online the card sits beside it (narrow). Offline (banner) the stack goes above that line, off the top of the window (seen live this round: the card at 14-60, capped at 0; the lift for a docked log is 3l's). The fix belongs to the docked rule (AGENT_LOG_LOW_PX against short windows), not the placement.
+
+**GM r76's follow-up (not #216):** the offline banner covers the open Updates panel at 800×420; it shows in this round's docked shot too (the panel top right, the banner over its foot). Left for the coordinator to check on main and queue.
+
+**MCP parity:** nothing agents read changed (placement and CSS only).
+
+**Strings written here (for GM):** none shipped. The live harness's Undo text ("Moved “Hero shot”, “Alt still”, “Photo 1”, “Photo 2” and “Notes” beside the brief, …") is test data only.
+
+**Mutation checks (round 3m).** 26 mutants (`scratchpad/pr216r3m/mut/run.py`, `results.json`), on the covering files only. 25 caught (3 after new pins: a notice with no Undo cut when unmeasured, a label of the notice's own replaced or lifted). M5 (the overflow check ignoring the stack's limit) is equivalent: the card's cap is bounded by the room less the rows, so the top passes the limit only when the card is capped under its floor, which the same check catches. It stays as the rule's statement.
+
+**Checks (round 3m).**
+- tsc 0; `npm run lint` 0.
+- vitest on an explicit 358-file list (length printed, abort at 0): the PR's test files, every test that reads `src/` or styles from disk, every test naming the notice region, the Undo notice or the placement, and main's six ratchets (regionNoticesReady, deleteLanded, sceneEditsReset, pinTextReady, tryAgainLines, agentPresenceFollowups): 6,871 passed. (A first run caught round 3f's CSS test reading the fold host's rule alone; it now reads the shared rule.)
+- Isolated pytest (`env -u NEBULA_TEST_SHARD`, temp HOME, settings, state and output): test_canvas_proposals, test_mcp_tools, test_proposal_plan_line, test_universal_ports, test_proposal_touched_round3l, test_unprivileged_marker, test_ci_shard, test_connected_copy_sweep, test_round20_fence: 583 passed. Backend unchanged.
+- `person_gate.py` byte-identical to origin/main.
+- Entry: 471,065 B raw, 146,499 B gzip (budget 512,000).
+
+**Live (round 3m).** Restraint. `serve_isolated.py` on 8952 with the person token on stdin, Vite on 5952 (`VITE_NEBULA_BACKEND_PORT=8952`), installed Chrome headless with a throwaway profile, 8000-8010 and the other ports blocked; every canary blocked. Shots in `scratchpad/pr216r3m/shots/`, md5s distinct.
+
+| Shot | Result |
+|---|---|
+| q1-800x420-docked (reshoot) | Banner 150-183; the docked log given way to its header at 296-340; the card 199-288, tight, Accept and Reject in it, 8 px clear of the log (3l: its foot at 312, over the log's header). |
+| q3m-undo-clipped-under-banner | 1280×420, a 3-line Undo notice (64 px whole): kept to one line at 199-245, under the banner, "…", Undo and × in its row; its accessible name the full text (`status`); the card 253-340, tight, its header line and Accept and Reject in view. |
+| q3m-undo-residual-scrolled | 800×420, a collapsed log at 180-224, an Undo notice: 100 px under the log for 108 (one-line row 46 + gap + footer 54); the card keeps its footer at 286-340, the stack scrolls, the Undo row's top 8 px in the scroll; nothing over the log or the banner. |
+| q3m-undo-whole-roomy | 1280×800: the same 3-line notice whole (64 px), not cut, no label. |
