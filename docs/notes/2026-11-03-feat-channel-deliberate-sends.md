@@ -269,3 +269,57 @@ failure states" and "Recipient".
   keeps all, keep_own ignored, route ignores or always applies the opt-in,
   wait drops it on resume, no validation, in-app line reverted).
 
+
+## Round 5 (review 3: the span per session; one session is one process)
+
+Review 3 HIGH-1 (all three lenses): any own reply ended the span, whichever
+push it answered. A second message, a sibling session under the same token,
+or an unrelated `resolve_pin` could end a span a later push opened, and that
+turn's edit was refused. Coordinator decisions D1/D2, adversarially checked
+(the changes below are binding).
+
+- **D1, a count per listener session.** One listener is one session, so the
+  state is per process already. `_take_deliberate` raises `_open_replies` by
+  one for a push that carried a message or an answer, and remembers the
+  pushed message ids (`_pushed_messages`) and pin ids (`_open_pins`, at most
+  MAX_OWN). The span ends when both are empty, or at the cap from the latest
+  push; the cap clears what still waits, so a late reply never reaches back.
+- **What answers a push.** Nebula, not the agent, picks which message a reply
+  answers (`replyTo`), so no reply can name a push: a plain count.
+  - Tool path (one process): every saved `reply_to_person` answers one push,
+    whatever its `replyTo` (None, or an older message). The tool's own late
+    `thread.replied` is skipped once (`_tool_reply_ids`), as before.
+  - Event path: an own `thread.replied` answers one push only when its
+    `replyTo` is a message this listener pushed. A sibling session's reply
+    answers its own messages, never these.
+  - Pins: only this session's own answer on that pin ends that pin's span:
+    `resolve_pin`, or `nebula pin resolve` from its own shell. A reply
+    never answers a pin, and an answer on another pin never ends a message
+    span. A message and a pin in one push need both.
+- **Own pin answers by session.** The journal keeps the agent session of a
+  `pin.resolved` beside it (`CanvasEventJournal._sessions`, by seq, pruned
+  with the buffer; never part of an event), and `ownReplies=1` keeps an own
+  `pin.resolved` only when it came from the caller's own session
+  (`canvas_events.OWN_SESSION_KINDS`). So a pin pushed to two sessions and
+  answered by one never ends the other's span. A shell pin answer counts as
+  the agent's call (`last_call`), like a shell reply.
+- **INSTRUCTIONS** (change 4): "Each is their request: answer a pin with
+  resolve_pin." (PR C adds "the others with reply_to_person"), and "A
+  proposal, run or change wake that needs no word ends without a reply." The
+  4,096-character cut holds (1,101 here).
+- **D2, one session is one process.** Each listener process sends a nonce of
+  its own with every beat (`mcp_server._CHANNEL_NONCE`) and with its goodbye.
+  While an entry lives, a second process naming the same agent and session
+  gets 409 `listener_session_taken` with "Nebula couldn’t connect this
+  listener because another process is already listening as this session.
+  Start each Claude Code with the launch command this prints, which gives
+  each its own session, then start this one again." and the command on its
+  own line; its DELETE never removes the first's entry. The listener prints
+  it once (as for 401) and beats again every 15 s, so after a crash it
+  registers once the old entry lapses (45 s). A listener that sends no nonce
+  matches only an entry made without one.
+- `ListenerBook.fresh_listening`: listening entries heard within
+  `FRESH_SECONDS` (25 s). PR C's reply route uses it to refuse to guess.
+- Judgment: a pin the person deletes before Claude answers it keeps its span
+  until the cap (the strict rule: only this session's answer ends it). The
+  safe direction: nothing is refused, edits wait.

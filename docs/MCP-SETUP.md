@@ -836,8 +836,10 @@ Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 default "from now"), `journal` (the id from a previous response), `wait`
 (seconds, capped at 25), `limit` (1–100), `kinds` (groups like `node` or
 exact kinds like `node.params`), `self=1` to include your own events, and
-`ownReplies=1` to include only your own `thread.replied` (a channel listener
-uses it: its reply from any route ends its deliberate span). It
+`ownReplies=1` to include, of your own events, only your `thread.replied`
+and your `pin.resolved` made from this same session (a channel listener uses
+it: its reply from any route, or its pin answer from its own shell, answers
+a deliberate push; a sibling session's pin answer never shows). It
 answers at once when newer events exist, otherwise waits. Resume with
 `after=<cursor>`: the cursor also moves past events filtered out for you, so
 your own edits never wake you. `gap: true` means the 500-event buffer
@@ -1113,18 +1115,25 @@ Nebula has had no call for 20 s. That guess can miss both ways:
   from the change turn, since Nebula never sees the terminal. A request you
   send from the canvas (a message, a pin or an answer) is never refused
   this way: it ends the window as it goes, and no gated push goes until
-  that session replies to you (a reply Nebula saved under the listener's
-  own token, by any route: `reply_to_person`, or `nebula reply` from the
-  session's own shell; or `resolve_pin` for a pin), or 10 minutes after the
-  push if no reply comes (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04). The
-  listener learns of a shell reply from its own `thread.replied` event,
-  which its long-poll asks for with `ownReplies=1` (its other own events
-  stay out of its feed). How long Claude thinks or works in other tools
-  between Nebula calls doesn't matter. A reply under another token doesn't
-  end it, and neither does one Nebula refused (it is never journaled).
-  After the reply, an edit you made meanwhile goes as a gated push once
-  Claude has been quiet for 20 s. A typed request still can
-  be refused, until the gate moves into Nebula.
+  that session has answered every request it got from you, or 10 minutes
+  after the latest if it hasn't (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04).
+  The listener counts, per session (one listener is one session): each
+  push with a message or an answer is answered by one reply that session
+  saved after it (`reply_to_person`; or `nebula reply` from the session's
+  own shell, once Nebula says it answers a message this listener pushed),
+  and each pin by that session's own answer on that pin (`resolve_pin`, or
+  `nebula pin resolve` from its shell). So two messages need two replies,
+  and a reply to the first never ends the second's span. A reply or pin
+  answer from another session under the same token, from another token,
+  or one Nebula refused (never journaled) answers nothing here. The
+  listener learns of a shell reply from its own `thread.replied` event
+  (whose `replyTo` names the message, set by Nebula) and of a shell pin
+  answer from its own `pin.resolved`, which its long-poll asks for with
+  `ownReplies=1` (its other own events stay out of its feed). How long
+  Claude thinks or works in other tools between Nebula calls doesn't
+  matter. After the last answer, an edit you made meanwhile goes as a gated
+  push once Claude has been quiet for 20 s. A typed request still can be
+  refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
   turn; if that is more than a minute later, the window has already ended
@@ -1141,7 +1150,19 @@ enforced either; after 5 minutes a gated turn's tool results say to wrap up.
 tells Nebula every 15 s (`POST /api/agent/channel`, as its own agent and
 session) and at once when listening stops, and deletes its entry when the
 session ends; Nebula drops an entry it hasn't heard from for 45 s
-(`backend/services/channel_listeners.py`).
+(`backend/services/channel_listeners.py`). One session is one process:
+each beat carries the process's own nonce, and while an entry lives a
+second process naming the same agent and session is refused (`409`,
+`X-Nebula-Code: listener_session_taken`) and its goodbye never removes the
+first's entry. It prints:
+
+- "error: Nebula couldn’t connect this listener because another process is
+  already listening as this session. Start each Claude Code with the launch
+  command this prints, which gives each its own session, then start this one
+  again." then `nebula mcp connect claude-code --channel` on its own line.
+
+It beats again every 15 s, so once the other entry is gone (its goodbye, or
+45 s after a crash) it registers.
 
 **Only a Settings agent token registers a listener** (Justin, 2026-11-03
 and 2026-11-04). The listener must hold a valid agent token from Settings ›

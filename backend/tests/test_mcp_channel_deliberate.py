@@ -525,10 +525,11 @@ def test_another_agents_reply_never_ends_the_span():
 MINE = {"kind": "agent", "id": "app:0123456789", "name": "Claude Code", "verified": True}
 
 
-def replied(seq: int, reply_id: str = "pt_9", actor=None) -> dict:
-    """A thread.replied in its feed (asked for with ownReplies=1)."""
+def replied(seq: int, reply_id: str = "pt_9", actor=None, reply_to: str | None = "msg_1") -> dict:
+    """A thread.replied in its feed (asked for with ownReplies=1); Nebula
+    names the message it answers (``replyTo``, round 5 D1)."""
     return ev(seq, mcp_channel.REPLY_KIND, actor=actor or MINE,
-              data={"replyId": reply_id, "text": "Done.", "nodeId": None})
+              data={"replyId": reply_id, "text": "Done.", "nodeId": None, "replyTo": reply_to})
 
 
 def test_its_own_reply_from_the_shell_ends_the_span():
@@ -573,8 +574,8 @@ def test_its_tool_replys_own_event_never_ends_a_newer_span():
     assert take(state, 111.0).wake == "message"
     state.observe(resp(replied(3, "pt_1"), edit(4)), now=112.0)
     assert _first_gated(drain(state, 112.0, 400.0)) is None
-    # A later shell reply (another id) still ends it.
-    state.observe(resp(replied(5, "pt_2")), now=400.0)
+    # A later shell reply (another id) answering the newer message ends it.
+    state.observe(resp(replied(5, "pt_2", reply_to="msg_2")), now=400.0)
     pushes = drain(state, 400.0, 421.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(420.0, "change", True)]
 
@@ -648,3 +649,160 @@ def test_the_listener_says_it_listens_and_a_message_and_an_answer_reach_the_sess
     assert pushes[1]["meta"]["wake"] == "answer" and "chose Warm" in pushes[1]["content"]
     # Its session ended: Nebula hears so.
     assert nebula.goodbyes == 1
+
+
+# -- round 5, D1: the span belongs to one listener session and the pushes it got --------------
+
+def _pin_answer(state: ChannelState, at: float, pin_id: str, *, ok: bool = True) -> None:
+    assert state.tool_started("resolve_pin", {"pin_id": pin_id}, at) is None
+    state.tool_finished("resolve_pin", {"pin_id": pin_id}, {"pin": {"id": pin_id}} if ok else None, at)
+
+
+def pin_resolved(seq: int, pin_id: str, actor=None) -> dict:
+    """Its own pin.resolved in its feed: Nebula keeps only this session's (canvas_events.OWN_SESSION_KINDS)."""
+    return ev(seq, "pin.resolved", actor=actor or MINE, data={"pinId": pin_id, "text": "x", "reply": "done"})
+
+
+def test_two_messages_and_one_reply_keep_the_second_messages_span():
+    # Review 3 HIGH-1 (P1): "make the sky warmer" at 100, "and add a moon" at
+    # 110; the reply to the first at 150 used to end the moon's span too, and
+    # a gated push at 176 refused the moon turn's edit at 181.
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(message(2, "and add a moon")), now=110.0)
+    assert take(state, 110.0).wake == "message"
+    _reply(state, 150.0)
+    state.observe(resp(edit(3)), now=151.0)
+    assert state.tool_started("look_at_canvas", {}, 155.0) is None
+    state.tool_finished("look_at_canvas", {}, {"nodes": []}, 155.0)
+    assert _first_gated(drain(state, 155.0, 181.0)) is None
+    assert state.tool_started("edit_canvas", {}, 181.0) is None  # the moon turn edits
+    state.tool_finished("edit_canvas", {}, {"ok": True}, 181.0)
+    assert _first_gated(drain(state, 181.0, 400.0)) is None
+    _reply(state, 400.0)  # the second reply answers the second push
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
+
+
+def test_the_same_for_shell_replies_naming_its_messages():
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(message(2, "and add a moon")), now=110.0)
+    assert take(state, 110.0).wake == "message"
+    state.observe(resp(replied(3, "pt_a", reply_to="msg_2"), edit(4)), now=150.0)
+    assert _first_gated(drain(state, 150.0, 400.0)) is None  # one of two answered
+    state.observe(resp(replied(5, "pt_b", reply_to="msg_2")), now=400.0)
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
+
+
+def test_a_sibling_sessions_reply_never_ends_the_span():
+    # Review 3 HIGH-1 (P1b): session A and this session B listen under one
+    # token. A's reply (its own message, same actor id) reaches B's feed.
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    sibling = ev(3, mcp_channel.REPLY_KIND, actor=MINE,
+                 data={"replyId": "pt_s", "text": "Done.", "nodeId": None, "replyTo": "msg_for_a"})
+    no_message = ev(4, mcp_channel.REPLY_KIND, actor=MINE,
+                    data={"replyId": "pt_n", "text": "Done.", "nodeId": None, "replyTo": None})
+    state.observe(resp(edit(2), sibling, no_message), now=110.0)
+    assert _first_gated(drain(state, 110.0, 400.0)) is None
+    # Its own shell reply (replyTo its message) ends it.
+    state.observe(resp(replied(5, "pt_mine", reply_to="msg_1")), now=400.0)
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
+
+
+def test_an_unrelated_resolve_pin_never_ends_a_message_span():
+    # Review 3 HIGH-1 (P1c).
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    _pin_answer(state, 120.0, "pin_old")
+    assert _first_gated(drain(state, 120.0, 400.0)) is None
+    _reply(state, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
+
+
+def test_a_reply_never_ends_a_pins_span_only_its_own_answer_on_that_pin():
+    state = listening()
+    state.observe(resp(pin(1, "warmer")), now=100.0)
+    assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]
+    state.observe(resp(edit(2)), now=101.5)
+    _reply(state, 110.0)  # a reply, not the pin's answer
+    _pin_answer(state, 111.0, "pin_other")  # another pin
+    assert _first_gated(drain(state, 111.0, 400.0)) is None
+    _pin_answer(state, 400.0, "pin_00000001")
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 400.0, 421.0)] == [(420.0, "change", True)]
+
+
+def test_its_shell_pin_answer_ends_the_pins_span_and_its_tool_echo_counts_once():
+    state = listening()
+    state.agent_id = MINE["id"]
+    state.observe(resp(pin(1, "warmer")), now=100.0)
+    assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]
+    state.observe(resp(edit(2)), now=101.5)
+    # Another agent answering the pin never ends this session's span.
+    state.observe(resp(pin_resolved(3, "pin_00000001", actor=OTHER_AGENT)), now=110.0)
+    assert _first_gated(drain(state, 110.0, 300.0)) is None
+    # `nebula pin resolve` from its own shell (Nebula keeps only this session's).
+    state.observe(resp(pin_resolved(4, "pin_00000001")), now=300.0)
+    assert [(at, p.wake, p.gate) for at, p in drain(state, 300.0, 321.0)] == [(320.0, "change", True)]
+
+
+def test_one_pin_pushed_to_two_sessions_a_siblings_answer_never_ends_the_other():
+    # Both sessions got the pin. Nebula keeps a pin.resolved in a listener's
+    # feed only from its own session, so B's feed never shows A's answer;
+    # A's own answer ends only A's span.
+    a, b = listening(), listening()
+    a.agent_id = b.agent_id = MINE["id"]
+    for state in (a, b):
+        state.observe(resp(pin(1, "warmer")), now=100.0)
+        assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]
+        state.observe(resp(edit(2)), now=101.5)
+    _pin_answer(a, 150.0, "pin_00000001")
+    b.observe(resp(), now=150.0)  # nothing of A's reaches B
+    assert [(at, p.gate) for at, p in drain(a, 150.0, 171.0)] == [(170.0, True)]
+    assert _first_gated(drain(b, 150.0, 400.0)) is None
+
+
+def test_a_message_and_a_pin_in_one_push_need_both_answers():
+    state = listening()
+    state.observe(resp(pin(1, "warmer"), message(2)), now=100.0)
+    push = take(state, 101.0)  # the pin's merge is over: both in one push
+    assert push.wake == "message" and "warmer" in push.content and "make the sky warmer" in push.content
+    state.observe(resp(edit(3)), now=101.5)
+    _reply(state, 110.0)
+    assert _first_gated(drain(state, 110.0, 300.0)) is None  # the pin is still unanswered
+    _pin_answer(state, 300.0, "pin_00000001")
+    assert [(at, p.gate) for at, p in drain(state, 300.0, 321.0)] == [(320.0, True)]
+
+
+def test_the_cap_clears_what_waits_so_a_later_reply_never_reaches_back():
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(message(2)), now=101.0)
+    assert take(state, 101.0).wake == "message"
+    state.observe(resp(edit(3)), now=102.0)
+    assert [(at, p.gate) for at, p in drain(state, 102.0, 702.0)] == [(701.5, True)]
+    assert state._open_replies == 0
+    state.observe(resp(message(4)), now=800.0)
+    assert take(state, 800.0).wake == "message"
+    state.observe(resp(edit(5)), now=801.0)
+    _reply(state, 810.0)  # one reply answers the one push since the cap
+    assert [(at, p.gate) for at, p in drain(state, 810.0, 831.0)] == [(830.0, True)]
+
+
+def test_the_instructions_say_to_answer_every_deliberate_wake():
+    # Round 5 (D1, adversarial change 4): a deliberate wake is answered (its
+    # span waits for that); "end the turn without a reply" is only for the
+    # passive wakes.
+    text = mcp_channel.INSTRUCTIONS
+    assert "Each is their request: answer a pin with resolve_pin" in text
+    assert "A proposal, run or change wake that needs no word ends without a reply." in text
+    assert "If nothing needs saying" not in text

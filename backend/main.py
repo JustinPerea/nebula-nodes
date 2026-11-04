@@ -5554,6 +5554,7 @@ def _journal(
     summary: str = "",
     actor: dict[str, Any] | None = None,
     project_id: str | None | Any = ...,
+    session: str | None = None,
 ) -> None:
     """Record a canvas change for `nebula watch`; never fails the route that called it.
 
@@ -5572,6 +5573,7 @@ def _journal(
             summary=summary,
             edit=_canvas_edit_link.get(),
             **({"project_id": project_id} if project_id is not ... else {}),
+            **({"session": session} if session else {}),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -6434,14 +6436,21 @@ def _channel_caller() -> tuple[AgentIdentity, str | None]:
 @app.post("/api/agent/channel")
 async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
     """A --channel listener's beat: {state: listening|stopped, reason?:
-    idle|error, projectId?}. Answers with its entry, whose listenerId a
-    person.message names to reach it."""
+    idle|error, projectId?, nonce?}. Answers with its entry, whose listenerId a
+    person.message names to reach it. ``nonce`` is the listener process's
+    own (D2): a second process naming the same agent session gets 409
+    listener_session_taken while the first's entry lives."""
     identity, session = _channel_caller()
     try:
         state, reason, project_id = channel_listeners.parse_beat(body)
     except channel_listeners.ListenerError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id)
+    try:
+        entry, changed = channel_book.beat(identity, session, state=state, reason=reason, project_id=project_id,
+                                           nonce=channel_listeners.parse_nonce(body.get("nonce")))
+    except channel_listeners.SessionTaken as exc:
+        raise HTTPException(status_code=409, detail=str(exc),
+                            headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
     if changed:
         await _broadcast_channel_listeners()
     _schedule_channel_expiry()
@@ -6449,10 +6458,11 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
 
 
 @app.delete("/api/agent/channel")
-async def end_channel_listener() -> dict[str, Any]:
-    """Its session ended: the canvas shows it as not connected."""
+async def end_channel_listener(nonce: str | None = None) -> dict[str, Any]:
+    """Its session ended: the canvas shows it as not connected. ``nonce``:
+    the listener process's own (D2), so another process's entry stays."""
     identity, session = _channel_caller()
-    if channel_book.gone(identity, session):
+    if channel_book.gone(identity, session, channel_listeners.parse_nonce(nonce)):
         await _broadcast_channel_listeners()
     _schedule_channel_expiry()
     return {"listener": None}
@@ -6721,8 +6731,10 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     Query: after (seq; default "from now"), journal (id from a previous
     response), wait (seconds, capped at 25), limit (1-100), kinds (comma
     list of groups or exact kinds), self=1 to include the caller's own
-    events, ownReplies=1 to include only its own thread.replied (a channel
-    listener: its reply by any route ends its deliberate span). Resume with
+    events, ownReplies=1 to include only its own thread.replied, and its own
+    pin.resolved made from this same session (a channel listener: its reply
+    by any route ends its deliberate span, and its pin answer the span that
+    pin's push opened; a sibling session's never does). Resume with
     after=<cursor>.
     """
     query = request.query_params
@@ -6759,6 +6771,9 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
             kinds=kinds,
             exclude_actor_id=exclude,
             keep_own=frozenset({OWN_REPLY_KIND}) if own_replies in {"1", "true"} else frozenset(),
+            # ...and its own pin answers, from this same session only (round 5, D1).
+            own_session=(presence_session(current_request_headers()) if identity is not None
+                         and own_replies in {"1", "true"} else None),
         )
     except TooManyWaiters as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -7389,6 +7404,9 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         data={"pinId": pin_id, "text": event_text(pin.get("text")), "reply": event_text(reply, multiline=False)},
         summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
+        # Its own session's listener ends the span this pin's push opened
+        # (canvas_events.OWN_SESSION_KINDS, round 5 D1); kept beside the journal.
+        session=presence_session(current_request_headers()),
     )
     await _broadcast_pins()
     try:

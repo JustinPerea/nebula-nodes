@@ -3043,6 +3043,9 @@ async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agen
 
 
 CHANNEL_BEAT_SECONDS = 15.0  # services/channel_listeners.BEAT_SECONDS: how often it tells Nebula it listens
+# This process's own (round 5, D2): Nebula refuses a second process that
+# names the same agent session while this one's entry lives.
+_CHANNEL_NONCE = secrets.token_hex(12)
 
 
 async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
@@ -3053,7 +3056,8 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
     the person sends it names in turn. A failed beat is tried again at the
     next one; it never stops the listener or the tools. Only an agent token
     registers (Justin, 2026-11-03): a refusal (no token, or one Nebula
-    doesn't know) is printed once to stderr after "error: ", and
+    doesn't know, or another process already listening as this session:
+    each beat carries this process's nonce, D2) is printed once to stderr after "error: ", and
     channel_status says it (``registerError``) until a beat goes through."""
     said: tuple[Any, ...] | None = None
     refused: str | None = None
@@ -3063,12 +3067,12 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
         now = clock()
         if shown != said or now - last >= CHANNEL_BEAT_SECONDS:
             body = {"state": shown[0], **({"reason": shown[1]} if shown[1] else {}),
-                    **({"projectId": state.project_id} if state.project_id else {})}
+                    **({"projectId": state.project_id} if state.project_id else {}), "nonce": _CHANNEL_NONCE}
             try:
                 answer = await _channel_fetch("/api/agent/channel", {}, 5.0, agent["name"], method="POST",
                                               json_body=body)
             except NebulaAPIError as exc:
-                if exc.status == 401:
+                if exc.status in (401, 409):  # no token, a bad one, or another process on this session (D2)
                     if exc.detail != refused:
                         print(f"error: {exc.detail}", file=sys.stderr, flush=True)
                     refused = exc.detail
@@ -3094,7 +3098,8 @@ async def _channel_goodbye(agent: dict[str, str]) -> None:
     """The session ended: Nebula shows it as not connected (best effort, 1 s at most)."""
     with anyio.CancelScope(shield=True), anyio.move_on_after(1.0):
         try:
-            await _channel_fetch("/api/agent/channel", {}, 1.0, agent["name"], method="DELETE")
+            await _channel_fetch("/api/agent/channel", {"nonce": _CHANNEL_NONCE}, 1.0, agent["name"],
+                                 method="DELETE")
         except Exception:  # noqa: BLE001 - past its TTL Nebula forgets it anyway
             pass
 
