@@ -33,9 +33,11 @@ to the one live project that uses them.
   trashed asset whose record names P (both `projectId` and `scopeDir`). A
   board's Updates go too, unless another copy of that board id is still on
   disk. A file that names another project, or can't be read, is left alone:
-  only what provably belonged to P goes. The live check is repeated under the
-  asset's own lock (`_board_lock`, `_char_lock`), so a move to Global that
-  lands mid-purge keeps the asset.
+  only what provably belonged to P goes. Each file and trash record is read
+  again under the asset's own lock (`_board_lock`, `_char_lock`,
+  `_preset_lock`), which each store also holds while it updates, moves,
+  trashes, restores or purges that id, so the purge only removes what still
+  names P at that moment (see Round 3).
 - **Image files are never deleted.** The outputs folder is shared and nothing
   records who uses a file.
 - **Crash safety, via a journal in the catalog:**
@@ -57,8 +59,8 @@ to the one live project that uses them.
   `GET /api/trash` project items, `DELETE /api/projects/{id}`
   `trashedProject`): the names of its `moodboards`, `characters` and
   `styles`, live and trashed, sorted. This is what the Projects screen's lines
-  are built from. It is computed per listing, which means one folder read per
-  trashed project per store.
+  are built from. It is computed once per listing: each store's trash is read
+  once for every trashed project, plus each project's own folder.
 
 ## What can still name a deleted character, style or board by id
 
@@ -76,28 +78,14 @@ to the one live project that uses them.
   sweep (`_sweep_asset_proposals`).
 - **Commons** imports board images by url, not by board id.
 
-## The one-time sweep (please read, Justin)
+## Projects deleted for good before this change
 
-Once per install, at start-up before the re-home, it deletes what earlier
-purges left behind, since the last start. That covers all three stores, under
-the same rules. Proof rules:
-
-1. the catalog exists and reads;
-2. the catalog has at least one project, live or trashed;
-3. the store root sits with the catalog's state folder (`~/.nebula/<store>`,
-   or the desktop app's `<data>/state` beside `<data>/<store>`), checked per
-   store, so one unpaired store is skipped and the others still run;
-4. the folder name is a 32-hex catalog id;
-5. the asset names that project itself.
-
-It logs counts only ("Left by projects deleted for good earlier: N
-moodboards, N characters, N styles removed") and writes
-`<state>/migrations/purged-project-assets.json`. What earlier starts moved to
-Global stays there (Justin, 2026-11-04).
-
-Residual risk: if catalog.json were replaced by a different catalog that has
-projects, while the roots stay paired, the old projects' files would count as
-orphans.
+There is no sweep. An asset filed under a project id the catalog doesn't know
+is left to the start-up re-home, which moves it to Global with a backup, as on
+main. Only ids this catalog put on its own `assetPurges` list are ever
+deleted. Accepted gap: a project deleted for good on main before upgrading has
+its leftovers moved to Global, not deleted (consistent with Justin's call that
+what main moved to Global stays there).
 
 ## Copy (agreed with design)
 
@@ -110,7 +98,11 @@ orphans.
   - two or three kinds: counts only;
   - none of the three: no line.
 - Empty: a line after its heading, naming the kinds present, without counts
-  (`emptyTrashLine`).
+  (`emptyTrashLine`); "Its … are deleted with it." when one project is in
+  Recently deleted.
+- A moodboard, character or style with no name reads “Untitled”. When any two
+  names in a kind match (several “Untitled” too), the line gives that kind's
+  count instead of names.
 - The kinds always come in the order moodboards, characters, styles, with no
   serial comma. The headings are unchanged.
 - An older backend sends no `goesWith`, so no line is shown.
@@ -124,3 +116,58 @@ orphans.
 - A board restored from its own trash into a project that is itself in
   Recently deleted shows an outdated `goesWith` until the list is fetched
   again. That only affects the line's names, not what goes.
+
+## Round 3 (review 1)
+
+- **No start-up sweep.** The first version deleted, once per install, every
+  asset filed under a 32-hex id absent from the catalog. On a desktop install
+  that is every migrated project asset: the migration copies the stores but
+  not `projects/`, the first listing files the open canvas as "Recovered
+  canvas", and the next start found every proof rule true. Dropped entirely
+  (`sweep_orphans`, `orphaned_project_ids`, the marker file, the sweep half of
+  the start-up hook). The start-up hook now only finishes ids on the list.
+  Test: the desktop sequence (no catalog, then "Recovered canvas", then a
+  second start) deletes nothing and moves all three kinds to Global with
+  backups.
+- **One pairing rule for every purge and replay.** `finish` skips a store
+  whose root isn't beside the catalog's folder
+  (`roots_paired(project_store.root.parent, store.root)`), keeps the id on the
+  list for it, and logs a count once per start, never a name. Without it, a
+  backend on a copy of the catalog (`NEBULA_STATE_DIR` set, `HOME` left real)
+  would have deleted the person's boards for a project their own catalog
+  still has, on Delete forever or simply on the 30-day expiry during a
+  listing. `assetPurges` stays a plain list of ids, and the re-home still
+  skips every id on it. `goesWith` lists only what a paired store holds.
+  Not built: an allowance for stores set explicitly with `NEBULA_*_ROOT` away
+  from the catalog. Such a store keeps its files (and the id stays listed);
+  it can be added if anyone runs that way.
+  Test: a copied catalog with default roots, then the expiry on a listing,
+  leaves the real stores untouched, lists nothing in `goesWith`, logs once.
+- **Locks.** Each store now holds the asset's lock while it updates, moves,
+  trashes, restores or purges it (`preset_store` gained `_preset_lock`). The
+  trash pass reads the record again under the lock and needs it to still name
+  P, with its file still there. A move to Global writes `_global/<id>.json`
+  and then unlinks the old file under the same lock, so the purge either finds
+  the file still P's or doesn't find it.
+- **Passes.** Live first, then the trash, again until a round finds nothing
+  (at most 3), so a board moved to Recently deleted, or restored, between two
+  passes still goes.
+- **`goesWith`** is computed once per listing (`goes_with`), not one trash
+  scan per project per store.
+- **Projects screen.** Delete forever's armed confirm takes its own
+  full-width row under the name, the date line and Restore: the line, then
+  "This can’t be undone.", wrapping as needed, with Cancel and Delete forever
+  right-aligned after it, or on their own line when the text needs the width.
+  The name stays on one line (ellipsis) and the date line never wraps. The row
+  opens on the layout spring (360 ms sampled spring, as the Inspector's) and
+  closes back on Cancel; under reduced motion it jumps. Focus goes to Cancel
+  on arm and back to the trigger on Cancel or Escape.
+- **Focus after a purge** goes to the next row's Restore (the row before when
+  it was the last), else the Recently deleted heading, else "Recent
+  projects"; before, it fell to the page.
+- **`nebula trash list`** names only the kinds a project has ("removed for
+  good with its moodboards and styles after …") and has no "with its …" when
+  it has none.
+- Mutation check: every deletion guard and lock, 46 mutants; the one
+  survivor (live pass before trash pass) is equivalent now that the passes
+  repeat until a round finds nothing.

@@ -3199,10 +3199,13 @@ the outputs folder, as every generated file does. Global moodboards,
 characters and styles are not touched. Each project in Recently deleted lists
 what would go with it as `goesWith` (`moodboards`, `characters`, `styles`:
 names). A purge that stops part way finishes on the next purge, project
-listing or start (`backend/services/project_asset_purge.py`), and once per
-install a start deletes what projects deleted for good before this change
-left behind (counts are logged, never names). What earlier starts already
-moved to Global stays there.
+listing or start (`backend/services/project_asset_purge.py`). Only a
+moodboard, character or style folder beside the project catalog is purged
+(`~/.nebula/moodboards` with `~/.nebula/projects`, or the desktop app's
+data folder): a backend pointed at another catalog leaves the others alone
+and keeps the project on its list. Anything filed under a project the
+catalog doesn't know (for example from before this change) is moved to
+Global at start, with a backup, as before; never deleted.
 
 ### Building and running over MCP
 

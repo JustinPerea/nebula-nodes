@@ -285,10 +285,10 @@ function deletedByNote(entry: TrashedProject): string {
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
-function ConfirmInline({ label, confirmLabel, prompt, detail, detailFirst = false, busy, onConfirm, className }: {
+function ConfirmInline({ label, confirmLabel, prompt, detail, busy, onConfirm, className }: {
   label: string; confirmLabel: string; prompt: string;
-  /** A line beside the prompt saying what else goes: before it with `detailFirst`, else after. */
-  detail?: string | null; detailFirst?: boolean;
+  /** A line after the prompt saying what else goes. */
+  detail?: string | null;
   busy: boolean; onConfirm: () => void; className?: string;
 }) {
   const [armed, setArmed] = useState(false);
@@ -300,16 +300,81 @@ function ConfirmInline({ label, confirmLabel, prompt, detail, detailFirst = fals
       onClick={() => setArmed(true)}>{label}</button>;
   }
   return (
-    <span className="project-home__confirm" role="group"
-      aria-label={[detailFirst && detail, prompt, !detailFirst && detail].filter(Boolean).join(' ')} onKeyDown={(event) => {
+    <span className="project-home__confirm" role="group" aria-label={[prompt, detail].filter(Boolean).join(' ')} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      {detailFirst && detail && <span className="project-home__confirm-prompt">{detail}</span>}
       <span className="project-home__confirm-prompt">{prompt}</span>
-      {!detailFirst && detail && <span className="project-home__confirm-prompt">{detail}</span>}
+      {detail && <span className="project-home__confirm-prompt">{detail}</span>}
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
     </span>
+  );
+}
+
+const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** The confirm row's spring (project-home.css), plus a margin: after it, a closing row unmounts even without transitionend. */
+const TRASH_CONFIRM_CLOSE_MS = 360 + 120;
+
+/**
+ * One project in Recently deleted. Delete forever arms a confirm on its own
+ * full-width row under the name, the date line and Restore: the line saying
+ * what else goes, wrapping as needed, then "This can’t be undone." with
+ * Cancel and Delete forever after it (on their own line when the text needs
+ * the width). It opens on the layout spring and closes back on Cancel.
+ */
+function TrashRow({ entry, now, busy, onRestore, onPurge }: {
+  entry: TrashedProject; now: number; busy: boolean;
+  onRestore: (id: string) => void; onPurge: (id: string) => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  // Mounted while armed, and while it shrinks back after Cancel.
+  const [shown, setShown] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const line = deleteForeverLine(entry.goesWith);
+  const prompt = 'This can’t be undone.';
+  // Arming puts focus on Cancel; Cancel or Escape puts it back on the trigger.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (armed) cancel.current?.focus();
+    else if (refocus.current) trigger.current?.focus();
+    refocus.current = false;
+  }, [armed]);
+  useEffect(() => {
+    if (armed || !shown) return;
+    const timer = window.setTimeout(() => setShown(false), TRASH_CONFIRM_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [armed, shown]);
+  const disarm = () => {
+    refocus.current = true;
+    setArmed(false);
+    if (prefersReducedMotion()) setShown(false);
+  };
+  return (
+    <li className="project-home__trash-row" data-project-id={entry.id} aria-label={entry.name}>
+      <span className="project-home__trash-name">{entry.name}</span>
+      <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
+      <span className="project-home__trash-actions">
+        <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
+        {/* It arms a Delete forever: red on hover (GM r13), neutral at rest. */}
+        {!armed && <button type="button" ref={trigger} className="project-home__trigger--danger" disabled={busy}
+          onClick={() => { setArmed(true); setShown(true); }}>Delete forever</button>}
+      </span>
+      {shown && <div className="project-home__trash-confirm" data-open={armed} aria-hidden={armed ? undefined : true} inert={!armed}
+        onTransitionEnd={(event) => { if (!armed && event.target === event.currentTarget) setShown(false); }}>
+        <div className="project-home__confirm project-home__trash-confirm-body" role={armed ? 'group' : undefined}
+          aria-label={armed ? [line, prompt].filter(Boolean).join(' ') : undefined} onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.preventDefault(); disarm(); }
+          }}>
+          <p className="project-home__trash-confirm-text">{line && <>{line} </>}{prompt}</p>
+          <span className="project-home__trash-confirm-buttons">
+            <button type="button" ref={cancel} disabled={busy} onClick={disarm}>Cancel</button>
+            <button type="button" className="project-home__danger" disabled={busy}
+              onClick={() => { setArmed(false); setShown(false); onPurge(entry.id); }}>Delete forever</button>
+          </span>
+        </div>
+      </div>}
+    </li>
   );
 }
 
@@ -339,18 +404,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">{PROJECT_TRASH_NOTE}</p>
           <ul className="project-home__trash-list">
-            {trash.map((entry) => (
-              <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
-                <span className="project-home__trash-name">{entry.name}</span>
-                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
-                <span className="project-home__trash-actions">
-                  <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
-                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone."
-                    detail={deleteForeverLine(entry.goesWith)} detailFirst busy={busy}
-                    onConfirm={() => onPurge(entry.id)} />
-                </span>
-              </li>
-            ))}
+            {trash.map((entry) => <TrashRow key={entry.id} entry={entry} now={now} busy={busy} onRestore={onRestore} onPurge={onPurge} />)}
           </ul>
         </div>
       )}
@@ -491,6 +545,35 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       && !stack.current?.contains(active)) return;
     stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
   }, [savedAsCopy]);
+  // After Delete forever or Empty, focus goes to the next row's Restore (the
+  // row before when it was the last), else to the Recently deleted heading,
+  // else to "Recent projects": never left on the page once the row is gone.
+  const afterPurge = useRef<{ gone: string[]; next: string | null } | null>(null);
+  const purge = (id: string) => {
+    const at = trash.findIndex((entry) => entry.id === id);
+    afterPurge.current = { gone: [id], next: trash[at + 1]?.id ?? trash[at - 1]?.id ?? null };
+    onPurge(id);
+  };
+  const emptyTrash = () => {
+    afterPurge.current = { gone: trash.map((entry) => entry.id), next: null };
+    onEmptyTrash();
+  };
+  useEffect(() => {
+    const pending = afterPurge.current;
+    if (!pending) return;
+    const left = new Set(trash.map((entry) => entry.id));
+    if (pending.gone.some((id) => left.has(id))) return; // not gone (yet)
+    afterPurge.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return; // the person has moved on
+    const row = pending.next && left.has(pending.next)
+      ? Array.from(document.querySelectorAll<HTMLElement>('.project-home__trash-row')).find((item) => item.dataset.projectId === pending.next)
+      : undefined;
+    const target = row?.querySelector<HTMLElement>('button')
+      ?? document.querySelector<HTMLElement>('#recently-deleted-title button')
+      ?? recentHeading.current;
+    target?.focus();
+  }, [trash]);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -546,7 +629,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} />}
       </main>
       {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}

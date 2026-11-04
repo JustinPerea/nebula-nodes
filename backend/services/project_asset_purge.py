@@ -45,18 +45,30 @@ after they are all gone is the id taken off the list (a second commit). So:
 - the start-up re-home treats an id on the list as a project's, never as an
   old-style folder to move to Global.
 
-Already-orphaned assets (``sweep_orphans``): purges before this change left
-files behind, and each start re-homed them to Global (those stay there:
-Justin, 2026-11-04). Once per install, at start-up and before the re-home,
-the assets whose project is in neither the catalog, its trash nor the list
-above are deleted, under the same rules. Only when it is provable: the
-catalog file exists and reads, it holds at least one project (live or
-trashed), the store root sits beside the state folder the catalog is in (so a
-backend pointed at another catalog never sweeps the person's files; checked
-per store), the folder name is a catalog id (32 hex, what
-project_store.make_project mints, so an old-style folder like
-``nebula_nodes`` is left to the re-home) and the asset itself names that
-project. The count is logged, never a name.
+Which stores (one pairing rule for every purge and replay). A store's
+files are deleted only when its root sits beside the catalog's own folder
+(``roots_paired``: ``~/.nebula`` holds the catalog's ``projects/`` and
+``moodboards/``, or the desktop app's data folder holds ``state/`` and
+``moodboards/`` side by side). A backend pointed at a copy of a catalog
+while its store roots are still the person's (``NEBULA_STATE_DIR`` set,
+``HOME`` left real) would otherwise delete the person's boards, characters
+and styles for a project their own catalog still has. An unpaired store is
+left alone: the id stays on the list (the re-home keeps skipping it), and
+the count is logged once per start, never a name. ``goesWith`` lists only
+what a paired store holds, so a line never promises more than goes.
+
+A project merely absent from the catalog is never a reason to delete: only
+ids this catalog put on its own list are purged. Assets filed under an id
+the catalog doesn't know (a lost or replaced catalog, a desktop migration
+that copied the stores but not ``projects/``) are left to the start-up
+re-home, which moves them to Global with a backup.
+
+Locks. Each delete takes the asset's own store lock (the lock its store
+holds while it updates, moves, trashes, restores or purges that id) and
+reads the file or trash record again under it, so it only ever removes what
+still names the project at that moment. Live files and the trash are each
+passed over until a pass finds nothing (a board moved to Recently deleted,
+or restored, between two passes is still caught), at most a few times.
 """
 from __future__ import annotations
 
@@ -66,7 +78,6 @@ import re
 from collections.abc import Callable, Container, Iterable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,11 +91,13 @@ PENDING_KEY = "assetPurges"
 # A canvas project id as the catalog mints it (project_store._ID).
 _PROJECT_ID = re.compile(r"^[a-f0-9]{32}$")
 _ASSET_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-SWEEP_MARKER = "purged-project-assets.json"
 # The kinds in the order every line names them: moodboards,
 # characters, styles. The trash kind of each (asset_trash's record ``kind``).
 KINDS = ("moodboard", "character", "style")
 PLURAL = {"moodboard": "moodboards", "character": "characters", "style": "styles"}
+# Live, then trash, again until a round finds nothing (an asset trashed or
+# restored between two passes); a bound, never a loop on a busy store.
+_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -103,8 +116,45 @@ def default_stores() -> list[AssetStore]:
         AssetStore("moodboard", moodboard_store.store_root(), moodboard_store.BOARD_SIDE_FOLDERS,
                    moodboard_store._board_lock),
         AssetStore("character", character_store.store_root(), (), character_store._char_lock),
-        AssetStore("style", preset_store.store_root()),
+        AssetStore("style", preset_store.store_root(), (), preset_store._preset_lock),
     ]
+
+
+# -- which stores are this catalog's ----------------------------------------------
+
+def roots_paired(state_dir: Path, store_root: Path) -> bool:
+    """Whether a store root belongs with the catalog under ``state_dir`` (the
+    folder holding the catalog's ``projects/``): ``~/.nebula`` holds both
+    (``~/.nebula/moodboards``), or the desktop app's data folder holds them
+    side by side (``<data>/state``, ``<data>/moodboards``)."""
+    try:
+        state = state_dir.resolve()
+        parent = store_root.resolve().parent
+    except OSError:
+        return False
+    return parent == state or (state.name == "state" and parent == state.parent)
+
+
+def paired_stores(state_dir: Path, stores: list[AssetStore] | None = None) -> tuple[list[AssetStore], list[AssetStore]]:
+    """``(paired, unpaired)``: the stores whose files this catalog may delete,
+    and the rest (left alone, see the module docstring)."""
+    stores = stores if stores is not None else default_stores()
+    paired = [store for store in stores if roots_paired(state_dir, store.root)]
+    return paired, [store for store in stores if store not in paired]
+
+
+# Once per start (per process): the unpaired-store line is logged the first
+# time it applies, then not again.
+_UNPAIRED_LOGGED: set[str] = set()
+
+
+def _log_unpaired(unpaired: list[AssetStore], waiting: int) -> None:
+    kinds = [PLURAL[store.kind] for store in unpaired if store.kind not in _UNPAIRED_LOGGED]
+    if not kinds:
+        return
+    _UNPAIRED_LOGGED.update(store.kind for store in unpaired)
+    logger.warning("%d project(s) deleted for good keep their %s for now: that folder isn't beside "
+                   "this project catalog, so nothing in it is deleted", waiting, ", ".join(kinds))
 
 
 # -- the journal (in the catalog) --------------------------------------------------
@@ -148,8 +198,13 @@ def _read(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _trashed_of(store: AssetStore, project_id: str) -> list[tuple[str, Path, dict[str, Any]]]:
-    """(id, record path, record) for each trashed asset deleted from the project."""
+def _record_names(record: dict[str, Any] | None, project_id: str) -> bool:
+    """A trash record of an asset deleted from the project's own folder."""
+    return record is not None and record.get("projectId") == project_id and record.get("scopeDir") == project_id
+
+
+def _trash_records(store: AssetStore) -> list[tuple[str, Path, dict[str, Any]]]:
+    """(id, record path, record) for every trashed asset whose file is there."""
     trash = store.root / TRASH_DIR
     if not trash.is_dir():
         return []
@@ -159,10 +214,14 @@ def _trashed_of(store: AssetStore, project_id: str) -> list[tuple[str, Path, dic
         if not _ASSET_ID.fullmatch(asset_id) or not (trash / f"{asset_id}.json").is_file():
             continue
         record = _read(record_path)
-        if record is None or record.get("projectId") != project_id or record.get("scopeDir") != project_id:
-            continue
-        found.append((asset_id, record_path, record))
+        if record is not None:
+            found.append((asset_id, record_path, record))
     return found
+
+
+def _trashed_of(store: AssetStore, project_id: str) -> list[tuple[str, Path, dict[str, Any]]]:
+    """(id, record path, record) for each trashed asset deleted from the project."""
+    return [entry for entry in _trash_records(store) if _record_names(entry[2], project_id)]
 
 
 def _live_of(store: AssetStore, project_id: str) -> list[tuple[str, Path, dict[str, Any]]]:
@@ -178,20 +237,41 @@ def _live_of(store: AssetStore, project_id: str) -> list[tuple[str, Path, dict[s
     return found
 
 
-def names(project_id: str, stores: list[AssetStore] | None = None) -> dict[str, list[str]]:
-    """What deleting the project for good would delete, by kind
+def _sorted_names(found: list[str]) -> list[str]:
+    return sorted(found, key=lambda name: (name.casefold(), name))
+
+
+def goes_with(project_ids: Iterable[str], *, state_dir: Path,
+              stores: list[AssetStore] | None = None) -> dict[str, dict[str, list[str]]]:
+    """What deleting each project for good would delete, by kind
     (``moodboards``, ``characters``, ``styles``): each asset's name, live and
-    trashed, sorted. For the Projects screen's confirmation lines."""
-    result: dict[str, list[str]] = {PLURAL[kind]: [] for kind in KINDS}
-    if not _PROJECT_ID.fullmatch(str(project_id)):
+    trashed, sorted. For the Projects screen's confirmation lines. One pass
+    over each store's trash for all of them, and only the stores this catalog
+    may delete from (``paired_stores``)."""
+    ids = list(dict.fromkeys(str(pid) for pid in project_ids))
+    result = {pid: {PLURAL[kind]: [] for kind in KINDS} for pid in ids}
+    wanted = {pid for pid in ids if _PROJECT_ID.fullmatch(pid)}
+    if not wanted:
         return result
-    for store in stores if stores is not None else default_stores():
+    paired, _unpaired = paired_stores(state_dir, stores)
+    for store in paired:
         if not store.root.is_dir():
             continue
-        found = [str(asset.get("name") or "") for _id, _path, asset in _live_of(store, project_id)]
-        found += [str(record.get("name") or "") for _id, _path, record in _trashed_of(store, project_id)]
-        result[PLURAL[store.kind]] = sorted(found, key=lambda name: (name.casefold(), name))
+        found: dict[str, list[str]] = {pid: [] for pid in wanted}
+        for pid in wanted:
+            found[pid] += [str(asset.get("name") or "") for _id, _path, asset in _live_of(store, pid)]
+        for _id, _path, record in _trash_records(store):
+            pid = record.get("projectId")
+            if pid in wanted and _record_names(record, pid):
+                found[pid].append(str(record.get("name") or ""))
+        for pid, names_found in found.items():
+            result[pid][PLURAL[store.kind]] = _sorted_names(names_found)
     return result
+
+
+def names(project_id: str, *, state_dir: Path, stores: list[AssetStore] | None = None) -> dict[str, list[str]]:
+    """``goes_with`` for one project."""
+    return goes_with([project_id], state_dir=state_dir, stores=stores)[str(project_id)]
 
 
 def _copies(store: AssetStore, asset_id: str) -> int:
@@ -216,11 +296,46 @@ def _drop_side_files(store: AssetStore, asset_id: str) -> None:
         (store.root / folder / f"{asset_id}.json").unlink(missing_ok=True)
 
 
+def _delete_live(store: AssetStore, project_id: str) -> list[dict[str, Any]]:
+    removed: list[dict[str, Any]] = []
+    for asset_id, path, _asset in _live_of(store, project_id):
+        with store.lock(asset_id):
+            # Read again under the lock: an update, move or delete since may
+            # have changed or moved it.
+            asset = _read(path)
+            if asset is None or asset.get("projectId") != project_id:
+                continue  # not provably this project's: left for the re-home
+            path.unlink(missing_ok=True)
+        _drop_side_files(store, asset_id)
+        removed.append({"id": asset_id, "name": str(asset.get("name") or ""), "projectId": project_id})
+    return removed
+
+
+def _delete_trashed(store: AssetStore, project_id: str) -> list[dict[str, Any]]:
+    trash = store.root / TRASH_DIR
+    removed: list[dict[str, Any]] = []
+    for asset_id, record_path, _record in _trashed_of(store, project_id):
+        with store.lock(asset_id):
+            # Read again under the lock: a restore (and a new delete of the
+            # same id from elsewhere) may have replaced the record since.
+            record = _read(record_path)
+            if not _record_names(record, project_id) or not (trash / f"{asset_id}.json").is_file():
+                continue
+            # The file, then its record (a record without its file is
+            # ignored by the trash, services/asset_trash.py).
+            (trash / f"{asset_id}.json").unlink(missing_ok=True)
+            record_path.unlink(missing_ok=True)
+        _drop_side_files(store, asset_id)
+        removed.append({"id": asset_id, "name": str(record.get("name") or ""), "projectId": project_id})
+    return removed
+
+
 def delete_store_assets(store: AssetStore, project_id: str, *, keep: Container[str]) -> list[dict[str, Any]]:
     """Delete project ``project_id``'s assets in one store (live and trashed)
     and return ``{id, name, projectId}`` for each. ``keep`` is every project
     the catalog still has: one of those is never touched (ValueError). OSError
-    propagates; what was deleted stays deleted and the caller retries the rest."""
+    propagates; what was deleted stays deleted and the caller retries the rest.
+    The caller decides the store is the catalog's (``paired_stores``)."""
     if not _PROJECT_ID.fullmatch(project_id):
         raise ValueError(f"invalid project id: {project_id!r}")
     if project_id in keep:
@@ -228,25 +343,12 @@ def delete_store_assets(store: AssetStore, project_id: str, *, keep: Container[s
     if not store.root.is_dir():
         return []
     removed: list[dict[str, Any]] = []
-    # Trashed first: the file, then its record (a record without its file is
-    # ignored by the trash, services/asset_trash.py).
-    trash = store.root / TRASH_DIR
-    for asset_id, record_path, record in _trashed_of(store, project_id):
-        with store.lock(asset_id):
-            (trash / f"{asset_id}.json").unlink(missing_ok=True)
-            record_path.unlink(missing_ok=True)
-        _drop_side_files(store, asset_id)
-        removed.append({"id": asset_id, "name": str(record.get("name") or ""), "projectId": project_id})
+    for _round in range(_ROUNDS):
+        went = _delete_live(store, project_id) + _delete_trashed(store, project_id)
+        removed += went
+        if not went:
+            break
     folder = store.root / project_id
-    for asset_id, path, _asset in _live_of(store, project_id):
-        with store.lock(asset_id):
-            # Read again under the lock: a write since may have changed it.
-            asset = _read(path)
-            if asset is None or asset.get("projectId") != project_id:
-                continue  # not provably this project's: left for the re-home
-            path.unlink(missing_ok=True)
-        _drop_side_files(store, asset_id)
-        removed.append({"id": asset_id, "name": str(asset.get("name") or ""), "projectId": project_id})
     if folder.is_dir() and not folder.is_symlink():
         for partial in folder.glob("*.json.tmp"):  # a write a crash cut short
             partial.unlink(missing_ok=True)
@@ -264,104 +366,49 @@ def _empty_removed() -> Removed:
     return {kind: [] for kind in KINDS}
 
 
-def delete_project_assets(project_id: str, *, keep: Container[str],
-                          stores: list[AssetStore] | None = None) -> Removed:
-    """``delete_store_assets`` in every store: what went, by kind."""
+def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: Path,
+                          stores: list[AssetStore] | None = None) -> tuple[bool, Removed]:
+    """``delete_store_assets`` in every store that is the catalog's. Returns
+    ``(complete, removed)``: ``complete`` is False when a store was skipped
+    as not the catalog's (the id stays on the list), and what went, by kind."""
+    paired, unpaired = paired_stores(state_dir, stores)
     removed = _empty_removed()
-    for store in stores if stores is not None else default_stores():
+    for store in paired:
         removed[store.kind].extend(delete_store_assets(store, project_id, keep=keep))
-    return removed
+    return not unpaired, removed
 
 
-def finish(catalog: dict[str, Any], stores: list[AssetStore] | None = None) -> tuple[list[str], Removed]:
-    """Delete what is filed under every project on the catalog's list.
-    Returns ``(done, removed)``: the project ids now finished (the caller
-    takes them off the list and commits) and what went, by kind. A project
-    whose files couldn't all be deleted stays on the list, logged, for next time."""
+def finish(catalog: dict[str, Any], *, state_dir: Path,
+           stores: list[AssetStore] | None = None) -> tuple[list[str], Removed]:
+    """Delete what is filed under every project on the catalog's list, in the
+    stores that are this catalog's (``state_dir`` is the folder holding the
+    catalog's ``projects/``). Returns ``(done, removed)``: the project ids now
+    finished (the caller takes them off the list and commits) and what went,
+    by kind. A project whose files couldn't all be deleted, or that a store
+    not beside this catalog may still hold, stays on the list."""
     keep = known_projects(catalog)
     stores = stores if stores is not None else default_stores()
     done: list[str] = []
     removed = _empty_removed()
+    waiting = 0
+    unpaired: list[AssetStore] = []
     for project_id in pending(catalog):
         if project_id in keep:
             done.append(project_id)  # back in the catalog: its files are its own again
             continue
         try:
-            went = delete_project_assets(project_id, keep=keep, stores=stores)
+            complete, went = delete_project_assets(project_id, keep=keep, state_dir=state_dir, stores=stores)
         except OSError as exc:
             logger.warning("A deleted project's moodboards, characters or styles weren't all removed (%s); "
                            "trying again later", type(exc).__name__)
             continue
         for kind, items in went.items():
             removed[kind].extend(items)
-        done.append(project_id)
+        if complete:
+            done.append(project_id)
+        else:
+            waiting += 1
+            unpaired = paired_stores(state_dir, stores)[1]
+    if waiting:
+        _log_unpaired(unpaired, waiting)
     return done, removed
-
-
-# -- assets already orphaned ----------------------------------------------------------
-
-def roots_paired(state_dir: Path, store_root: Path) -> bool:
-    """Whether a store root belongs with the catalog under ``state_dir``:
-    ``~/.nebula`` holds both (``~/.nebula/moodboards``), or the desktop app's
-    data folder holds them side by side (``<data>/state``, ``<data>/moodboards``)."""
-    try:
-        state = state_dir.resolve()
-        parent = store_root.resolve().parent
-    except OSError:
-        return False
-    return parent == state or (state.name == "state" and parent == state.parent)
-
-
-def orphaned_project_ids(store: AssetStore, catalog: dict[str, Any]) -> list[str]:
-    """Catalog-shaped project ids that this store files assets under (live,
-    or in the trash) and that the catalog no longer has, open, trashed or on
-    its list."""
-    known = known_projects(catalog) | set(pending(catalog))
-    found: set[str] = set()
-    root = store.root
-    if not root.is_dir():
-        return []
-    for sub in root.iterdir():
-        if sub.is_dir() and not sub.is_symlink() and _PROJECT_ID.fullmatch(sub.name) and sub.name not in known:
-            found.add(sub.name)
-    trash = root / TRASH_DIR
-    if trash.is_dir():
-        for record_path in trash.glob(f"*{RECORD_SUFFIX}"):
-            record = _read(record_path)
-            scope = str((record or {}).get("scopeDir") or "")
-            if _PROJECT_ID.fullmatch(scope) and scope not in known:
-                found.add(scope)
-    return sorted(found)
-
-
-def sweep_orphans(catalog: dict[str, Any] | None, *, state_dir: Path,
-                  stores: list[AssetStore] | None = None) -> dict[str, Any]:
-    """Once per install: delete what projects deleted for good before this
-    change left behind. ``catalog`` is None when there is no catalog file.
-    Returns ``{status, removed}`` (a count per kind); writes the marker only
-    once it has run. A store whose root isn't paired with the catalog is
-    skipped."""
-    marker = state_dir / "migrations" / SWEEP_MARKER
-    counts = {kind: 0 for kind in KINDS}
-    if marker.exists():
-        return {"status": "done before", "removed": counts}
-    if catalog is None:
-        return {"status": "skipped: no project catalog yet", "removed": counts}
-    if not known_projects(catalog):
-        return {"status": "skipped: the catalog has no projects", "removed": counts}
-    stores = stores if stores is not None else default_stores()
-    paired = [store for store in stores if roots_paired(state_dir, store.root)]
-    if not paired:
-        return {"status": "skipped: no store folder is this catalog's", "removed": counts}
-    keep = known_projects(catalog)
-    for store in paired:
-        for project_id in orphaned_project_ids(store, catalog):
-            counts[store.kind] += len(delete_store_assets(store, project_id, keep=keep))
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    tmp = marker.with_name(marker.name + ".tmp")
-    tmp.write_text(json.dumps({"version": 1, "sweptAt": datetime.now(timezone.utc).isoformat(),
-                               "removed": counts, "stores": [store.kind for store in paired]}), encoding="utf-8")
-    tmp.replace(marker)
-    logger.info("Left by projects deleted for good earlier: %d moodboards, %d characters, %d styles removed",
-                counts["moodboard"], counts["character"], counts["style"])
-    return {"status": "done", "removed": counts}

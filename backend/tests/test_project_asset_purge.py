@@ -1,6 +1,7 @@
 """A project deleted for good takes its moodboards, characters and styles with
 it (services/project_asset_purge.py): Delete forever, both Empties and the
-30-day expiry; crash safety; the one-time sweep of what earlier purges left;
+30-day expiry; crash safety; only stores beside the catalog; an id the
+catalog merely doesn't know is never deleted (the re-home moves it to Global);
 the re-home never moves a purge's files to Global; the listing says what goes."""
 from __future__ import annotations
 
@@ -299,7 +300,6 @@ def test_a_purge_stopped_part_way_finishes_on_the_next_start(ws, person, monkeyp
     assert len(left) == 1 and character.is_file()
     # A restart (the start-up step) finishes it.
     monkeypatch.delenv("NEBULA_NO_ASSET_REHOME", raising=False)
-    monkeypatch.setattr(main_module, "_STATE_DIR", tmp_path / "state")
     asyncio.run(main_module._project_asset_purge_startup())
     assert not (roots["moodboard"] / doomed).exists() and not character.exists()
     assert PENDING not in store.read()
@@ -363,7 +363,7 @@ def test_never_deletes_what_a_project_the_catalog_still_has_holds(tmp_path, kind
     assert asset.is_file()
     # finish() drops a listed id the catalog has again, without deleting.
     catalog = {"projects": {pid: {}}, "trash": {}, PENDING: [pid]}
-    done, removed = purge.finish(catalog, _stores(roots))
+    done, removed = purge.finish(catalog, state_dir=tmp_path, stores=_stores(roots))
     assert done == [pid] and not any(removed.values()) and asset.is_file()
 
 
@@ -415,79 +415,11 @@ def test_names_lists_only_what_would_go(tmp_path):
     _raw(roots["moodboard"], pid, "b3", project_id=None, name="Stray")
     _raw(roots["style"], pid, "s1", name="Dusk")
     _raw_trashed(roots["character"], "c9", "0" * 32, name="Elsewhere")
-    assert purge.names(pid, _stores(roots)) == {"moodboards": ["Rivers", "Tide"], "characters": [], "styles": ["Dusk"]}
-    assert purge.names("not-an-id", _stores(roots)) == {"moodboards": [], "characters": [], "styles": []}
+    assert purge.names(pid, state_dir=tmp_path, stores=_stores(roots)) == {"moodboards": ["Rivers", "Tide"], "characters": [], "styles": ["Dusk"]}
+    assert purge.names("not-an-id", state_dir=tmp_path, stores=_stores(roots)) == {"moodboards": [], "characters": [], "styles": []}
 
 
-# -- the one-time sweep ------------------------------------------------------------
-
-
-def _sweep_setup(tmp_path):
-    state = tmp_path / ".nebula"
-    roots = {"moodboard": state / "moodboards", "character": state / "characters", "style": state / "presets"}
-    live, trashed, purged = "1" * 32, "2" * 32, "3" * 32
-    catalog = {"projects": {live: {}}, "trash": {trashed: {}}}
-    paths = {}
-    for kind, root in roots.items():
-        paths[(kind, "live")] = _raw(root, live, f"{kind}-live")
-        paths[(kind, "trashed")] = _raw(root, trashed, f"{kind}-intrash")
-        paths[(kind, "purged")] = _raw(root, purged, f"{kind}-orphan")
-        paths[(kind, "global")] = _raw(root, "_global", f"{kind}-g", project_id=None)
-        paths[(kind, "old_style")] = _raw(root, "nebula_nodes", f"{kind}-legacy")
-        # One deleted from the purged project, waiting in that store's trash.
-        paths[(kind, "binned")] = _raw_trashed(root, f"{kind}-binned", purged)
-    return state, roots, catalog, paths
-
-
-def test_the_sweep_removes_only_provable_orphans_once(tmp_path, caplog):
-    state, roots, catalog, paths = _sweep_setup(tmp_path)
-    stores = _stores(roots)
-    with caplog.at_level("INFO", logger="services.project_asset_purge"):
-        report = purge.sweep_orphans(catalog, state_dir=state, stores=stores)
-    assert report == {"status": "done", "removed": {"moodboard": 2, "character": 2, "style": 2}}
-    for kind in roots:
-        assert not paths[(kind, "purged")].exists() and not paths[(kind, "binned")].exists()
-        for kept in ("live", "trashed", "global", "old_style"):
-            assert paths[(kind, kept)].is_file(), (kind, kept)
-    # Counts, never a name.
-    assert "2 moodboards, 2 characters, 2 styles removed" in caplog.text
-    assert "orphan" not in caplog.text and "binned" not in caplog.text
-    # Once: one orphaned later (an older Nebula's purge) is left to the re-home.
-    again = _raw(roots["character"], "4" * 32, "later")
-    assert purge.sweep_orphans(catalog, state_dir=state, stores=stores)["status"] == "done before"
-    assert again.is_file()
-
-
-@pytest.mark.parametrize("case", ["no catalog", "empty catalog", "unpaired roots", "pending"])
-def test_the_sweep_does_nothing_without_proof(tmp_path, case):
-    state, roots, catalog, paths = _sweep_setup(tmp_path)
-    if case == "no catalog":
-        catalog = None
-    elif case == "empty catalog":
-        catalog = {"projects": {}, "trash": {}}
-    elif case == "unpaired roots":
-        state = tmp_path / "elsewhere"  # a backend pointed at another catalog
-    else:
-        catalog[PENDING] = ["3" * 32]  # finish() owns it, not the sweep
-    report = purge.sweep_orphans(catalog, state_dir=state, stores=_stores(roots))
-    for kind in roots:
-        assert paths[(kind, "purged")].is_file()
-    if case == "pending":
-        assert report["status"] == "done" and not any(report["removed"].values())
-    else:
-        assert report["status"].startswith("skipped") and not (state / "migrations").exists()
-
-
-def test_the_sweep_skips_a_store_that_isnt_this_catalogs(tmp_path):
-    state, roots, catalog, paths = _sweep_setup(tmp_path)
-    stores = _stores(roots)
-    elsewhere = tmp_path / "other" / "characters"
-    elsewhere.mkdir(parents=True)
-    foreign = _raw(elsewhere, "3" * 32, "theirs")
-    stores[1] = purge.AssetStore("character", elsewhere)
-    report = purge.sweep_orphans(catalog, state_dir=state, stores=stores)
-    assert report["removed"] == {"moodboard": 2, "character": 0, "style": 2}
-    assert foreign.is_file()
+# -- which stores are the catalog's ------------------------------------------------
 
 
 def test_the_desktop_layout_counts_as_paired(tmp_path):
@@ -498,9 +430,12 @@ def test_the_desktop_layout_counts_as_paired(tmp_path):
     assert not purge.roots_paired(data / "other", data / "moodboards")
 
 
-def test_an_asset_moved_away_before_its_lock_is_left(tmp_path):
-    """Read again under the asset's lock: a move to Global that landed after
-    the folder was listed (it rewrites projectId first) keeps the asset."""
+def test_an_asset_changed_before_its_lock_is_left(tmp_path):
+    """Read again under the asset's lock: a write that landed after the
+    folder was listed and no longer names the project keeps the asset. (A
+    move to Global holds the same lock and writes ``_global/<id>.json``
+    before it unlinks the old file, so the purge either finds the file still
+    the project's or doesn't find it: moodboard_store.move, character_store.move.)"""
     from contextlib import contextmanager
 
     roots = {k: tmp_path / k for k in ("moodboard", "character", "style")}
@@ -515,3 +450,429 @@ def test_an_asset_moved_away_before_its_lock_is_left(tmp_path):
     store = purge.AssetStore("character", roots["character"], (), moved_meanwhile)
     assert purge.delete_store_assets(store, pid, keep=set()) == []
     assert path.is_file()
+
+
+# -- an id the catalog doesn't know is the re-home's, never deleted -----------------
+
+
+def test_a_desktop_migration_with_a_new_catalog_moves_to_global_and_deletes_nothing(tmp_path, monkeypatch):
+    """The desktop migration copies the stores but not ``projects/``. First
+    start: no catalog; the open canvas becomes "Recovered canvas". Second
+    start: every asset filed under a project of the old catalog goes to
+    Global with a backup, as on main. Nothing is deleted."""
+    from types import SimpleNamespace
+
+    from services import project_store as project_store_module
+
+    data = tmp_path / "Nebula"
+    roots = {"moodboard": data / "moodboards", "character": data / "characters", "style": data / "presets"}
+    for kind, env in (("moodboard", "NEBULA_MOODBOARD_ROOT"), ("character", "NEBULA_CHARACTER_ROOT"),
+                      ("style", "NEBULA_PRESET_ROOT")):
+        monkeypatch.setenv(env, str(roots[kind]))
+    monkeypatch.delenv("NEBULA_NO_ASSET_REHOME", raising=False)
+    store = ProjectStore(data / "state" / "projects")
+    monkeypatch.setattr(main_module, "project_store", store)
+    monkeypatch.setattr(main_module, "_STATE_DIR", data / "state")
+    old = "7" * 32
+    copied = {kind: _raw(root, old, f"{kind}-mine", name=f"Mine {kind}") for kind, root in roots.items()}
+    notes = _notes(roots["moodboard"], "moodboard-mine")
+    # First start: no catalog yet, and the open canvas isn't a project yet.
+    monkeypatch.setattr(main_module, "cli_graph", SimpleNamespace(nodes={"n1": {"id": "n1"}}))
+    asyncio.run(main_module._project_asset_purge_startup())
+    asyncio.run(main_module._asset_project_rehome_startup())
+    assert all(path.is_file() for path in copied.values())
+    # The first listing files the canvas as "Recovered canvas".
+    with store.transaction() as catalog:
+        recovered = project_store_module.make_project("Recovered canvas")
+        catalog["projects"][recovered["id"]] = recovered
+        catalog["activeProjectId"] = recovered["id"]
+        store.commit(catalog)
+    # Second start.
+    monkeypatch.setattr(main_module, "cli_graph", SimpleNamespace(nodes={}))
+    asyncio.run(main_module._project_asset_purge_startup())
+    asyncio.run(main_module._asset_project_rehome_startup())
+    for kind, root in roots.items():
+        assert (root / "_global" / f"{kind}-mine.json").is_file(), kind
+        assert not copied[kind].exists()
+        backup_kind = "preset" if kind == "style" else kind  # the re-home's kind names
+        assert list((data / f"{backup_kind}-backups").rglob(f"{kind}-mine.json")), kind
+    assert notes.is_file()
+    assert PENDING not in store.read()
+
+
+def test_the_startup_never_deletes_what_an_unknown_project_holds(ws, monkeypatch):
+    """Absent from the catalog is no proof: only ids on the catalog's own
+    list are purged (the startup replay finishes those and nothing else)."""
+    client, store, roots, _ = ws
+    keep, other, _revision = _two_projects(client)
+    unknown = "8" * 32
+    left = {kind: _raw(root, unknown, f"{kind}-x") for kind, root in roots.items()}
+    binned = _raw_trashed(roots["character"], "c-binned", unknown)
+    monkeypatch.delenv("NEBULA_NO_ASSET_REHOME", raising=False)
+    asyncio.run(main_module._project_asset_purge_startup())
+    assert all(path.is_file() for path in left.values()) and binned.is_file()
+
+
+# -- only the stores beside the catalog ------------------------------------------------
+
+
+def _trashed_entry(pid: str, deleted_at: str) -> dict:
+    from services.project_store import make_project
+
+    return {**make_project(pid[:2]), "id": pid, "deletedAt": deleted_at}
+
+
+def _half_isolated(tmp_path, monkeypatch):
+    """A backend on a copy of the person's catalog (its own state folder)
+    whose store roots are still the person's defaults (HOME left real)."""
+    real = tmp_path / "realhome"
+    monkeypatch.setenv("HOME", str(real))
+    for env in ("NEBULA_MOODBOARD_ROOT", "NEBULA_CHARACTER_ROOT", "NEBULA_PRESET_ROOT"):
+        monkeypatch.delenv(env, raising=False)
+    roots = {"moodboard": real / ".nebula" / "moodboards", "character": real / ".nebula" / "characters",
+             "style": real / ".nebula" / "presets"}
+    assert [s.root for s in purge.default_stores()] == list(roots.values())
+    store = ProjectStore(tmp_path / "copy" / "state" / "projects")
+    monkeypatch.setattr(main_module, "project_store", store)
+    monkeypatch.setattr(purge, "_UNPAIRED_LOGGED", set())
+    return store, roots
+
+
+def test_a_copied_catalog_with_default_roots_never_deletes_the_real_stores(ws, monkeypatch, tmp_path, caplog):
+    client, _store, _roots, _ = ws
+    store, roots = _half_isolated(tmp_path, monkeypatch)
+    expired, shown = "a1" * 16, "b2" * 16
+    real = {}
+    for kind, root in roots.items():
+        for pid in (expired, shown):
+            real[(kind, pid)] = _raw(root, pid, f"{kind}-{pid[:2]}")
+        real[(kind, "binned")] = _raw_trashed(root, f"{kind}-binned", expired)
+    long_ago = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+    recent = datetime.now(timezone.utc).isoformat()
+    with store.transaction() as catalog:
+        for pid, when in ((expired, long_ago), (shown, recent)):
+            catalog.setdefault("trash", {})[pid] = _trashed_entry(pid, when)
+        store.commit(catalog)
+    with caplog.at_level("WARNING", logger="services.project_asset_purge"):
+        listed = client.get("/api/projects")
+        assert listed.status_code == 200, listed.text
+        assert client.get("/api/trash").status_code == 200
+    # The expiry ran, and the real stores are untouched.
+    assert all(path.is_file() for path in real.values())
+    catalog = store.read()
+    assert expired not in catalog["trash"] and catalog[PENDING] == [expired]
+    # Nothing promised: the line can only name what would go.
+    entry = next(entry for entry in listed.json()["trash"] if entry["id"] == shown)
+    assert entry["goesWith"] == {"moodboards": [], "characters": [], "styles": []}
+    # Logged once per start, a count and no names.
+    lines = [r.getMessage() for r in caplog.records if "isn't beside" in r.getMessage()]
+    assert len(lines) == 1 and lines[0].startswith("1 project(s)") and "a1" not in lines[0]
+    # The re-home still sees the listed id: it never moves those to Global.
+    from services.asset_project_rehome import AssetRoot, rehome_legacy_assets
+    report = rehome_legacy_assets(store.read, tmp_path / "copy" / "state",
+                                  roots=[AssetRoot("moodboard", roots["moodboard"], True)])
+    assert report["status"] == "nothing to do"
+    assert real[("moodboard", expired)].is_file()
+
+
+def test_delete_forever_in_a_copied_catalog_leaves_the_real_stores(ws, person, monkeypatch, tmp_path):
+    client, _store, _roots, _ = ws
+    store, roots = _half_isolated(tmp_path, monkeypatch)
+    pid = "c3" * 16
+    when = datetime.now(timezone.utc).isoformat()
+    with store.transaction() as catalog:
+        catalog.setdefault("trash", {})[pid] = _trashed_entry(pid, when)
+        store.commit(catalog)
+    board = _raw(roots["moodboard"], pid, "b1")
+    assert client.request("DELETE", f"/api/projects/trash/{pid}", headers=person.headers).status_code == 200
+    assert board.is_file() and store.read()[PENDING] == [pid]
+
+
+def test_a_store_not_beside_the_catalog_keeps_the_id_listed(tmp_path):
+    state = tmp_path / ".nebula"
+    pid = "d4" * 16
+    roots = {k: state / k for k in ("moodboard", "character", "style")}
+    stores = _stores(roots)
+    elsewhere = tmp_path / "other" / "characters"
+    stores[1] = purge.AssetStore("character", elsewhere)
+    mine = _raw(roots["moodboard"], pid, "b1")
+    theirs = _raw(elsewhere, pid, "c1")
+    done, removed = purge.finish({"projects": {}, "trash": {}, PENDING: [pid]}, state_dir=state, stores=stores)
+    assert done == [] and [item["id"] for item in removed["moodboard"]] == ["b1"]
+    assert not mine.exists() and theirs.is_file()
+    # With every store beside it, the same id is done.
+    stores[1] = purge.AssetStore("character", roots["character"])
+    assert purge.finish({"projects": {}, "trash": {}, PENDING: [pid]}, state_dir=state, stores=stores)[0] == [pid]
+
+
+# -- the trash pass, under the lock -------------------------------------------------
+
+
+def test_a_trash_record_replaced_before_its_lock_is_left(tmp_path):
+    """Restored, then deleted again from Global, between the listing and the
+    lock: the record no longer names the project, so the Global copy stays."""
+    from contextlib import contextmanager
+
+    root = tmp_path / "character"
+    pid = "e5" * 16
+    record = _raw_trashed(root, "c1", pid)
+
+    @contextmanager
+    def replaced_meanwhile(_asset_id):
+        record.write_text(json.dumps({"id": "c1", "name": "c1", "projectId": None, "scopeDir": "_global"}))
+        yield
+
+    store = purge.AssetStore("character", root, (), replaced_meanwhile)
+    assert purge.delete_store_assets(store, pid, keep=set()) == []
+    assert record.is_file() and (root / ".trash" / "c1.json").is_file()
+
+
+def test_a_board_trashed_or_restored_between_passes_still_goes(tmp_path):
+    """Deleted for good means gone: a board moved to Recently deleted while
+    the live pass runs, and one restored while the trash pass runs, both go."""
+    from contextlib import contextmanager
+
+    from services import asset_trash
+
+    root = tmp_path / "moodboard"
+    pid = "f6" * 16
+    first = _raw(root, pid, "a-first")
+    second = _raw(root, pid, "b-second")
+    _raw_trashed(root, "c-binned", pid)
+    (root / pid / "c-binned.json").unlink(missing_ok=True)
+    done_once: set[str] = set()
+
+    @contextmanager
+    def busy_store(asset_id):
+        if asset_id == "a-first" and "trash" not in done_once:
+            done_once.add("trash")
+            asset_trash.move_to_trash(root, second, kind="moodboard", deleted_by=None)
+        if asset_id == "c-binned" and "restore" not in done_once:
+            done_once.add("restore")
+            asset_trash.restore(root, "c-binned")
+        yield
+
+    store = purge.AssetStore("moodboard", root, (), busy_store)
+    removed = purge.delete_store_assets(store, pid, keep=set())
+    assert sorted(item["id"] for item in removed) == ["a-first", "b-second", "c-binned"]
+    assert not first.exists() and not (root / pid).exists()
+    assert not any((root / ".trash").iterdir())
+
+
+# -- guards pinned one by one ------------------------------------------------------
+
+
+@pytest.mark.parametrize("record_project, scope_dir", [("same", "_global"), ("other", "same")])
+def test_a_trash_record_must_name_the_project_twice(tmp_path, record_project, scope_dir):
+    root = tmp_path / "style"
+    pid, other = "1a" * 16, "2b" * 16
+    trash = root / ".trash"
+    trash.mkdir(parents=True)
+    (trash / "s1.json").write_text(json.dumps({"id": "s1", "projectId": pid}))
+    record = trash / "s1.trash.json"
+    record.write_text(json.dumps({"id": "s1", "name": "s1",
+                                  "projectId": pid if record_project == "same" else other,
+                                  "scopeDir": pid if scope_dir == "same" else scope_dir}))
+    assert purge.delete_store_assets(purge.AssetStore("style", root), pid, keep=set()) == []
+    assert record.is_file() and (trash / "s1.json").is_file()
+    assert purge.names(pid, state_dir=tmp_path, stores=[purge.AssetStore("style", root)])["styles"] == []
+
+
+def test_a_trash_record_without_its_file_is_left(tmp_path):
+    root = tmp_path / "character"
+    pid = "3c" * 16
+    record = _raw_trashed(root, "c1", pid, name="Gone already")
+    (root / ".trash" / "c1.json").unlink()
+    store = purge.AssetStore("character", root)
+    assert purge.names(pid, state_dir=tmp_path, stores=[store])["characters"] == []
+    assert purge.delete_store_assets(store, pid, keep=set()) == []
+    assert record.is_file()
+
+
+def test_a_trashed_file_gone_before_its_lock_leaves_the_record(tmp_path):
+    """Restored (the file moved back, the record not yet dropped) between
+    the listing and the lock: the record isn't deleted from under it."""
+    from contextlib import contextmanager
+
+    root = tmp_path / "character"
+    pid = "3d" * 16
+    record = _raw_trashed(root, "c1", pid)
+
+    @contextmanager
+    def restored_meanwhile(_asset_id):
+        (root / ".trash" / "c1.json").unlink()
+        yield
+
+    assert purge.delete_store_assets(purge.AssetStore("character", root, (), restored_meanwhile), pid, keep=set()) == []
+    assert record.is_file()
+
+
+@pytest.mark.parametrize("bad", ["../escape", "nebula_nodes", "A" * 32, "a" * 31])
+def test_only_a_catalog_shaped_id_is_ever_purged(tmp_path, bad):
+    root = tmp_path / "moodboard"
+    _raw(root, "x", "b1", project_id=bad)
+    with pytest.raises(ValueError):
+        purge.delete_store_assets(purge.AssetStore("moodboard", root), bad, keep=set())
+
+
+def test_a_symlinked_project_folder_is_never_followed(tmp_path):
+    root = tmp_path / "moodboard"
+    pid = "4d" * 16
+    elsewhere = tmp_path / "elsewhere"
+    target = _raw(elsewhere, "x", "b1", project_id=pid)
+    root.mkdir()
+    (root / pid).symlink_to(target.parent, target_is_directory=True)
+    assert purge.delete_store_assets(purge.AssetStore("moodboard", root), pid, keep=set()) == []
+    assert target.is_file()
+
+
+def test_board_updates_stay_while_a_trashed_copy_of_the_id_is_waiting(tmp_path):
+    from services.moodboard_store import BOARD_SIDE_FOLDERS
+
+    root = tmp_path / "moodboard"
+    pid = "5e" * 16
+    _raw(root, pid, "shared")
+    _raw_trashed(root, "shared", None)  # Global's copy, in Recently deleted
+    notes = _notes(root, "shared")
+    removed = purge.delete_store_assets(purge.AssetStore("moodboard", root, BOARD_SIDE_FOLDERS), pid, keep=set())
+    assert [item["id"] for item in removed] == ["shared"]
+    assert notes.is_file() and (root / ".trash" / "shared.json").is_file()
+
+
+def test_only_catalog_shaped_ids_are_noted():
+    catalog: dict = {}
+    purge.note_purged(catalog, ["../escape", "nebula_nodes", "A" * 32, 12])
+    assert PENDING not in catalog
+    purge.note_purged(catalog, ["6f" * 16])
+    assert catalog[PENDING] == ["6f" * 16]
+
+
+def test_restoring_a_project_applies_the_expiry_to_the_others(ws, person):
+    client, store, roots, _ = ws
+    a = _create(client, "A")
+    b = _create(client, "B", a["workspaceRevision"])
+    c = _create(client, "C", b["workspaceRevision"])
+    ida, idb = a["project"]["id"], b["project"]["id"]
+    style_a = _raw(roots["style"], ida, "sa")
+    _trash(client, ida, c["workspaceRevision"])
+    _trash(client, idb, c["workspaceRevision"])
+    with store.transaction() as catalog:
+        catalog["trash"][ida]["deletedAt"] = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+        store.commit(catalog)
+    response = client.post(f"/api/projects/{idb}/restore")
+    assert response.status_code == 200, response.text
+    assert not style_a.exists() and PENDING not in store.read()
+
+
+# -- `nebula trash list` -------------------------------------------------------------
+
+
+def test_the_cli_names_only_the_kinds_a_project_has():
+    import io
+
+    from cli.commands import trash as trash_cli
+
+    def line(goes):
+        item = {"kind": "project", "id": "p1", "name": "P", "deletedAt": "2026-11-01T00:00:00+00:00",
+                "deletedBy": {"kind": "person", "name": "You"}, "purgeAt": "2026-12-01T00:00:00+00:00"}
+        if goes is not None:
+            item["goesWith"] = goes
+        client = type("C", (), {"shared": lambda self, *_a, **_k: {"items": [item]}})()
+        out = io.StringIO()
+        trash_cli.run_list(client, out=out)
+        return out.getvalue().splitlines()[1]
+
+    none = {"moodboards": [], "characters": [], "styles": []}
+    assert "removed for good after 2026-12-01" in line(none)
+    assert " with its" not in line(none) and " with its" not in line(None)
+    assert "removed for good with its characters after 2026-12-01" in line({**none, "characters": ["Mara"]})
+    assert "with its moodboards and styles after" in line({**none, "moodboards": ["a"], "styles": ["s"]})
+    assert "with its moodboards, characters and styles after" in line(
+        {"moodboards": ["a"], "characters": ["c"], "styles": ["s"]})
+
+
+# -- each store holds the asset's lock while it moves, trashes, restores or purges -----
+
+
+def _held_elsewhere(lock, asset_id):
+    """Hold ``lock(asset_id)`` on another thread until the returned event is set."""
+    import threading
+
+    taken, release = threading.Event(), threading.Event()
+
+    def hold():
+        with lock(asset_id):
+            taken.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=hold, daemon=True)
+    thread.start()
+    assert taken.wait(5)
+    return release, thread
+
+
+def _blocks_until_released(lock, asset_id, action):
+    import threading
+
+    release, holder = _held_elsewhere(lock, asset_id)
+    done = threading.Event()
+    errors: list[BaseException] = []
+
+    def run():
+        try:
+            action()
+        except BaseException as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    waited = done.wait(0.3)
+    release.set()
+    holder.join(5)
+    assert done.wait(5) and not errors, errors
+    return not waited
+
+
+@pytest.mark.parametrize("kind", ["moodboard", "character", "style"])
+@pytest.mark.parametrize("step", ["delete", "restore", "purge", "move", "update"])
+def test_the_stores_hold_the_assets_lock(ws, kind, step):
+    from services import character_store, moodboard_store, preset_store
+
+    if kind == "style" and step == "move":
+        pytest.skip("styles don't move")
+    if kind == "moodboard" and step == "update":
+        pytest.skip("board updates held the lock before")
+    client, store, roots, _ = ws
+    pid, _other, _revision = _two_projects(client)
+    if kind == "moodboard":
+        asset_id = _board(pid)["id"]
+        api, lock = MoodboardStore(), moodboard_store._board_lock
+    elif kind == "character":
+        asset_id = character_store.CharacterStore().create(
+            name="Mara", subjectType="person", referenceViews=["/api/outputs/a.png", "/api/outputs/b.png", "/api/outputs/c.png"], frozenTraitString="", seed=1,
+            consistencyStrength=0.5, projectId=pid)["id"]
+        api, lock = character_store.CharacterStore(), character_store._char_lock
+    else:
+        asset_id = preset_store.PresetStore().create(
+            name="Dusk", category="Style", prompt="", params={}, modelId=None, refImages=[], scope="project",
+            projectId=pid, params_version=preset_store.PARAMS_VERSION)["id"]
+        api, lock = preset_store.PresetStore(), preset_store._preset_lock
+    if step in ("restore", "purge"):
+        api.delete(asset_id)
+    action = {
+        "delete": lambda: api.delete(asset_id),
+        "restore": lambda: api.restore(asset_id),
+        "purge": lambda: api.purge(asset_id),
+        "move": lambda: api.move(asset_id, None),
+        "update": lambda: api.update(asset_id, name="Renamed"),
+    }[step]
+    assert _blocks_until_released(lock, asset_id, action)
+
+
+def test_the_purge_takes_each_stores_own_lock():
+    from services import character_store, moodboard_store, preset_store
+
+    assert [store.lock for store in purge.default_stores()] == [
+        moodboard_store._board_lock, character_store._char_lock, preset_store._preset_lock]

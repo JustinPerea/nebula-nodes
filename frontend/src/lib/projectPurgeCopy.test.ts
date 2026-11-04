@@ -42,4 +42,32 @@ describe('what deleting a project for good also deletes', () => {
       .toBe('Their moodboards, characters and styles are deleted with them.');
     expect(emptyTrashLine([{ goesWith: goes() }, {}])).toBeNull();
   });
+
+  it('a moodboard, character or style with no name is “Untitled”', () => {
+    expect(deleteForeverLine(goes({ styles: [''] }))).toBe('Its style “Untitled” is deleted with it.');
+    expect(deleteForeverLine(goes({ styles: ['', 'Noir'] }))).toBe('Its styles “Untitled” and “Noir” are deleted with it.');
+    expect(deleteForeverLine(goes({ characters: ['  '] }))).toBe('Its character “Untitled” is deleted with it.');
+    expect(deleteForeverLine(goes({ moodboards: [''] }))).toBe('Its moodboard “Untitled” is deleted with it.');
+  });
+
+  it('any two matching names in a kind fall back to its count, several “Untitled” styles too', () => {
+    expect(deleteForeverLine(goes({ moodboards: ['Rivers', 'Rivers'] }))).toBe('Its 2 moodboards are deleted with it.');
+    expect(deleteForeverLine(goes({ characters: ['Mara', 'Zed', 'Mara'] }))).toBe('Its 3 characters are deleted with it.');
+    expect(deleteForeverLine(goes({ styles: ['', ''] }))).toBe('Its 2 styles are deleted with it.');
+    expect(deleteForeverLine(goes({ styles: ['', 'Untitled'] }))).toBe('Its 2 styles are deleted with it.');
+    // Names that differ only in case are different names.
+    expect(deleteForeverLine(goes({ moodboards: ['Rivers', 'rivers'] }))).toBe('Its moodboards “Rivers” and “rivers” are deleted with it.');
+  });
+
+  it('Empty with one project: the singular form, for every kind combination', () => {
+    const one = (over: Partial<GoesWith>) => emptyTrashLine([{ goesWith: goes(over) }]);
+    expect(one({ moodboards: ['a'] })).toBe('Its moodboards are deleted with it.');
+    expect(one({ characters: ['Mara', 'Jon'] })).toBe('Its characters are deleted with it.');
+    expect(one({ styles: ['s'] })).toBe('Its styles are deleted with it.');
+    expect(one({ moodboards: ['a'], characters: ['c'] })).toBe('Its moodboards and characters are deleted with it.');
+    expect(one({ moodboards: ['a'], styles: ['s'] })).toBe('Its moodboards and styles are deleted with it.');
+    expect(one({ characters: ['c'], styles: ['s'] })).toBe('Its characters and styles are deleted with it.');
+    expect(one({ moodboards: ['a'], characters: ['c'], styles: ['s'] })).toBe('Its moodboards, characters and styles are deleted with it.');
+    expect(one({})).toBeNull();
+  });
 });

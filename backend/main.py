@@ -3392,24 +3392,24 @@ async def _stamp_moodboard_transparency(stamp: Any) -> None:
 @app.on_event("startup")
 async def _project_asset_purge_startup() -> None:
     """Every start, before the re-home below: finish deleting the
-    moodboards, characters and styles of projects deleted for good (a purge
-    that stopped part way), then, once per install, delete what earlier
-    purges left behind (services/project_asset_purge.py). Without it the
-    re-home would move them to Global."""
+    moodboards, characters and styles of projects deleted for good whose
+    purge stopped part way (services/project_asset_purge.py). Without it the
+    re-home would leave them in their folders (it skips a listed id). Only
+    ids on the catalog's own list are deleted: an asset filed under an id the
+    catalog doesn't know is the re-home's, which moves it to Global."""
     if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
         return
 
-    def run() -> dict[str, Any]:
+    def run() -> None:
         if not project_store.path.exists():
-            return project_asset_purge.sweep_orphans(None, state_dir=_STATE_DIR)
+            return
         with project_store.transaction() as catalog:
             _purge_noted_assets(catalog)
-            return project_asset_purge.sweep_orphans(catalog, state_dir=_STATE_DIR)
 
     try:
         await asyncio.to_thread(run)
     except Exception as exc:  # never block startup; it runs again next start
-        print(f"[main] files of deleted projects not swept: {type(exc).__name__}", flush=True)
+        print(f"[main] files of deleted projects not removed yet: {type(exc).__name__}", flush=True)
 
 
 @app.on_event("startup")
@@ -18146,7 +18146,7 @@ def _purge_noted_assets(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any
     if not project_asset_purge.pending(catalog):
         return {}
     try:
-        done, removed = project_asset_purge.finish(catalog)
+        done, removed = project_asset_purge.finish(catalog, state_dir=_catalog_folder())
         if done:
             project_asset_purge.clear(catalog, done)
             project_store.commit(catalog)
@@ -18169,20 +18169,29 @@ async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) ->
             await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
 
 
+def _catalog_folder() -> Path:
+    """The folder holding the catalog's ``projects/`` (``~/.nebula``, or the
+    desktop app's ``<data>/state``): a store's files are deleted with a
+    project only when the store sits beside it
+    (project_asset_purge.roots_paired)."""
+    return project_store.root.parent
+
+
 def _trash_listing(catalog: dict[str, Any]) -> list[dict[str, Any]]:
     """Recently deleted projects, newest first. Each says what deleting it
     for good also deletes (``goesWith``: the names of its ``moodboards``,
     ``characters`` and ``styles``, live and trashed), for the Projects
-    screen's confirmation lines."""
-    entries = (catalog.get("trash") or {}).values()
-    stores = project_asset_purge.default_stores()
-    listed = [_trash_entry(entry, stores) for entry in entries]
+    screen's confirmation lines. One read of each store for the whole list."""
+    entries = list((catalog.get("trash") or {}).values())
+    goes = project_asset_purge.goes_with([entry["id"] for entry in entries], state_dir=_catalog_folder())
+    listed = [{**trash_metadata(entry), "goesWith": goes[entry["id"]]} for entry in entries]
     return sorted(listed, key=lambda entry: entry["deletedAt"], reverse=True)
 
 
-def _trash_entry(entry: dict[str, Any], stores: list[Any] | None = None) -> dict[str, Any]:
+def _trash_entry(entry: dict[str, Any]) -> dict[str, Any]:
     """One Recently deleted project as listed, with ``goesWith`` (_trash_listing)."""
-    return {**trash_metadata(entry), "goesWith": project_asset_purge.names(entry["id"], stores)}
+    return {**trash_metadata(entry),
+            "goesWith": project_asset_purge.names(entry["id"], state_dir=_catalog_folder())}
 
 
 def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:

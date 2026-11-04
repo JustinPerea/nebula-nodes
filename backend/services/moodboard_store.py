@@ -1016,36 +1016,40 @@ class MoodboardStore:
         this id is already in the target folder."""
         from services.asset_project_rehome import GLOBAL_DIR, move_asset
 
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        target = projectId or None
-        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
-        # Two live copies (a re-home that skipped a collision leaves one in an
-        # old folder): which one is "the" asset isn't ours to guess.
-        copies = sorted(sub.name for sub in root.iterdir()
-                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
-        if len(copies) > 1:
-            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
-        # The file moves as saved (move_asset changes only projectId), so an
-        # old board stays unlaid-out on disk; the board returned is laid out
-        # in memory, as get() reads it.
-        before = _migrated(json.loads(path.read_text(encoding="utf-8")))
-        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
-            return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
-        moved_to = move_asset("moodboard", root, path, target)
-        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):  # a purge of its project holds it too
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            target = projectId or None
+            _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+            # Two live copies (a re-home that skipped a collision leaves one in an
+            # old folder): which one is "the" asset isn't ours to guess.
+            copies = sorted(sub.name for sub in root.iterdir()
+                            if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
+            if len(copies) > 1:
+                raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+            # The file moves as saved (move_asset changes only projectId), so an
+            # old board stays unlaid-out on disk; the board returned is laid out
+            # in memory, as get() reads it.
+            before = _migrated(json.loads(path.read_text(encoding="utf-8")))
+            if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+                return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
+            moved_to = move_asset("moodboard", root, path, target)
+            return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
 
     def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
         """Move the board to Recently deleted (services/asset_trash.py) and
         return the trash record. ``deleted_by`` is who asked, as
         services/canvas_events.actor_record gives it."""
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
 
     # -- Recently deleted --------------------------------------------------
 
@@ -1062,16 +1066,18 @@ class MoodboardStore:
     def restore(self, moodboard_id: str) -> dict[str, Any]:
         """Bring a trashed board back with the same id and contents."""
         _validate_moodboard_id(moodboard_id)
-        return asset_trash.restore(_moodboard_root(), moodboard_id)
+        with _board_lock(moodboard_id):
+            return asset_trash.restore(_moodboard_root(), moodboard_id)
 
     def purge(self, moodboard_id: str) -> None:
         """Delete a trashed board for good. Only the person may (main.py)."""
         _validate_moodboard_id(moodboard_id)
-        asset_trash.purge(_moodboard_root(), moodboard_id)
-        # Its Updates go with it (services/agent_notes.py); Recently deleted
-        # kept them, since a restore brings the same id back.
-        for folder in BOARD_SIDE_FOLDERS:
-            (_moodboard_root() / folder / f"{moodboard_id}.json").unlink(missing_ok=True)
+        with _board_lock(moodboard_id):
+            asset_trash.purge(_moodboard_root(), moodboard_id)
+            # Its Updates go with it (services/agent_notes.py); Recently deleted
+            # kept them, since a restore brings the same id back.
+            for folder in BOARD_SIDE_FOLDERS:
+                (_moodboard_root() / folder / f"{moodboard_id}.json").unlink(missing_ok=True)
 
 
 def migrate_brief_fields() -> dict[str, Any]:

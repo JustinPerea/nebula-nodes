@@ -58,6 +58,20 @@ def _where(client: NebulaClient, scope: str | None, project: str | None) -> str:
     return f"in project {name} ({project_id})" if name else f"in project {project_id}"
 
 
+def _goes_with(item: dict[str, Any]) -> str:
+    """The list line's ``with its moodboards and styles``: only the kinds a trashed project
+    holds (its ``goesWith``), in the order moodboards, characters, styles;
+    nothing when it holds none (or an older backend sent no ``goesWith``)."""
+    goes = item.get("goesWith")
+    if not isinstance(goes, dict):
+        return ""
+    kinds = [kind for kind in ("moodboards", "characters", "styles") if goes.get(kind)]
+    if not kinds:
+        return ""
+    listed = kinds[0] if len(kinds) == 1 else f"{', '.join(kinds[:-1])} and {kinds[-1]}"
+    return f" with its {listed}"
+
+
 def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None = None,
              project: str | None = None, as_json: bool = False, out: TextIO | None = None) -> int:
     out = out or sys.stdout
@@ -75,7 +89,7 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
         scope = ""
         if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
-        expiry = (f", removed for good with its moodboards, characters and styles after {str(item['purgeAt'])[:10]}"
+        expiry = (f", removed for good{_goes_with(item)} after {str(item['purgeAt'])[:10]}"
                   if item.get("purgeAt") else "")
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
               f"  (deleted {_when(item)} by {_who(item)}{expiry})", file=out)
