@@ -4898,6 +4898,11 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
+    # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
+    # offering them, and a send to one is refused as stopped.
+    if channel_book.drop_agent(f"{channel_listeners.APP_ID_PREFIX}{app_id}"):
+        await _broadcast_channel_listeners()
+        _schedule_channel_expiry()
     return {"status": "revoked"}
 
 
@@ -6393,11 +6398,14 @@ async def _sweep_channel_listeners() -> None:
 
 
 def _channel_caller() -> tuple[AgentIdentity, str | None]:
-    """The listener's agent, by its token only. A tokenless caller (a name
-    alone) or a token Nebula doesn't know is refused (401) with GM r81's
-    line and a code: listener_no_token or listener_token_invalid. The
-    identity comes from the token, so one agent's token never registers as
-    another (a name header beside it is ignored)."""
+    """The listener's agent, by its Settings app token only. A tokenless
+    caller (a name alone) or a token Nebula doesn't know is refused (401)
+    with GM r81's line and a code: listener_no_token or
+    listener_token_invalid. An in-app agent's turn token is refused too
+    (J3, Justin 2026-11-04: listener_in_app_token): only a token from
+    Settings › Connect your agent listens. The identity comes from the
+    token, so one agent's token never registers as another (a name header
+    beside it is ignored)."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None or not identity.verified:
@@ -6406,6 +6414,9 @@ def _channel_caller() -> tuple[AgentIdentity, str | None]:
         code, line = ((channel_listeners.BAD_TOKEN_CODE, channel_listeners.BAD_TOKEN_LINE) if presented
                       else (channel_listeners.NO_TOKEN_CODE, channel_listeners.NO_TOKEN_LINE))
         raise HTTPException(status_code=401, detail=line, headers={"X-Nebula-Code": code})
+    if not channel_listeners.is_app_agent(identity):
+        raise HTTPException(status_code=401, detail=channel_listeners.IN_APP_TOKEN_LINE,
+                            headers={"X-Nebula-Code": channel_listeners.IN_APP_TOKEN_CODE})
     return identity, presence_session(headers)
 
 

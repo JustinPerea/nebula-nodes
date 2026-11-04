@@ -142,6 +142,45 @@ def test_only_an_agent_token_registers_a_listener(ready):
     assert ready.client.get("/api/canvas/channel", headers=CLAUDE_TOKEN).json()["listeners"] == []
 
 
+IN_APP_LINE = ("Nebula couldn’t connect this listener because its token is an in-app agent’s, and only a token "
+               "from Settings › Connect your agent can listen. Copy one there, then run this command again.")
+
+
+def test_an_in_app_agents_turn_token_never_registers_a_listener(ready, monkeypatch):
+    """J3 (Justin, 2026-11-04; boundary LOW-3): an in-app agent's turn token
+    is verified, but only a Settings app token listens."""
+    from commons.actors import agent_registry
+    monkeypatch.setattr(agent_registry, "lookup", lambda token: {"runner": "claude", "session": "chat1"}
+                        if token == "tok-inapp" else None)
+    in_app = {"Authorization": "Agent tok-inapp", "X-Nebula-Agent-Session": "sess-a"}
+    for call in (lambda: ready.client.post("/api/agent/channel", headers=in_app, json={"state": "listening"}),
+                 lambda: ready.client.delete("/api/agent/channel", headers=in_app)):
+        refused = call()
+        assert refused.status_code == 401 and refused.json()["detail"] == IN_APP_LINE
+        assert refused.headers["X-Nebula-Code"] == "listener_in_app_token"
+    assert ready.channel.entries() == [] and _messages(ready) == []
+    assert _beat(ready).status_code == 200  # a Settings token still registers
+
+
+def test_revoking_a_token_drops_its_listeners_at_once(ready, monkeypatch):
+    """Boundary LOW-1: the revoke route drops that app's entries and tells
+    the person's tabs, not 45 s later at the TTL."""
+    monkeypatch.setattr(app_tokens, "valid_id", lambda app_id: app_id.isalnum())
+    monkeypatch.setattr(ready.main.app_token_store, "revoke", lambda app_id: app_id == "claude1")
+    _beat(ready)
+    _beat(ready, SESSION_B)
+    _beat(ready, CODEX_TOKEN)
+    before = len(_messages(ready))
+    answer = ready.client.delete("/api/agent/spend/apps/claude1", headers=PERSON)
+    assert answer.status_code == 200, answer.text
+    assert [e.agent.id for e in ready.channel.entries()] == ["app:codex1"]
+    sent = _messages(ready)
+    assert len(sent) == before + 1 and [e["agent"]["id"] for e in sent[-1]["listeners"]] == ["app:codex1"]
+    # Nothing of another app's goes, and an unknown app changes nothing.
+    assert ready.client.delete("/api/agent/spend/apps/nobody", headers=PERSON).status_code == 404
+    assert len(_messages(ready)) == before + 1
+
+
 def test_a_listener_keeps_its_id_through_a_lapse(ready):
     first = _beat(ready).json()["listener"]["listenerId"]
     ready.channel_clock.now += channel_listeners.TTL_SECONDS + 1

@@ -246,6 +246,12 @@ def _first_gated(pushes):
     return next((at for at, p in pushes if p.gate), None)
 
 
+def _reply(state: ChannelState, at: float, *, ok: bool = True) -> None:
+    """This session's reply_to_person, as the server's tool wrapper reports it."""
+    assert state.tool_started("reply_to_person", {"text": "Done."}, at) is None
+    state.tool_finished("reply_to_person", {"text": "Done."}, {"reply": {"id": "pt_1"}} if ok else None, at)
+
+
 def test_an_edit_while_claude_reads_a_message_never_gates_the_message_turn():
     # The reviewer's P6 probe: Claude's last Nebula call was long ago, the
     # person sends a message at 100 and nudges a node at 101. A gated change
@@ -260,11 +266,15 @@ def test_an_edit_while_claude_reads_a_message_never_gates_the_message_turn():
     assert _first_gated(pushes) is None  # nothing before the message turn's first call
     assert state.tool_started("edit_canvas", {}, 112.0) is None  # the message turn edits
     state.tool_finished("edit_canvas", {}, {"ok": True}, 112.5)
-    pushes = drain(state, 112.5, 300.0)
-    # The edit goes, gated, only once that turn has ended by the window's
-    # heuristic: window_min (60 s) after the push, window_idle (20 s) after
-    # its last call.
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(160.5, "change", True)]
+    # J4 (2026-11-04): the span lasts until this session replies, however
+    # long the turn goes without a Nebula call (it used to end 20 s after
+    # the last call, past the first minute).
+    assert _first_gated(drain(state, 112.5, 300.0)) is None
+    _reply(state, 300.0)
+    pushes = drain(state, 300.0, 400.0)
+    # The edit then goes, gated, as any gated push: once the agent has been
+    # quiet for agent_quiet (20 s) after its reply.
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(320.0, "change", True)]
 
 
 def test_a_message_turn_that_keeps_calling_holds_a_gated_push_until_it_ends():
@@ -278,7 +288,10 @@ def test_a_message_turn_that_keeps_calling_holds_a_gated_push_until_it_ends():
         assert state.tool_started("edit_canvas", {}, float(t)) is None
         state.tool_finished("edit_canvas", {}, {"ok": True}, float(t))
     pushes += drain(state, 192.5, 300.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(212.5, "change", True)]  # 20 s after the last call
+    assert _first_gated(pushes) is None  # no reply yet: the span holds (J4)
+    _reply(state, 300.0)
+    pushes = drain(state, 300.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(320.0, "change", True)]  # 20 s after the reply
 
 
 def test_a_call_running_in_the_message_turn_holds_a_gated_push():
@@ -289,8 +302,10 @@ def test_a_call_running_in_the_message_turn_holds_a_gated_push():
     state.observe(resp(edit(2)), now=106.0)
     assert [p for p in drain(state, 106.0, 230.0) if p[1].gate] == []
     state.tool_finished("get_proposal", {"proposal_id": "p"}, None, 230.0)
-    pushes = drain(state, 230.0, 300.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(250.5, "change", True)]
+    assert _first_gated(drain(state, 230.0, 300.0)) is None  # the call ended, no reply: still the span
+    _reply(state, 301.0)
+    pushes = drain(state, 301.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(321.0, "change", True)]
 
 
 def test_an_accept_in_the_message_turn_goes_without_the_persons_edits():
@@ -316,8 +331,12 @@ def test_an_edit_while_claude_reads_a_pin_never_gates_the_pin_turn():
     assert _first_gated(drain(state, 101.5, 111.5)) is None
     assert state.tool_started("edit_canvas", {}, 112.0) is None
     state.tool_finished("edit_canvas", {}, {"ok": True}, 112.5)
-    pushes = drain(state, 112.5, 300.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(161.5, "change", True)]
+    assert _first_gated(drain(state, 112.5, 300.0)) is None
+    # A pin's answer (resolve_pin, saved) is that session's reply: it ends the span.
+    assert state.tool_started("resolve_pin", {"pin_id": "pin_00000001"}, 300.0) is None
+    state.tool_finished("resolve_pin", {"pin_id": "pin_00000001"}, {"pin": {"id": "pin_00000001"}}, 300.0)
+    pushes = drain(state, 300.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(320.0, "change", True)]
 
 
 def test_an_edit_while_claude_reads_an_accept_never_gates_the_accept_turn():
@@ -364,16 +383,19 @@ def test_at_the_cap_a_waiting_pin_never_holds_the_passive_pushes():
     state.observe(resp(pin(2)), now=2.0)
     state.observe(resp(edit(3)), now=3.0)
     pushes = drain(state, 3.0, 90.0)
-    # The edit goes on its own terms (gated, once the message's turn has
-    # ended: 60 s with no Nebula call, HIGH-1); the pin waits for the cap.
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(61.5, "change", True)]
+    # The edit goes on its own terms (gated, once the message's span has
+    # ended: its reply, J4); the pin waits for the cap.
+    assert pushes == []
+    _reply(state, 90.0)
+    pushes = drain(state, 90.0, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(110.0, "change", True)]
     assert "<pin" not in pushes[0][1].content and "pin_00000002" in state._pins
 
 
 # -- passive limits unchanged, and the ride-along ------------------------------------------
 
 def test_deliberate_sends_never_count_toward_or_delay_the_passive_limits():
-    state = listening(window_min=2.0, window_idle=2.0)
+    state = listening(window_min=2.0, window_idle=2.0, deliberate_span=2.0)
     state.observe(resp(edit(1)), now=0.0)
     assert take(state, 8.0).wake == "change"  # passive push 1
     for n in range(2, 30):  # 28 deliberate pushes in the next 28 s
@@ -381,8 +403,8 @@ def test_deliberate_sends_never_count_toward_or_delay_the_passive_limits():
         assert take(state, float(n + 8)).wake == "message"
     assert len(state._history) == 1 and len(state._deliberate_history) == 28
     # The next passive push keeps its 30 s spacing from the last passive one,
-    # not from the last message. (A short turn heuristic here, so the last
-    # message's turn, at 37, is over by 39: HIGH-1 holds gated pushes until then.)
+    # not from the last message. (A short span cap here, so the last
+    # message's span, at 37, is over by 39: HIGH-1/J4 hold gated pushes until then.)
     state.observe(resp(edit(40, node="n9")), now=37.0)
     pushes = drain(state, 37.0, 100.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(45.0, "change", True)]
@@ -434,6 +456,103 @@ def test_an_ungated_passive_push_still_waits_for_a_gated_window():
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_b", "idMap": {}})), now=115.0)
     pushes = drain(state, 115.0, 250.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "proposal", False)]
+
+
+# -- J4: a deliberate span lasts until that session's reply (Justin, 2026-11-04) -------------
+
+@pytest.mark.parametrize("kind", ["message", "answer", "pin"])
+def test_a_long_quiet_inside_a_deliberate_turn_never_lets_a_gated_push_refuse_its_edit(kind):
+    # Review 2 LOW-5 (P6b): Claude reads the request, then thinks or works in
+    # Read/Bash for 70 s with no Nebula call. The person edits meanwhile. A
+    # gated push used to go at 160.5 and refuse the turn's edit at 175.
+    state = listening()
+    if kind == "message":
+        state.observe(resp(message(1)), now=100.0)
+        assert take(state, 100.0).wake == "message"
+    elif kind == "answer":
+        asked(state)
+        state.observe(resp(answered(1)), now=99.0)
+        state.answers_to_fetch()
+        state.answer_fetched("qs_0000000a", VIEW)
+        assert take(state, 100.0).wake == "answer"
+    else:
+        state.observe(resp(pin(1)), now=99.0)
+        assert [p.wake for _, p in drain(state, 99.0, 100.0)] == ["pin"]
+    state.observe(resp(edit(2)), now=101.0)
+    assert state.tool_started("look_at_canvas", {}, 102.0) is None
+    state.tool_finished("look_at_canvas", {}, {"nodes": []}, 103.0)
+    assert _first_gated(drain(state, 103.0, 175.0)) is None  # 72 s with no Nebula call
+    assert state.tool_started("edit_canvas", {}, 175.0) is None  # never refused
+    state.tool_finished("edit_canvas", {}, {"ok": True}, 176.0)
+    assert _first_gated(drain(state, 176.0, 500.0)) is None
+
+
+def test_the_reply_ends_the_span_and_the_next_gated_push_gates_as_before():
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    _reply(state, 150.0)
+    pushes = drain(state, 150.0, 171.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(170.0, "change", True)]
+    # It gates its turn, as before.
+    assert state.tool_started("edit_canvas", {}, 172.0) is not None
+
+
+def test_a_refused_reply_or_another_tool_never_ends_the_span():
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    _reply(state, 110.0, ok=False)  # Nebula refused it (paced, no token): nothing reached the person
+    assert state.tool_started("post_note", {"text": "x"}, 111.0) is None
+    state.tool_finished("post_note", {"text": "x"}, {"note": {"id": "n"}}, 111.0)
+    state.tool_finished("resolve_pin", {"pin_id": "p"}, None, 112.0)  # a failed pin answer
+    assert _first_gated(drain(state, 112.0, 400.0)) is None
+
+
+def test_another_agents_reply_never_ends_the_span():
+    # Its feed shows the other agent's thread.replied; only this session's
+    # own tool call ends the span.
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2), ev(3, "thread.replied", actor=OTHER_AGENT,
+                                   data={"replyId": "pt_x", "text": "hi", "nodeId": None})), now=101.0)
+    assert _first_gated(drain(state, 101.0, 400.0)) is None
+
+
+def test_the_cap_ends_the_span_when_no_reply_comes():
+    state = listening()
+    assert state.limits.deliberate_span == mcp_channel.DELIBERATE_SPAN_CAP == 600.0
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    assert _first_gated(drain(state, 101.0, 700.0)) is None
+    pushes = drain(state, 700.0, 760.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(700.5, "change", True)]
+
+
+def test_next_check_wakes_the_listener_at_the_cap():
+    state = listening()
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(edit(2)), now=101.0)
+    assert state.next_check(200.0) == pytest.approx(700.001 - 200.0)
+
+
+def test_a_later_message_restarts_the_cap_and_an_accept_never_shortens_the_span():
+    state = listening()
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
+    state.observe(resp(message(1)), now=100.0)
+    assert take(state, 100.0).wake == "message"
+    state.observe(resp(message(2)), now=400.0)
+    assert take(state, 400.0).wake == "message"
+    state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=410.0)
+    assert take(state, 410.0).wake == "proposal"  # an ungated passive push inside the span
+    state.observe(resp(edit(4)), now=411.0)
+    assert _first_gated(drain(state, 411.0, 1000.0)) is None  # 400 + 600: not the accept's 60 s
+    assert [(at, p.gate) for at, p in drain(state, 1000.0, 1001.0)] == [(1000.5, True)]
 
 
 # -- the wiring: the real --channel server against a fake Nebula ----------------------------

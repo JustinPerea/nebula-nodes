@@ -1135,11 +1135,12 @@ def test_a_pin_never_waits_behind_the_persons_continued_edits():
     # The pin and the edit made with it, in one ungated push.
     assert first.count == 2 and "pinned a note" in first.content and "changed the canvas (1 change)" in first.content
     assert "refused" not in first.content
-    # After it, the edits wake as before: gated, 30 s after the first of
-    # each batch (they never go 8 s quiet), but only once the turn the pin
-    # started has ended (60 s with no Nebula call, at 171: review 1 of #225,
-    # HIGH-1). The pin's push never moved the passive spacing.
-    assert [(at, p.wake, p.gate) for at, p in pushes[1:3]] == [(171.5, "change", True), (205.0, "change", True)]
+    # After it, the edits wake gated, but only once the span the pin opened
+    # has ended. With no answer on the pin that is its cap (J4, 2026-11-04:
+    # 600 s after the push at 111), when every edit made meanwhile goes in
+    # one gated push (they stop at 695). The pin's push never moved the
+    # passive spacing.
+    assert [(at, p.wake, p.gate) for at, p in pushes[1:]] == [(711.5, "change", True)]
 
 
 def test_a_rejection_while_a_pin_waits_goes_with_the_pin():

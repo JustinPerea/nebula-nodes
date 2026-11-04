@@ -159,3 +159,55 @@ failure states" and "Recipient".
   Tokenless: refused, one stderr line. Revoked: r81's second line.
 - Mutations: 6; 4 killed at first, the stderr-once mutant killed after the
   test ran three beats, the token-presented branch equivalent (above).
+
+## Round 4 (review 2 of #225, Justin 2026-11-04)
+
+- **J4, the deliberate span ends on the reply.** A deliberate push (message,
+  pin, answer) opens a span (`_turn_at`, now with `_reply_due_at`) that no
+  gated push crosses until this session's own reply reaches the person, or
+  `DELIBERATE_SPAN_CAP` (600 s, the `deliberate_span` limit) after the push.
+  It replaces the 20-second-idle end for that span (review 2 LOW-5: a 70 s
+  think with no Nebula call no longer lets a gated push refuse the turn's
+  edit). Passive ungated spans (an accept, its own run's end) keep the
+  window heuristic and never shorten a deliberate one. A later deliberate
+  push restarts the cap.
+- **What counts as the reply** (decision not in the brief): a saved
+  `reply_to_person` (`{reply}`) or a saved `resolve_pin` (`{pin}`). A pin's
+  answer is its reply in the Message box (a pinReply row, which GM r89.1
+  now counts as a reply), and the push tells Claude to answer a pin with
+  resolve_pin; without it a pin's span would hold the person's edits for 10
+  minutes every time. A refused or failed call doesn't end it. Another
+  agent's reply doesn't (only this process's own tool calls are seen), and
+  neither does `nebula reply` from a shell: the listener's feed leaves out
+  its own agent's events, so the cap ends that span. MCP-SETUP says to
+  answer a push with the tool.
+- After the reply the next gated push gates as before, which includes the
+  usual `agent_quiet` (20 s) after the agent's last call.
+- **J3:** `_channel_caller` refuses a verified in-app turn token
+  (`agent_registry`) with 401 `listener_in_app_token` and a line in r81's
+  form (copy for GM below). Only `app:` identities listen.
+- **Boundary LOW-1:** revoking an app in Settings drops its listener
+  entries at once (`ListenerBook.drop_agent`) and broadcasts
+  `channelListeners`. Settling that listener's messages in flight is #225's
+  (the thread lives there).
+- **Boundary NIT-2:** MCP-SETUP and `channel_status` no longer say
+  `--channel` makes the token: it reads the file Settings saved.
+- Tests turned round to J4 (intent kept, each now replies, then measures
+  the gated push 20 s after the reply): P6, the turn that keeps calling,
+  the call in flight, the pin turn (ended by resolve_pin), the cap test,
+  the passive-limits test (`deliberate_span=2`), and test_mcp_channel's
+  pin-never-waits probe (the edits now go at the cap, 711.5). New: the long
+  quiet for message, answer and pin; the reply ends it; a refused reply,
+  another tool or a failed resolve_pin doesn't; another agent's
+  thread.replied doesn't; the cap; next_check at the cap; a later message
+  restarts the cap and an accept never shortens it. Readiness: the in-app
+  token refused on POST and DELETE; revoke drops only that app's entries
+  and tells the tabs.
+- Mutations: 13 of 13 killed (span heuristic, reply no-op, refused reply
+  counts, passive push shortens, cap not restarted, resolve_pin left out,
+  next_check, cap off, J3 check off, prefix ignored, revoke keeps, drop
+  takes every agent, no broadcast).
+- Gate: 51 named files isolated (every test that reads MCP-SETUP, SKILL.md,
+  mcp_channel or channel_listeners, plus round20 fence, unprivileged
+  marker, ci shard, cli_api, agent_questions): 1,721 passed, 9 skipped.
+  `person_gate.py` untouched.

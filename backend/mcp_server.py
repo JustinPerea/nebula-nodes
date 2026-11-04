@@ -1040,8 +1040,9 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     one per session of yours ({listenerId, state, reason, projectId, since,
     seenAt}); none means Nebula doesn't count you as connected.
     `thisServer.registerError`: why Nebula refused this listener (only an
-    agent token from Settings › Connect your agent registers one; `nebula mcp
-    connect claude-code --channel` makes and saves it). Nebula can't
+    agent token from Settings › Connect your agent registers one, never an
+    in-app agent's; `nebula mcp connect claude-code --channel` reads the
+    token file Settings saved and points the listener at it). Nebula can't
     tell whether Claude Code delivers a push, so "listening" means Nebula
     pushes, not that the session took it."""
     if _channel is None:

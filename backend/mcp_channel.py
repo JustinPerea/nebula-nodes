@@ -26,14 +26,19 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   no ``min_gap``, no hourly limit of the passive wakes, no wait for the agent
   to be quiet and no wait for a gated window: it ends that window, so the
   turn it starts acts like any turn and is never refused for pacing. No
-  gated push goes until that turn ends by the window's heuristic (below:
-  ``window_min`` after the push, ``window_idle`` after its last Nebula
-  call, never while a call runs), so edits the person makes while Claude
-  reads the request ride a later push instead of gating its turn (review 1
-  of #225, HIGH-1). The same holds after an ungated passive push (an
-  accept, its own run's end). It is a guess: past the first minute, a pause
-  of more than ``window_idle`` with no Nebula call reads as the turn's end,
-  and a gated push may then gate the rest of it. Their
+  gated push goes until that session replies to the person (J4, Justin
+  2026-11-04: its own reply_to_person, or resolve_pin for a pin, that Nebula
+  saved), or ``DELIBERATE_SPAN_CAP`` (10 minutes) after the push if no reply
+  comes, however long the turn goes without a Nebula call. So edits the
+  person makes while Claude works on the request ride a later push instead
+  of gating its turn (review 1 of #225, HIGH-1). Another agent's reply, or
+  a reply this process doesn't make (``nebula reply`` from a shell: its own
+  events never reach its feed), doesn't end it; the cap does. After the
+  reply the next gated push gates as before (once the agent has been quiet
+  for ``agent_quiet``). An ungated passive push (an accept, its own run's
+  end) starts a span too, ended by the window's heuristic (below:
+  ``window_min`` after the push, ``window_idle`` after its last Nebula call,
+  never while a call runs), and never shortens a deliberate one. Their
   only limit is a runaway cap of ``deliberate_per_hour`` (200) in a rolling
   hour, counted on its own; past it they wait, never dropped. Everything
   passive that waits rides along in that push (edits, decisions, run ends),
@@ -81,7 +86,8 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   push ever closes or shortens a gated window: an ungated passive push (an
   accept, its own run's end) goes only once the window has ended on its own
   terms. Every ungated push starts a turn of its own that no gated push may
-  gate (``_turn_at``, ended by the same heuristic). Only a deliberate push ends one, at once: the person asked for
+  gate (``_turn_at``: a deliberate push's ends at its reply or the cap, a
+  passive one's by the same heuristic). Only a deliberate push ends one, at once: the person asked for
   something, and a request they make is never refused for pacing. The cost,
   accepted: Claude Code queues pushes that arrive while Claude is busy for
   its next turn, so a change turn still running when one goes is freed to
@@ -172,6 +178,14 @@ ANSWERED_KIND = "question.answered"
 # What each deliberate push is called (its meta wake), most specific first.
 DELIBERATE_WAKES = ("message", "answer", "pin")
 MAX_MESSAGE = 2000
+# J4 (Justin, 2026-11-04): the ungated span a deliberate push opens lasts
+# until this session's own reply (reply_to_person, or resolve_pin for a pin),
+# at most this long after the push (10 minutes), whatever the turn does
+# between Nebula calls.
+DELIBERATE_SPAN_CAP = 600.0
+# What ends that span: this session's reply to the person (the Message box)
+# or its answer on a pin (a pinReply row in the box).
+REPLY_TOOLS = frozenset({"reply_to_person", "resolve_pin"})
 
 MAX_LISTED = 20       # events written out per push; the rest are a count
 MAX_PENDING = 100     # pins, and changes, kept while waiting (each on its own); past this only a count
@@ -210,6 +224,7 @@ class Limits:
     turn_wrap: float = 300.0   # Q41 a "5 minutes per turn": calls after this are told to wrap up
     person_run_max: float = 300.0  # Q50 a: a run the person starts goes at its end, or after this
     deliberate_per_hour: int = 200  # deliberate sends' runaway cap (GM r50), counted apart from per_hour
+    deliberate_span: float = DELIBERATE_SPAN_CAP  # J4: a deliberate push's span ends on its reply, or after this
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Limits":
@@ -316,6 +331,15 @@ def _remember(kept: dict[str, Any], key: str, value: Any = None) -> None:
     kept[key] = value
     while len(kept) > MAX_OWN:
         del kept[next(iter(kept))]
+
+
+def _reply_went(name: str, result: Any) -> bool:
+    """Whether a REPLY_TOOLS call reached the person: Nebula saved the reply
+    (reply_to_person answers {reply}) or the pin's answer (resolve_pin
+    answers {pin}). A refused or failed call (None, an error) doesn't."""
+    if not isinstance(result, Mapping):
+        return False
+    return isinstance(result.get("reply" if name == "reply_to_person" else "pin"), Mapping)
 
 
 def _run_status(result: Any) -> dict[str, Any] | None:
@@ -428,6 +452,11 @@ class ChannelState:
         # push goes, so the person's edits made while Claude reads a message
         # can't gate the turn the message started.
         self._turn_at: float | None = None
+        # J4 (Justin, 2026-11-04): when the deliberate push whose span is open
+        # went. Set, that span ends only on this session's own reply
+        # (REPLY_TOOLS) or DELIBERATE_SPAN_CAP after it, never by the window's
+        # 20 s idle guess; None, the span (if any) is a passive push's.
+        self._reply_due_at: float | None = None
 
     # -- the journal ---------------------------------------------------------------
     def _keep(self, bucket: list[dict], item: dict) -> bool:
@@ -784,16 +813,37 @@ class ChannelState:
         push, ends a window: no passive push ever closes or shortens one (review 1)."""
         return self._turn_end(self._window_at)
 
+    def _ungated_end(self) -> float | None:
+        """When the ungated span under way ends (None: none; inf: not known
+        yet). A deliberate push's (J4): at its reply, which tool_finished
+        sees, else DELIBERATE_SPAN_CAP after the push, however long the turn
+        goes between Nebula calls. A passive push's (an accept, its own run's
+        end): the window's heuristic (_turn_end)."""
+        if self._turn_at is None:
+            return None
+        if self._reply_due_at is not None:
+            return self._reply_due_at + self.limits.deliberate_span
+        return self._turn_end(self._turn_at)
+
     def _ungated_turn(self, now: float) -> bool:
         """An ungated push's turn still seems under way: no gated push may go
         (it would gate that turn: review 1 of #225, HIGH-1)."""
-        end = self._turn_end(self._turn_at)
+        end = self._ungated_end()
         if end is None:
             return False
         if now > end:
             self._turn_at = None
+            self._reply_due_at = None
             return False
         return True
+
+    def _replied(self) -> None:
+        """This session replied to the person (J4): the deliberate span ends,
+        so the next gated push gates as before (once the agent has been quiet
+        for ``agent_quiet``, like any gated push)."""
+        if self._reply_due_at is not None:
+            self._turn_at = None
+            self._reply_due_at = None
 
     def _window_open(self, now: float) -> bool:
         end = self._window_end()
@@ -831,6 +881,8 @@ class ChannelState:
         """After a tool ran (result None when it raised); also ends its in-flight mark."""
         self.last_call = now
         self.in_flight = max(0, self.in_flight - 1)
+        if name in REPLY_TOOLS and _reply_went(name, result):
+            self._replied()
         if name == "get_proposal":
             key = str(args.get("proposal_id") or "")
             self._release(self._waiting_proposals, key)
@@ -1032,7 +1084,7 @@ class ChannelState:
         free_at = now
         # A gated push waits for the ungated turn under way to end, too.
         if self._ungated_turn(now):
-            end = self._turn_end(self._turn_at)
+            end = self._ungated_end()
             turn_free = end + 0.001 if end is not None and math.isfinite(end) else now + self.limits.window_idle
             idle_at = max(idle_at, turn_free)
         if self._window_open(now):
@@ -1132,7 +1184,10 @@ class ChannelState:
         else:
             # An ungated passive push leaves no window to close (it only goes
             # when none is open), but it starts a turn no gated push may gate.
-            self._turn_at = at
+            # One that goes inside a deliberate span leaves that span as it
+            # is: only the reply or the cap ends it (J4).
+            if self._reply_due_at is None:
+                self._turn_at = at
         content = self._render(wake, [], 0, [], [], proposals, runs, *edits, held=held, now=now, gate=gate,
                                nth=len(self._history))
         return self._push(wake, content, count, held, gate)
@@ -1175,8 +1230,10 @@ class ChannelState:
         # The person asked for something: a gated window ends here.
         self._window_at = None
         self._wrap_noted = False
-        # ...and starts a turn no gated push may gate until it ends (HIGH-1).
+        # ...and starts a turn no gated push may gate until this session
+        # replies, or DELIBERATE_SPAN_CAP after the push (HIGH-1, J4).
         self._turn_at = at
+        self._reply_due_at = at
         content = self._render(wake, messages, message_overflow, answers, pins, proposals, runs, *edits,
                                held=held, now=now, gate=False, nth=0, pin_overflow=pin_overflow,
                                deliberate_nth=len(self._deliberate_history))
