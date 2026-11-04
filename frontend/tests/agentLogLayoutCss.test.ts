@@ -20,9 +20,12 @@ describe('the right column keeps clear of the Agent log', () => {
     expect(body).toMatch(/bottom:[^;]*var\(--agent-log-h\)/);
   });
 
-  it('keeps the proposal bar out of the log\'s column', () => {
-    const body = rule('body.agent-log-reserved .proposal-bar');
-    expect(body).toMatch(/--col-right-w/);
-    expect(body).toMatch(/translate:/);
+  // GM - Design, PR #216 r1: only one clearance ever applies. The notice
+  // region already ends left of a docked log (--agent-log-clearance), so the
+  // card's own room rule and its left shift here counted the log twice and
+  // pushed the card off screen below ~950 px. tests/proposalCardPlace.test.tsx
+  // pins what replaced it.
+  it('leaves the proposal card to the notice region\'s one clearance', () => {
+    expect(layouts.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\.proposal-bar[^{]*\{/);
   });
 });
