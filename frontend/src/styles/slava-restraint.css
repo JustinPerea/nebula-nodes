@@ -669,7 +669,44 @@ body.app-slava-restraint .node-inspector-popover__body {
 }
 
 body.app-slava-restraint .node-inspector-popover__foot {
+  position: relative;
   padding: 0 var(--sr-space-3) var(--sr-space-3);
+}
+
+/* GM r87 (#226): while the body can scroll further down, a 1 px hairline in
+   the border token sits on the foot row's top edge, gone at the end. The
+   12 px fade alone shows nothing when the cut falls between fields. It comes
+   on the pop spring and goes on the soft one (lib/springs.ts, set on the foot
+   by NodeInspectorPopover.tsx). When it shows is decided there and written as
+   the foot's data-more-below: off through the open (GM r92: every image
+   complete and 2 stable frames, 300 ms at most), and held at its state while
+   a height spring runs (GM r98: on stays on, off stays off), then read again
+   when the spring rests. A held state, never a hide, so a line that's on
+   doesn't blink when content grows under a scrolled panel. Pinned or not:
+   wherever a body scrolls, it's the same cue (r92 Q2). */
+body.app-slava-restraint .node-inspector-popover__foot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--sr-edge);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+}
+
+body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before {
+  opacity: 1;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .node-inspector-popover__foot::before,
+  body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before {
+    transition: none;
+  }
 }
 
 body.app-slava-restraint .node-inspector-popover__pin--active {

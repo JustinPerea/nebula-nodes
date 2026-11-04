@@ -97,4 +97,45 @@ describe("the Inspector's file control", () => {
     const image = show(inputNode('image-input', { _previewUrl: '/api/outputs/chat-uploads/abc.png' }));
     expect(image.container.querySelector('.inspector__file-preview')).not.toBeNull();
   });
+
+  // #226 round 3 (GM r82): the stored image's size gives the preview its
+  // aspect ratio before it decodes, so the floating Inspector measures its
+  // whole body on the first frame it opens.
+  it('keeps the size /api/uploads reports with the preview, and a file without one drops the last', async () => {
+    answer(() => new Response(JSON.stringify({ filePath: '/out/chat-uploads/abc.png', url: '/api/outputs/chat-uploads/abc.png',
+      previewSize: { width: 640, height: 360 } }), { status: 200 }));
+    const { container } = show(inputNode('style-reference'));
+    await choose(container, new File([new Uint8Array(8)], 'ref.png', { type: 'image/png' }));
+    await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params._previewSize).toEqual({ width: 640, height: 360 }));
+    const preview = container.querySelector<HTMLImageElement>('.inspector__file-preview')!;
+    expect(preview.getAttribute('width')).toBe('640');
+    expect(preview.getAttribute('height')).toBe('360');
+    // Another file, its size unknown (an animated GIF, say): no stale size kept.
+    answer(() => new Response(JSON.stringify({ filePath: '/out/chat-uploads/def.gif', url: '/api/outputs/chat-uploads/def.gif' }),
+      { status: 200 }));
+    await choose(container, new File([new Uint8Array(8)], 'loop.gif', { type: 'image/gif' }));
+    await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params.filePath).toBe('/out/chat-uploads/def.gif'));
+    expect('_previewSize' in useGraphStore.getState().nodes[0].data.params).toBe(false);
+    expect(container.querySelector('.inspector__file-preview')!.hasAttribute('width')).toBe(false);
+  });
+
+  it('draws a preview with no size attributes for a missing or broken stored size', () => {
+    for (const broken of [undefined, null, 'wide', { width: 640 }, { width: 0, height: 10 }, { width: -1, height: 10 },
+      { width: Number.NaN, height: 10 }, { width: 1e9, height: 10 }]) {
+      const view = show(inputNode('image-input', { _previewUrl: '/api/outputs/chat-uploads/abc.png', _previewSize: broken }));
+      const preview = view.container.querySelector('.inspector__file-preview')!;
+      expect(preview.hasAttribute('width'), JSON.stringify(broken)).toBe(false);
+      expect(preview.hasAttribute('height'), JSON.stringify(broken)).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('keeps the preview at the panel\'s width with its own ratio (height: auto)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(__dirname, '../src/styles/panels.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, selector]) => selector.trim() === '.inspector__file-preview');
+    expect(rule?.[2]).toMatch(/width:\s*100%/);
+    expect(rule?.[2]).toMatch(/height:\s*auto/);
+  });
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
+import { houseDots } from '../helpers/houseDots';
 import { useUIStore } from '../../src/store/uiStore';
 
 /**
@@ -244,5 +245,194 @@ describe('the pinned Inspector', () => {
     bottomBar(1280, 640);
     advanceLayout();
     expectWholeAndClear();
+  });
+});
+
+/**
+ * GM r111: a port is a drag source and can't sit under the panel. The panel
+ * sits 8 px clear of the outer edge of the facing port's dot: right of the
+ * node, its output ports; left of it, its input ports. With no port on the
+ * facing side the gap stays 10 px from the card. The dot is measured as it is
+ * on screen, so the rule holds at every zoom. GM r114: the panel also clears
+ * the port's 20 px hit target and hover circle by 2 px, whichever stands
+ * farthest.
+ *
+ * The house skin's port (slava-restraint.css): a 20 px handle (its layout
+ * width), centred 14 px out from the card's edge, its 9 px dot drawn 4 px
+ * toward the card; so at zoom z the dot's outer edge is 14.5 z px out.
+ */
+describe('the gap to the facing port (GM r111)', () => {
+  let flowNode: HTMLElement | null = null;
+
+  afterEach(() => {
+    flowNode?.remove();
+    flowNode = null;
+    vi.restoreAllMocks();
+  });
+
+  /** A node at a zoom, its card at `card` on screen, with ports on the sides named (one or more per side). */
+  function openNode(card: DOMRect, ports: { left?: number[]; right?: number[] }, zoom = 1, width = 1440, height = 900) {
+    viewport(width, height);
+    bottomBar(width, height);
+    houseDots();
+    anchorRect = card;
+    flowNode = document.createElement('div');
+    flowNode.className = 'react-flow__node';
+    flowNode.getBoundingClientRect = () => anchorRect;
+    const anchor = document.createElement('div');
+    anchor.dataset.nodeInspectorAnchor = 'n1';
+    anchor.getBoundingClientRect = () => anchorRect;
+    flowNode.append(anchor);
+    for (const side of ['left', 'right'] as const) {
+      // Each port's centre, out from the card's edge, in layout px (14 by default; more for a port set further out).
+      for (const out of ports[side] ?? []) {
+        const handle = document.createElement('div');
+        handle.className = `react-flow__handle react-flow__handle-${side}`;
+        Object.defineProperty(handle, 'offsetWidth', { value: 20 });
+        handle.getBoundingClientRect = () => {
+          const centre = side === 'right' ? anchorRect.right + out * zoom : anchorRect.left - out * zoom;
+          return rect(centre - 10 * zoom, anchorRect.top + 20 * zoom, 20 * zoom, 20 * zoom);
+        };
+        flowNode.append(handle);
+      }
+    }
+    document.body.append(flowNode);
+    render(<NodeInspectorPopover />);
+    advanceLayout();
+  }
+
+  /**
+   * GM r114: from a port's centre, the panel stands at the farthest of the
+   * dot's outer edge + 8 (the 9 px dot drawn 4 px toward the card), the hit
+   * target's edge + 2 and the hover circle's edge + 2 (both 20 px). Past
+   * about 100 % the target governs.
+   */
+  const clear = (zoom: number) => Math.max(0.5 * zoom + 8, 10 * zoom + 2);
+
+  for (const zoom of [0.5, 1, 2]) {
+    it(`right, with an output port, at zoom ${zoom}: clear of its dot, hit target and hover circle`, () => {
+      openNode(rect(400, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
+      expect(panel()).toHaveAttribute('data-placement', 'right');
+      const centre = 400 + 180 * zoom + 14 * zoom;
+      expect(bounds().left).toBeCloseTo(centre + clear(zoom), 5);
+    });
+
+    it(`left, with an input port, at zoom ${zoom}: clear of its dot, hit target and hover circle`, () => {
+      // Near the right edge, so it opens on the left.
+      const cardLeft = 1440 - 16 - 180 * zoom - 60;
+      openNode(rect(cardLeft, 300, 180 * zoom, 120 * zoom), { left: [14], right: [14] }, zoom);
+      expect(panel()).toHaveAttribute('data-placement', 'left');
+      const centre = cardLeft - 14 * zoom;
+      expect(bounds().right).toBeCloseTo(centre - clear(zoom), 5);
+    });
+  }
+
+  /**
+   * GM r114 (review 5 MEDIUM-1): at 100, 200 and 400 % the panel never
+   * overlaps the facing port's handle box (its hit target) or its hover
+   * circle, which reach 10 x zoom from the centre; measured from the real
+   * boxes the page gives, not from the rule's constants.
+   */
+  for (const zoom of [1, 2, 4]) {
+    for (const side of ['right', 'left'] as const) {
+      it(`${side} at ${zoom * 100} %: the panel overlaps neither the handle's box nor its hover circle`, () => {
+        const cardWidth = 180 * zoom;
+        const cardLeft = side === 'right' ? 100 : 3200 - 16 - cardWidth - 60;
+        openNode(rect(cardLeft, 300, cardWidth, 120 * zoom), { left: [14], right: [14] }, zoom, 3200, 1800);
+        expect(panel()).toHaveAttribute('data-placement', side);
+        const handle = flowNode!.querySelector<HTMLElement>(`.react-flow__handle-${side}`)!;
+        const box = handle.getBoundingClientRect();
+        // The hover circle: 20 layout px, centred on the handle (border-box).
+        const half = 10 * zoom;
+        const centre = box.left + box.width / 2;
+        const circle = { left: centre - half, right: centre + half };
+        if (side === 'right') {
+          expect(bounds().left).toBeGreaterThanOrEqual(box.right + 2 - 1e-6);
+          expect(bounds().left).toBeGreaterThanOrEqual(circle.right + 2 - 1e-6);
+        } else {
+          expect(bounds().right).toBeLessThanOrEqual(box.left - 2 + 1e-6);
+          expect(bounds().right).toBeLessThanOrEqual(circle.left - 2 + 1e-6);
+        }
+      });
+    }
+  }
+
+  it('right, with no output port: 10 px from the card (an input port on the far side changes nothing)', () => {
+    openNode(rect(400, 300, 180, 120), { left: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'right');
+    expect(bounds().left).toBe(400 + 180 + 10);
+  });
+
+  it('left, with no input port: 10 px from the card (an output port on the far side changes nothing)', () => {
+    openNode(rect(1200, 300, 180, 120), { right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBe(1200 - 10);
+  });
+
+  it('several ports on the facing side: clear of the outermost one', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14, 30, 20] });
+    expect(bounds().left).toBeCloseTo(400 + 180 + 30 + clear(1), 5);
+  });
+
+  it('a port hidden (no box) does not count', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    const hidden = document.createElement('div');
+    hidden.className = 'react-flow__handle react-flow__handle-right';
+    // Collapsed (no box), but further out than the shown port: it must not count.
+    hidden.getBoundingClientRect = () => rect(900, 320, 0, 0);
+    flowNode!.append(hidden);
+    advanceLayout();
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14 + clear(1), 5);
+  });
+
+  it('a port with no drawn dot (another skin) counts as its whole box', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    vi.restoreAllMocks();
+    advanceLayout();
+    // The handle's box: 584-604.
+    expect(bounds().left).toBeCloseTo(400 + 180 + 24 + 8, 5);
+  });
+
+  it('never nearer the card than 10 px: a dot inside that gap (far zoomed out) leaves it at 10', () => {
+    openNode(rect(400, 300, 18, 12), { right: [14] }, 0.1);
+    expect(bounds().left).toBeCloseTo(400 + 18 + 10, 5);
+  });
+
+  it('decides the side with the port counted: room at 10 px from the card but not past the port opens it on the left', () => {
+    // Right of the card: 1440 - 16 - (card right + 10) = 230 would fit 228;
+    // past the port (card right + 26) it is 214, so it opens on the left.
+    const cardRight = 1440 - 16 - 10 - 230;
+    openNode(rect(cardRight - 180, 300, 180, 120), { left: [14], right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBeCloseTo(cardRight - 180 - 14 - clear(1), 5);
+  });
+
+  it('a window resize re-places it by the same rule', () => {
+    openNode(rect(400, 300, 180, 120), { left: [14], right: [14] });
+    expect(bounds().left).toBeCloseTo(400 + 180 + 14 + clear(1), 5);
+    // Too narrow for the right now: it re-places on the left, clear of the input's dot.
+    viewport(800, 900);
+    bottomBar(800, 900);
+    advanceLayout();
+    expect(panel()).toHaveAttribute('data-placement', 'left');
+    expect(bounds().right).toBeCloseTo(400 - 14 - clear(1), 5);
+  });
+
+  it('a zoom re-places it at once, by the dot at the new zoom', () => {
+    openNode(rect(400, 300, 180, 120), { right: [14] });
+    let zoom = 1;
+    const handle = flowNode!.querySelector<HTMLElement>('.react-flow__handle-right')!;
+    handle.getBoundingClientRect = () => rect(anchorRect.right + 14 * zoom - 10 * zoom, 320, 20 * zoom, 20 * zoom);
+    zoom = 2;
+    anchorRect = rect(400, 300, 360, 240);
+    advanceLayout();
+    expect(bounds().left).toBeCloseTo(760 + 28 + clear(2), 5);
+  });
+
+  it('the pinned Inspector stays docked by the rail, whatever ports the node has', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    openNode(rect(400, 300, 180, 120), { left: [14], right: [14] });
+    expect(panel()).toHaveAttribute('data-placement', 'pinned-left');
+    expect(bounds().left).toBe(16);
   });
 });
