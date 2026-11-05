@@ -11,7 +11,7 @@ once in ``services/moodboard_edits`` (GM - Design, PR #233): a board or a
 project is its curly name ("Added image 3 to “Dusk”", never "board Dusk"), an
 image is "image 3" in a sentence ("#3" is for badges and chips), clauses join
 with "and", a field is a quoted label ("Changed “Direction” on “Dusk” and
-turned off “Send notes”"), and an undo is "Undid a change to “Dusk”". A say
+turned off “Send notes to generators”"), and an undo is "Undid a change to “Dusk”". A say
 has no period. The journal's summary is the same phrase, lower-case, since
 the actor's name leads it.
 

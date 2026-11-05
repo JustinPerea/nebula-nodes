@@ -317,12 +317,16 @@ def _words_rows() -> list[tuple[str, dict, dict, str]]:
     aside["images"][0]["excluded"] = True
     return [
         ("add one", light, {**light, "images": _imgs(3)}, f"Added image 3 to {LQ}Desert light{RQ}"),
-        ("add several", light, {**light, "images": _imgs(5)}, f"Added 3 images to {LQ}Desert light{RQ}"),
+        ("add two", light, {**light, "images": _imgs(4)}, f"Added images 3 and 4 to {LQ}Desert light{RQ}"),
+        ("add three", light, {**light, "images": _imgs(5)}, f"Added images 3, 4 and 5 to {LQ}Desert light{RQ}"),
+        ("add four", light, {**light, "images": _imgs(6)}, f"Added 4 images to {LQ}Desert light{RQ}"),
         ("remove", {**dusk, "images": _imgs(3)}, {**dusk, "images": _imgs(2)}, f"Removed image 3 from {LQ}Dusk{RQ}"),
+        ("remove two", {**dusk, "images": _imgs(4)}, {**dusk, "images": _imgs(2)}, f"Removed images 3 and 4 from {LQ}Dusk{RQ}"),
+        ("remove four", {**dusk, "images": _imgs(6)}, {**dusk, "images": _imgs(2)}, f"Removed 4 images from {LQ}Dusk{RQ}"),
         ("set aside", dusk, aside, f"Set aside image 1 on {LQ}Dusk{RQ}"),
         ("fields and send notes", {**dusk, "sendNotes": True},
          {**dusk, "sendNotes": False, "direction": "warm dusk"},
-         f"Changed {LQ}Direction{RQ} on {LQ}Dusk{RQ} and turned off {LQ}Send notes{RQ}"),
+         f"Changed {LQ}Direction{RQ} on {LQ}Dusk{RQ} and turned off {LQ}Send notes to generators{RQ}"),
         ("undo", dusk, aside, f"Undid a change to {LQ}Dusk{RQ}"),
     ]
 
@@ -342,7 +346,7 @@ def test_every_board_change_line_in_gms_words_for_each_surface(label, before, af
     # fields, never values, so Send notes is "changed", where the say adds which way it went.
     assert summaries and all(s[0].islower() and not s.endswith(".") and ";" not in s for s in summaries)
     assert all("#" not in s and "board " not in s for s in summaries)
-    expected = (f"changed {LQ}Direction{RQ} and {LQ}Send notes{RQ} on {LQ}Dusk{RQ}" if label == "fields and send notes"
+    expected = (f"changed {LQ}Direction{RQ} and {LQ}Send notes to generators{RQ} on {LQ}Dusk{RQ}" if label == "fields and send notes"
                 else line[0].lower() + line[1:])
     assert summaries == [expected]
 
@@ -377,12 +381,12 @@ def test_the_journal_names_images_and_boards_like_the_say(api, monkeypatch):
     _edit(client, board["id"], [{"op": "setAside", "image": first["id"], "value": True}], AGENT)
     _edit(client, board["id"], added["undo"]["ops"], AGENT)
     says = _said(sent)
-    assert says == [f"Made {LQ}Dusk dunes{RQ} with 2 images", f"Added 2 images to {LQ}Dusk dunes{RQ}",
+    assert says == [f"Made {LQ}Dusk dunes{RQ} with 2 images", f"Added images 3 and 4 to {LQ}Dusk dunes{RQ}",
                     f"Set aside image 1 on {LQ}Dusk dunes{RQ}", f"Undid a change to {LQ}Dusk dunes{RQ}"]
     events = fresh.read(after=0, kinds={"board"}, limit=100)["events"]
     assert [e["summary"] for e in events] == [
-        f"added 2 images to {LQ}Dusk dunes{RQ}", f"set aside image 1 on {LQ}Dusk dunes{RQ}",
-        f"removed 2 images from {LQ}Dusk dunes{RQ}"]
+        f"added images 3 and 4 to {LQ}Dusk dunes{RQ}", f"set aside image 1 on {LQ}Dusk dunes{RQ}",
+        f"removed images 3 and 4 from {LQ}Dusk dunes{RQ}"]
     # No say carries a period, and no board line sends a separate `log` (the Agent log shows the say).
     assert not any(s.endswith(".") for s in says)
     assert not any("log" in e for e in sent if e.get("type") == "agentPresence")
@@ -432,4 +436,4 @@ def test_the_words_modules_use_curly_quotes_only():
         return found
 
     assert scan(actions, None) + scan(edits, words_in_edits) == []
-    assert "\u201c" in edits.board_where({"name": "x"}) and edits.SENTENCE_LABELS["sendNotes"] == "Send notes"
+    assert "\u201c" in edits.board_where({"name": "x"}) and edits.SENTENCE_LABELS["sendNotes"] == "Send notes to generators"

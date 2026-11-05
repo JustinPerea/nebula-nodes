@@ -248,7 +248,7 @@ def test_the_put_route_called_in_process_as_the_person_journals_too(root, journa
     events = _board_events(journal)
     assert [(event["kind"], event["data"]["fields"], event["actor"]["kind"]) for event in events] == [
         ("board.fields", ["sendNotes"], "person")]
-    assert events[0]["summary"] == "changed “Send notes” on “Placed”"
+    assert events[0]["summary"] == "changed “Send notes to generators” on “Placed”"
 
 
 # -- waiters wake at once ------------------------------------------------------------

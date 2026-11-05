@@ -1306,6 +1306,10 @@ def image_words(numbers: list[int], limit: int = 6) -> str:
     return "images " + listed_words(shown)
 
 
+# Added or removed images are named up to this many, then counted.
+MAX_NAMED_IMAGES = 3
+
+
 def image_count_words(n: int) -> str:
     """"1 image", "3 images"."""
     return f"{n} image{'' if n == 1 else 's'}"
@@ -1340,8 +1344,10 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         return image_words([n for n in (number(i) for i in ids) if n])
 
     if kind in ("added", "removed"):
-        # "added image 3 to “Dusk”", "added 3 images to “Dusk”".
-        what = image_words(shown) if len(shown) == 1 else image_count_words(len(shown) or len(refs))
+        # The names rule (GM, slice 3b): up to 3 are listed, "added images 4, 5 and
+        # 6 to “Dusk”"; from 4 a count, "added 4 images to “Dusk”".
+        what = (image_words(shown) if 1 <= len(shown) <= MAX_NAMED_IMAGES
+                else image_count_words(len(shown) or len(refs)))
         summary = f"added {what} to {where}" if kind == "added" else f"removed {what} from {where}"
     elif kind == "frame":
         summary = f"changed the frames on {where}"
@@ -1373,11 +1379,12 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
 
 # A board field as a sentence quotes it (Studio's own control labels, curly):
 # one list for the journal and the Agent log, so a field is never named two
-# ways. Send notes is short here: GM - Design's line is "turned off “Send notes”".
+# ways. Send notes is the Studio's full label (GM, slice 3b): "turned off
+# “Send notes to generators”".
 SENTENCE_LABELS = {
     "name": "Name", "notes": "Board notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
     "avoid": "Avoid", "pinnedColors": "Pinned colors", "clashMode": "Clash mode", "colorChoices": "Color choices",
-    "sendNotes": "Send notes", "coverImageId": "Cover", "briefOverride": "Your brief",
+    "sendNotes": "Send notes to generators", "coverImageId": "Cover", "briefOverride": "Your brief",
 }
 
 
