@@ -28,6 +28,7 @@ import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { InspectorFoot } from './InspectorFoot';
+import { FilePreviewFrame } from './FilePreviewFrame';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
@@ -42,11 +43,22 @@ import {
 } from './usePaletteExtracts';
 import { getProjectContext } from '../../lib/projectContext';
 import { applyPaletteFocus, notePaletteFocus, planPaletteFocus, scrollPaletteSlot, setPaletteScrollKey } from './paletteFocus';
-import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { previewSize, previewSizeAttributes } from '../../lib/previewSize';
+import { fileNameParam, fileParamName, middleTruncate, shownFileName, storedName } from '../../lib/fileName';
+import { rememberUploadName, useUploadNames } from '../../lib/uploadNames';
+import { fileDropNoteStale, watchFileDropNotes } from './fileDropNotes';
+import { NO_PREVIEW, uploadingLabel, uploadProjectChangedLine } from '../../lib/uploadNotice';
+import { previewSize } from '../../lib/previewSize';
 import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
+
+// The name of the file each upload into a file param is sending, by its
+// run key (usePaletteExtracts' paletteRunKey): the newest pick's, read by the
+// file row while "Uploading “name”…" shows (GM r46 on #222).
+const uploadNames = new Map<string, string>();
+// GM r48 bug 2 on #222: a dropped-upload line goes on any change to its
+// param's value, whatever made it (fileDropNotes.ts).
+watchFileDropNotes();
 
 type InspectorProps = {
   embedded?: boolean;
@@ -121,6 +133,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // this Inspector, one per project, graph and node (usePaletteExtracts;
   // GM r22 Q2 on #208). This re-renders on each change.
   usePaletteExtracts();
+  // A file param's name may come from Nebula's upload record (GM r48 Q1).
+  useUploadNames();
   // GM r22 Q1: a dropped palette's line is said once. The notes this
   // Inspector showed for its node go when it leaves the node.
   // By note key, the node it was shown on and the note itself (a newer
@@ -422,17 +436,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // the shown provider, at a value another provider would honor (rule H),
   // goes back to its default with one card note (lib/providerSwitch.ts
   // snapHidden): "Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2".
-  // Returns the params it wrote.
-  function writeEdit(params: Record<string, unknown>, key: string): Record<string, unknown> {
+  // Returns the params it wrote. `nodeId` is the node's own when the write
+  // lands after an await (writeParamsNow): this render may show another node.
+  function writeEdit(params: Record<string, unknown>, key: string, nodeId = activeNode.id): Record<string, unknown> {
     if (!definition || !switchable) {
-      updateNodeData(activeNode.id, { params });
+      updateNodeData(nodeId, { params });
       return params;
     }
     const routed = withWiredBlockers(definition, params, wiredKey ? wiredKey.split('\n') : []);
     const routeId = shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {});
     const snapped = snapHidden(definition, params, routeId, key);
-    updateNodeData(activeNode.id, { params: snapped.params });
-    if (snapped.notes.length) useProviderNoteStore.getState().show(activeNode.id, snapped.notes);
+    updateNodeData(nodeId, { params: snapped.params });
+    if (snapped.notes.length) useProviderNoteStore.getState().show(nodeId, snapped.notes);
     return snapped.params;
   }
 
@@ -449,16 +464,102 @@ export function Inspector({ embedded = false }: InspectorProps) {
     });
   }
 
-  // One param written over the node's params as they are now, not as this
+  // Params written over the node's params as they are now, not as this
   // render saw them: for a write that lands after an await (Extract's
-  // palette), so an edit made meanwhile, by the person or an agent, stays
-  // (review 7 M1). The node's own definition and provider snap, as any edit.
-  function writeParamNow(nodeId: string, key: string, value: unknown) {
+  // palette, a file upload), so an edit made meanwhile, by the person or an
+  // agent, stays (review 7 M1). `key` is the param the person edited; the
+  // node's own definition and provider snap run as on any edit. One store
+  // update, so one undo step. A node that is gone gets nothing.
+  function writeParamsNow(nodeId: string, key: string, patch: Record<string, unknown>, drop: readonly string[] = []) {
     const current = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.params;
     if (!current) return;
-    const next = { ...current, [key]: value };
+    const next = { ...current, ...patch };
+    for (const dropped of drop) delete next[dropped];
     const snap = definition ? snapParamDefaults(definition, current, next) : { params: next };
-    writeEdit(snap.params, key);
+    writeEdit(snap.params, key, nodeId);
+  }
+
+  function writeParamNow(nodeId: string, key: string, value: unknown) {
+    writeParamsNow(nodeId, key, { [key]: value });
+  }
+
+  // A file picked into a file param (#208 round 8c): the upload's answer
+  // lands over the node's params as they are then (writeParamsNow), so an
+  // edit made while it uploaded, the person's or an agent's, stays, and the
+  // provider snap runs as on any edit. It runs as Extract's palette does
+  // (usePaletteExtracts, the same one per project, graph and node: GM r46 on
+  // #222), so it shares its timing and its dropped line:
+  // - "Uploading “name”…" replaces the file's name once the upload has run
+  //   PALETTE_PENDING_DELAY_MS, and stays at least PALETTE_LINE_MIN_MS; the
+  //   control stays live, and the newest pick into the param wins (an older
+  //   one is dropped, its failure unsaid);
+  // - it lands only on the canvas it was picked on (the project and the
+  //   graph generation read now: only a project switch or a graph replace,
+  //   a load, clear or restore, moves either) and on the same node (its
+  //   definition unchanged). Dropped for a switch or a replace (or a follow
+  //   switch's lock), the line under the param says so, once, when the
+  //   person is back on the node; a node deleted or redefined hears nothing.
+  function uploadIntoParam(nodeId: string, paramKey: string, file: File) {
+    const project = getProjectContext()?.id ?? null;
+    const generation = canvasGeneration();
+    const picked = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+    const definitionId = picked?.data.definitionId;
+    if (!definitionId) return;
+    // The value the dropped line stands over: any change to it clears the
+    // line (GM r48 bug 2, fileDropNotes.ts).
+    const valueAtPick = picked?.data.params?.[paramKey] ?? '';
+    const runKey = paletteRunKey(project, generation, nodeId, paramKey);
+    const noteKey = paletteNoteKey(project, nodeId, paramKey);
+    setPaletteDropNote(noteKey, null);
+    uploadNames.set(runKey, file.name);
+    const formData = new FormData();
+    formData.append('file', file);
+    // GM, error-copy round 2: "Couldn't upload {filename}." then the
+    // reason, in the canvas notice (as a canvas drop says it).
+    const heading = `Couldn't upload ${quoted(shownFileName(file.name))}.`;
+    type Uploaded = { ok: true; filePath: string; url: string; previewSize?: unknown } | { ok: false; error: unknown };
+    startPaletteExtract<Uploaded>(
+      runKey,
+      () => apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
+        .then((r) => r.json() as Promise<{ filePath: string; url: string; previewSize?: unknown }>)
+        .then((data): Uploaded => ({ ok: true, filePath: data.filePath, url: data.url, previewSize: data.previewSize }),
+          (error: unknown): Uploaded => ({ ok: false, error })),
+      (uploaded) => {
+        uploadNames.delete(runKey);
+        if (!uploaded.ok) {
+          useGraphStore.getState().notify(failureMessage(uploaded.error, heading), 'error');
+          return '';
+        }
+        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+        const sameCanvas = (getProjectContext()?.id ?? null) === project && canvasGeneration() === generation;
+        const dropped = () => setPaletteDropNote(noteKey, { text: uploadProjectChangedLine(file.name), definitionId,
+          file: { project, nodeId, key: paramKey, value: valueAtPick } });
+        if (!sameCanvas || !node || node.data.definitionId !== definitionId) {
+          if (!sameCanvas) dropped();
+          return '';
+        }
+        // A follow switch is the project changing (as for the palette);
+        // offline, the store's own gate refuses the write and says so.
+        if (canvasLockNow().following) {
+          dropped();
+          return '';
+        }
+        // Its name is known here: no need to ask Nebula's record for it.
+        rememberUploadName(storedName(uploaded.filePath), file.name);
+        // filePath's card names the file (lib/fileName.ts), as
+        // /api/uploads keeps it for a node it creates.
+        const kept = paramKey === 'filePath' ? fileNameParam(uploaded.filePath, file.name) : null;
+        // The image's size as shown (backend services/preview_size.py), so the
+        // preview has its height before it decodes (#226, GM r82); a file
+        // without one drops the last file's (merged from main, 2026-11-05).
+        const size = previewSize(uploaded.previewSize);
+        writeParamsNow(nodeId, paramKey, {
+          [paramKey]: uploaded.filePath, _previewUrl: backendAssetUrlSync(uploaded.url),
+          ...(size ? { _previewSize: size } : {}), ...(kept ? { _fileName: kept } : {}),
+        }, size ? [] : ['_previewSize']);
+        return '';
+      },
+    );
   }
 
   // Extract from reference for one palette control: worked out in the
@@ -1008,10 +1109,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
     if (param.type === 'file') {
       const fileValue = String(value);
-      // The name it was uploaded with (the stored copy's name is a hash).
-      const loadedFilename = fileValue
-        ? (param.key === 'filePath' ? inputFileName(activeNodeData.params) : null) ?? fileValue.split(/[\\/]/).pop() ?? fileValue
-        : null;
+      // The name it was uploaded with, else the path's own name, never a
+      // bare content hash (GM r48 Q1: lib/fileName.ts fileParamName).
+      const loadedFilename = fileValue ? fileParamName(activeNodeData.params, param.key) : null;
       const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
       const isDocNode = activeNodeData.definitionId === 'document-input';
       const acceptAttr = isDocNode
@@ -1019,6 +1119,28 @@ export function Inspector({ embedded = false }: InspectorProps) {
         : isVideoNode
           ? 'video/*,audio/*'
           : 'image/*,video/*,audio/*';
+      // GM r46 on #222: an upload on its way says so in the row, in place of
+      // the name (uploadIntoParam); a dropped one says why under it, once.
+      const project = getProjectContext()?.id ?? null;
+      const uploadKey = paletteRunKey(project, canvasGeneration(), activeNode.id, param.key);
+      const uploadView = paletteExtractView(uploadKey);
+      const uploadingName = uploadView.shown ? uploadNames.get(uploadKey) ?? null : null;
+      const uploading = uploadingName ? shownFileName(uploadingName) : null;
+      // GM r48 bug 1: while an upload is in flight (from the pick, not only
+      // once its row shows), never "No preview": a preview the param holds
+      // stays until the new one lands, and with none nothing shows.
+      const inFlight = uploadView.working;
+      const noteKey = paletteNoteKey(project, activeNode.id, param.key);
+      const storedNote = paletteDropNote(noteKey);
+      // GM r48 bug 2: never over a value changed since the pick.
+      const dropNote = storedNote && storedNote.definitionId === activeNodeData.definitionId && !uploading
+        && !fileDropNoteStale(storedNote, activeNodeData.params[param.key])
+        ? storedNote.text : null;
+      if (dropNote && storedNote) shownPaletteNotes.current.set(noteKey, { node: activeNode.id, note: storedNote });
+      const rowId = `file-row-${activeNode.id}-${param.key}`;
+      const previewUrl = typeof activeNodeData.params._previewUrl === 'string' && activeNodeData.params._previewUrl
+        ? activeNodeData.params._previewUrl : null;
+      const showsPreview = !isDocNode && !isVideoNode;
       return (
         <div className="inspector__control-stack">
           <label className="inspector__file-button" {...lockedPicker(undefined, 'choose a file')}>
@@ -1029,54 +1151,41 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-hidden="true"
               focusable="false"
             />
-            <span>{loadedFilename ?? 'Choose File'}</span>
+            <span id={rowId} title={uploading ?? loadedFilename ?? undefined}>
+              {uploading ? uploadingLabel(uploading) : loadedFilename ? middleTruncate(loadedFilename) : 'Choose File'}
+            </span>
             <input
               type="file"
               accept={acceptAttr}
               disabled={readOnly} {...lock.mark}
+              // The row's words while uploading, read with the control (not
+              // announced on each pick: the house pattern, as Extract's).
+              aria-describedby={uploading ? rowId : undefined}
               className="inspector__file-input"
               onChange={(e) => {
                 // Review 7 N-2: refused here too (see Extract's onChange).
                 if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
+                // Emptied, so the same file chosen again (the dropped line
+                // asks for that) is a change too.
+                e.target.value = '';
                 if (!file) return;
-                const formData = new FormData();
-                formData.append('file', file);
-                // GM, error-copy round 2: "Couldn't upload {filename}." then the
-                // reason, in the canvas notice (as a canvas drop says it).
-                const heading = `Couldn't upload ${quoted(file.name)}.`;
-                apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
-                  .then((r) => r.json())
-                  .then((data: { filePath: string; url: string; previewSize?: unknown }) => {
-                    // filePath's card names the file (lib/fileName.ts), as
-                    // /api/uploads keeps it for a node it creates.
-                    const kept = param.key === 'filePath' ? fileNameParam(data.filePath, file.name) : null;
-                    // The image's size as shown (backend services/preview_size.py),
-                    // so the preview below has its height before it decodes; a
-                    // file without one drops the last file's.
-                    const rest = { ...activeNodeData.params };
-                    delete rest._previewSize;
-                    const size = previewSize(data.previewSize);
-                    updateNodeData(activeNode.id, {
-                      params: { ...rest, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url),
-                        ...(size ? { _previewSize: size } : {}), ...(kept ? { _fileName: kept } : {}) },
-                    });
-                  })
-                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error'));
+                uploadIntoParam(activeNode.id, param.key, file);
               }}
             />
           </label>
-          {!isDocNode && !isVideoNode && typeof activeNodeData.params._previewUrl === 'string' && (
-            <img
-              src={String(activeNodeData.params._previewUrl)}
-              alt="Preview"
-              className="inspector__file-preview"
-              // Its aspect ratio before it decodes (CSS keeps width 100%,
-              // height auto), so the floating Inspector measures its whole
-              // body on the first frame it opens (#226, GM r82).
-              {...previewSizeAttributes(activeNodeData.params._previewSize)}
-            />
+          {dropNote && (
+            // GM r46 Q1: neutral, no button. GM r67: directly under the row
+            // it describes, above the preview (under it, the sticky footer
+            // hid it).
+            <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
           )}
+          {showsPreview && fileValue && !previewUrl && !inFlight && (
+            // GM r46 Q2: neutral, nothing failed (the run reads the file).
+            <span className="inspector__file-no-preview">{NO_PREVIEW}</span>
+          )}
+          {showsPreview && <FilePreviewFrame src={previewUrl} size={activeNodeData.params._previewSize} />}
+          <span className="inspector__palette-status" role="status" aria-live="polite">{dropNote || ''}</span>
         </div>
       );
     }

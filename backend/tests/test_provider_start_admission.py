@@ -1319,14 +1319,14 @@ async def test_node_destructive_commit_holds_cross_backend_paid_fence(
     if operation == "update":
         original = main_module.cli_graph.update_params
 
-        def commit(target_id: str, params: dict[str, Any]) -> None:
+        def commit(target_id: str, params: dict[str, Any], **kwargs: Any) -> None:
             with pytest.raises(ProviderStartConflictError):
                 competing.claim(
                     run_id="other-backend",
                     claims=[(ENVIRONMENT, "old-world")],
                 )
             blocked.append(True)
-            original(target_id, params)
+            original(target_id, params, **kwargs)
 
         monkeypatch.setattr(main_module.cli_graph, "update_params", commit)
         request = Request(
