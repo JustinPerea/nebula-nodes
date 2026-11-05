@@ -82,7 +82,7 @@
   "lib/directRoute.ts": 9,
   "lib/editor/api.ts": 1,
   "lib/enhancePrompt.ts": 2,
-  "lib/errorCopy.ts": 15,
+  "lib/errorCopy.ts": 9,
   "lib/failureLines.ts": 4,
   "lib/graphFile.ts": 4,
   "lib/graphFileShared.ts": 2,

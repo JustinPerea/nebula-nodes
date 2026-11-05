@@ -29,6 +29,7 @@ const ALLOWED: Record<string, string> = {
   'lib/fileName.ts': 'the shared name function itself (and storedName, the upload record key)',
   'components/nodes/WorldEnvironmentViewer.tsx': "a download's file name from its URL, not a file param",
   'components/commons/CommonsSettings.tsx': "a linked Commons folder's path, not a file param",
+  'lib/commonsFormat.ts': "a linked Commons folder's path (its last part), not a file param",
   'lib/spatialValue.ts': "a URI's extension, never shown",
   'lib/meshFormat.ts': "a mesh URL's extension, never shown",
 };

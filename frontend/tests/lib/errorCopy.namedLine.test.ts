@@ -251,7 +251,10 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
  * ("couldn't", "board's"). Exempt by surface:
  * - tests (`*.test.*`, src/test/), which aren't shown;
  * - code: module specifiers, console calls (the console is for developers),
- *   and RegExp sources (a pattern may match either apostrophe), and comments.
+ *   and RegExp sources (a pattern may match either apostrophe), and comments;
+ * - `backendText("…")`: the backend's exact words, kept to match a response and never shown
+ *   (lib/backendText.ts; tests/lib/backendText.guard.test.ts allows it only as a key of errorCopy's
+ *   match tables and checks each against the backend).
  */
 const BASELINE_PATH = join(__dirname, 'straightApostrophes.baseline.json');
 const STRAIGHT_IN_WORD = /[A-Za-z]'[A-Za-z]/;
@@ -264,7 +267,7 @@ function straightApostrophes(text: string): string[] {
   const isCodeCall = (node: ts.Node) => {
     if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
     const callee = node.expression;
-    if (ts.isIdentifier(callee) && callee.text === 'RegExp') return true;
+    if (ts.isIdentifier(callee) && (callee.text === 'RegExp' || callee.text === 'backendText')) return true;
     if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) return true;
     return ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'console';
   };
@@ -319,6 +322,7 @@ describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
     // Code: a comment, a pattern, the console, a module, a quote that isn't inside a word.
     expect(straightApostrophes("// the board's line\n/* it's */ const a = 1;")).toHaveLength(0);
     expect(straightApostrophes("const a = new RegExp(\"couldn't\");")).toHaveLength(0);
+    expect(straightApostrophes("const a = backendText(\"couldn't\");")).toHaveLength(0);
     expect(straightApostrophes("console.warn(\"couldn't parse\");")).toHaveLength(0);
     expect(straightApostrophes("import x from \"./it's\";")).toHaveLength(0);
     expect(straightApostrophes("const a = \"[data-id='x']\";")).toHaveLength(0);

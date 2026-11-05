@@ -541,7 +541,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
       (uploaded) => {
         uploadNames.delete(runKey);
         if (!uploaded.ok) {
-          useGraphStore.getState().notify(failureMessage(uploaded.error, heading), 'error');
+          // The error rides along so a refusal only for not being the person clears on the promote.
+          useGraphStore.getState().notify(failureMessage(uploaded.error, heading), 'error', { error: uploaded.error });
           return '';
         }
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);

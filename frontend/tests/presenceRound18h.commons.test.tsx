@@ -26,7 +26,7 @@ const { notePersonPromoted, resetPersonSessionForTests } = await import('../src/
 const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 const { resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
-const { markCommonsOpening, peekCommonsOpening } = await import('../src/lib/commonsOpening');
+const { markCommonsOpening, peekCommonsOpening } = await import('../src/lib/commonsOff');
 
 // A cold first render can take seconds on a busy machine (presenceRound15.paneLoads does the same).
 vi.setConfig({ testTimeout: 30_000 });

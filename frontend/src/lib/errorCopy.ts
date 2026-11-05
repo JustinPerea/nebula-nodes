@@ -23,6 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { backendText } from './backendText';
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
@@ -152,20 +153,20 @@ const SERVER_BUSY_CLAUSE = 'the server is busy. Try again in a moment.';
  */
 export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
   // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
-  ["That reference isn't there anymore. Reload to get the latest references.",
+  [backendText("That reference isn't there anymore. Reload to get the latest references."),
     'it isn’t there anymore. Reload to get the latest references.'],
   // A labeling image's position that isn't in the set (backend evaluation.REFERENCE_GONE).
-  ["That reference isn't in this held-out set. Reload to get the latest references.",
+  [backendText("That reference isn't in this held-out set. Reload to get the latest references."),
     'it isn’t in this held-out set. Reload to get the latest references.'],
   // The references' search with filters the backend can't read (backend person_copy.BAD_FILTERS).
-  ["Those filters didn't work. Clear them and try again.", 'those filters didn’t work. Clear them and try again.'],
+  [backendText("Those filters didn't work. Clear them and try again."), 'those filters didn’t work. Clear them and try again.'],
   // GM r30: a reference's image or video the blob route can't find (backend routes/commons get_blob).
-  ['not found', 'the file isn’t there anymore.'],
+  [backendText('not found'), 'the file isn’t there anymore.'],
   // GM r30: the UI session's 401s (backend commons/actors.py resolve_actor).
-  ['invalid UI session token', 'this window’s session ended. Reload to sign in again.'],
-  ['no UI session: open Nebula from the desktop app or use the dev link', 'this window’s session ended. Reload to sign in again.'],
+  [backendText('invalid UI session token'), 'this window’s session ended. Reload to sign in again.'],
+  [backendText('no UI session: open Nebula from the desktop app or use the dev link'), 'this window’s session ended. Reload to sign in again.'],
   // GM r30: a route only the person's own window may call (backend routes/commons human_dep).
-  ['only the human UI session can do this', 'this window isn’t signed in as you. Reload to sign in again.'],
+  [backendText('only the human UI session can do this'), 'this window isn’t signed in as you. Reload to sign in again.'],
 ]);
 /** 401 or 403 with no reason (GM's line, kept by GM r30). */
 const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to sign in again.';
@@ -218,19 +219,19 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
  */
 export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
   // An agent grade was still running.
-  ['A grading attempt is still running. Close after it finishes.',
+  [backendText('A grading attempt is still running. Close after it finishes.'),
     'a grade is still running. Close the batch again when it finishes.'],
   // Sealed in another window meanwhile.
-  ["These labels are sealed as blind ground truth, so there's nothing to close.",
+  [backendText("These labels are sealed as blind ground truth, so there's nothing to close."),
     'its labels were already sealed as blind ground truth. Reload to see them.'],
   // The batch changed somewhere else (a stale revision).
-  ['Labels changed in another window. Reload before saving.',
+  [backendText('Labels changed in another window. Reload before saving.'),
     'it changed somewhere else. Reload, then close the batch again.'],
   // The batch was cleared meanwhile.
-  ["There's no held-out set yet. Prepare a folder first.",
+  [backendText("There's no held-out set yet. Prepare a folder first."),
     'its held-out set no longer exists. Reload to get the latest references.'],
   // The integrity check (backend evaluation.INTEGRITY).
-  ["The held-out set doesn't match what was saved, so Nebula stopped and changed nothing.",
+  [backendText("The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."),
     'the held-out set doesn’t match what was saved. Nothing was changed. Reload to check it again.'],
 ]);
 /** The 409 a grade still running gives (CLOSE_BECAUSE's first): the close waits for it. */

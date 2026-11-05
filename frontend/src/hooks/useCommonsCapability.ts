@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { isBackendOffline, subscribeBackendConnection, subscribeBackendRestart } from '../lib/backendConnection';
 import { fetchCommonsCapability } from '../lib/commonsCapability';
-import { markCommonsOpening } from '../lib/commonsOpening';
-import { noteCommonsAnswered, noteCommonsOff } from '../lib/commonsOff';
+import { markCommonsOpening, noteCommonsAnswered, noteCommonsOff } from '../lib/commonsOff';
 import { clearCommonsHash, commonsRouteWanted } from '../lib/commonsRoute';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';

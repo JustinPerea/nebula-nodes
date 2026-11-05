@@ -9,6 +9,7 @@ import { RequestFailedError, failureMessage } from './errorCopy';
 import { MESSAGE_MAX, mergeRows, sanitizeRow, type ThreadRow } from './personThread';
 import { usePersonThreadStore, type PendingSend, type SendFailureState } from '../store/personThreadStore';
 import { clearLineOnPromote } from './clearsOnPromote';
+import { personUnconfirmed } from './personSession';
 
 /** The heading a failed send is read under (apiRequest's, failureMessage's). */
 export const SEND_HEADING = "Couldn’t send your message.";
@@ -90,6 +91,9 @@ export function setDraft(text: string, selectedIds?: () => string[]): void {
 /** Sends the draft to a listener: one send in flight; a failure brings the
  * draft back (r50: kept across failures), unless another was begun. */
 export async function sendMessage(to: string): Promise<boolean> {
+  // Not connected as the person (or not yet known): nothing goes and the draft stays, as
+  // agentQuestionsStore.send does. The box locks its button the same way; this is the store's own guard.
+  if (personUnconfirmed()) return false;
   const state = usePersonThreadStore.getState();
   if (state.pending) return false;
   const text = state.draft.trim();
