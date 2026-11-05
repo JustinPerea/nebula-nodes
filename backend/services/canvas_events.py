@@ -147,6 +147,15 @@ EVENT_KINDS = frozenset({
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",
+    # The person sent a message from the canvas's Message box
+    # (services/person_thread.py): data {messageId, text, nodeIds, to:
+    # <listenerId>} while every agent reads the thread (Justin, 2026-11-03,
+    # as pins; person_thread.message_event_data is the one rule). Only the
+    # listener named in `to` wakes.
+    "person.message",
+    # An agent answered the person there (reply_to_person / `nebula reply`):
+    # data {replyId, text, nodeId}, under the same rule.
+    "thread.replied",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 
@@ -277,12 +286,28 @@ def param_changes(before: Mapping[str, Any] | None, after: Mapping[str, Any] | N
     return {"keys": keys[:MAX_LISTED_IDS], "values": values}
 
 
-def matches(event: Mapping[str, Any], kinds: set[str] | None, exclude_actor_id: str | None) -> bool:
+# A reply saved in the person's thread (PR C's person_thread.REPLY_EVENT).
+# A channel listener asks for its own (``ownReplies=1``): one under its token
+# by any route (the tool, `nebula reply` in its session's shell) is Claude's
+# reply and ends its deliberate span (Justin, 2026-11-04). Only this kind:
+# the own-event filter still hides the listener's own edits from it.
+OWN_REPLY_KIND = "thread.replied"
+# Its own answer on a pin, kept the same way but only from the caller's own
+# session (round 5, D1): `nebula pin resolve` in the listening session's
+# shell ends the span that pin's push opened, as resolve_pin does, and a
+# sibling session under the same token never does. The session is kept
+# beside the journal (``publish(session=...)``), never in an event.
+OWN_SESSION_KINDS = frozenset({"pin.resolved"})
+
+
+def matches(event: Mapping[str, Any], kinds: set[str] | None, exclude_actor_id: str | None,
+            keep_own: frozenset[str] = frozenset(), *, own_session_kept: bool = False) -> bool:
     kind = str(event.get("kind", ""))
     if kinds and kind not in kinds and kind.split(".", 1)[0] not in kinds:
         return False
     actor = event.get("actor") or {}
-    if exclude_actor_id is not None and actor.get("kind") == "agent" and actor.get("id") == exclude_actor_id:
+    if (exclude_actor_id is not None and actor.get("kind") == "agent" and actor.get("id") == exclude_actor_id
+            and kind not in keep_own and not own_session_kept):
         return False
     return True
 
@@ -309,6 +334,9 @@ class CanvasEventJournal:
         self.journal_id = secrets.token_hex(6)
         self._clock = clock
         self._events: deque[dict[str, Any]] = deque(maxlen=max_events)
+        # The session an event was made from, by seq, for OWN_SESSION_KINDS
+        # only: memory beside the journal, never part of an event.
+        self._sessions: dict[int, str] = {}
         self._seq = 0
         self._project_id: str | None = None
         self._project_known = False
@@ -381,12 +409,15 @@ class CanvasEventJournal:
         summary: str = "",
         edit: Mapping[str, Any] | None = None,
         project_id: str | None | object = ...,
+        session: str | None = None,
     ) -> dict[str, Any]:
         """``edit`` names the canvas edit behind the event (services/canvas_undo.py):
         ``{id}`` for an agent's edit, plus ``undoes`` or ``redoes`` (the edit id it
         reverts or applies again) and ``of`` (whose edit that was) for an undo.
         ``project_id``: the project the change was made in, when the caller
-        knows it (a pin's own project); otherwise the project open now."""
+        knows it (a pin's own project); otherwise the project open now.
+        ``session``: the agent session it came from, kept beside the journal
+        for OWN_SESSION_KINDS only (``read(own_session=...)``)."""
         if kind not in EVENT_KINDS:
             raise ValueError(f"unknown canvas event kind '{kind}'")
         tag = self._current_project() if project_id is ... else project_id
@@ -405,8 +436,19 @@ class CanvasEventJournal:
         if edit:
             event["edit"] = _cap_strings(dict(edit))
         self._events.append(event)
+        if session and kind in OWN_SESSION_KINDS:
+            self._sessions[self._seq] = session
+            if len(self._sessions) > len(self._events):
+                oldest = self.oldest
+                for seq in [seq for seq in self._sessions if seq < oldest]:
+                    del self._sessions[seq]
         self._wake()
         return event
+
+    def _own_session_kept(self, event: Mapping[str, Any], own_session: str | None) -> bool:
+        """An own event of OWN_SESSION_KINDS made from ``own_session``."""
+        return (own_session is not None and str(event.get("kind", "")) in OWN_SESSION_KINDS
+                and self._sessions.get(int(event.get("seq") or 0)) == own_session)
 
     def _wake(self) -> None:
         waiters, self._waiters = self._waiters, set()
@@ -432,6 +474,8 @@ class CanvasEventJournal:
         limit: int = DEFAULT_BATCH,
         kinds: set[str] | None = None,
         exclude_actor_id: str | None = None,
+        keep_own: frozenset[str] = frozenset(),
+        own_session: str | None = None,
     ) -> dict[str, Any]:
         limit = max(1, min(int(limit), MAX_BATCH))
         reset = journal is not None and journal != self.journal_id
@@ -449,7 +493,8 @@ class CanvasEventJournal:
         for event in self._events:
             if event["seq"] <= after:
                 continue
-            if not matches(event, kinds, exclude_actor_id):
+            if not matches(event, kinds, exclude_actor_id, keep_own,
+                           own_session_kept=self._own_session_kept(event, own_session)):
                 if len(events) < limit:
                     cursor = event["seq"]
                 continue
@@ -482,11 +527,14 @@ class CanvasEventJournal:
         limit: int = DEFAULT_BATCH,
         kinds: set[str] | None = None,
         exclude_actor_id: str | None = None,
+        keep_own: frozenset[str] = frozenset(),
+        own_session: str | None = None,
     ) -> dict[str, Any]:
         """Read, and if nothing matches yet, wait up to `wait` seconds for a matching event."""
         wait = max(0.0, min(float(wait), WAIT_CAP_SECONDS))
         result = self.read(after=after, journal=journal, limit=limit, kinds=kinds,
-                           exclude_actor_id=exclude_actor_id)
+                           exclude_actor_id=exclude_actor_id, keep_own=keep_own,
+                           own_session=own_session)
         if result["events"] or result["reset"] or result["gap"] or wait <= 0:
             return result
         if len(self._waiters) >= MAX_WAITERS:
@@ -510,7 +558,8 @@ class CanvasEventJournal:
             # Resume after what we already scanned, so skipped events (our own,
             # or other kinds) never wake us into a busy loop.
             result = self.read(after=result["cursor"], journal=self.journal_id, limit=limit,
-                               kinds=kinds, exclude_actor_id=exclude_actor_id)
+                               kinds=kinds, exclude_actor_id=exclude_actor_id, keep_own=keep_own,
+                               own_session=own_session)
             if result["events"] or result["gap"]:
                 return result
 

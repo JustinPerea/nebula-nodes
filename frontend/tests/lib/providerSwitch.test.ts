@@ -312,4 +312,15 @@ describe('a route priced from the input file', () => {
     expect(prices.fal[0]).toBe('-');
     expect(prices.auto[0]).toBe('by size');
   });
+
+  it('shows "by length" for a node priced from its audio\u2019s length', async () => {
+    const shipped = (await import('../../../backend/data/model_pricing.json')).default as unknown as PricingTable;
+    const state = providerSwitchState(NODE_DEFINITIONS['omnihuman-1-5'], {}, {
+      apiKeys: { FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY }, kreaSignedIn: false, pricing: shipped, wired: new Map([['audio', 1]]),
+    });
+    const prices = Object.fromEntries(state.rows.map((row) => [row.id, [row.price, row.priceTitle]]));
+    expect(prices.fal).toEqual(['by length', 'Priced from the audio\u2019s length when it runs']);
+    expect(prices.replicate[0]).toBe('by length');
+    expect(prices.auto[0]).toBe('by length');
+  });
 });

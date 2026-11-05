@@ -51,9 +51,10 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'lib/lazyWithPreload.ts': { count: 1, why: 'classifies a chunk-load failure, not shown' },
   // isBackendUnavailableError reads a failed status check's message to tell
   // a backend that is down from other failures; the panel shows its own line.
-  // `{e.message}` there is an agent-log entry's message (the backend's
-  // publish_action line, written for the person), not an Error.
-  'components/panels/AgentLog.tsx': { count: 1, why: "an agent-log entry's message, not an Error" },
+  // `{e.message}` in the log's entry row (moved out of AgentLog.tsx for the
+  // Message box's folds, #225) is an agent-log entry's message (the
+  // backend's publish_action line, written for the person), not an Error.
+  'components/panels/AgentLogEntryRow.tsx': { count: 1, why: "an agent-log entry's message, not an Error" },
   // `${err.message}` under `err instanceof GraphBundleImportTooLargeError`:
   // a FailureNotice whose reason is a written size line.
   // lib/graphFile.ts left the list in round 3f: its size notice reads failureMessage, not err.message.

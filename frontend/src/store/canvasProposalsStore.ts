@@ -55,6 +55,9 @@ export interface DeferredRun {
 
 interface CanvasProposalsState {
   proposals: Record<string, ProposalEntry>;
+  /** The canvas has been sent its proposals (proposalSync): before that, one
+   *  not here is unknown, not settled. */
+  synced: boolean;
   /** Where the person dragged ghosts, per proposal and ref. Sent with Accept. */
   drag: Record<string, Record<string, Point>>;
   pending: Record<string, 'accept' | 'reject'>;
@@ -164,6 +167,7 @@ async function runNodes(nodeIds: string[], approvalId: string | null): Promise<v
 
 export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) => ({
   proposals: {},
+  synced: false,
   drag: {},
   pending: {},
   errors: {},
@@ -186,6 +190,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     }
     set((state) => ({
       proposals,
+      synced: true,
       drag: Object.fromEntries(Object.entries(state.drag).filter(([id]) => id in proposals)),
       focusedId: state.focusedId && state.focusedId in proposals ? state.focusedId : null,
     }));
@@ -222,7 +227,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   clear: () => {
     for (const id of exitTimers.keys()) cancelExit(id);
-    set({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null });
+    set({ proposals: {}, synced: false, drag: {}, pending: {}, errors: {}, focusedId: null });
   },
 
   pruneExpired: (now = Date.now()) => {

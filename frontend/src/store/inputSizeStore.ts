@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { apiFetch } from '../lib/backend';
 import type { InputSize } from '../lib/pricing';
 
-export type SizeRef = { ref: string; kind: 'Image' | 'Video' };
+export type SizeRef = { ref: string; kind: 'Image' | 'Video' | 'Audio' };
 
 interface InputSizeState {
   /** Measured input files by ref; null when the backend can't read one. */

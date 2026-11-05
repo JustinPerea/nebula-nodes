@@ -10,6 +10,7 @@ import type {
 } from './runHistory';
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
+import type { ChannelListenersEvent, PersonThreadEvent } from './personThread';
 
 export type ErrorCategory =
   | 'blocked'
@@ -71,6 +72,8 @@ export interface AgentPresenceEvent {
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
   projectId?: string | null;
+  /** On a `propose` cursor: the proposal it waits on (lib/agentCursorSettled). */
+  proposalId?: string;
   /** What the action was, for the Agents panel (Q125 item 2): a past-tense
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
@@ -184,7 +187,7 @@ export interface StoredAssetChangedEvent {
   version?: number;
   /** Who wrote it (`tab` only for the person's own tab: the Studio skips its
    *  own echo), what it touched, and its undo (null over 200 ops, or a PUT). */
-  edit?: { actor?: { kind?: string; name?: string } | null; tab?: string | null } | null;
+  edit?: { actor?: { kind?: string; id?: string; name?: string } | null; tab?: string | null } | null;
   touched?: { images: string[]; frames: string[]; looks: string[] } | null;
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }
@@ -441,6 +444,8 @@ export type ExecutionEvent = (
   | QuestionsOpenedEvent
   | QuestionsSyncEvent
   | QuestionsClosedEvent
+  | PersonThreadEvent
+  | ChannelListenersEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 

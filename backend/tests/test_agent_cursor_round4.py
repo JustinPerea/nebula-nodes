@@ -115,6 +115,10 @@ def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(socket
     proposal_id = _propose(api, node, headers)
     (*_, proposing) = _frames(api.person_socket)
     assert proposing["action"] == "propose"
+    # The cursor names the proposal it waits on, so a tab ends it when that
+    # one is settled; a reload's replay still says which (PR #224 final review).
+    assert proposing["proposalId"] == proposal_id
+    assert [c.get("proposalId") for c in api.main.agent_presence.replay() if c["action"] == "propose"] == [proposal_id]
     # Another session of the same agent acts in between: "Accepted" still
     # goes to the cursor that proposed, not the agent's latest.
     _look(api, node, LANE_A)

@@ -373,7 +373,9 @@ def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(
     assert reply.json()["summary"] == "moved 1"
     (person,) = [json.loads(t) for t in _presence_frames(api.person_socket)]
     (agent,) = [json.loads(t) for t in _presence_frames(api.listener)]
-    assert person["say"] == "Moved 1 node" and "log" not in person
+    # The Agent log keeps the line naming the node (#225, GM r83.1); the
+    # bubble has the person's words.
+    assert person["say"] == "Moved 1 node" and person["log"] == "Moved “Text Input”"
     assert agent["say"] == "moved 1"
     (replayed,) = api.main.agent_presence.replay()
     assert replayed["say"] == "Moved 1 node"
@@ -528,8 +530,9 @@ def test_a_sibling_placed_by_the_layout_route_moves_no_unplaced_node(sockets):
 
 def test_a_person_say_takes_the_log_out_of_the_person_form_only(sockets):
     """Review 2, LOW-2 B7: with ``person_say``, the person's tabs show it as
-    the bubble and the log line alike (no separate ``log``); agents read
-    ``say`` and ``log`` as before."""
+    the bubble; agents read ``say`` and ``log`` as before. The person's form
+    keeps a ``log`` that says something else (the nodes an edit named, #225
+    GM r83.1) and drops one that would repeat the bubble."""
     import asyncio
 
     from services.agent_presence import request_headers_scope
@@ -539,7 +542,10 @@ def test_a_person_say_takes_the_log_out_of_the_person_form_only(sockets):
     with request_headers_scope(CLAUDE):
         asyncio.run(api.main._show_agent({"nodeId": node}, say="moved 1", log="Moved the prompt",
                                          person_say="Moved 1 node"))
-    (person,) = [json.loads(t) for t in _presence_frames(api.person_socket)]
-    (agent,) = [json.loads(t) for t in _presence_frames(api.listener)]
-    assert person["say"] == "Moved 1 node" and "log" not in person
+        asyncio.run(api.main._show_agent({"nodeId": node}, say="moved 1", log="Moved 1 node",
+                                         person_say="Moved 1 node"))
+    kept, same = [json.loads(t) for t in _presence_frames(api.person_socket)]
+    agent = json.loads(_presence_frames(api.listener)[0])
+    assert kept["say"] == "Moved 1 node" and kept["log"] == "Moved the prompt"
+    assert same["say"] == "Moved 1 node" and "log" not in same
     assert agent["say"] == "moved 1" and agent["log"] == "Moved the prompt"

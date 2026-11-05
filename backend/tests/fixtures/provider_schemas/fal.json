@@ -3254,7 +3254,216 @@
     "prompt"
    ],
    "type": "object"
+  },
+  "fal-ai/bytedance/omnihuman/v1.5": {
+   "title": "OmniHumanv15Input",
+   "properties": {
+    "mask_url": {
+     "title": "Mask Url",
+     "description": "The URL of the mask image to apply to the image. Only the person in the white area of the mask will speak.",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "audio_url": {
+     "title": "Audio Url",
+     "description": "The URL of the audio file to generate the video. Audio must be under 30s long for 1080p generation and under 60s long for 720p generation.",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/omnihuman_v15_input_audio.mp3"
+     ]
+    },
+    "image_url": {
+     "title": "Image Url",
+     "description": "The URL of the image used to generate the video",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/omnihuman_v15_input_image.png"
+     ]
+    },
+    "turbo_mode": {
+     "title": "Turbo Mode",
+     "default": false,
+     "description": "Generate a video at a faster rate with a slight quality trade-off.",
+     "type": "boolean"
+    },
+    "resolution": {
+     "title": "Resolution",
+     "default": "1080p",
+     "description": "The resolution of the generated video. Defaults to 1080p. 720p generation is faster and higher in quality. 1080p generation is limited to 30s audio and 720p generation is limited to 60s audio.",
+     "type": "string",
+     "enum": [
+      "720p",
+      "1080p"
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "The text prompt used to guide the video generation.",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_url",
+    "mask_url",
+    "audio_url",
+    "turbo_mode",
+    "resolution"
+   ],
+   "required": [
+    "image_url",
+    "audio_url"
+   ]
+  },
+  "fal-ai/bytedance/omnihuman/v2": {
+   "title": "OmniHumanV2Input",
+   "properties": {
+    "image_url": {
+     "title": "Image Url",
+     "description": "The URL of the image used to generate the video. Format: jpeg, png, webp, bmp, tiff, gif, heic or heif. Max size: 30 MB. Aspect ratio (width/height) between 0.4 and 2.5; width and height between 300 and 6000 pixels.",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/omnihuman_v15_input_image.png"
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "Optional text prompt for precise control of the scene, movements and camera. Supported languages: Chinese, English, Japanese, Korean, Spanish (Mexican) and Indonesian.",
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "audio_url": {
+     "title": "Audio Url",
+     "description": "The URL of the audio file to generate the video. Format: wav or mp3. Max size: 15 MB. Duration between 4 and 300 seconds.",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/omnihuman_v15_input_audio.mp3"
+     ]
+    }
+   },
+   "type": "object",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_url",
+    "audio_url"
+   ],
+   "required": [
+    "image_url",
+    "audio_url"
+   ]
+  },
+  "fal-ai/kling-video/ai-avatar/v2/standard": {
+   "required": [
+    "image_url",
+    "audio_url"
+   ],
+   "title": "AIAvatarInput",
+   "x-fal-order-properties": [
+    "enable_safety_checker",
+    "image_url",
+    "audio_url",
+    "prompt"
+   ],
+   "properties": {
+    "enable_safety_checker": {
+     "default": true,
+     "title": "Enable Safety Checker",
+     "description": "Disabling safety checks requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "image_url": {
+     "_fal_ui_field": "image",
+     "title": "Image Url",
+     "description": "The URL of the image to use as your avatar",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/kling_ai_avatar_input.jpg"
+     ]
+    },
+    "audio_url": {
+     "_fal_ui_field": "audio",
+     "title": "Audio Url",
+     "description": "The URL of the audio file.",
+     "type": "string",
+     "examples": [
+      "https://v3.fal.media/files/rabbit/9_0ZG_geiWjZOmn9yscO6_output.mp3"
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "default": ".",
+     "description": "The prompt to use for the video generation.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "fal-ai/kling-video/ai-avatar/v2/pro": {
+   "required": [
+    "image_url",
+    "audio_url"
+   ],
+   "title": "AIAvatarInput",
+   "x-fal-order-properties": [
+    "enable_safety_checker",
+    "image_url",
+    "audio_url",
+    "prompt"
+   ],
+   "properties": {
+    "enable_safety_checker": {
+     "default": true,
+     "title": "Enable Safety Checker",
+     "description": "Disabling safety checks requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "image_url": {
+     "_fal_ui_field": "image",
+     "title": "Image Url",
+     "description": "The URL of the image to use as your avatar",
+     "type": "string",
+     "examples": [
+      "https://storage.googleapis.com/falserverless/example_inputs/kling_ai_avatar_input.jpg"
+     ]
+    },
+    "audio_url": {
+     "_fal_ui_field": "audio",
+     "title": "Audio Url",
+     "description": "The URL of the audio file.",
+     "type": "string",
+     "examples": [
+      "https://v3.fal.media/files/rabbit/9_0ZG_geiWjZOmn9yscO6_output.mp3"
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "default": ".",
+     "description": "The prompt to use for the video generation.",
+     "type": "string"
+    }
+   },
+   "type": "object"
   }
  },
- "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined. fal-ai/flux-2-pro, fal-ai/flux-2-max, fal-ai/flux-2/flash, fal-ai/flux-2-flex, fal-ai/flux-2/klein/9b and fal-ai/flux-2/klein/4b added for PR 4 the same way (read 2026-10-15)."
+ "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined. fal-ai/flux-2-pro, fal-ai/flux-2-max, fal-ai/flux-2/flash, fal-ai/flux-2-flex, fal-ai/flux-2/klein/9b and fal-ai/flux-2/klein/4b added for PR 4 the same way (read 2026-10-15). fal-ai/bytedance/omnihuman/v1.5, fal-ai/bytedance/omnihuman/v2, fal-ai/kling-video/ai-avatar/v2/standard and fal-ai/kling-video/ai-avatar/v2/pro (the talking-head nodes) added the same way, read 2026-11-04."
 }

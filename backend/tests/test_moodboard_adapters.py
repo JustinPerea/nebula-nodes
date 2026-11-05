@@ -336,7 +336,8 @@ def test_every_generator_with_a_prompt_has_a_board_port_or_is_listed():
     listed = set(table["census"]["excluded"]) | set(table["census"]["pending"])
     assert set(census) == set(table["entries"]) | listed
     assert set(table["census"]["excluded"]) == {"identity-edit", "flux-video-edit", "openai-stt",
-                                                "openai-translate", "krea-audio-elevenlabs-tts"}
+                                                "openai-translate", "krea-audio-elevenlabs-tts",
+                                                "omnihuman-1-5", "omnihuman-2", "kling-ai-avatar-v2"}
     assert all(reason for reason in table["census"]["excluded"].values())
     assert set(table["census"]["pending"].values()) <= {"PR15", "PR16", "PR17", "PR18"}
 

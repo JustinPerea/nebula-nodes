@@ -262,6 +262,25 @@ def test_emptying_deletes_only_what_the_person_saw(api):
     assert bad.status_code == 400
 
 
+def test_emptying_an_empty_shown_list_deletes_nothing(api):
+    """`{"items": []}` is a list the person saw with nothing on it, not a
+    missing one: it deletes nothing for good, in every scope's trash
+    (review 10, LOW-4 B1/B2)."""
+    kept = _board(api, "Still restorable")
+    api.client.delete(f"/api/moodboards/{kept['id']}", headers=PERSON)
+    project = api.client.post("/api/projects", json={"name": "Also restorable"}, headers=PERSON).json()["project"]["id"]
+    revision = api.client.get("/api/projects").json()["workspaceRevision"]
+    api.client.request("DELETE", f"/api/projects/{project}", headers=PERSON, json={"workspaceRevision": revision})
+
+    for params in ({"kind": "moodboard", "scope": "global"}, {"kind": "moodboard"}, {"kind": "project"}, {}):
+        emptied = api.client.post("/api/trash/empty", params=params, headers=PERSON, json={"items": []})
+        assert emptied.status_code == 200, emptied.text
+        assert emptied.json() == {"purged": 0}, params
+        assert MoodboardStore().trashed(kept["id"]) is not None, params
+        listed = [item["id"] for item in api.client.get("/api/trash", params={"kind": "project"}).json()["items"]]
+        assert listed == [project], params
+
+
 def test_emptying_project_trash_deletes_only_the_projects_the_person_saw(api):
     ids = []
     for name in ("Seen", "Deleted later"):

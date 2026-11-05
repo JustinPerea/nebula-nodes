@@ -410,7 +410,7 @@ def format_selection(selection: dict[str, Any]) -> str:
 
 
 def _price(value: Any) -> str:
-    if value in ("free", "by input size"):
+    if value in ("free", "by input size", "by audio length"):
         return str(value)
     if isinstance(value, (list, tuple)) and len(value) == 2:
         low, high = float(value[0]), float(value[1])
@@ -626,8 +626,15 @@ def _node_lines(node: dict[str, Any], *, open_on_canvas: bool = True) -> list[st
         hint = f" ({node['errorHint']})" if node.get("errorHint") else ""
         lines.append(f"        error: {_brief(node['error'], 300)}{hint}")
     if node.get("fileName"):
-        # The name its file was uploaded with (filePath is the stored copy).
+        # The name the canvas shows for its file (filePath is the stored
+        # copy): services/upload_names.py.
         lines.append(f"        file: {json.dumps(str(node['fileName']), ensure_ascii=False)}")
+    file_names = node.get("fileNames")
+    if isinstance(file_names, dict):
+        # Its other file params, by the same name rule.
+        for key, name in file_names.items():
+            if key != "filePath" and name:
+                lines.append(f"        file ({key}): {json.dumps(str(name), ensure_ascii=False)}")
     params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
     if params:
         lines.append(f"        params: {_brief(params, 110)}")

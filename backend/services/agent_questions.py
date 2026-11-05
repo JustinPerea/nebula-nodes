@@ -40,9 +40,13 @@ Modelled on proposals, with one difference: sets are kept.
 - Owner-scoped. The answers go to the agent that asked: every agent route
   answers another agent's set as not there (404). The person's typed text is
   their message to that agent: it is never journaled, logged, put on an
-  Update or sent to a socket other than the person's own. On disk it is only
-  in the set's own record, which no agent route reads (project_store's
-  metadata, public_project and project_view.agent_project name their keys).
+  Update or sent to a socket other than the person's own. On disk it is in
+  the set's own record, which no agent route reads (project_store's
+  metadata, public_project and project_view.agent_project name their keys),
+  and in the Message box thread's question row as its ``outcome`` (GM r79.5:
+  the person's record of their answer), which agents never read
+  (person_thread.agent_view drops it, and keeps a question's text for its
+  asker only).
 
 Forward (Q125 items 2 and 3, not built here): ``open_for_agent`` lists one
 agent identity's open sets, so a later "Needs you" count is proposals plus

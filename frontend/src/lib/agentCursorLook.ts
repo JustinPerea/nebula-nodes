@@ -259,7 +259,8 @@ export interface CursorShape {
 export const AGENT_CURSOR_SAY_LEFT_GAP_PX = 4;
 
 /** The tip of the arrow below the cursor's origin. */
-const TIP = AGENT_CURSOR_ARROW_POINTS[0];
+export const AGENT_CURSOR_ARROW_TIP: Point = AGENT_CURSOR_ARROW_POINTS[0];
+const TIP = AGENT_CURSOR_ARROW_TIP;
 
 /**
  * A cursor as painted at `origin` (screen px). `say` draws its say pill:
