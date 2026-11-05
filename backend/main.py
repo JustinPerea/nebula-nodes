@@ -5175,8 +5175,10 @@ def _agent_node_context() -> dict[str, Any]:
             "pricing": pricing, "definitions": node_registry.get_all()}
 
 
-# find_nodes' and `nebula context`'s price for a node priced from its input's size.
+# find_nodes' and `nebula context`'s price for a node priced from its input's size,
+# or from its audio's length (the talking-head nodes).
 SIZED_PRICE = "by input size"
+LENGTH_PRICE = "by audio length"
 
 
 def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
@@ -5215,10 +5217,12 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
         estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
-        note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
+        routed = model_pricing.entry_for_route(entry, provider)
+        note = model_pricing.size_note(routed, definition)
         if row["price"] is None and note:
             # Priced at run time from the input file (model_pricing sizing).
-            row["price"] = SIZED_PRICE
+            row["price"] = (LENGTH_PRICE if model_pricing.sizing_kind(routed, definition) == "audio"
+                            else SIZED_PRICE)
             row["priceNote"] = note
     return row
 

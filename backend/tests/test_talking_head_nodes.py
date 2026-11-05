@@ -16,6 +16,7 @@ sources are in model_pricing.json and the notes file):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import shutil
@@ -54,6 +55,30 @@ async def run_node(monkeypatch, node_id: str, route_id: str, wired: dict[str, An
     spec = node_route.route_by_id(definition, route_id)
     hosts = hosts_for(monkeypatch, spec["provider"], True)
     saved = {**defaults(definition), **params, "_provider": route_id}
+    out = await registry_handler(node_id)(node(node_id, **saved), av_ports(**wired), dict(KEYS))
+    return hosts, out
+
+
+FAL_INIT = r"https://rest\.fal\.ai/storage/upload/initiate\?storage_type=gcs"
+FAL_PUT = r"https://storage\.example/put/.*"
+
+
+def fal_storage(hosts, *, init=None, put=None) -> None:
+    """fal's storage on the mocked hosts: initiate answers an upload_url and a file_url named after the
+    file; the PUT takes the bytes. ``init`` and ``put`` replace either answer."""
+    def start(request: httpx.Request) -> httpx.Response:
+        name = json.loads(request.content)["file_name"]
+        return httpx.Response(200, json={"upload_url": f"https://storage.example/put/{name}",
+                                         "file_url": f"https://v3b.fal.media/files/b/x/{name}"})
+
+    hosts.routes[:0] = [("POST", FAL_INIT, init or start), ("PUT", FAL_PUT, put or httpx.Response(200))]
+
+
+async def run_fal_local(monkeypatch, node_id: str, wired: dict[str, Any], *, init=None, put=None, **params: Any):
+    definition = REGISTRY[node_id]
+    hosts = hosts_for(monkeypatch, "fal", True)
+    fal_storage(hosts, init=init, put=put)
+    saved = {**defaults(definition), **params, "_provider": "fal"}
     out = await registry_handler(node_id)(node(node_id, **saved), av_ports(**wired), dict(KEYS))
     return hosts, out
 
@@ -197,10 +222,11 @@ def local_media():
 @pytest.mark.asyncio
 async def test_a_local_audio_file_goes_up_the_way_other_audio_inputs_do_on_each_route(monkeypatch, local_media):
     image, voice = local_media
-    # fal: data URIs, as every other audio input (_to_fal_url / media_url).
-    hosts, _ = await run_node(monkeypatch, "kling-ai-avatar-v2", "fal", {"image": image, "audio": voice})
+    # fal: uploaded to fal's storage first (it refuses data: URLs on these endpoints); the details are
+    # in test_fal_uploads_local_media_and_sends_the_https_url below.
+    hosts, _ = await run_fal_local(monkeypatch, "kling-ai-avatar-v2", {"image": image, "audio": voice})
     body = hosts.json("POST", re.escape(FAL + "fal-ai/kling-video/ai-avatar/v2/standard"))
-    assert body["audio_url"].startswith("data:audio/mpeg;base64,") and body["image_url"].startswith("data:image/png;base64,")
+    assert body["audio_url"].startswith("https://") and body["image_url"].startswith("https://")
     validate(SCHEMAS["fal"]["fal-ai/kling-video/ai-avatar/v2/standard"], body)
     # Replicate: uploaded through its files API first, then the file URL is the input.
     hosts, _ = await run_node(monkeypatch, "kling-ai-avatar-v2", "replicate", {"image": image, "audio": voice})
@@ -255,14 +281,30 @@ def test_each_route_offers_only_its_own_settings():
 
 # -- prices --------------------------------------------------------------------------
 
+def test_kling_is_never_priced_under_what_a_real_run_billed():
+    """12.6 s of audio gave 12.8 s of video, $0.72 (fal, 2026-11-04)."""
+    definition = REGISTRY["kling-ai-avatar-v2"]
+    estimate = model_pricing.estimate_node(PRICING["nodes"]["kling-ai-avatar-v2"], definition,
+                                           {**defaults(definition), "mode": "std"}, "fal", ["image", "audio"], {"seconds": 12.6})
+    assert estimate["high"] >= 12.8 * 0.0562
+    for route in PRICING["nodes"]["kling-ai-avatar-v2"]["routes"].values():
+        assert route["sizing"]["addSeconds"] == 1
+
+
 @pytest.mark.parametrize("node_id, route_id, params, seconds, expected", [
     ("omnihuman-1-5", "fal", {}, 12.3, 13 * 0.16),
     ("omnihuman-1-5", "replicate", {}, 30, 30 * 0.16),
     ("omnihuman-2", "fal", {}, 4.2, 5 * 0.105),
-    ("kling-ai-avatar-v2", "fal", {"mode": "std"}, 10, 10 * 0.0562),
-    ("kling-ai-avatar-v2", "fal", {"mode": "pro"}, 10, 10 * 0.115),
-    ("kling-ai-avatar-v2", "replicate", {"mode": "std"}, 10, 10 * 0.056),
-    ("kling-ai-avatar-v2", "replicate", {"mode": "pro"}, 10, 10 * 0.11),
+    # Kling bills the output's length, which runs a little longer than the audio: a real run on fal
+    # (2026-11-04) made 12.8 s of video from 12.6 s of audio and billed $0.72 (= 12.8 x $0.0562), and 4 s
+    # clips billed about 0.5 s over. A spend estimate must not understate, so the audio's length plus
+    # one second is priced, rounded up (12.6 s -> 14 s = $0.7868, over the $0.72 billed).
+    ("kling-ai-avatar-v2", "fal", {"mode": "std"}, 12.6, 14 * 0.0562),
+    ("kling-ai-avatar-v2", "fal", {"mode": "std"}, 10, 11 * 0.0562),
+    ("kling-ai-avatar-v2", "fal", {"mode": "std"}, 4, 5 * 0.0562),
+    ("kling-ai-avatar-v2", "fal", {"mode": "pro"}, 10, 11 * 0.115),
+    ("kling-ai-avatar-v2", "replicate", {"mode": "std"}, 10, 11 * 0.056),
+    ("kling-ai-avatar-v2", "replicate", {"mode": "pro"}, 10, 11 * 0.11),
 ])
 def test_the_estimate_is_the_vendors_per_second_price_times_the_audio_length(node_id, route_id, params, seconds, expected):
     definition = REGISTRY[node_id]
@@ -473,7 +515,7 @@ def test_a_local_file_over_the_cap_is_refused_before_it_is_read(monkeypatch):
     with pytest.raises(ValueError, match="takes audio up to 15 MB, and this file is 16 MB") as caught:
         route_clients.fal_fields("fal-ai/bytedance/omnihuman/v2", {}, av_ports(image=REF, audio=str(big)), "OmniHuman 2.0")
     assert _person(caught.value) == (
-        "Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because its audio file is too large at 16 MB, and fal "
+        "Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because its audio file is too large at 16 MB, and fal.ai "
         "takes up to 15 MB. Use a smaller file, then run it again.")
     assert ":" not in _person(caught.value)
     # No published limit: the fixed cap.
@@ -481,6 +523,85 @@ def test_a_local_file_over_the_cap_is_refused_before_it_is_read(monkeypatch):
     with pytest.raises(ValueError, match="up to 20 MB"):
         route_clients.fal_fields("fal-ai/kling-video/ai-avatar/v2/pro", {}, av_ports(image=REF, audio=str(bigger)),
                                  "Kling AI Avatar v2")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("node_id, params, endpoint", [
+    ("omnihuman-1-5", {}, "fal-ai/bytedance/omnihuman/v1.5"),
+    ("omnihuman-2", {}, "fal-ai/bytedance/omnihuman/v2"),
+    ("kling-ai-avatar-v2", {}, "fal-ai/kling-video/ai-avatar/v2/standard"),
+    ("kling-ai-avatar-v2", {"mode": "pro"}, "fal-ai/kling-video/ai-avatar/v2/pro"),
+])
+async def test_fal_uploads_local_media_and_sends_the_https_url(monkeypatch, local_media, node_id, params, endpoint):
+    """fal answers a data: URL on these endpoints with 422 "Failed to download the file" (a real run,
+    2026-11-04). The local file goes to fal's storage (fal-client's flow: initiate, then PUT) and the request
+    carries the file_url."""
+    image, voice = local_media
+    hosts, out = await run_fal_local(monkeypatch, node_id, {"image": image, "audio": voice}, **params)
+    body = hosts.json("POST", re.escape(FAL + endpoint))
+    assert body["image_url"] == "https://v3b.fal.media/files/b/x/portrait.png"
+    assert body["audio_url"] == "https://v3b.fal.media/files/b/x/voice.mp3"
+    assert "data:" not in json.dumps(body)
+    # Each file: one initiate with the fal key, its name and type, and one PUT of its bytes, no key on the PUT.
+    starts = hosts.sent("POST", FAL_INIT)
+    assert [json.loads(r.content) for r in starts] == [
+        {"file_name": "portrait.png", "content_type": "image/png"}, {"file_name": "voice.mp3", "content_type": "audio/mpeg"}]
+    assert all(r.headers["authorization"] == "Key fixture-fal" for r in starts)
+    puts = hosts.sent("PUT", FAL_PUT)
+    assert [r.content for r in puts] == [Path(image).read_bytes(), Path(voice).read_bytes()]
+    assert all("authorization" not in r.headers for r in puts)
+    validate(SCHEMAS["fal"][endpoint], body)
+    assert out["video"]["type"] == "Video"
+
+
+@pytest.mark.asyncio
+async def test_a_url_input_is_not_uploaded(monkeypatch):
+    hosts, _ = await run_fal_local(monkeypatch, "omnihuman-2", {"image": REF, "audio": AUDIO})
+    assert not hosts.sent("POST", FAL_INIT) and not hosts.sent("PUT", FAL_PUT)
+    assert hosts.json("POST", re.escape(FAL + "fal-ai/bytedance/omnihuman/v2"))["audio_url"] == AUDIO
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure, person", [
+    ("init-401", "fal.ai wouldn\u2019t store its image file. Check your fal.ai API key, then run it again."),
+    ("init-no-url", "fal.ai wouldn\u2019t store its image file. Run it again."),
+    ("init-http-upload-url", "fal.ai wouldn\u2019t store its image file. Run it again."),
+    ("put-500", "fal.ai wouldn\u2019t store its image file. Run it again."),
+    ("unreachable", "it couldn\u2019t reach fal.ai to upload its image file. Check your connection, then run it again."),
+])
+async def test_a_failed_upload_stops_the_run_with_a_clear_line_and_no_job(monkeypatch, local_media, failure, person):
+    image, voice = local_media
+
+    def unreachable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route", request=request)
+
+    kwargs = {"init-401": {"init": httpx.Response(401, json={"detail": "bad key"})},
+              "init-no-url": {"init": httpx.Response(200, json={"file_url": "http://insecure"})},
+              # the file's bytes never go to a plain-http upload_url
+              "init-http-upload-url": {"init": httpx.Response(200, json={
+                  "upload_url": "http://storage.example/put", "file_url": "https://v3.fal.media/files/x.png"})},
+              "put-500": {"put": httpx.Response(500)},
+              "unreachable": {"init": unreachable}}[failure]
+    hosts = hosts_for(monkeypatch, "fal", True)
+    fal_storage(hosts, **kwargs)
+    saved = {**defaults(REGISTRY["omnihuman-2"]), "_provider": "fal"}
+    with pytest.raises(RuntimeError) as caught:
+        await registry_handler("omnihuman-2")(node("omnihuman-2", **saved), av_ports(image=image, audio=voice), dict(KEYS))
+    assert _person(caught.value) == f"Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because {person}"
+    assert ":" not in _person(caught.value)
+    assert not hosts.sent("POST", re.escape(FAL + "fal-ai/bytedance/omnihuman/v2"))  # no job was submitted
+    assert not hosts.sent("PUT", re.escape("http://storage.example") + ".*")  # no bytes to a plain-http URL
+
+
+@pytest.mark.asyncio
+async def test_the_size_cap_stops_the_run_before_any_upload(monkeypatch):
+    big = _stored_blob("cap-before-upload.wav", 16 * 1024 * 1024)
+    hosts = hosts_for(monkeypatch, "fal", True)
+    fal_storage(hosts)
+    saved = {**defaults(REGISTRY["omnihuman-2"]), "_provider": "fal"}
+    with pytest.raises(ValueError, match="takes audio up to 15 MB"):
+        await registry_handler("omnihuman-2")(node("omnihuman-2", **saved), av_ports(image=REF, audio=str(big)), dict(KEYS))
+    assert not hosts.requests
 
 
 def test_a_local_file_under_the_cap_still_goes_as_a_data_uri():
@@ -517,6 +638,78 @@ async def test_audio_that_cant_be_measured_is_left_to_fal_and_other_endpoints_ha
     assert not hosts.requests
 
 
+# -- long jobs: a poll budget of at least 30 minutes, and a clear refusal when it runs out ------
+# A real run (2026-11-04): OmniHuman 2.0 was still IN_PROGRESS after 15 min, Kling took 3.5 to 6.6 min.
+
+THIRTY_MINUTES = 30 * 60
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("node_id, params", [("omnihuman-1-5", {}), ("omnihuman-2", {}), ("kling-ai-avatar-v2", {}),
+                                             ("kling-ai-avatar-v2", {"mode": "pro"})])
+async def test_fal_waits_at_least_30_minutes_for_a_talking_head_and_says_so_when_it_gives_up(monkeypatch, node_id, params):
+    from execution.person_line import slow_job_line
+    from handlers import fal_universal
+
+    budgets: list[tuple[int, float]] = []
+    real = fal_universal.handle_fal_universal
+
+    async def spy(*args, **kwargs):
+        budgets.append((kwargs["max_polls"], kwargs["poll_interval"]))
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(fal_universal, "handle_fal_universal", spy)
+    definition = REGISTRY[node_id]
+    hosts = hosts_for(monkeypatch, "fal", True)
+    queue = "https://queue.fal.run/q/requests/r1"
+    hosts.routes[:0] = [("GET", re.escape(f"{queue}/status"), httpx.Response(200, json={"status": "IN_PROGRESS"})),
+                        ("PUT", re.escape(f"{queue}/cancel"), httpx.Response(202, json={}))]
+    saved = {**defaults(definition), **params, "_provider": "fal"}
+    with pytest.raises(RuntimeError, match="timed out after 600 polls") as caught:
+        await registry_handler(node_id)(node(node_id, **saved), av_ports(image=REF, audio=AUDIO), dict(KEYS))
+    assert budgets and budgets[0][0] * budgets[0][1] >= THIRTY_MINUTES
+    assert _person(caught.value) == slow_job_line("fal.ai")
+    from services import cancellation
+
+    await asyncio.gather(*list(cancellation._pending_cancel_tasks))
+    assert hosts.sent("PUT", re.escape(f"{queue}/cancel"))  # the job is stopped upstream, not left to bill
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("node_id", ["omnihuman-1-5", "kling-ai-avatar-v2"])
+async def test_replicate_waits_at_least_30_minutes_for_a_talking_head_and_says_so_when_it_gives_up(monkeypatch, node_id):
+    from execution.person_line import slow_job_line
+    from handlers import replicate_model
+
+    assert replicate_model.MAX_POLLS * 3.0 < THIRTY_MINUTES  # the default (15 min) is not enough: the nodes pass their own
+    budgets: list[int] = []
+    real = replicate_model.run_model
+
+    async def spy(*args, **kwargs):
+        budgets.append(kwargs["max_polls"])
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(replicate_model, "run_model", spy)
+    hosts = replicate_hosts_forever(monkeypatch)
+    saved = {**defaults(REGISTRY[node_id]), "_provider": "replicate"}
+    with pytest.raises(RuntimeError, match="timed out after 600 polls") as caught:
+        await registry_handler(node_id)(node(node_id, **saved), av_ports(image=REF, audio=AUDIO), dict(KEYS))
+    assert budgets == [600] and 600 * 3.0 >= THIRTY_MINUTES  # at Replicate's 3 s poll interval
+    assert _person(caught.value) == slow_job_line("Replicate")
+    from services import cancellation
+
+    await asyncio.gather(*list(cancellation._pending_cancel_tasks))
+    assert hosts.sent("POST", REP + r"predictions/p1/cancel")
+
+
+def replicate_hosts_forever(monkeypatch) -> FakeHosts:
+    return FakeHosts(monkeypatch, [
+        ("POST", REP + r"models/[^/]+/[^/]+/predictions", httpx.Response(201, json={"id": "p1", "status": "starting"})),
+        ("GET", REP + r"predictions/p1", httpx.Response(200, json={"id": "p1", "status": "processing"})),
+        ("POST", REP + r"predictions/p1/cancel", httpx.Response(200, json={})),
+    ])
+
+
 # -- a WAV whose header understates its length ---------------------------------------------------
 
 def _wav_bytes(seconds: float, *, declared: float | None = None, trailing: bytes = b"", rate: int = 16000) -> bytes:
@@ -550,6 +743,77 @@ def test_a_wav_with_a_metadata_chunk_after_the_data_is_still_measured():
     assert input_sizes.measure(str(path), "Audio")["seconds"] == pytest.approx(10, abs=0.1)
 
 
+@needs_ffmpeg
+def test_a_big_fake_metadata_chunk_after_the_data_does_not_hide_audio_from_the_measure():
+    """The reviewer's case: 1 s of data, then a 160 KB LIST chunk that spans the rest of the file.
+    A provider may read the "metadata" as audio, so the file is left unmeasured; a small LIST is not."""
+    import struct
+
+    path = _stored("fake-list.wav")
+    path.write_bytes(_wav_bytes(1, trailing=b"LIST" + struct.pack("<I", 160 * 1024) + b"\x01" * (160 * 1024)))
+    assert input_sizes.measure(str(path), "Audio") is None
+    small = _stored("small-list.wav")
+    small.write_bytes(_wav_bytes(1, trailing=b"LIST" + struct.pack("<I", 4000) + b"x" * 4000))
+    assert input_sizes.measure(str(small), "Audio")["seconds"] == pytest.approx(1, abs=0.1)
+    # More trailing bytes than the audio itself is also unmeasured, even under the byte bound.
+    tiny = _stored("longer-than-data.wav")
+    tiny.write_bytes(_wav_bytes(0.1, trailing=b"LIST" + struct.pack("<I", 4000) + b"x" * 4000))
+    assert input_sizes.measure(str(tiny), "Audio") is None
+
+
+@needs_ffmpeg
+def test_a_wav_with_thousands_of_empty_chunks_is_left_unmeasured():
+    import struct
+
+    junk = (b"JUNK" + struct.pack("<I", 0)) * (input_sizes.WAV_MAX_CHUNKS + 100)
+    after = _stored("junk-after.wav")
+    after.write_bytes(_wav_bytes(1, trailing=junk))
+    assert input_sizes.measure(str(after), "Audio") is None
+    # The same count before the audio.
+    plain = _wav_bytes(1)
+    head, data = plain[:36], plain[36:]
+    body = head[8:] + junk + data
+    before = _stored("junk-before.wav")
+    before.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+    assert input_sizes.measure(str(before), "Audio") is None
+    # A handful of them is fine.
+    few = _stored("junk-few.wav")
+    few.write_bytes(_wav_bytes(1, trailing=(b"JUNK" + struct.pack("<I", 0)) * 10))
+    assert input_sizes.measure(str(few), "Audio")["seconds"] == pytest.approx(1, abs=0.1)
+
+
+# -- a node priced by audio length is never priced from a size ---------------------------------
+
+@pytest.mark.parametrize("node_id", ["omnihuman-1-5", "omnihuman-2", "kling-ai-avatar-v2"])
+@pytest.mark.parametrize("keys", [{"FAL_KEY": "set"}, {"REPLICATE_API_TOKEN": "set"}])
+@pytest.mark.parametrize("size", [None, {}, {"width": 1000, "height": 1000}, {"seconds": 0}, {"frames": 300}])
+def test_audio_length_priced_node_with_unreadable_audio_has_no_price_at_all(node_id, keys, size):
+    """Unreadable audio (size None, or one without a usable length) leaves the node unpriced and
+    awaiting its input: no price of any kind, least of all one from a size or a count of one second."""
+    if node_id == "omnihuman-2" and "REPLICATE_API_TOKEN" in keys:
+        pytest.skip("OmniHuman 2.0 is not on Replicate")
+    item = {"id": "n", "definitionId": node_id, "params": {}, "name": "Talker"}
+    sizes = {"n": size}
+    result = model_pricing.estimate_run([item], PRICING, REGISTRY, keys, None, {"n": {"image": 1, "audio": 1}}, sizes)
+    assert result["priced"] == {} and result["unpriced"] == ["n"]
+    # Unreadable audio is "awaiting its input" (the spend gate names the cause); a size with no usable length
+    # is just unpriced.
+    assert result["awaitingInput"] == (["n"] if size is None else [])
+    assert result["low"] is None and result["high"] is None
+    for entry in (PRICING["nodes"][node_id]["routes"] or {}).values():
+        assert model_pricing.estimate_node(entry, REGISTRY[node_id], {}, wired=["image", "audio"], size=size) is None
+
+
+def test_the_spend_gate_treats_audio_it_cant_read_as_unpriced_never_as_a_guessed_price():
+    item = {"id": "n", "definitionId": "kling-ai-avatar-v2", "params": {}, "name": "Kling AI Avatar v2"}
+    estimate = model_pricing.estimate_run([item], PRICING, REGISTRY, {"FAL_KEY": "set"}, None,
+                                          {"n": {"image": 1, "audio": 1}}, {"n": None})
+    assert "n" in estimate["unpriced"] and "n" not in estimate["priced"]
+    text = " ".join(agent_spend._awaiting_reasons(
+        ["n"], {"n": input_sizes.UNREADABLE}, {"n": "Kling AI Avatar v2"}, {"n": "kling-ai-avatar-v2"}, PRICING, REGISTRY))
+    assert "couldn't read that file's length" in text and "size" not in text.replace("such as", "")
+
+
 # -- agents and the CLI ------------------------------------------------------------------
 
 @pytest.fixture
@@ -565,6 +829,9 @@ def test_mcp_find_nodes_and_describe_node_show_the_nodes_ports_routes_and_prices
     rows = {row["id"]: row for row in http.get("/api/agent/nodes", params={"query": "omnihuman"}).json()["nodes"]}
     assert set(rows) == {"omnihuman-1-5", "omnihuman-2"}
     assert rows["omnihuman-1-5"]["providers"] == ["fal", "replicate"]
+    # An agent reads the price kind: these are priced by their audio's length, not a file size.
+    assert all(row["price"] == "by audio length" for row in rows.values())
+    assert all("audio\u2019s length" in row["priceNote"] for row in rows.values())
     avatar = {row["id"] for row in http.get("/api/agent/nodes", params={"query": "kling avatar"}).json()["nodes"]}
     assert "kling-ai-avatar-v2" in avatar
     body = http.get("/api/agent/nodes/omnihuman-1-5").json()

@@ -280,7 +280,9 @@ only a file in Nebula's own output folder (or an inline image): a file
 anywhere else could change between the check and the run, so a run from it
 is refused. The talking-head nodes (OmniHuman, Kling AI Avatar) are priced from the
 length of the audio in their `audio` port, at a per-second rate, so the audio has to be
-an Audio Input holding a file in Nebula's folder (`nebula upload voice.wav`). Add your file first:
+an Audio Input holding a file in Nebula's folder (`nebula upload voice.wav`). If Nebula can't read the
+length of that audio, the node has no price at all (never a price from the file's size), so a run under
+spending limits is refused. Add your file first:
 
 ```bash
 nebula upload clip.mp4     # copies it into Nebula; prints the Video Input it made (MCP: upload_file)

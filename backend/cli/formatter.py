@@ -410,7 +410,7 @@ def format_selection(selection: dict[str, Any]) -> str:
 
 
 def _price(value: Any) -> str:
-    if value in ("free", "by input size"):
+    if value in ("free", "by input size", "by audio length"):
         return str(value)
     if isinstance(value, (list, tuple)) and len(value) == 2:
         low, high = float(value[0]), float(value[1])

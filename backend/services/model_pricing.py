@@ -386,6 +386,9 @@ def _sizing_problems(where: str, entry: Mapping[str, Any], definition: Mapping[s
     megapixel = sizing.get("megapixel", DEFAULT_MEGAPIXEL)
     if isinstance(megapixel, bool) or not isinstance(megapixel, int) or megapixel <= 0:
         problems.append(f"{where} sizing.megapixel must be a whole number of pixels")
+    pad = sizing.get("addSeconds")
+    if pad is not None and (isinstance(pad, bool) or not isinstance(pad, (int, float)) or pad <= 0):
+        problems.append(f"{where} sizing.addSeconds must be a positive number of seconds or left out")
     rounded = sizing.get("roundUp", [])
     if not isinstance(rounded, list) or any(key not in SIZED_VARIABLES for key in rounded):
         problems.append(f"{where} sizing.roundUp must list quantities from {SIZED_VARIABLES}")
@@ -592,6 +595,10 @@ def sized_quantities(entry: Mapping[str, Any], values: Mapping[str, Any],
             amount = _positive(size.get(field))
             if amount is None:
                 return None
+            # Seconds a vendor bills beyond the input's own (Kling AI Avatar v2: see model_pricing.json).
+            pad = sizing.get("addSeconds") if key == "(source seconds)" else None
+            if isinstance(pad, (int, float)) and not isinstance(pad, bool) and pad > 0:
+                amount += pad
             quantities[key] = amount
     for key in sizing.get("roundUp") or []:
         if key in quantities:
@@ -618,15 +625,23 @@ def sizing_ports(entry: Mapping[str, Any] | None) -> set[str]:
             if isinstance(item, Mapping) and isinstance(item.get("sizing"), Mapping) and item["sizing"].get("port")}
 
 
+def sizing_kind(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) -> str:
+    """"audio", "video" or "image": the data type of the port an entry measures.
+    An audio port is priced by its length, the others by their size."""
+    sizing = entry.get("sizing") if isinstance(entry, Mapping) else None
+    port_id = sizing.get("port") if isinstance(sizing, Mapping) else None
+    port = next((p for p in definition.get("inputPorts") or []
+                 if isinstance(p, Mapping) and p.get("id") == port_id), {})
+    return {"video": "video", "audio": "audio"}.get(str(port.get("dataType") or "").lower(), "image")
+
+
 def size_note(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) -> str | None:
     """One line for agents: the entry's ``sizing.say`` and when it's priced,
     e.g. "...; priced from your image's size when you run it"."""
     if not awaits_input(entry):
         return None
     sizing = entry["sizing"]  # type: ignore[index]
-    port = next((p for p in definition.get("inputPorts") or []
-                 if isinstance(p, Mapping) and p.get("id") == sizing.get("port")), {})
-    kind = {"video": "video", "audio": "audio"}.get(str(port.get("dataType") or "").lower(), "image")
+    kind = sizing_kind(entry, definition)
     say = str(sizing.get("say") or "").strip()
     if kind == "audio":
         # GM r118: its own sentence, with the curly apostrophe.

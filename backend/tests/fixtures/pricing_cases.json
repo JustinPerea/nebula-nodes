@@ -3299,7 +3299,7 @@
       "name": "Krea 2 Turbo (Krea) doesn't count U+FEFF as whitespace (Python's strip() keeps it)",
       "nodeId": "krea-image-krea-krea-2-medium-turbo",
       "params": {
-        "image_style_references": "﻿"
+        "image_style_references": "\ufeff"
       },
       "apiKeys": {
         "KREA_API_TOKEN": "set"
@@ -3604,7 +3604,7 @@
       }
     },
     {
-      "name": "Kling AI Avatar v2 Standard on fal: 10 s at $0.0562",
+      "name": "Kling AI Avatar v2 Standard on fal: 10 s of audio is priced as 11 s (audio plus one second) at $0.0562",
       "nodeId": "kling-ai-avatar-v2",
       "params": {},
       "apiKeys": {
@@ -3615,13 +3615,13 @@
         "seconds": 10
       },
       "expected": {
-        "low": 0.562,
-        "high": 0.562,
+        "low": 0.6182,
+        "high": 0.6182,
         "awaitingInput": false
       }
     },
     {
-      "name": "Kling AI Avatar v2 Pro on fal: 10 s at $0.115",
+      "name": "Kling AI Avatar v2 Pro on fal: 10 s of audio is priced as 11 s at $0.115",
       "nodeId": "kling-ai-avatar-v2",
       "params": {
         "mode": "pro"
@@ -3634,13 +3634,30 @@
         "seconds": 10
       },
       "expected": {
-        "low": 1.15,
-        "high": 1.15,
+        "low": 1.265,
+        "high": 1.265,
         "awaitingInput": false
       }
     },
     {
-      "name": "Kling AI Avatar v2 Standard on Replicate: 10 s at $0.056",
+      "name": "Kling AI Avatar v2 on fal: 12.6 s of audio (a real run billed 12.8 s, $0.72) is priced as 14 s, never under the bill",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 12.6
+      },
+      "expected": {
+        "low": 0.7868,
+        "high": 0.7868,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 Standard on Replicate: 10 s of audio is priced as 11 s at $0.056",
       "nodeId": "kling-ai-avatar-v2",
       "params": {},
       "apiKeys": {
@@ -3651,13 +3668,13 @@
         "seconds": 10
       },
       "expected": {
-        "low": 0.56,
-        "high": 0.56,
+        "low": 0.616,
+        "high": 0.616,
         "awaitingInput": false
       }
     },
     {
-      "name": "Kling AI Avatar v2 Pro on Replicate: 10 s at $0.11",
+      "name": "Kling AI Avatar v2 Pro on Replicate: 10 s of audio is priced as 11 s at $0.11",
       "nodeId": "kling-ai-avatar-v2",
       "params": {
         "mode": "pro"
@@ -3670,8 +3687,8 @@
         "seconds": 10
       },
       "expected": {
-        "low": 1.1,
-        "high": 1.1,
+        "low": 1.21,
+        "high": 1.21,
         "awaitingInput": false
       }
     }

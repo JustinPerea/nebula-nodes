@@ -40,7 +40,7 @@ export interface PriceEntry {
   sources?: Array<{ url: string; quote: string }>;
   checked?: string;
   /** Quantities measured from the input on `port` (model_pricing.py sizing). */
-  sizing?: { port: string; output?: 'upscale'; megapixel?: number; roundUp?: string[]; say: string };
+  sizing?: { port: string; output?: 'upscale'; megapixel?: number; roundUp?: string[]; addSeconds?: number; say: string };
 }
 
 /** A run's measured input file (services/input_sizes.py). */
@@ -209,6 +209,8 @@ function sizedQuantities(entry: PriceEntry, values: Record<string, unknown>, siz
     if (amount === null) return null;
     out[key] = amount;
   }
+  // Seconds a vendor bills beyond the input's own (backend sized_quantities `addSeconds`).
+  if ('(source seconds)' in out && typeof sizing.addSeconds === 'number' && sizing.addSeconds > 0) out['(source seconds)'] += sizing.addSeconds;
   for (const key of sizing.roundUp ?? []) if (key in out) out[key] = Math.ceil(out[key] - 1e-9);
   return Object.fromEntries(wanted.map((key) => [key, out[key]]));
 }

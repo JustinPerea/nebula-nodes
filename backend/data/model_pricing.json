@@ -3017,7 +3017,7 @@
           "multiplyBy": [
             "(source seconds)"
           ],
-          "notes": "Standard $0.0562 a second, Pro $0.115. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more). fal's pricing API needs a key and wasn't cross-checked; the model pages and their llms.txt agree.",
+          "notes": "Standard $0.0562 a second, Pro $0.115. Billed per second of output video. A real run on fal (2026-11-04) gave 12.8 s of video for 12.6 s of audio, billed $0.72 (12.8 x $0.0562), and 4 s clips billed about half a second over, so the output runs a little longer than the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula prices the audio's length plus one second, rounded up to a whole second, so the estimate never understates. fal's pricing API needs a key and wasn't cross-checked; the model pages and their llms.txt agree.",
           "sources": [
             {
               "url": "https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/standard",
@@ -3034,7 +3034,8 @@
             "roundUp": [
               "(source seconds)"
             ],
-            "say": "$0.0562 (Standard) or $0.115 (Pro) per second of audio, rounded up to a whole second. The video runs as long as the audio."
+            "say": "$0.0562 (Standard) or $0.115 (Pro) per second of audio plus one second, rounded up to a whole second. The video runs a little longer than the audio.",
+            "addSeconds": 1
           }
         },
         "replicate": {
@@ -3058,7 +3059,7 @@
           "multiplyBy": [
             "(source seconds)"
           ],
-          "notes": "Standard $0.056 a second of output video, Pro $0.11. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
+          "notes": "Standard $0.056 a second of output video, Pro $0.11. Billed per second of output video. A real run on fal (2026-11-04) gave 12.8 s of video for 12.6 s of audio, billed $0.72 (12.8 x $0.0562), and 4 s clips billed about half a second over, so the output runs a little longer than the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula prices the audio's length plus one second, rounded up to a whole second, so the estimate never understates.",
           "sources": [
             {
               "url": "https://replicate.com/kwaivgi/kling-avatar-v2",
@@ -3075,7 +3076,8 @@
             "roundUp": [
               "(source seconds)"
             ],
-            "say": "$0.056 (Standard) or $0.11 (Pro) per second of audio, rounded up to a whole second. The video runs as long as the audio."
+            "say": "$0.056 (Standard) or $0.11 (Pro) per second of audio plus one second, rounded up to a whole second. The video runs a little longer than the audio.",
+            "addSeconds": 1
           }
         }
       }

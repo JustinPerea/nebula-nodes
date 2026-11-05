@@ -1284,7 +1284,9 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
     and `price` ("free", {"usd": [low, high]} per run at default settings,
     "by input size" with a `priceNote` saying the rate for a node priced from
-    its input file's size, e.g. SeedVR2 Upscale, or null when Nebula has no
+    its input file's size, e.g. SeedVR2 Upscale, "by audio length" with a
+    `priceNote` for a node priced from its audio's length, e.g. OmniHuman 2.0,
+    or null when Nebula has no
     list price). "free" is at the node's defaults: a
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
     mode, with no list price. With ready_only=false, nodes that can't run here

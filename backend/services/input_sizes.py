@@ -44,7 +44,8 @@ unmeasured: which frame a provider takes isn't known.
 Audio is measured the same way (one audio stream, its packets); a PCM WAV
 whose ``data`` chunk understates the bytes the file holds (a rewritten header,
 which ffprobe and every other demuxer then honour) is left unmeasured
-(``_wav_understates``). Known limit: for every other audio format the length
+(``_wav_understates``; chunks after the audio are allowed only up to 64 KiB and
+no more than the audio itself, and at most 1,024 chunks are walked). Known limit: for every other audio format the length
 is what the demuxer delivers, so a container whose own length field a provider
 reads differently from ffprobe is measured at ffprobe's.
 
@@ -321,6 +322,14 @@ def _probe_audio(path: Path) -> dict[str, Any] | None:
     return {"seconds": seconds}
 
 
+# A WAV may carry metadata chunks (LIST, id3) after its audio, but not much: more
+# than this many bytes, or more than the audio itself, and the "metadata" could be
+# audio a provider reads on into, so the file stays unmeasured. The parser also
+# walks at most this many chunks (a file of thousands of empty ones is not a clip).
+WAV_MAX_TRAILING_BYTES = 64 * 1024
+WAV_MAX_CHUNKS = 1024
+
+
 def _wav_understates(path: Path, seconds: float) -> bool:
     """True when a PCM WAV holds more audio than its header says: the bytes
     after the header, over the byte rate, exceed ``seconds`` by more than the
@@ -337,7 +346,11 @@ def _wav_understates(path: Path, seconds: float) -> bool:
             byte_rate = block_align = 0
             pcm = False
             data_at = data_size = None
+            walked = 0
             while data_at is None:
+                walked += 1
+                if walked > WAV_MAX_CHUNKS:
+                    return True
                 chunk = handle.read(8)
                 if len(chunk) < 8:
                     return False
@@ -357,8 +370,14 @@ def _wav_understates(path: Path, seconds: float) -> bool:
             if not pcm or byte_rate <= 0:
                 return False
             trailing = 0
+            after = size - (data_at + data_size + (data_size & 1))
+            if after > WAV_MAX_TRAILING_BYTES or after > data_size:
+                return True
             handle.seek(data_at + data_size + (data_size & 1))
             while True:
+                walked += 1
+                if walked > WAV_MAX_CHUNKS:
+                    return True
                 chunk = handle.read(8)
                 if len(chunk) < 8:
                     break

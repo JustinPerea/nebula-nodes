@@ -14407,7 +14407,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'omnihuman-1-5': {
     id: 'omnihuman-1-5',
     displayName: 'OmniHuman 1.5',
-    description: "Turns a portrait and an audio track into a talking video. Audio can run up to 30 s at 1080p or 60 s at 720p on fal, and up to 35 s on Replicate.",
+    description: "Turns a portrait and an audio track into a talking video. Audio can run up to 30 s at 1080p or 60 s at 720p on fal.ai, and up to 35 s on Replicate.",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/omnihuman/v1.5',
@@ -14478,7 +14478,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'omnihuman-2': {
     id: 'omnihuman-2',
     displayName: 'OmniHuman 2.0',
-    description: "Turns a portrait and an audio track into a talking video. It takes WAV or MP3 audio from 4 to 300 s, and runs on fal only for now.",
+    description: "Turns a portrait and an audio track into a talking video. It takes WAV or MP3 audio from 4 to 300 s, and runs on fal.ai only for now.",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/omnihuman/v2',
