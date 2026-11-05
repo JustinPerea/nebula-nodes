@@ -126,19 +126,22 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   });
 
   it.each([
-    ['an unknown code', 400, { detail: 'graph.json has a new problem', code: 'graph_something_new' },
-      `${LOAD} graph.json has a new problem`],
-    ['no code', 400, { detail: 'graph.json must contain an object' }, `${LOAD} graph.json must contain an object`],
-    ['a size with no numbers', 413, { detail: 'graph.json is too large', code: 'graph_too_large' },
-      `${LOAD} graph.json is too large`],
-  ])('%s: the answer reads as it did, with the backend’s words', async (_case, status, body, line) => {
-    const { said } = await loadBundleAnswering(answer(status, body));
-    expect(said.mock.calls).toEqual([[line]]);
+    // Review 8 of PR #205 (limits LOW-4, lines-inspector LOW-3): the person
+    // never reads the backend's words. A refusal with no line reads as a
+    // damaged file; the words stay in the console.
+    ['an unknown code', 400, { detail: 'graph.json has a new problem', code: 'graph_something_new' }],
+    ['no code', 400, { detail: 'graph.json must contain an object' }],
+    ['a size with no numbers', 413, { detail: 'graph.json is too large', code: 'graph_too_large' }],
+    ['an upload size with no limit', 413, { detail: 'Zip bundle exceeds the compressed upload limit', code: 'bundle_upload_too_large' }],
+  ])('%s: the damaged-file line, never the backend’s words', async (_case, status, body) => {
+    const { said, errors } = await loadBundleAnswering(answer(status, body));
+    expect(said.mock.calls).toEqual([[`${LOAD} This file is damaged or isn’t a Nebula canvas.`]]);
+    expect(errors).toHaveBeenCalledWith('[nebula] graph load', body.detail);
   });
 
-  it('an empty refusal still reads as one under the load heading', async () => {
+  it('an empty refusal reads as a damaged file under the load heading', async () => {
     const { said } = await loadBundleAnswering(new Response('', { status: 400 }));
-    expect(said.mock.calls).toEqual([[`${LOAD} Try again, or reload if it keeps happening.`]]);
+    expect(said.mock.calls).toEqual([[`${LOAD} This file is damaged or isn’t a Nebula canvas.`]]);
   });
 });
 
@@ -173,8 +176,35 @@ describe('the import’s own checks (GM #205 r16 item 3)', () => {
   ])('%s: %s', (code, line) => {
     expect(bundleRefusalLine({ code, detail: 'unknown node definition no-such-node' })).toBe(line);
   });
-  it('a member or upload size with no numbers keeps the answer as it was', () => {
-    expect(bundleRefusalLine({ code: 'bundle_member_too_large', limitBytes: 8 })).toBeNull();
+  it('a member or upload size with no limit keeps the answer as it was', () => {
+    // With the limit and no size, the line names the limit (GM PR #205 r17
+    // item 3: cinemaUploadLock.pr205r9.test.ts).
+    expect(bundleRefusalLine({ code: 'bundle_member_too_large', sizeBytes: 8 })).toBeNull();
     expect(bundleRefusalLine({ code: 'bundle_upload_too_large', sizeBytes: 9 })).toBeNull();
+  });
+});
+
+// Review 8 of PR #205 (limits LOW-4, lines-inspector LOW-3): a refusal of the
+// file with no line reads as a damaged file; an answer that isn't the file's
+// refusal keeps its own line.
+describe('loadRefusalLine', () => {
+  const DAMAGED = 'This file is damaged or isn’t a Nebula canvas.';
+  it('the code’s line first, then the damaged-file line for a 400 or 413 with none', async () => {
+    const { loadRefusalLine } = await import('../src/lib/graphFile');
+    expect(loadRefusalLine(400, { code: 'unknown_definition' })).toBe('This file uses a node this version of Nebula doesn’t have.');
+    for (const body of [null, {}, { detail: 'x' }, { code: 'graph_something_new' }, { code: 'graph_too_large' }]) {
+      expect(loadRefusalLine(400, body)).toBe(DAMAGED);
+      expect(loadRefusalLine(413, body)).toBe(DAMAGED);
+      expect(loadRefusalLine(422, body)).toBe(DAMAGED);
+    }
+  });
+  it('not for a server failure, a conflict, the person gate or a project limit', async () => {
+    const { loadRefusalLine } = await import('../src/lib/graphFile');
+    expect(loadRefusalLine(500, { detail: 'x' })).toBeNull();
+    expect(loadRefusalLine(503, null)).toBeNull();
+    expect(loadRefusalLine(409, { detail: 'Cannot load while a run is active.' })).toBeNull();
+    expect(loadRefusalLine(403, { code: 'person_required' })).toBeNull();
+    expect(loadRefusalLine(400, { code: 'person_required' })).toBeNull();
+    for (const limit of ['size', 'projects', 'storage']) expect(loadRefusalLine(413, { limit })).toBeNull();
   });
 });

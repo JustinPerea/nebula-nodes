@@ -8,9 +8,10 @@ export const INTERRUPTED_CINEMA_UPLOAD_MESSAGE = 'Upload was interrupted. Remove
 /** A canvas import stopped it (GM PR #205 r13 item 3). */
 export const STOPPED_CINEMA_UPLOAD_MESSAGE = 'The upload stopped because a canvas import started.';
 /** A stopped upload after a reload (GM PR #205 r15 item 2): its file is gone
- * and Try again with it, so the import reason leads nowhere; it reads as the
- * other reloaded rows do. */
-export const RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE = 'Remove it, then attach the image again.';
+ * and Try again with it, so the import reason leads nowhere. It is the same
+ * state as the interrupted row beside it, so it reads the same, opening with
+ * what happened (GM PR #205 r17). */
+export const RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE = INTERRUPTED_CINEMA_UPLOAD_MESSAGE;
 
 export interface CinemaReferenceUpload {
   id: string;
@@ -108,14 +109,31 @@ export const useCinemaUploadStore = createCinemaUploadStore();
 export function otherShotsUploadLine(nodeId: string, shotId: string, shots: readonly { id: string }[]): string | null {
   const others = useCinemaUploadStore.getState().uploads.filter((upload) => upload.nodeId === nodeId
     && upload.shotId !== undefined && upload.shotId !== shotId);
-  const pending = others.filter((upload) => upload.status === 'uploading');
-  const named = pending.length > 0 ? pending : others;
-  const numbers = [...new Set(named.map((upload) => shots.findIndex((shot) => shot.id === upload.shotId) + 1))]
-    .filter((number) => number > 0).sort((a, b) => a - b);
-  if (numbers.length === 0) return null;
-  const where = quotedNames(numbers.map((number) => `Shot ${number}`), 'shots');
-  return pending.length > 0 ? `You can generate all when the uploads in ${where} finish.`
-    : `You can generate all after you try the uploads in ${where} again or remove them.`;
+  const where = (named: CinemaReferenceUpload[]) => {
+    const numbers = [...new Set(named.map((upload) => shots.findIndex((shot) => shot.id === upload.shotId) + 1))]
+      .filter((number) => number > 0).sort((a, b) => a - b);
+    return numbers.length === 0 ? null : quotedNames(numbers.map((number) => `Shot ${number}`), 'shots');
+  };
+  const pending = where(others.filter((upload) => upload.status === 'uploading'));
+  if (pending) return `You can generate all when the uploads in ${pending} finish.`;
+  // GM PR #205 r17: what each shot's rows offer, from the same test as their
+  // buttons. A shot with an upload that can be tried again takes the try
+  // form; a shot whose uploads can only be removed takes the remove form.
+  const retryShots = new Set(others.filter(uploadOffersTryAgain).map((upload) => upload.shotId));
+  const tryAgain = where(others.filter((upload) => retryShots.has(upload.shotId)));
+  const removeOnly = where(others.filter((upload) => !retryShots.has(upload.shotId)));
+  const lines = [
+    tryAgain && `You can generate all after you try the uploads in ${tryAgain} again or remove them.`,
+    removeOnly && `You can generate all after you remove the uploads in ${removeOnly}.`,
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join(' ') : null;
+}
+
+/** Whether an upload row offers Try again: the test its button reads, and
+ * the one the lock lines read, so a line never promises an action the row
+ * doesn't have (GM PR #205 r17). */
+export function uploadOffersTryAgain(upload: CinemaReferenceUpload): boolean {
+  return upload.status === 'error' && upload.canRetry;
 }
 
 /** How an upload row's reason reads (GM PR #205 r14 item 4): a failure the
@@ -127,14 +145,22 @@ export function uploadReasonRole(upload: CinemaReferenceUpload): 'alert' | 'stat
 }
 
 /** Shared references affect every shot; composition references affect their owner. */
-export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAllShots = false): string | null {
+export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAllShots = false,
+  verb: 'generate' | 'generate all' = 'generate'): string | null {
   const uploads = useCinemaUploadStore.getState().uploads.filter((upload) => upload.nodeId === nodeId
     && (includeAllShots || !upload.shotId || upload.shotId === shotId));
   if (uploads.some((upload) => upload.status === 'uploading')) return 'Wait for reference uploads to finish before generating.';
   // GM PR #205 r14 item 3: a lock reason, in the lock form, naming the
   // uploads by the shared name-list rule (up to 3 by name, from 4 a count).
-  if (uploads.length) {
-    return `You can generate after you try ${quotedNames(uploads.map((upload) => upload.name), 'uploads')} again or remove ${uploads.length > 1 ? 'them' : 'it'}.`;
-  }
-  return null;
+  // GM PR #205 r17: one sentence per kind, from what each row offers. The
+  // Cinema toolbar's Generate all says "generate all" (review 8, item 17:
+  // the default until GM answers).
+  const retry = uploads.filter(uploadOffersTryAgain);
+  const removeOnly = uploads.filter((upload) => !uploadOffersTryAgain(upload));
+  const names = (list: CinemaReferenceUpload[]) => quotedNames(list.map((upload) => upload.name), 'uploads');
+  const lines = [
+    retry.length > 0 && `You can ${verb} after you try ${names(retry)} again or remove ${retry.length > 1 ? 'them' : 'it'}.`,
+    removeOnly.length > 0 && `You can ${verb} after you remove ${names(removeOnly)}.`,
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join(' ') : null;
 }

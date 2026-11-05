@@ -22,6 +22,7 @@ vi.mock('../../src/store/cinemaUploadStore', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../src/store/cinemaUploadStore')>();
   return {
     uploadReasonRole: real.uploadReasonRole,
+    uploadOffersTryAgain: real.uploadOffersTryAgain,
     // The real line, read from this file's uploads.
     otherShotsUploadLine: (...args: Parameters<typeof real.otherShotsUploadLine>) => {
       real.useCinemaUploadStore.setState({ uploads: metadata.uploads as never });

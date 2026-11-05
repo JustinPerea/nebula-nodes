@@ -2,7 +2,7 @@ import { useId, useRef } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { cinemaLookLabel, defaultCinemaLook, defaultCinemaPalette } from '../../lib/cinemaArtDirection';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
-import { uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { uploadOffersTryAgain, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { shortLine } from '../../lib/errorCopy';
 import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
@@ -164,7 +164,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
                     : upload.error ?? "Couldn't upload this image."}
               </span>
               <div className="cinema-reference-upload__actions">
-                {upload.status === 'error' && upload.canRetry && (
+                {uploadOffersTryAgain(upload) && (
                   <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Try again uploading “${upload.name}”`}
                     {...lockedAction(lock, { offline: true })}>Try again</button>
                 )}

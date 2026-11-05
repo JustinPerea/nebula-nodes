@@ -842,9 +842,12 @@ def format_event(event: dict[str, Any]) -> str:
         summary = f"rejected proposal {data['proposalId']}{reason}"
     elif kind == "proposal.accept_refused" and data.get("proposalId"):
         limit = data.get("limit") or {}
-        what = ({"depth": f"nested more than {limit.get('max')} levels deep",
-                 "values": f"holding more than {limit.get('max'):,} values" if isinstance(limit.get("max"), int) else ""}
-                .get(limit.get("kind")) or "too complex to save")
+        top = limit.get("max") if isinstance(limit.get("max"), int) and not isinstance(limit.get("max"), bool) else None
+        # A limit with no max reads by its kind alone, never "None".
+        what = {"depth": f"nested more than {top} levels deep" if top is not None else "nested too deeply to save",
+                "values": f"holding more than {top:,} values" if top is not None else "too complex to save",
+                "size": (f"over Nebula's save limit of {top / (1024 * 1024):g} MiB" if top is not None
+                         else "too large to save")}.get(limit.get("kind")) or "too complex to save"
         summary = (f"the person's Accept of proposal {data['proposalId']} was refused: the canvas would be {what}; "
                    f"it is still open (withdraw it and propose something smaller)")
     elif kind == "proposal.reopened" and data.get("proposalId"):

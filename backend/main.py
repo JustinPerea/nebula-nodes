@@ -4073,13 +4073,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # Events emitted while a browser is disconnected are not replayed.
         # Reconnect therefore starts with an authoritative graph, provider
         # safety journal, and retained execution-status snapshot.
-        export = await export_graph_for_frontend()
         # bootId: which backend process this is (round 15 of PR #114). A tab
         # holding a create whose answer was lost releases it only when the
         # backend restarted (a new bootId); after a mere reconnect the create
-        # may still land, and a later sync shows it.
-        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
-                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
+        # may still land, and a later sync shows it. Numbered and sent in the
+        # broadcasts' order (_graph_sync_order): no broadcast read before it
+        # reaches this socket after it.
+        async with _graph_sync_order():
+            export = await export_graph_for_frontend()
+            await websocket.send_text(json.dumps({"type": "graphSync", **export, "syncSeq": _next_graph_sync_seq(),
+                                                  "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
@@ -7991,9 +7994,10 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
                             detail=exc.detail) from exc
     # An agent can't propose a canvas the person's Save couldn't save: the
-    # staged canvas is measured as its own edits are (review 7 of PR #205,
-    # limits MEDIUM-1).
-    _refuse_agent_shape_past_save_limit(_graph_canvas_export(candidate))
+    # staged canvas is measured as its own edits are, shape and size (review
+    # 7 of PR #205, limits MEDIUM-1; review 8, limits MEDIUM-1). Proposing is
+    # agent-only (identity above), so the person's skip never applies.
+    _refuse_agent_growth_past_save_limit(candidate)
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
     measured = await _measure_proposal_inputs(candidate, run_ids)
@@ -8295,7 +8299,14 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             # MEDIUM-1). Measured on every Accept: with the canvas unchanged
             # the measure is the one the proposal passed, so only a change
             # since can refuse it.
-            too_complex = _shape_past_save_limit(_graph_canvas_export(candidate))
+            candidate_export = _graph_canvas_export(candidate)
+            too_complex = _shape_past_save_limit(candidate_export)
+            if too_complex is None:
+                # And past the project's size limit (review 8 of PR #205,
+                # limits MEDIUM-1): refused the same way, with the size limit.
+                too_large = _size_past_save_limit(candidate, candidate_export)
+                if too_large is not None:
+                    too_complex = (409, too_large[1], {"kind": "size", "max": MAX_PROJECT_BYTES})
             if too_complex is None:
                 touched = sorted(set(id_map.values()) | {change.node_id for change in proposal.spec.params})
                 _commit_graph_candidate_with_recoveries(
@@ -8304,9 +8315,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
                     source="proposal",
                 )
     if too_complex is not None:
-        _status, why = too_complex
-        limit = ({"kind": "depth", "max": RESTORE_MAX_GRAPH_DEPTH} if "nested" in why
-                 else {"kind": "values", "max": RESTORE_MAX_GRAPH_VALUES})
+        # The limit comes with the measure that found it, never from its words.
+        _status, why, limit = too_complex
         detail = (f"The person's Accept of {proposal.agent.name}'s proposal {proposal.id} was refused: "
                   f"{why} The proposal is still open.")
         _journal(
@@ -11793,6 +11803,66 @@ def _graph_edit_origin() -> dict[str, Any]:
     return origin
 
 
+# PR #205 review 8 (held undo): every graphSync carries ``syncSeq``, a number
+# that grows with each sync, in the order each read the graph. Started at this
+# process's start in microseconds (BACKEND_BOOT_STARTED_AT), so a backend
+# started later numbers its syncs above an earlier one's. An answer to a
+# restore or a node delete carries its own sync's number: a canvas knows any
+# sync with a lower one was read before Nebula applied that edit. Agents may
+# ignore it.
+_graph_sync_seq = BACKEND_BOOT_STARTED_AT
+# The lock that keeps syncs in that order on every socket, one per event loop
+# (a test's asyncio.run makes its own loop), and the task holding it.
+_graph_sync_lock: tuple[asyncio.AbstractEventLoop, asyncio.Lock] | None = None
+_graph_sync_holder: asyncio.Task[Any] | None = None
+
+
+def _next_graph_sync_seq() -> int:
+    """The next graphSync's ``syncSeq``. Take it in the step that read the
+    graph (no await between), so the numbers follow the reads."""
+    global _graph_sync_seq
+    _graph_sync_seq += 1
+    return _graph_sync_seq
+
+
+class _graph_sync_order:
+    """``async with``: held from a sync's graph read to its last send (the
+    broadcast, and a socket's first sync), so no socket gets a lower syncSeq
+    after a higher one. A sync made inside another's send by the same task (a
+    write a hook runs there) goes ahead rather than wait for itself forever."""
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock | None = None
+
+    async def __aenter__(self) -> None:
+        global _graph_sync_lock, _graph_sync_holder
+        loop = asyncio.get_running_loop()
+        if _graph_sync_lock is None or _graph_sync_lock[0] is not loop:
+            _graph_sync_lock = (loop, asyncio.Lock())
+        task = asyncio.current_task()
+        if _graph_sync_holder is task:
+            return
+        lock = _graph_sync_lock[1]
+        await lock.acquire()
+        _graph_sync_holder = task
+        self._lock = lock
+
+    async def __aexit__(self, *_exc: object) -> None:
+        global _graph_sync_holder
+        if self._lock is None:
+            return
+        _graph_sync_holder = None
+        self._lock.release()
+
+
+def _synced_seq(synced: Any) -> dict[str, int]:
+    """``{"syncSeq": n}`` for an answer whose edit _broadcast_graph_sync just
+    sent (its return), or nothing when it carried none."""
+    # Not a dict: a test's stand-in for the broadcast.
+    seq = synced.get("syncSeq") if isinstance(synced, dict) else None
+    return {"syncSeq": seq} if isinstance(seq, int) else {}
+
+
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
@@ -11879,27 +11949,32 @@ async def _broadcast_graph_sync(
         # Proposals point at node ids that just restarted: none of them still fit.
         closed = canvas_proposals.invalidate_all("the canvas was replaced")
         _journal_closed_proposals(closed)
-    export = await export_graph_for_frontend()
-    # A cover proposal's view follows the live canvas (a pin's image deleted
-    # or back). Before the sync goes out: one a delete closes is named in the
-    # delete's removal records, which the sync's ``edit`` carries.
-    await _follow_cover_proposals(export)
-    if graph_replaced:
-        agent_presence.forget_graph()
-        await _forget_status_anchors()
-    moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
-    # Placeholders on the graph now (a project opened, an agent's edit): when
-    # the next one runs out (pending_nodes' idle rule).
-    _schedule_pending_expiry()
-    await manager.broadcast_raw({"type": "graphSync", **export,
-                                 **({"graphReplaced": True} if graph_replaced else {}),
-                                 **({"cleared": True} if cleared and not graph_replaced else {}),
-                                 **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
-                                 **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
-                                 **({"arranged": arranged} if arranged and not graph_replaced else {}),
-                                 **({"runParams": run_params} if run_params and not graph_replaced else {}),
-                                 **({"edit": _graph_edit_origin()}
-                                    if edit and (not graph_replaced or reason == "import") else {})})
+    # One sync at a time, from the graph read to the last socket (PR #205
+    # review 8, held undo): each socket gets them in syncSeq order.
+    async with _graph_sync_order():
+        export = await export_graph_for_frontend()
+        # Numbered as read, before any await (_next_graph_sync_seq).
+        export["syncSeq"] = _next_graph_sync_seq()
+        # A cover proposal's view follows the live canvas (a pin's image deleted
+        # or back). Before the sync goes out: one a delete closes is named in the
+        # delete's removal records, which the sync's ``edit`` carries.
+        await _follow_cover_proposals(export)
+        if graph_replaced:
+            agent_presence.forget_graph()
+            await _forget_status_anchors()
+        moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
+        # Placeholders on the graph now (a project opened, an agent's edit): when
+        # the next one runs out (pending_nodes' idle rule).
+        _schedule_pending_expiry()
+        await manager.broadcast_raw({"type": "graphSync", **export,
+                                     **({"graphReplaced": True} if graph_replaced else {}),
+                                     **({"cleared": True} if cleared and not graph_replaced else {}),
+                                     **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
+                                     **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+                                     **({"arranged": arranged} if arranged and not graph_replaced else {}),
+                                     **({"runParams": run_params} if run_params and not graph_replaced else {}),
+                                     **({"edit": _graph_edit_origin()}
+                                        if edit and (not graph_replaced or reason == "import") else {})})
     # It carried the whole graph: a sync an admitted run couldn't send
     # (_broadcast_admitted_run) is paid by this one.
     global _graph_sync_owed
@@ -14132,7 +14207,7 @@ async def delete_graph_node(node_id: str) -> dict:
     removals = _removal_records(entries)
     token = _removals_ctx.set(removals)
     try:
-        await _broadcast_graph_sync(edit=True)
+        synced = await _broadcast_graph_sync(edit=True)
     finally:
         _removals_ctx.reset(token)
     _renew_kept_removals(removals)
@@ -14143,7 +14218,8 @@ async def delete_graph_node(node_id: str) -> dict:
         await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
     # `label` is its name as the canvas showed it (the type's name when it has none): `nebula delete` says it.
-    return {"status": "deleted", "id": node_id, "label": label, "removal": removals[0]}
+    # `syncSeq`: the graphSync that sent it (_synced_seq).
+    return {"status": "deleted", "id": node_id, "label": label, "removal": removals[0], **_synced_seq(synced)}
 
 
 def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -14647,6 +14723,7 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     undoing the same step agree. Staged on a copy (unwire, remove, nodes,
     wire) with the checks single edits use, then committed at once. Never
     runs anything. Anyone can call it, agents too: it is itself undoable.
+    The answer's ``syncSeq`` is the graphSync that sent the restored graph.
 
     ``edit`` (an edit id, ``ed_...``) is the edit this step undoes or redoes,
     when the canvas's step came from that edit's graphSync (its ``edit.id``).
@@ -14962,7 +15039,7 @@ async def _restore_graph(
     removals = _removal_records(entries)
     removals_token = _removals_ctx.set(removals)
     try:
-        await _broadcast_graph_sync(edit=True, moved=moved)
+        synced = await _broadcast_graph_sync(edit=True, moved=moved)
     finally:
         _removals_ctx.reset(removals_token)
     _renew_kept_removals(removals)
@@ -14985,6 +15062,9 @@ async def _restore_graph(
         "placeholders": sorted(made_pending),
         **undone,
         "removals": removals,
+        # The graphSync that sent it: a canvas reads any lower one as older
+        # than this restore (PR #205 review 8, held undo).
+        **_synced_seq(synced),
     }
 
 
@@ -16851,19 +16931,36 @@ def _graph_shape_measure(value: Any) -> tuple[int, int]:
     the other measure short (review 7 of PR #205, limits MEDIUM-2). The walk
     is linear in a canvas the size limit already bounds, and its depth is
     bounded by the ingress check (_check_graph_ingress_values)."""
-    stack: list[tuple[Any, int]] = [(value, 0)]
-    deepest = 0
-    count = 0
-    while stack:
-        current, depth = stack.pop()
-        count += 1
-        if depth > deepest:
-            deepest = depth
-        if isinstance(current, dict):
-            stack.extend((item, depth + 1) for item in current.values())
-        elif isinstance(current, list):
-            stack.extend((item, depth + 1) for item in current)
+    deepest, count, _past = _graph_shape_measure_past(value)
     return deepest, count
+
+
+def _graph_shape_measure_past(value: Any) -> tuple[int, int, int]:
+    """_graph_shape_measure, and how many values sit deeper than Save's depth
+    limit (RESTORE_MAX_GRAPH_DEPTH): "no worse" for depth compares that count,
+    not the deepest depth, so an agent can't add a second value as deep as
+    one already there (review 8 of PR #205, limits LOW-1). Walked a level at
+    a time, with no per-value tuple: the walk runs on every agent write that
+    leaves a canvas past a limit, and never stops early (review 8, NIT-1;
+    test_agent_canvas_limits_r9 times it on the largest canvas Save allows)."""
+    level: list[Any] = [value]
+    depth = 0
+    count = 0
+    past = 0
+    while True:
+        count += len(level)
+        if depth > RESTORE_MAX_GRAPH_DEPTH:
+            past += len(level)
+        below: list[Any] = []
+        for current in level:
+            if isinstance(current, dict):
+                below.extend(current.values())
+            elif isinstance(current, list):
+                below.extend(current)
+        if not below:
+            return depth, count, past
+        level = below
+        depth += 1
 
 
 def _project_snapshot_count(export: dict[str, list[dict[str, Any]]]) -> int:
@@ -16893,18 +16990,21 @@ def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, A
     found = _shape_past_save_limit(after_export)
     if found is None:
         return
-    status, detail = found
+    status, detail, _limit = found
     refusal = _person_only_refusal(detail)
     if isinstance(refusal, PersonGateError):
         raise refusal
     raise HTTPException(status_code=status, detail=detail)
 
 
-def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tuple[int, str] | None:
-    """(status, the agent's words) when ``after_export`` would leave the
-    canvas past Save's shape limits and worse than it is now; None when it
-    wouldn't (_refuse_agent_shape_past_save_limit)."""
-    depth, count = _graph_shape_measure(_canvas_save_file_view(after_export))
+def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tuple[int, str, dict[str, Any]] | None:
+    """(status, the agent's words, the limit: {kind: depth or values, max})
+    when ``after_export`` would leave the canvas past Save's shape limits and
+    worse than it is now; None when it wouldn't
+    (_refuse_agent_shape_past_save_limit). On a canvas already too deep,
+    "worse" is any more values past the depth limit: an edit may only take
+    depth away (review 8 of PR #205, limits LOW-1)."""
+    depth, count, past = _graph_shape_measure_past(_canvas_save_file_view(after_export))
     # The project's own save checks its whole snapshot (the canvas and its
     # run history) from the snapshot's root, where the canvas's values sit
     # as deep as in the file: only its count can be larger. Read it only
@@ -16922,20 +17022,21 @@ def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tup
     if not too_deep and not too_many:
         return None
     before_export = _graph_canvas_export(cli_graph)
-    before_depth, before_count = _graph_shape_measure(_canvas_save_file_view(before_export))
+    _before_depth, before_count, before_past = _graph_shape_measure_past(_canvas_save_file_view(before_export))
     if too_many and snapshot_count > count:
         count, before_count = snapshot_count, _project_snapshot_count(before_export)
-    if too_deep and (before_depth <= RESTORE_MAX_GRAPH_DEPTH or depth > before_depth):
-        status, detail = 400, (f"This edit would leave the canvas nested more than {RESTORE_MAX_GRAPH_DEPTH} levels deep "
-                               "from its file's root, and the person's canvas can't save it. Nothing changed. "
-                               "Nest the value less deeply.")
-    elif too_many and (before_count <= RESTORE_MAX_GRAPH_VALUES or count > before_count):
-        status, detail = 413, (f"This edit would leave the canvas holding more than {RESTORE_MAX_GRAPH_VALUES:,} values, "
-                               "and the person's canvas can't save it. Nothing changed. Make the edit smaller, "
-                               "or remove what the canvas no longer needs (ask the person first).")
-    else:
-        return None
-    return status, detail
+    # Past the depth limit, values only: a canvas that wasn't too deep has
+    # none, so any is worse; one that was may only lose them.
+    if too_deep and past > before_past:
+        return 400, (f"This edit would leave the canvas nested more than {RESTORE_MAX_GRAPH_DEPTH} levels deep "
+                     "from its file's root, and the person's canvas can't save it. Nothing changed. "
+                     "Nest the value less deeply."), {"kind": "depth", "max": RESTORE_MAX_GRAPH_DEPTH}
+    if too_many and (before_count <= RESTORE_MAX_GRAPH_VALUES or count > before_count):
+        return 413, (f"This edit would leave the canvas holding more than {RESTORE_MAX_GRAPH_VALUES:,} values, "
+                     "and the person's canvas can't save it. Nothing changed. Make the edit smaller, "
+                     "or remove what the canvas no longer needs (ask the person first)."), \
+            {"kind": "values", "max": RESTORE_MAX_GRAPH_VALUES}
+    return None
 
 
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
@@ -16952,6 +17053,29 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
         return
     after_export = _graph_canvas_export(candidate)
     _refuse_agent_shape_past_save_limit(after_export)
+    found = _size_past_save_limit(candidate, after_export)
+    if found is None:
+        return
+    after, detail = found
+    # No agent marker: most likely the person's canvas tab with a token from
+    # before Nebula restarted, whose Load graph is never refused for size once
+    # it reconnects. The person gate's refusal tells it so (GM's reconnect line,
+    # this text behind Details), not a pause or the agents' text as its reason.
+    refusal = _person_only_refusal(detail)
+    if isinstance(refusal, PersonGateError):
+        raise refusal
+    raise ProjectSizeRefusal(after, detail)
+
+
+def _size_past_save_limit(candidate: CLIGraph, after_export: dict[str, list[dict[str, Any]]] | None = None,
+                          ) -> tuple[int, str] | None:
+    """(the project's size after, the agent's words) when ``candidate`` would
+    leave the open project over the save limit and larger than it is now;
+    None when it wouldn't. Whoever asks: _refuse_agent_growth_past_save_limit
+    for an agent's edit, and the person's Accept of a proposal that has grown
+    past the limit since it was made (review 8 of PR #205, limits MEDIUM-1)."""
+    if after_export is None:
+        after_export = _graph_canvas_export(candidate)
     try:
         catalog_bytes = project_store.path.stat().st_size if project_store.path.exists() else 0
     except OSError:
@@ -16962,20 +17086,20 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     # ", " and ": ", one byte more per separator, and compact JSON has at most
     # one separator per two bytes ("0,0,0"): 1.5x the catalog bounds it.
     if (catalog_bytes * 3 + 1) // 2 + project_size.json_bytes(after_export) <= MAX_PROJECT_BYTES:
-        return
+        return None
     try:
         found = _open_project_with(candidate)
     except ProjectStoreError:
-        return
+        return None
     if found is None:
-        return
+        return None
     project, after_snapshot = found
     after = project_size.snapshot_bytes(after_snapshot)
     if after <= MAX_PROJECT_BYTES:
-        return
+        return None
     before = project_size.snapshot_bytes(_overlaid_snapshot(project, _graph_canvas_export(cli_graph)))
     if after <= before:
-        return
+        return None
     limit = f"{MAX_PROJECT_BYTES / (1024 * 1024):g} MiB ({MAX_PROJECT_BYTES:,} bytes)"
     if before > MAX_PROJECT_BYTES:
         detail = (f"The open project is already over Nebula's save limit of {limit} at {before:,} bytes, so the "
@@ -16986,14 +17110,7 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
         detail = (f"This edit would leave the open project at {after:,} bytes, over Nebula's save limit of {limit}, "
                   "and the person's canvas can't save a project that large. Nothing changed. Call project_size "
                   "(`nebula project size`) to see what takes the space, and make the edit smaller.")
-    # No agent marker: most likely the person's canvas tab with a token from
-    # before Nebula restarted, whose Load graph is never refused for size once
-    # it reconnects. The person gate's refusal tells it so (GM's reconnect line,
-    # this text behind Details), not a pause or the agents' text as its reason.
-    refusal = _person_only_refusal(detail)
-    if isinstance(refusal, PersonGateError):
-        raise refusal
-    raise ProjectSizeRefusal(after, detail)
+    return after, detail
 
 
 async def _projects_live_export() -> dict[str, Any]:

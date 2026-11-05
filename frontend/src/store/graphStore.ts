@@ -2378,7 +2378,7 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   deferredParamPushes.clear();
   deletesInFlight.clear();
   heldCopies.clear();
-  forgetEchoWaits();
+  forgetHoldsOfReplacedCanvas();
   renameDrafts.clear();
   labelsInFlight.clear();
   labelsSavedBefore.clear();
@@ -5917,17 +5917,51 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
   });
 }
 
-/** Hold a wire write; call the result with whether the backend took it. */
+/** Hold a wire write; call the result with whether the backend took it.
+ * `synced`: it took it, and the sync its answer names has been applied
+ * (whenSynced): that sync, or a later one, is Nebula's word on the wire, so
+ * the hold ends and the canvas takes the newest sync's wire (PR #205
+ * review 8, held-undo MEDIUM-2). Without it (an answer that names no sync)
+ * the hold waits for a sync that agrees, or one more (heldWrites). */
 function holdWire(edge: Edge | { source: string; sourceHandle: string; target: string; targetHandle: string },
-  want: boolean): (took: boolean) => void {
+  want: boolean): (took: boolean, synced?: boolean) => void {
   const key = edgeKey(edge);
   const write = wireWrites.get(key) ?? { want, sending: 0 };
   Object.assign(write, { want, sending: write.sending + 1, agreed: false, grace: false });
   wireWrites.set(key, write);
-  return (took) => {
+  let done = false;
+  return (took, synced = false) => {
+    // Once: a replaced canvas ends it first (whenSynced's drop), and the
+    // answer's run still comes; a second end would take another restore's
+    // share of the same connection.
+    if (done) return;
+    done = true;
     write.sending -= 1;
-    if (wireWrites.get(key) === write && !write.sending && (!took || write.agreed)) wireWrites.delete(key);
+    if (wireWrites.get(key) !== write || write.sending) return;
+    if (!took || write.agreed) wireWrites.delete(key);
+    else if (synced) {
+      wireWrites.delete(key);
+      takeSyncedWire(key);
+    }
   };
+}
+
+/** The connections of the newest sync applied (applyGraphSyncNow), by
+ * connection: what Nebula has, for a held wire whose hold ends after it. */
+let newestSyncEdges: ReadonlyMap<string, Edge> = new Map();
+/** A wire held through the sync that ended its hold (a restore's, between
+ * backend nodes): the canvas takes that sync's way, or a later one's, when
+ * both ends are on the canvas. */
+function takeSyncedWire(key: string): void {
+  const edge = newestSyncEdges.get(key);
+  useGraphStore.setState((state) => {
+    const shown = state.edges.some((each) => edgeKey(each) === key);
+    if (edge && !shown) {
+      const ends = new Set(state.nodes.map((node) => node.id));
+      return ends.has(edge.source) && ends.has(edge.target) ? { edges: [...state.edges, { ...edge, selected: false }] } : {};
+    }
+    return !edge && shown ? { edges: state.edges.filter((each) => edgeKey(each) !== key) } : {};
+  });
 }
 
 /** What this sync must leave as this tab has it: connection -> want. */
@@ -5935,33 +5969,32 @@ function heldWires(cliEdges: Edge[]): Map<string, boolean> {
   return heldWrites(wireWrites, new Set(cliEdges.map(edgeKey)));
 }
 
-/** Hold a node an undo or redo puts back (`want`) or takes off, until its
- * restore answers. Nebula sends the restore's own echo before that answer,
- * and the stale echoes before it, so unlike a wire the hold ends there. */
-function holdNode(id: string, want: boolean, nebulaHas = !want): (took: boolean, untilEcho?: boolean) => boolean {
+/** Hold a node an undo or redo puts back (`want`) or takes off, or the
+ * person's Delete takes off, until its answer is handled: a refusal at once,
+ * an OK once the sync it names has been applied (whenSynced). Every sync
+ * before then leaves the node as the canvas has it and is kept as a copy
+ * (noteHeldCopies), so the newest copy when the hold ends is that sync or a
+ * later one, never one older than the edit (PR #205 review 8, held undo).
+ * Each write keeps its own count: two restores of one node each end their
+ * own share, and the node stays held until the last (MEDIUM-1). */
+function holdNode(id: string, want: boolean, nebulaHas = !want): (took: boolean) => boolean {
   const fresh = !nodeWrites.has(id);
   const write = nodeWrites.get(id) ?? { want, sending: 0 };
-  // A new hold waits for its own agreement (`agreed`: a sync since it began
-  // showed the node as it wants it).
-  Object.assign(write, { want, sending: write.sending + 1, agreed: false });
+  Object.assign(write, { want, sending: write.sending + 1 });
   nodeWrites.set(id, write);
   // Whether Nebula had the node when the hold began, for its first copy's
   // link (a removal, or a sync that never had it: noteHeldCopies).
-  if (fresh && !heldCopies.has(id)) heldStartedWith.set(id, nebulaHas);
+  if (fresh && !heldCopies.has(id)) {
+    heldStartedWith.set(id, nebulaHas);
+    heldStartedEdges.set(id, useGraphStore.getState().edges.filter((edge) => edge.source === id || edge.target === id));
+  }
   let done = false;
   // True when this ended the hold (no other write holds the node).
-  // `untilEcho`: Nebula applied it (an OK answer) but no sync has shown the
-  // node as it left it yet: the syncs before its echo are older than it, so
-  // the hold stays until one agrees (review 7 of PR #205, held-undo MEDIUM-1).
-  return (_took, untilEcho = false) => {
+  return () => {
     if (done) return false;
     done = true;
     write.sending -= 1;
     if (nodeWrites.get(id) !== write || write.sending) return false;
-    if (untilEcho && !write.agreed) {
-      awaitEcho(id, write);
-      return false;
-    }
     nodeWrites.delete(id);
     return true;
   };
@@ -5969,62 +6002,93 @@ function holdNode(id: string, want: boolean, nebulaHas = !want): (took: boolean,
 
 /** Whether Nebula had each held node when its hold began (holdNode). */
 const heldStartedWith = new Map<string, boolean>();
+/** Its connections then, as the canvas had them (the restore's own, for a
+ * node it brings back): its first copy's link's `edgesBefore`. */
+const heldStartedEdges = new Map<string, Edge[]>();
 
 /**
- * Review 7 of PR #205 (held-undo MEDIUM-1): a restore Nebula applied (its
- * OK answer) whose echo hasn't come yet. Nebula sends its syncs in the order
- * it applies edits, but over the socket, apart from the answer: a sync it
- * sent before it applied the restore (an agent's edit made while the restore
- * waited) can arrive after the answer, and lacks a node the restore brought
- * back (or has one it took off). So the node's presence is held until a
- * sync shows it as the restore left it (the restore's own echo, or a later
- * sync), as a wire is held until a sync agrees. The syncs before the echo
- * still count, in Nebula's order, for every change but the node's presence.
- * Capped at the hold limit, in case the echo never comes (a dropped socket):
- * then the newest copy decides, as before.
+ * PR #205 review 8 (held undo): no sync older than an edit Nebula answered
+ * OK may undo that edit. Nebula numbers every graphSync (`syncSeq`, in the
+ * order each read the graph; main.py sends them to each socket in that
+ * order), and its answer to a restore or a node delete carries the number of
+ * the sync that sent it. Over the socket, apart from the answer, a sync read
+ * before Nebula applied the edit (an agent's edit made while it waited) can
+ * still arrive after the answer: it lacks a node the restore brought back,
+ * has one it or a Delete took off, or lacks a restored connection. So the
+ * answer is handled (its holds end, its Delete's copies are carried) only
+ * once the sync it names, or a later one, has been applied: as if the sync
+ * had come first. Every sync before it counts, in Nebula's order, for all
+ * but what the edit holds.
+ *
+ * There is no cap: that sync always comes, on this socket or as a
+ * reconnect's first sync (numbered too, and read after Nebula applied the
+ * edit unless the edit's own sync reaches the new socket after it), or from a
+ * restarted backend (numbered from a later start, and a new process besides).
+ * Until it does, the canvas keeps the edit as Nebula answered it.
  */
-const echoWaits = new Map<string, { write: WireWrite; timer: ReturnType<typeof setTimeout> }>();
-function awaitEcho(id: string, write: WireWrite): void {
-  const was = echoWaits.get(id);
-  if (was) clearTimeout(was.timer);
-  echoWaits.set(id, { write, timer: setTimeout(() => releaseEchoedHolds(id), HOLD_LIMIT_MS) });
+let newestSyncSeq: number | null = null;
+/** `drop` ends the answer's holds when its canvas is replaced first. */
+const syncWaits: Array<{ seq: number; run: () => void; drop: () => void }> = [];
+
+/** The sync an OK answer names (main.py's `syncSeq`), or null for one that
+ * names none (a delete of a node already gone, or an older backend). */
+function answeredSyncSeq(answer: unknown): number | null {
+  const seq = (answer as { syncSeq?: unknown } | null)?.syncSeq;
+  return typeof seq === 'number' ? seq : null;
 }
-/** A replaced canvas: no echo hold, or start presence, is its. The holds
- * waiting on an echo end with it (the canvas they held is gone). */
-function forgetEchoWaits(): void {
-  for (const [id, wait] of echoWaits) {
-    clearTimeout(wait.timer);
-    if (nodeWrites.get(id) === wait.write) nodeWrites.delete(id);
+
+/** `run` once the sync numbered `seq` (or a later one) has been applied:
+ * now when it has, at once when the answer names none. `drop` ends what it
+ * holds if another canvas replaces this one first (its nodes aren't the new
+ * canvas's, though the ids repeat); `run` still comes, and finds it gone. */
+function whenSynced(seq: number | null, run: () => void, drop: () => void): void {
+  if (seq === null || (newestSyncSeq !== null && newestSyncSeq >= seq)) {
+    run();
+    return;
   }
-  echoWaits.clear();
+  syncWaits.push({ seq, run, drop });
+}
+
+/** Set by a restart (a new boot id): the next sync is another process's. */
+let syncProcessChanged = false;
+subscribeBackendRestart(() => { syncProcessChanged = true; });
+
+/** A graphSync was applied (applyGraphSync): the answers waiting for it, or
+ * for an earlier one, are handled now, in the order they came. A sync with
+ * no number (an export read into an empty tab) is Nebula as it is now; so is
+ * a restarted backend's, whatever its number. */
+function noteAppliedSync(event: unknown): void {
+  const numbered = answeredSyncSeq(event);
+  const restarted = syncProcessChanged;
+  syncProcessChanged = false;
+  // The socket brings them in order (main.py), and a restart starts over.
+  if (numbered !== null) newestSyncSeq = numbered;
+  const due = syncWaits.filter((wait) => numbered === null || restarted || numbered >= wait.seq);
+  if (due.length === 0) return;
+  for (const wait of due) syncWaits.splice(syncWaits.indexOf(wait), 1);
+  for (const wait of due) wait.run();
+}
+
+/** A replaced canvas: no hold's start presence, or refused rename, is its,
+ * and an answer still waiting for its sync holds nothing now. It is handled
+ * when that sync (or the replacement's own, which is later) comes, and finds
+ * its canvas gone, as a late answer does. */
+function forgetHoldsOfReplacedCanvas(): void {
+  for (const wait of syncWaits) wait.drop();
   heldStartedWith.clear();
+  heldStartedEdges.clear();
   refusedRenames.clear();
 }
-// Tests: a harness with no echo would leave a node held into the next test
-// (ids repeat). tests/setup.ts runs these after every test; the app never
-// sets the hook.
-(globalThis as { __nebulaTestResets?: Set<() => void> }).__nebulaTestResets?.add(forgetEchoWaits);
-/** Ends the echo holds a sync agreed with (or `capped`, the one whose cap
- * passed): the canvas takes the newest copy, as when a hold ends. */
-function releaseEchoedHolds(capped?: string): void {
-  const ended: string[] = [];
-  for (const [id, wait] of [...echoWaits]) {
-    if (nodeWrites.get(id) !== wait.write || wait.write.sending > 0) {
-      // Replaced, or held again by a newer restore, whose answer decides.
-      clearTimeout(wait.timer);
-      echoWaits.delete(id);
-      continue;
-    }
-    if (!wait.write.agreed && id !== capped) continue;
-    clearTimeout(wait.timer);
-    echoWaits.delete(id);
-    nodeWrites.delete(id);
-    ended.push(id);
-  }
-  if (ended.length === 0) return;
-  applyHeldCopies(ended);
-  restoreDeletedScenes(new Set(ended), heldNodes());
-}
+// Tests: one test's answer still waiting for its sync (a harness that never
+// sends it) never holds a node of the next one (ids repeat), and its
+// numbers never mark the next test's syncs as seen. tests/setup.ts runs these
+// after every test; the app never sets the hook.
+(globalThis as { __nebulaTestResets?: Set<() => void> }).__nebulaTestResets?.add(() => {
+  forgetHoldsOfReplacedCanvas();
+  syncWaits.length = 0;
+  newestSyncSeq = null;
+  syncProcessChanged = false;
+});
 
 /**
  * Review 17, M-2: a held node isn't frozen for good. Each sync that arrives
@@ -6058,6 +6122,10 @@ interface HeldCopy {
 interface HeldLink {
   origin: EditOrigin | undefined; node: Node<NodeData> | null; edges: Edge[]; moved: boolean;
   there: ReadonlySet<string>; seq: number;
+  /** The node's connections just before this edit's first sync (the copy
+   * before it, else as the hold began): what Nebula had before the edit
+   * (placeEarlierLink; review 8 of PR #205, held-undo LOW-2). */
+  edgesBefore: Edge[];
   /** A run's own param write-back (no origin): as foreignEditStep's `runParams`. */
   runParams?: boolean;
   /** This edit took the node off (Nebula had it just before its sync):
@@ -6159,6 +6227,11 @@ function heldLabel(nodeId: string, node: Node<NodeData>, renaming: string | unde
  * is renamed again: a node a refused Delete puts back as it was when Delete
  * was pressed takes Nebula's name (putBackFailedDeletes). */
 const refusedRenames = new Map<string, { refused: string; saved: string }>();
+/** Review 8 of PR #205 (held-undo LOW-4): the newest name a sync had for a
+ * held node since the person's latest rename of it was sent (an agent's
+ * rename meanwhile): what Nebula has if that rename is refused, after the
+ * hold too. A sync of a node not held shows its name on the card itself. */
+const heldSyncedLabels = new Map<string, string>();
 function withoutRefusedName(node: Node<NodeData>): Node<NodeData> {
   const refused = refusedRenames.get(node.id);
   return refused && node.data.label === refused.refused ? { ...node, data: { ...node.data, label: refused.saved } } : node;
@@ -6207,7 +6280,7 @@ function sameEdit(a: EditOrigin | undefined, b: EditOrigin | undefined): boolean
  * make none. */
 function nextLinks(prior: readonly HeldLink[], origin: EditOrigin | undefined, own: boolean, node: Node<NodeData> | null,
   edges: Edge[], moved: boolean, there: ReadonlySet<string>, runParams: boolean, renaming: string | undefined,
-  removes = false): HeldLink[] {
+  removes: boolean, edgesBefore: Edge[]): HeldLink[] {
   if (own) return [...prior];
   const last = prior.at(-1);
   const named = renaming !== undefined ? { renaming } : {};
@@ -6216,11 +6289,11 @@ function nextLinks(prior: readonly HeldLink[], origin: EditOrigin | undefined, o
   // (review 5 of PR #205, LOW-2), so a fold keeps what both were. Folded
   // into the same edit's link, its removal stays its removal.
   if (last && sameEdit(last.origin, origin) && Boolean(last.runParams) === runParams) {
-    return [...prior.slice(0, -1), { origin, node, edges, moved: moved || last.moved, there, seq: last.seq,
+    return [...prior.slice(0, -1), { origin, node, edges, moved: moved || last.moved, there, seq: last.seq, edgesBefore: last.edgesBefore,
       ...(runParams ? { runParams } : {}), ...named, ...(last.step ? { step: last.step } : {}),
       ...(node === null && (removes || last.removes || last.node !== null) ? { removes: true } : {}) }];
   }
-  return [...prior, { origin, node, edges, moved, there, seq: ++heldLinkSeq, ...(runParams ? { runParams } : {}), ...named,
+  return [...prior, { origin, node, edges, moved, there, seq: ++heldLinkSeq, edgesBefore, ...(runParams ? { runParams } : {}), ...named,
     ...(removes ? { removes: true } : {}) }];
 }
 function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], edges: Edge[],
@@ -6233,10 +6306,6 @@ function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], 
   for (const id of held.keys()) {
     const node = byId.get(id) ?? null;
     const before = heldCopies.get(id);
-    // This sync shows the node as its hold wants it: the hold's restore has
-    // landed in Nebula (its echo, or a later sync; awaitEcho).
-    const write = nodeWrites.get(id);
-    if (write && (node !== null) === write.want) write.agreed = true;
     // Nebula had the node just before this sync (the copy before it, else
     // as the hold began): a sync without it is that edit's removal (review
     // 7 of PR #205, held-undo MEDIUM-2).
@@ -6251,9 +6320,10 @@ function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], 
     // MEDIUM-1): a sync after its answer was sent after its echo, so its
     // label (an agent's rename since, say) is newer and stays.
     const renaming = labelsInFlight.get(id);
+    if (renaming !== undefined && node && typeof node.data.label === 'string') heldSyncedLabels.set(id, node.data.label);
     const nodeEdges = node ? edges.filter((edge) => edge.source === id || edge.target === id) : [];
     const links = nextLinks(before?.links ?? [], origin, own, node, nodeEdges, moved.includes(id), present, runParams, renaming,
-      node === null && had);
+      node === null && had, before ? before.edges : (heldStartedEdges.get(id) ?? []));
     if (!own && links.length > 0) heldLinksThisSync.push(links.at(-1)!);
     heldCopies.set(id, {
       there: present,
@@ -6368,22 +6438,22 @@ function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean; even
  * was connected to took that connection off too, in Nebula, but its step was
  * made without it (the held node was off the canvas then): its Undo would
  * bring the other node back without it, for good. The step, one its sync's
- * links name, gets the connection as Nebula had it, as the Delete's step
- * (`deleteStep`, the canvas when Delete was pressed) holds it. */
+ * links name, gets the connection as Nebula had it just before that sync.
+ * Review 8 of PR #205 (held-undo LOW-1): only one Nebula still had then
+ * (`edgesBefore`: the copy before it, else the canvas when Delete was
+ * pressed): one an earlier edit took off isn't this edit's to put back. */
 function giveBackLostConnections(deleteStep: UndoEntry, ids: readonly string[]): void {
   if (isSliceStep(deleteStep)) return;
-  const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
   for (const id of ids) {
-    const steps = [...new Set((heldCopies.get(id)?.links ?? []).map((link) => link.step))].filter(isForeignEdit);
-    if (steps.length === 0) continue;
-    for (const edge of deleteStep.edges) {
-      if (edge.source !== id && edge.target !== id) continue;
-      const other = edge.source === id ? edge.target : edge.source;
-      if (onCanvas.has(other)) continue;
-      const key = edgeKey(edge);
-      for (const step of steps) {
-        if (step.before.nodes[other] && step.after.nodes[other] === null && !(key in step.before.edges)) {
-          step.before.edges[key] = { ...edge, selected: false };
+    const links = heldCopies.get(id)?.links ?? [];
+    for (const link of links) {
+      const step = link.step;
+      if (!step || !isForeignEdit(step)) continue;
+      for (const edge of link.edgesBefore) {
+        if (edge.source !== id && edge.target !== id) continue;
+        const other = edge.source === id ? edge.target : edge.source;
+        if (step.before.nodes[other] && step.after.nodes[other] === null) {
+          step.before.edges[edgeKey(edge)] = { ...edge, selected: false };
         }
       }
     }
@@ -6410,10 +6480,18 @@ function placeEarlierLink(id: string, link: HeldLink, set: GraphSet, get: GraphG
   const present = new Set(nodes.map((node) => node.id));
   // As the newest copy (applyHeldCopies): on a restore's hold the syncs
   // already put the node's connections on the canvas.
-  const edges = wires
-    ? carriedEdges(state.edges, id, link.edges, link.there).filter((edge) => present.has(edge.source) && present.has(edge.target))
-    : state.edges;
-  return setLinkStep(link, id, state, nodes, edges, foreignEditStep(state, nodes, edges, link.origin, false, link.moved ? [id] : [], Boolean(link.runParams)), set);
+  const carried = wires ? carriedEdges(state.edges, id, link.edges, link.there) : state.edges;
+  const edges = carried.filter((edge) => present.has(edge.source) && present.has(edge.target));
+  // Review 8 of PR #205 (held-undo LOW-2): a connection this edit made to a
+  // node a later edit took off (Nebula had it at this sync, not before) is
+  // still this edit's: its step carries it, though the canvas can't show it
+  // now. That later edit's step takes it off with its node
+  // (giveBackLostConnections). One Nebula had before is no change of this one's.
+  const synced = new Set(link.edges.map(edgeKey));
+  const had = new Set(link.edgesBefore.map(edgeKey));
+  const gone = carried.filter((edge) => synced.has(edgeKey(edge)) && !had.has(edgeKey(edge))
+    && !(present.has(edge.source) && present.has(edge.target)));
+  return setLinkStep(link, id, state, nodes, edges, foreignEditStep(state, nodes, [...edges, ...gone], link.origin, false, link.moved ? [id] : [], Boolean(link.runParams)), set);
 }
 
 /** A node's connections as a sync from someone else left them, over `edges`
@@ -6606,16 +6684,26 @@ function changeCanvasNodes(
   const onCanvas = get().nodes;
   applyCanvasNodeChanges(changes, set, get, undoStep);
   const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
-    try {
-      answeringDeletes += 1;
-      applyDeleteAnswers(results);
-    } finally {
-      answeringDeletes -= 1;
-      for (const nodeId of cliRemovedIds) if (deletesInFlight.get(nodeId) === undoStep) deletesInFlight.delete(nodeId);
-      settleStep(undoStep, set, get);
-    }
+    // PR #205 review 8 (held-undo MEDIUM-3): the answers are handled once
+    // the sync the newest OK one names has been applied (whenSynced), as if
+    // it had come first: a sync read before Nebula applied the Delete (an
+    // agent's edit of the node) is then a copy the Delete's step carries,
+    // never the node back as that agent's step. The queue behind it moves on
+    // at the answer.
+    const seqs = results.map((result) => (result.status === 'fulfilled' ? result.value.syncSeq : null))
+      .filter((seq): seq is number => seq !== null);
+    whenSynced(seqs.length > 0 ? Math.max(...seqs) : null, () => {
+      try {
+        answeringDeletes += 1;
+        applyDeleteAnswers(results);
+      } finally {
+        answeringDeletes -= 1;
+        for (const nodeId of cliRemovedIds) if (deletesInFlight.get(nodeId) === undoStep) deletesInFlight.delete(nodeId);
+        settleStep(undoStep, set, get);
+      }
+    }, () => { for (const done of holds.values()) done(false); });
   });
-  function applyDeleteAnswers(results: PromiseSettledResult<RemovalRecord | null>[]): void {
+  function applyDeleteAnswers(results: PromiseSettledResult<DeleteAnswer>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
     // The ids that failed with no answer from Nebula (GM, round 20, item 1).
@@ -6634,7 +6722,7 @@ function changeCanvasNodes(
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         confirmed.add(cliRemovedIds[index]);
-        if (result.value) removals.push(result.value);
+        if (result.value.removal) removals.push(result.value.removal);
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
       } else {
@@ -6962,9 +7050,14 @@ function applyCanvasNodeChanges(
  * wanted it gone, as restore treats an already-gone node); else rejects
  * with the reason the person reads (GM's line for the status, or the
  * backend's written reason). */
-async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null> {
+/** A node delete Nebula took: what it removed, and the sync that sent it
+ * (none for a node already gone). */
+interface DeleteAnswer { removal: RemovalRecord | null; syncSeq: number | null }
+
+async function deleteCLIOriginNode(nodeId: string): Promise<DeleteAnswer> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
-  if (response.status === 404) return null;
+  // Already gone: no sync of this delete's to wait for.
+  if (response.status === 404) return { removal: null, syncSeq: null };
   if (!response.ok) {
     const rendering = response.status === 409 ? await renderingOf(response) : null;
     const error = await requestError("Couldn’t delete the node.", response);
@@ -6973,8 +7066,8 @@ async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null
   }
   // What the delete removed (the pins it detached, the proposals it closed),
   // kept in the undo step so undo puts them back.
-  const body = await response.json().catch(() => ({})) as { removal?: unknown };
-  return cleanRemovals([body.removal])[0] ?? null;
+  const body = await response.json().catch(() => ({})) as { removal?: unknown; syncSeq?: unknown };
+  return { removal: cleanRemovals([body.removal])[0] ?? null, syncSeq: answeredSyncSeq(body) };
 }
 
 /** Scene deletes the backend refused because a shot renders (its 409's
@@ -9407,7 +9500,7 @@ function forgetStepsInFlight(): DroppedPresses {
   deletesInFlight.clear();
   deferredParamPushes.clear();
   heldCopies.clear();
-  forgetEchoWaits();
+  forgetHoldsOfReplacedCanvas();
   for (const { timer } of awaitingArrival.values()) clearTimeout(timer);
   awaitingArrival.clear();
   return dropped;
@@ -10375,11 +10468,27 @@ function sendRestore(
       // No answer: it may have landed. The next graphSync shows which.
       else console.warn(`[nebula] ${action} didn't reach the backend:`, err);
     }
-    for (const done of wireHolds) done(Boolean(response?.ok));
-    // A node it brings back or takes off stays held, after an OK answer,
-    // until a sync shows it so (awaitEcho; review 7 of PR #205, MEDIUM-1).
-    const ended = nodeHolds.filter(([id, done]) => done(Boolean(response?.ok),
-      Boolean(response?.ok) && (broughtBack.has(id) || takenOff.has(id)))).map(([id]) => id);
+    const ok = Boolean(response?.ok);
+    const answer = ok ? await response!.json().catch(() => ({})) as {
+      removals?: unknown; notReopened?: unknown; pinsLeft?: unknown; syncSeq?: unknown;
+    } : {};
+    // What it holds stays held until its answer is handled: a refusal, or
+    // no answer, now; an OK once the sync it names has been applied
+    // (whenSynced; PR #205 review 8, held-undo MEDIUM-1 and -2): any sync
+    // before that one is older than this restore, so it never decides what
+    // this restore put back or took off.
+    const endNodeHolds = (took: boolean) => nodeHolds.filter(([, done]) => done(took)).map(([id]) => id);
+    const endWireHolds = (took: boolean, synced: boolean) => { for (const done of wireHolds) done(took, synced); };
+    const placeCopies = (ended: string[], took: boolean) => {
+      // The newest copy Nebula synced of each node it held (M-2).
+      if (admission.graph !== canvasReplacementRevision) return;
+      applyHeldCopies(ended);
+      // Review 13 LOW-1: a deleted scene it brought back takes the
+      // person's kept edits now (its echo came while it was held).
+      if (took) restoreDeletedScenes(new Set(ended), heldNodes());
+    };
+    if (!ok) endWireHolds(false, false);
+    const ended = ok ? [] : endNodeHolds(false);
     try {
       if (abandoned) return;
       if (timedOut) {
@@ -10406,9 +10515,6 @@ function sendRestore(
         return;
       }
       if (response.ok) {
-        const answer = await response.json().catch(() => ({})) as {
-          removals?: unknown; notReopened?: unknown; pinsLeft?: unknown;
-        };
         // This restore deleted nodes (a redo of a delete): the step that
         // brings them back names these records.
         const fresh = cleanRemovals(answer.removals);
@@ -10433,13 +10539,22 @@ function sendRestore(
       console.warn(`[nebula] ${action} refused: ${reason}`);
       refused(reason);
     } finally {
-      // The newest copy Nebula synced of each node it held (M-2).
-      if (admission.graph === canvasReplacementRevision) {
-        applyHeldCopies(ended);
-        // Review 13 LOW-1: a deleted scene it brought back takes the
-        // person's kept edits now (its echo came while it was held).
-        if (response?.ok) restoreDeletedScenes(new Set(ended), heldNodes());
-      }
+      // After its line, as before: a held change landing first would be a
+      // newer step, and keep the line away (answerNotice).
+      if (ok) {
+        const seq = answeredSyncSeq(answer);
+        // The nodes' edits first (an agent's delete of a node it brought
+        // back, synced while held: its step takes the node's restored
+        // connections off with it), then the connections take the newest
+        // sync's way (holdWire).
+        whenSynced(seq, () => {
+          placeCopies(endNodeHolds(true), true);
+          endWireHolds(true, seq !== null);
+        }, () => {
+          endWireHolds(false, false);
+          endNodeHolds(false);
+        });
+      } else placeCopies(ended, false);
     }
   });
   restoreQueue = task.catch(() => {}).finally(() => {
@@ -10693,9 +10808,9 @@ wsClient.subscribe((event) => {
  * its canvas, and no line is said. */
 function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
   const applied = applyGraphSyncNow(event, options);
-  // A restore's echo (or a later sync) agreed with a node held until it
-  // came: that hold ends now, after the sync (awaitEcho).
-  if (echoWaits.size > 0) releaseEchoedHolds();
+  // The answers waiting for this sync (or an earlier one) are handled now,
+  // after it, as if it had come before them (whenSynced).
+  if (applied) noteAppliedSync(event);
   return applied;
 }
 
@@ -10704,6 +10819,8 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
     return false;
   }
   appliedGraphSyncs += 1;
+  // Nebula's connections now, for a wire hold this sync ends (takeSyncedWire).
+  newestSyncEdges = new Map((((event as { edges?: Edge[] }).edges) ?? []).map((edge) => [edgeKey(edge), edge]));
   clearedAsSaved = null;
   clearedHeldOff = null;
   useCinemaMotionStore.getState().observeGraphSync();
@@ -10833,7 +10950,7 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
     wireWrites.clear();
     nodeWrites.clear();
     heldCopies.clear();
-    forgetEchoWaits();
+    forgetHoldsOfReplacedCanvas();
     clearUnsavedParamEdits();
     // The committed import can arrive before, or instead of, its HTTP ack.
     // Revoke old same-ID uploads/writes and suspended drafts before merging.
@@ -12636,6 +12753,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!labelsInFlight.has(nodeId) && typeof previous === 'string') labelsSavedBefore.set(nodeId, previous);
     labelsInFlight.set(nodeId, next);
     refusedRenames.delete(nodeId);
+    heldSyncedLabels.delete(nodeId);
     // Round 23 (L-1): as a param save, for an agent's clear read before the answer.
     const landed = watchLanding(nodeId, (was) => ({ ...was, data: { ...was.data, label: next } }), renameSave(node, previous));
     graphMutationFetch(`/api/graph/node/${nodeId}/label`, {
@@ -12659,9 +12777,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // A refused rename leaves no trace on a held copy either (review 6 of
       // PR #205, held-undo LOW-1): the copy's sync took it as on its way,
       // so the hold's end would put it back, and an agent's Redo write it.
-      forgetRefusedRename(nodeId, next, typeof previous === 'string' ? previous : undefined);
+      // Review 8 of PR #205 (held-undo LOW-4): the name Nebula has is the
+      // newest one synced for the node while it was held and a rename on its
+      // way (an agent's rename), else the one before the person's: the
+      // canvas shows that one.
+      const saved = heldSyncedLabels.get(nodeId) ?? previous;
+      forgetRefusedRename(nodeId, next, typeof saved === 'string' ? saved : undefined);
       const current = get().nodes.find((candidate) => candidate.id === nodeId);
-      if (current?.data.label === next) get().updateNodeData(nodeId, { label: previous });
+      if (current?.data.label === next) get().updateNodeData(nodeId, { label: saved });
     });
   },
 
@@ -15546,17 +15669,6 @@ subscribeBackendConnection(() => {
   useGraphStore.setState(gated);
 }
 
-// GM PR #205 r10 items 2-3: however the node the Inspector shows leaves the
-// canvas (an Undo, a Delete, an agent's delete, a reopen), the Inspector
-// shows its empty state, and a pinned one stays pinned. One rule for every
-// way, so none can leave it naming a node that's gone.
-useGraphStore.subscribe((state, previous) => {
-  if (state.nodes === previous.nodes) return;
-  const shown = useUIStore.getState().selectedNodeId;
-  if (!shown || state.nodes.some((node) => node.id === shown) || !previous.nodes.some((node) => node.id === shown)) return;
-  useUIStore.getState().selectNode(null, { keepPin: true });
-});
-
 // GM PR #205 r12: one selected node is the node the Inspector shows, however
 // it was selected (a click, a Shift-click, a drag-select of one, Select all on
 // a canvas of one, a Paste of one), so the Inspector and the rings agree. A
@@ -15569,10 +15681,22 @@ const canvasSelectedIds = (nodes: Node<NodeData>[]) => nodes.filter((node) => no
 useGraphStore.subscribe((state, previous) => {
   if (state.nodes === previous.nodes) return;
   const now = canvasSelectedIds(state.nodes);
-  const before = canvasSelectedIds(previous.nodes);
-  if (now.length === before.length && now.every((id, index) => id === before[index])) return;
   const ui = useUIStore.getState();
   const shown = ui.selectedNodeId;
+  // GM PR #205 r10 items 2-3 and r16 item 5: the node the Inspector shows
+  // left the canvas (an Undo, a Redo, a Delete, an agent's delete, a reopen).
+  // One rule for every way, decided here from the selection as it is now
+  // (review 8, lines-inspector MEDIUM-1: a rule of its own ran first and
+  // closed an unpinned Inspector before this one saw what stayed selected).
+  // One node left selected: it shows that one. Several: unpinned, it stays on
+  // one of them, reading "N nodes selected"; pinned, it names none and says
+  // so. None: pinned, its empty state, its pin kept; unpinned, it closes.
+  if (shown && !state.nodes.some((node) => node.id === shown) && previous.nodes.some((node) => node.id === shown)) {
+    ui.selectNode(now.length === 1 || (now.length > 1 && !ui.inspectorPinned) ? now[0] : null, { keepPin: true });
+    return;
+  }
+  const before = canvasSelectedIds(previous.nodes);
+  if (now.length === before.length && now.every((id, index) => id === before[index])) return;
   if (now.length === 1) {
     if (shown !== now[0]) ui.selectNode(now[0], { keepPin: true });
     return;

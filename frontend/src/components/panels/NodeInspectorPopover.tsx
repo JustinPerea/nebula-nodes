@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { Pin, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useGraphStore } from '../../store/graphStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
@@ -33,6 +34,33 @@ const PINNED_RESIZE_MIN_WIDTH = 240;
 const PINNED_RESIZE_MIN_HEIGHT = 260;
 const PINNED_GAP = 12;
 const VIEWPORT_GUTTER = 16;
+
+/** The canvas card that holds focus, if any. */
+function focusedCard(): Element | null {
+  const active = document.activeElement;
+  return active instanceof Element ? active.closest('.react-flow__node') : null;
+}
+
+/** Focus fell to the page: it goes to the canvas. */
+function focusCanvasFromPage(): void {
+  if (document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
+}
+
+/** While focus is still in a leaving card, wait for the card to go (a frame
+ * or a few), then move focus from the page to the canvas. Returns the stop. */
+function focusCanvasOnceCardLeaves(card: Element): () => void {
+  let frame = 0;
+  let frames = 0;
+  const waitForCard = () => {
+    if (card.isConnected && document.activeElement !== document.body && frames++ < 30) {
+      frame = requestAnimationFrame(waitForCard);
+      return;
+    }
+    focusCanvasFromPage();
+  };
+  frame = requestAnimationFrame(waitForCard);
+  return () => cancelAnimationFrame(frame);
+}
 
 type PopoverFrame = {
   nodeId: string;
@@ -337,35 +365,36 @@ export function NodeInspectorPopover() {
       '.node-inspector-popover__body input:not(:disabled), .node-inspector-popover__body textarea:not(:disabled), .node-inspector-popover__body select:not(:disabled)',
     )?.focus();
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
-  // The shown node left the canvas (a Delete, an Undo, an agent): its card
-  // took focus with it. Focus goes to the canvas, never to the page, so the
-  // next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin MEDIUM-1;
-  // GM r13 item 5). React Flow removes the card a render after the selection
-  // clears (it copies the nodes into its own store), so while focus is still in
-  // the leaving card, wait for the card to go, then move it (review 7 LOW-1).
+  // A node left the canvas (a Delete, an Undo, an agent's delete) and its
+  // card took focus with it. Focus goes to the canvas, never to the page, so
+  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin
+  // MEDIUM-1; GM r13 item 5). The Inspector naming none (an unpinned one
+  // closing took focus from its field): the same.
   const shownBefore = useRef(selectedNodeId);
   useLayoutEffect(() => {
     const previous = shownBefore.current;
     shownBefore.current = selectedNodeId;
-    if (previous === null || selectedNodeId !== null) return;
-    const toCanvas = () => {
-      if (document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
-    };
-    const active = document.activeElement;
-    const card = active instanceof Element ? active.closest('.react-flow__node') : null;
-    if (!card || card.getAttribute('data-id') !== previous) { toCanvas(); return; }
-    let frame = 0;
-    let frames = 0;
-    const waitForCard = () => {
-      if (card.isConnected && document.activeElement !== document.body && frames++ < 30) {
-        frame = requestAnimationFrame(waitForCard);
-        return;
-      }
-      toCanvas();
-    };
-    frame = requestAnimationFrame(waitForCard);
-    return () => cancelAnimationFrame(frame);
+    if (previous !== null && selectedNodeId === null) focusCanvasFromPage();
   }, [selectedNodeId]);
+  // Any focused card whose node left, whichever node the Inspector shows or
+  // names after (review 8, lines-inspector LOW-1: an agent's delete of the
+  // shown card while another node stays selected names that one, never none,
+  // and a card the Inspector doesn't show can hold focus too). React Flow
+  // removes the card a render after the node goes (it copies the nodes into
+  // its own store), so while focus is still in the leaving card, wait for the
+  // card to go, then move it (review 7 LOW-1).
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    const unsubscribe = useGraphStore.subscribe((state, before) => {
+      if (state.nodes === before.nodes) return;
+      const card = focusedCard();
+      const id = card?.getAttribute('data-id');
+      if (!card || !id || state.nodes.some((node) => node.id === id) || !before.nodes.some((node) => node.id === id)) return;
+      stop?.();
+      stop = focusCanvasOnceCardLeaves(card);
+    });
+    return () => { unsubscribe(); stop?.(); };
+  }, []);
 
   if (!visible || (!selectedNodeId && !pinned) || !frame) return null;
 

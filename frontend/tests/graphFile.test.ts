@@ -817,9 +817,14 @@ describe('graph import memory ceiling', () => {
     // "Failed to load graph: Asset restore failed (HTTP 503)", and on fc906cb6
     // "Couldn't restore the asset.".
     [new Response('', { status: 503 }), "Nebula couldn’t load the canvas. Nebula didn't respond. Try again."],
-    [new Response('', { status: 400 }), "Nebula couldn’t load the canvas. Try again, or reload if it keeps happening."],
+    // A refusal with no code reads as a damaged file, never the backend's
+    // words (review 8 of PR #205, limits LOW-4).
+    [new Response('', { status: 400 }), 'Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.'],
     [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
-      "Nebula couldn’t load the canvas. That bundle has too many files."],
+      'Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.'],
+    // A conflict keeps its own line.
+    [new Response(JSON.stringify({ detail: 'A run is active.' }), { status: 409, headers: { 'Content-Type': 'application/json' } }),
+      'Nebula couldn’t load the canvas. A run is active.'],
   ])('a refused restore names the action and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -1038,9 +1043,23 @@ describe('the canvas limit lines on each surface', () => {
         .toThrow(expect.objectContaining({ reason: valueLine, detail: 'Graph contains a circular value that cannot be saved.' }));
       // With nothing to undo, the Agent log names the limit hit (none otherwise).
       expect(logged).toEqual(step.kind === 'none' ? [
-        `Nebula couldn’t save the canvas. It’s too complex to save: part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`,
-        'Nebula couldn’t save the canvas. Part of it holds a value Nebula can’t save: a number in it isn’t finite.',
+        `Nebula couldn’t save the canvas because part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`,
+        'Nebula couldn’t save the canvas because a number in it isn’t finite.',
       ] : []);
+    } finally {
+      window.removeEventListener('nebula:agent-log-entry', log);
+    }
+  });
+
+  it('Save, no step: the Agent log names the values limit in the "because" form (GM PR #205 r17 item 1)', async () => {
+    noticeSpy();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged: string[] = [];
+    const log = (event: Event) => logged.push((event as CustomEvent<{ message: string }>).detail.message);
+    window.addEventListener('nebula:agent-log-entry', log);
+    try {
+      await saveToFile([textNode({ value: new Array(GRAPH_MAX_VALUES + 1).fill(0) })], [], undefined, undefined, { kind: 'none' });
+      expect(logged).toEqual([`Nebula couldn’t save the canvas because it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`]);
     } finally {
       window.removeEventListener('nebula:agent-log-entry', log);
     }

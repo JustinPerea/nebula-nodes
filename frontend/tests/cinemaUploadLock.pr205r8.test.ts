@@ -73,7 +73,7 @@ describe('GM PR #205 r15 item 3: Generate all\'s lock reason names the other sho
 });
 
 describe('GM PR #205 r15 item 2: a stopped upload after a reload reads as the other reloaded rows', () => {
-  it('"Remove it, then attach the image again.", an alert like them, no Try again', async () => {
+  it('"Upload was interrupted. Remove it, then attach the image again.", an alert like them, no Try again', async () => {
     const { createCinemaUploadStore } = await import('../src/store/cinemaUploadStore');
     const kept = new Map<string, string>();
     const storage = { getItem: (key: string) => kept.get(key) ?? null, setItem: (key: string, value: string) => { kept.set(key, value); } };
@@ -81,7 +81,7 @@ describe('GM PR #205 r15 item 2: a stopped upload after a reload reads as the ot
     first.getState().setUploads(() => [failed('ref.png', { status: 'uploading' }), failed('bad.png', { error: "Couldn't upload bad.png. Too large." })]);
     first.getState().interrupt();
     const [stopped, bad] = createCinemaUploadStore(storage).getState().uploads;
-    expect(stopped).toMatchObject({ error: 'Remove it, then attach the image again.', canRetry: false });
+    expect(stopped).toMatchObject({ error: 'Upload was interrupted. Remove it, then attach the image again.', canRetry: false });
     expect(uploadReasonRole(stopped)).toBe('alert');
     expect(bad).toMatchObject({ error: "Couldn't upload bad.png. Too large.", canRetry: false });
   });

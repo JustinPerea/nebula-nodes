@@ -7,13 +7,18 @@ const flow = vi.hoisted(() => ({
   fitView: vi.fn(), initialized: false,
   internalNodes: new Map<string, { measured: { width?: number; height?: number } }>(),
   fitProp: true,
+  onSelectionStart: undefined as undefined | (() => void),
+  onSelectionEnd: undefined as undefined | (() => void),
 }));
 vi.mock('@xyflow/react', async (importOriginal) => {
   const original = await importOriginal<typeof import('@xyflow/react')>();
   return {
     ...original,
-    ReactFlow: ({ children, fitView }: { children: React.ReactNode; fitView: boolean }) => {
+    ReactFlow: ({ children, fitView, onSelectionStart, onSelectionEnd }: { children: React.ReactNode; fitView: boolean;
+      onSelectionStart?: () => void; onSelectionEnd?: () => void }) => {
       flow.fitProp = fitView;
+      flow.onSelectionStart = onSelectionStart;
+      flow.onSelectionEnd = onSelectionEnd;
       return <div>{children}</div>;
     },
     Background: () => null,
@@ -47,6 +52,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 import { Canvas, CanvasFocusController } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { isCanvasSelectionDragging, noteCanvasSelectionDrag } from '../src/lib/canvasSelectionDrag';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
@@ -147,6 +153,17 @@ describe('Canvas requested node focus', () => {
     expect(useUIStore.getState().selectedNodeId).toBeNull();
   });
 
+  // Review 8 of PR #205, lines-inspector MEDIUM-1: as when the shown node
+  // leaves, an unpinned Inspector over several ringed stays on one of them.
+  it('unpinned, two ringed, a focus request for a missing node names one of them ("N nodes selected"), open', () => {
+    useGraphStore.setState({ nodes: [{ ...node('motion'), selected: true }, { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorVisible(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, 'motion', false, true]);
+  });
+
   it('a canvas replaced while a focus request waits: the pinned Inspector stays pinned and on screen, empty', () => {
     useUIStore.getState().setInspectorPinned(true);
     useUIStore.getState().requestCanvasNodeFocus('motion');
@@ -227,6 +244,27 @@ describe('Canvas requested node focus', () => {
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(flow.fitView).not.toHaveBeenCalled();
+  });
+
+  // Review 8 of PR #205, lines-inspector NIT-1 and NIT-2: React Flow gets
+  // the drag-select handlers, and a drag the canvas started ends with it.
+  it('React Flow gets onSelectionStart and onSelectionEnd: a drag-select is on from its start to its end', () => {
+    render(<Canvas />);
+    expect(isCanvasSelectionDragging()).toBe(false);
+    act(() => { flow.onSelectionStart?.(); });
+    expect(isCanvasSelectionDragging()).toBe(true);
+    act(() => { flow.onSelectionEnd?.(); });
+    expect(isCanvasSelectionDragging()).toBe(false);
+  });
+
+  it('the canvas unmounting mid-drag ends the drag', () => {
+    const view = render(<Canvas />);
+    act(() => { flow.onSelectionStart?.(); });
+    expect(isCanvasSelectionDragging()).toBe(true);
+    view.unmount();
+    const after = isCanvasSelectionDragging();
+    noteCanvasSelectionDrag(false);
+    expect(after).toBe(false);
   });
 
   it('keeps ordinary node-added auto-fit through the accompanying node-count render', async () => {

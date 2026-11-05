@@ -14,8 +14,10 @@ export interface FakeNode { id: string; definitionId: string; label: string; par
 export interface FakeWire { id: string; source: string; sourceHandle: string; target: string; targetHandle: string }
 interface HeldAnswer { id: number; label: string; release: () => void }
 type Graph = { nodes: FakeNode[]; edges: FakeWire[] };
-/** An echo, and the request whose change it shows. */
-type Echo = Graph & { request: number };
+/** An echo, the request whose change it shows, and its syncSeq (PR #205
+ * review 8: main.py numbers every graphSync as it reads the graph, and a
+ * restore's or a node delete's answer names its own sync's number). */
+type Echo = Graph & { request: number; seq: number };
 
 const CLI = /^n\d+$/;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -39,6 +41,13 @@ export class FakeNebula {
   emit: (event: Record<string, unknown>) => void = () => {};
   tab = '';
   private answerSeq = 0;
+  /** The last syncSeq Nebula gave out. Never reset: a test's agent syncs
+   * take theirs from here too (nextSyncSeq), so one read before a restore
+   * applied is numbered below the restore's own echo. */
+  syncSeq = 1000;
+
+  /** A number for a sync read from the graph now (an agent's edit's). */
+  nextSyncSeq(): number { return ++this.syncSeq; }
 
   reset(nodes: FakeNode[], edges: FakeWire[] = []): void {
     this.nodes = new Map(nodes.map((node) => [node.id, clone(node)]));
@@ -63,7 +72,8 @@ export class FakeNebula {
   }
 
   broadcast(): void {
-    const graph = { nodes: [...this.nodes.values()].map(clone), edges: clone(this.edges), request: this.request };
+    const graph = { nodes: [...this.nodes.values()].map(clone), edges: clone(this.edges), request: this.request,
+      seq: this.nextSyncSeq() };
     this.echoes.push(graph);
     if (!this.holdEchoes) this.deliverEchoes();
   }
@@ -85,7 +95,7 @@ export class FakeNebula {
     const graph = this.echoes.shift();
     if (!graph) return false;
     this.emit({ nodes: FakeNebula.syncNodes(graph), edges: graph.edges, empty: graph.nodes.length === 0,
-      edit: { actor: { kind: 'person' }, tab: this.tab, id: 'ed_own' } });
+      syncSeq: graph.seq, edit: { actor: { kind: 'person' }, tab: this.tab, id: 'ed_own' } });
     return true;
   }
 
@@ -184,7 +194,7 @@ export class FakeNebula {
       this.nodes.delete(one[1]);
       this.edges = this.edges.filter((edge) => edge.source !== one[1] && edge.target !== one[1]);
       this.broadcast();
-      return this.answer(`delete ${one[1]}`, 200, { status: 'deleted', id: one[1] });
+      return this.answer(`delete ${one[1]}`, 200, { status: 'deleted', id: one[1], syncSeq: this.syncSeq });
     }
     if (one && method === 'PUT') {
       const node = this.nodes.get(one[1]);
@@ -210,7 +220,8 @@ export class FakeNebula {
       for (const wire of (body.unwire as FakeWire[] | undefined) ?? []) this.dropWire(wire);
       for (const wire of (body.wire as FakeWire[] | undefined) ?? []) this.addWire(wire);
       this.broadcast();
-      return this.answer('restore', 200, { status: 'restored', reattached: [], reopened: [], notReopened: [], pinsLeft: [], removals: [] });
+      return this.answer('restore', 200, { status: 'restored', reattached: [], reopened: [], notReopened: [], pinsLeft: [], removals: [],
+        syncSeq: this.syncSeq });
     }
     if (path === '/api/graph/connect' || path === '/api/graph/edge') {
       if (path === '/api/graph/connect') this.addWire(body as unknown as FakeWire);

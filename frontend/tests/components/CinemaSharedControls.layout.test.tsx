@@ -15,10 +15,14 @@ interface UploadState {
   stopped?: boolean;
 }
 const metadata = vi.hoisted(() => ({ uploads: [] as UploadState[] }));
-vi.mock('../../src/store/cinemaUploadStore', async (importOriginal) => ({
-  useCinemaUploadStore: (selector: (state: typeof metadata) => unknown) => selector(metadata),
-  uploadReasonRole: (await importOriginal<typeof import('../../src/store/cinemaUploadStore')>()).uploadReasonRole,
-}));
+vi.mock('../../src/store/cinemaUploadStore', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/store/cinemaUploadStore')>();
+  return {
+    useCinemaUploadStore: (selector: (state: typeof metadata) => unknown) => selector(metadata),
+    uploadReasonRole: real.uploadReasonRole,
+    uploadOffersTryAgain: real.uploadOffersTryAgain,
+  };
+});
 vi.mock('../../src/lib/cinemaUploads', () => ({
   attachCinemaReferences: vi.fn(), retryCinemaReferenceUpload: vi.fn(), removeCinemaReferenceUpload: vi.fn(),
 }));

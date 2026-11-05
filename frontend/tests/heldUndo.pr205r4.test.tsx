@@ -276,6 +276,10 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
   describe('review 3 LOW-2: connections', () => {
     it('U7p: the person takes a connection off, then deletes n1 at once; Codex\'s sync still has it: Undo leaves it off', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [wire('n1', 'n2')]);
+      // Codex's sync still has the connection: Nebula read it before the
+      // person's writes, so it had Codex's value when it read their echoes
+      // (one socket brings them in the order read; PR #205 round 9).
+      nebula().nodes.get('n1')!.params = { value: 'AGENT' };
       nebula().holdAnswers = true;
       nebula().holdEchoes = true;
       store().onEdgesChange([{ id: store().edges[0].id, type: 'remove' }]);
@@ -292,6 +296,8 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
 
     it('U6p: the person connects n1 to n2, then deletes n1 at once; Codex\'s sync lacks it: Undo brings the connection back', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
+      // As U7p: Nebula read Codex's sync before the person's writes.
+      nebula().nodes.get('n1')!.params = { value: 'AGENT' };
       nebula().holdAnswers = true;
       nebula().holdEchoes = true;
       store().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'text' });

@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
-import { getCinemaUploadIssue, otherShotsUploadLine, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { getCinemaUploadIssue, otherShotsUploadLine, uploadOffersTryAgain, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { useGraphStore } from '../../store/graphStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../lib/cinemaMotion';
 import { useCinemaMotionStore } from '../../store/cinemaMotionStore';
@@ -113,11 +113,20 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   // buttons point at it instead of repeating it as a tooltip (GM PR #205 r1).
   const reasonShown = { id: reasonId, text: blockedReason };
   const shotStopping = shotRun?.status === 'cancelling';
+  // GM PR #205 r18: what the shot is, never what it isn't. While the shot is
+  // blocked (a lock line under the actions, or a run that holds it) it isn't
+  // ready, so no "Ready to generate"; the true state comes back when the
+  // lock clears. Generating…, Generated and Generation failed are the shot's
+  // own state and always show.
+  const statusLine = status === 'done' ? 'Generated' : status === 'running' ? 'Generating…'
+    : status === 'error' ? 'Generation failed' : shotBlocked ? null : 'Ready to generate';
   const handleGenerateShot = () => {
     if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
     executeShot(cinemaNodeId, shot.id);
   };
   // Variations: one base-model run per distinct seed, collected into the strip.
+  const generateVariationsProps = lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
+    { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown });
   const handleGenerateVariations = () => {
     if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
     executeShot(cinemaNodeId, shot.id, undefined, variationCount);
@@ -183,7 +192,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
       <div className="cinema-shot-panel__editor">
         <div className="cinema-shot-panel__heading">
           <h2>Shot {shotNumber}</h2>
-          <span>{status === 'done' ? 'Generated' : status === 'running' ? 'Generating…' : status === 'error' ? 'Generation failed' : 'Ready to generate'}</span>
+          {statusLine && <span>{statusLine}</span>}
         </div>
         <label htmlFor={promptId} className="cinema-shot-panel__label">Prompt</label>
         <textarea
@@ -223,6 +232,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             </button>
           )}
         </div>
+        {/* GM PR #205 r18: the stepper only sets the count (nothing runs), so a
+            blocked shot leaves it live; its own limits, offline and following
+            still hold (lock.act). */}
         <div className="cinema-shot-panel__variations-control">
           <span className="cinema-shot-panel__variations-label">Variations</span>
           <div className="cinema-shot-panel__stepper">
@@ -230,7 +242,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               type="button"
               className="cinema-shot-panel__stepper-btn"
               onClick={() => setVariationCount((c) => Math.max(1, c - 1))}
-              {...lock.act({ disabled: variationCount <= 1 || shotBlocked, offline: true })}
+              {...lock.act({ disabled: variationCount <= 1, offline: true })}
               aria-label="Fewer variations"
             >
               −
@@ -240,18 +252,20 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               type="button"
               className="cinema-shot-panel__stepper-btn"
               onClick={() => setVariationCount((c) => Math.min(4, c + 1))}
-              {...lock.act({ disabled: variationCount >= 4 || shotBlocked, offline: true })}
+              {...lock.act({ disabled: variationCount >= 4, offline: true })}
               aria-label="More variations"
             >
               +
             </button>
           </div>
+          {/* GM PR #205 r18: Generate N says it is refused as Generate shot
+              does (aria-disabled, the same line), in the one disabled look. */}
           <button
             type="button"
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
-            {...lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
-              { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown })}
+            {...generateVariationsProps}
+            aria-disabled={generateVariationsProps.disabled || undefined}
           >
             Generate {variationCount}
           </button>
@@ -348,7 +362,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                         : upload.error ?? "Couldn't upload this image."}
                   </span>
                   <div className="cinema-reference-upload__actions">
-                    {upload.status === 'error' && upload.canRetry && (
+                    {uploadOffersTryAgain(upload) && (
                       <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Try again uploading “${upload.name}”`}
                         {...lock.act({ offline: true })}>Try again</button>
                     )}

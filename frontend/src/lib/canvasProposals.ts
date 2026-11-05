@@ -2,7 +2,7 @@ import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
-import { RequestFailedError } from './errorCopy';
+import { RequestFailedError, copyForAnswer, warnFailure } from './errorCopy';
 import { formatChipEstimate } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
@@ -34,14 +34,34 @@ export interface AcceptedProposal {
 /** A refused accept or reject: heading + reason like every request's error
  * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
 export class ProposalRequestError extends RequestFailedError {
-  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
+  /** Which of Save's limits a refused Accept hit (the answer's `limit.kind`
+   * beside `code: "proposal_too_complex"`): 'size' for the project's size
+   * limit, else the shape limits ('depth', 'values'). Null otherwise. Read
+   * from the answer, never its words (review 8 of PR #205, limits MEDIUM-1). */
+  readonly limitKind: string | null;
+
+  constructor(status: number, reason: string,
+    options: { heading?: string; detail?: unknown; code?: string | null; limitKind?: string | null } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
     this.name = 'ProposalRequestError';
+    this.limitKind = options.limitKind ?? null;
   }
 }
 
 const asProposalError = (error: RequestFailedError) =>
   new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code });
+
+/** A refused Accept's answer (409), read once: its line (copyForAnswer, as
+ * every request's error), its code, and the limit it hit. */
+async function acceptConflict(heading: string, response: Response): Promise<ProposalRequestError> {
+  type Answer = { detail?: unknown; code?: unknown; limit?: unknown } | null;
+  const body = await response.json().then((value: unknown) => value as Answer, () => null as Answer);
+  const code = typeof body?.code === 'string' ? body.code : null;
+  const limit = body?.limit && typeof body.limit === 'object' ? (body.limit as { kind?: unknown }).kind : null;
+  warnFailure(heading, response.status, body?.detail);
+  return new ProposalRequestError(response.status, copyForAnswer(response.status, body?.detail, code),
+    { heading, detail: body?.detail, code, limitKind: typeof limit === 'string' ? limit : null });
+}
 
 /**
  * Accept a proposal. The key came only over this canvas's WebSocket; the
@@ -53,11 +73,16 @@ export async function acceptProposal(
   acceptKey: string,
   positions: Record<string, Point>,
 ): Promise<AcceptedProposal> {
-  const response = await apiRequest("Couldn't accept the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
+  const heading = "Couldn't accept the proposal.";
+  const response = await apiRequest(heading, `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(Object.keys(positions).length > 0 ? { positions } : {}),
-  }, { as: asProposalError });
+  }, { as: asProposalError, allow: [409] });
+  if (response.status === 409) {
+    // A 409 is read here, for its limit too (a refused Accept: which line).
+    throw await acceptConflict(heading, response);
+  }
   const body = (await response.json()) as Partial<AcceptedProposal>;
   return {
     status: 'accepted',

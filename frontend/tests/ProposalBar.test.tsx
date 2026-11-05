@@ -221,6 +221,23 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
   });
 
+  // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
+  // same spot and style, with the size line (by the answer's limit.kind).
+  it('an Accept that would make the canvas too large to save: the size line, neutral, and Accept stays live', async () => {
+    open(proposal('p_a'));
+    net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'refused', code: 'proposal_too_complex', agent: 'Codex',
+      limit: { kind: 'size', max: 16_777_216 } }));
+    render(<ProposalBar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    const line = document.querySelector('.proposal-bar__error');
+    expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
+      `Nebula couldn’t accept this because the canvas would be too large to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
+    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
+  });
+
   it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
     open(proposal('p_a', { createdAt: 1 }));
     open(proposal('p_b', { createdAt: 2, note: 'Make the cold take' }), 'key-b');

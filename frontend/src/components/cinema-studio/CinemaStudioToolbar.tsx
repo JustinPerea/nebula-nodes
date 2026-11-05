@@ -26,7 +26,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   // already going (a stop is never refused), so both stay enabled.
   const lock = useCanvasLock();
   useCinemaUploadStore((state) => state.uploads);
-  const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
+  const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true, 'generate all');
   const sceneRuns = activeRuns.filter((run) => run.nodeIds.includes(cinemaNodeId));
   const stopping = sceneRuns.length > 0 && sceneRuns.every((run) => run.status === 'cancelling');
   const openHistory = () => {

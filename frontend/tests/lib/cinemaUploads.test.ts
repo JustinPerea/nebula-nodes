@@ -167,7 +167,7 @@ describe('Cinema reference ownership', () => {
     expect(storage.setItem.mock.calls[0][0]).toBe(CINEMA_UPLOAD_STORAGE_KEY); expect(storage.setItem.mock.calls[0][1]).not.toContain('canRetry');
     useCinemaUploadStore.setState({ uploads: restored.getState().uploads });
     useGraphStore.getState().loadGraph([cinema()], [], { preserveCinemaUploads: true }); retryCinemaReferenceUpload('reload');
-    expect(fetchMock).not.toHaveBeenCalled(); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “draft.png” again or remove it.');
+    expect(fetchMock).not.toHaveBeenCalled(); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you remove “draft.png”.');
     expect(JSON.stringify(useGraphStore.getState().nodes)).not.toContain('reload'); removeCinemaReferenceUpload('reload');
     expect(getCinemaUploadIssue(nodeId, 'a')).toBeNull();
   });

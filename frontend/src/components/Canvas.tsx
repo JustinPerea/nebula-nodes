@@ -225,11 +225,13 @@ export function CanvasFocusController() {
     const graph = useGraphStore.getState();
     if (!graph.nodes.some((node) => node.id === request.nodeId)) {
       clearRequest(request.requestId);
-      // The UI store names what the canvas still has selected: its one node,
-      // as the Inspector shows it, or none (review 7 of PR #205, inspector NIT-2).
+      // The UI store names what the canvas still has selected, as when the
+      // shown node leaves (graphStore): its one node; over several, one of
+      // them unpinned ("N nodes selected"), none pinned; else none (review 7
+      // of PR #205, inspector NIT-2; review 8, lines-inspector MEDIUM-1).
       if (ui.selectedNodeId === request.nodeId) {
         const ringed = graph.nodes.filter((node) => node.selected);
-        ui.selectNode(ringed.length === 1 ? ringed[0].id : null, { keepPin: true });
+        ui.selectNode(ringed.length === 1 || (ringed.length > 1 && !ui.inspectorPinned) ? ringed[0].id : null, { keepPin: true });
       }
       return;
     }
@@ -641,6 +643,8 @@ export function Canvas() {
   // ends with none selected (GM PR #205 r16 item 5).
   const onSelectionStart = useCallback(() => noteCanvasSelectionDrag(true), []);
   const onSelectionEnd = useCallback(() => noteCanvasSelectionDrag(false), []);
+  // A drag the canvas started ends with it (review 8, lines-inspector NIT-2).
+  useEffect(() => () => noteCanvasSelectionDrag(false), []);
 
   // Right-click on empty canvas offers "Leave a note for agents here…".
   const onPaneContextMenu = useCallback(

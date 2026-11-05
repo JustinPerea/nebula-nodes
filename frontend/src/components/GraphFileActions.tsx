@@ -172,10 +172,15 @@ export function GraphFileActions() {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
       // The import's own checks read GM's lines by the answer's code, never
-      // the backend's words (GM PR #205 r16 item 3; review 7 limits LOW-1).
-      if (error instanceof RequestFailedError && error.code) {
-        const { bundleRefusalLine } = await graphFileModule.load();
-        const line = bundleRefusalLine({ code: error.code });
+      // the backend's words (GM PR #205 r16 item 3; review 7 limits LOW-1);
+      // a refusal with no code, or a code with no line, reads as a damaged
+      // file (review 8 limits LOW-4). The words stay in the console above.
+      if (error instanceof RequestFailedError) {
+        const { loadRefusalLine } = await graphFileModule.load();
+        const line = loadRefusalLine(error.status, {
+          code: error.code,
+          limit: error.overSaveLimit ? 'size' : error.storageLimit,
+        });
         if (line) {
           showNotice(failureMessage(new FailureNotice('', line), LOAD_GRAPH));
           return;

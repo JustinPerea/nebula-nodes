@@ -239,11 +239,19 @@ The server exposes these tools for building and running (see
     as the bundle declares it, and `limitBytes`);
   - "This file is N MB. Nebula opens files up to M MB.":
     `bundle_upload_too_large` (with `sizeBytes`, the upload's size, and
-    `limitBytes`).
+    `limitBytes`). A streamed upload with no Content-Length is refused
+    before its end arrives, so it has no `sizeBytes` and reads "This file
+    is larger than M MB, the most Nebula opens." (a member refusal without
+    `sizeBytes` would read "One of its files is larger than M MB, the most
+    Nebula opens.").
   N is to the nearest tenth of a MB and M whole MB, as in the canvas size
-  line. A refusal with no `code` (the request's own, an empty body) reads
-  "Nebula couldn’t load the canvas." alone; the person never reads the
-  backend's words. Agents keep the backend's `detail` in every case.
+  line. Any other refusal of the file (a 400, 413 or 422 with no `code`, a code
+  with no line here, a size code without its numbers, an empty body) reads
+  "This file is damaged or isn’t a Nebula canvas." under the heading,
+  for a bundle and a plain file alike; the person never reads the
+  backend's words (the tab's console keeps them). A server failure (500)
+  with no code reads as any request Nebula didn't answer does. Agents keep
+  the backend's `detail` in every case.
 - `remove_from_canvas`: deletes nodes or single connections, all or nothing.
   On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
   back with their connections (as the person's own delete is, from the
@@ -266,12 +274,14 @@ The server exposes these tools for building and running (see
   paste does: one selection, so the Inspector's node and its "…" pill move
   to the node brought back (when several come back, the Inspector says
   "N nodes selected", pinned or not; when the node it shows leaves the
-  canvas, by an Undo, a delete, yours included, or Load canvas, a pinned
-  Inspector stays pinned and says "No node selected", and an unpinned one
-  closes; opening another project resets the panels, which unpins and
-  closes it). The Inspector follows the person's selection: one node shows
-  it, two or more read "N nodes selected", and an unpinned Inspector closes
-  only when nothing is selected. Either way it
+  canvas, by an Undo, a Redo, a delete, yours included, or Load canvas, it
+  shows what is still selected: one node shows it, and two or more read
+  "N nodes selected"; with nothing left selected, a pinned Inspector stays
+  pinned and says "No node selected", and an unpinned one closes; opening
+  another project resets the panels, which unpins and closes it). The
+  Inspector follows the person's selection: one node shows it, two or more
+  read "N nodes selected", and an unpinned Inspector closes only when
+  nothing is selected. Either way it
   brings them back as Nebula last had them: your edit to a node (or a
   connection you made or took off) that Nebula took while the person's
   delete was on its way comes back with it, a connection only while the node
@@ -493,7 +503,10 @@ The server exposes these tools for building and running (see
   Make the edit smaller, or remove what the canvas no longer needs (ask the
   person first)." The value count includes the project's run history when it
   could reach the limit. An edit that leaves a canvas already past a limit
-  no worse goes through; a request with no agent marker gets
+  no worse goes through: on a canvas already holding more than 1,000,000
+  values, one that doesn't add values; on one already nested too deeply,
+  one that adds no value past 64 levels (it may only take depth away). A
+  request with no agent marker gets
   `code: "person_required"` with the same `detail`. The person's own edits
   are never refused; their Save says "It’s too complex to save." (or "Part
   of it holds a value Nebula can’t save.") and names the Undo that brings
@@ -503,23 +516,27 @@ The server exposes these tools for building and running (see
   takes more than one, "Undo the last 2 changes, then try again." (always
   digits); when no number of Undos does (a change nobody named that made
   no step, older than every step), the line stops at its first sentence.
-  The Agent log reads "Nebula couldn’t save the canvas. It’s too complex
-  to save: it holds more than 1,000,000 values." (or "part of it is nested
-  more than 64 levels deep.", "a number in it isn’t finite.", "a value in
-  it refers back to itself."). The canvas's import of the CLI graph
+  The Agent log reads "Nebula couldn’t save the canvas because it holds
+  more than 1,000,000 values." (or "…because part of it is nested more
+  than 64 levels deep.", "…because a number in it isn’t finite.",
+  "…because a value in it refers back to itself."). The canvas's import of the CLI graph
   measures the file Save would write and says "This canvas is too complex
   to open." under "Nebula couldn’t import the CLI canvas.".
-  A proposal is measured when it is made, as the edit it stages
-  (`propose_change` gets the same 400 or 413), and again on every
-  Accept, since the canvas may have changed since. An Accept that would
-  leave the canvas past a limit is refused 409 with
-  `code: "proposal_too_complex"`, `agent` (the proposing agent's name),
-  `limit: {kind: "depth", max: 64}` or `{kind: "values", max: 1000000}`
-  and a `detail` naming the proposal; nothing changes and the proposal
-  stays open. A `proposal.accept_refused` event says so (with
+  A proposal is measured when it is made, as the edit it stages, for
+  these shape limits and the 16 MiB project size limit (`propose_change`
+  gets the same 400 or 413; the size refusal's 413 carries
+  `limit: "size"` and `sizeBytes`), and again on every Accept, since the
+  canvas may have changed since. An Accept that would leave the canvas
+  past a limit is refused 409 with `code: "proposal_too_complex"`,
+  `agent` (the proposing agent's name), `limit: {kind: "depth", max: 64}`,
+  `{kind: "values", max: 1000000}` or `{kind: "size", max: 16777216}`
+  (bytes) and a `detail` naming the proposal; nothing changes and the
+  proposal stays open. A `proposal.accept_refused` event says so (with
   `proposalId`, `agentId`, `code` and `limit`). The person's bar reads
   "Nebula couldn’t accept this because the canvas would be too complex to
-  save. Reject it, or ask <agent> to change it." with Accept still live.
+  save. Reject it, or ask <agent> to change it." (for the size limit,
+  "… because the canvas would be too large to save. …") with Accept
+  still live.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -811,7 +828,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
-| `proposal.accept_refused` | the person's Accept was refused because the canvas would be past Save's shape limits; nothing changed and the proposal is still open | `proposalId`, `agentId`, `code` (`proposal_too_complex`), `limit` (`kind`: `depth` or `values`, `max`) |
+| `proposal.accept_refused` | the person's Accept was refused because the canvas would be past Save's shape limits or the project over its size limit; nothing changed and the proposal is still open | `proposalId`, `agentId`, `code` (`proposal_too_complex`), `limit` (`kind`: `depth`, `values` or `size`, `max`; bytes for `size`) |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
@@ -3496,6 +3513,17 @@ it. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or
 "(redo)" on each line. Agents never need to call it; they undo their own
 edits with `undo_canvas_edit`.
+
+Every graphSync carries `syncSeq`, a whole number that grows with each sync
+in the order each read the graph; every socket gets the syncs in that order,
+its first sync included. It starts from the backend's start time in
+microseconds, so a backend started later numbers its syncs above an earlier
+one's. The answers to `POST /api/graph/restore` and `DELETE
+/api/graph/node/{id}` carry the `syncSeq` of the sync that sent their change
+(a delete of a node already gone, a 404, carries none). The canvas uses it
+so that no sync read before Nebula applied the person's Undo, Redo or Delete
+undoes it: it handles the answer once that sync, or a later one, has
+arrived. Agents may ignore it; nothing an agent sends uses it.
 
 Undo puts back everything a delete removed (GM - Design, 2026-10-23). Every
 node delete (`DELETE /api/graph/node/{id}`, an apply's `remove`, a restore

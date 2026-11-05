@@ -41,10 +41,17 @@ export function proposalTooComplexLine(agentName: string | null | undefined): st
   const name = agentName?.trim();
   return `${PROPOSAL_TOO_COMPLEX_LEAD} Reject it, or ask ${name || 'the agent'} to change it.`;
 }
-/** The bar shows this refusal in its line spot in the neutral style: it's a
- * refusal on the click, not a fault (GM r16 item 2). */
+/** The same refusal for the project's size limit (the answer's `limit.kind`
+ * 'size': review 8 of PR #205, limits MEDIUM-1), in the same form. */
+const PROPOSAL_TOO_LARGE_LEAD = 'Nebula couldn’t accept this because the canvas would be too large to save.';
+export function proposalTooLargeLine(agentName: string | null | undefined): string {
+  const name = agentName?.trim();
+  return `${PROPOSAL_TOO_LARGE_LEAD} Reject it, or ask ${name || 'the agent'} to change it.`;
+}
+/** The bar shows these refusals in its line spot in the neutral style: each
+ * is a refusal on the click, not a fault (GM r16 item 2). */
 export const isNeutralProposalLine = (line: string | null | undefined): boolean =>
-  Boolean(line?.startsWith(PROPOSAL_TOO_COMPLEX_LEAD));
+  Boolean(line?.startsWith(PROPOSAL_TOO_COMPLEX_LEAD) || line?.startsWith(PROPOSAL_TOO_LARGE_LEAD));
 
 export const PROPOSAL_EXIT_MS = 220;
 
@@ -302,7 +309,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const message = error instanceof ProposalRequestError && error.code === PROPOSAL_CANVAS_REPLACED_CODE
         ? PROPOSAL_CANVAS_REPLACED_LINE
         : error instanceof ProposalRequestError && error.code === PROPOSAL_TOO_COMPLEX_CODE
-        ? proposalTooComplexLine(entry.view.agent.name)
+        ? (error.limitKind === 'size' ? proposalTooLargeLine : proposalTooComplexLine)(entry.view.agent.name)
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");

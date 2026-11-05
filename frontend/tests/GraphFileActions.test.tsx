@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('../src/lib/graphFile', async () => ({ saveToFile: mocks.saveToFile, loadFromFile: mocks.loadFromFile,
   saveStepToFit: (await vi.importActual<typeof import('../src/lib/saveFixStep')>('../src/lib/saveFixStep')).saveStepToFit,
-  bundleRefusalLine: (await vi.importActual<typeof import('../src/lib/graphFile')>('../src/lib/graphFile')).bundleRefusalLine }));
+  bundleRefusalLine: (await vi.importActual<typeof import('../src/lib/graphFile')>('../src/lib/graphFile')).bundleRefusalLine,
+  loadRefusalLine: (await vi.importActual<typeof import('../src/lib/graphFile')>('../src/lib/graphFile')).loadRefusalLine }));
 // Save hands saveToFile the step its shape line offers as a function, worked out only on a refusal.
 const stepSaveGot = () => (mocks.saveToFile.mock.lastCall?.[4] as (() => unknown) | undefined)?.();
 vi.mock('../src/lib/backend', async (importOriginal) => ({
@@ -227,8 +228,18 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
-    // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the reason.
-    expect(notice()).toMatchObject({ text: "Nebula couldn’t load the canvas. Fixture import rejected", tone: 'error', offer: null });
+    // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the
+    // reason. A refusal with no code reads as a damaged file, never the
+    // backend's words (review 8 of PR #205, limits LOW-4).
+    expect(notice()).toMatchObject({ text: 'Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.', tone: 'error', offer: null });
+    // A code with no line, the same.
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'graph.json is too large', code: 'graph_something_new' }), { status: 413 }));
+    await act(async () => { requestGraphLoad(); });
+    expect(notice()?.text).toBe('Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.');
+    // A conflict (a run is active) keeps its own line.
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Cannot load a graph while a run is active.' }), { status: 409 }));
+    await act(async () => { requestGraphLoad(); });
+    expect(notice()?.text).toBe('Nebula couldn’t load the canvas. Cannot load a graph while a run is active.');
     // GM PR #205 r16 item 3: the import's own checks read GM's line by code, never the backend's words.
     for (const [code, line] of [['unknown_definition', 'This file uses a node this version of Nebula doesn’t have.'],
       ['graph_unknown_port', 'This file uses a node this version of Nebula doesn’t have.'],

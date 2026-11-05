@@ -1870,3 +1870,258 @@ tool, route or answer changed.
   proposal open, the event's limit {values, 20000}); focus on the canvas
   after the focused card's Delete; "2 nodes selected", closing at none.
   Four shots at 1440 in shots8, no duplicate md5s, each opened.
+
+## Round 9 (GM r17; CI on round 8)
+
+### 62. The shot panel's line comes from what each row offers
+
+- GM r17 (shot 12): both reloaded rows offered only [Remove], but the
+  panel said "try … again or remove them". The line now reads the same
+  test as the row's Try again button, `uploadOffersTryAgain` (an error
+  with `canRetry`), not a separate flag, so it can't promise an action the
+  row doesn't have. Rows that can only be removed: "You can generate after
+  you remove “ref.png” and “lost.png”." Mixed rows: two sentences, the try
+  form for the rows that can be tried again, then the remove form for the
+  rest, each naming files through `quotedNames`.
+- Generate all's line for other shots does the same, by shot: a shot with
+  an upload that can be tried again takes the try form; a shot whose
+  uploads can only be removed takes "You can generate all after you
+  remove the uploads in “Shot 2”." (GM confirmed this form). With both
+  kinds, two sentences. A shot holding both kinds is named once, in the
+  try form: its "or remove them" covers the rest.
+- The reloaded stopped row reads "Upload was interrupted. Remove it, then
+  attach the image again.", the same words as the interrupted row beside
+  it: `RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE` is now that constant.
+- A row reloaded from an upload on its way (`canRetry: false`) now reads
+  the remove form; `tests/lib/cinemaUploads.test.ts` pinned the old try
+  form for it and is updated.
+
+### 63. The Agent log's save line, and a size refusal with no size
+
+- GM r17 item 1: "Nebula couldn’t save the canvas because it holds more
+  than 1,000,000 values." (and the nested, non-finite and circular forms),
+  one whole sentence per limit. Round 8 spliced the person's reason into a
+  template (`${error.reason…}: ${which}`), which the named-line ratchet
+  (`tests/lib/errorCopy.namedLine.test.ts`, "only the reviewed ones")
+  flagged in CI. No HAND_BUILT entry: the new lines are fixed sentences
+  with a number in them, which the ratchet doesn't match.
+- Why round 8's focused list missed it: that list was the files that
+  import what changed (118 of them). The ratchet imports only errorCopy
+  and reads every source file from disk, so no import path leads to it.
+  From this round the focused set also carries every copy ratchet that
+  scans src (errorCopy.namedLine, errorCopy.sweep,
+  errorCopy.rawMessageGuard, errorCopy.round3e.sweep,
+  failureLines.round13, agentPresenceFollowups.r13text).
+- GM r17 item 3: a streamed upload with no Content-Length has no
+  `sizeBytes`, and now reads "This file is larger than M MB, the most
+  Nebula opens." A member refusal always carries its size, but with none
+  it would read "One of its files is larger than M MB, the most Nebula
+  opens." (GM confirmed). No limit either: the heading alone, as before.
+  Agents keep the backend's words; the backend is unchanged.
+
+### 63b. GM r18: the shot panel while a shot is blocked (section 1b)
+
+- Generate N takes `aria-disabled` and the same `aria-describedby` as
+  Generate shot (the lock line under the row). Its look was already the
+  one disabled style: it is a `.cinema-shot-panel__action`, which the
+  shared rule in disabled-buttons.css greys when disabled. Measured live
+  at 1440: its label is rgba(255, 255, 255, 0.55), the computed
+  `--disabled-label`, beside Run history (a live secondary button) at
+  0.92 and the live + at 0.92. So the change here is the aria; no CSS
+  changed.
+- The Variations −/+ stepper is out of the shot lock: it only sets the
+  panel's count (local state; nothing runs, nothing saves). It keeps 1
+  and 4, and `lock.act`, so offline and following (the read-only canvas)
+  still lock it.
+- The shot's status line shows the shot's own state: Generating…,
+  Generated and Generation failed always show. "Ready to generate" shows
+  only when the shot isn't blocked (`shotBlocked`: a lock line under the
+  actions, or a run holding the shot, including a run of this shot that
+  hasn't reported running yet). When the lock clears, it comes back.
+  Another shot's line (Generate all's) doesn't block this shot, so it
+  doesn't hide its status.
+
+### 64. Held Undo: no sync older than an edit Nebula answered OK may undo it (review 8, held-undo 1-6)
+
+One rule, built once for restored nodes, restored connections and the
+person's Delete. It replaces round 8's per-node echo wait (and its 15 s
+cap), the count-based wire grace on restores, and the Delete path's
+`done(false)` with no echo.
+
+- **Backend (`main.py`).** Every graphSync carries `syncSeq`, a counter that
+  starts at the backend's boot time in microseconds and grows by one per
+  sync, taken right after the graph read. A per-event-loop lock
+  (`_graph_sync_order`), held from the read to the last send, keeps every
+  socket's syncs in seq order (a broadcast could await between read and
+  send, so two syncs could reach a socket out of read order). It is
+  task-reentrant: a sync the same task makes while inside another's send
+  goes ahead (a plain lock hung `test_undo_removal_binding`). The answers to
+  `POST /api/graph/restore` and `DELETE /api/graph/node/{id}` carry their
+  broadcast's `syncSeq`; a 404 delete carries none. No gate or agent surface
+  changed; agents may ignore the field. MCP-SETUP's graphSync row names it.
+- **Frontend (`graphStore.ts`).** An OK answer is handled once the sync it
+  names, or a later one, has been applied (`whenSynced`). Until then the
+  node or connection stays held, so every older sync arrives as a copy
+  (`noteHeldCopies`) and the newest copy when the hold ends is the edit's own
+  sync or later. What ends a wait: any applied sync numbered at or above the
+  answer's; an unnumbered sync; a restarted backend's first sync (new
+  bootId); a replaced canvas (`drop`). There is no time cap: a sync at or
+  after the mark always comes (the echo, any later broadcast, a reconnect's
+  numbered hello). Nothing turns an older sync into an agent's step (LOW-3).
+- **MEDIUM-1.** Each restore holds its own share (`nodeWrites.sending` counts
+  writes); each answer ends only its own share at its own sync.
+- **MEDIUM-2.** A restored connection is held to its sync; on a synced end the
+  canvas takes the newest applied sync's way (`takeSyncedWire`, only when both
+  ends are on the canvas). The count-based grace stays only for answers that
+  name no sync (the person's own connect and edge delete, and an older
+  backend).
+- **MEDIUM-3.** The person's Delete is handled at the sync its newest OK
+  answer names; an agent's sync read before Nebula applied it is a copy the
+  Delete's step carries, never the node coming back as that agent's step.
+- **LOW-1.** `giveBackLostConnections` gives back only what Nebula had just
+  before that edit (`HeldLink.edgesBefore`: the copy before it, else as the
+  hold began).
+- **LOW-2.** `placeEarlierLink` carries a connection an edit made to a node a
+  later edit deleted (`gone`), if Nebula didn't have it before that edit.
+- **LOW-4.** A refused rename puts back the newest name a sync had for the
+  held node since the rename was sent (`heldSyncedLabels`), else the previous
+  name. Whether the agent's rename gets its own Undo step is the
+  person-side Undo for agent edits, not this PR.
+- **Decisions.** Restore end order: node holds end and their copies are placed
+  first, then connections take the newest sync's way (otherwise an agent's
+  delete of the restored node, ending the hold, took the connection off
+  without a step). `holdWire` has a once-guard (a replaced canvas ends the
+  hold, and the answer's run still comes later). The test fake numbers
+  syncs; two older tests changed to match the backend's socket order
+  (`heldUndo.pr205r4` U6p/U7p modelled an order the backend now rules out;
+  `heldUndo.property.round17` numbers its echoes). The new generator's
+  step-order check is relaxed for `deletePending` only (seed 8344): each edit
+  has one step, in any order, and every Undo and Redo still matched Nebula
+  and touched only its own edit.
+- **Known limits (not regressions).** A 404 delete names no sync, so it is
+  handled at once. The person's own connect and edge-delete answers aren't
+  numbered. With the echo lost, an agent's later sync that disagrees with a
+  restored connection makes the canvas take Nebula's way with no Undo step
+  for that agent's change (canvas and Nebula agree).
+- **Tests.** `tests/heldUndo.pr205r9.test.tsx` (101): S1, S2, S3, S3b, S5 and
+  S6 in several socket orders; W9c (stale counts 1-3, both orders), W9d-f;
+  the two-node Delete; F3b, F3c, Fa, Fb, Fc; N1 and N1b; the clear and import
+  cleanup; the ways a wait ends; and the generator (4 socket modes x 5 hold
+  kinds, 1-4 agents; `NEBULA_HELD_GEN_SEEDS` sets the seed count, default 8).
+  Invariant after every Undo and Redo: canvas = Nebula, and a step labelled
+  for one agent changes only that agent's edit. `backend/tests/test_graph_sync_seq.py`
+  (8): the seq grows from above the boot time; the answers name their sync; a
+  404 names none; the hello is numbered after earlier syncs and waits for a
+  send on its way; two broadcasts go in seq order; a same-task nested sync
+  goes ahead.
+
+### 65. Limits and Save (review 8, limits-save 7-12)
+
+- **A proposal and the 16 MiB size limit.** `create_canvas_proposal` now calls
+  `_refuse_agent_growth_past_save_limit(candidate)` after the shape check, as
+  every other agent write does (a 9 MiB node that `/api/graph/apply` refuses
+  with 413 was a 201 proposal, and Accept then paused saving). At Accept, a
+  proposal grown past 16 MiB is the same 409 `proposal_too_complex` with
+  `limit: {kind: "size", max: 16777216}`, the `proposal.accept_refused`
+  event, the proposal still open and Accept still live. The bar reads
+  "Nebula couldn’t accept this because the canvas would be too large to save.
+  Reject it, or ask <agent> to change it." (same neutral style and "the
+  agent" fallback; GM's confirmation was pending when built).
+  `_shape_past_save_limit` now returns the limit with the measure, so Accept
+  no longer guesses the kind from the words (mutant b08). The CLI says "over
+  Nebula's save limit of 16 MiB" and a limit with no max reads by its kind,
+  never "None". MCP `propose_change`/`get_proposal` and MCP-SETUP match.
+- **"No worse" for depth counts values past the limit.**
+  `_graph_shape_measure_past` returns (deepest, count, values deeper than
+  64). On a too-deep canvas an edit is refused when that count goes up, so a
+  second value as deep as the deepest no longer passes. Reading, for GM: "at
+  or past the limit" is Save's own test, depth > 64, so a value at exactly 64
+  can still be added (one character to change; mutant b7 pins the reading).
+  The walk stays uncapped and goes a level at a time: 0.04 s on a
+  1,000,000-value file (0.115 s before); a budget test pins it.
+- **Save's Undo walk** keys connections by `edgeKey` on both sides and applies
+  each slice step with the real `applySlice`, so a removed node takes its
+  connections and a step's added connection comes off. It measures
+  incrementally, per id and content version: 10,000 nodes with 50 steps went
+  from 3,008 ms to 237 ms; a test pins the measure count (exactly nodes +
+  connections + 1) and a loose wall clock.
+- **A load refusal with no code (or a code with no line)** reads the heading
+  plus "This file is damaged or isn’t a Nebula canvas." for 400, 413 and 422;
+  5xx, 409, `person_required` and the project and store limits keep their own
+  lines; agents keep the backend's words. Section 1's size lines are kept;
+  only a size code with no limit at all falls to the damaged line.
+  MCP-SETUP, the code and `bundleRefusalLines.pr205r7` agree.
+- **Tests.** `test_agent_canvas_limits_r9.py` (14), `saveFixStep.pr205r9.test.ts`
+  (18), `proposalAcceptLimit.pr205r9.test.ts` (5), plus cases in
+  `canvasProposalsStore`, `ProposalBar`, `bundleRefusalLines.pr205r7`,
+  `GraphFileActions` and `graphFile` (an Accept refused for depth, own-add
+  params, slice connections).
+
+### 66. The unpinned Inspector, focus, the lock ratchet (review 8, lines-inspector 13-16)
+
+- **The shown node leaves while others stay selected.** The separate "shown
+  node left" subscriber ran first and hid an unpinned Inspector. Its rule is
+  now the first step of the selection subscriber, decided from the selection
+  as it is after the change: one left shows it; two or more, unpinned, stay
+  open and read "N nodes selected" (pinned names none, as before); none
+  left, pinned keeps its pin ("No node selected") and unpinned closes.
+  Canvas's focus request for a missing node follows the same rule. MCP-SETUP's
+  contradicting sentence is rewritten.
+- **Focus.** `NodeInspectorPopover` watches for the focused card's node
+  leaving the canvas, whichever node the Inspector shows, waits for React Flow
+  to drop the card, then moves focus from the page to the canvas.
+  (`focusout` isn't fired when a focused element is removed.)
+- **The lock ratchet** (`agentPresenceFollowups.ratchet.test.ts`):
+  `refuseCoverage` is iterative with an explicit stack, a busy set and
+  memoized results; `gatedOf` stops chains costing n squared; the store is
+  reached by member names, never its `create(…)` body; an assignment counts
+  only for the binding it assigns to. The reviewer's R1 shape ends in about
+  1 s with the right answer (no finding) instead of a RangeError after 404 s,
+  and the corpus keeps it. Whole file 326 s to 197 s on the lane's run.
+- **Drag flag** stays in `canvasSelectionDrag.ts`. A drag also ends on a
+  window pointerup the pane never saw, pointercancel, blur and Canvas's
+  unmount. Escape is not an end: React Flow keeps the box selecting after
+  Escape and only the pointerup ends it (flag for GM; the brief listed
+  Escape). `Canvas.focus.test.tsx` pins `onSelectionStart`/`onSelectionEnd`
+  reaching ReactFlow (M6).
+- **Generate all (item 17, default until GM answers).** The Cinema toolbar's
+  Generate all takes "You can generate all after …" from the same per-row
+  source, with the remove-only form where rows can only be removed.
+
+### Round 9 proof (final tree)
+
+- Gates in `frontend/`: `tsc -b --noEmit` rc 0; `npm run lint`
+  (inline-styles, slava-css-scope, eslint) rc 0. This branch has no
+  `check:ratchets` script (it is on main); the copy ratchets below ran as
+  tests.
+- Focused vitest at 2 workers, 60 files (every changed test, the held-undo
+  family, the Inspector, Canvas, proposal, Save and Toolbar tests, the six
+  src copy ratchets): 1313 tests passed, Errors 0, no timeouts. The lock
+  ratchet alone: 1 file passed, 142 s.
+- Backend, isolated (temp HOME, NEBULA_SETTINGS_PATH, NEBULA_STATE_DIR,
+  NEBULA_OUTPUT_ROOT; state and output stayed empty): 25 files, 825 passed.
+  The files are the ones that name graphSync, restore, delete, proposals,
+  the limits or the formatter.
+- Base check on e4b2d7c0: `heldUndo.pr205r9.test.tsx` 35 of 101 fail (the 66
+  that pass are controls); `test_graph_sync_seq.py` 4 fail, the 404 control
+  passes and the hello-waits test hangs on base (killed at 240 s). The
+  limits lane: 8 of 13 backend and 28 frontend fail; the Inspector lane: 16
+  of 24 fail; section 1b: 5 of 10 fail; section 1: 9 of 14 fail. The rest
+  are controls.
+- Mutation, held-undo guards (`r9s2-hu/mut.py`, 47 one-edit mutants): 39
+  killed, 7 survived, 1 skipped (its text no longer exists). Survivors:
+  `whenSyncedNullWaits` (differs only before the tab's first numbered sync;
+  every test has synced and the app always gets a hello first),
+  `restoreRefusedWiresKept`, `acceptedNotUnnamed`, `clearHeldOffEdgeEndsOff`,
+  `syncForgetsClearedHeldOffOff`, `importKeepsHolds`, `gap_emptyNoBind`. The
+  last five are review 7's carried guards; none is pinned by a test yet and
+  none is a wrong result anyone reproduced. Listed for the coordinator.
+  Section 1: 15 of 15 killed; section 1b: 5 of 6 (the 6th is unreachable);
+  limits lane: 25 of 26 (f9 equivalent).
+- Live, 8797/5797 (canaries refused first, no request to 8000-8010, 5173 or
+  any real host, no Run or Generate): the reloaded rows each read "Upload was
+  interrupted. Remove it, then attach the image again." with only [Remove],
+  and the panel reads "You can generate after you remove “ref.png” and
+  “lost.png”." One shot at 1440, opened. The rows were set through the app's
+  own store module, since opening a project after a page reload drops saved
+  upload rows (Justin's, not this PR).

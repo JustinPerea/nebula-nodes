@@ -6,7 +6,7 @@ import { shotPortId } from '../constants/ports';
 import { backendAssetUrlSync, canonicalBackendAssetUrls, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
-import { FailureNotice, failureMessage, oneLine, requestError } from './errorCopy';
+import { FailureNotice, PERSON_REQUIRED_CODE, failureMessage, oneLine, requestError } from './errorCopy';
 import { showNotice } from './canvasNotice';
 import {
   hasRepresentationViewer,
@@ -154,6 +154,14 @@ export const bundleMemberSizeLine = (bytes: number, limitBytes: number) =>
   `One of its files is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
 export const bundleUploadSizeLine = (bytes: number, limitBytes: number) =>
   `This file is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
+/** GM PR #205 r17 item 3: with no size (a streamed upload with no
+ * Content-Length is refused before its end arrives), the limit is still
+ * known, so the line names it. A member's size always comes with its
+ * refusal; its form is the same, for a refusal that leaves it out. */
+export const bundleMemberOverLine = (limitBytes: number) =>
+  `One of its files is larger than ${Math.floor(limitBytes / MIB)} MB, the most Nebula opens.`;
+export const bundleUploadOverLine = (limitBytes: number) =>
+  `This file is larger than ${Math.floor(limitBytes / MIB)} MB, the most Nebula opens.`;
 
 export class GraphFileInvalidError extends FailureNotice {
   readonly detail: string;
@@ -622,11 +630,12 @@ export async function addGraphAssetsToBundle(
  * offer: Nebula's line, then which limit, in Nebula's words, so an agent can
  * help (never the walk's own English: review 7 of PR #205, limits LOW). */
 function saveLimitLogLine(error: GraphStructureLimitError): string {
-  const which = error.detail.includes('values') ? `it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`
-    : error.detail.includes('nested') ? `part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`
-      : error.detail.includes('non-finite') ? 'a number in it isn’t finite.'
-        : 'a value in it refers back to itself.';
-  return `Nebula couldn’t save the canvas. ${error.reason.replace(/\.$/, '')}: ${which}`;
+  // GM PR #205 r17 item 1: the "because" form, no colon, one whole
+  // sentence per limit (never the person's reason spliced into a template).
+  if (error.detail.includes('values')) return `Nebula couldn’t save the canvas because it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`;
+  if (error.detail.includes('nested')) return `Nebula couldn’t save the canvas because part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`;
+  if (error.detail.includes('non-finite')) return 'Nebula couldn’t save the canvas because a number in it isn’t finite.';
+  return 'Nebula couldn’t save the canvas because a value in it refers back to itself.';
 }
 
 /**
@@ -1053,12 +1062,14 @@ export function bundleRefusalLine(body: unknown): string | null {
     case 'bundle_member_too_large': {
       const size = count('sizeBytes');
       const limit = count('limitBytes');
-      return size !== null && limit !== null ? bundleMemberSizeLine(size, limit) : null;
+      if (limit === null) return null;
+      return size !== null ? bundleMemberSizeLine(size, limit) : bundleMemberOverLine(limit);
     }
     case 'bundle_upload_too_large': {
       const size = count('sizeBytes');
       const limit = count('limitBytes');
-      return size !== null && limit !== null ? bundleUploadSizeLine(size, limit) : null;
+      if (limit === null) return null;
+      return size !== null ? bundleUploadSizeLine(size, limit) : bundleUploadOverLine(limit);
     }
     case 'graph_newer_version': return GRAPH_FILE_NEWER_COPY;
     case 'bundle_restore_failed': return BUNDLE_FILES_NOT_COPIED_COPY;
@@ -1072,6 +1083,24 @@ export function bundleRefusalLine(body: unknown): string | null {
     }
     default: return null;
   }
+}
+
+/** The person's line for a load the backend refused (a bundle's restore, a
+ * plain file's import): the line for its code (bundleRefusalLine), and for
+ * any other refusal of the file (no code, a code with no line, an empty
+ * body) GM's damaged-file line. The person never reads the backend's words;
+ * they stay in the console, and agents keep them (review 8 of PR #205,
+ * limits LOW-4 and lines-inspector LOW-3). Null for an answer that isn't
+ * the file's refusal, which keeps its own line: a server failure (5xx), a
+ * conflict (409, a run is active), the person gate's refusal, or a limit
+ * of the project store's or the project's size. */
+export function loadRefusalLine(status: number, body: unknown): string | null {
+  const line = bundleRefusalLine(body);
+  if (line !== null) return line;
+  if (status !== 400 && status !== 413 && status !== 422) return null;
+  if (isRecord(body) && (body.code === PERSON_REQUIRED_CODE || body.limit === 'size'
+    || body.limit === 'projects' || body.limit === 'storage')) return null;
+  return GRAPH_FILE_DAMAGED_COPY;
 }
 
 /** What Load graph hands the canvas. */
@@ -1102,14 +1131,15 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
       body: selection.file,
-    }, { allow: [400, 413, 500] });
+    }, { allow: [400, 413, 422, 500] });
     if (!resp.ok) {
       // A graph.json refused for its shape gets the line a plain file gets
-      // (bundleRefusalLine); the backend's words stay the error's detail,
-      // for the log. Any other refusal reads as it did.
+      // (loadRefusalLine), and one with no line the damaged-file line; the
+      // backend's words stay the error's detail, for the log. A 500 reads
+      // as it did.
       let body: unknown = null;
       try { body = await resp.clone().json(); } catch { body = null; }
-      const line = bundleRefusalLine(body);
+      const line = loadRefusalLine(resp.status, body);
       if (line !== null) {
         const detail = isRecord(body) && typeof body.detail === 'string' ? body.detail : line;
         throw new GraphStructureLimitError(line, detail);
