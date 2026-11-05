@@ -5,6 +5,7 @@ AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph
 ## Where tests run
 
 - Run the full suites in a Claude Code cloud session or in GitHub CI on a pushed branch. That covers the backend's pytest, the frontend's vitest, lint and build, and the contract scripts. On a machine you share with other agents, such as the maintainer's Mac, run only the focused tests for what you changed. Outside contributors without either can run [CONTRIBUTING.md's checks](CONTRIBUTING.md#development-checks) locally.
+- Run `npm run check:ratchets` (from frontend/) before pushing. It runs every test that reads the source or the docs from disk (wording, apostrophe, banned-phrase and similar scans), which a changed-files run misses.
 - A cloud session installs what CI installs on its own. `.claude/settings.json` runs `scripts/cloud-session-setup.sh` whenever a session starts, resumes, clears, compacts or forks, through `scripts/cloud-session-setup.mjs`, which does nothing outside a Linux cloud session (on Windows too). It installs at start and resume. After a clear, compaction or fork it only puts the venv back on `PATH`, so nothing is reinstalled under work in progress; it says when the dependencies changed since the last install.
   - The script does nothing unless `CLAUDE_CODE_REMOTE` is `true` (Claude Code sets it only in cloud sessions) and the machine is Linux.
   - It makes `backend/.venv` and runs `npm ci` in `frontend`, then puts the venv first on `PATH`, so CI's own commands work as written. Its first lines in the session say what's ready.
