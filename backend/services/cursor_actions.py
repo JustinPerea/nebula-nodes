@@ -46,9 +46,8 @@ def _shown(text: str) -> str:
     return "".join(out)
 
 
-def refusal(value: object) -> str:
-    """The line an unknown action gets, everywhere (GM - Design, PR #211 r2):
-    it echoes the value given, cleaned (``_shown``) and cut to 40
+def echoed(value: object) -> str:
+    """A value as a refusal may echo it: cleaned (``_shown``) and cut to 40
     characters without splitting one (services/text_cut.safe_cut)."""
     if isinstance(value, str):
         shown = value[: _ECHO_CHARS * 4]  # a 100 KB value is never walked whole
@@ -58,4 +57,22 @@ def refusal(value: object) -> str:
     shown = _shown(shown)
     if len(shown) > _ECHO_CHARS:
         shown = shown[: safe_cut(shown, _ECHO_CHARS - 1)] + "\u2026"
-    return f"\u201c{shown}\u201d isn\u2019t an action Nebula knows. Use one of {ACTIONS_LIST_TEXT}."
+    return shown
+
+
+def refusal(value: object) -> str:
+    """The line an unknown action gets, everywhere (GM - Design, PR #211 r2):
+    it echoes the value given, cleaned and cut (``echoed``)."""
+    return f"\u201c{echoed(value)}\u201d isn\u2019t an action Nebula knows. Use one of {ACTIONS_LIST_TEXT}."
+
+
+# Surfaces a cursor can point at besides the canvas (Phase 3, "Anywhere"):
+# the Moodboard panel and Studio are one surface, `moodboard`. The anchor is
+# {"surface": "moodboard", "itemId": "<board>" | "<board>/<image>", "part"?}.
+SURFACES = ("moodboard",)
+BOARD_PARTS = ("name", "direction", "avoid", "colors")
+IMAGE_PARTS = ("note", "weight")
+# The words a part goes by (the labels the Studio shows for each control;
+# the frontend's AGENT_SURFACE_PART_LABELS holds the same, pinned by a test).
+PART_LABELS = {"name": "Name", "direction": "Direction", "avoid": "Avoid", "colors": "Colors",
+               "note": "Note", "weight": "Weight"}

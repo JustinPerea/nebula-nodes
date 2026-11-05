@@ -23,10 +23,26 @@ export type ErrorCategory =
   | 'invalid_input'
   | 'unknown';
 
-/** Where an agent cursor points: a node, one of its ports, or a flow-space spot. */
+/** Where an agent cursor points: a node, one of its ports, a flow-space spot,
+ * or an item on a surface beside the canvas (Phase 3, "Anywhere"): the
+ * Moodboard panel and Studio, one surface. `itemId` is `<board>` or
+ * `<board>/<image>` (ids only, whatever the agent called the item); `part`
+ * is a control: name, direction, avoid or colors on a board, note or weight
+ * on an image. The DOM carries the same string as `data-agent-anchor`
+ * (lib/agentAnchors.ts). */
 export type AgentCursorAnchor =
   | { nodeId: string; handle?: string }
-  | { x: number; y: number };
+  | { x: number; y: number }
+  | { surface: 'moodboard'; itemId: string; part?: string };
+
+/** What a surface item is called, beside its anchor (never in it: tabs
+ * compare anchors whole), so a line or a launcher park can name an item that
+ * isn't on screen. `image` is the image's number on its board. */
+export interface AgentAnchorNames {
+  board: string;
+  image?: number;
+  part?: string;
+}
 
 /** graphSync.projectSwitch: who opened or made a project, and what was open
  * before (backend main.py _switch_notice). */
@@ -58,6 +74,8 @@ export interface AgentPresenceEvent {
   /** Absent for an action with no place on the canvas (a moodboard write):
    * the Agent log lists it (agentLogStore) and no cursor moves. */
   target?: AgentCursorAnchor;
+  /** Present with a surface target (Phase 3). */
+  anchorNames?: AgentAnchorNames;
   from?: AgentCursorAnchor;
   /** One of AGENT_CURSOR_ACTIONS; anything else is read as 'move' (forward compatible). */
   action: string;

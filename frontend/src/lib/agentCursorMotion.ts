@@ -76,11 +76,14 @@ export function isAtRest(state: SpringState, target: Point): boolean {
     && Math.hypot(state.vx, state.vy) < REST_SPEED;
 }
 
-/** Where an anchor sits in flow coordinates right now, or null if its node isn't drawn. */
+/** Where an anchor sits in flow coordinates right now, or null if its node isn't drawn
+ *  (or it is a surface item: no flow point). */
 export function resolveAnchor(
   anchor: AgentCursorAnchor,
   nodeLookup: AnchorLookup,
 ): Point | null {
+  // A surface item (the Moodboard panel) isn't in flow space: its own layer places it.
+  if ('surface' in anchor) return null;
   if (!('nodeId' in anchor)) return { x: anchor.x, y: anchor.y };
   const node = nodeLookup.get(anchor.nodeId);
   if (!node) return null;

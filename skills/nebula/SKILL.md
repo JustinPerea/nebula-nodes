@@ -877,6 +877,7 @@ nebula pins                    # notes the person pinned for agents
 nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
 nebula point --say "Reading your board"   # no target: said where your cursor is, it doesn't move
+nebula point --moodboard "Desert light" --image 12 --part note --action type   # a moodboard item (below)
 nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
@@ -917,6 +918,15 @@ question's text only its asker). Replies are paced: 5 in a row, then one
 every 2 s; past that Nebula refuses and says when you can reply again, so
 put everything in one reply. `nebula channel` says whether Nebula counts
 your session as listening.
+
+`--moodboard BOARD` (its id or exact name) points at a moodboard instead of a
+node or a spot, with `--image N` (a number, `#12` or an id) and `--part`
+(`name`, `direction`, `avoid` or `colors` on a board; `note` or `weight` on
+an image). It takes no target and no `--from`. Nebula never opens a panel or
+scrolls for the person: if the Moodboard panel is closed or the item is out of
+view, your cursor parks at the button that opens it or at the edge of what
+they see. Your board writes (`nebula moodboard add`, `set`, `edit`, ...) move
+your cursor to what they touched on their own.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

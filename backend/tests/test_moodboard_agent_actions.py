@@ -3,8 +3,10 @@
 The log is fed by the same `agentPresence` events that move an agent's cursor
 (frontend store/agentLogStore.ts). Graph edits always sent one; a board write
 over MCP or the CLI (Set aside, Analyze, ...) sent none, so the person never
-saw it. A board has no place on the canvas, so these events carry no
-`target`: the log lists them and no cursor moves.
+saw it. A board has no place on the canvas, so before Phase 3 these events
+carried no `target`. They now carry a surface anchor (the board, the image or
+the control the write touched), and the delete's, which has nothing left to
+point at, still none.
 """
 from __future__ import annotations
 
@@ -81,9 +83,14 @@ def test_an_agents_set_aside_and_analyze_are_named_in_the_log(api):
     assert {event["agent"]["name"] for event in events} == {"Claude Code"}
     assert events[0]["agent"] == identify(AGENT).as_dict()
     assert all(isinstance(event["at"], int) for event in events)
-    # No place on the canvas: no target, and no cursor is drawn or listed.
-    assert all("target" not in event for event in events)
-    assert presence.active() == []
+    # No place on the canvas, but one on the Moodboard panel (Phase 3): each
+    # carries a surface anchor (the full table is tests/test_cursor_anywhere_writes.py).
+    assert [(event["target"]["itemId"], event["target"].get("part"), event["action"]) for event in events] == [
+        (board["id"], None, "click"),
+        (f"{board['id']}/{first['id']}", None, "click"),
+        (board["id"], "colors", "look"),
+    ]
+    assert [row["target"] for row in presence.active()] == [events[-1]["target"]]
 
 
 def test_the_persons_own_board_writes_send_nothing(api):
@@ -240,8 +247,9 @@ def test_an_agents_edit_batch_logs_one_line_in_its_own_words(api):
           AGENT, say="Set aside the red one, eased the blue")
     events = [event for event in sent if event.get("type") == "agentPresence"]
     assert [event["say"] for event in events] == ["Set aside the red one, eased the blue"]
-    assert "target" not in events[0] and events[0]["agent"] == identify(AGENT).as_dict()
-    assert presence.active() == []
+    assert events[0]["agent"] == identify(AGENT).as_dict()
+    # Two images in one batch: the board (not one of the images), click.
+    assert events[0]["target"] == {"surface": "moodboard", "itemId": board["id"]} and events[0]["action"] == "click"
 
 
 def test_an_agents_edit_batch_without_say_logs_the_journal_summary(api):

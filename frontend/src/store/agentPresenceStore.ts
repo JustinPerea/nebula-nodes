@@ -122,9 +122,16 @@ function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
   };
 }
 
+const ANCHOR_ITEM = /^[A-Za-z0-9_.-]{1,64}(\/[A-Za-z0-9_.-]{1,64})?$/;
+
 function isAnchor(value: unknown): value is AgentCursorAnchor {
   if (!value || typeof value !== 'object') return false;
   const anchor = value as Record<string, unknown>;
+  // A surface item: `itemId` is `<board>` or `<board>/<image>` (ids, 1-64 of the DOM attribute's characters).
+  if (anchor.surface === 'moodboard') {
+    return typeof anchor.itemId === 'string' && ANCHOR_ITEM.test(anchor.itemId)
+      && (anchor.part === undefined || typeof anchor.part === 'string');
+  }
   if (typeof anchor.nodeId === 'string') return anchor.handle === undefined || typeof anchor.handle === 'string';
   return Number.isFinite(anchor.x) && Number.isFinite(anchor.y);
 }

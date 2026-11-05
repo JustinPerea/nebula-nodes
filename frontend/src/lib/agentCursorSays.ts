@@ -48,10 +48,14 @@ export function middleCut(name: string, max: number): string {
 
 /** The line, with its names quoted by nodeNameList and cut in the middle,
  *  evenly, so the whole line fits AGENT_SAY_MAX_CHARS. */
-function line(parts: TemplateStringsArray, ...names: string[]): string {
+function compose(parts: readonly string[], names: readonly string[]): string {
   const fixed = parts.reduce((n, p) => n + Array.from(p).length, 0) + names.length * 2; // two quotes each
   const each = Math.max(4, Math.floor((AGENT_SAY_MAX_CHARS - fixed) / Math.max(1, names.length)));
   return parts.reduce((out, p, i) => out + p + (i < names.length ? nodeNameList([middleCut(names[i], each)]) : ''), '');
+}
+
+function line(parts: TemplateStringsArray, ...names: string[]): string {
+  return compose(parts, names);
 }
 
 /**
@@ -87,6 +91,51 @@ export function defaultSay(action: AgentCursorAction, { node, from = null, pulle
       return 'Couldn’t do that';
     default:
       return '';
+  }
+}
+
+/** The words a moodboard control goes by in a line: the labels the Studio
+ *  shows for it (a test pins each against the Studio's own source), in the
+ *  backend's words too (cursor_actions.PART_LABELS). Phase 3, GM - Design
+ *  r4 item 4. */
+export const AGENT_SURFACE_PART_LABELS = {
+  name: 'Name', direction: 'Direction', avoid: 'Avoid', colors: 'Colors', note: 'Note', weight: 'Weight',
+} as const;
+
+/** What a surface anchor's line can name. `board` is the board's name,
+ *  `image` the image's number on it (both `anchorNames`, beside the anchor);
+ *  `hasImage` says the item is an image (its id is in the anchor). */
+export interface SurfaceSayContext {
+  board: string | null;
+  image?: number | null;
+  hasImage: boolean;
+  part?: string | null;
+}
+
+/**
+ * The default line for a cursor on a moodboard item (GM - Design r4 item 4),
+ * or null for none: the line a cursor shows when the agent sends no say of
+ * its own (the agent's always wins; a board write's is the backend's "Added
+ * …"). Display only, like every default here. Only `look`, `type` and
+ * `click` have lines on a surface; every other action keeps its own
+ * (`Thinking`, `Waiting for your OK`, ...: defaultSay with no node).
+ */
+export function surfaceSay(action: AgentCursorAction, { board, image = null, hasImage, part = null }: SurfaceSayContext): string | null {
+  if (!board || (action !== 'look' && action !== 'type' && action !== 'click')) return null;
+  const onImage = image !== null ? `image ${image}` : 'an image';
+  const names = AGENT_SURFACE_PART_LABELS;
+  if (action === 'look') {
+    if (part === 'colors') return compose(['Looking at the colors of ', ''], [board]);
+    return hasImage ? compose([`Looking at ${onImage} on `, ''], [board]) : compose(['Looking at ', ''], [board]);
+  }
+  switch (part) {
+    case 'direction': return compose(['Writing the direction for ', ''], [board]);
+    case 'avoid': return compose(['Changing ', ' on ', ''], [names.avoid, board]);
+    case 'name': return compose(['Renaming ', ''], [board]);
+    case 'colors': return compose(['Changing ', ' on ', ''], [names.colors, board]);
+    case 'note': return `Writing a note on ${onImage}`;
+    case 'weight': return `Changing \u201c${names.weight}\u201d on ${onImage}`;
+    default: return compose(['Changing ', ''], [board]);
   }
 }
 
@@ -145,3 +194,18 @@ export const DEFAULT_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
   { action: 'error', when: 'after an edit or a connect', line: defaultSay('error', { node: 'FLUX.2', cause: 'change' }) },
   { action: 'error', when: 'unknown, or at a spot', line: defaultSay('error', { node: 'FLUX.2' }) },
 ];
+
+/** Every moodboard line, with its case, for GM's review and the docs
+ *  (Phase 3, r4 item 4). */
+export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
+  ['look', 'a board', { board: 'Desert light', hasImage: false }],
+  ['look', 'an image', { board: 'Desert light', image: 12, hasImage: true }],
+  ['look', 'a board\u2019s colors (Analyze)', { board: 'Desert light', hasImage: false, part: 'colors' }],
+  ['type', 'a board\u2019s Direction', { board: 'Desert light', hasImage: false, part: 'direction' }],
+  ['type', 'a board\u2019s Avoid list', { board: 'Desert light', hasImage: false, part: 'avoid' }],
+  ['type', 'a board\u2019s name', { board: 'Desert light', hasImage: false, part: 'name' }],
+  ['click', 'a board\u2019s pinned colors', { board: 'Desert light', hasImage: false, part: 'colors' }],
+  ['type', 'an image\u2019s note', { board: 'Desert light', image: 12, hasImage: true, part: 'note' }],
+  ['click', 'an image\u2019s weight', { board: 'Desert light', image: 12, hasImage: true, part: 'weight' }],
+  ['type', 'a board, no control known', { board: 'Desert light', hasImage: false }],
+] as const).map(([action, when, context]) => ({ action, when, line: surfaceSay(action, context) ?? '' }));
