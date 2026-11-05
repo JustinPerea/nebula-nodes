@@ -272,10 +272,14 @@
   background: var(--agent-color);
 }
 
-/* type with nothing else to show it: the caret on the cursor itself, right of the tip. */
+/* type with nothing else to show it: the caret on the cursor itself, right of the tip.
+   3 px clear of the arrow's outline at rest (GM): the arrow's right-most point is x 14.7 and
+   its stroke is 1.4 wide, so the outline ends at 15.4 and the caret starts at 18.4. The
+   cursor isn't scaled with the canvas, so these are screen px at every zoom
+   (tests/agentCursorTipCaretGap.test.ts checks it against AGENT_CURSOR_ARROW_PATH). */
 .agent-cursor__tip-caret {
   position: absolute;
-  left: 15px;
+  left: 18.4px;
   top: 3px;
   width: var(--agent-cursor-caret-width);
   height: 12px;
