@@ -1,15 +1,48 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { getBezierPath, Position, useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
+import { Check, StickyNote } from 'lucide-react';
 import type { NodeData } from '../../types';
 import {
   AGENT_CURSOR_IDLE_MS,
   AGENT_SAY_FADE_MS,
-  AGENT_SAY_MS,
   useAgentPresenceStore,
   type AgentCursor,
 } from '../../store/agentPresenceStore';
-import type { AgentCursorAction } from '../../lib/wsClient';
-import { chainPoint, resolveAnchor, type Point } from '../../lib/agentCursorMotion';
+import { chainPoint, resolveAnchor, stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
+import {
+  frameAt,
+  impulseCurve,
+  nextChangeAt,
+  onArrival,
+  onEvent,
+  onKeystroke,
+  onSettled,
+  stepCurve,
+  thinkCurve,
+  type Expression,
+  type ExpressionFrame,
+} from '../../lib/agentCursorExpression';
+import { defaultSay, errorCause, heldDefault, sayHoldMs, type SayContext } from '../../lib/agentCursorSays';
+import { isSettled } from '../../lib/agentCursorSettled';
+import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { fieldBox, fieldTextChanged, findTypeField, onScreen, type FieldBox, type TypeField } from '../../lib/agentCursorField';
+import {
+  AGENT_CURSOR_CLICK,
+  AGENT_CURSOR_DASHED,
+  AGENT_CURSOR_ERROR,
+  AGENT_CURSOR_HALO,
+  AGENT_CURSOR_LOOK,
+  AGENT_CURSOR_MARK,
+  AGENT_CURSOR_PRESS_SPRING,
+  AGENT_CURSOR_RING_SPRING,
+  AGENT_CURSOR_RUN,
+  AGENT_CURSOR_SHAKE_SPRING,
+  AGENT_CURSOR_THINK,
+  AGENT_CURSOR_TYPE,
+  AGENT_CURSOR_WIRE,
+  AGENT_CURSOR_WIRE_SPRING,
+} from '../../lib/agentCursorTuning';
 import {
   AGENT_CURSOR_ENTRANCE_PX,
   AGENT_CURSOR_FADE_SPRING,
@@ -28,6 +61,7 @@ import {
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
   AGENT_CURSOR_ARROW_PATH,
+  AGENT_CURSOR_ARROW_TIP,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
   AGENT_CURSOR_NAME_FONT,
@@ -58,24 +92,155 @@ function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
-/**
- * Until each action has its own look (GM's agent cursor spec, phase 2), an
- * action draws today's nearest visual: these ripple on arrival, a drag also
- * pulls its wire, and move, look and think draw nothing extra.
- */
-const RIPPLE_ACTIONS: ReadonlySet<AgentCursorAction> = new Set(['click', 'drag', 'type', 'run', 'propose', 'wait', 'error']);
-
-/** The CSS springs, sampled once (agentCursor.css reads them). */
+/** The CSS springs and the expression's numbers, sampled once from
+ *  lib/springs.ts, lib/agentCursorExpression.ts and lib/agentCursorTuning.ts
+ *  (agentCursor.css reads them): GM retunes in the tuning module alone. */
 let springVars: Record<`--${string}`, string> | null = null;
 function cursorSpringVars(): Record<`--${string}`, string> {
   if (springVars) return springVars;
   const soft = springLinear(SPRING_SOFT);
-  const ring = springLinear(springFromStiffness(AGENT_CURSOR_FADE_SPRING.stiffness, AGENT_CURSOR_FADE_SPRING.damping));
+  const ring = stepCurve(AGENT_CURSOR_RING_SPRING);
+  const press = impulseCurve(AGENT_CURSOR_PRESS_SPRING);
+  const shake = impulseCurve(AGENT_CURSOR_SHAKE_SPRING);
+  const turn = stepCurve(AGENT_CURSOR_RING_SPRING);
+  const breath = thinkCurve();
+  const fade = springLinear(springFromStiffness(AGENT_CURSOR_FADE_SPRING.stiffness, AGENT_CURSOR_FADE_SPRING.damping));
   springVars = {
     '--agent-cursor-soft': `${soft.durationMs}ms ${soft.easing}`,
     '--agent-cursor-ring': `${ring.durationMs}ms ${ring.easing}`,
+    '--agent-cursor-ring-from': `${AGENT_CURSOR_CLICK.ringFromPx}px`,
+    '--agent-cursor-ring-to': `${AGENT_CURSOR_CLICK.ringToPx}px`,
+    '--agent-cursor-ring-stroke-from': `${AGENT_CURSOR_CLICK.strokeFromPx}px`,
+    '--agent-cursor-ring-stroke-to': `${AGENT_CURSOR_CLICK.strokeToPx}px`,
+    '--agent-cursor-ring-opacity': String(AGENT_CURSOR_CLICK.opacityFrom),
+    '--agent-cursor-press': `${press.durationMs}ms ${press.easing}`,
+    '--agent-cursor-press-scale': String(AGENT_CURSOR_CLICK.pressScale),
+    '--agent-cursor-halo-opacity': String(AGENT_CURSOR_HALO.opacity),
+    '--agent-cursor-look-dim': String(AGENT_CURSOR_LOOK.dimOpacity),
+    '--agent-cursor-sweep': `${AGENT_CURSOR_LOOK.sweepMs}ms ${turn.easing}`,
+    '--agent-cursor-sweep-stroke': `${AGENT_CURSOR_LOOK.strokePx}px`,
+    '--agent-cursor-sweep-opacity': String(AGENT_CURSOR_LOOK.arcOpacity),
+    '--agent-cursor-breath': `${Math.round(AGENT_CURSOR_THINK.loopMs / 2)}ms ${breath.easing}`,
+    '--agent-cursor-breath-trough-opacity': String(AGENT_CURSOR_THINK.troughOpacity),
+    '--agent-cursor-breath-peak-opacity': String(AGENT_CURSOR_THINK.peakOpacity),
+    '--agent-cursor-breath-trough-blur': `${AGENT_CURSOR_THINK.troughBlurPx}px`,
+    '--agent-cursor-breath-peak-blur': `${AGENT_CURSOR_THINK.peakBlurPx}px`,
+    '--agent-cursor-breath-scale': String(AGENT_CURSOR_THINK.peakScale),
+    '--agent-cursor-orbit': `${AGENT_CURSOR_RUN.orbitMs}ms ${turn.easing}`,
+    '--agent-cursor-orbit-stroke': `${AGENT_CURSOR_RUN.strokePx}px`,
+    '--agent-cursor-dashed-stroke': `${AGENT_CURSOR_DASHED.strokePx}px`,
+    '--agent-cursor-dashed-dash': `${AGENT_CURSOR_DASHED.dashPx} ${AGENT_CURSOR_DASHED.gapPx}`,
+    '--agent-cursor-dashed-opacity': String(AGENT_CURSOR_DASHED.opacity),
+    '--agent-cursor-mark-left': `${AGENT_CURSOR_MARK.leftPx}px`,
+    '--agent-cursor-mark-top': `${AGENT_CURSOR_MARK.topPx}px`,
+    '--agent-cursor-mark-box': `${AGENT_CURSOR_MARK.boxPx}px`,
+    '--agent-cursor-shake': `${shake.durationMs}ms ${shake.easing}`,
+    '--agent-cursor-shake-px': `${AGENT_CURSOR_ERROR.shakePx}px`,
+    '--agent-cursor-flash': `${AGENT_CURSOR_ERROR.flashMs}ms ${fade.easing}`,
+    '--agent-cursor-flash-opacity': String(AGENT_CURSOR_ERROR.flashOpacity),
+    '--agent-cursor-blink': `${AGENT_CURSOR_TYPE.blinkMs}ms ${soft.easing}`,
+    '--agent-cursor-caret-width': `${AGENT_CURSOR_TYPE.caretPx}px`,
   };
   return springVars;
+}
+
+/** The arrow's middle (its box is 1.5–14.7 × 1.5–20.1): the arcs' centre. */
+const ARROW_MIDDLE = { x: 8, y: 11 } as const;
+/** An arc of `deg` degrees on a circle drawn with pathLength 360. */
+const arcDash = (deg: number) => `${deg} ${360 - deg}`;
+/** The dashed halo: the arrow grown about its tip (propose, wait), so
+ *  nothing paints above or left of the tip and the column spacing holds
+ *  (GM r56 item D). */
+const DASHED_GROW = `translate(${AGENT_CURSOR_ARROW_TIP.x} ${AGENT_CURSOR_ARROW_TIP.y}) scale(${AGENT_CURSOR_DASHED.grow}) translate(${-AGENT_CURSOR_ARROW_TIP.x} ${-AGENT_CURSOR_ARROW_TIP.y})`;
+
+/** The node lookup as the say lines read it: each node's card title. */
+type NodeLabels = Map<string, { data?: { label?: unknown } } | undefined>;
+
+interface SayInfo {
+  /** The line beside the cursor ('' for none). */
+  text: string;
+  /** It is the action's default line, not the agent's. */
+  isDefault: boolean;
+  /** type: the field the caret or underline goes on, if the card shows one. */
+  field: TypeField | null;
+}
+
+/** The cursor's line for this event: its own say, or its action's default (r54). */
+function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined): SayInfo {
+  const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const handle = 'nodeId' in cursor.target ? cursor.target.handle : undefined;
+  const field = cursor.action === 'type' && nodeId ? findTypeField(nodeId, handle) : null;
+  if (cursor.say) return { text: cursor.say, isDefault: false, field };
+  const labelOf = (id: string | null): string | null => {
+    if (!id) return null;
+    const label = lookup?.get(id)?.data?.label;
+    return typeof label === 'string' && label.trim() ? label.trim() : null;
+  };
+  const fromId = cursor.from && 'nodeId' in cursor.from ? cursor.from.nodeId : null;
+  const context: SayContext = {
+    node: labelOf(nodeId),
+    from: labelOf(fromId),
+    pulled: cursor.from !== undefined,
+    field: field ? (field.kind === 'param' ? { kind: 'param', label: field.label } : { kind: 'text' }) : null,
+    cause: cursor.action === 'error' ? errorCause(cursor.did, nodeId, cursor.receivedAt) : null,
+  };
+  return { text: defaultSay(cursor.action, context), isDefault: true, field };
+}
+
+/**
+ * type's caret at the end of the field's text, or its underline under a
+ * param row (§2), drawn in flow coordinates beside the cursor so it rides
+ * with its node and zooms with the card's text. Measured when the state
+ * starts and on each keystroke, never per frame; a node move only moves it.
+ */
+function FieldMark({ field, nodeId, blinking, keystrokeAt }: {
+  field: TypeField;
+  nodeId: string;
+  blinking: boolean;
+  keystrokeAt: number;
+}) {
+  const store = useStoreApi<Node<NodeData>>();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [kind, setKind] = useState<FieldBox['kind']>(field.kind === 'param' ? 'underline' : 'caret');
+  useLayoutEffect(() => {
+    let box: FieldBox | null = null;
+    const place = () => {
+      const el = ref.current;
+      if (!el) return;
+      const node = store.getState().nodeLookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined;
+      const at = node?.internals?.positionAbsolute;
+      if (!box || !at) {
+        el.style.visibility = 'hidden';
+        return;
+      }
+      el.style.visibility = '';
+      el.style.transform = `translate(${at.x + box.x}px, ${at.y + box.y}px)`;
+      el.style.width = `${box.width}px`;
+      el.style.height = `${box.height}px`;
+    };
+    const measure = () => {
+      box = fieldBox(field, nodeId, store.getState().transform?.[2] ?? 1, AGENT_CURSOR_TYPE.caretPx, AGENT_CURSOR_TYPE.underlinePx);
+      if (box) setKind(box.kind);
+      place();
+    };
+    measure();
+    // Once more after the card has drawn the text this keystroke brought.
+    const frame = requestAnimationFrame(measure);
+    const unsubscribe = store.subscribe(place);
+    return () => {
+      cancelAnimationFrame(frame);
+      unsubscribe();
+    };
+  }, [field, nodeId, store, keystrokeAt]);
+  return (
+    <div
+      ref={ref}
+      className="agent-cursor__field-mark"
+      data-kind={kind}
+      data-blink={blinking && kind === 'caret' ? 'true' : undefined}
+      aria-hidden="true"
+    />
+  );
 }
 
 
@@ -1016,9 +1181,12 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   onExited?: (key: string) => void;
 }) {
   const store = useStoreApi<Node<NodeData>>();
+  const haloId = `agent-cursor-halo-${useId().replace(/:/g, '')}`;
   const cursorRef = useRef<HTMLDivElement | null>(null);
   const pointerRef = useRef<SVGSVGElement | null>(null);
-  const wireRef = useRef<SVGLineElement | null>(null);
+  const wireRef = useRef<SVGPathElement | null>(null);
+  // The drag wire's free end, trailing the tip on its lag spring (§2 drag).
+  const wireEnd = useRef<SpringState | null>(null);
   const motion = useRef<CursorMotion | null>(null);
   const phase = useRef<Phase>('rest');
   // A new event plans a fresh move from wherever the cursor is.
@@ -1067,15 +1235,90 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   knownRef.current = cursor.arrivalKnown;
   // Its column (StackSpot.column), as last laid out.
   const exited = useRef(onExited);
-  const [arrivedSeq, setArrivedSeq] = useState(0);
   // Each holds the event seq whose timer ran out, so a new event resets both.
   const [sayDoneSeq, setSayDoneSeq] = useState(0);
   const [sayFadeSeq, setSayFadeSeq] = useState(0);
   const [idleSeq, setIdleSeq] = useState(0);
-  const showSay = Boolean(cursor.say) && sayDoneSeq !== cursor.seq;
+  // The line beside the cursor: the agent's own say, else the action's
+  // default line (GM - Design r54, lib/agentCursorSays), worked out once per
+  // event from the canvas as it is then. A default is display only: the
+  // accessible name and the Agent log keep the agent's own words.
+  const sayInfo = useMemo(() => sayFor(cursor, store.getState().nodeLookup as unknown as NodeLabels),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
+    [cursor.seq, cursor.say, cursor.action]);
+  const say = sayInfo.text;
+  // How long it shows before its exit (r54): max(3 s, 60 ms × characters),
+  // capped at 8 s; a default tied to a held state (think, propose, wait)
+  // has no timer and holds as long as its state.
+  const sayHold = sayInfo.isDefault && heldDefault(cursor.action) ? null : sayHoldMs(say);
+  // propose and wait wait for the person: their default stays through idle.
+  const sayOutlastsIdle = sayInfo.isDefault && (cursor.action === 'propose' || cursor.action === 'wait');
+  // propose and wait end when the person settles what they wait on (their
+  // lines go with the state; an agent's own say keeps its own timer).
+  const proposalsSynced = useCanvasProposalsStore((s) => s.synced);
+  const proposals = useCanvasProposalsStore((s) => s.proposals);
+  const questionSets = useAgentQuestionsStore((s) => s.sets);
+  const settled = isSettled(cursor, { proposalsSynced, proposals, questionSets });
+  const showSay = Boolean(say) && sayDoneSeq !== cursor.seq && !(settled && sayInfo.isDefault && heldDefault(cursor.action));
+  const sayHoldRef = useRef(sayHold);
+  sayHoldRef.current = sayHold;
+
+  // What the cursor expresses (§2; lib/agentCursorExpression). A new event
+  // ends the current state at once (or holds it to its minimum, for a bare
+  // move); the new one begins when the tip arrives (arrive, from the loop).
+  const [expr, setExpr] = useState<Expression | null>(null);
+  const [, setExprClock] = useState(0);
+  const arrivedFor = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (leaving) return;
+    setExpr((current) => onEvent(current, cursor.action, performance.now()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per event
+  }, [cursor.seq]);
+  // The person settled what propose or wait waited on: it ends at once (also
+  // when the settled state is what a reload brings, before the cursor lands).
+  useLayoutEffect(() => {
+    if (settled) setExpr((current) => onSettled(current, cursor.seq, performance.now()));
+  }, [settled, expr, cursor.seq]);
+  const arrive = useRef<(watched: boolean) => void>(() => {});
+  arrive.current = (watched: boolean) => {
+    if (arrivedFor.current === cursor.seq) return;
+    arrivedFor.current = cursor.seq;
+    const { action, seq } = cursor;
+    setExpr((current) => onArrival(current, action, seq, performance.now(), watched));
+  };
+  const idleSince = useRef<number | null>(null);
   // Fading out, still mounted (GM - Design, round 19); a new event's seq ends it.
   const sayLeaving = sayFadeSeq === cursor.seq;
   const idle = idleSeq === cursor.seq;
+  if (idle && idleSince.current === null) idleSince.current = performance.now();
+  if (!idle) idleSince.current = null;
+  // The frame showing now; a timer re-renders when it next changes by itself.
+  const exprNow = performance.now();
+  const expressed: ExpressionFrame = frameAt(expr, exprNow, idleSince.current);
+  useEffect(() => {
+    const at = nextChangeAt(expr, performance.now(), idleSince.current);
+    if (at === null) return undefined;
+    const timer = window.setTimeout(() => setExprClock((c) => c + 1), Math.max(0, at - performance.now()) + 1);
+    return () => window.clearTimeout(timer);
+  });
+  // type: the field's text changing is a keystroke (the caret blinks).
+  const typingNode = expressed.action === 'type' && !expressed.lingering && 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const typingHandle = typingNode && 'handle' in cursor.target ? cursor.target.handle ?? null : null;
+  useEffect(() => {
+    if (!typingNode) return undefined;
+    // Only the field's text counts: a run status or any other change to the
+    // node's data is not a keystroke (the blink doesn't restart, nothing is
+    // measured again).
+    const dataOf = () => (store.getState().nodeLookup.get(typingNode) as { data?: unknown } | undefined)?.data;
+    let seen = dataOf();
+    return store.subscribe(() => {
+      const now = dataOf();
+      if (now === seen) return;
+      const typed = fieldTextChanged(seen, now, typingHandle);
+      seen = now;
+      if (typed) setExpr((current) => onKeystroke(current, performance.now()));
+    });
+  }, [typingNode, typingHandle, store]);
 
   // A pill hidden by a takeover stays hidden for the rest of that exit, even
   // if the new holder leaves first (GM - Design, PR #211 review 5, item 6).
@@ -1101,9 +1344,9 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   // with the fallback font can be narrower than it is drawn (review 7,
   // MEDIUM-4). No layout read.
   const widths = useMemo(
-    () => labelWidths(countText ?? name, countText === null ? cursor.say : ''),
+    () => labelWidths(countText ?? name, countText === null ? say : ''),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontVersion: the fonts changed under the same text
-    [name, cursor.say, countText, fontVersion],
+    [name, say, countText, fontVersion],
   );
   // The pills' text in the font they draw in: a subset not loaded yet loads
   // now, and the layer measures again when it has (fontVersion).
@@ -1111,8 +1354,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
     if (!fonts || typeof fonts.load !== 'function') return;
     fonts.load(AGENT_CURSOR_NAME_FONT, countText ?? name).catch(() => {});
-    if (cursor.say) fonts.load(AGENT_CURSOR_SAY_FONT, cursor.say).catch(() => {});
-  }, [name, cursor.say, countText]);
+    if (say) fonts.load(AGENT_CURSOR_SAY_FONT, say).catch(() => {});
+  }, [name, say, countText]);
   // A count cursor and a folded one draw no say pill: the says of a full
   // column's later members show in the Agent log.
   const drawsSay = !counting && !collapsed;
@@ -1120,7 +1363,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const countNames = counting ? shownFold.group!.map((key) => (key === cursor.key ? name : field.names.get(key) ?? '')) : [];
 
   // Narration and idle dimming follow each new event. The bubble fades on a
-  // spring about 3 s after the last event, then goes; at once under reduced
+  // spring after its hold (sayHold, GM r54), then goes; at once under reduced
   // motion. A new event clears both timers, so a fade in progress stops.
   useEffect(() => {
     // Leaving: the say and the dimming stay as they are; the whole cursor
@@ -1133,21 +1376,22 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // event starts them now.
     const ageMs = cursor.replayed ? Math.max(0, Date.now() - cursor.receivedAt) : 0;
     let fadeTimer: number | undefined;
-    const sayTimer = window.setTimeout(() => {
+    // A default held by its state has no timer: the next event ends it.
+    const sayTimer = sayHold === null ? undefined : window.setTimeout(() => {
       if (prefersReducedMotion()) {
         setSayDoneSeq(seq);
         return;
       }
       setSayFadeSeq(seq);
       fadeTimer = window.setTimeout(() => setSayDoneSeq(seq), AGENT_SAY_FADE_MS);
-    }, Math.max(0, AGENT_SAY_MS - ageMs));
+    }, Math.max(0, sayHold - ageMs));
     const idleTimer = window.setTimeout(() => setIdleSeq(seq), Math.max(0, AGENT_CURSOR_IDLE_MS - ageMs));
     return () => {
       window.clearTimeout(sayTimer);
       if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
       window.clearTimeout(idleTimer);
     };
-  }, [cursor.seq, cursor.receivedAt, cursor.replayed, leaving]);
+  }, [cursor.seq, cursor.receivedAt, cursor.replayed, leaving, sayHold]);
 
   // The say pill's place, set outside React like the label: on the canvas
   // (and which side), waiting hidden, or in the Agent log only.
@@ -1262,7 +1506,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
 
   // What the loop, the pointer and the timers read between renders.
   useLayoutEffect(() => {
-    sayShownRef.current = showSay && !idle;
+    sayShownRef.current = showSay && (!idle || sayOutlastsIdle);
     idleRef.current = idle;
     // A leaving cursor keeps the peers it had as its exit began, so its
     // label keeps its layout (review 5, M1).
@@ -1275,13 +1519,13 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     collapsedRef.current = collapsed;
     countingRef.current = counting;
     field.names.set(cursor.key, name);
-    const sayNow = showSay && !idle && drawsSay;
+    const sayNow = showSay && (!idle || sayOutlastsIdle) && drawsSay;
     // A folded member's say is in the Agent log only (r18 item 1); one in
     // the log keeps no room (setSay below sets it as it is drawn).
     field.setSay(cursor.key, sayNow && sayKeepsRoom(sayState.current), widths);
     if (!sayNow) {
       setSay.current('none');
-    } else if (!sayWasShown.current || sayText.current !== cursor.say) {
+    } else if (!sayWasShown.current || sayText.current !== say) {
       // A new say pill: held hidden, nothing moving, until another column
       // is out of its way; then its own column glides and it fades in.
       // Under reduced motion everything is instant: it takes its place
@@ -1300,7 +1544,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       }
     }
     sayWasShown.current = sayNow;
-    sayText.current = sayNow ? cursor.say : null;
+    sayText.current = sayNow ? say : null;
   });
 
   useLayoutEffect(() => {
@@ -1396,25 +1640,35 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       field.placers.set(cursor.key, apply);
       field.markers.set(cursor.key, paintMarks);
     }
-    const updateWire = (start: Point | null, arrivedNow = false) => {
-      const line = wireRef.current;
+    // The drag's wire: the canvas's own bezier (React Flow's getBezierPath,
+    // as the edges draw it) from the port to an end that trails the tip on
+    // the wire's lag spring, so it visibly gets pulled (§2 drag). Its width
+    // is in flow units, like an edge's.
+    const drawWire = (path: SVGPathElement, from: Point, to: Point) => {
+      const [d] = getBezierPath({
+        sourceX: from.x, sourceY: from.y, sourcePosition: Position.Right,
+        targetX: to.x, targetY: to.y, targetPosition: Position.Left,
+      });
+      path.setAttribute('d', d);
+    };
+    const updateWire = (start: Point | null, arrivedNow = false, dt = 0) => {
+      const path = wireRef.current;
       const m = motion.current;
-      if (!line) return;
+      if (!path) return;
       if (arrivedNow && start && m && dragging) {
         // The tip is at the port: the wire ends there as it fades.
-        line.setAttribute('x2', String(m.pos.x));
-        line.setAttribute('y2', String(m.pos.y));
+        drawWire(path, start, m.pos);
       }
       if (!start || !m || phase.current !== 'travel' || !dragging) {
-        line.style.opacity = '0';
+        path.style.opacity = '0';
+        wireEnd.current = null;
         return;
       }
-      line.setAttribute('x1', String(start.x));
-      line.setAttribute('y1', String(start.y));
-      line.setAttribute('x2', String(m.pos.x));
-      line.setAttribute('y2', String(m.pos.y));
-      line.style.strokeWidth = String(2 / zoomRef.current);
-      line.style.opacity = '1';
+      const end = wireEnd.current ?? { x: start.x, y: start.y, vx: 0, vy: 0 };
+      wireEnd.current = stepSpring(end, m.pos, Number.isFinite(dt) ? Math.min(dt, 0.1) : 0, AGENT_CURSOR_WIRE_SPRING);
+      drawWire(path, start, wireEnd.current);
+      path.style.strokeWidth = String(AGENT_CURSOR_WIRE.strokePx);
+      path.style.opacity = '1';
     };
     // The cursor's own hover boxes (arrow and pills), read at most once per
     // landing, label change or viewport move, never per frame or per pointermove.
@@ -1595,7 +1849,9 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         field.landed(cursor.key);
         field.snapped(cursor.key);
         firstSightAt.current = performance.now();
-        if (ageMs >= AGENT_SAY_MS) setSayDoneSeq(cursor.seq);
+        if (sayHoldRef.current !== null && ageMs >= sayHoldRef.current) setSayDoneSeq(cursor.seq);
+        // Landed with no flight to show: a held state shows as it is, no gesture plays.
+        arrive.current(false);
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
         lastTime.current = null;
         apply();
@@ -1667,6 +1923,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         field.holdBelow(cursor.key, z, time);
         updateWire(null);
         field.landed(cursor.key);
+        arrive.current(false);
         updateLabel.current();
         lastTime.current = null;
         hoverBoxes = null;
@@ -1688,7 +1945,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         // The tip is at the target (within 2 px): the action fires and the
         // wire lets go here, never at the hand-off.
         phase.current = 'rest';
-        setArrivedSeq(cursor.seq);
+        // Its expression begins here (§2: the action fires at the tip).
+        arrive.current(true);
         field.landed(cursor.key);
         // No layout invalidation here: nothing else moved, and this
         // cursor's own hover boxes go when it comes to rest (boxesMoved).
@@ -1699,7 +1957,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       field.steppedAt.set(cursor.key, time);
       apply();
       field.holdBelow(cursor.key, z, time);
-      updateWire(start, arrivedNow);
+      updateWire(start, arrivedNow, dt);
       updateLabel.current();
       decideSay.current();
 
@@ -1839,12 +2097,30 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     place.current();
   }, [zoom]);
 
-  const ripple = RIPPLE_ACTIONS.has(cursor.action);
+  // The expression as drawn (§2). Under reduced motion each state is a
+  // still frame (§3): no sweep, breath, press, ring or shake.
+  const still = prefersReducedMotion();
+  const fx = leaving || collapsed ? null : expressed.action;
+  const playing = expressed.gesture && !still;
+  const gestureKey = expr?.startedAt ?? 0;
+  const typeNode = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const fieldShown = fx === 'type' && sayInfo.field !== null && typeNode !== null && onScreen(sayInfo.field);
+  const sayCaret = fx === 'type' && !fieldShown;
+  // type with no field mark and no say pill to end (a count cursor, a say
+  // whose hold is over, a field off screen with no say): the caret sits on the
+  // cursor itself, beside the tip, so the state never shows nothing.
+  const sayPillShown = showSay && (!idle || sayOutlastsIdle) && drawsSay;
+  const tipCaret = sayCaret && !sayPillShown;
   return (
     <>
       <svg className="agent-cursor__wire-layer" aria-hidden="true">
-        <line ref={wireRef} className="agent-cursor__wire" stroke={fill} />
+        <path ref={wireRef} className="agent-cursor__wire" stroke={fill} fill="none" />
       </svg>
+      {fieldShown && (
+        <div className="agent-cursor__field-layer" style={{ ['--agent-color' as string]: fill }}>
+          <FieldMark field={sayInfo.field!} nodeId={typeNode!} blinking={expressed.blinking} keystrokeAt={expr?.keystrokeAt ?? 0} />
+        </div>
+      )}
       <div
         ref={cursorRef}
         className="agent-cursor"
@@ -1858,18 +2134,56 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         data-taken={taken ? 'true' : undefined}
         data-count={counting ? shownFold.group!.length : undefined}
         data-collapsed={collapsed ? 'true' : undefined}
+        data-expr={fx ?? undefined}
+        data-gesture={fx && playing ? 'true' : undefined}
+        data-still={fx && still ? 'true' : undefined}
         role={leaving || collapsed ? undefined : 'status'}
         aria-hidden={leaving || collapsed ? true : undefined}
         aria-label={leaving || collapsed ? undefined : counting
           ? `${countText}: ${countNames.join(', ')}`
           : `${name}${cursor.say ? `: ${cursor.say}` : ''}`}
       >
-        {ripple && arrivedSeq === cursor.seq && !prefersReducedMotion() && (
-          <span key={cursor.seq} className="agent-cursor__ripple" />
-        )}
         <svg ref={pointerRef} className="agent-cursor__pointer" width="20" height="22" viewBox="0 0 20 22" aria-hidden="true">
-          <path d={AGENT_CURSOR_ARROW_PATH} />
+          <defs>
+            <filter id={haloId} x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation={AGENT_CURSOR_HALO.blur} />
+            </filter>
+          </defs>
+          {/* One sideways shake (error), then the press (click, a drag's arrival): each remounts per gesture. */}
+          <g key={`shake-${gestureKey}`} className={fx === 'error' && playing ? 'agent-cursor__shake agent-cursor__fx' : undefined}>
+            <g className={(fx === 'click' || fx === 'drag') && playing ? 'agent-cursor__press' : undefined}>
+              {/* The halo in place of a drop shadow (§1): the state surface. */}
+              <path className="agent-cursor__halo" d={AGENT_CURSOR_ARROW_PATH} filter={`url(#${haloId})`} />
+              {fx === 'error' && (playing || still) && (
+                <path className="agent-cursor__danger" d={AGENT_CURSOR_ARROW_PATH} filter={`url(#${haloId})`} />
+              )}
+              {(fx === 'propose' || fx === 'wait') && (
+                <path className="agent-cursor__dashed" d={AGENT_CURSOR_ARROW_PATH} transform={DASHED_GROW} vectorEffect="non-scaling-stroke" />
+              )}
+              {fx === 'look' && playing && (
+                <circle className="agent-cursor__sweep agent-cursor__fx" cx={ARROW_MIDDLE.x} cy={ARROW_MIDDLE.y}
+                  r={AGENT_CURSOR_LOOK.radiusPx} pathLength={360} strokeDasharray={arcDash(AGENT_CURSOR_LOOK.arcDeg)}
+                  filter={`url(#${haloId})`} />
+              )}
+              {fx === 'run' && (
+                <circle className={`agent-cursor__orbit${playing ? ' agent-cursor__fx' : ''}`} cx={ARROW_MIDDLE.x} cy={ARROW_MIDDLE.y}
+                  r={AGENT_CURSOR_RUN.radiusPx} pathLength={360}
+                  strokeDasharray={still ? undefined : arcDash(AGENT_CURSOR_RUN.arcDeg)} />
+              )}
+              <path className="agent-cursor__arrow" d={AGENT_CURSOR_ARROW_PATH} />
+            </g>
+          </g>
+          {(fx === 'click' || fx === 'drag') && playing && (
+            <circle key={`ring-${gestureKey}`} className="agent-cursor__ring agent-cursor__fx" cx={1.5} cy={1.5} r={AGENT_CURSOR_CLICK.ringFromPx} />
+          )}
         </svg>
+        {tipCaret && <span className="agent-cursor__tip-caret" data-blink={expressed.blinking ? 'true' : undefined} aria-hidden="true" />}
+        {(fx === 'propose' || fx === 'wait') && (
+          <span className={`agent-cursor__mark agent-cursor__mark--${fx}`} aria-hidden="true">
+            {fx === 'propose' && <Check size={8} strokeWidth={3} aria-hidden="true" />}
+            {fx === 'wait' && <StickyNote size={8} strokeWidth={2.5} aria-hidden="true" />}
+          </span>
+        )}
         <div className="agent-cursor__label">
           {counting ? (
             <>
@@ -1888,8 +2202,12 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
             /* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */
             <span className="agent-cursor__name"><bdi>{cursor.name}</bdi>{name.slice(cursor.name.length)}</span>
           )}
-          {showSay && !idle && drawsSay && (
-            <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>{cursor.say}</span>
+          {sayPillShown && (
+            <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>
+              {say}
+              {/* type with its field off screen: the caret ends the say pill (§2). */}
+              {sayCaret && <span className="agent-cursor__say-caret" data-blink={expressed.blinking ? 'true' : undefined} aria-hidden="true" />}
+            </span>
           )}
         </div>
       </div>
@@ -1946,6 +2264,25 @@ export function AgentCursorLayer() {
     const timer = window.setInterval(() => prune(), PRUNE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [prune]);
+
+  // Dev only (GM r49): ?cursorStates=1 plays each state in turn for tuning.
+  // Behind import.meta.env.DEV, so the production build drops the import and
+  // its chunk (scripts/check-dev-only-code.mjs checks dist).
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      if (!new URLSearchParams(window.location.search).has('cursorStates')) return undefined;
+      let stop: (() => void) | null = null;
+      let gone = false;
+      void import('./agentCursorStatesDriver').then((driver) => {
+        if (!gone) stop = driver.startCursorStatesDriver();
+      });
+      return () => {
+        gone = true;
+        stop?.();
+      };
+    }
+    return undefined;
+  }, []);
 
   // The cached pane box and hover boxes go stale when the viewport moves or
   // the pane resizes: drop them then, and only then.

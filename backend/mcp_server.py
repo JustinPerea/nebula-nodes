@@ -436,9 +436,12 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    connections, the user's selection, and other agents' cursors. An input node
-    holding an uploaded file has `fileName`, the name it was uploaded with
-    (its `filePath` is a stored, hashed name). `view.stale` is
+    connections, the user's selection, and other agents' cursors. A node
+    holding a file has `fileName` (its filePath's) and, with other file
+    params, `fileNames` ({param: name}): the name the canvas shows, which is
+    the name the file was uploaded with, else the path's own name, and
+    "Uploaded file" for a bare stored hash (a `filePath` is a stored, hashed
+    name). `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
@@ -597,19 +600,39 @@ def point_at(
     report or a suggestion goes in post_note, which the person reads in the
     Updates list, not at your cursor.
 
-    `action`, what you are doing there:
-    - `move`: going there, no gesture;
-    - `look`: reading or checking something;
-    - `think`: working something out at that spot;
-    - `type`: writing a prompt or changing a field;
-    - `click`: pressing something;
-    - `drag`: connecting, with `from_node_id`/`from_port`;
-    - `run`: starting a run;
-    - `propose`: you proposed a change and wait for the person's OK;
-    - `wait`: you asked the person something and wait for the answer;
-    - `error`: something you tried failed.
-    Graph edits through Nebula's API pick their own action. Any other value
-    is refused.
+    `action`, what you are doing there, how the cursor shows it, and the line
+    it shows when you give no `say` (your own `say` always wins):
+    - `move`: going there, no gesture; no line;
+    - `look`: reading or checking something; its glow dims and an arc sweeps
+      once around it; "Looking at “Brief”" ("Looking here" at a spot);
+    - `think`: working something out at that spot; its glow breathes while
+      you stay on it; "Thinking";
+    - `type`: writing a prompt or changing a field; a caret at the end of the
+      card's text field, or an underline under the port row you name
+      (`port`); "Writing the prompt for “FLUX.2”", or "Changing “Resolution”
+      on “FLUX.2”" with a port;
+    - `click`: pressing something; the arrow presses and a ring blooms; no
+      line;
+    - `drag`: connecting, with `from_node_id`/`from_port`; a connection is pulled
+      from the port; "Connecting “Brief” to “FLUX.2”" (no line for a drag
+      to a spot with no start: that is only a move);
+    - `run`: starting a run; a thin arc circles the arrow once; "Started
+      “FLUX.2”";
+    - `propose`: you proposed a change and wait for the person's OK; a
+      dashed glow and a small ghost card, the cursor still; "Waiting for
+      your OK" until that proposal is accepted, rejected, withdrawn or
+      expired (propose_change sets it for you; `propose` with no proposal
+      open ends at once);
+    - `wait`: you asked the person something (ask_person) and wait for the
+      answer; a dashed glow and a pin, the cursor still; "Waiting for your
+      answer" until the person answers or dismisses a question you asked
+      (with none asked, until your next action);
+    - `error`: something you tried failed; one shake and a red flash;
+      "Couldn’t run “FLUX.2”" after your run there, "Couldn’t change
+      “FLUX.2”" after your edit or connection there, else "Couldn’t do
+      that".
+    A line shows for max(3 s, 60 ms per character), at most 8 s. Graph edits
+    through Nebula's API pick their own action. Any other value is refused.
 
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set

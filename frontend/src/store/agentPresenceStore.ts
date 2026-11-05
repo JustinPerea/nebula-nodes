@@ -43,6 +43,8 @@ export interface AgentCursor {
   replayed: boolean;
   /** The project open when it happened. */
   projectId: string | null;
+  /** The proposal a `propose` cursor waits on, if its event named one. */
+  proposalId: string | null;
   /** When it came to where it is, in the backend's clock (its `since`, else
    *  the event's `at`): the column order, the same in every tab and after a
    *  reload (GM - Design, PR #211 r21). */
@@ -190,6 +192,8 @@ function withEvent(
     seq: nextSeq(key, previous?.seq),
     did: cleanDid(event.did, now),
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
+    proposalId: typeof event.proposalId === 'string' && event.proposalId && event.proposalId.length <= 128
+      ? event.proposalId : null,
     replayed,
     arrivedAt: arrivalOf(event, previous),
     arrivalKnown: typeof event.since === 'number' && Number.isFinite(event.since)

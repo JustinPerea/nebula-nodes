@@ -73,6 +73,8 @@ export interface AgentPresenceEvent {
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
   projectId?: string | null;
+  /** On a `propose` cursor: the proposal it waits on (lib/agentCursorSettled). */
+  proposalId?: string;
   /** What the action was, for the Agents panel (Q125 item 2): a past-tense
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */

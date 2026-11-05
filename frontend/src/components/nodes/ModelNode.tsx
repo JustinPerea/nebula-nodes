@@ -41,7 +41,8 @@ import { NodeLabel } from './NodeLabel';
 import { useCardWidthSpring, useNodeRemeasure } from '../../lib/cardWidthSpring';
 import { NodeRunStatus } from './NodeRunStatus';
 import { MoodboardAdapterRow } from './MoodboardAdapterRow';
-import { inputFileName, middleTruncate } from '../../lib/fileName';
+import { fileParamName, middleTruncate } from '../../lib/fileName';
+import { useUploadNames } from '../../lib/uploadNames';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
@@ -95,6 +96,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const batchPreview = useBatchPreview(id, nodeData);
+  // An input card's name may come from Nebula's upload record (GM r48 Q1).
+  useUploadNames();
   const actionSlot = useSelectionActionSlot(id);
   // GM r107: the card's width springs when its own content widens it.
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -291,8 +294,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
   // Every input card names the file it holds, an image under its picture
   // (GM - Design, 2026-10-24: similar images are hard to tell apart).
+  // The name the Inspector shows too, never a bare content hash (GM r48 Q1
+  // on #222: lib/fileName.ts fileParamName).
   const inputFile = INPUT_FILE_CARDS.has(nodeData.definitionId)
-    ? inputFileName(nodeData.params)
+    ? fileParamName(nodeData.params, 'filePath')
     : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData

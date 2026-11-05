@@ -60,6 +60,9 @@ import { resolve } from 'node:path';
 import { AGENT_CURSOR_IDLE_MS, AGENT_SAY_FADE_MS, AGENT_SAY_MS } from '../src/store/agentPresenceStore';
 import { agentActionEntry } from '../src/store/agentLogStore';
 import { forgetPersonPlaced, notePersonPlaced } from '../src/lib/personNodeMoves';
+import { useCanvasProposalsStore, type ProposalEntry } from '../src/store/canvasProposalsStore';
+import { useAgentQuestionsStore, type QuestionSetEntry } from '../src/store/agentQuestionsStore';
+import { AGENT_CURSOR_TYPE } from '../src/lib/agentCursorTuning';
 
 /**
  * GM - Design's agent cursor spec, phase 1 in the layer: each action draws
@@ -99,7 +102,18 @@ const event = (overrides: Partial<AgentPresenceEvent> = {}): AgentPresenceEvent 
 });
 const send = (e: AgentPresenceEvent) => act(() => { useAgentPresenceStore.getState().apply(e); });
 const cursors = () => [...document.querySelectorAll<HTMLElement>('.agent-cursor')];
-const ripple = () => document.querySelector('.agent-cursor__ripple');
+// A gesture playing (Phase 2: click's ring, run's orbit, error's shake, look's sweep).
+const ripple = () => document.querySelector('.agent-cursor__fx');
+/** The wire path's free end (the last point of its bezier). */
+const wireEnd = (wire: SVGPathElement) => {
+  const n = (wire.getAttribute('d') ?? '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)!.map(Number);
+  return { x: n[n.length - 2], y: n[n.length - 1] };
+};
+/** A cursor's tip from its transform. */
+const tipOf = (el: HTMLElement) => {
+  const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\)/.exec(el.style.transform)!;
+  return { x: +m[1], y: +m[2] };
+};
 const realMatchMedia = window.matchMedia;
 const reduceMotion = (on: boolean) => {
   window.matchMedia = ((query: string) => ({ matches: on && query.includes('reduce'), media: query,
@@ -138,8 +152,8 @@ afterEach(() => {
   useAgentPresenceStore.getState().clear();
 });
 
-describe('each action draws its nearest visual until phase 2', () => {
-  it.each(['click', 'type', 'run', 'propose', 'wait', 'error'])('%s ripples on arrival', (action) => {
+describe('each action draws its own look (Phase 2, spec §2)', () => {
+  it.each(['click', 'run', 'error'])('%s plays its gesture on arrival, not before', (action) => {
     render(<AgentCursorLayer />);
     send(event({ action }));
     tickFrames(2);
@@ -147,14 +161,112 @@ describe('each action draws its nearest visual until phase 2', () => {
     flush();
     expect(ripple()).not.toBeNull();
     expect(cursors()[0].dataset.action).toBe(action);
+    expect(cursors()[0].dataset.expr).toBe(action);
+    expect(cursors()[0].dataset.gesture).toBe('true');
   });
 
-  it.each(['move', 'look', 'think'])('%s draws nothing extra', (action) => {
+  it.each([
+    ['click', '.agent-cursor__ring'],
+    ['run', '.agent-cursor__orbit'],
+    ['error', '.agent-cursor__shake'],
+    ['look', '.agent-cursor__sweep'],
+  ])('%s draws %s', (action, part) => {
     render(<AgentCursorLayer />);
     send(event({ action }));
     flush();
+    expect(document.querySelector(part)).not.toBeNull();
+  });
+
+  it('click presses the arrow; error flashes the halo danger', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'click' }));
+    flush();
+    expect(document.querySelector('.agent-cursor__press')).not.toBeNull();
+    send(event({ action: 'error' }));
+    flush();
+    expect(document.querySelector('.agent-cursor__press')).toBeNull();
+    expect(document.querySelector('.agent-cursor__danger')).not.toBeNull();
+  });
+
+  it.each(['look', 'think', 'type', 'propose', 'wait'])('%s is held from arrival', (action) => {
+    render(<AgentCursorLayer />);
+    send(event({ action }));
+    tickFrames(2);
+    expect(cursors()[0].dataset.expr).toBeUndefined();
+    flush();
+    expect(cursors()[0].dataset.expr).toBe(action);
+  });
+
+  it.each(['propose', 'wait'])('%s turns the halo dashed and fills the mark slot', (action) => {
+    render(<AgentCursorLayer />);
+    send(event({ action }));
+    flush();
+    expect(document.querySelector('.agent-cursor__dashed')).not.toBeNull();
+    const mark = document.querySelector(`.agent-cursor__mark--${action}`)!;
+    expect(mark).not.toBeNull();
+    // wait carries the pin's glyph, propose a check in its ghost card (GM r56 item C).
+    expect(mark.querySelector('svg')).not.toBeNull();
+    expect(mark.querySelector('svg')!.classList.contains(action === 'wait' ? 'lucide-sticky-note' : 'lucide-check')).toBe(true);
+  });
+
+  it.each(['move', 'click', 'look', 'think', 'run'])('%s leaves the mark slot empty', (action) => {
+    render(<AgentCursorLayer />);
+    send(event({ action }));
+    flush();
+    expect(document.querySelector('.agent-cursor__mark')).toBeNull();
+    expect(document.querySelector('.agent-cursor__dashed')).toBeNull();
+  });
+
+  it('every cursor has the halo in place of a drop shadow', () => {
+    render(<AgentCursorLayer />);
+    send(event({}));
+    flush();
+    const halo = document.querySelector('.agent-cursor__halo')!;
+    expect(halo.getAttribute('filter')).toMatch(/^url\(#agent-cursor-halo-/);
+    expect(document.querySelector(halo.getAttribute('filter')!.slice(4, -1))!.querySelector('feGaussianBlur')!.getAttribute('stdDeviation')).toBe('3');
+  });
+
+  it('move draws nothing extra', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'move' }));
+    flush();
     expect(cursors()[0].dataset.placed).toBe('true');
+    expect(cursors()[0].dataset.expr).toBeUndefined();
     expect(ripple()).toBeNull();
+  });
+
+  it('a new action replaces the current one at once', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'think' }));
+    flush();
+    expect(cursors()[0].dataset.expr).toBe('think');
+    send(event({ action: 'click', target: { nodeId: 'n2' } }));
+    tickFrames(1);
+    // Flying to n2: think is over, click hasn't arrived.
+    expect(cursors()[0].dataset.expr).toBeUndefined();
+    flush();
+    expect(cursors()[0].dataset.expr).toBe('click');
+  });
+
+  it('a bare move keeps a held state on for its 0.4 s minimum', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'think' }));
+    flush();
+    send(event({ action: 'move', target: { nodeId: 'n2' } }));
+    tickFrames(1);
+    expect(cursors()[0].dataset.expr).toBe('think');
+  });
+
+  it('the layer stays out of the accessibility tree: nothing new is announced', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'propose' }));
+    flush();
+    for (const part of ['.agent-cursor__pointer', '.agent-cursor__mark']) {
+      expect(document.querySelector(part)!.getAttribute('aria-hidden')).toBe('true');
+    }
+    // The default line shows, but the accessible name keeps the agent's own words (none).
+    expect(document.querySelector('.agent-cursor__say')!.textContent).toBe('Waiting for your OK');
+    expect(cursors()[0].getAttribute('aria-label')).toBe('Claude');
   });
 
   it('an action this tab does not know draws like move', () => {
@@ -168,7 +280,7 @@ describe('each action draws its nearest visual until phase 2', () => {
   it('drag pulls the wire on its second leg, then ripples', () => {
     render(<AgentCursorLayer />);
     send(event({ action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
-    const wire = document.querySelector<SVGLineElement>('.agent-cursor__wire')!;
+    const wire = document.querySelector<SVGPathElement>('.agent-cursor__wire')!;
     let pulled = false;
     for (let i = 0; i < 200 && !ripple(); i += 1) {
       tickFrames(1);
@@ -280,20 +392,24 @@ describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
   it('the drag wire stays on until the tip is at the port, and its end is there', () => {
     render(<AgentCursorLayer />);
     send(event({ action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
-    const wire = document.querySelector<SVGLineElement>('.agent-cursor__wire')!;
+    const wire = document.querySelector<SVGPathElement>('.agent-cursor__wire')!;
     let lastOn: { x: number; y: number } | null = null;
+    let trailed = 0;
     for (let i = 0; i < 300 && !ripple(); i += 1) {
       tickFrames(1);
-      if (wire.style.opacity === '1') lastOn = { x: +wire.getAttribute('x2')!, y: +wire.getAttribute('y2')! };
+      if (wire.style.opacity === '1') {
+        lastOn = wireEnd(wire);
+        // Phase 2: the wire's end trails the tip on its lag spring (§2 drag).
+        trailed = Math.max(trailed, Math.hypot(lastOn.x - tipOf(cursors()[0]).x, lastOn.y - tipOf(cursors()[0]).y));
+      }
     }
     expect(ripple()).not.toBeNull();
-    // The wire stays on until the frame before the tip arrives (one frame's
-    // travel short at most: round 1 let go 130-170 px short), and lets go
-    // with its end at the port (n2's header), within 2 px.
+    // The wire stays on until the tip arrives, visibly pulled behind it on
+    // the way, and lets go with its end at the port (n2's header), within 2 px.
     expect(lastOn).not.toBeNull();
-    expect(Math.hypot(lastOn!.x - 1000, lastOn!.y - 344)).toBeLessThan(6);
+    expect(trailed).toBeGreaterThan(5);
     expect(wire.style.opacity).toBe('0');
-    expect(Math.hypot(+wire.getAttribute('x2')! - 1000, +wire.getAttribute('y2')! - 344)).toBeLessThanOrEqual(2);
+    expect(Math.hypot(wireEnd(wire).x - 1000, wireEnd(wire).y - 344)).toBeLessThanOrEqual(2);
   });
 });
 
@@ -307,10 +423,11 @@ describe('two cursors on one spot keep their places (review 1, F2)', () => {
     const before = where();
     expect(before.aaaaaaaaaaaa).toBe('translate(500px, 344px) scale(1)');
     expect(before.bbbbbbbbbbbb).toBe(`translate(500px, ${344 + S}px) scale(1)`);
-    send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, action: 'look' }));
+    // click: an act with no default line (Phase 2's look says "Looking here").
+    send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, action: 'click' }));
     flush();
     expect(where()).toEqual(before);
-    send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, action: 'look' }));
+    send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, action: 'click' }));
     flush();
     expect(where()).toEqual(before);
     // Recency still sets paint order: b last.
@@ -742,7 +859,7 @@ describe('a tab hidden mid-flight lands with no ring and no wire (GM - Design, P
   it.each([1500, 5000])('a drag hidden %s ms mid-flight lands with its wire gone and no ripple', (hiddenMs) => {
     render(<AgentCursorLayer />);
     send(event({ action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
-    const wire = document.querySelector<SVGLineElement>('.agent-cursor__wire')!;
+    const wire = document.querySelector<SVGPathElement>('.agent-cursor__wire')!;
     for (let i = 0; i < 200 && wire.style.opacity !== '1'; i += 1) tickFrames(1);
     expect(wire.style.opacity).toBe('1');
     setVisibility('hidden');
@@ -1130,7 +1247,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     // It still lands on the node, and the ripple came once.
     flush();
     expect(at(cursors()[0])).toEqual(spotOf('n2'));
-    expect(document.querySelectorAll('.agent-cursor__ripple')).toHaveLength(1);
+    expect(document.querySelectorAll('.agent-cursor__fx')).toHaveLength(1);
   });
 });
 
@@ -1160,7 +1277,7 @@ describe('a view whose effects reconnect keeps its place (round 4: StrictMode in
     flush();
     const before = where();
     expect(before).toEqual({ claude: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 500, y: 344 + S }, bbbbbbbbbbbb: { x: 500, y: 344 + 2 * S } });
-    send(pair('aaaaaaaaaaaa', 1, 'look'));
+    send(pair('aaaaaaaaaaaa', 1, 'click'));
     flush();
     expect(where()).toEqual(before);
   });
@@ -1616,7 +1733,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
   it('a leaving drag cursor drops its wire on its first exit frame (review 5, F11)', () => {
     render(<AgentCursorLayer />);
     send(event({ ...session('a', 1), action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
-    const wire = document.querySelector<SVGLineElement>('.agent-cursor__wire')!;
+    const wire = document.querySelector<SVGPathElement>('.agent-cursor__wire')!;
     for (let i = 0; i < 300 && wire.style.opacity !== '1'; i += 1) tickFrames(1);
     expect(wire.style.opacity).toBe('1');
     demote();
@@ -2023,7 +2140,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
-    send(event({ ...session('b', 2), target: { nodeId: 'n1' }, action: 'look' }));
+    send(event({ ...session('b', 2), target: { nodeId: 'n1' }, action: 'click' }));
     let waited = 0;
     let shownMeeting = 0;
     for (let i = 0; i < 90; i += 1) {
@@ -2210,6 +2327,19 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     });
     const pointer = (x: number, y: number) => act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y })); });
     const list = (el: HTMLElement) => [...el.querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent);
+
+    it('a count cursor that is typing has no say pill, so the caret sits on the cursor (final review)', () => {
+      render(<AgentCursorLayer />);
+      for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
+        send(event({ ...session(key, i + 1), action: 'type', say: 'Writing' }));
+        flush();
+      }
+      const counting = byKey('c');
+      expect(counting.dataset.count).toBe('2');
+      expect(counting.dataset.expr).toBe('type');
+      expect(counting.querySelector('.agent-cursor__say')).toBeNull();
+      expect(counting.querySelector('.agent-cursor__tip-caret')).not.toBeNull();
+    });
 
     it('four or more: two in full, then one neutral arrow with "2 more" that lists the names on hover; the later arrivals fade out into it', () => {
       render(<AgentCursorLayer />);
@@ -4290,7 +4420,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       settle(200);
       // A nudge of its own, inside its stamp radius: it keeps its arrival
       // (500), so it heads the column again, before the hold ends.
-      send(event({ ...session('a', 3), target: { x: 504, y: 344 }, since: 500, action: 'look' }));
+      // A move, not a look: a look now says "Looking here" (cursor Phase 2's
+      // default says), and that line is taller than the slot this test reads.
+      send(event({ ...session('a', 3), target: { x: 504, y: 344 }, since: 500, action: 'move' }));
       settle(700); // still inside the 1.5 s hold
       expect(where()).toEqual({ a: { x: 504, y: 344 }, d: { x: 504, y: 344 + S }, e: { x: 504, y: 344 + 2 * S } });
     } finally {
@@ -5367,6 +5499,604 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       expect(marked()).toEqual([]);
       expect(frames.length).toBe(0);
     } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('default say lines and their hold, in the layer (GM r54)', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
+  const leavingSay = () => document.querySelector('.agent-cursor__say--leaving') !== null;
+  /** The nodes with card titles, as the say lines read them. */
+  const titled = () => {
+    const next = new Map(lookup as Map<string, object>);
+    next.set('n1', { ...(lookup.get('n1') as object), data: { label: 'Brief' } });
+    next.set('n2', { ...(lookup.get('n2') as object), data: { label: 'FLUX.2' } });
+    lookupRef.current = next;
+  };
+
+  it('a default line shows when the agent sends no say; the agent’s own say wins', () => {
+    titled();
+    render(<AgentCursorLayer />);
+    send(event({ action: 'look' }));
+    flush();
+    expect(sayText()).toBe('Looking at “Brief”');
+    send(event({ action: 'look', say: 'Reading the brief' }));
+    flush();
+    expect(sayText()).toBe('Reading the brief');
+    expect(cursors()[0].getAttribute('aria-label')).toBe('Claude: Reading the brief');
+  });
+
+  it('a drag names both nodes; a drag to a spot with no start says nothing', () => {
+    titled();
+    render(<AgentCursorLayer />);
+    send(event({ action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
+    flush();
+    expect(sayText()).toBe('Connecting “Brief” to “FLUX.2”');
+    send(event({ action: 'drag', target: { x: 50, y: 50 } }));
+    flush();
+    expect(sayText()).toBeNull();
+  });
+
+  it.each([
+    ['Ran', 'Couldn’t run “FLUX.2”'],
+    ['Connected', 'Couldn’t change “FLUX.2”'],
+    ['Proposed', 'Couldn’t do that'],
+  ])('an error after %s says %s', (verb, line) => {
+    titled();
+    render(<AgentCursorLayer />);
+    send(event({ action: 'error', target: { nodeId: 'n2' }, did: { verb, nodeId: 'n2', label: 'FLUX.2', secondsAgo: 2 } }));
+    flush();
+    expect(sayText()).toBe(line);
+  });
+
+  it('an agent’s say holds max(3 s, 60 ms × characters)', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ say: 'x'.repeat(100) }));
+      flush();
+      act(() => { vi.advanceTimersByTime(5990); });
+      expect(leavingSay()).toBe(false);
+      act(() => { vi.advanceTimersByTime(20); });
+      expect(leavingSay()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a short say still holds 3 s, a long one at most 8 s', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ say: 'Hi' }));
+      flush();
+      act(() => { vi.advanceTimersByTime(2990); });
+      expect(leavingSay()).toBe(false);
+      act(() => { vi.advanceTimersByTime(20); });
+      expect(leavingSay()).toBe(true);
+      send(event({ say: 'y'.repeat(140) }));
+      flush();
+      act(() => { vi.advanceTimersByTime(7990); });
+      expect(leavingSay()).toBe(false);
+      act(() => { vi.advanceTimersByTime(20); });
+      expect(leavingSay()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('think’s default holds while think does, then goes with the next event', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'think' }));
+      flush();
+      act(() => { vi.advanceTimersByTime(15_000); });
+      expect(sayText()).toBe('Thinking');
+      expect(leavingSay()).toBe(false);
+      send(event({ action: 'click' }));
+      flush();
+      expect(sayText()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['propose', 'wait'])('%s’s default stays until the person acts, idle or not', (action) => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action }));
+      flush();
+      act(() => { vi.advanceTimersByTime(AGENT_CURSOR_IDLE_MS + 5000); });
+      expect(cursors()[0].dataset.idle).toBe('true');
+      expect(sayText()).toBe(action === 'propose' ? 'Waiting for your OK' : 'Waiting for your answer');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('look’s default takes the normal hold (its sweep ends inside it)', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'look' }));
+      flush();
+      act(() => { vi.advanceTimersByTime(3010); });
+      expect(leavingSay()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** A card in the DOM, as React Flow draws it, with a prompt field and a port row. */
+  const card = () => {
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    node.dataset.id = 'n1';
+    node.innerHTML = '<div class="model-node__port-row"><div class="react-flow__handle" data-handleid="resolution"></div>'
+      + '<span class="model-node__port-label">Resolution</span></div><textarea class="model-node__textarea">A desert</textarea>';
+    document.body.appendChild(node);
+    const box = { left: 10, top: 10, right: 210, bottom: 90, width: 200, height: 80, x: 10, y: 10, toJSON() {} };
+    for (const el of node.querySelectorAll<HTMLElement>('*')) el.getBoundingClientRect = () => box as DOMRect;
+    return node;
+  };
+
+  it('type puts the caret in the card’s field when it is on screen, and says what it writes', () => {
+    titled();
+    const node = card();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type' }));
+      flush();
+      expect(document.querySelector('.agent-cursor__field-mark')?.getAttribute('data-kind')).toBe('caret');
+      expect(document.querySelector('.agent-cursor__say-caret')).toBeNull();
+      expect(sayText()).toBe('Writing the prompt for “Brief”');
+    } finally {
+      node.remove();
+    }
+  });
+
+  it('type at a port underlines its row and names the field', () => {
+    titled();
+    const node = card();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', target: { nodeId: 'n1', handle: 'resolution' } }));
+      flush();
+      expect(document.querySelector('.agent-cursor__field-mark')?.getAttribute('data-kind')).toBe('underline');
+      expect(sayText()).toBe('Changing “Resolution” on “Brief”');
+    } finally {
+      node.remove();
+    }
+  });
+
+  it('type with no field on screen puts the caret at the end of the say pill', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'type' }));
+    flush();
+    expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
+    expect(document.querySelector('.agent-cursor__field-mark')).toBeNull();
+  });
+});
+
+
+/**
+ * GM r56 (2026-11-03): think's breath raised (A), the mark slot right of the
+ * arrow (C), the dashed halo grown from the tip (D) and the say pills' quotes
+ * read from the DOM (E).
+ */
+describe('GM r56: think, mark slot, dashed halo, quotes', () => {
+  const layerVar = (name: string) => (document.querySelector('.agent-cursor-layer') as HTMLElement).style.getPropertyValue(name);
+  const cssText = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+  const STROKE_HALF = 1.4 / 2;
+  const DASHED_HALF = 1.5 / 2;
+  /** The arrow's outline as drawn by an SVG transform of the form the layer writes. */
+  const transformed = (transform: string) => {
+    const nums = transform.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [tx, ty, k, bx, by] = nums;
+    return ARROW_POINTS.map((p) => ({ x: tx + k * (p.x + bx), y: ty + k * (p.y + by) }));
+  };
+  const ARROW_POINTS = [
+    { x: 1.5, y: 1.5 }, { x: 1.5, y: 17.5 }, { x: 6, y: 13.3 }, { x: 9.1, y: 20.1 },
+    { x: 11.9, y: 18.9 }, { x: 8.9, y: 12.3 }, { x: 14.7, y: 12.1 },
+  ];
+  /** The distance from a segment to an axis-aligned box (0 when they meet). */
+  const segToBox = (a: { x: number; y: number }, b: { x: number; y: number }, box: { left: number; top: number; right: number; bottom: number }) => {
+    let best = Infinity;
+    for (let i = 0; i <= 200; i += 1) {
+      const t = i / 200;
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      best = Math.min(best, Math.hypot(Math.max(0, box.left - x, x - box.right), Math.max(0, box.top - y, y - box.bottom)));
+    }
+    return best;
+  };
+  const outlineToBox = (pts: { x: number; y: number }[], box: { left: number; top: number; right: number; bottom: number }) =>
+    Math.min(...pts.map((p, i) => segToBox(p, pts[(i + 1) % pts.length], box)));
+
+  it('A (r58): think breathes between a trough (3 px blur, scale 1, 20%) and a peak (5 px, 1.25, 60%) on a 2.2 s loop', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'think' }));
+    flush();
+    expect(cursors()[0].dataset.expr).toBe('think');
+    expect(layerVar('--agent-cursor-breath-trough-opacity')).toBe('0.2');
+    expect(layerVar('--agent-cursor-breath-peak-opacity')).toBe('0.6');
+    expect(layerVar('--agent-cursor-breath-trough-blur')).toBe('3px');
+    expect(layerVar('--agent-cursor-breath-peak-blur')).toBe('5px');
+    expect(layerVar('--agent-cursor-breath-scale')).toBe('1.25');
+    expect(layerVar('--agent-cursor-breath')).toMatch(/^1100ms linear\(/);
+    // The trough's blur is the resting halo's, so the breath starts where rest is.
+    expect(document.querySelector(document.querySelector('.agent-cursor__halo')!.getAttribute('filter')!.slice(4, -1))!
+      .querySelector('feGaussianBlur')!.getAttribute('stdDeviation')).toBe('3');
+    const frames = /@keyframes agent-cursor-breathe \{([\s\S]*?)\n\}/.exec(cssText)![1];
+    expect(frames).toMatch(/from \{\s*transform: scale\(1\);\s*opacity: var\(--agent-cursor-breath-trough-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-trough-blur\)\);\s*\}/);
+    expect(frames).toMatch(/to \{\s*transform: scale\(var\(--agent-cursor-breath-scale\)\);\s*opacity: var\(--agent-cursor-breath-peak-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-peak-blur\)\);\s*\}/);
+  });
+
+  it('A (r58): the breath is think\'s halo alone: the scale grows about the arrow\'s centre and no other halo path blurs in CSS', () => {
+    // The halo scales about its fill box's centre: the arrow's middle, not the tip.
+    expect(cssText).toMatch(/\.agent-cursor__halo \{[^}]*transform-box: fill-box;\s*transform-origin: center;/);
+    // Only think's halo rule and the keyframes (and the reduced still) use a CSS blur.
+    const blurRules = [...cssText.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^{}]*filter: blur\(/g)].map((m) => m[1].trim());
+    expect(blurRules).toEqual([
+      ".agent-cursor[data-expr='think'] .agent-cursor__halo",
+      'from',
+      'to',
+      ".agent-cursor[data-expr='think'] .agent-cursor__halo",
+    ]);
+    // The reduced-motion still frame holds the peak.
+    const reduced = cssText.slice(cssText.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.agent-cursor\[data-expr='think'\] \.agent-cursor__halo \{\s*transform: scale\(var\(--agent-cursor-breath-scale\)\);\s*opacity: var\(--agent-cursor-breath-peak-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-peak-blur\)\);/);
+  });
+
+  it('D: the dashed halo grows from the tip: nothing paints above or left of it', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'propose' }));
+    flush();
+    const grown = transformed(document.querySelector('.agent-cursor__dashed')!.getAttribute('transform')!);
+    expect(grown[0].x).toBeCloseTo(1.5, 9);
+    expect(grown[0].y).toBeCloseTo(1.5, 9);
+    for (const p of grown) {
+      expect(p.x).toBeGreaterThanOrEqual(1.5 - 1e-9);
+      expect(p.y).toBeGreaterThanOrEqual(1.5 - 1e-9);
+    }
+    // Grown by 1.45 (the spec's dashed halo), so it still reads as a halo.
+    expect(Math.max(...grown.map((p) => p.y))).toBeCloseTo(1.5 + 18.6 * 1.45, 6);
+  });
+
+  it.each(['propose', 'wait'])('C: %s’s mark sits right of the arrow, level with the tip, 2 px clear of the arrow, the dashed halo and the pills', (action) => {
+    render(<AgentCursorLayer />);
+    send(event({ action }));
+    flush();
+    const left = parseFloat(layerVar('--agent-cursor-mark-left'));
+    const top = parseFloat(layerVar('--agent-cursor-mark-top'));
+    const size = parseFloat(layerVar('--agent-cursor-mark-box'));
+    expect(cssText).toMatch(/\.agent-cursor__mark \{[^}]*left: var\(--agent-cursor-mark-left\);\s*top: var\(--agent-cursor-mark-top\);/);
+    const mark = { left, top, right: left + size, bottom: top + size };
+    expect(top).toBe(1.5);
+    expect(left).toBeGreaterThan(Math.max(...ARROW_POINTS.map((p) => p.x)) + STROKE_HALF);
+    expect(outlineToBox(ARROW_POINTS, mark) - STROKE_HALF).toBeGreaterThanOrEqual(2);
+    const grown = transformed(document.querySelector('.agent-cursor__dashed')!.getAttribute('transform')!);
+    expect(outlineToBox(grown, mark) - DASHED_HALF).toBeGreaterThanOrEqual(2);
+    // Its own pills: the name (ring included) and the say under it, and the
+    // say alone in the name's place (the label lifted, data-label 'say').
+    for (const say of [false, true]) {
+      for (const p of cursorShape({ x: 0, y: 0 }, say).pills) {
+        const gap = Math.hypot(Math.max(0, p.core.left - mark.right, mark.left - p.core.right), Math.max(0, p.core.top - mark.bottom, mark.top - p.core.bottom)) - p.radius;
+        expect(gap).toBeGreaterThanOrEqual(2);
+      }
+    }
+    // Inside the cursor's painted bounds, so the column spacing is unchanged.
+    const bounds = cursorShape({ x: 0, y: 0 }, true).bounds;
+    expect(mark.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(mark.right).toBeLessThanOrEqual(bounds.right);
+  });
+
+  it('E: the say pills carry curly quotes and a curly apostrophe in the DOM, never straight ones', () => {
+    const next = new Map(lookup as Map<string, object>);
+    next.set('n1', { ...(lookup.get('n1') as object), data: { label: 'Brief' } });
+    next.set('n2', { ...(lookup.get('n2') as object), data: { label: 'FLUX.2' } });
+    lookupRef.current = next;
+    render(<AgentCursorLayer />);
+    const seen: string[] = [];
+    send(event({ action: 'look' }));
+    flush();
+    seen.push(document.querySelector('.agent-cursor__say')!.textContent!);
+    send(event({ action: 'error', target: { nodeId: 'n2' }, did: { verb: 'Ran', nodeId: 'n2', label: 'FLUX.2', secondsAgo: 2 } }));
+    flush();
+    seen.push(document.querySelector('.agent-cursor__say')!.textContent!);
+    expect(seen).toEqual(['Looking at “Brief”', 'Couldn’t run “FLUX.2”']);
+    for (const text of seen) expect(text).not.toMatch(/["']/);
+  });
+});
+
+
+/**
+ * PR #224's final review: propose and wait end when the person settles what
+ * they wait on, and type never shows nothing.
+ */
+describe('propose and wait end when the person acts (final review, MEDIUM)', () => {
+  const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
+  const expr = () => cursors()[0].dataset.expr;
+  const proposal = (id: string, agentId = 'claude', expiresAt = Date.now() + 60_000) => ({
+    view: { id, status: 'open', agent: { id: agentId, name: 'Claude', color: '#E8825A', verified: true }, expiresAt },
+    acceptKey: 'k',
+  }) as unknown as ProposalEntry;
+  const holdProposals = (...entries: ProposalEntry[]) => act(() => {
+    useCanvasProposalsStore.setState({
+      synced: true,
+      proposals: Object.fromEntries(entries.map((e) => [e.view.id, e])),
+    });
+  });
+  const questionSet = (id: string, status: 'open' | 'answered' | 'dismissed', closedAt: number | null, agentId = 'claude') => ({
+    view: { id, status, closedAt, createdAt: 0, agent: { id: agentId, name: 'Claude', color: '#E8825A', verified: true } },
+  }) as unknown as QuestionSetEntry;
+  const holdQuestions = (...entries: QuestionSetEntry[]) => act(() => {
+    useAgentQuestionsStore.setState({ sets: Object.fromEntries(entries.map((e) => [e.view.id, e])) });
+  });
+
+  beforeEach(() => {
+    useCanvasProposalsStore.getState().clear();
+    useAgentQuestionsStore.getState().reset();
+  });
+  afterEach(() => {
+    useCanvasProposalsStore.getState().clear();
+    useAgentQuestionsStore.getState().reset();
+  });
+
+  const propose = () => {
+    holdProposals(proposal('p1'));
+    send(event({ action: 'propose', proposalId: 'p1' }));
+    flush();
+  };
+
+  it('a propose cursor holds while its proposal is open', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    expect(expr()).toBe('propose');
+    expect(sayText()).toBe('Waiting for your OK');
+  });
+
+  it.each([
+    ['accepting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' })],
+    ['rejecting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'rejected' })],
+    ['the agent withdrawing it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'withdrawn' })],
+    ['its expiry', () => useCanvasProposalsStore.getState().pruneExpired(Date.now() + 120_000)],
+    ['the store losing it (superseded, a project switch)', () => holdProposals()],
+  ])('%s ends the held state at once', (_name, settle) => {
+    render(<AgentCursorLayer />);
+    propose();
+    act(() => { settle(); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(document.querySelector('.agent-cursor__mark')).toBeNull();
+    expect(sayText()).toBeNull();
+  });
+
+  it('another proposal settling leaves this one held', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p1'), proposal('p2'));
+    send(event({ action: 'propose', proposalId: 'p1' }));
+    flush();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p2', status: 'rejected' }); });
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('a reload after the answer shows no held state (a fresh store with the proposal settled)', () => {
+    render(<AgentCursorLayer />);
+    // The replay lands first; the proposals arrive after (proposalSync: none open).
+    send({ ...event({ action: 'propose', proposalId: 'p1' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    expect(expr()).toBe('propose'); // not told yet: unknown, not settled
+    act(() => { useCanvasProposalsStore.getState().sync([]); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBeNull();
+  });
+
+  it('a reload with the proposal still open keeps the held state', () => {
+    render(<AgentCursorLayer />);
+    send({ ...event({ action: 'propose', proposalId: 'p1' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    holdProposals(proposal('p1'));
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('the agent’s next event still replaces it', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    send(event({ action: 'think' }));
+    flush();
+    expect(expr()).toBe('think');
+  });
+
+  it('a settled cursor is replaced by the agent’s next propose, which holds for its own proposal', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' }); });
+    flush();
+    expect(expr()).toBeUndefined();
+    holdProposals(proposal('p2'));
+    send(event({ action: 'propose', proposalId: 'p2' }));
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('an agent’s own say on the proposal keeps its timer, not the state’s', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p1'));
+    send(event({ action: 'propose', proposalId: 'p1', say: 'Two nodes for the brief' }));
+    flush();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' }); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBe('Two nodes for the brief');
+  });
+
+  it('wait holds until a question the agent asked is answered', () => {
+    render(<AgentCursorLayer />);
+    holdQuestions(questionSet('q1', 'open', null));
+    send(event({ action: 'wait' }));
+    flush();
+    expect(expr()).toBe('wait');
+    expect(sayText()).toBe('Waiting for your answer');
+    holdQuestions(questionSet('q1', 'answered', Date.now() + 1000));
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBeNull();
+  });
+
+  it('wait ends on a dismissed question too, and on a reload after the answer', () => {
+    render(<AgentCursorLayer />);
+    send({ ...event({ action: 'wait' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    expect(expr()).toBe('wait');
+    holdQuestions(questionSet('q1', 'dismissed', Date.now() - 5000)); // closed since the event (30 s ago)
+    flush();
+    expect(expr()).toBeUndefined();
+  });
+
+  it('wait is not ended by a question closed before it, or by another agent’s', () => {
+    render(<AgentCursorLayer />);
+    holdQuestions(questionSet('q1', 'answered', Date.now() - 60_000), questionSet('q2', 'answered', Date.now() + 1000, 'someone-else'));
+    send(event({ action: 'wait' }));
+    flush();
+    expect(expr()).toBe('wait');
+  });
+
+  it('wait stays while another of its sets is still open', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'wait' }));
+    flush();
+    holdQuestions(questionSet('q1', 'answered', Date.now() + 1000), questionSet('q2', 'open', null));
+    flush();
+    expect(expr()).toBe('wait');
+  });
+});
+
+describe('type always shows something (final review, LOW)', () => {
+  const tipCaret = () => document.querySelector('.agent-cursor__tip-caret');
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const card = () => {
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    node.dataset.id = 'n1';
+    node.innerHTML = '<textarea class="model-node__textarea">A desert</textarea>';
+    document.body.appendChild(node);
+    const box = { left: 10, top: 10, right: 210, bottom: 90, width: 200, height: 80, x: 10, y: 10, toJSON() {} };
+    for (const el of node.querySelectorAll<HTMLElement>('*')) el.getBoundingClientRect = () => box as DOMRect;
+    return node;
+  };
+
+  it('with the field off screen and no say pill, the caret sits on the cursor', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'type', target: { x: 50, y: 50 } })); // a spot: no field, and the pill is its default
+    flush();
+    // the pill shows now, ending in the caret: nothing doubled
+    expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
+    expect(tipCaret()).toBeNull();
+  });
+
+  it('once the say’s hold ends while type is still held, the caret moves onto the cursor', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
+      expect(tipCaret()).toBeNull();
+      act(() => { vi.advanceTimersByTime(3000 + AGENT_SAY_FADE_MS + 100); });
+      expect(document.querySelector('.agent-cursor__say')).toBeNull();
+      expect(cursors()[0].dataset.expr).toBe('type');
+      expect(tipCaret()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('with the field on screen, the caret is the field’s and not also the cursor’s', () => {
+    fake();
+    const node = card();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      act(() => { vi.advanceTimersByTime(3000 + AGENT_SAY_FADE_MS + 100); });
+      expect(document.querySelector('.agent-cursor__field-mark')).not.toBeNull();
+      expect(tipCaret()).toBeNull();
+    } finally {
+      node.remove();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('only the field’s text is a keystroke (final review, LOW)', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const withData = (data: object) => {
+    const next = new Map(lookup as Map<string, object>);
+    next.set('n1', { ...(lookup.get('n1') as object), data });
+    lookupRef.current = next;
+  };
+  const card = () => {
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    node.dataset.id = 'n1';
+    node.innerHTML = '<textarea class="model-node__textarea">A desert</textarea>';
+    document.body.appendChild(node);
+    const box = { left: 10, top: 10, right: 210, bottom: 90, width: 200, height: 80, x: 10, y: 10, toJSON() {} };
+    for (const el of node.querySelectorAll<HTMLElement>('*')) el.getBoundingClientRect = () => box as DOMRect;
+    return node;
+  };
+  const blinking = () => document.querySelector('.agent-cursor__field-mark')?.getAttribute('data-blink') === 'true';
+
+  it('a status change on the node leaves the blink stopped; a text change restarts it', () => {
+    fake();
+    const node = card();
+    try {
+      withData({ label: 'Brief', state: 'idle', params: { prompt: 'A desert' } });
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      expect(blinking()).toBe(true); // the event itself is a keystroke
+      act(() => { vi.advanceTimersByTime(AGENT_CURSOR_TYPE.blinkMs + 200); });
+      expect(blinking()).toBe(false);
+      withData({ label: 'Brief', state: 'running', progress: 0.4, params: { prompt: 'A desert' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(false);
+      withData({ label: 'Brief', state: 'running', params: { prompt: 'A desert at dusk' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(true);
+    } finally {
+      node.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('a port edit counts only that param', () => {
+    fake();
+    const node = card();
+    try {
+      withData({ label: 'Brief', params: { resolution: '1k', prompt: 'a' } });
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', target: { nodeId: 'n1', handle: 'resolution' }, say: 'Changing' }));
+      flush();
+      const wasBlinking = () => cursors()[0].querySelector('.agent-cursor__tip-caret, .agent-cursor__say-caret') !== null || blinking();
+      act(() => { vi.advanceTimersByTime(AGENT_CURSOR_TYPE.blinkMs + 200); });
+      withData({ label: 'Brief', params: { resolution: '1k', prompt: 'ab' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(false);
+      expect(wasBlinking()).toBeDefined();
+    } finally {
+      node.remove();
       vi.useRealTimers();
     }
   });

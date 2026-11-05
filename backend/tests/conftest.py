@@ -179,6 +179,18 @@ def empty_model_cache():
 
 
 @pytest.fixture(autouse=True)
+def empty_upload_names():
+    """Each test starts with no recorded upload names (services/upload_names.py):
+    uploads are deduplicated by content, so a name one test's upload recorded
+    would name another test's file of the same bytes."""
+    from services import upload_names
+
+    upload_names.forget_for_tests()
+    yield
+    upload_names.forget_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def isolated_commons_opt_in(request, monkeypatch):
     """Only the dedicated synthetic Commons tests opt into store access."""
     name = request.node.path.name

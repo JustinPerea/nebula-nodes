@@ -41,7 +41,7 @@ from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Match
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -89,6 +89,8 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
+from services.file_param_preview import NO_PREVIEW_DEFINITIONS, follow_file_params
+from services import upload_names
 from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
@@ -300,6 +302,9 @@ except Exception as exc:
     _STATE_PATH: Path | None = None
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
+# The names files were uploaded with, by their stored (content-hash) name
+# (services/upload_names.py, GM r48 Q1 on #222).
+upload_names.configure(_STATE_DIR / "upload-names.json")
 
 # Whether a canvas was saved before this boot (round 21): a missing
 # canvas-revisions.json then can't be a first run, so the canvas revisions
@@ -2290,6 +2295,26 @@ def _output_url_from_ref(value: str) -> str | None:
     return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
 
 
+def _file_preview_url(value: Any) -> str | None:
+    """The served URL of a file Nebula holds (in its output folder), for a
+    file param's preview; None when it holds no such file."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        path = _output_path_from_ref(value)
+        url = _output_url_from_ref(value)
+    except Exception:  # a protected or unreadable path makes no preview
+        return None
+    return url if url and path is not None and path.is_file() else None
+
+
+def _follow_file_params(definition_id: str, before: Mapping[str, Any],
+                        update: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """services/file_param_preview.follow_file_params for this node's definition."""
+    return follow_file_params(node_registry.get(definition_id), before, update, _file_preview_url,
+                              previews=definition_id not in NO_PREVIEW_DEFINITIONS)
+
+
 def _output_file_time(url: str) -> float | None:
     path = _output_path_from_ref(url)
     try:
@@ -2663,7 +2688,7 @@ def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent
     file_path = params.get("filePath")
     if ("filePath" in sent and "_previewUrl" not in sent
             and not _same_ref_file(before.get("filePath"), file_path)):
-        url = _output_url_from_ref(file_path) if isinstance(file_path, str) and file_path else None
+        url = _file_preview_url(file_path)  # the same existence check as _follow_file_params
         if url is not None and params.get("_previewUrl") != url:
             params["_previewUrl"] = url
             changed = True
@@ -2726,7 +2751,7 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
             value = rewritten.get(key)
             if not isinstance(value, str) or not value:
                 continue
-            preview_url = _output_url_from_ref(value)
+            preview_url = _file_preview_url(value)  # none for a file that isn't there
             if preview_url is not None:
                 rewritten["_previewUrl"] = preview_url
                 break
@@ -3697,6 +3722,16 @@ def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, nod
     return False
 
 
+@app.get("/api/uploads/names")
+async def upload_names_route(file: list[str] = Query(default=[])) -> dict[str, Any]:
+    """{"names": {stored name: the name it was uploaded with}} for the stored
+    names asked (``?file=<name>``, repeated; at most 200), those Nebula
+    recorded. The canvas reads it to name a file param (frontend
+    lib/uploadNames.ts, GM r48 Q1 on #222); agents get the same name in
+    look_at_canvas."""
+    return {"names": upload_names.recorded_names(file[:200])}
+
+
 @app.post("/api/uploads")
 @graph_write(checks_in_route=True)
 async def upload_file_consolidated(
@@ -3808,6 +3843,9 @@ async def upload_file_consolidated(
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
+    # The name it was sent with, for every surface that names a file param
+    # holding it (services/upload_names.py, GM r48 Q1 on #222).
+    upload_names.record(saved_path.name, file.filename)
 
     # Base response — present for every caller.
     response: dict[str, Any] = {
@@ -5784,6 +5822,7 @@ async def _show_agent(
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
     person_say: str | None = None,
+    proposal_id: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5802,6 +5841,9 @@ async def _show_agent(
     value agents read in the snapshot and on /ws, as before. ``person_say``
     is the same for the words: the person's tabs (the bubble, the Agent log
     and a reload's replay) show it, and agents read ``say`` as before.
+    ``proposal_id`` is the proposal a ``propose`` cursor waits on: the event
+    carries it (``proposalId``), so a tab ends the cursor's held state when
+    that proposal is settled, and a reload's replay still knows which.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -5819,6 +5861,8 @@ async def _show_agent(
         if log is not None and clean_say(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
+        if proposal_id:
+            event["proposalId"] = proposal_id
         person = _person_form(event, identity, headers, shown=shows)
         if person is not None and person is not event and person_say:
             # In place: the slot keeps this dict for the replay.
@@ -8790,8 +8834,12 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
+            # GM r46 Q2 on #222: the preview and name follow a file param
+            # an agent sets (services/file_param_preview.py); an Image Input's
+            # preview size follows too (#226, _preview_follows_file).
             before = copy.deepcopy(node.get("params") or {})
-            candidate.update_params(change.node_id, update)
+            update, dropped = _follow_file_params(definition_id, before, update)
+            candidate.update_params(change.node_id, update, drop=dropped)
             _preview_follows_file(candidate, change.node_id, before, update)
     names = spec.names
     raw_nodes = [
@@ -9358,7 +9406,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         target = None
     if target is not None:
         await _show_agent(target, action="click", shows="propose", say=spec.note,
-                          did=_did("Proposed", target.get("nodeId")))
+                          did=_did("Proposed", target.get("nodeId")), proposal_id=proposal.id)
     # Nodes of the run that can't run here, so the agent can say so or pick
     # another model before the person accepts (the canvas shows it too), and
     # the call that withdraws this one or an earlier one this replaces.
@@ -14771,6 +14819,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
+        # GM r46 Q2 on #222: a file param set without its preview fields
+        # (an agent's `nebula set`, a script) takes the new file's preview
+        # and name, or clears them (services/file_param_preview.py).
+        params, dropped = _follow_file_params(str(node.get("definitionId") or ""), params_before, params)
         if models is not None and node.get("definitionId") == current_definition:
             # Universal nodes carry no recovery checkpoint or Cinema scene.
             full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
@@ -14782,17 +14834,17 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
-            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params), drop=dropped))
             if not _is_person_request():
                 grown = cli_graph.clone()
-                grown.update_params(node_id, copy.deepcopy(params))
+                grown.update_params(node_id, copy.deepcopy(params), drop=dropped)
                 _refuse_agent_growth_past_save_limit(grown)
             _author_cinema_scene(cli_graph, node_id, node, params)
             recovery_update = _keep_recovery_checkpoint(node, params)
             if recovery_update:
                 candidate = cli_graph.clone()
                 try:
-                    candidate.update_params(node_id, params)
+                    candidate.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
@@ -14802,7 +14854,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 )
             else:
                 try:
-                    cli_graph.update_params(node_id, params)
+                    cli_graph.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
             _preview_follows_file(cli_graph, node_id, params_before, params)

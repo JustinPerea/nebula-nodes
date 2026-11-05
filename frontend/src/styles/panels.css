@@ -636,6 +636,53 @@ body:not(.app-slava-restraint) .inspector__file-button {
   margin-top: 6px;
 }
 
+/* GM r46 Q2 on #222: with no preview the frame collapses on the layout
+   spring (FilePreviewFrame.tsx), never an empty box; at once under reduced
+   motion. */
+/* The same spring as the popover's (a test keeps the two equal). */
+.inspector__file-preview-frame {
+  --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--inspector-layout-spring);
+}
+
+.inspector__file-preview-frame[data-collapsed] {
+  grid-template-rows: 0fr;
+}
+
+.inspector__file-preview-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inspector__file-preview-frame > .inspector__file-preview-clip > .inspector__file-preview {
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector__file-preview-frame {
+    transition: none;
+  }
+}
+
+/* GM r46 Q2: under the file's name when there is no preview: quiet,
+   secondary text, neutral. */
+.inspector__file-no-preview {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body:not(.app-slava-restraint) .inspector__file-no-preview {
+  color: #888;
+}
+
+body.app-slava-restraint .inspector__file-no-preview {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
 body:not(.app-slava-restraint) .inspector__file-preview {
   border-radius: 4px;
 }
