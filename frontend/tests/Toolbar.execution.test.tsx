@@ -6,7 +6,8 @@ const graphFileMocks = vi.hoisted(() => ({
   loadFromFile: vi.fn(),
 }));
 
-vi.mock('../src/lib/graphFile', () => graphFileMocks);
+vi.mock('../src/lib/graphFile', async () => ({ ...graphFileMocks,
+  saveStepToFit: (await vi.importActual<typeof import('../src/lib/saveFixStep')>('../src/lib/saveFixStep')).saveStepToFit }));
 
 vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
@@ -77,9 +78,9 @@ describe('Toolbar execution lifecycle', () => {
     render(<><GraphFileActions /><Toolbar /></>);
 
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    const save = screen.getByRole('button', { name: 'Save graph' });
+    const save = screen.getByRole('button', { name: 'Save canvas' });
     expect(save).toBeDisabled();
-    expect(save).toHaveAttribute('title', 'Wait for the active run to finish.');
+    expect(save).toHaveAttribute('title', 'You can save the canvas when the run finishes.');
     fireEvent.click(save);
     fireEvent(window, new CustomEvent('nebula:save'));
 
@@ -101,7 +102,7 @@ describe('Toolbar execution lifecycle', () => {
 
     render(<><GraphFileActions /><Toolbar /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    const save = screen.getByRole('button', { name: 'Save graph' });
+    const save = screen.getByRole('button', { name: 'Save canvas' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
       'title',
@@ -140,7 +141,7 @@ describe('Toolbar execution lifecycle', () => {
 
     render(<><GraphFileActions /><Toolbar /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save canvas' }));
 
     await waitFor(() => expect(graphFileMocks.saveToFile).toHaveBeenCalledWith(
       [expect.objectContaining({
@@ -152,6 +153,8 @@ describe('Toolbar execution lifecycle', () => {
       [],
       { x: 0, y: 0, zoom: 1 },
       undefined,
+      expect.any(Function),
     ));
+    expect((graphFileMocks.saveToFile.mock.lastCall?.[4] as () => unknown)()).toEqual({ kind: 'none' });
   });
 });

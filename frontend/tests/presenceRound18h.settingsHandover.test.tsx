@@ -100,9 +100,12 @@ describe('a control disabled in place while work runs hands focus to the heading
     act(() => toggle.focus());
     fireEvent.click(toggle);
     await flush();
-    expect((toggle as HTMLInputElement).disabled).toBe(true);
+    // GM, PR #205 r1 answer 6: a switch saving its own change is held (aria-disabled), not
+    // disabled, so it keeps its focus and needs no handover.
+    expect((toggle as HTMLInputElement).disabled).toBe(false);
+    expect(toggle.getAttribute('aria-disabled')).toBe('true');
     act(() => fixup.current().flush()); // Chrome's focus fixup
-    expect(document.activeElement).toBe(document.getElementById('settings-personal-agents-heading'));
+    expect(document.activeElement).toBe(toggle);
     await act(async () => { finish(); });
     await flush();
     await flush();

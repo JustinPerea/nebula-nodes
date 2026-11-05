@@ -54,6 +54,7 @@ import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvas
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -130,7 +131,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const schemaLock = usePersonLock('fetch the schema');
   const favoriteLock = usePersonLock('save favorites');
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
-  const visible = embedded ? selectedNodeId !== null : panelVisible;
+  const pinned = useUIStore((s) => s.inspectorPinned);
+  // Embedded, a pinned one stays with no node: its empty state (GM PR #205 r10).
+  const visible = embedded ? selectedNodeId !== null || pinned : panelVisible;
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
 
   // OpenRouter model selector state
@@ -215,7 +218,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
     }).catch(() => setFavorites({}));
   }, []);
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  // The canvas's selection (each node's `selected`), as the selection bar
+  // counts it: Shift-click, a drag-select, a Paste of several, Select all
+  // (GM PR #205 r12). One selected node is the node shown (the store keeps
+  // selectedNodeId on it); from 2, none is.
+  const canvasSelectedCount = useMemo(() => nodes.reduce((count, node) => count + (node.selected ? 1 : 0), 0), [nodes]);
+  // The canvas selection decides (GM #205 r12): one selected node is the
+  // node shown, whatever the UI store last named; none falls back to it.
+  const selectedNode = canvasSelectedCount >= 2
+    ? undefined
+    : canvasSelectedCount === 1
+      ? nodes.find((n) => n.selected)
+      : nodes.find((n) => n.id === selectedNodeId);
   const selectedNodeData = selectedNode?.data as NodeData | undefined;
   const lastSelectionRef = useRef<{ node: NonNullable<typeof selectedNode>; data: NodeData } | null>(null);
   if (selectedNode && selectedNodeData) {
@@ -406,8 +420,32 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   if (!shouldRender) return null;
 
+  // A pinned Inspector whose node went (several came back, or an Undo, a
+  // Delete or a reopen took it off) shows this, its pin kept (GM PR #205 r10
+  // items 2-3). Over several selected nodes it says so, counted from the
+  // canvas's selection (GM PR #205 r11 item 3): "No node selected" is for none.
+  const emptyBody = (
+    <div className="panel__body panel__body--empty" key="inspector-empty">
+      <div className="inspector__empty" data-inspector-empty="true"
+        data-inspector-selected={canvasSelectedCount >= 2 ? canvasSelectedCount : undefined}>
+        <span className="inspector__empty-grid" aria-hidden="true" />
+        {canvasSelectedCount >= 2 ? (
+          <>
+            <span className="inspector__empty-title">{`${canvasSelectedCount} nodes selected`}</span>
+            <span className="inspector__empty-line">Select one node to see its settings.</span>
+          </>
+        ) : (
+          <>
+            <span className="inspector__empty-title">No node selected</span>
+            {/* Decoration; the title says it (GM PR #205 r13 item 6). */}
+            <span className="inspector__empty-status" aria-hidden="true">standby</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
   if (!renderNode || !nodeData) {
-    if (embedded) return null;
+    if (embedded) return emptyBody;
     if (!isSlavaSkin) return null;
     return (
       <div
@@ -433,13 +471,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           </button>
         </div>
 
-        <div className="panel__body panel__body--empty" key="inspector-empty">
-          <div className="inspector__empty" data-inspector-empty="true">
-            <span className="inspector__empty-grid" aria-hidden="true" />
-            <span className="inspector__empty-title">No node selected</span>
-            <span className="inspector__empty-status">standby</span>
-          </div>
-        </div>
+        {emptyBody}
       </div>
     );
   }
@@ -1576,7 +1608,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
+            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1591,7 +1623,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked })}
+            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.duplicateIt) })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1606,7 +1638,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.deleteIt) })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

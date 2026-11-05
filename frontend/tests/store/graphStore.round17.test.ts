@@ -239,11 +239,11 @@ describe("GM's partial-undo lines, every form (exact)", () => {
   });
   it('the dropped rename, by who renamed it', () => {
     expect(droppedRenameLine({ kind: 'agent', name: 'Codex' }, 'Hero', 'Mine'))
-      .toBe('Codex renamed this node “Hero” while Nebula was offline, so your rename to “Mine” wasn\'t saved.');
+      .toBe('Codex renamed this node “Hero” while Nebula was offline, so your rename to “Mine” wasn’t saved.');
     expect(droppedRenameLine(you, 'Hero', 'Mine'))
-      .toBe('You renamed this node “Hero” in another window while Nebula was offline, so your rename to “Mine” here wasn\'t saved.');
+      .toBe('You renamed this node “Hero” in another window while Nebula was offline, so your rename to “Mine” here wasn’t saved.');
     expect(droppedRenameLine(unknown, 'Hero', 'Mine'))
-      .toBe('This node was renamed “Hero” while Nebula was offline, so your rename to “Mine” wasn\'t saved.');
+      .toBe('This node was renamed “Hero” while Nebula was offline, so your rename to “Mine” wasn’t saved.');
   });
 });
 

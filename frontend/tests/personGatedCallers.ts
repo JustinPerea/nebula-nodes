@@ -1983,6 +1983,9 @@ function constValue(at: ts.Node, name: string): ts.Expression | null {
  * its `control` (`{...lock(describedBy)}`). */
 function controlCall(expression: ts.Expression): string | null {
   let e: ts.Expression | null = expression;
+  // `definedProps(<lock>.control(…))` is the control's props with its unset keys dropped (so they
+  // don't clear what another lock put on the same element): still that lock's control.
+  while (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'definedProps' && e.arguments.length === 1) e = e.arguments[0];
   const handed = (id: ts.Expression) => ts.isIdentifier(id) && /(?:^l|L)ock(?:Props)?$/.test(id.text) && constValue(id, id.text) === null && isLockParam(id);
   if (handed(e)) return `{...${e.getText()}}`;
   if (ts.isCallExpression(e) && handed(e.expression)) return `{...${e.expression.getText()}()}`;
