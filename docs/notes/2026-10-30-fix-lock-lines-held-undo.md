@@ -2316,3 +2316,68 @@ scratchpad `ll11/live/shots/`, 1440 wide, no duplicate md5.
 - Settings > Preferences > Personal agents: "Use Claude (your setup) in chat"
   held while its save is out (aria-disabled, the held look, the thumb where
   the person put it; the section's other switches held too).
+
+## Round 12 (GM's string fixes, and the Opus final review's two fixes)
+
+Strings only (no behaviour change), each pinned verbatim in its tests:
+
+- Save shape lines are one whole line in the "because" form, replacing
+  review 5's heading-plus-body pair: "Nebula couldn’t save the canvas because
+  it’s too complex. Undo your last change, then try again." (also "Undo the
+  last 2 changes", "Undo Claude’s last change", and the no-step ending with
+  the first sentence only); "Nebula couldn’t save the canvas because part of it
+  holds a value it can’t store. Undo …". `saveShapeLine` (graphFileShared.ts).
+  `FailureNotice` now treats a line that opens with its own "Nebula couldn’t "
+  and has no heading as standalone, so no catch puts a heading over it.
+- Load refusal for nodes and connections is one whole line: "Nebula couldn’t
+  open this file because it has more than 10,000 nodes, the most Nebula opens."
+  GM named the nodes line; the connections line is the same form with "50,000
+  connections" (listed for GM).
+- Mixed Cinema rows are one sentence joined by "and": "You can generate after
+  you try “ref.png” again or remove it, and remove “lost.png”." and "You can
+  generate all after you try the uploads in “Shot 2” again or remove them, and
+  remove the uploads in “Shot 3”." (cinemaUploadStore.ts). This revises round 8.
+- docs/MCP-SETUP.md quotes the new Save lines.
+
+Left as GM ruled, and listed for GM: Save's "The canvas has more than 10,000
+nodes." / "... connections." still sits under "Nebula couldn’t save the canvas.",
+a heading-plus-body pair like the shape lines were; the CLI import's "This canvas
+has more than ..." under "Nebula couldn’t import the CLI canvas." likewise.
+
+Final review fixes:
+
+- MEDIUM, agents grew the canvas past the node and connection limits one call at
+  a time (also on main). `_refuse_agent_growth_past_save_limit` now counts nodes
+  and connections first, through `_oversized_graph_detail` (the predicate
+  `_refuse_oversized_graph`/apply uses, now a shared helper), so node add,
+  connect, node-and-connect, cluster, import, restore/undo, propose and apply
+  all refuse at one limit with apply's words (413). It compares with the canvas
+  as it is: an edit that leaves a count no larger than it is (one on a canvas
+  already past a limit, a trim, a param change) goes through, as the size and
+  shape checks do. The person's own edits are never refused (unchanged).
+  Accept of a proposal checks the counts too (it had its own shape and size
+  checks, not this function): 409 `proposal_too_complex`, `limit: {kind:
+  "nodes" | "connections", max}`; the bar reads the same "too complex to save"
+  line (any kind but "size"). This is a person-side behaviour added (an Accept
+  that would pass the count limit is refused on the click, as for shape); listed.
+  `undosToFitSave` is not changed: a count over a limit is refused by Save's
+  own count check before the shape walk, with no Undo step in its line, so the
+  Undo count is never read for it.
+- LOW, one slow socket held the sync-order lock. `broadcast_raw` now sends to
+  all sockets at once, each bounded by `SOCKET_SEND_TIMEOUT_SECONDS` (5 s); a
+  socket that fails or times out is closed and dropped (its tab reconnects and
+  gets a fresh hello). The ordering lock still covers the whole send, so the
+  order is kept; it is simply bounded. Smaller than a per-socket queue.
+  `broadcast_others` and `broadcast_browser` are not changed (they never hold
+  the lock). The other two LOWs (a restart's hello or the empty-tab read ending
+  a held Undo's wait early) stay follow-ups.
+
+Tests: backend/tests/test_agent_count_limits_r12.py (9: node add at and past
+the limit, the person's add, connect, node-and-connect and cluster, apply and
+propose with the same words, trim and no-worse, Accept, the MCP tools, the
+stalled socket). Frontend: graphFile, saveFixStep.pr205r8, bundleRefusalLines
+.pr205r7, cinemaUploadLock.pr205r9, cinemaShotBlocked.pr205r9 updated; a plain
+file's node and connection lines added. Mutation-checked: count check removed
+(6 fail), Accept's count removed (1), socket failure kept (1), send unbounded
+(hangs, killed at 30 s), "store" to "keep" (8), "opens" to "reads" (6), ", and
+remove" to "; and remove" (2), ", and remove the uploads" to ", then" (1).

@@ -61,16 +61,17 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['a number out of range', 400, { detail: 'Invalid graph.json: a number is out of range: NaN', code: 'graph_unreadable_value' },
       'Part of this file holds a value Nebula can’t read.'],
     ['too many nodes', 413, { detail: 'graph.json contains too many nodes', code: 'graph_too_many_nodes', maxNodes: 10_000 },
-      'This file has more than 10,000 nodes.'],
+      'Nebula couldn’t open this file because it has more than 10,000 nodes, the most Nebula opens.'],
     ['too many connections', 413, { detail: 'graph.json contains too many edges', code: 'graph_too_many_edges', maxEdges: 50_000 },
-      'This file has more than 50,000 connections.'],
+      'Nebula couldn’t open this file because it has more than 50,000 connections, the most Nebula opens.'],
     ['too large', 413, { detail: 'graph.json is too large', code: 'graph_too_large',
       sizeBytes: 600 * 1024 * 1024, limitBytes: 528 * 1024 * 1024 },
       'This canvas is 600.0 MB. Nebula opens canvases up to 528 MB.'],
   ])('%s: the plain file’s line under the load heading; the backend’s words go to the log', async (_case, status, body, line) => {
     const { result, said, errors } = await loadBundleAnswering(answer(status, body));
     expect(result).toBeNull();
-    expect(said.mock.calls).toEqual([[`${LOAD} ${line}`]]);
+    // GM #205 r12 item 2: a line with its own "Nebula couldn’t open this file because …" takes no heading.
+    expect(said.mock.calls).toEqual([[line.startsWith('Nebula couldn’t ') ? line : `${LOAD} ${line}`]]);
     expect(said.mock.calls[0][0]).not.toContain(body.detail);
     // The log keeps the engine's exact reason.
     expect(errors).toHaveBeenCalledWith('[nebula] graph load', body.detail);
@@ -122,7 +123,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   it('the node line uses the limit the answer carries', async () => {
     const { said } = await loadBundleAnswering(answer(413,
       { detail: 'graph.json contains too many nodes', code: 'graph_too_many_nodes', maxNodes: 2_500 }));
-    expect(said).toHaveBeenCalledWith(`${LOAD} This file has more than 2,500 nodes.`);
+    expect(said).toHaveBeenCalledWith('Nebula couldn’t open this file because it has more than 2,500 nodes, the most Nebula opens.');
   });
 
   it.each([
@@ -148,10 +149,10 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
 describe('bundleRefusalLine', () => {
   it('falls back to this tab’s limit when the answer’s is missing or not a positive whole number', () => {
     for (const maxNodes of [undefined, 0, -3, 1.5, '10', Number.NaN]) {
-      expect(bundleRefusalLine({ code: 'graph_too_many_nodes', maxNodes })).toBe('This file has more than 10,000 nodes.');
+      expect(bundleRefusalLine({ code: 'graph_too_many_nodes', maxNodes })).toBe('Nebula couldn’t open this file because it has more than 10,000 nodes, the most Nebula opens.');
     }
     for (const maxEdges of [undefined, 0, '9']) {
-      expect(bundleRefusalLine({ code: 'graph_too_many_edges', maxEdges })).toBe('This file has more than 50,000 connections.');
+      expect(bundleRefusalLine({ code: 'graph_too_many_edges', maxEdges })).toBe('Nebula couldn’t open this file because it has more than 50,000 connections, the most Nebula opens.');
     }
   });
 

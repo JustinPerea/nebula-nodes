@@ -4107,6 +4107,10 @@ def _socket_share_view(websocket: WebSocket) -> dict[str, Any]:
         return {"sees_share": False, "agent_id": None}
 
 
+# How long one socket's send may take before broadcast_raw drops it.
+SOCKET_SEND_TIMEOUT_SECONDS = 5.0
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
@@ -4169,14 +4173,34 @@ class ConnectionManager:
         `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
         forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
-        for connection in self.active_connections:
+        sends: list[tuple[WebSocket, str]] = []
+        for connection in list(self.active_connections):
             try:
                 base = data if others is None or connection in self.browser_connections else others
-                await connection.send_text(self._form(connection, base, forms))
+                sends.append((connection, self._form(connection, base, forms)))
             except Exception:
                 disconnected.append(connection)
+        # Every socket's send at once, each bounded: one that stalls can't hold
+        # the sync-order lock (and so every sync, hello and delete answer) for
+        # the others. A socket that times out or fails is closed; its tab
+        # reconnects and gets a fresh hello (PR #205 final review, LOW).
+        results = await asyncio.gather(*(self._send_bounded(c, text) for c, text in sends))
+        disconnected.extend(connection for (connection, _text), sent in zip(sends, results) if not sent)
         for conn in disconnected:
             self.disconnect(conn)
+
+    async def _send_bounded(self, connection: WebSocket, text: str) -> bool:
+        """Send ``text``; False (the socket closed) when it fails or takes
+        longer than SOCKET_SEND_TIMEOUT_SECONDS."""
+        try:
+            await asyncio.wait_for(connection.send_text(text), timeout=SOCKET_SEND_TIMEOUT_SECONDS)
+            return True
+        except Exception:  # noqa: BLE001 - a stalled or broken socket is dropped, never raised
+            try:
+                await asyncio.wait_for(connection.close(), timeout=1.0)
+            except Exception:  # noqa: BLE001
+                pass
+            return False
 
     def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
         """`base` as this socket gets it, serialised once per form. An Updates message always
@@ -9693,7 +9717,15 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             # the measure is the one the proposal passed, so only a change
             # since can refuse it.
             candidate_export = _graph_canvas_export(candidate)
-            too_complex = _shape_past_save_limit(candidate_export)
+            # Past the node or connection count a project can save, as apply
+            # and every agent write count it (PR #205 final review): refused
+            # the same way, naming the count that is over.
+            count_detail = _oversized_graph_detail(candidate, cli_graph)
+            too_complex = None if count_detail is None else (409, count_detail, (
+                {"kind": "nodes", "max": RESTORE_MAX_GRAPH_NODES} if len(candidate.nodes) > RESTORE_MAX_GRAPH_NODES
+                else {"kind": "connections", "max": RESTORE_MAX_GRAPH_EDGES}))
+            if too_complex is None:
+                too_complex = _shape_past_save_limit(candidate_export)
             if too_complex is None:
                 # And past the project's size limit (review 8 of PR #205,
                 # limits MEDIUM-1): refused the same way, with the size limit.
@@ -16267,14 +16299,27 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _oversized_graph_detail(candidate: CLIGraph, before: CLIGraph | None = None) -> str | None:
+    """The agent's words when ``candidate`` holds more nodes or connections than
+    a project can save; None when it doesn't. With ``before``, only a count that
+    is past its limit AND larger than ``before``'s counts (an edit that trims a
+    canvas already past a limit goes through, as for size and shape)."""
+    nodes, edges = len(candidate.nodes), len(candidate.edges)
+    too_many_nodes = nodes > RESTORE_MAX_GRAPH_NODES and (before is None or nodes > len(before.nodes))
+    too_many_edges = edges > RESTORE_MAX_GRAPH_EDGES and (before is None or edges > len(before.edges))
+    if not too_many_nodes and not too_many_edges:
+        return None
+    return (
+        f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} connections "
+        f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} connections, "
+        "so nothing changed.")
+
+
 def _refuse_oversized_graph(candidate: CLIGraph) -> None:
     """413 when a staged edit would make a canvas bigger than a project can save."""
-    nodes, edges = len(candidate.nodes), len(candidate.edges)
-    if nodes > RESTORE_MAX_GRAPH_NODES or edges > RESTORE_MAX_GRAPH_EDGES:
-        raise HTTPException(status_code=413, detail=(
-            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} connections "
-            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} connections, "
-            "so nothing changed."))
+    detail = _oversized_graph_detail(candidate)
+    if detail is not None:
+        raise HTTPException(status_code=413, detail=detail)
 
 
 def _arrange_reply(arrange: Any) -> dict[str, Any]:
@@ -18663,6 +18708,15 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     project with the canvas overlaid (run history from its last save)."""
     if _is_person_request():
         return
+    # The node and connection counts, by the predicate /api/graph/apply uses
+    # (_refuse_oversized_graph), so every agent write stops at the same limit
+    # as apply and the person's Save, one call at a time too (PR #205 final review).
+    count_detail = _oversized_graph_detail(candidate, cli_graph)
+    if count_detail is not None:
+        refusal = _person_only_refusal(count_detail)
+        if isinstance(refusal, PersonGateError):
+            raise refusal
+        raise HTTPException(status_code=413, detail=count_detail)
     after_export = _graph_canvas_export(candidate)
     _refuse_agent_shape_past_save_limit(after_export)
     found = _size_past_save_limit(candidate, after_export)

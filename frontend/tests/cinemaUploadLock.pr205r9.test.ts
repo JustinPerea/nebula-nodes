@@ -17,8 +17,8 @@ describe('GM PR #205 r17: the shot panel\'s line, by what each row offers', () =
       'You can generate after you remove “ref.png” and “lost.png”.'],
     ['try-again only', [row('a.png', true), row('b.png', true)],
       'You can generate after you try “a.png” and “b.png” again or remove them.'],
-    ['mixed: two sentences, one per kind', [row('a.png', true), row('ref.png', false), row('lost.png', false)],
-      'You can generate after you try “a.png” again or remove it. You can generate after you remove “ref.png” and “lost.png”.'],
+    ['mixed: one sentence, joined by "and"', [row('a.png', true), row('ref.png', false), row('lost.png', false)],
+      'You can generate after you try “a.png” again or remove it, and remove “ref.png” and “lost.png”.'],
   ])('%s', (_label, uploads, line) => {
     useCinemaUploadStore.getState().setUploads(() => uploads);
     expect(getCinemaUploadIssue('scene')).toBe(line);
@@ -51,8 +51,8 @@ describe('GM PR #205 r17: Generate all\'s line for other shots, by what their ro
   it.each([
     ['remove-only', [row('x.png', false, { shotId: 's2' })], 'You can generate all after you remove the uploads in “Shot 2”.'],
     ['try-again', [row('x.png', true, { shotId: 's2' })], 'You can generate all after you try the uploads in “Shot 2” again or remove them.'],
-    ['mixed shots: two sentences', [row('x.png', true, { shotId: 's2' }), row('y.png', false, { shotId: 's3' }), row('z.png', false, { shotId: 's4' })],
-      'You can generate all after you try the uploads in “Shot 2” again or remove them. You can generate all after you remove the uploads in “Shot 3” and “Shot 4”.'],
+    ['mixed shots: one sentence, joined by "and"', [row('x.png', true, { shotId: 's2' }), row('y.png', false, { shotId: 's3' }), row('z.png', false, { shotId: 's4' })],
+      'You can generate all after you try the uploads in “Shot 2” again or remove them, and remove the uploads in “Shot 3” and “Shot 4”.'],
     ['a shot with a row that can be tried again takes the try form', [row('x.png', true, { shotId: 's2' }), row('y.png', false, { shotId: 's2' })],
       'You can generate all after you try the uploads in “Shot 2” again or remove them.'],
   ])('%s', (_label, uploads, line) => {

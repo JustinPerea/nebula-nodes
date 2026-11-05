@@ -621,20 +621,27 @@ describe('graph structural complexity', () => {
     value.self = value;
     return value;
   };
-  const complexSave = 'It’s too complex to save. Undo your last change, then try again.';
-  const valueSave = 'Part of it holds a value Nebula can’t save. Undo your last change, then try again.';
+  const complexSave = 'Nebula couldn’t save the canvas because it’s too complex. Undo your last change, then try again.';
+  const valueSave = 'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo your last change, then try again.';
   const complexOpen = 'This file is too complex to open.';
   const valueOpen = 'Part of this file holds a value Nebula can’t read.';
 
   // GM PR #205 r14, r15: a file being loaded is "This file", the CLI import "This canvas"; Save keeps "The canvas".
   it('matches the backend node and edge ceilings before walking individual nodes, in the person\'s words', () => {
-    for (const [use, subject] of [['save', 'The canvas'], ['open', 'This file'], ['import', 'This canvas']] as const) {
+    const lines = {
+      save: [`The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`, `The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`],
+      // GM PR #205 r12 item 2: a file being opened is one whole line.
+      open: [`Nebula couldn’t open this file because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`,
+        `Nebula couldn’t open this file because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula opens.`],
+      import: [`This canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`, `This canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`],
+    } as const;
+    for (const use of ['save', 'open', 'import'] as const) {
       expect(thrown({ nodes: new Array(GRAPH_MAX_NODES + 1).fill(null), edges: [] }, use)).toEqual({
-        reason: `${subject} has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
+        reason: lines[use][0],
         detail: `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
       });
       expect(thrown({ nodes: [], edges: new Array(GRAPH_MAX_EDGES + 1).fill(null) }, use)).toEqual({
-        reason: `${subject} has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`,
+        reason: lines[use][1],
         detail: `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`,
       });
     }
@@ -735,7 +742,7 @@ describe('graph import memory ceiling', () => {
     const text = JSON.stringify({ version: 2, name: 'Many', createdAt: '2026-10-23T00:00:00.000Z',
       nodes: Array.from({ length: 10_001 }, (_, index) => ({ ...node, id: `n${index}` })), edges: [] });
     const selection = await inspectGraphFileWithinLimit(new File([text], 'Many.nebula'));
-    await expect(readGraphSelection(selection)).rejects.toThrow('This file has more than 10,000 nodes.');
+    await expect(readGraphSelection(selection)).rejects.toThrow('Nebula couldn’t open this file because it has more than 10,000 nodes, the most Nebula opens.');
   });
 
   function zipSelection(): File {
@@ -999,7 +1006,7 @@ describe('the canvas limit lines on each surface', () => {
     const alertSpy = noticeSpy();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await expect(saveToFile([textNode({ value: Infinity })], [])).resolves.toBeNull();
-    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas. Part of it holds a value Nebula can’t save. Undo your last change, then try again.');
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo your last change, then try again.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', 'Graph contains a non-finite number.');
   });
 
@@ -1007,23 +1014,23 @@ describe('the canvas limit lines on each surface', () => {
     const alertSpy = noticeSpy();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await expect(saveToFile([textNode({ value: deep() })], [])).resolves.toBeNull();
-    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas. It’s too complex to save. Undo your last change, then try again.');
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas because it’s too complex. Undo your last change, then try again.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
   });
 
   // GM PR #205 r13 item 1: the step the line offers follows the newest Undo step.
   it.each([
     ['the person\'s step: unchanged', { kind: 'person' } as const,
-      'It’s too complex to save. Undo your last change, then try again.',
-      'Part of it holds a value Nebula can’t save. Undo your last change, then try again.'],
+      'Nebula couldn’t save the canvas because it’s too complex. Undo your last change, then try again.',
+      'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo your last change, then try again.'],
     ['an agent\'s step: that agent\'s last change', { kind: 'agent', name: 'Claude' } as const,
-      'It’s too complex to save. Undo Claude’s last change, then try again.',
-      'Part of it holds a value Nebula can’t save. Undo Claude’s last change, then try again.'],
+      'Nebula couldn’t save the canvas because it’s too complex. Undo Claude’s last change, then try again.',
+      'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo Claude’s last change, then try again.'],
     ['a step from an origin Nebula doesn\'t know: "the last change", never "your" (GM r14 item 2)', { kind: 'unknown' } as const,
-      'It’s too complex to save. Undo the last change, then try again.',
-      'Part of it holds a value Nebula can’t save. Undo the last change, then try again.'],
+      'Nebula couldn’t save the canvas because it’s too complex. Undo the last change, then try again.',
+      'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo the last change, then try again.'],
     ['no step at all: the cause and nothing more', { kind: 'none' } as const,
-      'It’s too complex to save.', 'Part of it holds a value Nebula can’t save.'],
+      'Nebula couldn’t save the canvas because it’s too complex.', 'Nebula couldn’t save the canvas because part of it holds a value it can’t store.'],
   ])('Save, %s', async (_label, step, complexLine, valueLine) => {
     const alertSpy = noticeSpy();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -1032,9 +1039,9 @@ describe('the canvas limit lines on each surface', () => {
     window.addEventListener('nebula:agent-log-entry', log);
     try {
       await saveToFile([textNode({ value: deep() })], [], undefined, undefined, step);
-      expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. ${complexLine}`);
+      expect(alertSpy).toHaveBeenLastCalledWith(complexLine);
       await saveToFile([textNode({ value: Infinity })], [], undefined, undefined, step);
-      expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. ${valueLine}`);
+      expect(alertSpy).toHaveBeenLastCalledWith(valueLine);
       // A circular value takes the same step (the walk's own check: a
       // canvas can't carry one into the file writer).
       const circular: Record<string, unknown> = {};
@@ -1090,6 +1097,22 @@ describe('the canvas limit lines on each surface', () => {
     await expect(loadFromFile()).resolves.toBeNull();
     expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas. This file is too complex to open.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+  });
+
+  // GM PR #205 r12 item 2: one whole line, no "Nebula couldn’t load the canvas." over it.
+  it('Load: a plain .nebula with too many nodes or connections says the whole line', async () => {
+    const alertSpy = noticeSpy();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    for (const [file, line] of [
+      [{ nodes: new Array(GRAPH_MAX_NODES + 1).fill(textNode({})), edges: [] },
+        `Nebula couldn’t open this file because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`],
+      [{ nodes: [], edges: new Array(GRAPH_MAX_EDGES + 1).fill({}) },
+        `Nebula couldn’t open this file because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula opens.`],
+    ] as const) {
+      openFile(new File([JSON.stringify({ version: 2, name: 'Many', createdAt: '2026-10-31T00:00:00.000Z', ...file })], 'Many.nebula', { type: 'application/json' }));
+      await expect(loadFromFile()).resolves.toBeNull();
+      expect(alertSpy).toHaveBeenLastCalledWith(line);
+    }
   });
 
   it('Load: a bundle whose restored canvas holds a circular value Nebula can\'t read', async () => {

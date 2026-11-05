@@ -35,7 +35,7 @@ describe('Save names the Undo that fixes its refusal', () => {
     const steps = [slice({ b: node('b') }), snapshot([node('a'), node('b')])];
     expect(undosToFitSave(canvas, [], undefined, undefined, steps)).toBe(2);
     expect(line(canvas, walk({ kind: 'agent', name: 'Codex' }, steps)))
-      .toBe('It’s too complex to save. Undo the last 2 changes, then try again.');
+      .toBe('Nebula couldn’t save the canvas because it’s too complex. Undo the last 2 changes, then try again.');
   });
 
   it('the reverse: Codex\'s deep value on top of the person\'s rename: Codex’s, by name', () => {
@@ -43,38 +43,38 @@ describe('Save names the Undo that fixes its refusal', () => {
     const steps = [slice({ a: node('a') }), snapshot([node('a'), node('b')])];
     expect(undosToFitSave(canvas, [], undefined, undefined, steps)).toBe(1);
     expect(line(canvas, walk({ kind: 'agent', name: 'Codex' }, steps)))
-      .toBe('It’s too complex to save. Undo Codex’s last change, then try again.');
+      .toBe('Nebula couldn’t save the canvas because it’s too complex. Undo Codex’s last change, then try again.');
   });
 
   it('the person\'s own deep value on top: "your"; an unknown origin\'s: "the"', () => {
     const canvas = [deepNode('a')];
     expect(line(canvas, walk({ kind: 'person' }, [snapshot([node('a')])])))
-      .toBe('It’s too complex to save. Undo your last change, then try again.');
+      .toBe('Nebula couldn’t save the canvas because it’s too complex. Undo your last change, then try again.');
     expect(line(canvas, walk({ kind: 'unknown' }, [slice({ a: node('a') })])))
-      .toBe('It’s too complex to save. Undo the last change, then try again.');
+      .toBe('Nebula couldn’t save the canvas because it’s too complex. Undo the last change, then try again.');
   });
 
   it('3 steps: digits, never a number word', () => {
     const canvas = [deepNode('a'), node('b', {}, 'B2'), node('c', {}, 'C2')];
     const steps = [slice({ c: node('c') }), slice({ b: node('b') }), snapshot([node('a'), node('b'), node('c')])];
     expect(line(canvas, walk({ kind: 'agent', name: 'Claude' }, steps)))
-      .toBe('It’s too complex to save. Undo the last 3 changes, then try again.');
+      .toBe('Nebula couldn’t save the canvas because it’s too complex. Undo the last 3 changes, then try again.');
   });
 
   it('no number of Undos fixes it (the value is older than every step): the first sentence only', () => {
     const canvas = [deepNode('a'), node('b', {}, 'B2')];
     const steps = [slice({ b: node('b') }), snapshot([deepNode('a'), node('b')])];
     expect(undosToFitSave(canvas, [], undefined, undefined, steps)).toBeNull();
-    expect(line(canvas, walk({ kind: 'agent', name: 'Codex' }, steps))).toBe('It’s too complex to save.');
+    expect(line(canvas, walk({ kind: 'agent', name: 'Codex' }, steps))).toBe('Nebula couldn’t save the canvas because it’s too complex.');
   });
 
   it('the value form takes the same endings', () => {
     const canvas = [node('a', { value: Infinity }), node('b', {}, 'B2')];
     const steps = [slice({ b: node('b') }), snapshot([node('a'), node('b')])];
     expect(line(canvas, walk({ kind: 'agent', name: 'Codex' }, steps)))
-      .toBe('Part of it holds a value Nebula can’t save. Undo the last 2 changes, then try again.');
+      .toBe('Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo the last 2 changes, then try again.');
     expect(saveShapeLine('value', { kind: 'steps', count: 4 }))
-      .toBe('Part of it holds a value Nebula can’t save. Undo the last 4 changes, then try again.');
+      .toBe('Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo the last 4 changes, then try again.');
   });
 
   it('an Undo that removes a node an agent added, and an add\'s step (null in its slice), count as they leave the canvas', () => {

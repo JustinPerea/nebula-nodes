@@ -122,11 +122,10 @@ export function otherShotsUploadLine(nodeId: string, shotId: string, shots: read
   const retryShots = new Set(others.filter(uploadOffersTryAgain).map((upload) => upload.shotId));
   const tryAgain = where(others.filter((upload) => retryShots.has(upload.shotId)));
   const removeOnly = where(others.filter((upload) => !retryShots.has(upload.shotId)));
-  const lines = [
-    tryAgain && `You can generate all after you try the uploads in ${tryAgain} again or remove them.`,
-    removeOnly && `You can generate all after you remove the uploads in ${removeOnly}.`,
-  ].filter(Boolean);
-  return lines.length > 0 ? lines.join(' ') : null;
+  // GM PR #205 r12 item 3: both kinds make one sentence, joined by "and".
+  const tryPart = tryAgain && `You can generate all after you try the uploads in ${tryAgain} again or remove them`;
+  if (tryPart) return removeOnly ? `${tryPart}, and remove the uploads in ${removeOnly}.` : `${tryPart}.`;
+  return removeOnly ? `You can generate all after you remove the uploads in ${removeOnly}.` : null;
 }
 
 /** Whether an upload row offers Try again: the test its button reads, and
@@ -158,9 +157,8 @@ export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAll
   const retry = uploads.filter(uploadOffersTryAgain);
   const removeOnly = uploads.filter((upload) => !uploadOffersTryAgain(upload));
   const names = (list: CinemaReferenceUpload[]) => quotedNames(list.map((upload) => upload.name), 'uploads');
-  const lines = [
-    retry.length > 0 && `You can ${verb} after you try ${names(retry)} again or remove ${retry.length > 1 ? 'them' : 'it'}.`,
-    removeOnly.length > 0 && `You can ${verb} after you remove ${names(removeOnly)}.`,
-  ].filter(Boolean);
-  return lines.length > 0 ? lines.join(' ') : null;
+  // GM PR #205 r12 item 3: both kinds make one sentence, joined by "and".
+  const tryPart = retry.length > 0 && `You can ${verb} after you try ${names(retry)} again or remove ${retry.length > 1 ? 'them' : 'it'}`;
+  if (tryPart) return removeOnly.length > 0 ? `${tryPart}, and remove ${names(removeOnly)}.` : `${tryPart}.`;
+  return removeOnly.length > 0 ? `You can ${verb} after you remove ${names(removeOnly)}.` : null;
 }

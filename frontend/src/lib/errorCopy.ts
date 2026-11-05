@@ -689,7 +689,8 @@ export class FailureNotice extends Error {
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
-    this.standalone = options.standalone === true;
+    // A line that opens with its own "Nebula couldn’t …" is a whole line: no heading over it.
+    this.standalone = options.standalone ?? (heading === '' && /^Nebula couldn’t /.test(reason));
     this.code = options.code ?? null;
     this.sentAt = sentAtOf(options);
   }

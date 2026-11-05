@@ -76,7 +76,9 @@ export type SaveUndoStep = { kind: 'person' } | { kind: 'agent'; name: string } 
 /** A Save's shape line (GM PR #205 r10 item 4, r13 item 1): the cause, then
  * the Undo that can fix it, never one that can't. */
 export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { kind: 'person' }): string {
-  const cause = kind === 'complex' ? 'It’s too complex to save.' : 'Part of it holds a value Nebula can’t save.';
+  // GM PR #205 r12 item 1: the "because" form, one whole line (no heading over it).
+  const cause = kind === 'complex' ? 'Nebula couldn’t save the canvas because it’s too complex.'
+    : 'Nebula couldn’t save the canvas because part of it holds a value it can’t store.';
   if (step.kind === 'none') return cause;
   if (step.kind === 'steps') return `${cause} Undo the last ${step.count} changes, then try again.`;
   const whose = step.kind === 'agent' ? `${step.name}’s` : step.kind === 'unknown' ? 'the' : 'your';
@@ -90,10 +92,13 @@ export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { 
 // Save and agents' writes keep "The canvas". Picked by where the check ran,
 // as the shape lines are.
 const limitSubject = (use: GraphCheckUse) => (use === 'open' ? 'This file' : use === 'import' ? 'This canvas' : 'The canvas');
-export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') =>
-  `${limitSubject(use)} has more than ${limit.toLocaleString()} nodes.`;
-export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') =>
-  `${limitSubject(use)} has more than ${limit.toLocaleString()} connections.`;
+// GM PR #205 r12 item 2: a file being opened is one whole line, as the size line is.
+export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') => use === 'open'
+  ? `Nebula couldn’t open this file because it has more than ${limit.toLocaleString()} nodes, the most Nebula opens.`
+  : `${limitSubject(use)} has more than ${limit.toLocaleString()} nodes.`;
+export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') => use === 'open'
+  ? `Nebula couldn’t open this file because it has more than ${limit.toLocaleString()} connections, the most Nebula opens.`
+  : `${limitSubject(use)} has more than ${limit.toLocaleString()} connections.`;
 
 /** GM PR #205 r10 item 4 and its addendum: the shape walk's reasons, which
  * the person can't act on, as a cause they understand. Too many values or

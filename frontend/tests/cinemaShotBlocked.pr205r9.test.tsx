@@ -140,7 +140,7 @@ describe('review 8 item 17 (GM default): Generate all\'s line for failed shared 
     ['try again', [shared('ref.png', true)], 'You can generate all after you try “ref.png” again or remove it.'],
     ['remove only', [shared('ref.png', false)], 'You can generate all after you remove “ref.png”.'],
     ['both', [shared('a.png', true), shared('ref.png', false)],
-      'You can generate all after you try “a.png” again or remove it. You can generate all after you remove “ref.png”.'],
+      'You can generate all after you try “a.png” again or remove it, and remove “ref.png”.'],
   ])('%s', (_label, uploads, line) => {
     scene();
     useCinemaUploadStore.setState({ uploads });

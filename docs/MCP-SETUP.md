@@ -510,8 +510,9 @@ The server exposes these tools for building and running (see
   one that adds no value past 64 levels (it may only take depth away). A
   request with no agent marker gets
   `code: "person_required"` with the same `detail`. The person's own edits
-  are never refused; their Save says "It’s too complex to save." (or "Part
-  of it holds a value Nebula can’t save.") and names the Undo that brings
+  are never refused; their Save says "Nebula couldn’t save the canvas because
+  it’s too complex." (or "Nebula couldn’t save the canvas because part of it
+  holds a value it can’t store.") and names the Undo that brings
   the canvas back within the limits: when undoing the newest step alone
   does and it is yours, "Undo <agent>’s last change, then try again." (one
   with no named agent: "Undo the last change, then try again."); when it
@@ -523,7 +524,17 @@ The server exposes these tools for building and running (see
   than 64 levels deep.", "…because a number in it isn’t finite.",
   "…because a value in it refers back to itself."). The canvas's import of the CLI graph
   measures the file Save would write and says "This canvas is too complex
-  to open." under "Nebula couldn’t import the CLI canvas.".
+  to open." under "Nebula couldn’t import the CLI canvas.". The node and
+  connection counts are held at the same limits as `edit_canvas` on every
+  agent write (a node or connection added one call at a time, a cluster, a
+  proposal, an Accept): 413 "A canvas holds at most 10,000 nodes and 50,000
+  connections (the most a project can save). This edit would leave …, so
+  nothing changed.", unless the edit leaves the count no larger than it is. An
+  Accept that would pass them is refused 409 `proposal_too_complex` with
+  `limit: {kind: "nodes", max: 10000}` or `{kind: "connections", max: 50000}`.
+  A file opened with more of either says "Nebula couldn’t open this file
+  because it has more than 10,000 nodes, the most Nebula opens." (or "…more
+  than 50,000 connections…").
   A proposal is measured when it is made, as the edit it stages, for
   these shape limits and the 16 MiB project size limit (`propose_change`
   gets the same 400 or 413; the size refusal's 413 carries
