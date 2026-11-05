@@ -8,6 +8,7 @@ import { useUIStore } from './uiStore';
 import { RequestFailedError } from '../lib/errorCopy';
 import type { ThreadRow } from '../lib/personThread';
 import { sendMessage, setDraft } from '../lib/personThreadCompose';
+import { resetPersonSessionForTests } from '../lib/personSession';
 import type { AgentPresenceEvent } from '../lib/wsClient';
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
@@ -29,9 +30,21 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  resetPersonSessionForTests();
 });
 
 describe('sending', () => {
+  it('goes nowhere while this tab is not confirmed as the person: no request, the draft stays (as agentQuestionsStore.send)', async () => {
+    setDraft('Warmer', () => ['n1']);
+    resetPersonSessionForTests({ unanswered: true });
+    expect(await sendMessage('ch_1')).toBe(false);
+    expect(apiRequest).not.toHaveBeenCalled();
+    const state = usePersonThreadStore.getState();
+    expect(state.pending).toBeNull();
+    expect(state.failure).toBeNull();
+    expect(state.draft).toBe('Warmer');
+  });
+
   it('posts the draft with its nodes and one client id, clears the draft, and adds the row', async () => {
     apiRequest.mockResolvedValue(answer({ id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent', clientId: 'c-x' }));
     setDraft('W', () => ['n1', 'n2']);

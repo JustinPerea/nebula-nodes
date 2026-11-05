@@ -1,5 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useContext, useState, type FormEvent } from 'react';
 import { ModalPortal } from '../ModalPortal';
+import { PersonLockLine } from '../PersonLock';
+import { PromptLockContext } from './promptLock';
 
 export interface PromptRequest {
   label: string;
@@ -9,6 +11,7 @@ export interface PromptRequest {
 
 export function PromptDialog({ request, onDone }: { request: PromptRequest; onDone: (value: string | null) => void }) {
   const [value, setValue] = useState(request.initial);
+  const lock = useContext(PromptLockContext);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onDone(value);
@@ -19,7 +22,7 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
     <div className="commons-prompt commons-scope" role="dialog" aria-modal="true" aria-label={request.label}>
       <form
         className="commons-prompt__card"
-        onSubmit={submit}
+        onSubmit={lock ? lock.guard(submit) : submit}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -34,8 +37,9 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
         </label>
         <div className="commons-prompt__actions">
           <button type="button" className="commons-button" onClick={() => onDone(null)}>Cancel</button>
-          <button type="submit" className="commons-button commons-button--primary">OK</button>
+          <button type="submit" className="commons-button commons-button--primary" {...lock?.control()}>OK</button>
         </div>
+        {lock && <PersonLockLine lock={lock} place="control" />}
       </form>
     </div>
     </ModalPortal>

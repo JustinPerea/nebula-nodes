@@ -638,7 +638,7 @@ export async function saveToFile(
     }
   } catch (error) {
     console.error('[nebula] graph save', error);
-    showNotice(failureMessage(error, SAVE_GRAPH));
+    showNotice(failureMessage(error, SAVE_GRAPH), 'error', error);
     return null;
   }
 
@@ -656,7 +656,7 @@ export async function saveToFile(
     blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   } catch (error) {
     console.error('[nebula] graph bundle', error);
-    showNotice(failureMessage(error, SAVE_GRAPH));
+    showNotice(failureMessage(error, SAVE_GRAPH), 'error', error);
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
@@ -1066,7 +1066,7 @@ export async function loadFromFile(): Promise<LoadedGraph | null> {
     } catch (err) {
       if ((err as DOMException).name === 'AbortError') return null;
       if (err instanceof GraphBundleImportTooLargeError) {
-        showNotice(failureMessage(err, LOAD_GRAPH));
+        showNotice(failureMessage(err, LOAD_GRAPH), 'error', err);
         return null;
       }
       console.warn('File System Access API failed, falling back to input:', err);
@@ -1109,7 +1109,7 @@ export function loadViaInput(): Promise<GraphFileSelection | null> {
         resolve(await inspectGraphFileWithinLimit(file));
       } catch (error) {
         console.error('[nebula] graph pick', error);
-        showNotice(failureMessage(error, LOAD_GRAPH));
+        showNotice(failureMessage(error, LOAD_GRAPH), 'error', error);
         resolve(null);
       }
     };

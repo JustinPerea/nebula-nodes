@@ -351,6 +351,24 @@ body.app-slava-restraint {
   outline-offset: var(--sr-focus-offset);
 }
 
+/* PR #204 round 18g (GM r36): a heading or a line that takes focus from code draws no ring. A
+ * handover (a demote, going offline, the Commons turning off, Try again's line going, the off
+ * view opening into the Commons) moves focus to a page or section heading, or to the line that
+ * says why, so a screen reader announces it. Those targets have tabindex -1: a person can never
+ * Tab to them, so a ring there only marks where code put focus. Everything a person tabs to keeps
+ * its ring. Important, so no component's own :focus-visible ring can bring it back
+ * (tests/focusRingCss.test.ts). */
+body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible {
+  outline: none !important;
+}
+
+/* PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take it,
+ * focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops to
+ * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that. */
+body.app-slava-restraint [data-focus-start]:focus-visible {
+  outline: none !important;
+}
+
 /* The canvas itself with keyboard focus (round 3l, GM r69 Q2): it fills the
  * window, so the baseline ring, drawn outside its box, was clipped away and
  * Tab arrival showed nothing. The token ring goes inside its edge instead.
@@ -4671,7 +4689,7 @@ body.app-slava-restraint .final-export__start {
 }
 
 body.app-slava-restraint .final-export__error {
-  color: #ff7a68;
+  color: var(--line-warning, #ff7a68);
   overflow-wrap: anywhere;
 }
 

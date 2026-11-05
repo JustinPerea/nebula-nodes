@@ -10,6 +10,8 @@ import {
   type QuestionSetView,
 } from '../lib/agentQuestions';
 import { RequestFailedError, failureMessage } from '../lib/errorCopy';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
+import { personUnconfirmed } from '../lib/personSession';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -203,7 +205,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     send: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       const inputs = answerInputs(entry.view, get().drafts[setId]);
       if (inputs.length === 0) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
@@ -219,10 +222,11 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
           get().closed(setId, already[1] as Exclude<QuestionSetStatus, 'open'>, null);
           return false;
         }
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't send the answers.") },
-        }));
+        const line = failureMessage(error, "Couldn't send the answers.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.answer
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
       // The socket's questionsClosed brings the server's copy; until then, ours.
@@ -233,15 +237,17 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     dismiss: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
       try {
         await dismissQuestions(setId, entry.answerKey);
       } catch (error) {
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't dismiss the questions.") },
-        }));
+        const line = failureMessage(error, "Couldn't dismiss the questions.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.dismiss
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'dismissed', null);

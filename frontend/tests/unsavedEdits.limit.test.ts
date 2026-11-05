@@ -127,10 +127,11 @@ describe('the held edits screen, from a real answer', () => {
       'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.' });
   });
 
-  it('person_required keeps Try again and holds nothing', async () => {
+  // PR #204 r6 (GM r7 2): no Try again while the reason is "not connected"; the promote retries.
+  it('person_required shows no Try again and holds nothing', async () => {
     fetch.mockResolvedValueOnce(json(403, { detail: BILLING, code: 'person_required' }));
     await useProjectStore.getState().retry();
     expect(state().unsavedEdits).toBeNull();
-    expect(projectRetryOffer(state())).not.toBe('none');
+    expect(projectRetryOffer(state())).toBe('none');
   });
 });

@@ -4,6 +4,7 @@ import {
 } from '../../../lib/kreaConnection';
 import { useUIStore } from '../../../store/uiStore';
 import { failureMessage, failureUnder } from '../../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 
 /**
  * Krea sign-in state and actions. Lives above the row because the row moves
@@ -54,7 +55,13 @@ export function useKreaConnection() {
     setError(null);
     setLaunchError(null);
     try { setConnection(await action()); }
-    catch (value) { setError(failureMessage(value, "Couldn't update the Krea connection.")); }
+    catch (value) {
+      const line = failureMessage(value, "Couldn't update the Krea connection.");
+      setError(line);
+      // PR #204 round 4 (review 2 MEDIUM): connect, check and disconnect are person-only
+      // (routes/krea_connector.py person_only); refused only for this tab, the line goes on the promote.
+      clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.connection
+    }
     finally { setBusy(false); }
   }
 

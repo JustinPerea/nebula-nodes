@@ -10,6 +10,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { failureMessage } from '../../lib/errorCopy';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -236,7 +237,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
             ))}
           </div>
         )}
-        {saveError && <div className="result-card__save-error" role="alert">{saveError}</div>}
+        {saveError && <div className="result-card__save-error" role="alert"><LineText text={saveError} /></div>}
       </div>
     </div>
   );

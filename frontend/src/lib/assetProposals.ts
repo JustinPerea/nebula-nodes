@@ -72,14 +72,16 @@ export interface AssetProposalClosedEvent {
 /** A refused accept, reject or list: heading + reason like every request's
  * error (GM, error-copy round 2); `status` stays for the store. */
 export class AssetProposalError extends RequestFailedError {
-  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
+  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code,
+      sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'AssetProposalError';
   }
 }
 
 const asAssetProposalError = (error: RequestFailedError) =>
-  new AssetProposalError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code });
+  new AssetProposalError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code,
+    sentAt: error.sentAt });
 
 async function decide(id: string, acceptKey: string, verb: 'accept' | 'reject', body?: unknown): Promise<void> {
   await apiRequest(`Couldn't ${verb} the proposal.`, `/api/asset-proposals/${encodeURIComponent(id)}/${verb}`, {

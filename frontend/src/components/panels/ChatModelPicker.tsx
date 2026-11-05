@@ -9,6 +9,9 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import { shortLine } from '../../lib/errorCopy';
 import '../../styles/chat-model-picker.css';
+import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 type Agent = 'claude' | 'codex';
 
@@ -16,6 +19,10 @@ export interface ChatModelPickerProps {
   agent: ChatAgentId;
   /** The person's own agents that are ready to start (Settings > Personal agents). */
   personalAgents?: PersonalAgent[];
+  /** PR #204 round 14 (GM r23 answer 6): the tab isn't connected as the person, past the held
+   * rule's 150 ms (usePersonView held). The person's own agents aren't listed, as on a tab that
+   * never connected (Settings > Personal agents does the same). */
+  agentsHeld?: boolean;
   model: string | null;
   effort: string | null;
   catalog: ChatModelCatalog | null;
@@ -32,10 +39,15 @@ const PROVIDERS: Array<{ id: Agent; label: string }> = [
   { id: 'claude', label: 'Claude Code' }, { id: 'codex', label: 'Codex' },
 ];
 
-export function ChatModelPicker({ agent, personalAgents = [], model, effort, catalog, loading, error, disabled,
+export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false, model, effort, catalog, loading, error, disabled,
   onAgentChange, onModelChange, onEffortChange, onRetry }: ChatModelPickerProps) {
   const personal = isPersonalAgent(agent)
     ? personalAgents.find((item) => `personal:${item.id}` === agent) ?? null : null;
+  // GM r23 answer 6: on a tab that isn't connected as the person (held, demoted, or a stored
+  // token the backend no longer takes) the picker says why its agents aren't listed, under its
+  // heading. The person's words for them are "your agents" (Settings > Personal agents, "Your own
+  // agent" here). Offline comes first (answer 3): offline, only the offline notice shows.
+  const agentsLock = usePersonLock('pick your agents');
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ x: 8, y: 8 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -151,17 +163,22 @@ export function ChatModelPicker({ agent, personalAgents = [], model, effort, cat
       style={{ '--chat-picker-left': `${anchor.x}px`, '--chat-picker-top': `${anchor.y}px` } as CSSProperties}
       onMouseDown={(event) => event.stopPropagation()} onKeyDownCapture={keepTabInPicker}
       onKeyDown={(event) => event.stopPropagation()}>
-      <div className="chat-model-picker__header"><strong>Model &amp; thinking</strong>
+      <div className="chat-model-picker__header"><strong role="heading" aria-level={2}>Model &amp; thinking</strong>
         <button type="button" className="chat-model-picker__close" aria-label="Close chat model settings" onClick={dismiss}>
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-      <div className="chat-model-picker__providers" role="group" aria-label="Chat provider">
+      <PersonLockLine lock={agentsLock} place="heading" className="chat-model-picker__held-line" />
+      <div className="chat-model-picker__providers" role="group" aria-label="Chat provider"
+        aria-describedby={agentsLock.shown ? agentsLock.id : undefined}>
         {PROVIDERS.map((item) => <button key={item.id} type="button" data-chat-provider={item.id}
           aria-pressed={agent === item.id} onClick={() => { if (item.id !== agent) onAgentChange(item.id); }}>
           {item.label}
         </button>)}
-        {personalAgents.filter((item) => item.status === 'ready').map((item) => {
+        {/* Round 18b (CI): the line and the list go together. The line shows the moment the tab is
+            held (usePersonLock), while agentsHeld waits the held rule's 150 ms: without its own
+            check there were 150 ms where the line said the agents weren't listed and they were. */}
+        {(agentsHeld || agentsLock.shown ? [] : personalAgents).filter((item) => item.status === 'ready').map((item) => {
           const id: ChatAgentId = `personal:${item.id}`;
           return <button key={id} type="button" data-chat-provider={id} aria-pressed={agent === id}
             onClick={() => { if (id !== agent) onAgentChange(id); }}>
@@ -182,7 +199,7 @@ export function ChatModelPicker({ agent, personalAgents = [], model, effort, cat
           agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
           {/* GM's WRAP rule: Retry is the retry, so the reason drops its own. */}
-          <p role="status">{shortLine(unavailable)}</p>
+          <p role="status"><LineText text={shortLine(unavailable)} /></p>
           <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}

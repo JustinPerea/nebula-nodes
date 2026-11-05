@@ -379,7 +379,7 @@ def test_the_token_file_is_read_strictly(tmp_path, cli_env, monkeypatch, capsys)
     agent.write_text("an-agent-session-token-not-an-app-one")
     os.chmod(agent, 0o600)
     for bad, says in ((loose, "readable by other users"), (link, "can't open"), (tmp_path / "missing", "can't open"),
-                      (agent, "doesn't hold an app token")):
+                      (agent, "doesn’t hold an app token")):
         assert mcp_connect.run_connect(args("cursor", token_file=str(bad)), home=tmp_path / "home") == 1
         assert says in capsys.readouterr().err
     assert not (tmp_path / "home").exists() and cli_env.checked == []
@@ -559,7 +559,7 @@ def test_connect_without_a_token_says_where_to_make_one(tmp_path, monkeypatch, c
     assert mcp_connect.run_connect(args("cursor", name="Desk", daily_usd=5), home=tmp_path) == 1
     err = capsys.readouterr().err
     assert "Settings > Connect your agent" in err and "name it Desk" in err and "$5" in err
-    assert "can't make tokens" in err and "--token-file" in err
+    assert "can’t make tokens" in err and "--token-file" in err
 
 
 def test_replacing_a_nebula_entry_blanks_the_old_token_in_the_backup(tmp_path, cli_env, capsys):
@@ -579,10 +579,14 @@ def test_connect_refuses_to_write_when_nebula_cant_be_reached(tmp_path, monkeypa
     monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
     monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: None)
     assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 1
-    assert "nothing was written" in capsys.readouterr().err and not list(tmp_path.rglob("*"))
+    err = capsys.readouterr().err
+    assert "nothing was written" in err and not list(tmp_path.rglob("*"))
+    # GM r45: two sentences, no semicolon, and the file named in Settings, not a pane title.
+    assert ("Start Nebula, or pass its address with --url. For the desktop app, set NEBULA_URL_FILE to the file "
+            "named in Settings, under Connect your agent. --print shows the config without checking.") in err
     # Printing only still works, with a warning.
     assert mcp_connect.run_connect(args("hermes"), home=tmp_path) == 0
-    assert "couldn't reach Nebula" in capsys.readouterr().err
+    assert "couldn’t reach Nebula" in capsys.readouterr().err
 
 
 def test_check_token_refuses_what_isnt_nebula(monkeypatch):
@@ -997,6 +1001,124 @@ def test_cli_default_url_reads_the_url_file(tmp_path, monkeypatch):
     assert default_url({}) == "http://localhost:8000"
     with pytest.raises(SystemExit):
         default_url({"NEBULA_URL_FILE": str(tmp_path / "missing")})
+
+
+def test_check_token_says_where_to_point_it_in_two_sentences(monkeypatch, capsys):
+    """GM r45: "Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead." """
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(404, json={"detail": "Not Found"}))
+    with pytest.raises(SystemExit):
+        mcp_connect.check_token(URL, TOKEN)
+    err = capsys.readouterr().err
+    assert "isn’t a Nebula backend that knows this token. Pass Nebula’s address with --url. For the desktop app, " \
+           "set NEBULA_URL_FILE instead." in err
+    assert ";" not in err.split("token. ", 1)[1]
+
+
+def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
+    """GM r51 Q6: no semicolon and no aside in parens, each its own sentence; the parser's words on their own line."""
+    import httpx
+
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn-token")
+    mcp_connect.run_connect(args("cursor"), home=tmp_path)
+    mcp_connect.run_disconnect(args("cursor"), home=tmp_path)
+    err = capsys.readouterr().err.splitlines()
+    # GM r59: actionable for the agent that hits it.
+    assert err == ["error: in-app agents can’t connect other apps to Nebula. Ask the person to run this in their own "
+                   "terminal.",
+                   "error: in-app agents can’t disconnect other apps from Nebula. Ask the person to run this in their "
+                   "own terminal."]
+    monkeypatch.delenv("NEBULA_AGENT_TOKEN")
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(401, json={"detail": "invalid"}))
+    with pytest.raises(SystemExit):
+        mcp_connect.check_token(URL, TOKEN)
+    assert capsys.readouterr().err == ("error: Nebula doesn’t recognize this token. It was revoked, or it’s from another "
+                                       "Nebula. Make a new one in Settings > Connect your agent.\n")
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    with pytest.raises(mcp_connect.MergeError) as raised:
+        mcp_connect._load(broken)
+    first, second = str(raised.value).split("\n")
+    assert first == f"{broken} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it."  # GM r60 1
+    assert second.startswith("The parser said Expecting property name") and second.endswith(".")
+
+
+def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
+    """Round 18p (GM r59, r60): GM's exact strings. Nothing introduces a command or a path with a colon:
+    a sentence ends with a period and the command goes on the next line."""
+    # r60 19: OpenClaw's and the plain case, the command on its own line.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
+    assert mcp_connect.run_disconnect(args("openclaw"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Stop the OpenClaw Gateway, then run this command.",
+                                                        "openclaw mcp unset nebula"]
+    assert mcp_connect.run_disconnect(args("hermes"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Run this command.", "hermes mcp remove nebula"]
+    assert mcp_connect.run_disconnect(args("codex"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Run this command.", "codex mcp remove nebula"]
+
+    # r60 9: the backup sentence, with and without a blanked-out token.
+    backup = tmp_path / "mcp.json.nebula-backup-1"
+    assert mcp_connect._backup_note(backup, None) == f" Nebula saved a backup at {backup}."
+    assert mcp_connect._backup_note(backup, "nebula_app_old") == (
+        f" Nebula saved a backup at {backup}. The old Nebula token is blanked out in it.")
+    assert mcp_connect._backup_note(None, "nebula_app_old") == ""
+
+    # r60 12: the names in curly quotes, no repr.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert mcp_connect.run_connect(args("cursor", name="Desk"), home=tmp_path) == 0
+    assert "note: this token belongs to “My Cursor”, not “Desk”. The canvas will show “My Cursor”.\n" in \
+        capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name, daily, pick", [
+    (None, None, "Pick Cursor."),
+    ("Desk", None, "Pick Cursor and name it Desk."),
+    (None, 5, "Pick Cursor and set a daily limit of $5."),
+    ("Desk", 0.5, "Pick Cursor, name it Desk and set a daily limit of $0.5."),
+])
+def test_gm_r60_11_no_token_names_the_picks_without_a_colon(tmp_path, monkeypatch, capsys, name, daily, pick):
+    monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
+    assert mcp_connect.run_connect(args("cursor", name=name, daily_usd=daily), home=tmp_path) == 1
+    assert capsys.readouterr().err.startswith(
+        f"error: no token. Make one in Settings > Connect your agent. {pick} Then run the command it shows, ")
+
+
+def test_gm_r59_the_paste_prompt_and_the_commands_the_cli_runs(tmp_path, legacy_env, monkeypatch, capsys):
+    monkeypatch.delenv("NEBULA_APP_TOKEN")
+    monkeypatch.setattr(mcp_connect.sys.stdin, "isatty", lambda: True, raising=False)
+    prompts = []
+    monkeypatch.setattr(mcp_connect.getpass, "getpass", lambda prompt: prompts.append(prompt) or TOKEN)
+    assert mcp_connect._token(args("cursor", paste_token=True)) == (TOKEN, None)
+    assert prompts == ["Paste the token from Settings > Connect your agent. It stays hidden as you paste. "]
+
+    # Not on PATH: a sentence, then the command.
+    monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", legacy_env.file)
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
+    assert mcp_connect.run_connect(args("codex"), home=tmp_path) == 1
+    out = capsys.readouterr()
+    assert out.err == "error: `codex` isn’t on PATH. Add it to PATH, then run this command yourself.\n"
+    # The command follows any warning lines.
+    assert [line for line in out.out.splitlines() if not line.startswith("! ")][0].startswith("codex mcp add")
+
+    # On PATH: what Nebula runs, on the line after the sentence.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    runner = lambda argv, **kw: subprocess.CompletedProcess(argv, 1 if argv[2] == "get" else 0, "", "")  # noqa: E731
+    assert mcp_connect.run_connect(args("claude-code"), home=tmp_path, runner=runner) == 0
+    lines = capsys.readouterr().out.splitlines()
+    at = lines.index("Nebula will run this command.")
+    assert lines[at + 1].startswith("claude mcp add") and not any(line.startswith("Running") for line in lines)
+
+
+def test_print_puts_the_label_and_the_place_on_their_own_lines(tmp_path, cli_env, capsys):
+    assert mcp_connect.run_connect(args("codex", print_only=True), home=tmp_path) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == ["# Codex", "# Terminal"]
+    assert lines[lines.index("# Or") + 1] == "# ~/.codex/config.toml"
 
 
 # -- `nebula mcp connect claude-code --channel` (the Nebula channel's listen config) ----

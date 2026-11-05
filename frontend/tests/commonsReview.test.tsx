@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CommonsReview } from '../src/components/commons/CommonsReview';
 import type { ReviewBatch } from '../src/lib/commonsReviewTypes';
+import { withFocusFixup } from './helpers/focusFixup';
+import { lockPlacementProblems } from '../src/lib/lockPlacement';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), propose: vi.fn(), accept: vi.fn(), image: vi.fn(), close: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsReviewApi: api, commonsEvaluationApi: { image: api.image, close: api.close } }));
@@ -15,6 +17,7 @@ const batch = (): ReviewBatch => ({ mode: 'assisted_review', independent_ground_
       fields: { summary: { value: 'An agent proposal', why: 'A visible feature' }, composition_notes: { value: 'Open space', why: 'A margin' },
         type_style: { value: 'none', why: 'No text is visible.' }, axes: { quiet_loud: { value: 0.25, why: 'A bright focal point.' } } } } }] });
 
+const fixup = withFocusFixup();
 beforeEach(() => {
   vi.clearAllMocks(); api.get.mockResolvedValue(batch()); api.image.mockResolvedValue(new Blob(['fixture']));
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture'); vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -39,8 +42,12 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
-  expect((screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText('Save before changing reference')).toBeTruthy();
+  // Round 18o (GM r51 Q3): the reference buttons lock in place, the status line their reason.
+  const reference = screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement;
+  expect(reference.disabled).toBe(false);
+  expect(reference.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(reference.getAttribute('aria-describedby')!)?.textContent).toBe('Save or discard your corrections to change the reference.');
+  expect(screen.getByText('Save or discard your corrections to change the reference.')).toBeTruthy();
   expect(screen.queryByText(/Unsaved corrections ·/)).toBeNull();
   fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
   await screen.findByRole('alert');
@@ -59,7 +66,7 @@ it('closes only after confirmation, then reloads the review', async () => {
   expect(api.close).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('Close as assisted review'));
   await screen.findByText(/Closed as assisted review ·/);
-  expect(api.close).toHaveBeenCalledWith(7);
+  expect(api.close).toHaveBeenCalledWith(7, expect.any(AbortSignal));
   expect(screen.queryByText('Close review & resume library analysis…')).toBeNull();
   expect(screen.getAllByText('Agree & next').length).toBeGreaterThan(0);
 });
@@ -79,12 +86,18 @@ it('shows the committed close even when the reload fails, and stops offering new
   expect(screen.queryByText('Generate remaining grades')).toBeNull();
 });
 
+// Round 18o (GM r51 Q2, R6 updated on purpose): a running grade locks the opener in place (aria,
+// focusable, presses ignored) with its own line, no longer natively.
 it('does not offer closing while a grade is running', async () => {
   const value = batch(); value.items[0].status = 'running'; value.items[0].proposal = null;
   api.get.mockResolvedValue(value);
   render(<CommonsReview />);
   const button = await screen.findByText('Close review & resume library analysis…');
-  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect((button as HTMLButtonElement).disabled).toBe(false);
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('You can close this batch when the grade finishes.');
+  fireEvent.click(button);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
 });
 
 function deferred<T>() {
@@ -219,4 +232,43 @@ it('does not start generation while an explicit human acceptance is still pendin
   await act(async () => pending.resolve(saved));
   expect(screen.getByText('Generate remaining grades')).toBeEnabled();
   expect(api.propose).not.toHaveBeenCalled();
+});
+
+it('round 18m (GM r44 1): unsaved corrections lock the opener in place, its line under it; live again once discarded', async () => {
+  render(<CommonsReview />);
+  await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
+  const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+  act(() => opener.focus());
+  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  act(() => fixup.current().flush());
+  expect(opener.disabled).toBe(false);
+  expect(opener.getAttribute('aria-disabled')).toBe('true');
+  const line = document.getElementById(opener.getAttribute('aria-describedby')!)!;
+  expect(line.textContent).toBe('Save or discard your corrections to close this batch.');
+  expect(opener.nextElementSibling).toBe(line);
+  expect(lockPlacementProblems()).toEqual([]);
+  expect(document.activeElement).toBe(opener);
+  fireEvent.click(opener);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  fireEvent.click(screen.getByText('Discard changes'));
+  await waitFor(() => expect(opener.getAttribute('aria-disabled')).toBeNull());
+  expect(screen.queryByText('Save or discard your corrections to close this batch.')).toBeNull();
+  fireEvent.click(opener);
+  expect(screen.getByRole('alertdialog')).toBeTruthy();
+});
+
+it('round 18m: while corrections save, the opener is natively disabled for that moment, with no line', async () => {
+  let finish: (value: ReviewBatch) => void = () => {};
+  api.accept.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  render(<CommonsReview />);
+  await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
+  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
+  const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
+  expect(opener.disabled).toBe(true);
+  expect(opener.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Save or discard your corrections to close this batch.')).toBeNull();
+  const saved = batch(); saved.items[0].reviewed_at = '2026-11-03'; saved.items[0].revision++;
+  await act(async () => { finish(saved); });
+  await waitFor(() => expect(opener.disabled).toBe(false));
 });

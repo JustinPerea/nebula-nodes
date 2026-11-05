@@ -165,7 +165,8 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     expect(within(sections[0]).getByText('board an_b1 about #2')).toBeTruthy();
     expect(within(sections[1]).getByText('update an_p1')).toBeTruthy();
     // The header keeps the count of both and the read state.
-    expect(dialog.querySelector('.agent-notes-panel__count')!.textContent).toBe('2 · all read');
+    // GM, #204 r3 item 1: once the server has read them.
+    await vi.waitFor(() => expect(dialog.querySelector(".agent-notes-panel__count")!.textContent).toBe("2 · all read"));
   });
 
   it('loads the board\'s list when the Studio opens a board', async () => {

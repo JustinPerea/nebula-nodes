@@ -1,4 +1,5 @@
 import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
@@ -34,7 +35,8 @@ import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, notConnectedBecause } from '../../lib/errorCopy';
+import { clearSetterOnPromote, isPersonRefusal } from '../../lib/clearsOnPromote';
 import { PALETTE_CANT_RUN, PALETTE_OFFLINE_DROPPED, PALETTE_PROJECT_CHANGED, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
 import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
 import {
@@ -49,6 +51,9 @@ import { fileDropNoteStale, watchFileDropNotes } from './fileDropNotes';
 import { NO_PREVIEW, uploadingLabel, uploadProjectChangedLine } from '../../lib/uploadNotice';
 import { previewSize } from '../../lib/previewSize';
 import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -115,6 +120,15 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
   const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
+  // PR #204 round 10 (GM r15, r17 items 1 and 5): a universal node's model picker and Fetch
+  // Schema set the model through POST /api/graph/node/{id}/model, and a favorite is PUT
+  // /api/settings, both the person's alone. The pickers lock as one group with one line; the
+  // star has its own.
+  const modelLock = usePersonLock('change the model');
+  // Replicate's Fetch Schema has its own line (GM, 2026-11-05): the Model ID field stays
+  // editable like any param, so only the fetch is the person's.
+  const schemaLock = usePersonLock('fetch the schema');
+  const favoriteLock = usePersonLock('save favorites');
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const visible = embedded ? selectedNodeId !== null : panelVisible;
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
@@ -190,6 +204,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  const shownFavoriteError = useOfflineFirstBecause(favoriteError);
 
   // Load favorites from settings
   useEffect(() => {
@@ -527,7 +544,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
       (uploaded) => {
         uploadNames.delete(runKey);
         if (!uploaded.ok) {
-          useGraphStore.getState().notify(failureMessage(uploaded.error, heading), 'error');
+          // The error rides along so a refusal only for not being the person clears on the promote.
+          useGraphStore.getState().notify(failureMessage(uploaded.error, heading), 'error', { error: uploaded.error });
           return '';
         }
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
@@ -703,10 +721,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
           type="text"
           placeholder={
             modelsLoading
-              ? 'Loading models...'
+              ? 'Loading models…'
               : modelLoadError
                 ? "Couldn't load the models."
-                : 'Search models...'
+                : 'Search models…'
           }
           value={modelSearch}
           onChange={(e) => setModelSearch(e.target.value)}
@@ -714,8 +732,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <select
           className="inspector__field"
           value={selectedModel}
-          disabled={readOnly} {...lock.mark}
+          disabled={readOnly} {...lock.mark} {...modelLock.control()}
           onChange={(e) => {
+            if (modelLock.locked) return;
             const selected = openRouterModels.find((m) => m.id === e.target.value);
             if (selected) {
               configureOpenRouterModel(activeNode.id, selected.id, selected);
@@ -729,9 +748,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </option>
           ))}
         </select>
+        <PersonLockLine lock={modelLock} place="control" />
         {modelLoadError && universalProvider === 'nous' && (
           <div className="inspector__model-error">
-            {modelLoadError}
+            <LineText text={modelLoadError} />
           </div>
         )}
         {selectedModel !== '' && (
@@ -744,17 +764,27 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   ? 'inspector__favorite-button inspector__favorite-button--active inspector__favorite-remove'
                   : 'inspector__favorite-button inspector__favorite-remove'
               }
-              title={isFavorite ? 'Remove favorite' : 'Add favorite'}
+              title={favoriteLock.locked ? undefined : isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
               aria-pressed={isFavorite}
-              disabled={readOnly} {...lock.mark}
+              disabled={readOnly} {...lock.mark} {...favoriteLock.control()}
               onClick={() => {
+                if (favoriteLock.locked) return;
                 const updated = isFavorite
                   ? favoriteIds.filter((modelId: string) => modelId !== selectedModel)
                   : [...favoriteIds, selectedModel];
                 const newFavorites = { ...favorites, [universalProvider]: updated };
+                const before = favorites;
                 setFavorites(newFavorites);
-                updateSettings({ favorites: newFavorites }).catch(() => undefined);
+                // Review of the sweep (GM r17 item 5): a refused save no longer drops silently. The
+                // star goes back and the line says why (the same rule as every other setting).
+                setFavoriteError(null);
+                updateSettings({ favorites: newFavorites }).catch((exc: unknown) => {
+                  setFavorites(before);
+                  const line = isPersonRefusal(exc) ? notConnectedBecause('save the favorite') : failureMessage(exc, 'Couldn’t save the favorite.');
+                  setFavoriteError(line);
+                  clearSetterOnPromote(exc, setFavoriteError, line, null); // clears-on-promote: inspector.favorite
+                });
               }}
             >
               <Star
@@ -768,6 +798,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </button>
           </div>
         )}
+        {selectedModel !== '' && <PersonLockLine lock={favoriteLock} place="control" />}
+        {shownFavoriteError && <div className="inspector__model-error" role="alert"><LineText text={shownFavoriteError} /></div>}
       </div>
     );
   }
@@ -1261,8 +1293,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
             disabled={schemaLoading || !activeNodeData.params.model_id || readOnly}
-            {...lock.mark}
+            {...lock.mark} {...schemaLock.control()}
             onClick={async () => {
+              if (schemaLock.locked) return;
               const modelId = String(activeNodeData.params.model_id ?? '');
               if (!modelId.includes('/')) return;
               const [owner, name] = modelId.split('/', 2);
@@ -1281,9 +1314,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-hidden="true"
               focusable="false"
             />
-            <span>{schemaLoading ? 'Fetching...' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
+            <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
           </button>
         )}
+        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={schemaLock} place="control" />}
       </div>
     );
   }

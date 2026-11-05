@@ -5,6 +5,7 @@ import { requestReview } from '../store/assetProposalReviewRequest';
 import { openWorkspace } from './goToCanvas';
 import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
 import { writtenLine } from './errorCopy';
+import { COMMONS_OFF_REVIEW_LINE, commonsOffNow } from './commonsOff';
 
 /**
  * Review on an asset proposal's Update (Justin's Q92 a): take the person to
@@ -26,8 +27,10 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   // another of its sections, where unsaved labels keep.
   if (kind !== 'commons') refuseWhileCommonsUnsaved();
   const ui = useUIStore.getState();
-  if (kind === 'commons' && !ui.commonsEnabled) {
-    throw writtenLine('Turn on the Commons in Settings to review this proposal.');
+  // Round 18h (GM r37): a tab that loaded with the Commons off, or one whose Commons calls since
+  // heard it is off (lib/commonsOff: a restart without it, live check), says why and how.
+  if (kind === 'commons' && (!ui.commonsEnabled || commonsOffNow())) {
+    throw writtenLine(COMMONS_OFF_REVIEW_LINE);
   }
   requestReview({ kind, targetId });
   if (kind === 'project') {

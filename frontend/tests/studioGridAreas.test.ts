@@ -76,9 +76,18 @@ const STUDIOS: Studio[] = [
   },
   {
     name: 'Commons', root: 'commons-view commons-scope',
-    owners: ['styles/commons.css'], component: ['components/commons/CommonsView.tsx', 'components/commons/CommonsDetail.tsx', 'components/commons/CommonsFilters.tsx'],
+    // CommonsPageLines renders the messages row (PR #204: the page's lines and Add's line).
+    owners: ['styles/commons.css'], component: ['components/commons/CommonsView.tsx', 'components/commons/CommonsDetail.tsx', 'components/commons/CommonsFilters.tsx',
+      'components/commons/CommonsPageLines.tsx'],
     children: [header('commons-toolbar'), offline, { tag: 'div', cls: 'commons-messages' }, { tag: 'section', cls: 'commons-candidates' },
       { tag: 'aside', cls: 'commons-filters' }, { tag: 'main', cls: 'commons-main' }],
+  },
+  {
+    // PR #204 round 18d (GM r31 layout M): the Commons turned off, mid-visit (CommonsView) or on a
+    // tab opened on it (CommonsOffView): the header, the offline row and the one line.
+    name: 'Commons turned off', root: 'commons-view commons-scope',
+    owners: ['styles/commons.css'], component: ['components/commons/CommonsOffView.tsx', 'components/commons/CommonsView.tsx'],
+    children: [header('commons-toolbar'), offline, { tag: 'div', cls: 'commons-messages' }],
   },
   {
     name: 'Commons with a reference open', root: 'commons-view commons-scope commons-view--detail',
@@ -341,7 +350,10 @@ describe('every studio names its offline row and every child in its own template
           expect(text, studio.name).toMatch(/<WorkspaceHeader|<SafeHeader/);
           expect(source('components/StudioOfflineRow.tsx')).toMatch(/className="studio-offline-row"/);
         } else {
-          expect(text, `${studio.name}: ${own}`).toContain(own);
+          // Round 17 (review 13 NIT-2): the class as a whole token, so `commons-messages` isn't
+          // found inside `commons-messages__lock-line` once the row's own class is gone.
+          const token = new RegExp(`(?<![\\w-])${own.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`);
+          expect(text, `${studio.name}: ${own}`).toMatch(token);
         }
       }
     }
@@ -722,6 +734,19 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(selectorSpecificity('body.s .v:not(.v--board) > .c')).toEqual([0, 4, 1]);
     expect(selectorSpecificity('html body .v.v--board')).toEqual([0, 2, 2]);
     expect(selectorSpecificity('#id :is(.a, #b) p::before')).toEqual([2, 0, 2]);
+    // Round 17 (review 13 NIT-2), each worked by hand from Selectors Level 4, section 16:
+    // a one-colon pseudo-element is a pseudo-element: a (type) + :before (pseudo-element) = (0,0,2).
+    expect(selectorSpecificity('a:before')).toEqual([0, 0, 2]);
+    expect(selectorSpecificity('p:first-line')).toEqual([0, 0, 2]);
+    expect(selectorSpecificity('.a:after')).toEqual([0, 1, 1]);
+    // :nth-child(An+B of S) is the pseudo-class plus S's most specific: li (0,0,1) + :nth-child
+    // (0,1,0) + max(.x (0,1,0), #y (1,0,0)) = (1,1,1).
+    expect(selectorSpecificity('li:nth-child(2 of .x, #y)')).toEqual([1, 1, 1]);
+    expect(selectorSpecificity('li:nth-last-child(odd of .a.b)')).toEqual([0, 3, 1]);
+    // Without `of`, only the pseudo-class: (0,1,1).
+    expect(selectorSpecificity('li:nth-child(2n+1)')).toEqual([0, 1, 1]);
+    // The forms review 13 found right stay right.
+    expect(selectorSpecificity(':is(:where(#z),.q) span')).toEqual([0, 1, 1]);
   });
 
   it('indexes each rule under a class its subject requires, and finds the same rules as a full scan', () => {

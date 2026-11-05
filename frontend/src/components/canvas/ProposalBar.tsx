@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import {
-  PROPOSAL_GATE_COPY,
   acceptLabel,
   changeCountLabel,
   countdown,
@@ -20,7 +19,9 @@ import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
-import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { LineText } from '../LineText';
 import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD_ATTR, SHRINK_NAME_ATTR } from '../../lib/noticeStackPlace';
 import { useGraphStore } from '../../store/graphStore';
 import { canvasFocusTarget } from '../../lib/noticeFocus';
@@ -160,7 +161,13 @@ export function ProposalBar() {
   // GM r30 item 7: while this tab isn't connected as the person (the hold the
   // server's demote sets and its promote clears, lib/personSession), Accept
   // and Reject wait, disabled with their reasons; Show still works.
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
+  // GM, #204 r5 item 2: one state, held or not answered yet since load (useTabHeld). Before
+  // the socket's first answer the lock keeps its own look for 150 ms (gatePending), so a
+  // normal load never greys: aria-disabled, no reason, a click does nothing.
+  // PR #204 round 10 (GM r15, r17 item 2): through the one lock (components/PersonLock):
+  // aria-disabled, no tooltip, one line under both buttons, as the Updates rows say it.
+  const gate = usePersonLock('review this');
+  const gateHeld = gate.locked;
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -504,7 +511,7 @@ export function ProposalBar() {
                 </div>
               )}
               {errorLeave.shown && (
-                <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
+                <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
               )}
             </div>
           </div>
@@ -524,10 +531,10 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button"
-              {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
-                title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
+              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...gate.control()}
               onClick={(event) => {
-                if (!settled()) return;
+                if (gateHeld || !settled()) return;
                 byKeyboard(event, 'reject');
                 void reject(current.view.id);
               }}
@@ -539,10 +546,10 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button proposal-bar__button--primary"
-              {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
-                title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
+              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...gate.control()}
               onClick={(event) => {
-                if (!settled()) return;
+                if (gateHeld || !settled()) return;
                 byKeyboard(event, 'accept');
                 void accept(current.view.id);
               }}
@@ -551,6 +558,7 @@ export function ProposalBar() {
             </button>
           </span>
         </div>
+        <PersonLockLine lock={gate} place="control" className="proposal-bar__held-line" />
       </div>
     </InNoticeRegion>
   );

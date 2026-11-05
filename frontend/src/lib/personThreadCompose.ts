@@ -7,7 +7,9 @@
 import { apiRequest } from './apiRequest';
 import { RequestFailedError, failureMessage } from './errorCopy';
 import { MESSAGE_MAX, mergeRows, sanitizeRow, type ThreadRow } from './personThread';
-import { usePersonThreadStore, type PendingSend } from '../store/personThreadStore';
+import { usePersonThreadStore, type PendingSend, type SendFailureState } from '../store/personThreadStore';
+import { clearLineOnPromote } from './clearsOnPromote';
+import { personUnconfirmed } from './personSession';
 
 /** The heading a failed send is read under (apiRequest's, failureMessage's). */
 export const SEND_HEADING = "Couldn’t send your message.";
@@ -89,6 +91,9 @@ export function setDraft(text: string, selectedIds?: () => string[]): void {
 /** Sends the draft to a listener: one send in flight; a failure brings the
  * draft back (r50: kept across failures), unless another was begun. */
 export async function sendMessage(to: string): Promise<boolean> {
+  // Not connected as the person (or not yet known): nothing goes and the draft stays, as
+  // agentQuestionsStore.send does. The box locks its button the same way; this is the store's own guard.
+  if (personUnconfirmed()) return false;
   const state = usePersonThreadStore.getState();
   if (state.pending) return false;
   const text = state.draft.trim();
@@ -101,12 +106,16 @@ export async function sendMessage(to: string): Promise<boolean> {
     row = await postMessage({ text, to, nodeIds: pending.nodeIds, clientId });
   } catch (error) {
     const kind = sendFailure(error);
+    const failure: SendFailureState = { kind, line: kind === 'other' ? otherFailureLine(error) : null, clientId, text, to };
     usePersonThreadStore.setState((current) => ({
       pending: null,
-      failure: { kind, line: kind === 'other' ? otherFailureLine(error) : null, clientId, text, to },
+      failure,
       draft: current.draft.trim() ? current.draft : text,
       contextIds: current.draft.trim() ? current.contextIds : pending.nodeIds,
     }));
+    // GM, #204 r3: a refusal only for not being connected as the person goes on the promote; the draft stays.
+    clearLineOnPromote(error, () => usePersonThreadStore.getState().failure, failure, // clears-on-promote: thread.send
+      () => usePersonThreadStore.setState({ failure: null }));
     return false;
   }
   const wait = sendingSettleDelay(pending.startedAt, now());

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { InNoticeRegion } from '../InNoticeRegion';
 import type { LeaveProps } from '../../lib/noticeLeave';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 /** How long the toast stays up while the pointer and focus are elsewhere. */
 export const BOARD_TOAST_MS = 6000;
@@ -32,6 +33,8 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   leave?: LeaveProps;
 }) {
   const [held, setHeld] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('board');
   const dismissRef = useRef(onDismiss);
   useEffect(() => { dismissRef.current = onDismiss; }, [onDismiss]);
 
@@ -42,8 +45,8 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   // the toast after holding it gives it a fresh BOARD_TOAST_MS, as before.
   const wasHeld = useRef(false);
   useEffect(() => {
-    if (held) {
-      // Held, the old deadline is void: a remount meanwhile (the view
+    if (held || waiting) {
+      // Held (or waiting behind a capped popover, GM r13 2), the old deadline is void: a remount meanwhile (the view
       // switched under the pointer) starts a fresh BOARD_TOAST_MS too.
       wasHeld.current = true;
       deadlines.delete(toast);
@@ -58,7 +61,7 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
     wasHeld.current = false;
     const timer = window.setTimeout(() => dismissRef.current(), Math.max(0, until - now));
     return () => window.clearTimeout(timer);
-  }, [held, toast]);
+  }, [held, waiting, toast]);
 
   return (
     <InNoticeRegion slot="board">

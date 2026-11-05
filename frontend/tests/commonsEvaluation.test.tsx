@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { withFocusFixup } from './helpers/focusFixup';
+import { lockPlacementProblems } from '../src/lib/lockPlacement';
 import { CommonsEvaluation } from '../src/components/commons/CommonsEvaluation';
 import { evaluationComplete, type EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import { CommonsRequestError } from '../src/lib/commonsRequestError';
@@ -12,6 +14,7 @@ const batch = (): EvaluationBatch => ({ revision: 0, state: 'open', denominator:
   fields: { type_style: ['none'] }, axes: ['quiet_loud'], roles: ['accent'], keywords: ['geometric_type'], excluded_count: 0, assisted_reviews: 0,
   items: [{ position: 0, image_sha256: 'fixture-image', width: 40, height: 32, accent_locked: false, labels: null }] });
 
+const fixup = withFocusFixup();
 beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockResolvedValue(batch()); api.image.mockResolvedValue(new Blob(['fixture']));
@@ -51,7 +54,49 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   fireEvent.click(screen.getByText('Save labels'));
   await screen.findByRole('alert');
   expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
-  expect((screen.getByText('Review batch · 0 / 15') as HTMLButtonElement).disabled).toBe(true);
+  // Round 18n (GM r44 1, r45 Q1): unsaved labels lock the toggle in place, its own line right under it.
+  const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
+  act(() => toggle.focus());
+  act(() => fixup.current().flush());
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.getAttribute('aria-disabled')).toBe('true');
+  const line = document.getElementById(toggle.getAttribute('aria-describedby')!)!;
+  expect(line.textContent).toBe('Save or discard your label changes to review the batch.');
+  expect(toggle.nextElementSibling).toBe(line);
+  expect(lockPlacementProblems()).toEqual([]);
+  expect(document.activeElement).toBe(toggle);
+  fireEvent.click(toggle);
+  expect(screen.queryByText('Close without sealing…')).toBeNull();
+  expect(screen.getByText('Save labels')).toBeTruthy();
+  // The form's status line says what the reference buttons wait for, in the same form.
+  expect(screen.getByText('Save or discard your label changes to change the reference.')).toBeTruthy();
+});
+
+it('round 18n: Discard frees the toggle and its line goes; a save in flight disables it natively, with no line', async () => {
+  const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
+  api.get.mockResolvedValue(value);
+  let finish: (next: EvaluationBatch) => void = () => {};
+  api.labels.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  render(<CommonsEvaluation />);
+  await screen.findByText('Set neutral');
+  const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
+  fireEvent.click(screen.getByText('Set neutral'));
+  expect(toggle.getAttribute('aria-disabled')).toBe('true');
+  fireEvent.click(screen.getByText('Discard unsaved changes'));
+  await waitFor(() => expect(toggle.getAttribute('aria-disabled')).toBeNull());
+  expect(screen.queryByText('Save or discard your label changes to review the batch.')).toBeNull();
+  fireEvent.click(await screen.findByText('Set neutral'));
+  expect(toggle.getAttribute('aria-disabled')).toBe('true');
+  fireEvent.click(screen.getByText('Save labels'));
+  expect(toggle.disabled).toBe(true);
+  expect(toggle.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Save or discard your label changes to review the batch.')).toBeNull();
+  const saved = structuredClone(value); saved.revision = 1;
+  await act(async () => { finish(saved); });
+  await waitFor(() => expect(toggle.disabled).toBe(false));
+  expect(toggle.getAttribute('aria-disabled')).toBeNull();
+  fireEvent.click(toggle);
+  expect(screen.getByText('Close without sealing…')).toBeTruthy();
 });
 
 // GM (commons-leave): "UNSAVED" beside Save gives the state, so the status
@@ -65,7 +110,7 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   render(<CommonsEvaluation onWork={(next) => { work = next; }} />);
   await screen.findByText('Set neutral');
   fireEvent.click(screen.getByText('Set neutral'));
-  expect(screen.getByText('Save before changing reference')).toBeTruthy();
+  expect(screen.getByText('Save or discard your label changes to change the reference.')).toBeTruthy();
   expect(screen.queryByText(/Unsaved changes ·/)).toBeNull();
   await waitFor(() => expect(work?.unsaved).toBe(true));
 
@@ -82,7 +127,7 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   // (typeerror, 2026-10-24): GM's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again, or reload if it keeps happening.',
-    message: "Couldn't save your labels. Try again, or reload if it keeps happening.", retry: true });
+    message: "Couldn’t save your labels. Try again, or reload if it keeps happening.", retry: true });
   // GM: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));

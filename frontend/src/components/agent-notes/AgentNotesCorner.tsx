@@ -33,12 +33,14 @@ import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import type { RosterNext } from './agentRosterModel';
-import { answerableQuestions, needsYouCount, openViews } from './agentNeedsYou';
+import { answerableQuestions, heldAsks, needsYouCount, openViews } from './agentNeedsYou';
+import { holdsAskIn } from './heldLock';
 import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
 import './agentNotes.css';
 import { failureMessage, writtenLine } from '../../lib/errorCopy';
+import { clearLineOnPromote } from '../../lib/clearsOnPromote';
 import { reportPersonRequired } from '../../lib/personSession';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { UPDATES_OPEN_EVENT } from '../../lib/personThread';
@@ -59,12 +61,15 @@ function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
   const sets = useAgentQuestionsStore((s) => s.sets);
   const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
   const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  const notes = useAgentNotesStore((s) => selectCanvasList(s).notes);
   return useMemo(() => (enabled ? needsYouCount({
     projectId,
     questions: answerableQuestions(sets),
     canvasProposals: openViews(canvasProposals),
     assetProposals: openViews(assetProposals),
-  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals]);
+    // GM, 2026-10-29: what this tab knows only from Updates counts too, so a promote changes nothing here.
+    held: heldAsks(notes ?? [], holdsAskIn(sets, canvasProposals, assetProposals)),
+  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals, notes]);
 }
 
 /** The chip's name (GM's review of PR #193): the unread count, then how many agents need the person. */
@@ -668,7 +673,11 @@ export function AgentNotesCorner({ sections, agents = null }: {
    * card, or when the list closed meanwhile.
    */
   function fail(failure: unknown) {
-    useAgentNotesStore.setState({ error: failureMessage(failure, "Couldn't update the note.") });
+    const line = failureMessage(failure, "Couldn’t update the note.");
+    useAgentNotesStore.setState({ error: line });
+    // GM, #204 r3: refused only because this tab isn't connected as you: gone on the promote.
+    clearLineOnPromote(failure, () => useAgentNotesStore.getState().error, line, // clears-on-promote: notes.corner
+      () => useAgentNotesStore.setState({ error: null }));
     if (!openRef.current) openListRef.current();
   }
 
@@ -925,6 +934,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
           listRef={listRef}
           sections={sections}
           newCount={newCount}
+          unread={unread}
           now={now}
           error={error}
           onClose={closeList}
@@ -1069,10 +1079,8 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
         // A reply saved in another project's thread (GM r100.3): open that thread.
         if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId, action.op.replyId);
-        const proposals = useCanvasProposalsStore.getState();
-        const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
-        if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
-        if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
+        // GM r9 3: no Update decides a proposal from its row any more (an old Accept or
+        // Reject is read as Review, lib/agentNotes); anything else can't run here.
         throw writtenLine(`“${action.label}” can’t run from here.`);
       },
       // GM r108 c: Open on a reply's Update names whose reply and where.
@@ -1084,7 +1092,9 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
       },
       actionState: (action) => {
         // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
-        if (action.op.kind !== 'proposal.accept' && action.op.kind !== 'proposal.reject') return null;
+        // An old Update's Review (once Accept and Reject) has no such resolve: it greys as
+        // Expired when its proposal isn't waiting any more.
+        if (action.op.kind !== 'proposal.review' || action.op.legacy !== true) return null;
         const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
         return useCanvasProposalsStore.getState().proposals[id] ? null : 'Expired';
       },

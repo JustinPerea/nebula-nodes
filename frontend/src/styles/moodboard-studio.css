@@ -126,7 +126,7 @@ body.app-slava-restraint .moodboard-studio-toolbar__state--error,
 body.app-slava-restraint .moodboard-studio__notice--error,
 body.app-slava-restraint .moodboard-palette__empty--error,
 body.app-slava-restraint .moodboard-rail__empty--error {
-  color: #e0796b;
+  color: var(--line-warning, #e0796b);
 }
 
 /* The open board is another project's: say where, above the list. */
@@ -196,7 +196,7 @@ body.app-slava-restraint .moodboard-studio-view__board-notices > .moodboard-stud
 }
 
 body.app-slava-restraint .moodboard-studio__notice--warn {
-  color: #d9a441;
+  color: var(--line-warning, #d9a441);
 }
 
 /* GM r12 1 (PR #210): a board's send that failed on reconnect lost nothing

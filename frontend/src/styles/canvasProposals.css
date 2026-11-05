@@ -734,7 +734,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 /* 5. The inline error, above the footer. */
 .proposal-bar__error {
   margin: 8px 0 0;
-  color: #ff8a80;
+  color: var(--line-warning, #ff8a80);
   /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
   overflow: clip;
   interpolate-size: allow-keywords;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isBackendOffline, subscribeBackendConnection } from '../lib/backendConnection';
 import { useOfflinePulse } from '../hooks/useOfflinePulse';
 import { OFFLINE_LINE } from './BackendConnectionStatus';
+import { noteOfflineRowShown, STUDIO_OFFLINE_LINE_ID } from '../lib/useBackendOffline';
 
 /** How long Nebula is offline before a studio's row opens (GM, PR #198 r2:
  * "keep the existing offline delay"). The app had none: the canvas's banner
@@ -61,6 +62,12 @@ export function StudioOfflineRow() {
     };
   }, []);
 
+  // Round 18l (review 17 LOW-1): a control locked offline points at the line only while it shows.
+  useEffect(() => {
+    noteOfflineRowShown(open);
+    return () => noteOfflineRowShown(false);
+  }, [open]);
+
   useEffect(() => {
     if (!closing) return;
     const timer = window.setTimeout(() => setClosing(false), CLOSE_MS);
@@ -72,7 +79,7 @@ export function StudioOfflineRow() {
       <div className="studio-offline-row__clip">
         <div className="studio-offline-row__pad">
           {(open || closing) && (
-            <div ref={pill} className="studio-offline-row__pill" role={open ? 'status' : undefined}
+            <div ref={pill} id={STUDIO_OFFLINE_LINE_ID} className="studio-offline-row__pill" role={open ? 'status' : undefined}
               aria-live={open ? 'polite' : undefined} aria-hidden={open ? undefined : true}
               data-pulse-seq={pulse?.seq} onAnimationEnd={() => pill.current?.removeAttribute('data-pulse')}>
               {OFFLINE_LINE}

@@ -9,6 +9,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { startRemotionRender } from '../../lib/renderJobs';
 import { useRenderJob } from '../../hooks/useRenderJob';
 import { offlineAction } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
 
 interface RemotionEditorToolbarProps {
   remotionNodeId: string;
@@ -173,7 +174,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
               </button>
             )}
             {(renderJob.error || renderJob.job?.error) && (
-              <div className="final-export__error" role="alert">{renderJob.error || renderJob.job?.error}</div>
+              <div className="final-export__error" role="alert"><LineText text={renderJob.error || renderJob.job?.error} /></div>
             )}
             {renderJob.job?.status === 'cancelled' && (
               <div className="final-export__status">Export cancelled.</div>

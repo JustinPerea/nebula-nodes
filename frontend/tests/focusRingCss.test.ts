@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { tabIndexSites } from './helpers/tabIndexSites';
 
 // GM - Design (sf, after #157): "Yes, fix the focus ring at the token,
 // app-wide. But make it a light neutral, not --sr-accent. Orange already means
@@ -234,6 +235,10 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // PR #204 round 18g (GM r36): a heading or a line focused from code (see the describe below).
+  'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
+  // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
+  'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:focus-visible': 'focused only from code: no ring',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
   // The proposal card's scrolling body: its fade mask would clip its own ring,
@@ -383,5 +388,164 @@ describe('the focus ring clears the Updates chip\'s unread ring', () => {
     const ringed = find('.agent-notes-chip--ringed:focus-visible');
     expect(ringed, 'a ringed chip moves its focus ring out').toBeTruthy();
     expect(px(decl(ringed!, 'outline-offset'))).toBeGreaterThanOrEqual(outer + 1);
+  });
+});
+
+// ── PR #204 round 18g (GM r36): focus from code draws no ring ────────────────
+// A handover (a demote, going offline, the Commons turning off, Try again's line going, the off
+// view opening into the Commons) moves focus to a heading, or to the line that says why, so a
+// screen reader announces it. A person never Tabs there (tabindex -1), so the ring would only mark
+// where code put focus. One rule in slava-restraint.css takes it off, app-wide; everything a person
+// tabs to keeps its ring.
+
+const CODE_FOCUS_RULE = 'body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible';
+/** What the rule covers: a heading, or a line (a focus line, a line box, a status or alert line). */
+const CODE_FOCUS_TARGET = /(^|[\s>+~(,])h[1-6](?![\w-])|\[data-focus-line\]|\[data-line-box\]|\[role="(status|alert)"\]|__title\b|-heading\b|\.line-box\b|\.person-lock-line\b/;
+
+describe('a heading or a line focused from code draws no ring (GM r36)', () => {
+  it('one rule takes the ring off them, important, after the baseline ring', () => {
+    const rule = rules.find((r) => r.selectors.includes(CODE_FOCUS_RULE));
+    expect(rule, 'the code-focus rule').toBeTruthy();
+    expect(rule!.file).toBe('styles/slava-restraint.css');
+    expect(rule!.selectors).toEqual([CODE_FOCUS_RULE]);
+    expect(decl(rule!, 'outline')).toBe('none');
+    // Important: no component's own ring can bring it back, whatever its specificity.
+    const raw = slava.slice(slava.indexOf(CODE_FOCUS_RULE));
+    expect(raw.slice(0, raw.indexOf('}'))).toMatch(/outline:\s*none\s*!important;/);
+    // Only tabindex -1: a heading or a line a person can Tab to keeps its ring.
+    expect(CODE_FOCUS_RULE).toContain('[tabindex="-1"]:focus-visible');
+    const base = slava.indexOf(':where(body.app-slava-restraint :focus-visible)');
+    expect(base).toBeGreaterThan(-1);
+    expect(slava.indexOf(CODE_FOCUS_RULE)).toBeGreaterThan(base);
+  });
+
+  it('no other rule draws a ring on a heading or a line when it takes focus', () => {
+    const bad: string[] = [];
+    for (const r of rules.filter(live)) {
+      if (r.selectors.includes(CODE_FOCUS_RULE)) continue;
+      for (const sel of focusSelectors(r)) {
+        // The focused element: the compound that carries :focus (not a :has() or a parent).
+        const focused = sel.split(/\s+|>|\+|~/).filter((part) => /:focus/.test(part) && !/:has\(/.test(part));
+        if (!focused.some((part) => CODE_FOCUS_TARGET.test(` ${part}`))) continue;
+        const outline = decl(r, 'outline');
+        if ((outline && !/^(none|0)$/.test(outline)) || (decl(r, 'box-shadow') ?? 'none') !== 'none') bad.push(`${where(r)} :: ${sel}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  // Every element the app gives tabindex -1 is either a heading or a line (the rule covers it and
+  // code focuses it), a roving tab stop (a control moved to with the arrow keys), or listed here
+  // with why it keeps the ring. Round 18h (review 16 focus LOW-1): counted per file, so a new
+  // element in a listed file still has to be placed; found from the syntax tree in .ts and .tsx
+  // (helpers/tabIndexSites), whatever the spelling.
+  const KEEPS_RING: Record<string, { count: number; why: string }> = {
+    'components/create-studio/ResultCard.tsx': { count: 1, why: 'a button: a control keeps its ring' },
+    'components/create-studio/ResultComparison.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (:focus-visible, GM r37)' },
+    'components/create-studio/Lightbox.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (GM r37)' },
+    'components/create-studio/ModelPicker.tsx': { count: 1, why: 'a picker panel focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/SceneUnsavedMark.tsx': { count: 1, why: 'a popover focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/ProviderSwitcher.tsx': { count: 3, why: 'menu items, moved through with the arrow keys' },
+    'components/nodes/MeshPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/WorldPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
+    'components/commons/CommonsLeavePopover.tsx': { count: 1, why: 'an alertdialog focused on open: a ring only from the keyboard (GM r37)' },
+    'components/commons/CommonsView.tsx': { count: 1, why: 'a section tab folded into More: a control keeps its ring' },
+    'components/projects/ProjectSizePanel.tsx': { count: 1, why: 'a panel focused on open: a ring only from the keyboard (GM r37)' },
+    'components/panels/ChatModelPicker.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (GM r37)' },
+    'components/panels/settings/ServiceAccountInput.tsx': { count: 1, why: 'a hidden file input, never focused' },
+    'components/panels/settings/ProviderRow.tsx': { count: 1, why: 'a provider row a setup link moves focus to: keeps its :focus-visible ring (GM r38 3d)' },
+    'components/canvas/ProposalBar.tsx': { count: 2, why: 'Review focuses the card, and a keyboard decision focuses the Undo notice it raised: the neutral ring from the keyboard (#161, GM r57)' },
+    'components/moodboard-studio/BoardCanvas.tsx': { count: 1, why: 'the board itself, where focus rests when no tile can take it: the token ring from the keyboard (moodboard-board.css, GM #210 r4)' },
+    'components/moodboard-studio/MoodboardStudioView.tsx': { count: 1, why: "the screen's <main>, focused from code with focusVisible: false, so it draws no ring" },
+    'lib/threadOpen.ts': { count: 1, why: 'a thread row an Update opened, focused from code: its ring from the keyboard, and the tabindex goes on its blur (messageBox.css [data-focus-target])' },
+    'components/agent-notes/AgentNotesList.tsx': { count: 1, why: 'the Updates list, focused on open: a ring only from the keyboard (GM r37)' },
+    'components/onboarding/OnboardingOverlay.tsx': { count: 1, why: 'the onboarding panel, focused on open: a ring only from the keyboard (GM r37)' },
+    'components/proposals/AssetProposalStrip.tsx': { count: 2, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },
+    'components/asset-move/AssetMoveMenu.tsx': { count: 1, why: 'menu items, moved through with the arrow keys' },
+    'components/panels/Inspector.tsx': { count: 1, why: 'the palette\'s "Extracting colors…" line, focused from code: its own :focus rule draws no ring (#208, panels.css)' },
+    'lib/noticeLeave.ts': { count: 1, why: 'a notice with no ×, or the start of the page: a notice is a status or alert line; the start draws no ring (data-focus-start, GM r38 3d)' },
+  };
+
+  /** The code-focus rule's :is() list, read from the sheet: what it covers is what the scan
+   * counts as covered, so the two can't drift (round 18h, review 16 focus LOW-1 R9/R10). */
+  const coveredBy = (): Array<(tag: string, element: string) => boolean> => {
+    const rule = rules.find((r) => r.file === 'styles/slava-restraint.css'
+      && r.selectors.some((sel) => /^body\.app-slava-restraint :is\(.*\)\[tabindex="-1"\]:focus-visible$/.test(sel)));
+    const sel = rule!.selectors[0];
+    const list = splitTop(sel.slice(sel.indexOf(':is(') + 4, sel.lastIndexOf(')[tabindex')), ',');
+    const attrs = readFileSync(join(SRC, 'lib/lineAttrs.ts'), 'utf8');
+    return list.map((item) => {
+      const tag = /^h[1-6]$/.exec(item)?.[0];
+      if (tag) return (name: string) => name === tag;
+      const role = /^\[role="(\w+)"\]$/.exec(item)?.[1];
+      if (role) return (_: string, element: string) => new RegExp(`role="${role}"|role=\\{[^}]*'${role}'`).test(element);
+      const attr = /^\[([\w-]+)\]$/.exec(item)?.[1];
+      expect(attr, `a selector the scan can read: ${item}`).toBeTruthy();
+      // The attribute, or the lineAttrs constant that names it.
+      const constant = new RegExp(`export const (\\w+) = '${attr}'`).exec(attrs)?.[1];
+      return (_: string, element: string) => element.includes(`${attr}=`) || (constant !== undefined && element.includes(constant));
+    });
+  };
+
+  it('every tabindex -1 in the app is a covered heading or line, a roving stop, or keeps its ring for a reason', () => {
+    const source = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return source(path);
+      return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+    });
+    const covers = coveredBy();
+    const kept: Record<string, number> = {};
+    let covered = 0;
+    for (const path of source(SRC)) {
+      const file = relative(SRC, path);
+      for (const site of tabIndexSites(readFileSync(path, 'utf8'), path)) {
+        if (covers.some((cover) => cover(site.tag, site.element))) { covered += 1; continue; }
+        if (site.roving) continue;
+        kept[file] = (kept[file] ?? 0) + 1;
+      }
+    }
+    expect(kept).toEqual(Object.fromEntries(Object.entries(KEEPS_RING).map(([file, { count }]) => [file, count])));
+    // The page heading, the section headings, the Commons and person-lock lines, the line boxes.
+    expect(covered).toBeGreaterThanOrEqual(10);
+  });
+
+  it('the scan finds every spelling of tabindex -1, and tells a roving stop apart', () => {
+    const one = (code: string, name = 'a.tsx') => tabIndexSites(code, name);
+    expect(one('const a = <div tabIndex={-1} />;')).toHaveLength(1);
+    expect(one('const a = <div tabIndex="-1" />;')).toHaveLength(1);
+    expect(one('const a = <div tabIndex={ -1 } />;')).toHaveLength(1);
+    expect(one('const a = <div tabIndex={open ? -1 : undefined} />;')[0]).toMatchObject({ tag: 'div', roving: false });
+    expect(one('const a = <button tabIndex={on ? 0 : -1} />;')[0]).toMatchObject({ tag: 'button', roving: true });
+    expect(one("const a = <p {...(x ? { tabIndex: -1, 'data-focus-line': '' } : {})} />;")[0].tag).toBe('p');
+    expect(one("el.setAttribute('tabindex', '-1');", 'a.ts')).toHaveLength(1);
+    expect(one('el.tabIndex = -1;', 'a.ts')).toHaveLength(1);
+    expect(one('const a = <div tabIndex={0} />; const b = x - 1;')).toHaveLength(0);
+  });
+
+  it('the start of the page a leaving notice hands focus to draws no ring', () => {
+    const rule = rules.find((r) => r.selectors.includes('body.app-slava-restraint [data-focus-start]:focus-visible'));
+    expect(rule, 'the focus-start rule').toBeTruthy();
+    const raw = slava.slice(slava.indexOf('body.app-slava-restraint [data-focus-start]:focus-visible'));
+    expect(raw.slice(0, raw.indexOf('}'))).toMatch(/outline:\s*none\s*!important;/);
+  });
+
+  it('the Try again ring hugs the words, and a gap as wide as the ring keeps it off the full stop', () => {
+    const base = rules.find((r) => r.selectors.includes('body.app-slava-restraint .commons-retry') && decl(r, 'margin-inline-end'));
+    const ring = rules.find((r) => r.selectors.includes('body.app-slava-restraint .commons-retry:focus-visible'));
+    expect(ring && decl(ring, 'outline-offset')).toBe('0');
+    // The panes' own 3px offset (commons-evaluation.css) is outranked there too.
+    expect(ring!.selectors).toContain('body.app-slava-restraint .commons-view .commons-evaluation .commons-retry:focus-visible');
+    const width = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(slava.slice(slava.indexOf('--sr-focus-outline:')))![1]);
+    expect(Number.parseFloat(decl(base!, 'margin-inline-end') ?? '0')).toBeGreaterThanOrEqual(width);
+  });
+
+  it('the handover only ever focuses a heading or a line', () => {
+    const hook = readFileSync(join(SRC, 'hooks/useFocusHandover.ts'), 'utf8');
+    // Its targets: the control come back (the person's own, ring kept), a line, or the heading.
+    // Round 18h: a line in its place, else the heading at once (never <body>).
+    expect(hook).toMatch(/const line = inPlace \|\| origin \? null : nearestLine\(was, scope\);/);
+    expect(hook).toMatch(/const head = heading\(\);/);
+    expect(hook.match(/\.focus\(/g)).toHaveLength(2);
+    expect(hook).toMatch(/const LINE = `\[\$\{FOCUS_LINE_ATTR\}\]`;/);
   });
 });

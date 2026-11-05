@@ -40,6 +40,9 @@ export function noteProbeAnswer(seq: number, next: BackendConnection): boolean {
   if (applied) {
     newestApplied = seq;
     noteBackendConnection(next);
+    const waiting = [...answerWaiters];
+    answerWaiters.clear();
+    for (const listener of waiting) listener(next === 'online');
   }
   for (const listener of [...probeAnswerListeners]) listener();
   return applied;
@@ -71,6 +74,16 @@ export function probeOffline(timeoutMs = 5_000): Promise<boolean> {
     timer = setTimeout(done, timeoutMs);
     requestHealthProbe();
   });
+}
+
+const answerWaiters = new Set<(online: boolean) => void>();
+
+/** Calls `listener` once with whether the backend is reachable, as soon as a health probe's
+ * answer has been applied: at once if one has, else on the first one (Justin, 2026-10-31: a
+ * person token is never dropped while Nebula is starting, before its health has settled). */
+export function afterHealthAnswer(listener: (online: boolean) => void): void {
+  if (newestApplied > 0) listener(connection === 'online');
+  else answerWaiters.add(listener);
 }
 
 export function isBackendOffline(): boolean {
@@ -311,6 +324,7 @@ export function resetBackendConnectionForTests(): void {
   connection = 'online';
   probesStarted = 0;
   newestApplied = 0;
+  answerWaiters.clear();
   lastPulseAt = Number.NEGATIVE_INFINITY;
   knownBootId = null;
   retiredBootIds.clear();

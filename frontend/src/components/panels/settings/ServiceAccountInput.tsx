@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type DragEvent } from 'react';
 import { readServiceAccount } from './rowHelpers';
+import { LineText } from '../../LineText';
 
 
 const MAX_KEY_FILE_BYTES = 64 * 1024;
@@ -73,8 +74,8 @@ export function ServiceAccountInput({ label, value, fileName, onChange, onSubmit
           )}
         </div>
       )}
-      {check && !check.ok && <p className="settings-row__error" role="alert">{check.error}</p>}
-      {fileError && <p className="settings-row__error" role="alert">{fileError}</p>}
+      {check && !check.ok && <p className="settings-row__error" role="alert"><LineText text={check.error} /></p>}
+      {fileError && <p className="settings-row__error" role="alert"><LineText text={fileError} /></p>}
       <div className="settings-sa__choices" id={hintId}>
         <button type="button" className="settings__button settings__button--ghost" data-provider-key={pasting ? undefined : 'GOOGLE_VERTEX_CREDENTIALS'}
           onClick={() => { setPasting(false); fileInput.current?.click(); }}>

@@ -238,6 +238,17 @@ describe('A: one source for the read-only state', () => {
     // PR #198's hook that hides a screen's load-failure notice offline: not a
     // canvas edit, so the lock has nothing to add (the #195 merge).
     'hooks/useOfflineHiddenNotice.ts',
+    // PR #204 round 14 (GM r23 3): offline comes first for not-connected lines and the general
+    // notice. They show nothing offline and edit nothing, so the canvas lock (which also covers
+    // following, when a lock line should still show) has nothing to add.
+    'components/PersonRequiredBanner.tsx',
+    // Round 18d (live LOW-1, GM r23 3): a Commons load line and the Commons-off line hide beside
+    // "Nebula is offline". They edit nothing.
+    'components/commons/CommonsErrorLine.tsx',
+    'components/commons/CommonsOffView.tsx',
+    'components/commons/useLockLineHold.ts',
+    'hooks/useOfflineFirstBecause.ts',
+    'hooks/usePersonLock.ts',
     'lib/canvasLock.ts',
     'lib/useBackendOffline.ts',
   ]);

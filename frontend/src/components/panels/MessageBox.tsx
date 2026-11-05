@@ -1,6 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
+import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { ScrollFade } from '../ScrollFade';
 import { AgentLogEntryRow } from './AgentLogEntryRow';
 import { OFFLINE_LINE_ID } from '../BackendConnectionStatus';
@@ -347,8 +350,14 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   const fromComposer = questions.length === 1 && questions[0].options.length === 0;
   const needsForm = !fromComposer && questions.some((question) => question.options.length === 0);
   const setId = row.questionId ?? '';
+  // PR #204 round 10 (GM r15, r17): answering is the person's alone (POST /api/questions/.../answer:
+  // require_person), so the options and Send answers lock as one group, with one line under them,
+  // on a tab that isn't connected as the person. The answers that go from the composer or the
+  // Agents panel's form lock where they are.
+  const sends = open && (oneClick || (!needsForm && !fromComposer));
+  const lock = usePersonLock('answer this', sends);
   function pick(questionId: string, option: string) {
-    if (!open || busy) return;
+    if (!open || busy || lock.locked) return;
     const store = useAgentQuestionsStore.getState();
     store.toggleChoice(setId, questionId, option);
     if (oneClick) void store.send(setId);
@@ -365,7 +374,7 @@ function QuestionRow({ row }: { row: ThreadRow }) {
               <div className="message-box__options">
                 {question.options.map((option) => (
                   <button key={option} type="button" className="message-box__option"
-                    aria-pressed={picked.includes(option)} aria-disabled={!open || busy || undefined}
+                    aria-pressed={picked.includes(option)} {...lock.control()} aria-disabled={!open || busy || lock.locked || undefined}
                     onClick={() => pick(question.id, option)}>
                     {option}
                   </button>
@@ -396,12 +405,13 @@ function QuestionRow({ row }: { row: ThreadRow }) {
         </button>
       )}
       {open && !oneClick && !needsForm && !fromComposer && (
-        <button type="button" className="message-box__show" aria-disabled={busy || undefined}
-          onClick={() => { if (!busy) void useAgentQuestionsStore.getState().send(setId); }}>
+        <button type="button" className="message-box__show" {...lock.control()} aria-disabled={busy || lock.locked || undefined}
+          onClick={() => { if (busy || lock.locked) return; void useAgentQuestionsStore.getState().send(setId); }}>
           Send answers
         </button>
       )}
-      {error && <p className="message-box__line message-box__line--failed">{error}</p>}
+      {sends && <PersonLockLine lock={lock} place="control" />}
+      {error && <p className="message-box__line message-box__line--failed"><LineText text={error} /></p>}
     </div>
   );
 }
@@ -892,6 +902,12 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   }, [answeringId]);
 
   const { offline } = useCanvasLock();
+  // PR #204 round 10 (GM r15, r17): sending a message (POST /api/canvas/thread/messages) and an
+  // answer (the question's answer route) are the person's alone. Typing stays live on a tab that
+  // isn't connected as the person; Send (and Try again) lock where they are, with the one line.
+  const sendLock = usePersonLock('send messages', !answeringNow);
+  const answerLock = usePersonLock('answer this', Boolean(answeringNow));
+  const lock = answeringNow ? answerLock : sendLock;
   const ready = state.kind === 'ready';
   // An answer goes to the question, not to a listener: only offline locks it.
   const live = answeringNow ? !offline : ready;
@@ -954,10 +970,11 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   function send() {
     if (!canSend) return;
     if (answeringNow) {
+      if (answerLock.locked) return;
       void sendAnswer(answeringNow);
       return;
     }
-    if (state.kind !== 'ready') return;
+    if (state.kind !== 'ready' || sendLock.locked) return;
     // GM r89.3: the first Enter after the chip went only says why (the line,
     // spoken); the next posts the words as a message.
     if (goneText && answerGone?.held) {
@@ -1026,17 +1043,20 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           onBlur={() => setFocused(false)}
         />
         {draft.trim() || focused || expanded ? (
-          <button type="button" className="message-box__send" aria-disabled={!canSend || undefined} onClick={send}>Send</button>
+          <button type="button" className="message-box__send" {...lock.control()} aria-disabled={!canSend || lock.locked || undefined}
+            onClick={send}>Send</button>
         ) : (
           <kbd className="message-box__key" aria-hidden="true">/</kbd>
         )}
       </div>
+      <PersonLockLine lock={lock} place="control" />
       {lineText && state.kind !== 'offline' && (
         <div className={`message-box__line${failureText && !lockLine ? ' message-box__line--failed' : ''}`}>
-          <span id={lineId}>{lineText}</span>
+          <span id={lineId}><LineText text={lineText} /></span>
           {state.kind === 'notConnected' && !answeringNow && <CopyCommand />}
           {!lockLine && failure?.kind === 'server' && (
-            <button type="button" className="message-box__show" aria-disabled={!canSend || undefined} onClick={send}>Try again</button>
+            <button type="button" className="message-box__show" {...lock.control()} aria-disabled={!canSend || lock.locked || undefined}
+              onClick={send}>Try again</button>
           )}
         </div>
       )}

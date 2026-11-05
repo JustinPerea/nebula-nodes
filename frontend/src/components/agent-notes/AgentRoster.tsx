@@ -6,7 +6,10 @@ import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
-import { answerableQuestions, openViews } from './agentNeedsYou';
+import { LineText } from '../LineText';
+import { selectCanvasList, useAgentNotesStore } from '../../store/agentNotesStore';
+import { answerableQuestions, heldAsks, openViews } from './agentNeedsYou';
+import { holdsAskIn, useLockPending, useTabHeld } from './heldLock';
 import {
   AGENTS_HEADING,
   buildRosterRows,
@@ -52,6 +55,8 @@ export function AgentRoster({
   const sets = useAgentQuestionsStore((s) => s.sets);
   const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
   const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  const notes = useAgentNotesStore((s) => selectCanvasList(s).notes);
+  const tabHeld = useTabHeld();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -110,9 +115,11 @@ export function AgentRoster({
       questions: answerableQuestions(sets),
       canvasProposals: openViews(canvasProposals),
       assetProposals: openViews(assetProposals),
+      held: heldAsks(notes ?? [], holdsAskIn(sets, canvasProposals, assetProposals)),
+      tabHeld,
       nodeLabel: (id) => byId.get(id) || null,
     });
-  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, named, labels]);
+  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, notes, named, labels, tabHeld]);
 
   // Opened with no agents around: the panel isn't there, so it isn't open.
   useLayoutEffect(() => {
@@ -190,7 +197,10 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   onOpen: (next: RosterNext, anchor: HTMLElement) => void;
 }) {
   const lineId = useId();
+  const lockId = useId();
   const needsYou = row.group === 'needsYou';
+  // GM r5 2a: before the socket's first answer, the lock's first moment keeps the row's look.
+  const pending = useLockPending(Boolean(row.locked));
   const content = (
     <>
       <AuthorDot author={{ kind: 'agent', name: row.agent.name, color: row.agent.color }} verified={row.agent.verified} />
@@ -198,18 +208,27 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
         <span className="agent-roster__name">{row.agent.name}</span>
         {needsYou && <span className="agent-roster__count">{row.countLine}</span>}
         {row.line && <span id={lineId} className="agent-roster__line" title={row.line}>{row.line}</span>}
+        {/* PR #204 round 10: a locked row's reason is a line, not a tooltip (the one lock's form). */}
+        {row.locked && !pending && (
+          <span id={lockId} className="agent-roster__line agent-roster__held-line"><LineText text={row.locked} /></span>
+        )}
       </span>
     </>
   );
   // A Working agent with no place on the canvas: a plain row, no tooltip.
   if (!row.tooltip || !row.ariaLabel) return <div className="agent-roster__row agent-roster__row--static">{content}</div>;
   const click = (event: MouseEvent<HTMLButtonElement>) => {
+    // GM, 2026-10-29: known only from its Update, the ask can't open here yet; the tooltip says why.
+    if (row.locked) return;
     if (row.next) onOpen(row.next, event.currentTarget);
     else if (row.flyTo) onFlyTo(row.flyTo, row.agent.color, event.currentTarget);
   };
   return (
-    <button type="button" className="agent-roster__row" data-group={row.group} title={row.tooltip}
-      aria-label={row.ariaLabel} aria-describedby={needsYou && row.line ? lineId : undefined} onClick={click}>
+    // aria-disabled, not disabled: it keeps its focus and its tooltip (the shared disabled look, disabled-buttons.css).
+    <button type="button" className="agent-roster__row" data-group={row.group} title={row.locked ? undefined : row.tooltip}
+      aria-disabled={row.locked ? true : undefined} data-held-pending={pending ? '' : undefined}
+      aria-label={row.ariaLabel} aria-describedby={[needsYou && row.line ? lineId : undefined, row.locked && !pending ? lockId : undefined].filter(Boolean).join(' ') || undefined}
+      onClick={click}>
       {content}
     </button>
   );

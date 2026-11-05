@@ -79,6 +79,7 @@ import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
 
 /** A filled placeholder goes after this long even when no board ran its fade. */
 const FILL_FALLBACK_MS = 3000;
@@ -927,6 +928,7 @@ function failBoardSave(key: string, id: string, err: unknown) {
   const store = useAssetStudioDraftStore.getState();
   const line = boardSaveLine(err, savedNameAt(key));
   store.failSave(key, id, line.failure, { retry: line.retry });
+  store.clearOnPromote(key, err, line.failure); // clears-on-promote: studio.save-board (GM, #204 r3)
   markGone(key, err);
 }
 
@@ -2045,10 +2047,12 @@ export function MoodboardStudioView() {
       // The step names its own action (the edit request's heading is the
       // board save's), and the toolbar's Retry runs the same undo (or redo)
       // of this step again (GM, round 3: "Make Retry redo the failed action").
-      store.failSave(key, attempt.id, {
+      const failure = {
         ...failureCopy(err),
         heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
-      }, { retry: direction, step: step.id });
+      };
+      store.failSave(key, attempt.id, failure, { retry: direction, step: step.id });
+      store.clearOnPromote(key, err, failure); // clears-on-promote: studio.undo-redo (GM, #204 r3)
     }
   };
 
@@ -2308,7 +2312,11 @@ export function MoodboardStudioView() {
       if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
       else rememberBrief(kept);
     } catch (err) {
-      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't save your brief." }) });
+      if (isCurrent()) {
+        const failure = failureCopy(err, { heading: "Couldn't save your brief." });
+        patch({ saveError: failure });
+        useAssetStudioDraftStore.getState().clearOnPromote(key, err, failure); // clears-on-promote: studio.brief (GM, #204 r3)
+      }
     }
   };
 
@@ -3513,9 +3521,9 @@ function MoodboardRail({
       <button type="button" className="moodboard-rail__new" disabled={noProject}
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list" ref={rows}>
-        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status">{notice}</div>}
+        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
         {busy && <div className="moodboard-rail__empty">Loading...</div>}
-        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error">{failed}</div>}
+        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} /></div>}
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}

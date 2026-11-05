@@ -1940,10 +1940,16 @@ describe('GM r10 (round 3h)', () => {
 describe('the rules', () => {
   it('lifts the stack, never the region, and above the log drops only the log clearance', () => {
     expect(rule(REGION_CSS, '.notice-region__stack')['margin-bottom']).toBe('var(--notice-stack-lift, 0px)');
-    expect(rule(REGION_CSS, ".notice-region[data-above-log='true']").right).toBe('var(--page-gutter, 16px)');
+    // Above the log only the log's clearance goes: the right side panel's (#204 round 18) stays.
+    expect(rule(REGION_CSS, ".notice-region[data-above-log='true']")['--notice-r'])
+      .toBe('max(var(--page-gutter, 16px), var(--notice-right-clearance, 0px))');
     const region = rule(REGION_CSS, '.notice-region');
-    expect(region.left).toBe('max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px))');
-    expect(region.right).toBe('max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px))');
+    // #204 round 18: centred on the window inside the clearances (the left tool rail's and an open side panel's,
+    // both on --notice-left-clearance), narrowing before it gives up the centre.
+    expect(region['--notice-l']).toBe('max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px))');
+    expect(region['--notice-r']).toBe('max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px), var(--notice-right-clearance, 0px))');
+    expect(region.left).toBe('max(var(--notice-l), min(var(--notice-r), calc(100vw - var(--notice-r) - var(--notice-centred-min-w))))');
+    expect(region.right).toBe('max(var(--notice-r), min(var(--notice-l), calc(100vw - var(--notice-l) - var(--notice-centred-min-w))))');
     expect(rule(RAIL_CSS, ':root:has(.workspace-rail)')['--notice-left-clearance'])
       .toBe('calc(var(--workspace-rail-left) + var(--workspace-rail-width) + 8px)');
   });
