@@ -214,7 +214,7 @@ The server exposes these tools for building and running (see
   - "Part of this file holds a value Nebula can’t read.":
     `graph_unreadable_value` (a NaN, an Infinity or a number past a
     float's range);
-  - "This file has more than N nodes." / "… connections.":
+  - "Nebula couldn’t open this file because it has more than 10,000 nodes, the most Nebula opens." / "… 50,000 connections …":
     `graph_too_many_nodes` (with `maxNodes`) and `graph_too_many_edges`
     (with `maxEdges`);
   - "This canvas is N MB. Nebula opens canvases up to M MB.":
@@ -548,8 +548,13 @@ The server exposes these tools for building and running (see
   `proposalId`, `agentId`, `code` and `limit`). The person's bar reads
   "Nebula couldn’t accept this because the canvas would be too complex to
   save. Reject it, or ask <agent> to change it." (for the size limit,
-  "… because the canvas would be too large to save. …") with Accept
-  still live.
+  "… because the canvas would be too large to save. …"; for a count,
+  "… because the canvas would have more than 10,000 nodes, the most Nebula
+  saves. Reject it, or ask <agent> to change it.", or "… 50,000 connections …")
+  with Accept still live. A Save past a count says "Nebula couldn’t save the
+  canvas because it has more than 10,000 nodes, the most Nebula saves. Delete
+  some, then try again."; the CLI canvas import, "Nebula couldn’t import the
+  CLI canvas because it has more than 10,000 nodes, the most Nebula opens."
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a

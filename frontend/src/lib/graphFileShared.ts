@@ -85,20 +85,19 @@ export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { 
   return `${cause} Undo ${whose} last change, then try again.`;
 }
 
-/** GM PR #205 r9 item 2: the node and connection limits, in the person's
- * words ("edges" is ours). */
-// GM PR #205 r14 and r15: a file being loaded is "This file" (as every other
-// load reason says), the CLI import "This canvas" (as its other lines say);
-// Save and agents' writes keep "The canvas". Picked by where the check ran,
-// as the shape lines are.
-const limitSubject = (use: GraphCheckUse) => (use === 'open' ? 'This file' : use === 'import' ? 'This canvas' : 'The canvas');
-// GM PR #205 r12 item 2: a file being opened is one whole line, as the size line is.
-export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') => use === 'open'
-  ? `Nebula couldn’t open this file because it has more than ${limit.toLocaleString()} nodes, the most Nebula opens.`
-  : `${limitSubject(use)} has more than ${limit.toLocaleString()} nodes.`;
-export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') => use === 'open'
-  ? `Nebula couldn’t open this file because it has more than ${limit.toLocaleString()} connections, the most Nebula opens.`
-  : `${limitSubject(use)} has more than ${limit.toLocaleString()} connections.`;
+/** GM PR #205 r9 item 2, r12 item 1: the node and connection limits, in the
+ * person's words ("edges" is ours). One whole line in the "because" form, with
+ * the limit and, where the person can act, a step: a Save says to delete some,
+ * a file or the CLI's canvas (which the person can't edit in the app) has none.
+ * A file being opened and the CLI's canvas "opens"; Save "saves". */
+const tooManyLine = (limit: number, noun: 'nodes' | 'connections', use: GraphCheckUse) => {
+  const count = limit.toLocaleString();
+  if (use === 'open') return `Nebula couldn’t open this file because it has more than ${count} ${noun}, the most Nebula opens.`;
+  if (use === 'import') return `Nebula couldn’t import the CLI canvas because it has more than ${count} ${noun}, the most Nebula opens.`;
+  return `Nebula couldn’t save the canvas because it has more than ${count} ${noun}, the most Nebula saves. Delete some, then try again.`;
+};
+export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'nodes', use);
+export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'connections', use);
 
 /** GM PR #205 r10 item 4 and its addendum: the shape walk's reasons, which
  * the person can't act on, as a cause they understand. Too many values or

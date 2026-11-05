@@ -2381,3 +2381,42 @@ file's node and connection lines added. Mutation-checked: count check removed
 (6 fail), Accept's count removed (1), socket failure kept (1), send unbounded
 (hangs, killed at 30 s), "store" to "keep" (8), "opens" to "reads" (6), ", and
 remove" to "; and remove" (2), ", and remove the uploads" to ", then" (1).
+
+## Round 13 (GM's count lines, and the round-12 check's findings)
+
+- GM's count lines, verbatim (`tooManyLine`, graphFileShared.ts): Save "Nebula
+  couldn’t save the canvas because it has more than 10,000 nodes, the most
+  Nebula saves. Delete some, then try again." (and 50,000 connections); CLI
+  import "Nebula couldn’t import the CLI canvas because it has more than 10,000
+  nodes, the most Nebula opens." (also connections; no step). Accept's count
+  refusal, by `limit.kind`: "Nebula couldn’t accept this because the canvas
+  would have more than 10,000 nodes, the most Nebula saves. Reject it, or ask
+  <agent> to change it." (and 50,000 connections), `proposalCountLine`; it
+  reads neutral in the bar as the other Accept refusals do. The CLI's event
+  line for it names nodes or connections too (formatter.py). These replace the
+  heading-plus-body pairs. Checked every `FailureNotice` caller: each heading
+  or line says what failed by itself, so none needed the because form.
+- MEDIUM, the hello's first graphSync was an unbounded `send_text` under the
+  sync-order lock. It goes through `_send_bounded` now; on a timeout or failure
+  the socket is closed and dropped.
+- LOW, the fixed 5 s bound could drop a healthy socket on a very large sync.
+  `socket_send_timeout(size)` = 5 s floor + 1 s per MiB (a rate of 1 MiB/s,
+  far below a local socket's hundreds), capped at 60 s because the lock is held
+  for the send. Chosen over a measurement: the floor keeps a stalled socket's
+  cost small, the per-MiB term can only be generous. Not measured on a
+  max-size sync.
+- LOW, Accept's `kind` came from `len(candidate.nodes) > MAX`. It now comes
+  from `_oversized_graph_kind(candidate, cli_graph)`, the kind this proposal
+  grows past its limit (nodes, else connections).
+- LOW, apply called the strict `_refuse_oversized_graph(candidate)`. It passes
+  the live graph now, the same predicate (`_oversized_graph_kinds`) as every
+  other path, so a trim or a param edit on an over-limit canvas goes through
+  and growth is refused.
+- Tests (test_agent_count_limits_r12.py): the trim test now removes a node,
+  an edge-only edit (unwire) and a refused new wire, apply on an over-limit
+  canvas (trim to 5 of 6, an edit, growth refused), Accept's kind on a canvas
+  already over the node limit, the kind predicate, the bound function, two
+  consecutive broadcasts in per-socket order, a stalled hello send.
+  Mutation-checked: hello send unbounded (fails, bounded wait_for in the
+  test), kind by node count (1 fails), strict apply (1), the bound fixed at 5 s
+  (1).

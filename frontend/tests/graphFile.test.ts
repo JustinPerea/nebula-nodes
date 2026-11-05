@@ -629,11 +629,14 @@ describe('graph structural complexity', () => {
   // GM PR #205 r14, r15: a file being loaded is "This file", the CLI import "This canvas"; Save keeps "The canvas".
   it('matches the backend node and edge ceilings before walking individual nodes, in the person\'s words', () => {
     const lines = {
-      save: [`The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`, `The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`],
+      // GM PR #205 r12 item 1, verbatim: the "because" form, the limit and a step.
+      save: [`Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula saves. Delete some, then try again.`,
+        `Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula saves. Delete some, then try again.`],
       // GM PR #205 r12 item 2: a file being opened is one whole line.
       open: [`Nebula couldn’t open this file because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`,
         `Nebula couldn’t open this file because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula opens.`],
-      import: [`This canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`, `This canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`],
+      import: [`Nebula couldn’t import the CLI canvas because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`,
+        `Nebula couldn’t import the CLI canvas because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula opens.`],
     } as const;
     for (const use of ['save', 'open', 'import'] as const) {
       expect(thrown({ nodes: new Array(GRAPH_MAX_NODES + 1).fill(null), edges: [] }, use)).toEqual({
@@ -1083,9 +1086,9 @@ describe('the canvas limit lines on each surface', () => {
     const alertSpy = noticeSpy();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await saveToFile(new Array(GRAPH_MAX_NODES + 1).fill(textNode({})), []);
-    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula saves. Delete some, then try again.`);
     await saveToFile([], new Array(GRAPH_MAX_EDGES + 1).fill({}));
-    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`);
+    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula saves. Delete some, then try again.`);
   });
 
   it('Load: a plain .nebula nested too deep is too complex to open, with no step', async () => {

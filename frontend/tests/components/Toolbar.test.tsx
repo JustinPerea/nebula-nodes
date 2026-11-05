@@ -433,6 +433,11 @@ describe('Canvas toolbar hierarchy', () => {
       expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas. Part of this canvas holds a value Nebula can’t read.']);
       expect(mocks.load).not.toHaveBeenCalled();
     });
+
+    it('a CLI canvas with too many nodes or connections is one whole line (GM PR #205 r12 item 1)', async () => {
+      const nodes = new Array(10_001).fill(0).map((_, i) => cliNode(i));
+      expect(await importWith(nodes)).toEqual(['Nebula couldn’t import the CLI canvas because it has more than 10,000 nodes, the most Nebula opens.']);
+    });
   });
 
   it('fits the imported graph only while the same Canvas target and viewport are current', async () => {

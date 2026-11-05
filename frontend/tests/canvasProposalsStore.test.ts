@@ -321,6 +321,21 @@ describe('Accept that would make the canvas too complex to save', () => {
     expect(proposalTooComplexLine('')).toBe('Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask the agent to change it.');
     expect(proposalTooComplexLine(null)).toBe('Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask the agent to change it.');
   });
+  it.each([
+    ['nodes', 'Nebula couldn’t accept this because the canvas would have more than 10,000 nodes, the most Nebula saves.'],
+    ['connections', 'Nebula couldn’t accept this because the canvas would have more than 50,000 connections, the most Nebula saves.'],
+  ])("a count past a limit says which, never \"too complex\" (GM PR #205 r12 item 3): %s", async (kind, lead) => {
+    const { isNeutralProposalLine, proposalCountLine } = await import('../src/store/canvasProposalsStore');
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockRejectedValueOnce(new ProposalRequestError(409, 'x',
+      { heading: "Couldn't accept the proposal.", code: 'proposal_too_complex', limitKind: kind } as never));
+    await useCanvasProposalsStore.getState().accept('p_a');
+    const line = useCanvasProposalsStore.getState().errors.p_a;
+    expect(line).toBe(`${lead} Reject it, or ask ${proposal('p_a').agent.name} to change it.`);
+    expect(isNeutralProposalLine(line)).toBe(true);
+    expect(proposalCountLine(kind as 'nodes' | 'connections', null)).toBe(`${lead} Reject it, or ask the agent to change it.`);
+  });
   it('control: another refusal keeps the alert style', async () => {
     const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
     expect(isNeutralProposalLine("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.")).toBe(false);

@@ -4107,8 +4107,20 @@ def _socket_share_view(websocket: WebSocket) -> dict[str, Any]:
         return {"sees_share": False, "agent_id": None}
 
 
-# How long one socket's send may take before broadcast_raw drops it.
+# How long one socket's send may take before it is dropped: a floor, plus time
+# for the bytes at a rate far below a local socket's (about 1 MiB/s, where a
+# loopback socket moves hundreds), so a healthy tab taking a very large
+# graphSync isn't dropped while a stalled one still is. Capped, because the
+# sync-order lock is held for the send.
 SOCKET_SEND_TIMEOUT_SECONDS = 5.0
+SOCKET_SEND_SECONDS_PER_MIB = 1.0
+SOCKET_SEND_TIMEOUT_CAP_SECONDS = 60.0
+
+
+def socket_send_timeout(size: int) -> float:
+    """Seconds one send of ``size`` bytes may take: the floor plus 1 s per MiB, never past the cap."""
+    extra = max(size, 0) / (1024 * 1024) * SOCKET_SEND_SECONDS_PER_MIB
+    return min(SOCKET_SEND_TIMEOUT_SECONDS + extra, max(SOCKET_SEND_TIMEOUT_CAP_SECONDS, SOCKET_SEND_TIMEOUT_SECONDS))
 
 
 class ConnectionManager:
@@ -4191,9 +4203,9 @@ class ConnectionManager:
 
     async def _send_bounded(self, connection: WebSocket, text: str) -> bool:
         """Send ``text``; False (the socket closed) when it fails or takes
-        longer than SOCKET_SEND_TIMEOUT_SECONDS."""
+        longer than socket_send_timeout(its size)."""
         try:
-            await asyncio.wait_for(connection.send_text(text), timeout=SOCKET_SEND_TIMEOUT_SECONDS)
+            await asyncio.wait_for(connection.send_text(text), timeout=socket_send_timeout(len(text)))
             return True
         except Exception:  # noqa: BLE001 - a stalled or broken socket is dropped, never raised
             try:
@@ -4428,8 +4440,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # reaches this socket after it.
         async with _graph_sync_order():
             export = await export_graph_for_frontend()
-            await websocket.send_text(json.dumps({"type": "graphSync", **export, "syncSeq": _next_graph_sync_seq(),
-                                                  "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
+            # Bounded as broadcast_raw's sends are: a new socket that never
+            # takes this can't hold the sync-order lock for every other one.
+            # On a timeout or failure it is closed and dropped; its tab reconnects.
+            sync_text = json.dumps({"type": "graphSync", **export, "syncSeq": _next_graph_sync_seq(),
+                                    "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT})
+            if not await manager._send_bounded(websocket, sync_text):
+                return
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
@@ -9721,8 +9738,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             # and every agent write count it (PR #205 final review): refused
             # the same way, naming the count that is over.
             count_detail = _oversized_graph_detail(candidate, cli_graph)
-            too_complex = None if count_detail is None else (409, count_detail, (
-                {"kind": "nodes", "max": RESTORE_MAX_GRAPH_NODES} if len(candidate.nodes) > RESTORE_MAX_GRAPH_NODES
+            count_kind = _oversized_graph_kind(candidate, cli_graph)
+            too_complex = None if count_detail is None or count_kind is None else (409, count_detail, (
+                {"kind": "nodes", "max": RESTORE_MAX_GRAPH_NODES} if count_kind == "nodes"
                 else {"kind": "connections", "max": RESTORE_MAX_GRAPH_EDGES}))
             if too_complex is None:
                 too_complex = _shape_past_save_limit(candidate_export)
@@ -16149,7 +16167,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             made_ready = pending_nodes.clear(candidate.nodes, mine)
         if spec.pending is True:
             made_pending = pending_nodes.mark(candidate.nodes, id_map.values(), identity, agent_status.now())
-        _refuse_oversized_graph(candidate)
+        _refuse_oversized_graph(candidate, cli_graph)
         _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
         _refuse_agent_change_to_approved_runs(candidate)
@@ -16299,25 +16317,42 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _oversized_graph_kinds(candidate: CLIGraph, before: CLIGraph | None = None) -> list[str]:
+    """Which counts ("nodes", "connections") ``candidate`` holds past what a
+    project can save. With ``before``, only one that is past its limit AND
+    larger than ``before``'s (an edit that trims or leaves a canvas already
+    past a limit no worse goes through, as for size and shape). The one
+    predicate every write path uses."""
+    kinds = []
+    if len(candidate.nodes) > RESTORE_MAX_GRAPH_NODES and (before is None or len(candidate.nodes) > len(before.nodes)):
+        kinds.append("nodes")
+    if len(candidate.edges) > RESTORE_MAX_GRAPH_EDGES and (before is None or len(candidate.edges) > len(before.edges)):
+        kinds.append("connections")
+    return kinds
+
+
+def _oversized_graph_kind(candidate: CLIGraph, before: CLIGraph | None = None) -> str | None:
+    """The first count ``candidate`` grows past its limit: nodes, else connections."""
+    kinds = _oversized_graph_kinds(candidate, before)
+    return kinds[0] if kinds else None
+
+
 def _oversized_graph_detail(candidate: CLIGraph, before: CLIGraph | None = None) -> str | None:
     """The agent's words when ``candidate`` holds more nodes or connections than
-    a project can save; None when it doesn't. With ``before``, only a count that
-    is past its limit AND larger than ``before``'s counts (an edit that trims a
-    canvas already past a limit goes through, as for size and shape)."""
-    nodes, edges = len(candidate.nodes), len(candidate.edges)
-    too_many_nodes = nodes > RESTORE_MAX_GRAPH_NODES and (before is None or nodes > len(before.nodes))
-    too_many_edges = edges > RESTORE_MAX_GRAPH_EDGES and (before is None or edges > len(before.edges))
-    if not too_many_nodes and not too_many_edges:
+    a project can save (see _oversized_graph_kinds); None when it doesn't."""
+    if not _oversized_graph_kinds(candidate, before):
         return None
+    nodes, edges = len(candidate.nodes), len(candidate.edges)
     return (
         f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} connections "
         f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} connections, "
         "so nothing changed.")
 
 
-def _refuse_oversized_graph(candidate: CLIGraph) -> None:
-    """413 when a staged edit would make a canvas bigger than a project can save."""
-    detail = _oversized_graph_detail(candidate)
+def _refuse_oversized_graph(candidate: CLIGraph, before: CLIGraph | None = None) -> None:
+    """413 when a staged edit would make a canvas bigger than a project can
+    save (and, with ``before``, bigger than it is now)."""
+    detail = _oversized_graph_detail(candidate, before)
     if detail is not None:
         raise HTTPException(status_code=413, detail=detail)
 

@@ -853,6 +853,9 @@ def format_event(event: dict[str, Any]) -> str:
         # A limit with no max reads by its kind alone, never "None".
         what = {"depth": f"nested more than {top} levels deep" if top is not None else "nested too deeply to save",
                 "values": f"holding more than {top:,} values" if top is not None else "too complex to save",
+                "nodes": f"holding more than {top:,} nodes" if top is not None else "holding more nodes than it saves",
+                "connections": (f"holding more than {top:,} connections" if top is not None
+                                else "holding more connections than it saves"),
                 "size": (f"over Nebula's save limit of {top / (1024 * 1024):g} MiB" if top is not None
                          else "too large to save")}.get(limit.get("kind")) or "too complex to save"
         summary = (f"the person's Accept of proposal {data['proposalId']} was refused: the canvas would be {what}; "

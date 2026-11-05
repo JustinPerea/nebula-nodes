@@ -35,6 +35,15 @@ export const PROPOSAL_CANVAS_REPLACED_LINE =
  * #205). The proposal stays open, and Accept stays live. */
 export const PROPOSAL_TOO_COMPLEX_CODE = 'proposal_too_complex';
 const PROPOSAL_TOO_COMPLEX_LEAD = 'Nebula couldn’t accept this because the canvas would be too complex to save.';
+/** GM PR #205 r12 item 3, verbatim: a count past a limit says which, never "too complex". */
+const PROPOSAL_COUNT_LEADS = {
+  nodes: 'Nebula couldn’t accept this because the canvas would have more than 10,000 nodes, the most Nebula saves.',
+  connections: 'Nebula couldn’t accept this because the canvas would have more than 50,000 connections, the most Nebula saves.',
+} as const;
+export function proposalCountLine(kind: 'nodes' | 'connections', agentName: string | null | undefined): string {
+  const name = agentName?.trim();
+  return `${PROPOSAL_COUNT_LEADS[kind]} Reject it, or ask ${name || 'the agent'} to change it.`;
+}
 /** GM PR #205 r16 item 2, verbatim, naming the agent as the bar does. A
  * proposal always comes from a named agent; one with no name reads "the
  * agent", as the canvas-replaced line does (never "your"). */
@@ -52,7 +61,8 @@ export function proposalTooLargeLine(agentName: string | null | undefined): stri
 /** The bar shows these refusals in its line spot in the neutral style: each
  * is a refusal on the click, not a fault (GM r16 item 2). */
 export const isNeutralProposalLine = (line: string | null | undefined): boolean =>
-  Boolean(line?.startsWith(PROPOSAL_TOO_COMPLEX_LEAD) || line?.startsWith(PROPOSAL_TOO_LARGE_LEAD));
+  Boolean(line?.startsWith(PROPOSAL_TOO_COMPLEX_LEAD) || line?.startsWith(PROPOSAL_TOO_LARGE_LEAD)
+    || Object.values(PROPOSAL_COUNT_LEADS).some((lead) => line?.startsWith(lead)));
 
 export const PROPOSAL_EXIT_MS = 220;
 
@@ -332,7 +342,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const message = error instanceof ProposalRequestError && error.code === PROPOSAL_CANVAS_REPLACED_CODE
         ? PROPOSAL_CANVAS_REPLACED_LINE
         : error instanceof ProposalRequestError && error.code === PROPOSAL_TOO_COMPLEX_CODE
-        ? (error.limitKind === 'size' ? proposalTooLargeLine : proposalTooComplexLine)(entry.view.agent.name)
+        ? (error.limitKind === 'nodes' || error.limitKind === 'connections' ? (name: string | null | undefined) => proposalCountLine(error.limitKind as 'nodes' | 'connections', name)
+          : error.limitKind === 'size' ? proposalTooLargeLine : proposalTooComplexLine)(entry.view.agent.name)
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
