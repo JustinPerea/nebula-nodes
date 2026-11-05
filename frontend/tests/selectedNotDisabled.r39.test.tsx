@@ -19,7 +19,8 @@ const DISABLED_VALUE = /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:0?\.(?:42|55)
  * PR #205, NIT-1: the app's `.is-active` too, and the other spellings). */
 const SELECTED = /aria-(?:pressed|checked|selected|current)|:checked|--(?:active|selected|chosen|on|checked|pressed|current)\b|\.is-(?:active|selected|checked|pressed|current|on)\b|\[data-(?:active|selected|chosen|state|checked|pressed)\b/;
 /** A state that locks the control. */
-const LOCKED = /:disabled|\[disabled\]|aria-disabled|data-offline-disabled|data-following-disabled|data-held-look|:is\([^)]*:disabled/;
+// data-person-lock (PR #204): a control the person lock holds is locked, so its checked state may take the disabled look.
+const LOCKED = /:disabled|\[disabled\]|aria-disabled|data-offline-disabled|data-following-disabled|data-held-look|data-person-lock|:is\([^)]*:disabled/;
 
 beforeEach(() => { document.body.className = 'app-slava-restraint'; });
 afterEach(() => { cleanup(); document.body.className = ''; });
@@ -27,8 +28,12 @@ afterEach(() => { cleanup(); document.body.className = ''; });
 const value = (element: Element, key: string) => cascaded(element).get(key)?.value ?? '';
 
 /** A rule that gives a selected state the disabled look without a lock. */
+/** A value with the fallback of every non-disabled token dropped: `var(--sr-ink-light, rgba(255, 255, 255, 0.55))`
+ * is the ink token (whose fallback happens to equal the disabled grey), never the disabled look. */
+const withoutOtherFallbacks = (value: string) => value.replace(/var\(\s*(--[\w-]+)\s*,[^()]*(?:\([^()]*\)[^()]*)*\)/g,
+  (whole, name: string) => (DISABLED_TOKEN.test(name) ? whole : `var(${name})`));
 const borrows = (rule: { selector: string; decls: Array<{ value: string }> }) => SELECTED.test(rule.selector)
-  && rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value))
+  && rule.decls.some((decl) => DISABLED_TOKEN.test(withoutOtherFallbacks(decl.value)) || DISABLED_VALUE.test(withoutOtherFallbacks(decl.value)))
   && !LOCKED.test(rule.selector);
 
 describe('the ratchet: a selected state never borrows a disabled token unless it is locked too', () => {
@@ -56,7 +61,7 @@ describe('the ratchet: a selected state never borrows a disabled token unless it
     expect(borrows({ selector, decls: [{ value }] })).toBe(caught);
   });
 
-  it('the locked selected marks are the reviewed ones (GM\'s image-only and chip rule, and the anchor by PR #205 r1), never the switch', () => {
+  it('the locked selected marks are the reviewed ones (GM\'s image-only and chip rule, the anchor by PR #205 r1, and a checkbox the person lock holds by PR #204), never a switch that is not locked', () => {
     const marks = [...new Set(appRules()
       .filter((rule) => SELECTED.test(rule.selector) && LOCKED.test(rule.selector))
       .filter((rule) => rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value)))
@@ -66,6 +71,7 @@ describe('the ratchet: a selected state never borrows a disabled token unless it
       "styles/disabled-buttons.css: :is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true'])",
       "styles/disabled-buttons.css: :is(.project-home__cover-choice[aria-pressed='true']):is(:disabled, [aria-disabled='true'])",
       "styles/disabled-buttons.css: :is(.remotion-properties-panel__anchor-button[aria-pressed='true']):is(:disabled, [aria-disabled='true'])",
+      "styles/disabled-buttons.css: input[type='checkbox'][data-person-lock]:not([data-held-pending]):checked",
     ]);
   });
 });

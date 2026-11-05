@@ -316,13 +316,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'depth', max: 64 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
   });
 
   // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
@@ -333,13 +333,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'size', max: 16_777_216 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too large to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
   });
 
   it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {

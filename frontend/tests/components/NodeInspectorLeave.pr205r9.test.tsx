@@ -334,6 +334,32 @@ describe('a drag-select ends however the drag ends (NIT-2)', () => {
     expect([isCanvasSelectionDragging(), ...inspector()]).toEqual([false, 'b', true]);
   });
 
+  // Coordinator ruling (PR #205 round 10, b): the hold releases on the real pointerup that ends the
+  // box select, not on Escape, and releases exactly once.
+  it('Escape, then the real pointerup: the hold releases on the pointerup, exactly once', async () => {
+    const ended = vi.fn();
+    const stop = onCanvasSelectionDragEnd(ended);
+    try {
+      unpinnedOpenWithNone();
+      await act(async () => {});
+      act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+      act(() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape' })); });
+      expect(ended).not.toHaveBeenCalled();
+      expect(isCanvasSelectionDragging()).toBe(true);
+      act(() => { window.dispatchEvent(new MouseEvent('pointerup', { button: 0 })); });
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(isCanvasSelectionDragging()).toBe(false);
+      // Nothing more releases it: a second pointerup, React Flow's own end, a blur.
+      act(() => { window.dispatchEvent(new MouseEvent('pointerup', { button: 0 })); });
+      act(() => { noteCanvasSelectionDrag(false); });
+      act(() => { window.dispatchEvent(new Event('blur')); });
+      expect(ended).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+      noteCanvasSelectionDrag(false);
+    }
+  });
+
   it('a drag ends once: React Flow\'s own end after the window\'s, or a second window event, ends nothing more', () => {
     const ended = vi.fn();
     const stop = onCanvasSelectionDragEnd(ended);

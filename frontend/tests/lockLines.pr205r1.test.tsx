@@ -40,7 +40,7 @@ import { LOCK_WAITS, lockLine } from '../src/lib/runLock';
 import { runLockedLine, runLockedWiresLine, scenesDeleteBlockTitle, sceneDeleteBlockTitle, shotRemovalBlockTitle } from '../src/lib/cinemaScene';
 import { failureCopy } from '../src/lib/errorCopy';
 import { HELD_LOOK_DELAY_MS } from '../src/hooks/useHeldLook';
-import { useGraphStore } from '../src/store/graphStore';
+import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import { cascaded } from './helpers/cssCascade';
@@ -51,6 +51,7 @@ const INITIAL_PROPOSALS = { ...useCanvasProposalsStore.getState() };
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  resetDeletedSceneEditsForTests();
   useGraphStore.setState(INITIAL_GRAPH, true);
   useUIStore.setState(INITIAL_UI, true);
   useCanvasProposalsStore.setState(INITIAL_PROPOSALS, true);

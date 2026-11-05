@@ -209,6 +209,8 @@ const GATED: Record<string, Surface> = {
     'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry', 'create.style-retry'],
   _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal', 'graph.undo-refusal'],
   _refuse_agent_growth_past_save_limit: ['graph.notify', 'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry'],
+  // PR #205: the shape limits (depth, values), the same writes' refusal as the size limit's.
+  _refuse_agent_shape_past_save_limit: ['graph.notify', 'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry'],
   _reader_spend_hold: NO_LINE('POST /api/moodboards/{id}/read: no tab calls it (agents and the CLI only)'),
   // stop_refusal
   _refuse_stopping_the_persons_run: NO_LINE('a refused Stop shows no line: graphStore requestTrackedCancellation keeps the intent and asks again; only an offline Stop says so'),
@@ -255,6 +257,7 @@ const CLASSIFIERS: Record<string, string> = {
   'lib/wsClient.ts': 'reports the socket\'s personRequired frame to the banner; keeps no line',
   'lib/canvasPins.ts': 'words a pin refusal; canvasPinsStore keeps the line and registers it',
   'lib/commonsChatAuthority.ts': 'throws the session failure; ChatPanel keeps the line and registers it',
+  'lib/graphFile.ts': 'loadRefusalLine leaves the person gate\'s refusal (null) to the notice\'s own line; keeps none',
   'lib/notConnectedLine.ts': 'reads whether the page already shows a not-connected line (GM r8 1); keeps none',
 };
 
@@ -277,6 +280,7 @@ const NO_FRONTEND: Record<string, string> = {
   'POST /api/graph/apply': 'an agent\'s edit (edit_canvas, `nebula apply`); no tab sends it',
   'POST /api/graph/apply/undo': 'an agent\'s undo of its own apply; no tab sends it',
   'POST /api/graph/run': 'the CLI\'s and MCP\'s run; a tab runs through /api/execute',
+  'POST /api/canvas/proposals': 'an agent\'s proposal (propose_changes); no tab sends it',
   'POST /api/quick': 'the CLI\'s one-shot generate; no tab sends it',
   'POST /api/moodboards/{moodboard_id}/read': 'an agent reading a board (spend hold); no tab sends it',
   'PUT /api/presets/{preset_id}': 'no tab edits a style in place: Create saves a new one (POST) or deletes it',

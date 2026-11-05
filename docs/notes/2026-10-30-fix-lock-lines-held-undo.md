@@ -2125,3 +2125,109 @@ cap), the count-based wire grace on restores, and the Delete path's
   “lost.png”." One shot at 1440, opened. The rows were set through the app's
   own store module, since opening a project after a page reload drops saved
   upload rows (Justin's, not this PR).
+
+## Round 10 (merge of origin/main, the 7 survivors, whole-file rewrites)
+
+### 64. The merge of origin/main (about 325 commits)
+
+Thirty files conflicted. Where main and this PR built the same thing, main's
+version is the base and this PR's behaviour is ported onto it.
+
+- Backend: `backend/main.py` (`accept_canvas_proposal` keeps main's
+  `unread` check and this PR's `too_complex` refusal, in that order; the
+  commit is nested under `too_complex is None`), `backend/mcp_server.py`
+  (main's propose text, then the save-limit paragraph).
+- Canvas and notices: `Canvas.tsx` (main's provider and toolbar slot; the
+  box-select start and end props), `ConnectionPopup.tsx`, `ContextMenu.tsx`,
+  `CinemaShotPanel.tsx`, `Toolbar.tsx`, `GraphFileActions.tsx`,
+  `lib/graphFile.ts` (this PR's copy and coded-refusal log, main's
+  `'error', error` arguments), `lib/keyboardShortcuts.ts`,
+  `lib/canvasProposals.ts` (`limitKind`, `sentAt`, `sentBeforePromote`).
+- `ProposalBar.tsx`: main's redesigned card; the neutral size and
+  save-limit line (`proposal-bar__error--neutral`, `role="status"`) is ported
+  onto it. `ProposalBar.test.tsx` now finds main's "Accept and run" name.
+- `DeferredRunNotice.tsx`: this PR's live line and held Run, main's
+  `dismissLock`. The two locks both spread onto Run, so `definedProps` drops a
+  lock's unset keys; the lock-sweep ratchet (`personGatedCallers.controlCall`)
+  now sees through `definedProps(<lock>.control())`.
+- `CommonsReview.tsx`, `Inspector.tsx`, `NodeInspectorPopover.tsx` (main's
+  open/close frame, this PR's focus resume and a pinned empty state).
+- Settings: `PersonalAgentsSection.tsx`, `StorageTab.tsx`, `Switch.tsx`.
+  `SettingsSwitch` takes main's `lock` (aria-disabled, its line) next to this
+  PR's held look; the lock's set keys win. The section's `load` now returns
+  its read, because the hold lasts until the reload answers.
+- Styles: `canvasProposals.css`, `disabled-buttons.css` (both sides' rules).
+- `graphStore.ts`: `notify` takes `error?` and keeps `sayRunLocked`; the Undo
+  path keeps `selectionFollows` and `notePersonPlaced`; `refused` keeps
+  `heldLine`.
+- Tests: `errorCopy.round3f`, `heldUndo.round14`, `heldUndoBound.round12`,
+  `lib/cinemaUploads`, `graphStore.fix16/17/18`, `pr198Fix25Held` (main's
+  whole file).
+
+Unified mechanisms:
+
+- `deleteAnswered` (this PR) and `deleteLanded` (main): one helper, main's.
+  `fix16/17/18` use it. `deleteInFlightForTests` reads this PR's
+  `heldPresses` (main's `pressHitsDeleteInFlight` is gone).
+- pr198Fix25Held's flake fix (this PR's `pressAt`) and main's fake clock:
+  main's.
+- The settings switch's lock (main) and held look (this PR): one
+  `SettingsSwitch`.
+- Ratchets that main added now cover this PR: `clearsOnPromote` (the
+  save-limit refusal is gated; `graphFile.ts` is classified; `POST
+  /api/canvas/proposals` has no tab caller), `personGateRoutes` snapshot (71
+  routes), `deleteLanded` opt-out comments on three older tests,
+  `resetDeletedSceneEditsForTests` in four files, `selectedNotDisabled`
+  reads `data-person-lock` as locked, the straight-apostrophe baseline
+  (counts only fell), and `test_agent_cursor_sessions` ignores the per-read
+  `syncSeq` of a graphSync.
+- A focus handover test of main's (`presenceRound18h`) said a switch saving
+  its change is `disabled`; the held rule keeps it aria-disabled with its
+  focus, so the test says that.
+
+### 65. The 7 surviving mutants
+
+New tests in `tests/heldUndo.pr205r10.test.tsx`:
+
+- `whenSyncedNullWaits`: a Delete whose answer names no sync, before any
+  numbered sync, is handled at once.
+- `restoreRefusedWiresKept`: a refused Undo of a connection leaves no hold.
+- `acceptedNotUnnamed`: a refused rename leaves an accepted add's node too.
+
+Not killed:
+
+- `importKeepsHolds`: equivalent. An import (graphStore `applyGraphSyncNow`)
+  calls `forgetStepsInFlight()` (which already clears the holds) and then
+  `forgetHoldsOfReplacedCanvas()` itself, with nothing between that fills
+  them again.
+- `syncForgetsClearedHeldOffOff`: unreachable difference. `clearedHeldOff`
+  is set only inside `replaceCanvasByClear`, which runs in the same
+  `applyGraphSyncNow` before `asLastSaved` consumes it, so the flag never
+  outlives the sync (barring a throw between them).
+- `clearHeldOffEdgeEndsOff` and `gap_emptyNoBind`: not killed. For
+  `gap_emptyNoBind` four scenarios were tried (Claude then Codex clear, a
+  clear then an add, a clear alone), and in each the result is the same with
+  and without `bindHeldLinks` in the empty branch. Open.
+- `forgetStepsKeepsHolds` was killed in round 9 and survives after the
+  merge: the three tests that killed it still pass without
+  `forgetHoldsOfReplacedCanvas()` in `forgetStepsInFlight`. Open.
+- `syncedLabelsKeptOnReplace`'s edit no longer matches (the code it names
+  was removed in an earlier round), so it is not run.
+
+### 66. The depth limit and Escape during a box select (coordinator rulings)
+
+- The lock and the save refusal share one predicate: the engine refuses
+  past 64 (`depth > GRAPH_MAX_DEPTH`), so the line stays "more than 64 levels
+  deep". `tests/saveDepthParity.pr205r10.test.ts` checks the lock
+  (`undosToFitSave`) and the refusal agree at 63, 64 and 65; changing either
+  predicate to `>=` or `<` fails it.
+- Escape does not end React Flow's box select; the pointerup does.
+  `NodeInspectorLeave.pr205r9.test.tsx` has "Escape, then the real
+  pointerup": the hold releases on the pointerup, once. Making Escape end
+  the drag, or dropping the once-only guard, fails it.
+
+### 67. The whole-file rewrites
+
+`git diff origin/main` of `backend/main.py`, `frontend/src/lib/graphFile.ts`
+and `docs/MCP-SETUP.md`: every hunk is this PR's change. Nothing of main's
+was reformatted or reverted; nothing was undone.

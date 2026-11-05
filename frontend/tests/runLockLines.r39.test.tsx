@@ -38,7 +38,7 @@ import { DeferredRunNotice } from '../src/components/canvas/DeferredRunNotice';
 import { canvasLockOf } from '../src/lib/canvasLock';
 import { deferredRunLine, RUN_LOCK_VERBS, runFinishesLine } from '../src/lib/runLock';
 import { runLockedLine, runLockedWiresLine } from '../src/lib/cinemaScene';
-import { useGraphStore } from '../src/store/graphStore';
+import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 
@@ -47,6 +47,7 @@ const INITIAL_UI = { ...useUIStore.getState() };
 const INITIAL_PROPOSALS = { ...useCanvasProposalsStore.getState() };
 afterEach(() => {
   cleanup();
+  resetDeletedSceneEditsForTests();
   useGraphStore.setState(INITIAL_GRAPH, true);
   useUIStore.setState(INITIAL_UI, true);
   useCanvasProposalsStore.setState(INITIAL_PROPOSALS, true);

@@ -66,6 +66,8 @@ import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 /** GM r39 item 3 / r40 item 2, verbatim (curly quotes). */
 const bringBack = (names: string) => `Nebula couldn’t bring back ${names}. Try Undo again.`;
 
+// delete-landed-wait: off, the fake answers each DELETE at once (or holds it until the test lets it go), so
+// settle() (a few timer turns) never races a clock: no runner stall can move the answer.
 const initialGraph = useGraphStore.getState();
 function textNode(id: string, label: string): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 100, y: 100 }, width: 120, height: 60,

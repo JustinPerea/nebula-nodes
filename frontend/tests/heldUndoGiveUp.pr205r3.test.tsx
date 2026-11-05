@@ -29,6 +29,8 @@ import { STALE_CANVAS_DETAIL, setProjectContext } from '../src/lib/projectContex
 
 fake.backend = new FakeNebula();
 const nebula = () => fake.backend;
+// delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
+// holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const initialGraph = useGraphStore.getState();
 const store = () => useGraphStore.getState();
 const ids = () => store().nodes.map((node) => node.id).sort();

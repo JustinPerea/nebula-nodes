@@ -48,12 +48,14 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(), send: vi.fn() } }));
 
-import { useGraphStore } from '../src/store/graphStore';
+import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 
 const DROPPED = 'Nothing was undone. Your last change was still saving.';
 /** GM r39 item 3 / r40 item 2, verbatim (curly quotes). */
 const bringBack = (names: string) => `Nebula couldn’t bring back ${names}. Try Undo again.`;
 
+// delete-landed-wait: off, the fake answers each DELETE at once (or holds it until the test lets it go), so
+// settle() (a few timer turns) never races a clock: no runner stall can move the answer.
 const initialGraph = useGraphStore.getState();
 function textNode(id: string, label: string): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 100, y: 100 }, width: 120, height: 60,
@@ -104,6 +106,7 @@ describe('an Undo held on a Delete (GM r39 item 3, r40 items 1 and 2)', () => {
     for (const resolve of net.heldRestores.splice(0)) await act(async () => { resolve({ status: 200, body: {} }); });
     await settle();
     vi.restoreAllMocks();
+    resetDeletedSceneEditsForTests();
     useGraphStore.setState(initialGraph, true);
   });
   const setGraph = (nodes: Node<NodeData>[], edges: Edge[] = []) => useGraphStore.setState({ nodes, edges, isExecuting: false,

@@ -14,7 +14,7 @@ import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel
 import { CinemaStudioToolbar } from '../src/components/cinema-studio/CinemaStudioToolbar';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
-import { useGraphStore } from '../src/store/graphStore';
+import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../src/store/cinemaUploadStore';
 
@@ -48,6 +48,7 @@ beforeEach(() => { resetCanvasFollowForTests(); resetBackendConnectionForTests()
 afterEach(() => {
   cleanup();
   act(() => { resetCanvasFollowForTests(); resetBackendConnectionForTests(); });
+  resetDeletedSceneEditsForTests();
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUI, true);
   useCinemaUploadStore.setState({ uploads: [] });
