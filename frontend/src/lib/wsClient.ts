@@ -1,4 +1,5 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
+import { TAB_ID, onTabIdRekeyed, tabIdConfirmed, tabIdReady } from './tabId';
 import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
@@ -399,10 +400,22 @@ class WebSocketClient {
     // A person link pasted into this open tab: say hello on the open socket
     // if it is that backend's, otherwise reconnect to the backend it pins.
     if (typeof window !== 'undefined') onPersonConnected(() => this.personConnected());
+    // A page back from the back/forward cache whose id a copy took moves to
+    // a new one (lib/tabId.ts): the open socket says the kept state again
+    // under it (review 21 LOW-1 on PR #199).
+    onTabIdRekeyed(() => { void tabIdReady().then(() => this.sayKeptAgain()); });
+  }
+
+  private sayKeptAgain(): void {
+    const socket = this.ws;
+    if (!this.keptEdits || !socket || this.greeted !== socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'keptEdits', kept: true, tab: TAB_ID }));
   }
 
   private sayHello(socket: WebSocket, url: string): void {
-    void personTokenForSocket(url).then((personToken) => {
+    // Never under an id the page doesn't hold yet (review 21 LOW-1 on PR
+    // #199): the hello and what follows it name this tab.
+    const hello = (personToken: string | null | undefined) => {
       if (!personToken) {
         reportPersonRequired();
         return;
@@ -414,7 +427,10 @@ class WebSocketClient {
         this.greeted = socket;
         this.sendViewing(socket);
       }
-    });
+    };
+    const token = personTokenForSocket(url);
+    if (tabIdConfirmed()) void token.then(hello);
+    else void Promise.all([token, tabIdReady()]).then(([personToken]) => hello(personToken));
   }
 
   /** The project this tab shows on its canvas because the person opened it
@@ -440,7 +456,9 @@ class WebSocketClient {
   /** Whether this tab keeps edits Nebula couldn't save after a restore
    * (GM r15 on PR #199): the backend refuses agents' canvas writes and
    * project switches meanwhile (409 canvas_kept_in_tab, GM r16). Said on
-   * the promoted socket after every hello, and on change. */
+   * the promoted socket after every hello, and on change, with this tab's
+   * id (X-Nebula-Tab): the person's kept save passes the project limit
+   * only from a tab Nebula knows keeps edits. */
   private keptEdits = false;
 
   setKeptEdits(kept: boolean): void {
@@ -448,7 +466,7 @@ class WebSocketClient {
     this.keptEdits = kept;
     const socket = this.ws;
     if (socket && this.greeted === socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'keptEdits', kept }));
+      socket.send(JSON.stringify({ type: 'keptEdits', kept, tab: TAB_ID }));
     }
   }
 
@@ -461,7 +479,7 @@ class WebSocketClient {
 
   private sendViewing(socket: WebSocket): void {
     if (this.greeted !== socket || this.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
-    if (this.keptEdits) socket.send(JSON.stringify({ type: 'keptEdits', kept: true }));
+    if (this.keptEdits) socket.send(JSON.stringify({ type: 'keptEdits', kept: true, tab: TAB_ID }));
     if (this.viewing !== undefined) {
       socket.send(JSON.stringify(this.viewing === null ? { type: 'viewing', projectId: null }
         : { type: 'viewing', projectId: this.viewing, openedBy: 'person' }));

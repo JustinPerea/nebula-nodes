@@ -175,7 +175,7 @@ def test_a_world_export_node_names_its_own_recovery_field(canvas, monkeypatch):
     import main as main_module
 
     # "Forget ID" cleared the record; the ID is still in the node.
-    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
+    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source, **_: [])
     node = canvas.graph.add_node("worldlabs-world-export", {"resume_operation_id": "op-export-1"},
                                  position={"x": 0, "y": 0})
     response = _delete(canvas, node)
@@ -186,7 +186,7 @@ def test_a_world_export_node_names_its_own_recovery_field(canvas, monkeypatch):
 def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
     import main as main_module
 
-    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
+    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source, **_: [])
     both = canvas.graph.add_node("worldlabs-environment", {"resume_operation_id": "op-1", "existing_world_id": "w-1"},
                                  position={"x": 0, "y": 0})
     assert _delete(canvas, both).json()["detail"] == PARAMS(

@@ -39,10 +39,10 @@ describe('GM r12, 2: each waiting line its own count, the person first', () => {
         + 'Nothing in it is lost. Delete a project and Nebula will save it.');
   });
 
-  it('rendered on home with the listing’s per-canvas counts', () => {
+  it('rendered on home with the listing’s per-canvas counts', async () => {
     render(<ProjectHome {...base} canvasNotFiled={{ reason: 'projects', projectLimit: 4, deletes: 2,
       canvases: [{ name: null, deletes: 1 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 2 }] }} />);
-    expect(screen.getByText(/Codex’s copy of your canvas .* Delete 2 projects and Nebula will save it\.$/)).toBeTruthy();
+    expect(await screen.findByText(/Codex’s copy of your canvas .* Delete 2 projects and Nebula will save it\.$/)).toBeTruthy();
     expect(screen.getByText(/^The canvas you had open isn’t saved .* Delete a project and Nebula will save it\. Codex’s/)).toBeTruthy();
   });
 });
@@ -78,9 +78,9 @@ describe('GM r12, 1: [Save as a project] after a restore stopped this tab’s ed
     expect(SAVE_AS_A_PROJECT).toBe('Save as a project');
   });
 
-  it('the saved toast names the project', () => {
+  it('the saved toast names the project', async () => {
     render(<ProjectHome {...base} editsRecoveredAs={{ id: 'p', name: 'Delta (recovered)' }} />);
-    expect(screen.getByText(editsRecoveredToast('Delta (recovered)'))).toBeTruthy();
+    expect(await screen.findByText(editsRecoveredToast('Delta (recovered)'))).toBeTruthy();
     // GM r14 on PR #199, 1, verbatim.
     expect(editsRecoveredToast('Delta (recovered)')).toBe('Your latest edits were saved as their own project, “Delta (recovered)”.');
   });

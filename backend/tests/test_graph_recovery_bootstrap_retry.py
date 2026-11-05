@@ -181,9 +181,9 @@ def test_the_retry_reseeds_under_the_lifecycle_fence(canvas, monkeypatch):
 
     seed = canvas.main._ensure_shared_graph_recoveries
 
-    def watched_seed(nodes, *, source):
+    def watched_seed(nodes, *, source, **kwargs):
         calls.append((source, fenced["in"]))
-        return seed(nodes, source=source)
+        return seed(nodes, source=source, **kwargs)
 
     monkeypatch.setattr(guard, "exclusive_lifecycle", watched)
     monkeypatch.setattr(canvas.main, "_ensure_shared_graph_recoveries", watched_seed)
@@ -229,7 +229,7 @@ def test_a_journal_that_raises_on_the_reseed_refuses_with_the_same_lines(canvas,
     _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
     monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
 
-    def fail(_nodes, *, source):
+    def fail(_nodes, *, source, **_kwargs):
         raise ProviderRecoveryPersistenceError("provider recovery journal write failed")
 
     monkeypatch.setattr(canvas.main, "_ensure_shared_graph_recoveries", fail)

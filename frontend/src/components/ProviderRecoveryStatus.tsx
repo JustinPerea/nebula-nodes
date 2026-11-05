@@ -62,7 +62,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
     </div>
   );
   if (!ambiguity && !warning) {
-    return <div ref={boxRef} className="provider-recovery-status provider-recovery-status--reopen-only" role="alert" aria-live="assertive">{reopen}</div>;
+    return <div ref={boxRef} data-top-stack="" className="provider-recovery-status provider-recovery-status--reopen-only" role="alert" aria-live="assertive">{reopen}</div>;
   }
 
   const ambiguityKey = ambiguity ? `${ambiguity.kind}:${ambiguity.nodeId}` : null;
@@ -81,7 +81,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
   };
 
   return (
-    <div ref={boxRef} className="provider-recovery-status" role="alert" aria-live="assertive">
+    <div ref={boxRef} data-top-stack="" className="provider-recovery-status" role="alert" aria-live="assertive">
       <span>
         <strong>{ambiguity
           ? WORLD_LABS_RUN_NEEDS_CHECK

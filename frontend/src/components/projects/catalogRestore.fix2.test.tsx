@@ -173,7 +173,7 @@ describe('GM r3 string 5: the rebuild\'s Agent log line', () => {
     expect(catalogRestoreLogLine(restore({
       ...rebuilt, damagedReadWhole: false, addedBack: rows('A', 'B', 'C', 'D'), addedBackCount: 4,
       notAddedBack: [{ id: 'x'.repeat(32), reason: 'incomplete', name: 'Logo' }], notAddedBackCount: 1,
-    }))).toBe(`Rebuilt the project list from the damaged file. Recovered 4 projects. Couldn’t recover “Logo”. Couldn’t read the whole file. The damaged file was kept at ${DAMAGED}.`);
+    }))).toBe(`Rebuilt the project list from the damaged file. Recovered 4 projects. Nebula couldn’t recover “Logo”. Nebula couldn’t read the whole file. The damaged file was kept at ${DAMAGED}.`);
   });
 });
 

@@ -84,18 +84,18 @@ describe('review 13 MEDIUM-1: the restore notices follow the notice stack’s fo
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Dismiss' }));
     expect(document.activeElement?.classList.contains('project-home__notice-close')).toBe(true);
   });
-  it('the held-unreadable notice’s × with the waiting line below: focus goes to the waiting line (it has no ×)', () => {
+  it('the held-unreadable notice’s × with the waiting line below: focus goes to the waiting line (it has no ×)', async () => {
     const waiting = { reason: 'projects' as const, projectLimit: 3 };
     const view = render(<ProjectHome {...props({ canvasHeldUnreadable: { count: 1 }, canvasNotFiled: waiting })} />);
-    const close = screen.getByRole('button', { name: 'Dismiss' });
+    const close = await screen.findByRole('button', { name: 'Dismiss' });
     close.focus();
     fireEvent.click(close);
     view.rerender(<ProjectHome {...props({ canvasHeldUnreadable: null, canvasNotFiled: waiting })} />);
     expect(document.activeElement?.classList.contains('project-home__waiting')).toBe(true);
   });
-  it('with nothing left: the "Recent projects" heading', () => {
+  it('with nothing left: the "Recent projects" heading', async () => {
     const view = render(<ProjectHome {...props({ canvasHeldUnreadable: { count: 2 } })} />);
-    const close = screen.getByRole('button', { name: 'Dismiss' });
+    const close = await screen.findByRole('button', { name: 'Dismiss' });
     close.focus();
     fireEvent.click(close);
     view.rerender(<ProjectHome {...props({ canvasHeldUnreadable: null })} />);

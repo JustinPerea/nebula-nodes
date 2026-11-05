@@ -8,8 +8,13 @@ record holds nothing here: Delta's own n1 deletes while Alpha's n1 has a
 record, for the person and for agents, and Alpha's record stays.
 Ambiguities and active starts carry no ID and still hold by node id. When
 Nebula still refuses, agents' text is as it was; the person's is the
-record's own line, or GM's shared-id line (r34 addendum 2) when Nebula
-knows the record is another project's but can't place it in one.
+record's own line, or GM's shared-id line when Nebula can't identify the
+record's project.
+
+Since round 23 (review 21 LOW-1; Justin's answer), only the stamp Nebula
+writes with a record releases a node: a record here is "Alpha's" because
+it is stamped with Alpha (``project=``); an unstamped one holds
+(test_world_labs_stamp_fix23 tests the stamp itself).
 """
 from __future__ import annotations
 
@@ -29,8 +34,9 @@ from tests.test_project_catalog_restore_fix21 import ENVIRONMENT, _alpha_then_de
 from tests.test_project_catalog_restore_fix17 import _open, _rev  # noqa: E402
 
 OLD_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
-UNNAMED = ("Nebula couldn’t delete “Delta brief” because it shares the ID n1 with a World Labs Environment node "
-           "from another project, which has a saved World Labs recovery ID. Forget that ID in Run History, then try again.")
+# GM r36 item 2 (round 23), verbatim.
+UNNAMED = ("Nebula couldn’t delete “Delta brief” because it shares the ID n1 with a World Labs run from a project "
+           "Nebula can’t identify. Check that run in Marble before you forget its ID in Run History, then try again.")
 AGENT_DETAIL = ("Cannot delete n1: it has unresolved World Labs paid state. "
                 "Check Marble, then resolve its exact recovery/ambiguity record first.")
 
@@ -46,8 +52,8 @@ def _delta_brief(client):
     return alpha, delta
 
 
-def _alphas_record(recoveries, run_id="wl-run-alpha", op="op-1"):
-    recoveries.set(run_id=run_id, node_id="n1", resume_operation_id=op, existing_world_id=None)
+def _alphas_record(recoveries, run_id="wl-run-alpha", op="op-1", project=None):
+    recoveries.set(run_id=run_id, node_id="n1", resume_operation_id=op, existing_world_id=None, project_id=project)
 
 
 def _refused_as_before(client, *, agent_too=True):
@@ -64,8 +70,8 @@ def _refused_as_before(client, *, agent_too=True):
 @pytest.mark.parametrize("who", [PERSON, CODEX], ids=["person", "agent"])
 def test_deltas_n1_deletes_while_alphas_n1_has_a_record_and_alphas_record_stays(app, recoveries, who):
     client, *_ = app
-    _delta_brief(client)
-    _alphas_record(recoveries)
+    alpha, _delta = _delta_brief(client)
+    _alphas_record(recoveries, project=alpha)
     deleted = _delete(client, who)
     assert deleted.status_code == 200, deleted.text
     assert "n1" not in main_module.cli_graph.nodes
@@ -106,10 +112,17 @@ def test_the_open_projects_record_keeps_its_own_line_when_a_duplicate_copied_its
 
 
 def test_a_record_nobody_can_place_is_refused(app, recoveries):
+    """Refused; since round 23 (GM r35, 2) the person reads GM's line in
+    addendum 2's shape (test_project_catalog_fix23); agents' text as before."""
     client, *_ = app
     _delta_brief(client)
     _alphas_record(recoveries, run_id="wl-run-nowhere")
-    _refused_as_before(client)
+    refused = _delete(client)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"] == ("Nebula couldn’t delete “Delta brief” because it has a saved World Labs "
+                                        "recovery ID. Check the run in Marble, then forget that ID in Run History.")
+    assert _delete(client, CODEX).json()["detail"] == AGENT_DETAIL
+    assert "n1" in main_module.cli_graph.nodes
 
 
 def test_a_run_in_two_other_projects_cant_be_placed_and_is_refused(app, recoveries):
@@ -134,8 +147,9 @@ def test_a_run_in_two_other_projects_cant_be_placed_and_is_refused(app, recoveri
 
 def test_the_shared_id_line_reads_only_the_records_that_hold(app, recoveries):
     """Beside a record whose run two other projects hold (it holds the node),
-    a seeded record placed by its ID in Alpha holds nothing, so it doesn't
-    change the line."""
+    an unstamped seeded record placed by its ID in Alpha holds too (round
+    23: only a stamp releases), and its project can't be identified either:
+    the line is still GM's shared-id line."""
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
     with store.transaction() as catalog:
@@ -160,13 +174,14 @@ def test_the_shared_id_line_reads_only_the_records_that_hold(app, recoveries):
 
 def test_a_run_registered_on_the_open_project_here_is_refused(app, recoveries, monkeypatch):
     client, *_ = app
-    _alpha, delta = _delta_brief(client)
+    alpha, delta = _delta_brief(client)
 
     class Run:
         canvas = (delta, "rev")
     real = main_module.execution_runs.get
     monkeypatch.setattr(main_module.execution_runs, "get", lambda run_id: Run() if run_id == "wl-run-alpha" else real(run_id))
-    _alphas_record(recoveries)
+    # Stamped with Alpha, yet registered on Delta here: that sign adds a hold.
+    _alphas_record(recoveries, project=alpha)
     _refused_as_before(client)
 
 
@@ -182,8 +197,8 @@ def test_a_node_holding_another_projects_record_id_is_refused(app, recoveries):
 
 def test_unknowns_fail_closed(app, recoveries, monkeypatch):
     client, *_ = app
-    _delta_brief(client)
-    _alphas_record(recoveries)
+    alpha, _delta = _delta_brief(client)
+    _alphas_record(recoveries, project=alpha)
     record = recoveries.list()[0]
     node = main_module.cli_graph.nodes["n1"]
     assert main_module._recovery_record_holds_node(record, node) is False
@@ -199,23 +214,24 @@ def test_unknowns_fail_closed(app, recoveries, monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("boom")
     with monkeypatch.context() as m:
-        m.setattr(main_module, "_hold_run_project", boom)
+        m.setattr(main_module, "_record_may_be_open_projects", boom)
         assert main_module._recovery_record_holds_node(record, node) is True
     # And with every patch gone, it is Alpha's again.
     assert main_module._recovery_record_holds_node(record, node) is False
 
 
-def test_a_seeded_record_placed_by_its_id_in_alpha_lets_deltas_n1_go(app, recoveries):
+def test_a_seeded_record_stamped_alpha_lets_deltas_n1_go(app, recoveries):
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
-    # Nebula seeds a record with a run id of its own, which no run history names: placed by its World Labs ID.
+    # Nebula seeds a record with a run id of its own, which no run history
+    # names, stamped with the canvas it seeded from (round 23).
     with store.transaction() as catalog:
         for node in catalog["projects"][alpha]["snapshot"]["nodes"]:
             if node.get("id") == "n1":
                 node["data"] = {**node["data"], "definitionId": ENVIRONMENT,
                                 "params": {**(node["data"].get("params") or {}), "resume_operation_id": "op-alpha"}}
         store.commit(catalog)
-    _alphas_record(recoveries, run_id="graph-seeded-1", op="op-alpha")
+    _alphas_record(recoveries, run_id="graph-seeded-1", op="op-alpha", project=alpha)
     deleted = _delete(client)
     assert deleted.status_code == 200, deleted.text
     assert "n1" not in main_module.cli_graph.nodes

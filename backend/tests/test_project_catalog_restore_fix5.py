@@ -511,7 +511,8 @@ def test_l2_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_nu
     assert "Project limit reached" in str(raised.value)
     assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 4
     http = client.post("/api/projects", headers=AGENT, json={"name": "Fifth", "workspaceRevision": _rev(client)})
-    assert http.status_code == 413 and http.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3}
+    assert http.status_code == 413 and http.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3,
+                              "projectCount": 4, "deletes": 2}
 
 
 # -- M-3: the waiting canvas is held aside --------------------------------------------

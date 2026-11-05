@@ -1341,6 +1341,12 @@ def edit_canvas(
       no canvas open, the first one to open does it; the result's `arrange` says which.
     - `remove`: node ids to delete, with their connections. `unwire`: single connections,
       [{"source", "sourceHandle", "target", "targetHandle"}].
+      A node World Labs state holds is refused (409 "Cannot delete n3: it has
+      unresolved World Labs paid state..."): a kept recovery ID holds its node
+      unless Nebula recorded, when the run wrote it, that the run belongs to
+      another project that still exists and the open project's run history
+      doesn't name it; a start settling or waiting on the person's check holds
+      by node id; an ID in the node's settings holds too.
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
     - `pending`: true makes this call's new nodes your placeholders while you
@@ -1527,7 +1533,7 @@ def _limit_said_whole() -> Iterator[None]:
         payload = exc.payload if isinstance(exc.payload, dict) else {}
         if exc.status != 413:
             raise
-        fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
+        fields = {key: payload[key] for key in ("limit", "projectLimit", "projectCount", "deletes", "scope", "code") if key in payload}
         raise NebulaAPIError(f"{exc.detail} (413, {_json.dumps(fields)})", status=413, kind=exc.kind,
                              headers=exc.headers, payload=exc.payload) from exc
 
@@ -1569,11 +1575,18 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     <project left>", then "Recovered <project left> copy", "copy 2" and so
     on). Refused while a run is going, and while World Labs state holds
     (a paid start settling, a start waiting on the person's check, a kept
-    recovery ID or an ID in a node's settings, any project's): the 409
-    carries `hold`, as list_projects' `openHold` says it. Open proposals
-    close (another project's canvas).
+    recovery ID or an ID in a node's settings, any project's, or Nebula
+    couldn't save its World Labs safeguards: code paid_bootstrap): the 409
+    carries `hold`, as list_projects' `openHold` says it. It is refused
+    too (409, code canvas_kept_in_tab) while the person's tab keeps edits
+    of its own. If Nebula can't verify the paid-start fence's storage, it
+    answers 507 "Cannot switch projects because Nebula cannot verify the
+    durable World Labs paid-start fence." Open proposals close (another
+    project's canvas).
     Refused at the project limit with the whole refusal, as HTTP answers it:
-    "Project limit reached (413, {"limit": "projects", "projectLimit": N})".
+    "Project limit reached (413, {"limit": "projects", "projectLimit": N,
+    "projectCount": M, "deletes": D})": how many there are, and how many to
+    delete before a new one fits.
     """
     return _switch("/api/projects", {"name": name}, ctx)
 
@@ -1594,9 +1607,13 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     on; a number in the name is never read). Refused while a run is going,
     and while World Labs state holds (a paid start settling, a start
     waiting on the person's check, a kept recovery ID or an ID in a node's
-    settings, any project's), the open of the project already open too:
-    the 409 carries `hold`, as list_projects' `openHold` says it; and while
-    the person's tab keeps edits of its own (code canvas_kept_in_tab).
+    settings, any project's, or Nebula couldn't save its World Labs
+    safeguards: code paid_bootstrap), the open of the project already open
+    too: the 409 carries `hold`, as list_projects' `openHold` says it; and
+    while the person's tab keeps edits of its own (code canvas_kept_in_tab).
+    If Nebula can't verify the paid-start fence's storage, it answers 507
+    "Cannot switch projects because Nebula cannot verify the durable World
+    Labs paid-start fence."
     A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
     is held aside first, whole, and saved as its own project once there is
     room, so opening works then too.
@@ -1641,6 +1658,12 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     undo_canvas_edit (or the person's Cmd+Z) puts them back. On the person's
     open canvas the nodes leave at once, and edits to them still waiting to be
     sent (the person's typing) are dropped.
+    A node World Labs state holds can't be deleted (409 "Cannot delete n3: it
+    has unresolved World Labs paid state..."): a kept recovery ID holds its node
+    unless Nebula recorded, when the run wrote it, that the run belongs to
+    another project that still exists and the open project's run history
+    doesn't name it; a start settling or waiting on the person's check holds by
+    node id; an ID in the node's settings holds too. Tell the person.
     """
     body: dict[str, Any] = {}
     if node_ids:

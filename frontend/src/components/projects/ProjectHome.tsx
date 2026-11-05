@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
-import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyFallback, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyFallback, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
+import { UNDO_VISIBLE_MS } from './toastTiming';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
@@ -137,7 +138,6 @@ export interface ProjectHomeProps {
   onDismissCanvasSaved?: () => void;
 }
 
-const UNDO_VISIBLE_MS = 8000;
 
 const monochromeMark = [
   { t: 0, rgb: [235, 236, 235] as [number, number, number] },
@@ -466,6 +466,15 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 
 const noop = () => {};
 
+// Review 21 LOW-1 (the entry chunk's budget): the notices that only show
+// when something happened load the first time one shows, and show nothing
+// while they load (no wrong line; each is a polite status that announces on
+// arrival).
+const CanvasWaitingNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasWaitingNotice })));
+const CanvasHeldUnreadableNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasHeldUnreadableNotice })));
+const CanvasSavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasSavedToast })));
+const SavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.SavedToast })));
+
 /** The notice after Nebula restored a damaged project list (GM's lines,
  * catalogRestoreCopy). Its status region is in the page from the start and
  * filled after it mounts, so screen readers announce it (a live region
@@ -514,73 +523,6 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </>}
     </div>
-  );
-}
-
-/** GM r9: the held canvases that couldn't be read, when no restore notice
- * shows to say it: its own notice, styled like the restore notice, closed
- * with × (a one-time report; only the waiting line has no ×). */
-function CanvasHeldUnreadableNotice({ copy, count, onDismiss }: { copy: RestoreCopy; count: number | null; onDismiss: () => void }) {
-  return (
-    <div className="project-home__notice project-home__restore" role="status">
-      <span className="project-home__restore-text">{copy.canvasHeldUnreadableLine(count)}</span>
-      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
-  );
-}
-
-/** GM r5's waiting line (r6's wording): the canvas isn't saved as a
- * project yet, the list is at a limit, nothing in it is lost. A slim notice where the restore notice sits; it
- * can't be dismissed while the canvas waits and goes once it is saved. The
- * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
-function CanvasWaitingNotice({ copy, waiting, trashCount, onOpenRecentlyDeleted }: {
-  copy: RestoreCopy;
-  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null }; trashCount: number;
-  onOpenRecentlyDeleted: () => void;
-}) {
-  const line = copy.canvasWaitingLine(waiting.reason, {
-    projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0, canvases: waiting.canvases,
-    deletes: waiting.deletes,
-  });
-  return (
-    // No ×: the stack's focus rule can land on it, so it takes focus itself.
-    <div className="project-home__notice project-home__restore project-home__waiting" role="status" tabIndex={-1}>
-      <span className="project-home__restore-text">{line}</span>
-      {waiting.reason === 'storage' && trashCount > 0 && <button type="button" className="project-home__restore-action project-home__restore-action--neutral"
-        onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
-    </div>
-  );
-}
-
-/** GM r5: "Once saved: the normal toast", with the project's real name. */
-function CanvasSavedToast({ copy, project, onDismiss }: {
-  copy: RestoreCopy;
-  project: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
-    filed?: SavedCanvas[] };
-  onDismiss: () => void;
-}) {
-  return <SavedToast text={copy.canvasSavedToast(project.name, project.filed, project.overSaveLimit === true,
-    project.another === true, project.agentCopy)} onDismiss={onDismiss} />;
-}
-
-/** The app's saved toast: it goes after UNDO_VISIBLE_MS, held while pointed
- * at or focused. Keyed by the caller on what it names. */
-function SavedToast({ text, onDismiss }: { text: string; onDismiss: () => void }) {
-  const [paused, setPaused] = useState(false);
-  useEffect(() => {
-    if (paused) return;
-    const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [paused, onDismiss]);
-  return (
-    <InNoticeRegion slot="project-home">
-      <div className="project-home__toast" role="status" aria-live="polite"
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{text}</span>
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-      </div>
-    </InNoticeRegion>
   );
 }
 
@@ -728,10 +670,10 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         {/* The same element with or without a restore: its live region stays in the page. */}
         <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} copyFailed={copyFailed} restore={catalogRestore} current={current}
           onDismiss={onDismissCatalogRestore} heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} /></div>
-        {showWaiting && canvasNotFiled && copy && <div {...track('waiting')}><CanvasWaitingNotice copy={copy} waiting={canvasNotFiled} trashCount={trash.length}
-          onOpenRecentlyDeleted={() => openTrash()} /></div>}
-        {showUnreadable && canvasHeldUnreadable && copy && <div {...track('unreadable')}><CanvasHeldUnreadableNotice copy={copy} count={canvasHeldUnreadable.count}
-          onDismiss={onDismissCanvasHeldUnreadable} /></div>}
+        {showWaiting && canvasNotFiled && copy && <div {...track('waiting')}><Suspense fallback={null}><CanvasWaitingNotice copy={copy} waiting={canvasNotFiled} trashCount={trash.length}
+          onOpenRecentlyDeleted={() => openTrash()} /></Suspense></div>}
+        {showUnreadable && canvasHeldUnreadable && copy && <div {...track('unreadable')}><Suspense fallback={null}><CanvasHeldUnreadableNotice copy={copy} count={canvasHeldUnreadable.count}
+          onDismiss={onDismissCanvasHeldUnreadable} /></Suspense></div>}
 
         {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
             then the held edits or the line that says where they went, then
@@ -781,11 +723,13 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
         onUndo={() => onRestore(last.id, 'undo')} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
-      {canvasSaved && copy && <CanvasSavedToast key={canvasSaved.id} copy={copy} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
-      {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={filedCopyLine(editsRecoveredToast(editsRecoveredAs.name), editsRecoveredAs)}
-        onDismiss={onDismissEditsRecovered} />}
-      {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}
-        onDismiss={onDismissAgentClosedNote} />}
+      <Suspense fallback={null}>
+        {canvasSaved && copy && <CanvasSavedToast key={canvasSaved.id} copy={copy} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
+        {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={filedCopyLine(editsRecoveredToast(editsRecoveredAs.name), editsRecoveredAs)}
+          onDismiss={onDismissEditsRecovered} />}
+        {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}
+          onDismiss={onDismissAgentClosedNote} />}
+      </Suspense>
     </div>
   );
 }

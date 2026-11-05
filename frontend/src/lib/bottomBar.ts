@@ -109,6 +109,94 @@ export function floatingTopLimit(gutter: number): number {
 }
 
 /**
+ * Where the selection toolbar goes (GM r35 on PR #199): it must not cover
+ * the selection. In order:
+ * 1. its own place below the top stack (the workspace header, the World
+ *    Labs notice and its reopen line), when that doesn't cover the
+ *    selection: the selection is below it with the gap, or beside or above it;
+ * 2. otherwise flipped below the selection, the usual floating-toolbar rule,
+ *    when it fits above the bottom bar (and below the offline banner, which
+ *    sits under the toolbar's own place);
+ * 3. otherwise pinned in its own place, the only case that covers the
+ *    selection. The camera never moves.
+ * `home` is the toolbar's own top (its Panel, the marker floating panels
+ * stop below, which never moves with it); boxes are viewport px.
+ */
+export interface ScreenBox { top: number; bottom: number; left: number; right: number }
+export type SelectionToolbarPlace = 'clear' | 'between' | 'below' | 'pinned';
+
+export function placeSelectionToolbar({ home, height, left, right, selection, stackBottom = null, bottomLimit, gap = BOTTOM_BAR_GAP }: {
+  home: number; height: number; left: number; right: number;
+  selection: ScreenBox | null;
+  /** The lowest of the top stack's parts, the offline banner included, or null. */
+  stackBottom?: number | null;
+  bottomLimit: number;
+  gap?: number;
+}): { top: number; place: SelectionToolbarPlace } {
+  if (!selection || selection.bottom <= selection.top) return { top: home, place: 'clear' };
+  const acrossIt = left < selection.right && right > selection.left;
+  const covers = (top: number) => acrossIt && top < selection.bottom + gap && top + height + gap > selection.top;
+  if (!covers(home)) return { top: home, place: acrossIt && selection.top >= home + height + gap ? 'between' : 'clear' };
+  const below = Math.max(selection.bottom + gap, home, stackBottom === null ? home : stackBottom + gap);
+  if (below + height <= bottomLimit) return { top: below, place: 'below' };
+  return { top: home, place: 'pinned' };
+}
+
+/** The top stack's parts that sit at the canvas's top over the toolbar's
+ * line or under it (the World Labs notice box, the offline banner). */
+export const TOP_STACK_ATTR = 'data-top-stack';
+/** Said on the window when the stack changes, so the toolbar places itself again. */
+export const TOP_STACK_EVENT = 'nebula:top-stack';
+
+/** The bottom of the lowest part of the top stack on screen, or null. */
+export function topStackBottom(): number | null {
+  if (typeof document === 'undefined') return null;
+  let bottom: number | null = null;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_STACK_ATTR}]`)) {
+    const box = part.getBoundingClientRect();
+    if (box.height <= 0) continue;
+    bottom = bottom === null ? box.bottom : Math.max(bottom, box.bottom);
+  }
+  return bottom;
+}
+
+/** The selected nodes' box on screen (their union), or null. */
+export function selectionScreenBox(within: ParentNode = document): ScreenBox | null {
+  let box: ScreenBox | null = null;
+  for (const node of within.querySelectorAll<HTMLElement>('.react-flow__node.selected')) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    box = box === null
+      ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }
+      : { top: Math.min(box.top, rect.top), bottom: Math.max(box.bottom, rect.bottom),
+          left: Math.min(box.left, rect.left), right: Math.max(box.right, rect.right) };
+  }
+  return box;
+}
+
+export const SELECTION_TOOLBAR_OFFSET_VAR = '--selection-toolbar-offset';
+export const SELECTION_TOOLBAR_PLACE_ATTR = 'data-toolbar-place';
+
+/** Places `toolbar` (inside its Panel) by placeSelectionToolbar and writes
+ * the result on the Panel: the offset from its own place, and the case. */
+export function applySelectionToolbarPlace(toolbar: HTMLElement): SelectionToolbarPlace | null {
+  const panel = toolbar.parentElement;
+  if (!panel) return null;
+  const home = panel.getBoundingClientRect().top;
+  const bar = toolbar.getBoundingClientRect();
+  const span = { left: bar.left, right: bar.right };
+  const { top, place } = placeSelectionToolbar({
+    home, height: toolbar.offsetHeight || bar.height, ...span,
+    selection: selectionScreenBox(panel.closest('.react-flow') ?? document),
+    stackBottom: topStackBottom(),
+    bottomLimit: floatingBottomLimit(BOTTOM_BAR_GAP, window.innerHeight, span),
+  });
+  panel.style.setProperty(SELECTION_TOOLBAR_OFFSET_VAR, `${Math.round(top - home)}px`);
+  panel.setAttribute(SELECTION_TOOLBAR_PLACE_ATTR, place);
+  return place;
+}
+
+/**
  * The canvas's top notices (the World Labs notice, its held-reopen line
  * inside it) sit over the selection toolbar's line; the toolbar moves below
  * them while they show (review 20 lens item 4, GM r34 A5 on PR #199): the
@@ -140,10 +228,15 @@ export function publishTopNotice(notice: HTMLElement | null): void {
   root.style.setProperty(TOP_NOTICE_CLEARANCE_VAR, `${Math.max(0, Math.ceil(box.bottom + BOTTOM_BAR_GAP - canvasTop))}px`);
 }
 
+/** Tells the toolbar the top stack changed (a notice, its line or the banner came, went or grew). */
+export function sayTopStackChanged(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(TOP_STACK_EVENT));
+}
+
 /** Keeps `notice`'s foot published while it is on screen (its size and the
  * window's), and clears it when it goes. Returns the stop. */
 export function watchTopNotice(notice: HTMLElement): () => void {
-  const publish = () => publishTopNotice(notice);
+  const publish = () => { publishTopNotice(notice); sayTopStackChanged(); };
   publish();
   const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
   observer?.observe(notice);
@@ -152,6 +245,7 @@ export function watchTopNotice(notice: HTMLElement): () => void {
     observer?.disconnect();
     window.removeEventListener('resize', publish);
     publishTopNotice(null);
+    sayTopStackChanged();
   };
 }
 

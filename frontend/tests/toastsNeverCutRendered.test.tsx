@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { ProjectHome, type ProjectSummary } from '../src/components/projects/ProjectHome';
 
 vi.mock('../src/lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
@@ -66,12 +66,15 @@ function cuts(surface: Element): string[] {
 }
 
 const surfaces = () => [...document.querySelectorAll('.project-home__toast, .project-home__notice')];
+/** The notices load as their own chunk (PR #199 round 23's first-load split): wait for `count` of them. */
+const surfacesReady = (count: number) => waitFor(() => expect(surfaces().length).toBeGreaterThanOrEqual(count), { timeout: 60_000 });
 
 describe('no Projects home toast or notice cuts its text (rendered)', { timeout: 120_000 }, () => {
-  it('applies the stylesheets it measures with', () => {
+  it('applies the stylesheets it measures with', async () => {
     render(<ProjectHome projects={[]} loading={false} busy={false} error={null} onCreate={vi.fn()} onOpen={vi.fn()}
       onRename={vi.fn()} onDelete={vi.fn()} onRetry={vi.fn()}
       canvasSaved={{ id: A, name: long }} />);
+    await surfacesReady(1);
     // A rule from project-home.css reached the rendered toast: the measure
     // sees real styles, not defaults.
     const toast = document.querySelector('.project-home__toast')!;
@@ -79,7 +82,7 @@ describe('no Projects home toast or notice cuts its text (rendered)', { timeout:
     expect(sheets.some((file) => file.endsWith('project-home.css'))).toBe(true);
   });
 
-  it('every toast and notice, with long names', () => {
+  it('every toast and notice, with long names', async () => {
     render(<ProjectHome projects={[project(A, long), project(B, `${long} 2`)]} loading={false} busy={false} error={null}
       onCreate={vi.fn()} onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} onRetry={vi.fn()}
       catalogRestore={{ id: 'r', kind: 'restored', source: 'catalog.json.bak', addedBack: [], addedBackCount: 0,
@@ -89,25 +92,28 @@ describe('no Projects home toast or notice cuts its text (rendered)', { timeout:
       canvasNotFiled={{ reason: 'projects', projectLimit: 500, canvases: [{ name: long }, { name: `${long} 3` }], deletes: 2 }}
       canvasSaved={{ id: B, name: `${long} 4`, another: true }}
       lastDeleted={{ id: 'c'.repeat(32), name: long, deletedAt: '2026-10-28T10:00:00Z' } as never} />);
+    await surfacesReady(4);
     const all = surfaces();
     expect(all.length).toBeGreaterThanOrEqual(4);
     expect(all.flatMap((surface) => cuts(surface))).toEqual([]);
   });
 
-  it('the held canvases\' notice alone, with its ×', () => {
+  it('the held canvases\' notice alone, with its ×', async () => {
     render(<ProjectHome projects={[]} loading={false} busy={false} error={null} onCreate={vi.fn()} onOpen={vi.fn()}
       onRename={vi.fn()} onDelete={vi.fn()} onRetry={vi.fn()} canvasHeldUnreadable={{ count: null }} />);
+    await surfacesReady(1);
     expect(surfaces()).toHaveLength(1);
     expect(cuts(surfaces()[0])).toEqual([]);
   });
 
-  it('catches a cut: a clamp, an ellipsis or a fixed box planted on the toast text', () => {
+  it('catches a cut: a clamp, an ellipsis or a fixed box planted on the toast text', async () => {
     const planted = document.createElement('style');
     planted.textContent = `.project-home__toast-text { -webkit-line-clamp: 2; overflow: hidden; max-height: 3em; text-overflow: ellipsis; }`;
     document.head.appendChild(planted);
     try {
       render(<ProjectHome projects={[]} loading={false} busy={false} error={null} onCreate={vi.fn()} onOpen={vi.fn()}
         onRename={vi.fn()} onDelete={vi.fn()} onRetry={vi.fn()} canvasSaved={{ id: A, name: long }} />);
+      await surfacesReady(1);
       const found = cuts(document.querySelector('.project-home__toast')!);
       expect(found.some((line) => line.includes('line clamp'))).toBe(true);
       expect(found.some((line) => line.includes('ellipsis'))).toBe(true);

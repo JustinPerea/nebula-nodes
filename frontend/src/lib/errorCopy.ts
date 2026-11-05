@@ -46,6 +46,19 @@ export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload t
 /** 413 with no reason (GM). */
 export const TOO_LARGE_COPY = "That's too large to save.";
 
+/** GM r35 on PR #199, verbatim, for every refusal of a new project at the
+ * project limit (the limit is for new projects: a restore, an Undo of a
+ * delete and the person's save of kept edits may take the list past it):
+ * "You have 501 projects and the limit is 500. You can make a new one after
+ * you delete 2 projects." The real numbers; `deletes` is what the backend
+ * counted (what is added with the new one too), else the count past the
+ * limit plus one. */
+export function overProjectLimitCopy(count: number, limit: number, deletes?: number | null): string {
+  const n = Math.max(1, typeof deletes === 'number' && Number.isInteger(deletes) && deletes > 0 ? deletes : count - limit + 1);
+  return `You have ${count} ${count === 1 ? 'project' : 'projects'} and the limit is ${limit}. `
+    + `You can make a new one after you delete ${n} ${n === 1 ? 'project' : 'projects'}.`;
+}
+
 /** The person gate's code for a refusal only the person may get past: this
  * tab isn't connected as the person (no person token, or one from before
  * Nebula restarted), which reconnecting fixes (backend services/person_gate.py). */
@@ -477,18 +490,26 @@ export async function readRefusal(response: Response): Promise<{ detail: unknown
 interface FailureBody {
   detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null;
   overSaveLimit: boolean; sizeBytes: number | null; hold?: unknown;
+  /** A refused new project at the project limit, with its numbers: overProjectLimitCopy. */
+  limitReason?: string;
 }
+const wholeNumber = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
     const body = await response.json() as {
       detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown; hold?: unknown;
+      projectLimit?: unknown; projectCount?: unknown; deletes?: unknown;
     } | null;
     const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
     const code = typeof body?.code === 'string' ? body.code : null;
     const overSaveLimit = response.status === 413 && body?.limit === 'size';
     const sizeBytes = overSaveLimit && typeof body?.sizeBytes === 'number' && Number.isFinite(body.sizeBytes) ? body.sizeBytes : null;
+    const limitReason = response.status === 413 && limit === 'projects' && wholeNumber(body?.projectCount)
+      && wholeNumber(body?.projectLimit) && body.projectLimit > 0 && body.projectCount >= body.projectLimit
+      ? overProjectLimitCopy(body.projectCount, body.projectLimit, wholeNumber(body?.deletes) ? body.deletes : null) : undefined;
     return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes,
-      ...(body && typeof body === 'object' && 'hold' in body ? { hold: body.hold } : {}) };
+      ...(body && typeof body === 'object' && 'hold' in body ? { hold: body.hold } : {}),
+      ...(limitReason ? { limitReason } : {}) };
   } catch {
     return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null };
   }
@@ -594,7 +615,7 @@ export async function requestError(heading: string, response: Response,
     ? { detail: options.detail, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null }
     : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
-  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
+  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason ?? body.limitReason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
     overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, hold: body.hold });
 }

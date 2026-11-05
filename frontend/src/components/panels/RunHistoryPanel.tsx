@@ -8,11 +8,12 @@ import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
-import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
+import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, providerRecoveryPlaceKey, recordNodeType, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
 import { runFinishesLine } from '../../lib/useBackendOffline';
 import { showNotice } from '../../lib/canvasNotice';
+import { useAnnounced } from '../../lib/useAnnounced';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -70,15 +71,20 @@ export function RunHistoryPanel() {
   const recoveryOnCanvas = useGraphStore((s) => s.providerRecoveryOnCanvas);
   const owned = providerRecoveries.map((checkpoint) => recoveryOnCanvas(checkpoint));
   const verdictIndex = verdictRecordIndex(openHold, 'recovery', openId, providerRecoveries, owned);
-  const recordName = (index: number, inSentence = false) => heldRecordName(nodes, providerRecoveries[index].nodeId,
-    owned[index], index === verdictIndex ? openHold : null, inSentence);
+  // Each record's type, when it knows it (GM r36 item 1): the node type
+  // Nebula stored with it (the person-only places), or its World ID.
+  const places = useGraphStore((s) => s.providerRecoveryPlaces);
+  const recordName = (index: number, inSentence = false) => {
+    const { runId, nodeId, existingWorldId } = providerRecoveries[index];
+    const kind = recordNodeType(places[providerRecoveryPlaceKey(runId, nodeId)]?.nodeType, existingWorldId);
+    return heldRecordName(nodes, nodeId, owned[index], index === verdictIndex ? openHold : null, inSentence, kind);
+  };
   // GM r34 A4: while Run History is open, the held reopen's Forget ID line
   // shows at the top of its safeguards (the rail's callout hides). Its own
   // polite region, mounted empty and then given the line, so the first
   // line is announced too.
   const reopenLine = useProjectStore((s) => (s.heldReopenLine?.place === 'runHistory' ? s.heldReopenLine.line : null));
-  const [announcedReopenLine, setAnnouncedReopenLine] = useState<string | null>(null);
-  useEffect(() => { setAnnouncedReopenLine(visible ? reopenLine : null); }, [reopenLine, visible]);
+  const announcedReopenLine = useAnnounced(visible ? reopenLine : null);
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);

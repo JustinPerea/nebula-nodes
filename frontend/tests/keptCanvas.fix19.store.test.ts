@@ -177,8 +177,8 @@ const noticeText = () => {
 
 
 
-const OUTPUTS = 'Couldn’t connect two outputs. Drag from an output to an input.';
-const INPUTS = 'Couldn’t connect two inputs. Drag from an output to an input.';
+const OUTPUTS = 'Nebula couldn’t connect two outputs. Drag from an output to an input.';
+const INPUTS = 'Nebula couldn’t connect two inputs. Drag from an output to an input.';
 
 /** Duplicate n1: a node only this tab has, by a tab-local id. */
 function duplicateN1(): string {

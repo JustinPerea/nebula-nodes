@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
 import { forgetNodeLabelsForTests } from '../src/lib/lastNodeLabels';
@@ -6,6 +6,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { useUIStore } from '../src/store/uiStore';
 import type { RunRecord } from '../src/lib/runHistory';
+import { frames } from './helpers/frames';
 
 /**
  * Round 22 of PR #199 (review 20 RV LOW-2; GM r34 A1 and its addendum, A4):
@@ -14,7 +15,8 @@ import type { RunRecord } from '../src/lib/runHistory';
  *   the node's card title (and the removed forms);
  * - the record Nebula's open-hold verdict names: "“World” from “Alpha”",
  *   or "“World” from another project" with no project name;
- * - any other: "A World Labs Environment node from another project".
+ * - any other: its type when the record knows it (round 23, GM r36 item 1),
+ *   else "A World Labs node from another project" (an operation ID alone).
  * The Forget ID button's name and its confirm's heading say the same. While
  * Run History is open, the held reopen's Forget ID line is the first line
  * of the safeguards section (GM r34 A4).
@@ -45,7 +47,10 @@ function setup({ records = [record('run-alpha')], hold = verdict() as Record<str
 const rows = () => within(screen.getByRole('region', { name: 'World Labs recovery safeguards' }))
   .getAllByRole('listitem').map((item) => item.querySelector('span')?.textContent);
 
+const clock = frames();
+afterEach(() => clock.uninstall());
 beforeEach(() => {
+  clock.install();
   forgetNodeLabelsForTests();
   useGraphStore.setState(INITIAL_GRAPH, true);
   useUIStore.setState(INITIAL_UI, true);
@@ -71,27 +76,27 @@ describe('LR1: Alpha’s record on Delta’s canvas', () => {
     expect(screen.getByRole('button', { name: 'Forget the recovery ID for “Text Input” from another project' })).toBeTruthy();
   });
 
-  it('no verdict: A World Labs Environment node from another project (never “Delta brief”)', () => {
+  it('no verdict: A World Labs node from another project (never “Delta brief”)', () => {
     setup({ hold: null });
     render(<RunHistoryPanel />);
-    expect(rows()).toEqual(['A World Labs Environment node from another project · Operation ID op-alpha-probe']);
-    const forget = screen.getByRole('button', { name: 'Forget the recovery ID for a World Labs Environment node from another project' });
+    expect(rows()).toEqual(['A World Labs node from another project · Operation ID op-alpha-probe']);
+    const forget = screen.getByRole('button', { name: 'Forget the recovery ID for a World Labs node from another project' });
     fireEvent.click(forget);
     expect(screen.getByRole('alertdialog', {
-      name: 'Forget the recovery ID for a World Labs Environment node from another project?' })).toBeTruthy();
+      name: 'Forget the recovery ID for a World Labs node from another project?' })).toBeTruthy();
   });
 
   it('the verdict with no node name: the placeholder', () => {
     setup({ hold: verdict({ nodeName: null }) });
     render(<RunHistoryPanel />);
-    expect(rows()).toEqual(['A World Labs Environment node from another project · Operation ID op-alpha-probe']);
+    expect(rows()).toEqual(['A World Labs node from another project · Operation ID op-alpha-probe']);
   });
 
   it('a verdict of another state, another node, or the open project names no row', () => {
     for (const hold of [verdict({ state: 'ambiguity' }), verdict({ nodeId: 'n2' }), verdict({ projectId: 'delta' })]) {
       setup({ hold });
       const { unmount } = render(<RunHistoryPanel />);
-      expect(rows()).toEqual(['A World Labs Environment node from another project · Operation ID op-alpha-probe']);
+      expect(rows()).toEqual(['A World Labs node from another project · Operation ID op-alpha-probe']);
       unmount();
     }
   });
@@ -102,7 +107,7 @@ describe('LR1: Alpha’s record on Delta’s canvas', () => {
     expect(rows()).toEqual([
       '“Delta brief” · Operation ID op-delta',
       '“Text Input” from “Alpha” · Operation ID op-alpha-probe',
-      'A World Labs Environment node from another project · Operation ID op-beta',
+      'A World Labs node from another project · Operation ID op-beta',
     ]);
   });
 
@@ -143,6 +148,8 @@ describe('GM r34 A4: the held reopen’s Forget ID line tops the safeguards whil
     render(<RunHistoryPanel />);
     const section = screen.getByRole('region', { name: 'World Labs recovery safeguards' });
     const line = within(section).getByRole('status');
+    expect(line.textContent).toBe('');
+    clock.flush();
     expect(line).toHaveTextContent(REOPEN_LINE);
     expect(line).toHaveAttribute('aria-live', 'polite');
     expect(section.firstElementChild).toBe(line);
@@ -152,12 +159,13 @@ describe('GM r34 A4: the held reopen’s Forget ID line tops the safeguards whil
     setup();
     render(<RunHistoryPanel />);
     const line = within(screen.getByRole('region', { name: 'World Labs recovery safeguards' })).getByRole('status');
-    expect(line).toHaveTextContent('');
+    expect(line.textContent).toBe('');
     act(() => useProjectStore.setState({ heldReopenLine: { id: 'delta', line: REOPEN_LINE, place: 'runHistory' } }));
+    clock.flush();
     expect(line).toHaveTextContent(REOPEN_LINE);
     act(() => useProjectStore.setState({ heldReopenLine: null }));
     expect(line.isConnected).toBe(true);
-    expect(line).toHaveTextContent('');
+    expect(line.textContent).toBe('');
   });
 
   it('a line placed elsewhere (by Stop, in the World Labs notice) doesn’t show here', () => {
@@ -171,6 +179,7 @@ describe('GM r34 A4: the held reopen’s Forget ID line tops the safeguards whil
     setup({ records: [] });
     useProjectStore.setState({ heldReopenLine: { id: 'delta', line: REOPEN_LINE, place: 'runHistory' } });
     render(<RunHistoryPanel />);
+    clock.flush();
     expect(within(screen.getByRole('region', { name: 'World Labs recovery safeguards' })).getByRole('status'))
       .toHaveTextContent(REOPEN_LINE);
     expect(screen.queryByText(/These IDs prevent/)).toBeNull();

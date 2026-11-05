@@ -187,7 +187,8 @@ is free (`roomNow`) the next listing saves it. Tell them, and don't delete
 anything to make room yourself. Restoring a project from Recently deleted, and the person saving a kept
 tab's edits as a project, are never refused by the limit (they may pass
 it); making a new one past the
-limit still is (413 with `limit` and `projectLimit`, which MCP's
+limit still is (413 with `limit`, `projectLimit`, `projectCount` and
+`deletes`, how many to delete before a new one fits, which MCP's
 `new_project` prints too).
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from

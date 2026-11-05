@@ -94,10 +94,10 @@ describe('GM r9: the held canvases that couldn\'t be read', () => {
     expect(screen.getByText('The damaged files were kept.')).toBeTruthy();
   });
 
-  it('alone: its own notice styled like the restore notice, with × that closes it', () => {
+  it('alone: its own notice styled like the restore notice, with × that closes it', async () => {
     const onDismiss = vi.fn();
     render(<ProjectHome {...base} canvasHeldUnreadable={{ count: 2 }} onDismissCanvasHeldUnreadable={onDismiss} />);
-    const line = screen.getByText("Nebula couldn’t read 2 canvases you had open that were waiting to be saved, so they may be lost. The damaged file was kept.");
+    const line = await screen.findByText("Nebula couldn’t read 2 canvases you had open that were waiting to be saved, so they may be lost. The damaged file was kept.");
     const notice = line.closest('.project-home__notice');
     expect(notice?.classList.contains('project-home__restore')).toBe(true);
     expect(notice?.classList.contains('project-home__waiting')).toBe(false);

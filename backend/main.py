@@ -843,6 +843,40 @@ def _restore_node_errors() -> None:
 
 
 _restore_node_errors()
+
+
+def _legacy_record_place(catalog: Mapping[str, Any], record: Mapping[str, Any]) -> str | None:
+    """The one project (counting Recently deleted) whose stored run history
+    has the record's run, for the one-time stamp of a record saved before
+    stamps (PR #199 round 23); None when none or several do. Run history
+    only, never a World ID."""
+    run_id = record.get("runId")
+    if not isinstance(run_id, str) or not run_id:
+        return None
+    found = []
+    for project_id, project in [*(catalog.get("projects") or {}).items(), *(catalog.get("trash") or {}).items()]:
+        history = ((project.get("snapshot") or {}).get("runHistory") or []) if isinstance(project, dict) else []
+        if any(isinstance(entry, dict) and entry.get("id") == run_id for entry in history):
+            found.append(project_id)
+    return found[0] if len(found) == 1 and isinstance(found[0], str) else None
+
+
+def _stamp_legacy_recoveries() -> None:
+    """Boot: stamp each unstamped World Labs record once, where today's run
+    histories place it unambiguously (_legacy_record_place). The rest stay
+    unstamped and hold. One atomic journal write; logs a count, never ids."""
+    try:
+        catalog = project_store.read()
+        count = provider_recovery_store.stamp_unstamped(lambda record: _legacy_record_place(catalog, record))
+    except Exception as exc:  # noqa: BLE001 - boot never stops over it: unstamped records hold
+        print(f"[provider-recovery] could not stamp saved records: {type(exc).__name__}", flush=True)
+        return
+    if count:
+        print(f"[provider-recovery] stamped {count} saved World Labs record{'' if count == 1 else 's'} "
+              "with their project", flush=True)
+
+
+_stamp_legacy_recoveries()
 provider_start_guard = ProviderStartGuard(
     _STATE_DIR / "provider-start-ambiguities.json" if _STATE_PATH is not None else None
 )
@@ -1186,9 +1220,15 @@ def _hold_place(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]
     if state in {"ambiguity", "recovery"}:
         records = facts["records"]
         node_id = str(records[0].get("nodeId") or "") or None
-        project = _hold_run_project(catalog, records[0].get("runId"))
-        if project is None and state == "recovery":
-            project = _hold_id_project(catalog, records[0])
+        stamped = _stamped_project_id(records[0]) if state == "recovery" else None
+        if stamped is not None:
+            # The record's stamp places it (PR #199 round 23); a project
+            # deleted for good can't be known any more.
+            project = _catalog_project(catalog, stamped)
+        else:
+            project = _hold_run_project(catalog, records[0].get("runId"))
+            if project is None and state == "recovery":
+                project = _hold_id_project(catalog, records[0])
     elif state == "params":
         node_id = facts["nodeId"]
         project = (catalog.get("projects") or {}).get(open_id)
@@ -1198,17 +1238,49 @@ def _hold_place(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]
     return node_id, project, name
 
 
-def _held_node_type(state: str, facts: Mapping[str, Any]) -> str | None:
-    """The held node's type, as the node picker names it ("World Labs
-    Environment"), for a node whose name can't be known (its project
-    can't be, or no longer has it): known from the record alone only when it
-    holds an Existing World ID, a field only a World Labs Environment node
-    has. Never guessed from a node id. Else None."""
-    record = facts["records"][0] if state == "recovery" and facts.get("records") else {}
-    if not record.get("existingWorldId"):
+# The World Labs node types a record can name (GM r36 item 1 on PR #199).
+WORLD_LABS_NODE_TYPES = ("worldlabs-environment", "worldlabs-world-export")
+
+
+def _stamped_project_id(record: Mapping[str, Any]) -> str | None:
+    """The project the record's stamp names (PR #199 round 23), or None."""
+    stamp = provider_recovery_store.stamp_of(record.get("runId"), record.get("nodeId")) or {}
+    project_id = stamp.get("projectId")
+    return project_id if isinstance(project_id, str) and project_id else None
+
+
+def _catalog_project(catalog: Mapping[str, Any], project_id: Any) -> Mapping[str, Any] | None:
+    """A project in the catalog or in Recently deleted, by its id; None for
+    one deleted for good (or never there)."""
+    if not isinstance(project_id, str):
         return None
-    name = (node_registry.get_all().get("worldlabs-environment") or {}).get("displayName")
+    found = (catalog.get("projects") or {}).get(project_id) or (catalog.get("trash") or {}).get(project_id)
+    return found if isinstance(found, dict) else None
+
+
+def _record_node_type(record: Mapping[str, Any]) -> str | None:
+    """A World Labs record's node type, as the node picker names it (GM r36
+    item 1 on PR #199): the node type stored with the record's stamp when
+    it is a World Labs one ("World Labs Environment", "World Labs Export"),
+    else "World Labs Environment" for a record holding an Existing World ID
+    (a field only that node has), else None ("A World Labs node"). Never
+    guessed from a node id."""
+    stamp = provider_recovery_store.stamp_of(record.get("runId"), record.get("nodeId")) or {}
+    stored = stamp.get("nodeType")
+    definition_id = stored if stored in WORLD_LABS_NODE_TYPES else (
+        "worldlabs-environment" if record.get("existingWorldId") else None)
+    if definition_id is None:
+        return None
+    name = (node_registry.get_all().get(definition_id) or {}).get("displayName")
     return name if isinstance(name, str) and name.strip() else None
+
+
+def _held_node_type(state: str, facts: Mapping[str, Any]) -> str | None:
+    """The held node's type (_record_node_type), for a node whose name can't
+    be known (its project can't be, or no longer has it). Else None."""
+    if state != "recovery" or not facts.get("records"):
+        return None
+    return _record_node_type(facts["records"][0])
 
 
 def _held_person_subject(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]) -> str | None:
@@ -1332,7 +1404,8 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     global _graph_recovery_bootstrap_error
     try:
         with provider_start_guard.exclusive_lifecycle():
-            _ensure_shared_graph_recoveries(list(cli_graph.nodes.values()), source="bootstrap-retry")
+            _ensure_shared_graph_recoveries(list(cli_graph.nodes.values()), source="bootstrap-retry",
+                                            project_id=cli_graph.owner)
             provider_recovery_store.verify_writable()
     except ProviderStartConflictError as exc:
         # A start began since has_active() was read: the settling refusal, as
@@ -1394,7 +1467,8 @@ def _paid_graph_mutation(action: str):
             # shared journal existed. Seed its current checkpoint identities
             # before this mutation is allowed to erase or replace that graph.
             _seed_shared_graph_recoveries_for_api(
-                list(cli_graph.nodes.values()), source="mutation-preflight"
+                list(cli_graph.nodes.values()), source="mutation-preflight",
+                project_id=cli_graph.owner,
             )
             # Round 15: the seed may have written nothing (no IDs on the
             # canvas), so it alone can't clear the bootstrap error.
@@ -1431,24 +1505,36 @@ def _graph_worldlabs_recovery_checkpoints(
     return checkpoints
 
 
+def _recovery_node_types(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """Each node's definition id by its id, for the records' stamps."""
+    return {str(node["id"]): str(node["definitionId"]) for node in nodes
+            if isinstance(node, dict) and isinstance(node.get("id"), str)
+            and isinstance(node.get("definitionId"), str)}
+
+
 def _ensure_shared_graph_recoveries(
-    nodes: list[dict[str, Any]], *, source: str
+    nodes: list[dict[str, Any]], *, source: str, project_id: Any = None
 ) -> list[dict[str, str | None]]:
+    """Seed the journal from a canvas's World Labs IDs. ``project_id``: the
+    project that canvas is (its owner), which stamps each record this adds
+    (PR #199 round 23); None or not a project id: unstamped (it holds)."""
     checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
     if not checkpoints:
         return []
     return provider_recovery_store.ensure_many(
         run_id=f"graph-{source}-{uuid4().hex}",
         checkpoints=checkpoints,
+        project_id=project_id if isinstance(project_id, str) else None,
+        node_types=_recovery_node_types(nodes),
     )
 
 
 def _seed_shared_graph_recoveries_for_api(
-    nodes: list[dict[str, Any]], *, source: str
+    nodes: list[dict[str, Any]], *, source: str, project_id: Any = None
 ) -> list[dict[str, str | None]]:
     """Fail the graph commit if its recovery control state is not durable."""
     try:
-        return _ensure_shared_graph_recoveries(nodes, source=source)
+        return _ensure_shared_graph_recoveries(nodes, source=source, project_id=project_id)
     except ProviderRecoveryCapacityError as exc:
         raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit),
                                    route="canvas") from exc
@@ -1481,6 +1567,7 @@ def _commit_graph_candidate_with_recoveries(
     additions = _seed_shared_graph_recoveries_for_api(
         recovery_nodes,
         source=source,
+        project_id=candidate.owner,
     )
     try:
         cli_graph.replace_with(candidate)
@@ -1515,6 +1602,8 @@ if _bootstrap_checkpoints:
             provider_recovery_store.ensure_many(
                 run_id=f"graph-bootstrap-{uuid4().hex}",
                 checkpoints=_bootstrap_checkpoints,
+                project_id=cli_graph.owner if isinstance(cli_graph.owner, str) else None,
+                node_types=_recovery_node_types(list(cli_graph.nodes.values())),
             )
     except (
         ProviderRecoveryCapacityError,
@@ -1570,7 +1659,10 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
                if isinstance(exc, ProjectLimitError) and exc.limit == "projects" else {}),
             # How many projects there are, where the route knows (a kept save: GM r22 on PR #199).
             **({"projectCount": exc.project_count}
-               if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "project_count", None), int) else {})}
+               if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "project_count", None), int) else {}),
+            # How many to delete before it fits (GM r35 on PR #199: the tab's over-limit line).
+            **({"deletes": exc.deletes}
+               if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "deletes", None), int) else {})}
 
 
 # Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
@@ -4760,6 +4852,10 @@ class ConnectionManager:
         # The person's tabs that keep edits Nebula couldn't save after a
         # restore (GM r15 on PR #199, the kept mode): agents' writes wait for them.
         self.kept_tabs: set[WebSocket] = set()
+        # The X-Nebula-Tab each kept socket said it has (its keptEdits frame),
+        # so a request can be matched to a tab Nebula knows keeps edits
+        # (is_kept_tab). Only sockets in kept_tabs count.
+        self.kept_tab_ids: dict[WebSocket, str] = {}
         # Each closed kept tab's grace (KEPT_GRACE_SECONDS), and each kept tab
         # a restart remembered (KEPT_BOOT_SLACK_SECONDS): a key of its own ->
         # time.monotonic() until which it holds kept mode.
@@ -4805,11 +4901,23 @@ class ConnectionManager:
         if self.kept_graces:
             del self.kept_graces[min(self.kept_graces, key=self.kept_graces.__getitem__)]
 
-    def set_kept(self, websocket: WebSocket, kept: object) -> None:
+    def is_kept_tab(self, tab: object) -> bool:
+        """Whether ``tab`` (a request's X-Nebula-Tab) is a tab Nebula knows
+        keeps edits: a promoted socket in kept_tabs said it with that id."""
+        return isinstance(tab, str) and any(self.kept_tab_ids.get(socket) == tab for socket in self.kept_tabs)
+
+    def set_kept(self, websocket: WebSocket, kept: object, tab: object = None) -> None:
         """The person's tab says it keeps edits Nebula couldn't save (or no
-        longer does): only a promoted socket (is_browser) gets here."""
+        longer does): only a promoted socket (is_browser) gets here. ``tab``
+        is the id the tab sends as X-Nebula-Tab (a kept save passes the
+        project limit only from such a tab)."""
+        if kept is True and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
+            self.kept_tab_ids[websocket] = tab
+        else:
+            self.kept_tab_ids.pop(websocket, None)
         if websocket not in self.browser_connections:
             self.kept_tabs.discard(websocket)
+            self.kept_tab_ids.pop(websocket, None)
             return
         if kept is True:
             # A tab back within its grace carries kept mode on seamlessly.
@@ -4983,6 +5091,7 @@ class ConnectionManager:
     def clear_kept(self) -> None:
         """Forget every kept tab and grace, and the marker (tests)."""
         self.kept_tabs.clear()
+        self.kept_tab_ids.clear()
         self.kept_graces.clear()
         self._marker_count = None
         self._remember_kept()
@@ -5008,6 +5117,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        self.kept_tab_ids.pop(websocket, None)
         if websocket in self.kept_tabs:
             # Still keeping edits as it closed: a blip, most likely. Its own grace.
             self.kept_tabs.discard(websocket)
@@ -5292,7 +5402,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 elif isinstance(frame, dict) and frame.get("type") == "personOpen":
                     await _person_tab_open(frame.get("projectId"))
                 elif isinstance(frame, dict) and frame.get("type") == "keptEdits":
-                    manager.set_kept(websocket, frame.get("kept"))
+                    manager.set_kept(websocket, frame.get("kept"), frame.get("tab"))
                 continue
             try:
                 # ValueError, not only JSONDecodeError: an int past 4,300
@@ -5315,6 +5425,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _send_questions_sync(websocket)
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
+                # And where each World Labs record was written (PR #199 round
+                # 23): the graphSync this socket got first was the agents' form.
+                await websocket.send_text(json.dumps({"type": "providerRecoveryPlaces",
+                                                      "places": _person_recovery_places()}))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -7085,6 +7199,14 @@ def _note_result_landed(event: Any, run_id: str | None) -> None:
     node_id = getattr(event, "node_id", None)
     if not isinstance(event, (ExecutedEvent, ErrorEvent, SkippedEvent)) or not isinstance(node_id, str) or not run_id:
         return
+    _stamp_result_landed(node_id, run_id, persist=not isinstance(event, ExecutedEvent))
+
+
+def _stamp_result_landed(node_id: str, run_id: str, *, persist: bool) -> None:
+    """Record that ``run_id``'s result landed on ``node_id`` now, in the
+    project the run was admitted in (_note_result_landed). ``persist``: write
+    the live graph now; a caller that writes it next (a Cinema shot's merge,
+    an output's own sync) passes False."""
     project = _run_project()
     if project is ...:
         project = _workspace_context()["activeProjectId"]
@@ -7097,8 +7219,8 @@ def _note_result_landed(event: Any, run_id: str | None) -> None:
     live = cli_graph.nodes.get(node_id)
     if live is not None and project == _workspace_context()["activeProjectId"]:
         live[RESULT_LANDED_KEY] = at
-        if not isinstance(event, ExecutedEvent):
-            cli_graph._maybe_persist()  # an output's own sync persists it
+        if persist:
+            cli_graph._maybe_persist()
 
 
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
@@ -11272,7 +11394,8 @@ def _claim_fresh_paid_worldlabs_starts(
         if _graph_recovery_bootstrap_error is not None:
             try:
                 _ensure_shared_graph_recoveries(
-                    list(cli_graph.nodes.values()), source="bootstrap-retry"
+                    list(cli_graph.nodes.values()), source="bootstrap-retry",
+                    project_id=cli_graph.owner,
                 )
                 # Round 15 (review 14, M4): a re-seed with no IDs to seed
                 # writes nothing, so prove the journal takes a real write
@@ -11345,12 +11468,16 @@ def _claim_fresh_paid_worldlabs_starts(
                 for _kind, node_id, resume_id, existing_id in recovery_claims
             ],
         )
-        for _kind, node_id, resume_id, existing_id in recovery_claims:
+        for kind, node_id, resume_id, existing_id in recovery_claims:
+            # Stamped with the open project, whose canvas the run is on (a
+            # registered run blocks a switch), and the node's type.
             provider_recovery_store.set(
                 run_id=run_id,
                 node_id=node_id,
                 resume_operation_id=resume_id,
                 existing_world_id=existing_id,
+                project_id=cli_graph.owner if isinstance(cli_graph.owner, str) else None,
+                node_type=kind,
             )
 
     try:
@@ -12382,6 +12509,11 @@ async def _merge_shot_result(
             existing.update(_normalize_outputs_for_storage(shaped))
             node["outputs"] = existing
 
+        # The shot's result (or failure) landed on the node now: the stamp a
+        # tab's older handoff is judged against after a restart (PR #199
+        # round 23, review 21 reopen-tabs NIT-4), as every other run result.
+        if run_id:
+            _stamp_result_landed(node_id, run_id, persist=False)
         cli_graph._maybe_persist()
 
     return result_output
@@ -12525,6 +12657,8 @@ async def _merge_shot_variations(
         existing = dict(node.get("outputs") or {})
         existing[f"shot_{shot_id}"] = {"type": "Image", "value": variations[0]["url"]}
         node["outputs"] = existing
+        if run_id:
+            _stamp_result_landed(node_id, run_id, persist=False)  # as _merge_shot_result
         cli_graph._maybe_persist()
     return canonical
 
@@ -13187,17 +13321,26 @@ async def _broadcast_graph_sync(
     # Placeholders on the graph now (a project opened, an agent's edit): when
     # the next one runs out (pending_nodes' idle rule).
     _schedule_pending_expiry()
-    await manager.broadcast_raw({"type": "graphSync", **export,
-                                 **({"graphReplaced": True} if graph_replaced else {}),
-                                 **({"cleared": True} if cleared and not graph_replaced else {}),
-                                 **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
-                                 **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
-                                 **({"renumbered": dict(renumbered)} if renumbered and graph_replaced else {}),
-                                 **({"proposalsKept": True} if graph_replaced and proposals_kept else {}),
-                                 **({"arranged": arranged} if arranged and not graph_replaced else {}),
-                                 **({"runParams": run_params} if run_params and not graph_replaced else {}),
-                                 **({"edit": _graph_edit_origin()}
-                                    if edit and (not graph_replaced or reason == "import") else {})})
+    sync = {"type": "graphSync", **export,
+            **({"graphReplaced": True} if graph_replaced else {}),
+            **({"cleared": True} if cleared and not graph_replaced else {}),
+            **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
+            **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+            **({"renumbered": dict(renumbered)} if renumbered and graph_replaced else {}),
+            **({"proposalsKept": True} if graph_replaced and proposals_kept else {}),
+            **({"arranged": arranged} if arranged and not graph_replaced else {}),
+            **({"runParams": run_params} if run_params and not graph_replaced else {}),
+            **({"edit": _graph_edit_origin()}
+               if edit and (not graph_replaced or reason == "import") else {})}
+    # The records' places go to the person's canvas only (PR #199 round 23):
+    # every other socket gets the sync as it always was. With no stamped
+    # record there is nothing to add, and the sync goes out as it always did
+    # (the tab keeps the places it has when a frame carries none).
+    places = _person_recovery_places()
+    if places:
+        await manager.broadcast_raw({**sync, "providerRecoveryPlaces": places}, others=sync)
+    else:
+        await manager.broadcast_raw(sync)
     # It carried the whole graph: a sync an admitted run couldn't send
     # (_broadcast_admitted_run) is paid by this one.
     global _graph_sync_owed
@@ -13580,12 +13723,20 @@ def _sync_provider_recovery_to_cli_graph(
     durability_warning: str | None = None
     safety_hold_changed = False
     if run_id is not None:
+        # The stamp (PR #199 round 23): the project the run registered on,
+        # and the node's type from the live node while that canvas is open.
+        run_canvas = getattr(execution_runs.get(run_id), "canvas", None)
+        stamp_project = run_canvas[0] if isinstance(run_canvas, tuple) and run_canvas else None
+        live_node = cli_graph.nodes.get(event.node_id) if (
+            isinstance(stamp_project, str) and stamp_project == cli_graph.owner) else None
         try:
             provider_recovery_store.set(
                 run_id=run_id,
                 node_id=event.node_id,
                 resume_operation_id=event.resume_operation_id,
                 existing_world_id=event.existing_world_id,
+                project_id=stamp_project if isinstance(stamp_project, str) else None,
+                node_type=(live_node or {}).get("definitionId"),
             )
         except (ProviderRecoveryPersistenceError, ValueError) as exc:
             # A hostile/legacy node id must not turn a successfully captured
@@ -15459,17 +15610,22 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
 
 def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
     """Whether a World Labs recovery record with this node's id holds the
-    node from deletion (Justin, 2026-10-31, on PR #199): node ids repeat
-    across projects, so a record holds the node only when it is placed in
-    the open project (its run registered on it here, or the open-hold
-    verdict's placement: _hold_run_project, then _hold_id_project), when it
-    can't be placed at all, or when the node's own settings hold the
-    record's ID. Another project's record holds nothing here: deleting this
-    node leaves that record and its ID as they are. Fails closed: anything
-    unknown (no catalog, no open project, a canvas that isn't the open
-    project's, an error) holds. Ambiguities and active starts carry no ID
-    and still hold by node id (_ensure_node_deletable). The same rule for
-    the person and for agents; their texts are unchanged."""
+    node from deletion (Justin, 2026-10-31, on PR #199; review 21 LOW-1):
+    node ids repeat across projects, so a record holds the node unless the
+    stamp Nebula wrote with it, when the run wrote it, names another
+    project that still exists (in the catalog or Recently deleted). Run
+    histories and IDs only ever add a hold, never release one (agents can
+    write histories, and the tab trims them): the node's own settings
+    holding the record's ID hold first; and a record stamped elsewhere
+    still holds when its run is registered on the open project here, is in
+    the open project's stored run history, or the open project's stored
+    node holds its ID. An unstamped record (saved before stamps, and not
+    placed by the startup pass) and one stamped with a project deleted for
+    good hold. Fails closed: anything unknown (no catalog, no open project,
+    a canvas that isn't the open project's, an error) holds. Ambiguities
+    and active starts carry no ID and still hold by node id
+    (_ensure_node_deletable). The same rule for the person and for agents;
+    their texts are unchanged."""
     try:
         wanted = {value for value in (record.get("resumeOperationId"), record.get("existingWorldId")) if value}
         held = {value for value in recovery_identifiers(str(node.get("definitionId") or ""), node.get("params") or {})
@@ -15480,34 +15636,64 @@ def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, An
         open_id = catalog.get("activeProjectId")
         if not isinstance(open_id, str) or not open_id or cli_graph.owner != open_id:
             return True
-        run_id = record.get("runId")
-        canvas = getattr(execution_runs.get(run_id), "canvas", None) if isinstance(run_id, str) and run_id else None
-        if isinstance(canvas, tuple) and canvas and canvas[0] == open_id:
+        stamped = _stamped_project_id(record)
+        if stamped is None or stamped == open_id or _catalog_project(catalog, stamped) is None:
             return True
-        project = _hold_run_project(catalog, run_id) or _hold_id_project(catalog, record)
-        return project is None or project.get("id") == open_id
+        return _record_may_be_open_projects(catalog, record, open_id)
     except Exception:  # noqa: BLE001 - fail closed: a record Nebula can't place holds
         return True
 
 
+def _record_may_be_open_projects(catalog: Mapping[str, Any], record: Mapping[str, Any], open_id: str) -> bool:
+    """The signs that only add a hold (PR #199 round 23): the record's run
+    is registered on the open project in this process, is in the open
+    project's stored run history, or the open project's stored node with
+    the record's node id holds one of its IDs."""
+    run_id = record.get("runId")
+    canvas = getattr(execution_runs.get(run_id), "canvas", None) if isinstance(run_id, str) and run_id else None
+    if isinstance(canvas, tuple) and canvas and canvas[0] == open_id:
+        return True
+    project = (catalog.get("projects") or {}).get(open_id)
+    snapshot = (project.get("snapshot") or {}) if isinstance(project, dict) else {}
+    if any(isinstance(entry, dict) and entry.get("id") == run_id for entry in snapshot.get("runHistory") or []):
+        return True
+    wanted = {value for value in (record.get("resumeOperationId"), record.get("existingWorldId")) if value}
+    for stored in snapshot.get("nodes") or []:
+        data = stored.get("data") if isinstance(stored, dict) and isinstance(stored.get("data"), dict) else {}
+        if isinstance(stored, dict) and stored.get("id") == record.get("nodeId") \
+                and isinstance(data.get("definitionId"), str) and isinstance(data.get("params"), dict) \
+                and wanted & {value for value in recovery_identifiers(data["definitionId"], data["params"]) if value}:
+            return True
+    return False
+
+
 def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]]) -> str | None:
     """The person's line when a delete is refused only by recovery records
-    Nebula knows are another project's but can't place in one (GM r34
-    addendum 2 on PR #199): each one's run is in other projects' run
-    histories (a duplicate copies them), never the open project's, and the
-    node holds none of their IDs. "Nebula couldn’t delete “Delta brief”
-    because it shares the ID n1 with a World Labs Environment node from
-    another project, which has a saved World Labs recovery ID. Forget that
-    ID in Run History, then try again." ``holding``: the records that hold
-    the node (_recovery_record_holds_node); one placed in another project
-    holds nothing, so none here is named. None (the record's own line
-    stays) when any of them may be the open project's or can't be placed
-    anywhere. Read-only; never fails."""
+    Nebula can't identify as the open project's; the node holds none of
+    their IDs. Two lines (GM on PR #199):
+    - a record whose project Nebula can't identify (GM r36 item 2): its
+      stamp names a project deleted for good, or it is unstamped and its run
+      is only in other projects' run histories (a duplicate copies them,
+      Recently deleted counts) or another project's node holds its ID:
+      "Nebula couldn’t delete “Delta brief” because it shares the ID n1 with
+      a World Labs run from a project Nebula can’t identify. Check that run
+      in Marble before you forget its ID in Run History, then try again.";
+    - a record nothing names (r35, 2, in addendum 2's shape), which wins:
+      "Nebula couldn’t delete “Delta brief” because it has a saved World
+      Labs recovery ID. Check the run in Marble, then forget that ID in Run
+      History."
+    ``holding``: the records that hold the node (_recovery_record_holds_node).
+    None (the record's own line stays) when any of them may be the open
+    project's (stamped with it, or a sign that adds a hold:
+    _record_may_be_open_projects), or when Nebula can't read where it is.
+    Read-only; never fails."""
     try:
         if not holding:
             return None
         catalog = _catalog_for_the_hold()
         open_id = catalog.get("activeProjectId")
+        if not isinstance(open_id, str) or not open_id or cli_graph.owner != open_id:
+            return None
         projects = catalog.get("projects") or {}
         others = [project for project_id, project in projects.items() if project_id != open_id]
         others += list((catalog.get("trash") or {}).values())
@@ -15516,17 +15702,27 @@ def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]])
             history = ((project.get("snapshot") or {}).get("runHistory") or []) if isinstance(project, dict) else []
             return any(isinstance(entry, dict) and entry.get("id") == run_id for entry in history)
 
+        nowhere = False
         for record in holding:
             run_id = record.get("runId")
-            canvas = getattr(execution_runs.get(run_id), "canvas", None) if isinstance(run_id, str) and run_id else None
-            if not isinstance(run_id, str) or not run_id or ran(projects.get(open_id), run_id) \
-                    or (isinstance(canvas, tuple) and bool(canvas) and canvas[0] == open_id) \
-                    or not any(ran(project, run_id) for project in others):
+            stamped = _stamped_project_id(record)
+            if not isinstance(run_id, str) or not run_id or stamped == open_id \
+                    or _record_may_be_open_projects(catalog, record, open_id):
                 return None
-        kind = (node_registry.get_all().get("worldlabs-environment") or {}).get("displayName") or "World Labs Environment"
-        return (f"Nebula couldn\u2019t delete {_quoted(_node_label(node_id))} because it shares the ID {node_id} "
-                f"with a {kind} node from another project, which has a saved World Labs recovery ID. "
-                "Forget that ID in Run History, then try again.")
+            if stamped is not None:
+                continue  # its project was deleted for good: it can't be identified
+            if not any(ran(project, run_id) for project in others) and _hold_id_project(catalog, record) is None:
+                # (Placed by its ID in the open project can't reach here: the
+                # open project's stored node is a sign above, and the live
+                # node holding it is the params line's.)
+                nowhere = True
+        label = _quoted(_node_label(node_id))
+        if nowhere:
+            return (f"Nebula couldn\u2019t delete {label} because it has a saved World Labs recovery ID. "
+                    "Check the run in Marble, then forget that ID in Run History.")
+        return (f"Nebula couldn\u2019t delete {label} because it shares the ID {node_id} "
+                "with a World Labs run from a project Nebula can\u2019t identify. "
+                "Check that run in Marble before you forget its ID in Run History, then try again.")
     except Exception:  # noqa: BLE001 - the refusal itself never fails over its line
         return None
 
@@ -20299,7 +20495,11 @@ def _refuse_a_create_past_the_limit(catalog: dict[str, Any]) -> None:
     the next listing files the canvas (there is room for it alone)."""
     adding = 1 + (1 if _settle_would_file(catalog) else 0) + len(_held_distinct())
     if len(catalog["projects"]) + adding > project_store_module.MAX_PROJECTS:
-        raise ProjectLimitError("Project limit reached", "projects")
+        refused = ProjectLimitError("Project limit reached", "projects")
+        # The tab's line names both numbers and how many to delete (GM r35 on PR #199).
+        refused.project_count = len(catalog["projects"])
+        refused.deletes = len(catalog["projects"]) + adding - project_store_module.MAX_PROJECTS
+        raise refused
 
 
 def _undo_canvas_filing(settled: tuple[str, Any] | None) -> None:
@@ -20483,7 +20683,8 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
     additions = []
     graph_written = False
     try:
-        additions = _seed_shared_graph_recoveries_for_api(list(candidate.nodes.values()), source="project-open")
+        additions = _seed_shared_graph_recoveries_for_api(list(candidate.nodes.values()), source="project-open",
+                                                          project_id=candidate.owner)
         if cli_graph._persist_path is not None:
             candidate.save(cli_graph._persist_path)
             graph_written = True
@@ -20857,13 +21058,18 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         # The person's save of a kept tab's edits may pass the project limit
         # (Justin, 2026-10-31, on PR #199), as a restore and an Undo of a
         # delete may; a stale tab's recovery and any agent's request may not.
-        kept_save = body.get("kept") is True and is_person(current_request_headers())
+        # Only from a tab Nebula knows keeps edits (its keptEdits frame named
+        # this X-Nebula-Tab); the store caps it at the limit + 1. Any other
+        # request with kept: true is refused like a new project.
+        kept_save = (body.get("kept") is True and is_person(current_request_headers())
+                     and manager.is_kept_tab(_persons_tab_id()))
         try:
             project_store.commit(catalog, kept_save=kept_save)
         except ProjectLimitError as exc:
             # The tab's line names the limit and how many there are (GM r22 on PR #199).
             if exc.limit == "projects":
                 exc.project_count = len(catalog["projects"]) - 1
+                exc.deletes = len(catalog["projects"]) - project_store_module.MAX_PROJECTS
             raise
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
                   "renumbered": copy.deepcopy(renumbered), "droppedWires": copy.deepcopy(project["_recoveryDroppedWires"]),
@@ -21534,7 +21740,8 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                                    pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"),
                                    renumbered=_handoff_renumbering(project, handoff),
                                    base=_handoff_renumbering_base(project, handoff),
-                                   deleted_ids=body.get("deletedNodeIds"))
+                                   deleted_ids=body.get("deletedNodeIds"),
+                                   live_open=catalog["activeProjectId"] == project_id)
             refresh_metadata(project)
             project_store.commit(catalog)
             removed: list[dict[str, Any]] = []
@@ -21546,7 +21753,9 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                     **({"_removed": removed} if removed else {}),
                     # Deletes it ignored and kept (review 19 reopen LOW-4): the
                     # tab shows a line for them.
-                    **({"deletesKept": landed.kept_deletes} if landed.kept_deletes else {})}
+                    **({"deletesKept": landed.kept_deletes} if landed.kept_deletes else {}),
+                    # Deletes a guard refused (review 21 NIT-2), each with its line.
+                    **({"deletesHeld": landed.held_deletes} if landed.held_deletes else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
@@ -21802,12 +22011,17 @@ class _HandoffLanded(NamedTuple):
     # The listed deletes this save ignored and kept (their new ids): the
     # window sending it isn't the one that saved the node last.
     kept_deletes: list[str] = []
+    # The listed deletes a guard refused (a World Labs record or paid start,
+    # a rendering Cinema scene; PR #199 round 23, review 21 NIT-2), with the
+    # person's line for each: {nodeId, line}. The node stays, said.
+    held_deletes: list[dict[str, str]] = []
 
 
 def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
                   pending_params: Any = None, pending_labels: Any = None,
                   renumbered: Mapping[str, str] | None = None,
-                  base: dict[str, Any] | None = None, deleted_ids: Any = None) -> _HandoffLanded:
+                  base: dict[str, Any] | None = None, deleted_ids: Any = None,
+                  live_open: bool = False) -> _HandoffLanded:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -21883,6 +22097,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     renamed: set[str] = set()
     deleted: set[str] = set()
     kept_deletes: set[str] = set()
+    held_deletes: list[dict[str, str]] = []
     if renumbered:
         if isinstance(raw, dict):
             held = {node.get("id") for node in raw.get("nodes") or [] if isinstance(node, dict)}
@@ -21895,6 +22110,19 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
                 # last: ignored, and the answer says so (deletesKept), so a
                 # refused delete is never silent.
                 kept_deletes = said - deleted
+                if live_open:
+                    # The project is the open one: a node its live delete
+                    # (_apply_handoff_live) would refuse stays in the saved
+                    # copy too, and the answer says why (deletesHeld).
+                    for node_id in sorted(deleted):
+                        live = cli_graph.nodes.get(node_id)
+                        if live is None:
+                            continue
+                        try:
+                            _ensure_node_deletable(node_id, live)
+                        except HTTPException as exc:
+                            deleted.discard(node_id)
+                            held_deletes.append({"nodeId": node_id, "line": str(exc.detail)})
             _apply_node_renumbering(raw, renumbered)
         pending_params = _renumbered_keys(pending_params, renumbered)
         pending_labels = _renumbered_keys(pending_labels, renumbered)
@@ -22013,7 +22241,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
         base.pop(node_id, None)
     return _HandoffLanded(
         {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels, node_id in moved) for node_id in merged},
-        sorted(deleted), results, result_runs, sorted(kept_deletes))
+        sorted(deleted), results, result_runs, sorted(kept_deletes), held_deletes)
 
 
 def _journal_handoff_results(project: Mapping[str, Any], result_runs: Mapping[str, str | None]) -> None:
@@ -22489,7 +22717,29 @@ async def get_graph_export() -> dict:
     its Cinema scenes (fix round 8, H2; services/scene_keys.py)."""
     export = await export_graph_for_frontend()
     scene_keys.note_read(_scene_scope(), _reader_agent(), export.get("sceneKeys") or {})
+    if _is_person_request():
+        # The person's own read only (PR #199 round 23): never an agent's.
+        return {**export, "providerRecoveryPlaces": _person_recovery_places()}
     return export
+
+
+def _person_recovery_places() -> list[dict[str, Any]]:
+    """Where Nebula wrote each World Labs record (its stamp: the project
+    whose canvas the run was on, and the node's type), for the person's tab
+    only: the export for the person's request, the graphSync's person form,
+    the frame after a verified hello. Never in an agent-readable payload.
+    A stamp naming a project deleted for good says projectId null (it can't
+    be known any more). Never fails: [] (every record then holds)."""
+    try:
+        places = provider_recovery_store.places()
+        if not places:
+            return []
+        catalog = _catalog_for_the_hold()
+        return [{**place, "projectId": place.get("projectId")
+                 if _catalog_project(catalog, place.get("projectId")) is not None else None}
+                for place in places]
+    except Exception:  # noqa: BLE001 - see above
+        return []
 
 
 async def export_graph_for_frontend() -> dict:

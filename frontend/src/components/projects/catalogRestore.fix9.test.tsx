@@ -108,9 +108,9 @@ describe("GM r11, 4: the agent's copy is the agent's", () => {
     expect(screen.getByText('Codex’s changes were saved as their own project, “Recovered canvas copy”.')).toBeTruthy();
   });
 
-  it('rendered: the copy waiting on home', () => {
+  it('rendered: the copy waiting on home', async () => {
     render(<ProjectHome {...base} canvasNotFiled={{ reason: 'projects', projectLimit: 500,
       canvases: [{ name: null, agentCopy: { agent: 'Codex' } }] }} />);
-    expect(screen.getByText(/^Codex’s copy of your canvas isn’t saved as a project yet/)).toBeTruthy();
+    expect(await screen.findByText(/^Codex’s copy of your canvas isn’t saved as a project yet/)).toBeTruthy();
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Round 19 of PR #199, the frontend's rules and lines:
  * - GM r28, 1 (review 17 drops-locks-ui LOW-1): a drop on a handle of the
- *   same kind says its own line ("Couldn’t connect two outputs. Drag from an
+ *   same kind says its own line ("Nebula couldn’t connect two outputs. Drag from an
  *   output to an input." / "… two inputs …"), never another failure's
  *   reason (it was read as an input: "isn’t on the node anymore", a loop);
  * - review 17 drops-locks-ui NIT: the kept one-connection refusal says
@@ -27,8 +27,8 @@ const node = (id: string, definitionId: string, data: Record<string, unknown> = 
 const edge = (source: string, sourceHandle: string, target: string, targetHandle: string): Edge =>
   ({ id: `${source}-${target}-${targetHandle}`, source, sourceHandle, target, targetHandle });
 
-const OUTPUTS = 'Couldn’t connect two outputs. Drag from an output to an input.';
-const INPUTS = 'Couldn’t connect two inputs. Drag from an output to an input.';
+const OUTPUTS = 'Nebula couldn’t connect two outputs. Drag from an output to an input.';
+const INPUTS = 'Nebula couldn’t connect two inputs. Drag from an output to an input.';
 
 describe('GM r28, 1: a drop on a handle of the same kind', () => {
   const nodes = [node('t', 'text-input'), node('t2', 'text-input'), node('s', 'seedream-4-5'), node('s2', 'seedream-4-5')];
@@ -62,7 +62,7 @@ describe('GM r28, 1: a drop on a handle of the same kind', () => {
   it('a drop of the other kind still says its own reason, and a valid or empty drop nothing', () => {
     expect(refusedDropLine({ nodeId: 't', handleId: 'text', handleType: 'source' },
       { isValid: false, toHandle: { nodeId: 's', id: 'images', type: 'target' } }, nodes, []))
-      .toBe('Couldn’t connect to “References”. It takes images and masks, not text.');
+      .toBe('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     expect(refusedDropLine({ nodeId: 't', handleId: 'text', handleType: 'source' },
       { isValid: true, toHandle: { nodeId: 's', id: 'prompt', type: 'target' } }, nodes, [])).toBeNull();
     expect(refusedDropLine({ nodeId: 't', handleId: 'text', handleType: 'source' }, { isValid: null, toHandle: null }, nodes, [])).toBeNull();
@@ -82,7 +82,7 @@ describe('review 17 NIT: the kept one-connection refusal', () => {
       dynamicInputPorts: [{ id: 'refs', label: 'Refs', dataType: 'Image', multiple: true, maxConnections: 1 }], dynamicOutputPorts: [] });
     const images = [node('i1', 'image-input'), node('i2', 'image-input')];
     expect(checkKeptWire({ source: 'i2', sourceHandle: 'image', target: 'c', targetHandle: 'refs' }, [capped, ...images],
-      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Couldn’t connect to “Refs”. It takes only one connection.' });
+      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Nebula couldn’t connect to “Refs”. It takes only one connection.' });
   });
 });
 
@@ -111,8 +111,8 @@ describe('GM r27, 3 and review 17 NIT-2: the following lines', () => {
     expect(runWhileFollowingLine(null, null, 'Delta', 3, true)).toBe('You can run 3 nodes when “Delta” opens.');
   });
 
-  it('an agent’s: “Couldn’t run …” with ’', () => {
-    expect(runWhileFollowingLine(null, 'Codex', 'Delta')).toBe('Couldn’t run the canvas. Codex is opening “Delta”.');
+  it('an agent’s: “Nebula couldn’t run …” with ’', () => {
+    expect(runWhileFollowingLine(null, 'Codex', 'Delta')).toBe('Nebula couldn’t run the canvas. Codex is opening “Delta”.');
   });
 });
 

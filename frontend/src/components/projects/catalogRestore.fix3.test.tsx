@@ -178,10 +178,10 @@ describe('the Projects home', () => {
     expect(screen.getByRole('listitem', { name: 'Dunes' }).getAttribute('data-from-notice')).toBeNull();
   });
 
-  it('shows the waiting line while the canvas waits, with no Dismiss, and drops it once saved', () => {
+  it('shows the waiting line while the canvas waits, with no Dismiss, and drops it once saved', async () => {
     const waiting = { reason: 'storage' as const, projectLimit: 500 };
     const { rerender } = render(<ProjectHome {...props({ canvasNotFiled: waiting, trash: [trashed(DUNES, 'Dunes')] })} />);
-    const line = screen.getByText(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: true }));
+    const line = await screen.findByText(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: true }));
     const notice = line.closest('.project-home__waiting') as HTMLElement;
     expect(notice).toBeTruthy();
     expect(notice.querySelector('[aria-label="Dismiss"]')).toBeNull();
@@ -190,9 +190,9 @@ describe('the Projects home', () => {
     expect(document.querySelector('.project-home__waiting')).toBeNull();
   });
 
-  it('has no Open Recently deleted on the project-limit waiting line', () => {
+  it('has no Open Recently deleted on the project-limit waiting line', async () => {
     render(<ProjectHome {...props({ canvasNotFiled: { reason: 'projects', projectLimit: 500 }, trash: [trashed(DUNES, 'Dunes')] })} />);
-    expect(screen.getByText(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: true }))).toBeTruthy();
+    expect(await screen.findByText(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: true }))).toBeTruthy();
     expect(screen.queryByRole('button', { name: OPEN_RECENTLY_DELETED })).toBeNull();
   });
 
@@ -204,10 +204,10 @@ describe('the Projects home', () => {
 });
 
 describe('the saved toast on the Projects home', () => {
-  it('names the project the waiting canvas was saved as', () => {
+  it('names the project the waiting canvas was saved as', async () => {
     const onDismiss = vi.fn();
     render(<ProjectHome {...props({ canvasSaved: { id: SCRATCH, name: 'Recovered canvas' }, onDismissCanvasSaved: onDismiss })} />);
-    expect(screen.getByText('The canvas you had open was saved as its own project, “Recovered canvas”.')).toBeTruthy();
+    expect(await screen.findByText('The canvas you had open was saved as its own project, “Recovered canvas”.')).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' }).at(-1)!);
     expect(onDismiss).toHaveBeenCalled();
   });

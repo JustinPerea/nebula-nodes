@@ -86,11 +86,11 @@ describe('GM r14, 1 and 3; GM r15: the lines, verbatim', () => {
       .toBe('Codex changed a copy of the canvas you had open. The original was saved as its own project, “Recovered canvas”.');
   });
 
-  it('Projects home shows the agent-closed line as a toast', () => {
+  it('Projects home shows the agent-closed line as a toast', async () => {
     const onDismiss = vi.fn();
     render(<ProjectHome {...base} agentClosedNote={{ id: 's1', text: agentClosedLine('Codex', 'clear', 'Recovered canvas') }}
       onDismissAgentClosedNote={onDismiss} />);
-    expect(screen.getByText('Codex cleared the canvas. “Recovered canvas” is kept as its own project.')).toBeTruthy();
+    expect(await screen.findByText('Codex cleared the canvas. “Recovered canvas” is kept as its own project.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(onDismiss).toHaveBeenCalled();
   });

@@ -524,7 +524,8 @@ The server exposes these tools for building and running (see
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. A
   project restore may pass the project limit; after one, `new_project` is
-  still refused (413, `limit: "projects"`, `projectLimit`).
+  still refused (413, `limit: "projects"`, `projectLimit`, `projectCount`,
+  `deletes`).
   `list_trash` takes `kind` (`moodboard`, `character`, `style` or `project`),
   and `scope` (`global`, or `project` with `project_id`, an id or
   `"current"`; `project_id` alone means `project`) as the route does. See
@@ -1297,6 +1298,17 @@ state...". The choice is by who asks, never by what they may do: a request
 with `X-Nebula-Agent`, `X-Nebula-Client` or an `Agent` token always gets the
 specific text, and the Commons decides by its actor (its UI session is the
 person). Parse status codes and your detail; don't match the person's lines.
+
+When a World Labs record holds a node, deleting it (`remove_from_canvas`,
+`edit_canvas` with `remove`, `DELETE /api/graph/node/{id}`) is refused with
+409, "Cannot delete n3: it has unresolved World Labs paid state. Check Marble,
+then resolve its exact recovery/ambiguity record first." A kept recovery ID
+holds its node unless Nebula recorded, when the run wrote the record, that the
+run belongs to another project that still exists (in the list or Recently
+deleted) and the open project's run history doesn't name it; a record whose
+project Nebula can't tell holds, and run histories never release one. A start that is settling or waiting on the person's check holds by node
+id, and so does an ID in the node's settings. The text is the same whoever the
+record belongs to; tell the person, who clears it in Marble and Run History.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
 and the same checks: the status bar's "I’ve checked Marble" (`DELETE
@@ -3281,10 +3293,13 @@ Nebula process restores the same folder. The restore:
    waiting canvas waits on. A list past the limit that way is like any other (a
    damaged project list restored from a copy of it comes back whole too:
    a restore adds no new project): making a
-   project is still refused (413, `limit: "projects"`, `projectLimit`; MCP's
-   `new_project` and `open_project` say it whole: "Project limit reached
-   (413, {"limit": "projects", "projectLimit": 500})") until enough are
-   deleted. A canvas waiting on a list past the limit needs more than one
+   project is still refused (413, `limit: "projects"`, `projectLimit`,
+   `projectCount` and `deletes`, how many to delete before a new one fits;
+   MCP's `new_project` and `open_project` say it whole: "Project limit
+   reached (413, {"limit": "projects", "projectLimit": 500, "projectCount":
+   501, "deletes": 2})") until enough are deleted. The person reads "You have
+   501 projects and the limit is 500. You can make a new one after you delete
+   2 projects." A canvas waiting on a list past the limit needs more than one
    delete: `canvasNotFiled.deletes` (and each row's own) counts them, and the
    `note` names the numbers ("The project list has 502 projects, over the
    limit of 500. Move 3 to Recently deleted to make room."); the
@@ -3755,6 +3770,12 @@ forgets it in Run History."; `nebula projects` prints that note.
 `openHold` covers Nebula's own holds only: while the person's tab keeps
 edits of its own, your open is refused with `code: "canvas_kept_in_tab"`
 (above), which `openHold` doesn't show.
+`new_project` is refused the same way (409, `code: "canvas_kept_in_tab"`)
+while the person's tab keeps edits. If the paid-start fence's own storage
+can't be read or written, an open or a new project answers 507 with `detail`
+"Cannot switch projects because Nebula cannot verify the durable World Labs
+paid-start fence." (`code: "run_safeguards"`); that is a different store from
+the project list, and restarting Nebula is the fix there.
 `state` is, in the order the guards read them: `active` (a World Labs paid
 start is settling), `ambiguity` (a World Labs start needs the person's
 check), `recovery` (a kept World Labs recovery ID, any project's; Run

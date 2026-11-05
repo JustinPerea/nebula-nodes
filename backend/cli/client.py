@@ -71,7 +71,7 @@ class NebulaClient:
                 # The project list's limit, whole, as MCP's new_project says it
                 # (mcp_server._limit_said_whole; review 13 of PR #199, LOW-3):
                 # which limit and how many projects it holds.
-                fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
+                fields = {key: payload[key] for key in ("limit", "projectLimit", "projectCount", "deletes", "scope", "code") if key in payload}
                 message = f"{message} (413, {json.dumps(fields)})"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)

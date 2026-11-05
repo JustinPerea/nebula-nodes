@@ -4,7 +4,7 @@
  * Nebula recorded with the recovered copy; open proposals survive a reopen
  * of the same project.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
@@ -52,7 +52,7 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { projectRetryOffer, reopenHold, reopenHoldLine, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { projectRetryOffer, reopenHold, reopenHoldLine, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import type { ProposalView } from '../src/lib/wsClient';
 import { tabLocalDeletes, useGraphStore } from '../src/store/graphStore';
@@ -100,6 +100,10 @@ const sync = (workspaceRevision: string, more: Record<string, unknown> = {}) => 
 let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
+
+// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// tests are about the lines themselves, so it is loaded first.
+beforeAll(async () => { await loadReopenHoldLines(); });
 
 beforeEach(async () => {
   vi.clearAllMocks();

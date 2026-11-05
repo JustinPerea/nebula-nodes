@@ -14,9 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';
 import { useGraphStore } from '../src/store/graphStore';
 import { UNLOCK_LABEL, UNLOCK_RUN_ARIA, unlockAriaLabel } from '../src/lib/worldLabsWaiting';
-import { reopenHoldLine } from '../src/lib/reopenHold';
+import { reopenHoldLine } from '../src/lib/reopenHoldLines';
 import { failureMessage } from '../src/lib/errorCopy';
 import * as projects from '../src/lib/projects';
+import { frames } from './helpers/frames';
 
 const AMBIGUITY = { runId: 'run-1', nodeId: 'n1', kind: 'worldlabs-environment', message: 'Staged.', durable: true };
 const ITS = reopenHoldLine('Delta', 'delta', { state: 'ambiguity', nodeId: 'n1', nodeName: 'World', projectId: 'delta',
@@ -24,16 +25,19 @@ const ITS = reopenHoldLine('Delta', 'delta', { state: 'ambiguity', nodeId: 'n1',
 const PARAMS = reopenHoldLine('Delta', 'delta', { state: 'params', nodeId: 'n1', nodeName: 'World', projectId: 'delta',
   projectName: 'Delta', count: 1, fields: ['Resume Operation ID'] }, false);
 
+const clock = frames();
 beforeEach(() => {
+  clock.install();
   useGraphStore.setState({ providerRecoveryWarning: null, uncertainWorldLabsRunId: null, providerRecoveries: [],
     providerStartAmbiguities: [] });
 });
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); clock.uninstall(); });
 
 describe('GM r33, 6: the reopen line is the World Labs notice’s second line', () => {
   it('renders inside the notice’s box, after its text and button, and quotes the button as it shows', () => {
     useGraphStore.setState({ providerStartAmbiguities: [AMBIGUITY] });
     const { container } = render(<ProviderRecoveryStatus reopenLine={{ line: ITS, onDismiss: () => {} }} />);
+    clock.flush();
     const box = container.querySelector('.provider-recovery-status');
     expect(box).not.toBeNull();
     // One box at the top: no second box stacked under it.
@@ -58,6 +62,7 @@ describe('GM r33, 6: the reopen line is the World Labs notice’s second line', 
 
   it('with nothing else to say (a params hold), the box holds only the line', () => {
     const { container } = render(<ProviderRecoveryStatus reopenLine={{ line: PARAMS, onDismiss: () => {} }} />);
+    clock.flush();
     const box = container.querySelector('.provider-recovery-status');
     expect(box?.textContent).toBe(PARAMS);
     expect(box?.getAttribute('role')).toBe('alert');
@@ -121,7 +126,10 @@ describe('GM r33, 2: the failure headings this PR adds say who, with the curly a
   it('the kept edits’, the follow’s and the reopen’s headings', () => {
     const store = readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8');
     for (const heading of ['Nebula couldn’t open the project.', 'Nebula couldn’t discard the kept edits.',
-      'Nebula couldn’t save your edits.', 'Nebula couldn’t reopen the project.']) expect(store).toContain(heading);
+      'Nebula couldn’t save your edits.', 'Nebula couldn’t reopen the project.',
+      'Nebula couldn’t save your edits as a project.']) expect(store).toContain(heading);
+    // Review 21 NIT-2: the retry of the recovered-edits save has its own heading, with its subject.
+    expect(store).toMatch(/saveRecovered: "Nebula couldn’t save your edits as a project\."/);
     for (const old of ['"Couldn\'t discard the kept edits."', 'openFollowed: "Couldn\'t open the project."',
       'failureMessage(error, "Couldn\'t save your edits.")', "'Couldn’t reopen the project.'"]) expect(store).not.toContain(old);
   });

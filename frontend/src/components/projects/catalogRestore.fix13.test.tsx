@@ -49,8 +49,8 @@ describe('GM r17: the person’s line names the number past the limit', () => {
     expect(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: true, deletes: 2 })).not.toMatch(/Delete 2/);
   });
 
-  it('renders on the Projects home', () => {
+  it('renders on the Projects home', async () => {
     render(<ProjectHome {...base} canvasNotFiled={{ reason: 'projects', projectLimit: 3, canvases: [{ name: null, deletes: 2 }], deletes: 2 }} />);
-    expect(screen.getByText(/Delete 2 projects and Nebula will save it\.$/)).toBeTruthy();
+    expect(await screen.findByText(/Delete 2 projects and Nebula will save it\.$/)).toBeTruthy();
   });
 });

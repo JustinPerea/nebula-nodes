@@ -770,13 +770,13 @@ export function catalogRestoreLogLine(restore: Pick<CatalogRestore, 'kind' | 'so
   if (trashed.length > 0) sentences.push(`Put ${logList(trashed, trashed.length)} in Recently deleted.`);
   const failedRows = restore.notAddedBack ?? [];
   const failed = total(restore.notAddedBackCount, failedRows);
-  if (failed > 0) sentences.push(`Couldn’t add back ${logList(failedRows, failed)}.`);
+  if (failed > 0) sentences.push(`Nebula couldn’t add back ${logList(failedRows, failed)}.`);
   return sentences.join(' ');
 }
 
 /** GM r3 string 5: "Rebuilt the project list from the damaged file.
- * Recovered “Hero study”." then as needed "Couldn't recover “X”." /
- * "Couldn't read the whole file." / "The damaged file was kept at <path>."
+ * Recovered “Hero study”." then as needed "Nebula couldn’t recover “X”." /
+ * "Nebula couldn’t read the whole file." / "The damaged file was kept at <path>."
  * Names to 3, counts from 4; Recently deleted's losses are logged too. */
 function rebuiltLogLine(restore: Parameters<typeof catalogRestoreLogLine>[0], path: string | null): string {
   const sentences = ['Rebuilt the project list from the damaged file.'];
@@ -785,8 +785,8 @@ function rebuiltLogLine(restore: Parameters<typeof catalogRestoreLogLine>[0], pa
   if (recovered > 0) sentences.push(`Recovered ${logList(rows, recovered)}.`);
   const failedRows = restore.notAddedBack ?? [];
   const failed = total(restore.notAddedBackCount, failedRows);
-  if (failed > 0) sentences.push(`Couldn’t recover ${logList(failedRows, failed)}.`);
-  if (restore.damagedReadWhole === false) sentences.push("Couldn’t read the whole file.");
+  if (failed > 0) sentences.push(`Nebula couldn’t recover ${logList(failedRows, failed)}.`);
+  if (restore.damagedReadWhole === false) sentences.push("Nebula couldn’t read the whole file.");
   if (path) sentences.push(`The damaged file was kept at ${path}.`);
   return sentences.join(' ');
 }

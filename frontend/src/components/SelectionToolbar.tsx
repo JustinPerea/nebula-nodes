@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
   Download,
@@ -23,6 +23,8 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock, type LockOwn } from '../lib/canvasLock';
+import { TOP_STACK_EVENT, applySelectionToolbarPlace } from '../lib/bottomBar';
+import { useBackendOffline } from '../lib/useBackendOffline';
 
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
@@ -93,6 +95,44 @@ export function SelectionToolbar() {
   useEffect(() => () => {
     if (focusTimer.current !== null) window.clearTimeout(focusTimer.current);
   }, []);
+  // GM r35 on PR #199: the toolbar never covers the selection (below the top
+  // stack, else flipped below the selection, else pinned; the camera never
+  // moves: lib/bottomBar placeSelectionToolbar). Placed again whenever the
+  // selection, the camera, the window or the top stack changes.
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const offline = useBackendOffline();
+  const hasSelection = ids.length > 0;
+  useLayoutEffect(() => {
+    if (toolbarRef.current) applySelectionToolbarPlace(toolbarRef.current);
+  }, [nodes, offline, hasSelection]);
+  useEffect(() => {
+    if (!hasSelection) return;
+    let frame: number | null = null;
+    const again = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (toolbarRef.current) applySelectionToolbarPlace(toolbarRef.current);
+      });
+    };
+    window.addEventListener('resize', again);
+    window.addEventListener(TOP_STACK_EVENT, again);
+    // A node's size settles after it renders (an image loading, the text growing).
+    const sizes = typeof ResizeObserver === 'function' ? new ResizeObserver(again) : null;
+    const flow = toolbarRef.current?.closest('.react-flow');
+    for (const node of flow?.querySelectorAll('.react-flow__node.selected') ?? []) sizes?.observe(node);
+    // The camera: a pan or zoom rewrites the viewport's transform.
+    const camera = typeof MutationObserver === 'function' ? new MutationObserver(again) : null;
+    const viewport = flow?.querySelector('.react-flow__viewport');
+    if (viewport) camera?.observe(viewport, { attributes: true, attributeFilter: ['style', 'transform'] });
+    return () => {
+      window.removeEventListener('resize', again);
+      window.removeEventListener(TOP_STACK_EVENT, again);
+      sizes?.disconnect();
+      camera?.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [hasSelection, nodes]);
   if (ids.length === 0) return null;
 
   function openAgent() {
@@ -137,6 +177,7 @@ export function SelectionToolbar() {
 
   return (
     <div
+      ref={toolbarRef}
       className="selection-toolbar nodrag nopan"
       role="toolbar"
       aria-label={`Actions for ${ids.length} selected ${ids.length === 1 ? 'node' : 'nodes'}`}

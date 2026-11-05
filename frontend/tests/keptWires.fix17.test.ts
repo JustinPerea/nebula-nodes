@@ -29,20 +29,20 @@ const edge = (source: string, sourceHandle: string, target: string, targetHandle
   ({ id: `${source}-${target}-${targetHandle}-${Math.random()}`, source, sourceHandle, target, targetHandle });
 
 describe('GM r23 (1): a refused kept connection says what the input takes, in the tab’s words', () => {
-  it('the wrong kind: “Couldn’t connect to “References”. It takes images and masks, not text.”', () => {
+  it('the wrong kind: “Nebula couldn’t connect to “References”. It takes images and masks, not text.”', () => {
     const check = checkKeptWire({ source: 't', sourceHandle: 'text', target: 's', targetHandle: 'images' },
       [node('t', 'text-input'), node('s', 'seedream-4-5')], []);
-    expect(check).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It takes images and masks, not text.' });
+    expect(check).toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It takes images and masks, not text.' });
   });
 
   it('a loop and a several-input limit, each in one curly-apostrophe line', () => {
     const nodes = [node('a', 'seedream-4-5'), node('b', 'seedream-4-5')];
     expect(checkKeptWire({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, nodes,
-      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It would make a loop.' });
+      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It would make a loop.' });
     const ten = Array.from({ length: 10 }, (_, index) => edge(`i${index}`, 'image', 'a', 'images'));
     const images = Array.from({ length: 11 }, (_, index) => node(`i${index}`, 'image-input'));
     expect(checkKeptWire({ source: 'i10', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, [...nodes, ...images], ten))
-      .toEqual({ ok: false, line: 'Couldn’t connect to “References”. It takes up to 10 connections.' });
+      .toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It takes up to 10 connections.' });
   });
 });
 
@@ -57,7 +57,7 @@ describe('review 15 kept-wires-ui LOW-2: “replaced” is one predicate for the
     expect(checkKeptWire({ source: 'i1', sourceHandle: 'image', target: 'c', targetHandle: 'refs' }, [capped, ...images], []))
       .toEqual({ ok: true, duplicate: false });
     expect(checkKeptWire({ source: 'i2', sourceHandle: 'image', target: 'c', targetHandle: 'refs' }, [capped, ...images],
-      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Couldn’t connect to “Refs”. It takes only one connection.' });
+      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Nebula couldn’t connect to “Refs”. It takes only one connection.' });
   });
 
   it('a one-connection port is replaced: the new one is allowed', () => {
@@ -81,7 +81,7 @@ describe('review 15 kept-wires-ui LOW-3: dynamic ports (W10, W11)', () => {
 
   it('the same dynamic ports hold the type rule: text into the universal node’s image input is refused', () => {
     expect(checkKeptWire({ source: 't', sourceHandle: 'text', target: 'u', targetHandle: 'input_image' },
-      [node('t', 'text-input'), universal], [])).toEqual({ ok: false, line: 'Couldn’t connect to “Input image”. It takes images and masks, not text.' });
+      [node('t', 'text-input'), universal], [])).toEqual({ ok: false, line: 'Nebula couldn’t connect to “Input image”. It takes images and masks, not text.' });
   });
 });
 

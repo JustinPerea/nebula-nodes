@@ -69,10 +69,10 @@ describe('GM r8: the saved toast wraps', () => {
     projects: [project('l'.repeat(32), 'Logo')], loading: false, busy: false, error: null,
     onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,
   });
-  it('renders the whole sentence with both names', () => {
+  it('renders the whole sentence with both names', async () => {
     render(<ProjectHome {...props({ canvasSaved: { id: 'b', name: 'Recovered canvas 2',
       filed: [{ id: 'a', name: 'Recovered canvas' }, { id: 'b', name: 'Recovered canvas 2' }] } })} />);
-    const line = screen.getByText('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”.');
+    const line = await screen.findByText('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”.');
     expect(line.classList.contains('project-home__toast-text')).toBe(true);
   });
 });

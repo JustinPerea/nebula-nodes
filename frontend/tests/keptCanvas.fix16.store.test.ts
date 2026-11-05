@@ -218,18 +218,18 @@ describe('GM r21 (3) on PR #199: a connection drawn while kept is this tab’s o
     // Text into an image input.
     useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([]);
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes images and masks, not text.');
+    expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     // A loop: n2's image into n3, then n3's image back into n2.
     useGraphStore.getState().onConnect({ source: 'n2', sourceHandle: 'image', target: 'n3', targetHandle: 'images' });
     useGraphStore.getState().onConnect({ source: 'n3', sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([['n2', 'image', 'n3', 'images']]);
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It would make a loop.');
+    expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It would make a loop.');
     // "References" takes up to 10: the 11th is refused.
     for (let index = 10; index < 21; index += 1) {
       useGraphStore.getState().onConnect({ source: `n${index}`, sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
     }
     expect(useGraphStore.getState().edges.filter((edge) => edge.target === 'n2')).toHaveLength(10);
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes up to 10 connections.');
+    expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It takes up to 10 connections.');
     // Only the drawn ones are kept steps; nothing was sent.
     expect(useGraphStore.getState().keptUndo.length).toBe(before + 11);
     expect(graphWrites.sent).toEqual([]);

@@ -569,7 +569,8 @@ def test_l1_over_the_limit_after_undo_the_next_create_is_refused_with_the_limit_
     before = client.get("/api/projects", headers=PERSON).json()
     created = client.post("/api/projects", json={"name": "New", "workspaceRevision": _rev(client)}, headers=PERSON)
     assert created.status_code == 413
-    assert created.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3}
+    assert created.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3,
+                              "projectCount": 4, "deletes": 2}
     after = client.get("/api/projects", headers=PERSON).json()
     assert [project["id"] for project in after["projects"]] == [project["id"] for project in before["projects"]]
 

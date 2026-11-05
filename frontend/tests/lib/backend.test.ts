@@ -968,6 +968,10 @@ describe('browser person link', () => {
     vi.stubGlobal('WebSocket', MockWS);
     await importFresh();
     const { wsClient } = await import('../../src/lib/wsClient');
+    // The tab's id (X-Nebula-Tab) rides with the kept frames: the backend
+    // lets a kept save pass the project limit only from a tab it knows is kept.
+    const { TAB_ID } = await import('../../src/lib/tabId');
+    expect(TAB_ID).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
     wsClient.setKeptEdits(true); // before the socket: sent after the hello
     wsClient.connect();
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
@@ -975,10 +979,10 @@ describe('browser person link', () => {
     sockets[0].onopen?.();
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     expect(sockets[0].sent.map((frame) => JSON.parse(frame))).toEqual([
-      { type: 'hello', personToken: TOKEN }, { type: 'keptEdits', kept: true }]);
+      { type: 'hello', personToken: TOKEN }, { type: 'keptEdits', kept: true, tab: TAB_ID }]);
     wsClient.setKeptEdits(true);
     wsClient.setKeptEdits(false);
-    expect(sockets[0].sent.slice(2).map((frame) => JSON.parse(frame))).toEqual([{ type: 'keptEdits', kept: false }]);
+    expect(sockets[0].sent.slice(2).map((frame) => JSON.parse(frame))).toEqual([{ type: 'keptEdits', kept: false, tab: TAB_ID }]);
     wsClient.disconnect();
   });
 

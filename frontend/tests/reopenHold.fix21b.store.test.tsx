@@ -10,7 +10,7 @@
  * - items 12-15: no number read in a name, the shared run helper, curly
  *   apostrophes, the messageNotice path.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
@@ -58,7 +58,7 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { deletesKeptLine, refreshOpenHold, reopenHold, reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { deletesKeptLine, refreshOpenHold, reopenHold, reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
@@ -71,7 +71,9 @@ import { resetCanvasFollowForTests } from '../src/lib/canvasFollow';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasNotice';
 import { resetKeptCanvasForTests } from '../src/lib/keptCanvas';
 import { takeTabId } from '../src/lib/tabId';
-import { OPEN_HOLD_STATES, REOPEN_HOLD_PLACES, reopenHoldLine } from '../src/lib/reopenHold';
+import { OPEN_HOLD_STATES, REOPEN_HOLD_PLACES } from '../src/lib/reopenHold';
+import { reopenHoldLine } from '../src/lib/reopenHoldLines';
+import { frames } from './helpers/frames';
 import { runFinishesLine } from '../src/lib/useBackendOffline';
 import { savedOrder } from '../src/components/projects/catalogRestoreCopy';
 import { ReopenHoldCallout } from '../src/components/ReopenHoldCallout';
@@ -108,6 +110,10 @@ const sync = (workspaceRevision: string, more: Record<string, unknown> = {}) => 
 let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
+
+// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// tests are about the lines themselves, so it is loaded first.
+beforeAll(async () => { await loadReopenHoldLines(); });
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -417,7 +423,11 @@ describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () 
     duplicateN1();
     await verdict(RECOVERY_ALPHA);
     await askToReopen();
+    const clock = frames();
+    clock.install();
     const { container } = render(<ReopenHoldCallout place="runHistory" />);
+    clock.flush();
+    clock.uninstall();
     const shown = container.querySelectorAll('[data-reopen-hold-callout]');
     expect(shown).toHaveLength(1);
     expect(shown[0].getAttribute('data-reopen-hold-callout')).toBe('runHistory');
@@ -543,6 +553,25 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     expect(calls, JSON.stringify(calls)).toContainEqual({ id: 'alpha', revision: 'rev-a', deleted: [local] });
     expect(useGraphStore.getState().nodes.some((node) => node.id === 'n2')).toBe(true);
     await vi.waitFor(() => expect(noticeNow()).toBe('Nebula kept “Kept copy” because another tab saved it last. Delete it again to remove it.'));
+  });
+
+  it('round 23 (review 21 NIT-2): a handoff whose delete a World Labs record held says so, never silently', async () => {
+    const local = duplicateN1();
+    await useProjectStore.getState().flush();
+    useGraphStore.setState((state) => ({ nodes: state.nodes.filter((node) => node.id !== local) }));
+    const kept = { ...project('alpha'), snapshot: { ...project('alpha').snapshot, nodes: [...project('alpha').snapshot.nodes,
+      { id: 'n2', type: 'model-node', position: { x: 10, y: 400 }, data: { definitionId: 'text-input', label: 'Kept copy', params: { value: 'v' }, state: 'idle', outputs: {} } }] } };
+    vi.mocked(projects.saveProject).mockImplementation(async (id, snapshot) => ({ ...project(id), snapshot,
+      deletesHeld: ['“Kept copy” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'] }) as never);
+    vi.mocked(projects.listProjects).mockResolvedValue(listing({ workspaceRevision: 'rev-a2' }));
+    vi.mocked(projects.getProject).mockResolvedValue(kept as never);
+    bootSwitch({ workspaceRevision: 'rev-a2', projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',
+      previousProjectId: 'alpha', previousProjectName: P, actor: { kind: 'agent', name: 'Codex' }, created: false } });
+    await vi.waitFor(() => expect(getProjectContext()?.revision).toBe('rev-a2'));
+    await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
+    expect(useGraphStore.getState().nodes.some((node) => node.id === 'n2')).toBe(true);
+    await vi.waitFor(() => expect(noticeNow()).toBe(
+      'Couldn\'t delete “Kept copy”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.'));
   });
 });
 

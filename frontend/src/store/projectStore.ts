@@ -37,8 +37,8 @@ import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
   failureMessage, failureUnder, isNoAnswer, nodeNameList, oneLine, shortReason,
 } from '../lib/errorCopy';
-import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
-import { REOPEN_HOLD_PLACES, readOpenHold, reopenHoldLine as reopenHoldLineFor } from '../lib/reopenHold';
+import { WORLD_LABS_NEEDS_CHECK, deleteRefusalText } from '../lib/worldLabsWaiting';
+import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { OpenHold, ReopenHold, ReopenHoldPlace } from '../lib/reopenHold';
 import { useCinemaUploadStore } from './cinemaUploadStore';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
@@ -557,9 +557,59 @@ function clearSavePause(): void {
   }
 }
 
+type UIStateNow = ReturnType<typeof useUIStore.getState>;
+/** What a window keeps through the person's reopen elsewhere, read when the
+ * switch arrives (before its sync clears the view): the studio it is in and
+ * the canvas view (review 21 LOW-2 and NIT-1, GM r36 item 5). */
+type KeptStudio = Pick<UIStateNow, 'viewMode' | 'editorTargetNodeId' | 'remotionEditorTargetNodeId'
+  | 'cinemaEditorNodeId' | 'cinemaSelectedShotIds' | 'characterEditorId' | 'moodboardEditorId' | 'canvasViewport'>;
+function keptStudioNow(): KeptStudio {
+  const ui = useUIStore.getState();
+  return { viewMode: ui.viewMode, editorTargetNodeId: ui.editorTargetNodeId, remotionEditorTargetNodeId: ui.remotionEditorTargetNodeId,
+    cinemaEditorNodeId: ui.cinemaEditorNodeId, cinemaSelectedShotIds: ui.cinemaSelectedShotIds,
+    characterEditorId: ui.characterEditorId, moodboardEditorId: ui.moodboardEditorId, canvasViewport: ui.canvasViewport };
+}
+/** The studio and view `kept` carried onto the loaded canvas: each studio's
+ * node by its new id when it still exists (as adoptRenumberedSelection
+ * does for the selection), Cinema's shot selection with it, the Character
+ * and Moodboard studios' assets as they were, and the viewport the canvas
+ * still shows. A studio whose node is gone goes to the canvas. `before` is
+ * the window just before the load (which clears the studios' nodes and the
+ * view): a window the person moved to another view during the follow, or a
+ * pan they made meanwhile, is theirs, carried the same way. */
+function carriedStudio(kept: KeptStudio, before: KeptStudio, renumbered: Record<string, string>): Partial<UIStateNow> {
+  const present = new Set(useGraphStore.getState().nodes.map((node) => node.id));
+  const carry = (id: string | null) => {
+    const next = id ? renumbered[id] ?? id : null;
+    return next && present.has(next) ? next : null;
+  };
+  // The graph-replace sync cleared the view: a view since is the person's.
+  const canvasViewport = before.canvasViewport ?? kept.canvasViewport;
+  const viewport = canvasViewport ? { canvasViewport } : {};
+  const studioKeys = ['viewMode', 'editorTargetNodeId', 'remotionEditorTargetNodeId', 'cinemaEditorNodeId',
+    'characterEditorId', 'moodboardEditorId'] as const;
+  if (studioKeys.some((key) => before[key] !== kept[key])) kept = before;
+  const editorTargetNodeId = carry(kept.editorTargetNodeId);
+  const remotionEditorTargetNodeId = carry(kept.remotionEditorTargetNodeId);
+  const cinemaEditorNodeId = carry(kept.cinemaEditorNodeId);
+  const cinemaSelectedShotIds: Record<string, string> = {};
+  for (const [nodeId, shotId] of Object.entries(kept.cinemaSelectedShotIds)) {
+    const next = carry(nodeId);
+    if (next) cinemaSelectedShotIds[next] = shotId;
+  }
+  const lost = (kept.viewMode === 'editor' && !editorTargetNodeId)
+    || (kept.viewMode === 'remotion-editor' && !remotionEditorTargetNodeId)
+    || (kept.viewMode === 'cinema-editor' && !cinemaEditorNodeId);
+  return { ...viewport, editorTargetNodeId, remotionEditorTargetNodeId, cinemaEditorNodeId, cinemaSelectedShotIds,
+    characterEditorId: kept.characterEditorId, moodboardEditorId: kept.moodboardEditorId,
+    ...(lost ? { viewMode: 'canvas' as const } : {}) };
+}
+
 /** Set while followProjectSwitch loads a reopen this window keeps its view
- * through (review 20 LOW-3): applyProject leaves the panels and view mode. */
-let keepWindowView: { renumbered: Record<string, string>; selected: string[]; inspected: string | null } | null = null;
+ * through (review 20 LOW-3): applyProject leaves the panels and view mode,
+ * and carries the studio and the viewport (carriedStudio). */
+let keepWindowView: { renumbered: Record<string, string>; selected: string[]; inspected: string | null;
+  studio: KeptStudio } | null = null;
 /** `heading` names the action that loads it, for the busy line. */
 function applyProject(project: SavedProject, revision: string, bootstrap = false,
   heading = "Couldn't load the project.", canvas?: string): void {
@@ -569,6 +619,8 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
     setProjectContext({ id: project.id, revision, ...(canvas !== undefined ? { canvas } : {}) });
     canvasParamsVersion = GRAPH_PARAMS_VERSION;
     const snapshot = rewriteBackendAssetUrls(project.snapshot);
+    // The window as the load finds it (carriedStudio): the load clears it.
+    const windowBefore = keepWindowView ? keptStudioNow() : null;
     if (!useGraphStore.getState().loadProjectGraph(snapshot.nodes, snapshot.edges, snapshot.runHistory, { bootstrap })) {
       setProjectContext(previous);
       throw runStillGoing(heading);
@@ -605,8 +657,9 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
     }
     // A reopen this window follows keeps the window as it is (review 20
     // LOW-3, followProjectSwitch's `keep`): no panel reset, no view change.
-    if (keepWindowView) {
-      useUIStore.setState({ createSessionId: sessionId });
+    if (keepWindowView && windowBefore) {
+      useUIStore.setState({ createSessionId: sessionId,
+        ...carriedStudio(keepWindowView.studio, windowBefore, keepWindowView.renumbered) });
     } else {
       useUIStore.getState().resetPanelsForFreshCanvas({ canvasEmpty: snapshot.nodes.length === 0 });
       projectViewport = snapshot.viewport ?? null;
@@ -636,6 +689,11 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
  * no person token, or one from before Nebula restarted) isn't: once the
  * person opens the launch link in this tab, the same request passes, so Try
  * again stays and a held copy isn't held for it (Q116 a review). */
+/** A 413 for the project limit (the backend's `limit: "projects"`): the same
+ * save passes once the person has deleted projects. */
+function isProjectLimitRefusal(error: unknown): boolean {
+  return error instanceof RequestFailedError && error.status === 413 && error.storageLimit === 'projects';
+}
 function refusedForGood(error: unknown): boolean {
   return error instanceof WorldLabsHold || (error instanceof RequestFailedError && !canTryAgain(error.status)
     && error.code !== PERSON_REQUIRED_CODE);
@@ -664,7 +722,7 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
   load: LOAD_HEADING, list: LOAD_HEADING, save: "Couldn't save the project.", open: "Couldn't open the project.",
   create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
   restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
-  emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.", saveRecovered: LOAD_HEADING,
+  emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.", saveRecovered: "Nebula couldn’t save your edits as a project.",
   reloadForUpdate: LOAD_HEADING, openFollowed: "Nebula couldn’t open the project.",
 };
 /** Show `error` with what Try again does for it: `retry`, unless the backend
@@ -1128,8 +1186,9 @@ async function saveKeptEdits(): Promise<void> {
   // The tab's names for its nodes, for the left-out connections' line.
   const namesBefore = new Map(useGraphStore.getState().nodes.map((node) => [node.id, nodeCardTitle(node)]));
   try {
-    // At or past the project limit too (Justin, 2026-10-31): the backend lets
-    // the person's kept save through, as a restore, so no limit line here.
+    // At the project limit the backend lets the person's kept save through
+    // by one project, from a tab it knows keeps edits (Justin, 2026-10-31);
+    // past that it is refused like a new project (below).
     const saved = await api.recoverProject(kept.sourceId, snapshot, recoveryId, canvasParamsVersion, kept.sourceName, true);
     renumbered = saved?.renumbered ?? {};
     const byCopyId = new Map(Object.entries(renumbered).map(([was, now]) => [now, was]));
@@ -1139,7 +1198,10 @@ async function saveKeptEdits(): Promise<void> {
       ...(dropped ? { dropped } : {}) };
   } catch (error) {
     setKeptCanvasSaving(false);
-    if (refusedForGood(error) && !isOfflineRefusal(error)) {
+    // Over the project limit: the person can make room and save again, so
+    // the kept edits stay on the canvas with the over-limit line (not held
+    // and dropped from kept mode as a refusal for good).
+    if (refusedForGood(error) && !isOfflineRefusal(error) && !isProjectLimitRefusal(error)) {
       stopKeepingEdits();
       const recovery = pendingRecoveryOf(kept.sourceId, snapshot);
       recovery.projectName = kept.sourceName;
@@ -1663,17 +1725,20 @@ export function reopenHold(id: string, afterPress = false): ReopenHold | null {
   // `bootstrap` locks nothing before the press (review 20 NIT-1, GM r34 A3):
   // the press retries saving the safeguards and usually goes, so it is sent,
   // and the line shows only on its 409 (`afterPress`), and while it shows.
-  if (verdict && (verdict.state !== 'bootstrap' || afterPress)) return verdict;
-  if (graph.uncertainWorldLabsRunId !== null) return { state: 'uncertain' };
+  if (verdict && (verdict.state !== 'bootstrap' || afterPress)) { holdArrived(); return verdict; }
+  if (graph.uncertainWorldLabsRunId !== null) { holdArrived(); return { state: 'uncertain' }; }
   if (graph.providerStartAmbiguities.length > 0) {
     // One this tab lists and Nebula's verdict doesn't name (not read yet, or
     // another tab's press cleared it): this tab won't switch until its own
     // notice's press either (canSwitchProject). Whose run it is isn't known
     // here, so the line names no project.
+    holdArrived();
     return { state: 'ambiguity', nodeId: null, nodeName: null, projectId: null, projectName: null,
       count: graph.providerStartAmbiguities.length, fields: [] };
   }
-  return graph.canSwitchProject({ exceptSaves: true }) ? null : { state: 'tabRun' };
+  if (graph.canSwitchProject({ exceptSaves: true })) return null;
+  holdArrived();
+  return { state: 'tabRun' };
 }
 /** The verdict, unless this tab has just seen what it named end (it was
  * read while this tab held the ambiguity, recovery ID or run, and now
@@ -1686,10 +1751,36 @@ function verdictStillTrue(verdict: OpenHold | null, graph: ReturnType<typeof use
   if ((verdict.state === 'run' || verdict.state === 'active') && openHoldBasis.executing && !graph.isExecuting) return null;
   return verdict;
 }
-/** The line for `hold` (lib/reopenHold, the one table). */
-export function reopenHoldLine(project: string, openId: string, hold: ReopenHold): string {
-  return reopenHoldLineFor(project, openId, hold);
+/** The table of lines (lib/reopenHoldLines) loads when a hold first arrives,
+ * not with the entry chunk (review 21 LOW-1, the entry chunk's budget).
+ * Nothing says a line before it is here: the Projects card shows none and
+ * the canvas none until it loads (a local chunk, a moment), then the line
+ * arrives as it always did. If the chunk can't load, no line shows and the
+ * next hold tries again. */
+let holdLines: typeof import('../lib/reopenHoldLines') | null = null;
+let loadingHoldLines: Promise<void> | null = null;
+export function loadReopenHoldLines(): Promise<void> {
+  loadingHoldLines ??= import('../lib/reopenHoldLines').then((module) => {
+    holdLines = module;
+    // The Projects card reads its line through the store's subscription: a
+    // change wakes it now that the lines are here.
+    useProjectStore.setState({});
+  }, (error: unknown) => { loadingHoldLines = null; throw error; });
+  return loadingHoldLines;
 }
+/** The line for `hold` (lib/reopenHoldLines, the one table), once loaded
+ * (loadReopenHoldLines); null before. */
+function heldLine(project: string, openId: string, hold: ReopenHold): string | null {
+  return holdLines ? holdLines.reopenHoldLine(project, openId, hold) : null;
+}
+/** The line for `hold`: only once the table has loaded (see above). */
+export function reopenHoldLine(project: string, openId: string, hold: ReopenHold): string {
+  const line = heldLine(project, openId, hold);
+  if (line === null) throw new Error('The reopen-hold lines are not loaded yet: await loadReopenHoldLines().');
+  return line;
+}
+/** A hold arrived (a verdict, or this tab's own): start loading the lines. */
+function holdArrived(): void { if (!holdLines) loadReopenHoldLines().catch(() => {}); }
 
 /** What this tab held when Nebula's verdict was read (verdictStillTrue). */
 let openHoldBasis: { ambiguities: number; recoveries: number; executing: boolean } | null = null;
@@ -1703,7 +1794,9 @@ function holdBasisNow() {
 function noteListedOpenHold(raw: unknown): OpenHold | null {
   openHoldSeq += 1;
   openHoldBasis = holdBasisNow();
-  return readOpenHold(raw);
+  const verdict = readOpenHold(raw);
+  if (verdict) holdArrived();
+  return verdict;
 }
 /** Takes the verdict a refused open carried (its 409's `hold`, review 20
  * LOW-5 and NIT-3): Nebula's reason for that refusal, already in hand, so
@@ -1711,6 +1804,7 @@ function noteListedOpenHold(raw: unknown): OpenHold | null {
 function noteRefusalHold(raw: unknown): boolean {
   const verdict = readOpenHold(raw);
   if (!verdict) return false;
+  holdArrived();
   openHoldSeq += 1;
   openHoldBasis = holdBasisNow();
   useProjectStore.setState({ openHold: verdict });
@@ -1725,6 +1819,7 @@ export async function refreshOpenHold(): Promise<void> {
     if (seq !== openHoldSeq) return;
     openHoldBasis = basis;
     const next = readOpenHold(answer?.hold);
+    if (next) holdArrived();
     if (JSON.stringify(next) !== JSON.stringify(useProjectStore.getState().openHold)) useProjectStore.setState({ openHold: next });
   } catch { /* Offline or refused: the last verdict stands until the next read. */ }
 }
@@ -1778,7 +1873,9 @@ let lastHoldNow: { id: string; line: string } | null = null;
 export function reopenHoldNow(): { id: string; line: string } | null {
   const project = useProjectStore.getState().activeProject;
   const hold = project ? reopenHold(project.id) : null;
-  const next = project && hold ? { id: project.id, line: reopenHoldLine(project.name, project.id, hold) } : null;
+  // Before the lines are here, nothing is said (the load wakes this read).
+  const line = project && hold ? heldLine(project.name, project.id, hold) : null;
+  const next = project && line !== null ? { id: project.id, line } : null;
   // The same value keeps the same object (a stable snapshot for useSyncExternalStore).
   if (next?.id !== lastHoldNow?.id || next?.line !== lastHoldNow?.line) lastHoldNow = next;
   return lastHoldNow;
@@ -1792,7 +1889,18 @@ export function reopenHoldNow(): { id: string; line: string } | null {
  * forms are `heldReopenLine`, in the World Labs notice's box (GM r33, 6) or by
  * Run History (GM r32, 2). */
 let shownReopen: { id: string; line: string; place: ReopenHoldPlace; stop: () => void } | null = null;
-function sayReopenHeld(id: string, project: string, hold: ReopenHold): void {
+function sayReopenHeld(id: string, project: string, hold: ReopenHold): Promise<void> | void {
+  if (holdLines) return sayReopenHeldNow(id, project, hold);
+  // The table of lines isn't here yet: nothing is said until it is, and only
+  // if this project is still the one open then, with the hold as it is then
+  // (one that ended meanwhile says nothing). If it can't load, nothing.
+  return loadReopenHoldLines().then(() => {
+    if (useProjectStore.getState().activeProject?.id !== id) return;
+    const now = reopenHold(id, true);
+    if (now) sayReopenHeldNow(id, project, now);
+  }, () => {});
+}
+function sayReopenHeldNow(id: string, project: string, hold: ReopenHold): void {
   shownReopen?.stop();
   clearShownReopenSurface();
   // Watched only while it shows (no import-time subscription).
@@ -1837,7 +1945,7 @@ function followReopenLineNow(current: NonNullable<typeof shownReopen>): void {
     ? graph.undoNotice?.text === shownReopen.line || graph.messageNotice?.text === shownReopen.line
     : useProjectStore.getState().heldReopenLine?.line === shownReopen.line;
   const hold = showing && active?.id === shownReopen.id ? reopenHold(shownReopen.id, true) : null;
-  const line = hold && active ? reopenHoldLine(active.name, active.id, hold) : null;
+  const line = hold && active ? heldLine(active.name, active.id, hold) : null;
   if (hold && line === shownReopen.line) return;
   if (hold && line) {
     // Another hold now: its line, in its place.
@@ -1983,7 +2091,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
         if (!carried && !hold) await refreshOpenHold();
         if (carried || !hold) hold = reopenHold(retry.id, true);
       }
-      if (hold) sayReopenHeld(retry.id, project, hold);
+      if (hold) await sayReopenHeld(retry.id, project, hold);
       else if (refused) {
         // Nothing holds it now (the run ended in between, or another tab's
         // reopen moved the revision): one more try, quietly; a second
@@ -2403,7 +2511,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   const sameProject = context !== null && notice.projectId === context.id;
   const keep = sameProject && quietSwitch(notice)
     ? { renumbered, selected: useGraphStore.getState().nodes.filter((node) => node.selected).map((node) => node.id),
-      inspected: useUIStore.getState().selectedNodeId }
+      inspected: useUIStore.getState().selectedNodeId, studio: keptStudioNow() }
     : null;
   startFollowing(notice);
   // Where an agent's switch takes the tab is never a screen the person
@@ -2431,6 +2539,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   let keptCopy = false;
   let copy: { id: string; name: string } | null = null;
   let deletesKept: string[] = [];
+  let deletesHeld: string[] = [];
   try {
     await saveQueue.catch(() => {});
     // Offline (round 16 of PR #114, review 15 M3): the switch is followed
@@ -2455,6 +2564,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
         const saved = await whenSent(() => api.saveProject(context.id, snapshot, context.revision, pending));
         // The deletes Nebula kept (another window saved those nodes last).
         deletesKept = Array.isArray(saved?.deletesKept) ? saved.deletesKept : [];
+        // The deletes a guard refused, each with its line (review 21 NIT-2).
+        deletesHeld = Array.isArray(saved?.deletesHeld) ? saved.deletesHeld : [];
       } catch {
         // Refused (that project was opened again since, say): a copy only
         // when its saved copy lacks something this tab holds (round 17 of
@@ -2497,6 +2608,12 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // A delete this tab said that Nebula kept is never silent (review 19
     // item 5): the node is back on the canvas, and the line says why.
     if (deletesKept.length > 0 && getProjectContext()) sayDeletesKept(deletesKept);
+    if (deletesHeld.length > 0 && getProjectContext()) {
+      // Never silent: "Couldn't delete “X”. It has a saved World Labs …", as
+      // the canvas says a refused delete.
+      useGraphStore.getState().notify(deleteRefusalText(deletesHeld.length === 1 ? "Couldn't delete the node."
+        : `Couldn't delete ${deletesHeld.length} nodes.`, deletesHeld.length, deletesHeld), 'info');
+    }
     // The toast names the project the tab landed on (round 17, review 16
     // M1), from the newest switch to it; the way back is the project this
     // tab was showing. An agent that reopened that project reloaded it from
@@ -2745,7 +2862,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       set({ screen: 'workspace', error: null, errorRetry: null });
       // Focus goes to the canvas it returns to (review 19 item 6).
       focusCanvasSoon();
-      if (hold) sayReopenHeld(id, state.activeProject?.name ?? '', hold);
+      if (hold) await sayReopenHeld(id, state.activeProject?.name ?? '', hold);
       return;
     }
     const inPlace = state.initialized && !state.busy && id === state.activeProject?.id;

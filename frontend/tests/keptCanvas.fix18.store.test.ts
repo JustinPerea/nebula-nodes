@@ -227,7 +227,7 @@ describe('GM r26, 3: a refused drop says why, on kept and normal tabs alike', ()
   it('a normal tab: the wrong kind, in GM’s words, masks named', () => {
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, seedream()] }));
     useGraphStore.getState().sayRefusedConnection({ source: 'n1', sourceHandle: 'text', target: 's1', targetHandle: 'images' });
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes images and masks, not text.');
+    expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     expect(graphWrites.sent).toEqual([]);
   });
 
@@ -235,14 +235,14 @@ describe('GM r26, 3: a refused drop says why, on kept and normal tabs alike', ()
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, canvasNode('a', 'seedream-4-5', 400), canvasNode('b', 'seedream-4-5', 800)],
       edges: [{ id: 'e1', source: 'a', sourceHandle: 'image', target: 'b', targetHandle: 'images' }] }));
     useGraphStore.getState().sayRefusedConnection({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' });
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It would make a loop.');
+    expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It would make a loop.');
   });
 
   it('kept: the same line, nothing drawn or sent', () => {
     keepWith([seedream()]);
     const before = edges();
     useGraphStore.getState().sayRefusedConnection({ source: 'n1', sourceHandle: 'text', target: 's1', targetHandle: 'images' });
-    expect(noticeText()).toContain('Couldn’t connect to “References”. It takes images and masks, not text.');
+    expect(noticeText()).toContain('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     expect(edges()).toEqual(before);
     expect(graphWrites.sent).toEqual([]);
   });

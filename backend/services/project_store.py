@@ -143,8 +143,11 @@ RESTORE_MAY_PASS_THE_PROJECT_LIMIT = True
 # take the list past MAX_PROJECTS: yes (Justin, 2026-10-31, on PR #199), as a
 # restore and an Undo of a delete may. The list is then past the limit by
 # that copy, and a new project is refused until it is back under (prepare's
-# cap counts only projects new to the list). Agents never pass it this way.
+# cap counts only projects new to the list). Agents never pass it this way,
+# and the person's only from a tab Nebula knows keeps edits, and only up to
+# the limit + 1 (KEPT_SAVE_OVER_BY).
 KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT = True
+KEPT_SAVE_OVER_BY = 1
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was
 # open. ``canvasPending`` (what protects the person's canvas) comes right
@@ -250,6 +253,9 @@ class ProjectLimitError(ProjectStoreError):
         # How many projects the list holds, when the route that refused says
         # (the answer's ``projectCount``); None otherwise.
         self.project_count: int | None = None
+        # How many to delete before the refused write fits (the answer's
+        # ``deletes``: the tab's line, GM r35 on PR #199); None when unknown.
+        self.deletes: int | None = None
 
 
 def now() -> str:
@@ -2528,13 +2534,23 @@ class ProjectStore:
         is past it only by what the copy holds. The size cap still holds.
 
         ``kept_save``: the person's save of a kept tab's edits, which may pass
-        the project limit too (KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT); the
-        route sets it only for the person's request."""
+        the project limit too (KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT), by one
+        project at most (KEPT_SAVE_OVER_BY); the route sets it only for the
+        person's request from a tab Nebula knows keeps edits."""
         self._ensure_root()
         if (len(catalog["projects"]) > MAX_PROJECTS and not (restoring and RESTORE_MAY_PASS_THE_PROJECT_LIMIT)
-                and not (kept_save and KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT)
+                and not (kept_save and KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT
+                         and len(catalog["projects"]) <= MAX_PROJECTS + KEPT_SAVE_OVER_BY)
                 and not self._past_the_limit_by_restores_only(catalog)):
-            raise ProjectLimitError("Project limit reached", "projects")
+            refused = ProjectLimitError("Project limit reached", "projects")
+            # The numbers for the tab's line (GM r35 on PR #199): the list as
+            # this hold read it, and how many to delete for what this adds.
+            known = getattr(self._local, "ids", None)
+            if known:
+                adding = len(set(catalog["projects"]) - known)
+                refused.project_count = len(catalog["projects"]) - adding
+                refused.deletes = len(catalog["projects"]) - MAX_PROJECTS
+            raise refused
         try:
             self._check(catalog, fill=False)
         except (ValueError, TypeError, KeyError, AttributeError) as exc:

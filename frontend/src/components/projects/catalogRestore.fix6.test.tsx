@@ -60,12 +60,12 @@ describe('N-2: every canvas that waits is counted or named', () => {
       "2 canvases you had open couldn’t be saved as their own projects because you’ve reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
   });
 
-  it('renders the counted waiting line on Projects home', () => {
+  it('renders the counted waiting line on Projects home', async () => {
     render(<ProjectHome {...props({ canvasNotFiled: { reason: 'projects', projectLimit: 3, canvases: [{ name: null }, { name: null }] } })} />);
-    expect(screen.getByText(/^2 canvases you had open aren’t saved as projects yet/)).toBeTruthy();
+    expect(await screen.findByText(/^2 canvases you had open aren’t saved as projects yet/)).toBeTruthy();
   });
 
-  it('the saved toast names each canvas it filed', () => {
+  it('the saved toast names each canvas it filed', async () => {
     expect(canvasSavedToast('Recovered canvas')).toBe('The canvas you had open was saved as its own project, “Recovered canvas”.');
     const two = [{ name: 'Recovered canvas' }, { name: 'Recovered canvas 2' }];
     expect(canvasSavedToast('Recovered canvas 2', two)).toBe(
@@ -74,7 +74,7 @@ describe('N-2: every canvas that waits is counted or named', () => {
       '4 canvases you had open were saved as their own projects.');
     render(<ProjectHome {...props({ canvasSaved: { id: 'x', name: 'Recovered canvas 2', filed: [
       { id: 'w', name: 'Recovered canvas' }, { id: 'x', name: 'Recovered canvas 2' }] } })} />);
-    expect(screen.getByText(/“Recovered canvas” and “Recovered canvas 2”/)).toBeTruthy();
+    expect(await screen.findByText(/“Recovered canvas” and “Recovered canvas 2”/)).toBeTruthy();
   });
 });
 
@@ -143,13 +143,13 @@ describe('GM bug 2: Removed for good in 30 days', () => {
 });
 
 describe('L-1 and the Agent log lines', () => {
-  it('says a held canvas that could not be read', () => {
+  it('says a held canvas that could not be read', async () => {
     expect(canvasHeldUnreadableLine(1)).toBe(
       "Nebula couldn’t read a canvas you had open that was waiting to be saved, so it may be lost. The damaged file was kept.");
     expect(canvasHeldUnreadableLine(null)).toBe(
       "Nebula couldn’t read the file that kept the canvases you had open, so some may be lost. The damaged file was kept.");
     render(<ProjectHome {...props({ canvasHeldUnreadable: { count: 2 } })} />);
-    expect(screen.getByText(/couldn’t read 2 canvases you had open/)).toBeTruthy();
+    expect(await screen.findByText(/couldn’t read 2 canvases you had open/)).toBeTruthy();
   });
 
   it("words GM's line for any other write", () => {

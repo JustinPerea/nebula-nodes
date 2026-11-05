@@ -18,7 +18,7 @@ import { PORT_RULES, isPortCompatible } from './portCompatibility';
  * decide that with the same predicate, targetHandleAllowsMultiple.)
  *
  * Round 17 (GM r23, 1 and 2): the person's lines are the tab's own, written
- * from the types it knows ("Couldn’t connect to “References”. It takes
+ * from the types it knows ("Nebula couldn’t connect to “References”. It takes
  * images, not text."); the server's sentences are for agents.
  */
 
@@ -102,17 +102,17 @@ export function takesTypes(type: string | null | undefined): string {
   return joinedList([...new Set([type, ...partners])].map(typeName));
 }
 
-/** Connection refusals (GM r23, 1; GM r25, 1): "Couldn’t connect to
+/** Connection refusals (GM r23, 1; GM r25, 1): "Nebula couldn’t connect to
  * “References”. It takes images and masks, not text." A loop (GM r26, 3):
- * "Couldn’t connect to “Prompt”. It would make a loop." A missing port names
+ * "Nebula couldn’t connect to “Prompt”. It would make a loop." A missing port names
  * no input, so it says what happened. */
 export const keptWireLoop = (into: PortShape | undefined) =>
-  `Couldn’t connect to “${portName(into, 'Input')}”. It would make a loop.`;
-export const KEPT_WIRE_NO_PORT = 'Couldn’t make that connection. That input or output isn’t on the node anymore.';
+  `Nebula couldn’t connect to “${portName(into, 'Input')}”. It would make a loop.`;
+export const KEPT_WIRE_NO_PORT = 'Nebula couldn’t make that connection. That input or output isn’t on the node anymore.';
 export const keptWireWrongKind = (into: PortShape | undefined, out: PortShape | undefined) =>
-  `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${takesTypes(into?.dataType)}, not ${typeName(out?.dataType)}.`;
+  `Nebula couldn’t connect to “${portName(into, 'Input')}”. It takes ${takesTypes(into?.dataType)}, not ${typeName(out?.dataType)}.`;
 export const keptWireTooMany = (into: PortShape | undefined, limit: number) =>
-  `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${limit === 1 ? 'only one connection' : `up to ${limit} connections`}.`;
+  `Nebula couldn’t connect to “${portName(into, 'Input')}”. It takes ${limit === 1 ? 'only one connection' : `up to ${limit} connections`}.`;
 
 export type KeptWireCheck = { ok: true; duplicate: boolean } | { ok: false; line: string };
 
@@ -192,8 +192,8 @@ export function refusedDropConnection(from: DropStart, state: DropEnd): Connecti
  * LOW-1: React Flow refuses it in Strict mode with a `toHandle`, which was
  * read as an input and said "isn’t on the node anymore" or a loop). */
 export const SAME_KIND_DROP_LINES = {
-  source: 'Couldn’t connect two outputs. Drag from an output to an input.',
-  target: 'Couldn’t connect two inputs. Drag from an output to an input.',
+  source: 'Nebula couldn’t connect two outputs. Drag from an output to an input.',
+  target: 'Nebula couldn’t connect two inputs. Drag from an output to an input.',
 } as const;
 
 /** The line a drop the canvas refused says (GM r26, 3; GM r28, 1), or null

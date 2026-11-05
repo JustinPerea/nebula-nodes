@@ -14,6 +14,7 @@ import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { personFocusMark, personMovedFocusSince } from '../lib/canvasFocus';
 import { useArrangeStore } from './arrangeStore';
 import {
   clearPersistedRunHistory,
@@ -88,7 +89,7 @@ import {
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../lib/agentCursorMotion';
 import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText, providerRecoveryPlaceKey } from '../lib/worldLabsWaiting';
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
@@ -998,6 +999,10 @@ interface GraphState {
   releaseGraphImport: (options?: { discardSuspended?: boolean }) => void;
   providerRecoveryWarning: string | null;
   providerRecoveries: ProviderRecoveryCheckpoint[];
+  /** Where Nebula wrote each record (PR #199 round 23): its stamp, keyed
+   * by providerRecoveryPlaceKey. Only the person's tab gets these (the
+   * graphSync's person form, the frame after a verified hello). */
+  providerRecoveryPlaces: Readonly<Record<string, ProviderRecoveryPlace>>;
   uncertainWorldLabsRunId: string | null;
   providerStartAmbiguities: ProviderStartAmbiguity[];
   backendFreshStartPending: boolean;
@@ -6204,6 +6209,8 @@ function changeCanvasNodes(
     nodes: get().nodes.filter((node) => node.selected).map((node) => node.id),
     inspected: useUIStore.getState().selectedNodeId,
     focus: focusMarkOf(typeof document === 'undefined' ? null : document.activeElement),
+    // The person's own focus moves so far (GM r36 item 6): one after this is moving on.
+    personFocus: personFocusMark(),
   };
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
@@ -6368,7 +6375,9 @@ function changeCanvasNodes(
    * step), unless it also took wires (deleteCanvasElements).
    *
    * GM r34 addendum 3 on PR #199 (refining round 20 B): when the person
-   * hasn't selected or focused anything since the press, a refused delete
+   * hasn't selected or focused anything since the press (GM r36 item 6:
+   * focus the person moved, never focus Nebula moved; lib/canvasFocus
+   * personMovedFocusSince), a refused delete
    * restores the state at the press: the nodes come back selected as they
    * were, the inspected one inspected again, focus where it was (so a
    * refusal that names the node's id, which a selected card shows, reads
@@ -6380,7 +6389,8 @@ function changeCanvasNodes(
     const ui = useUIStore.getState();
     // Nothing selected since the press but what was selected then.
     const untouched = get().nodes.every((node) => !node.selected || selectionBefore.nodes.includes(node.id))
-      && (ui.selectedNodeId === null || ui.selectedNodeId === selectionBefore.inspected);
+      && (ui.selectedNodeId === null || ui.selectedNodeId === selectionBefore.inspected)
+      && !personMovedFocusSince(selectionBefore.personFocus);
     const reselect = new Set(untouched ? selectionBefore.nodes.filter((nodeId) => back.has(nodeId)) : []);
     if (!untouched && ui.selectedNodeId && back.has(ui.selectedNodeId)) ui.selectNode(null);
     set((state) => {
@@ -7092,20 +7102,65 @@ function namedOnCanvas(nodes: readonly Node<NodeData>[], nodeId: string): string
   return typeof label === 'string' && label.trim() ? `\u201c${label}\u201d` : undefined;
 }
 
+/** Where Nebula wrote a World Labs record (PR #199 round 23): the project
+ * its stamp names (null: unstamped, or a project deleted for good) and the
+ * node's type (a definition id), from the person-only places. */
+export interface ProviderRecoveryPlace { projectId: string | null; nodeType: string | null }
+/** The places a person-only payload carries ([{runId, nodeId, projectId,
+ * nodeType}]), or null when it carries none (an agents' form: keep what
+ * the tab has). */
+export function providerRecoveryPlacesFrom(raw: unknown): Record<string, ProviderRecoveryPlace> | null {
+  if (!Array.isArray(raw)) return null;
+  const places: Record<string, ProviderRecoveryPlace> = {};
+  for (const entry of raw as unknown[]) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { runId, nodeId, projectId, nodeType } = entry as Record<string, unknown>;
+    if (typeof runId !== 'string' || typeof nodeId !== 'string') continue;
+    places[providerRecoveryPlaceKey(runId, nodeId)] = {
+      projectId: typeof projectId === 'string' && projectId ? projectId : null,
+      nodeType: typeof nodeType === 'string' && nodeType ? nodeType : null,
+    };
+  }
+  return places;
+}
+/** The store takes the places a payload carries; the same places keep the
+ * same object (no re-render). */
+export function applyProviderRecoveryPlaces(raw: unknown): void {
+  const places = providerRecoveryPlacesFrom(raw);
+  if (!places) return;
+  const now = useGraphStore.getState().providerRecoveryPlaces;
+  if (JSON.stringify(now) === JSON.stringify(places)) return;
+  useGraphStore.setState({ providerRecoveryPlaces: places });
+}
+function placeOf(state: Partial<Pick<GraphState, 'providerRecoveryPlaces'>>, runId: string, nodeId: string):
+  ProviderRecoveryPlace | undefined {
+  return state.providerRecoveryPlaces?.[providerRecoveryPlaceKey(runId, nodeId)];
+}
+
 /**
  * Whose World Labs record this is, as the tab can tell (review 20 of PR
- * #199, LOW-2; the backend's journals list every project's records, with no
- * project on them, and node ids repeat across projects): this project's
- * when its run is in the open canvas's run history, or is a run this tab
- * started on this project that is still going (its record opens with the
- * run, so this only covers a history that has dropped it). Anything else
- * can't be known to be this project's.
+ * #199, LOW-2; node ids repeat across projects): this project's when its
+ * run is in the open canvas's run history, is a run this tab started on
+ * this project that is still going (its record opens with the run, so this
+ * only covers a history that has dropped it), or (round 23, with `nodeId`)
+ * Nebula's stamp for it names this project. Anything else can't be known
+ * to be this project's.
  */
-export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory'>, runId: string): boolean {
+export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory'>
+  & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>, runId: string, nodeId?: string): boolean {
   if (state.runHistory.some((record) => record.id === runId)) return true;
+  const open = canvasNow().projectId;
+  if (nodeId !== undefined && open !== null && placeOf(state, runId, nodeId)?.projectId === open) return true;
   const started = runCanvases.get(runId);
-  return started !== undefined && ownsRun(runId) && started.projectId === canvasNow().projectId;
+  return started !== undefined && ownsRun(runId) && started.projectId === open;
 }
+
+/* The tab never releases a hold on its own (review 21 LOW-1, round 23):
+ * a delete of a node it can't place (no run of this history, no stamp
+ * naming this project, no ID in the node's settings) goes to the backend,
+ * whose guard holds it unless Nebula's stamp names another project, and
+ * whose line says why. A blank World Labs copy is refused whatever the
+ * records say (providerSafeCloneParams). */
 
 /**
  * The one matcher for a recovery record and a canvas node (Delete,
@@ -7115,12 +7170,12 @@ export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory
  * record's ID (runHistory paramsHoldRecoveryId). Never by node id alone.
  */
 export function providerRecoveryMatchesNode(
-  state: Pick<GraphState, 'runHistory'>,
+  state: Pick<GraphState, 'runHistory'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>,
   checkpoint: ProviderRecoveryCheckpoint,
   node: { id: string; data?: { definitionId?: unknown; params?: unknown } } | undefined,
 ): boolean {
   if (!node || checkpoint.nodeId !== node.id) return false;
-  if (providerRecordIsThisProjects(state, checkpoint.runId)) return true;
+  if (providerRecordIsThisProjects(state, checkpoint.runId, checkpoint.nodeId)) return true;
   const { definitionId, params } = node.data ?? {};
   return typeof definitionId === 'string' && params !== null && typeof params === 'object'
     && paramsHoldRecoveryId(definitionId, params as Record<string, unknown>, checkpoint);
@@ -7141,10 +7196,10 @@ export function providerAmbiguityMatchesNode(
  * History's names): this project's (its node on the canvas or not), or a
  * canvas node holds its ID. */
 export function providerRecoveryOnCanvas(
-  state: Pick<GraphState, 'runHistory' | 'nodes'>,
+  state: Pick<GraphState, 'runHistory' | 'nodes'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>,
   checkpoint: ProviderRecoveryCheckpoint,
 ): boolean {
-  return providerRecordIsThisProjects(state, checkpoint.runId)
+  return providerRecordIsThisProjects(state, checkpoint.runId, checkpoint.nodeId)
     || providerRecoveryMatchesNode(state, checkpoint, state.nodes.find((node) => node.id === checkpoint.nodeId));
 }
 
@@ -7435,11 +7490,15 @@ function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
-  owner: Pick<GraphState, 'runHistory'> = useGraphStore.getState(),
+  owner: Pick<GraphState, 'runHistory'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>
+    = useGraphStore.getState(),
 ): Node<NodeData>[] {
   const latestByNode = new Map<string, ProviderRecoveryCheckpoint>();
+  const places = owner.providerRecoveryPlaces ?? useGraphStore.getState().providerRecoveryPlaces;
   for (const checkpoint of checkpoints) {
-    if (providerRecordIsThisProjects(owner, checkpoint.runId)) latestByNode.set(checkpoint.nodeId, checkpoint);
+    if (providerRecordIsThisProjects({ ...owner, providerRecoveryPlaces: places }, checkpoint.runId, checkpoint.nodeId)) {
+      latestByNode.set(checkpoint.nodeId, checkpoint);
+    }
   }
   let changed = false;
   const next = nodes.map((node) => {
@@ -10052,6 +10111,11 @@ function releaseUnresolvedCreates(): void {
 
 wsClient.subscribe((event) => {
   if (event.type === 'socketReconnected') firstSyncAfterReconnect = true;
+  // Sent after a verified hello (PR #199 round 23): the person-only places.
+  if ((event as { type: string }).type === 'providerRecoveryPlaces') {
+    applyProviderRecoveryPlaces((event as { places?: unknown }).places);
+    return;
+  }
   if (event.type === 'graphSync') {
     const boot = (event as { bootId?: unknown }).bootId;
     // Review 10, N-4: a sync from a process this tab has already seen
@@ -10283,6 +10347,8 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
     useCinemaMotionStore.getState().clear();
     clearReplacedCanvasFocus();
   }
+  // The person form's places first, so the records land placed.
+  applyProviderRecoveryPlaces((event as { providerRecoveryPlaces?: unknown }).providerRecoveryPlaces);
   useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
   useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
   if (executionStatuses !== undefined) {
@@ -11225,6 +11291,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   createCancelledLaunchIds: [],
   providerRecoveryWarning: null,
   providerRecoveries: [],
+  providerRecoveryPlaces: {},
   uncertainWorldLabsRunId: null,
   providerStartAmbiguities: [],
   backendFreshStartPending: false,
@@ -15071,7 +15138,7 @@ function keptRecordWire(connection: Connection, run: () => void, added: Node<Nod
   const nodes = added ? [...before.nodes, added] : before.nodes;
   const check = checkKeptWire(connection, nodes, before.edges);
   if (!check.ok) {
-    // The line is whole: "Couldn’t connect to “References”. It takes images and masks, not text." (GM r23, 1; GM r25, 1).
+    // The line is whole: "Nebula couldn’t connect to “References”. It takes images and masks, not text." (GM r23, 1; GM r25, 1).
     if (check.line) useGraphStore.setState((state) => noticeLine(state, check.line));
     return false;
   }
@@ -15217,6 +15284,9 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   'sayRefusedConnection', 'sayRefusedDrop',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
+  // Run History's record matcher (PR #199 round 22): a method only so the
+  // panel reads it through the store; it answers from the state and sets nothing.
+  'providerRecoveryOnCanvas',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.
   'resetExecution', 'cancelExecution', 'cancelRun', 'reserveGraphImport', 'releaseGraphImport',
   'reserveCreateGeneration', 'releaseCreateGeneration', 'cancelCreateGeneration',

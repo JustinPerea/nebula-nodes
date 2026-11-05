@@ -93,7 +93,8 @@ def test_q4_mcp_new_project_past_the_limit_carries_the_limit_and_its_number(app,
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
     with pytest.raises(Exception) as raised:
         asyncio.run(mcp_server.mcp.call_tool("new_project", {"name": "Fourth"}))
-    assert 'Project limit reached (413, {"limit": "projects", "projectLimit": 3})' in str(raised.value)
+    assert ('Project limit reached (413, {"limit": "projects", "projectLimit": 3, "projectCount": 3, '
+            '"deletes": 1})') in str(raised.value)
 
 
 def test_q4_the_kept_detail_uses_curly_apostrophes():

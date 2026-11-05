@@ -124,6 +124,11 @@ body.app-slava-restraint .react-flow__minimap {
   -webkit-backdrop-filter: blur(22px);
   pointer-events: auto;
   animation: selection-toolbar-in 140ms ease-out both;
+  /* Off its own place only to keep clear of the selection (GM r35 on PR
+     #199; lib/bottomBar.ts placeSelectionToolbar): flipped below it. The
+     Panel, the floating panels' marker, stays where it is. */
+  position: relative;
+  top: var(--selection-toolbar-offset, 0px);
 }
 
 .selection-toolbar__count {

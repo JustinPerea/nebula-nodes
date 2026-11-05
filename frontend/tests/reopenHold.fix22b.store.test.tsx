@@ -57,6 +57,13 @@ vi.mock('../src/lib/personSession', async (original) => ({
 vi.mock('../src/lib/paramsOutdated', async (original) => ({
   ...await original<typeof import('../src/lib/paramsOutdated')>(), reloadPage: vi.fn(),
 }));
+// Spied (lines-ui NIT-1 of review 21): a focus loop an earlier test started
+// keeps looking for a canvas for about a second, so focus landing on the
+// canvas alone can't show that this test's reopen moved it.
+vi.mock('../src/lib/canvasFocus', async (original) => {
+  const real = await original<typeof import('../src/lib/canvasFocus')>();
+  return { ...real, focusCanvasSoon: vi.fn(real.focusCanvasSoon) };
+});
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
@@ -75,12 +82,14 @@ import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { resetCanvasFollowForTests } from '../src/lib/canvasFollow';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasNotice';
 import { resetKeptCanvasForTests } from '../src/lib/keptCanvas';
-import { TAB_ID, claimOwnTabId, claimTabId, setTabIdForTests, takeTabId } from '../src/lib/tabId';
+import { TAB_ID, createTabIdentity, takeTabId } from '../src/lib/tabId';
 import { ReopenHoldCallout } from '../src/components/ReopenHoldCallout';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';
 import { act, render } from '@testing-library/react';
 import { publishTopNotice } from '../src/lib/bottomBar';
 import { useAnnounced } from '../src/lib/useAnnounced';
+import { frames } from './helpers/frames';
+import { focusCanvasSoon } from '../src/lib/canvasFocus';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -341,8 +350,12 @@ describe('review 20 lines-ui LOW-2 and NIT-1: focus and the poll', () => {
   it('an in-place reopen that goes lands focus on the canvas', async () => withCanvas(async (canvas) => {
     duplicateN1();
     vi.mocked(projects.openProject).mockResolvedValue(openedAlpha());
+    vi.mocked(focusCanvasSoon).mockClear();
     await askToReopen();
     expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(1);
+    expect(getProjectContext()?.revision).toBe('rev-a3');
+    // This reopen asked for it, not a loop left from an earlier test.
+    expect(vi.mocked(focusCanvasSoon)).toHaveBeenCalled();
     await vi.waitFor(() => expect(document.activeElement).toBe(canvas));
   }));
 
@@ -445,67 +458,74 @@ describe('review 20 NIT-5: where the window is when the follow lands, not when i
 });
 
 describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page lives', () => {
+  // Round 23 (review 21 LOW-1): the claim never waits (`ifAvailable`); the
+  // two-page paths are in tabId.fix23b.test.ts.
   function fakeLocks() {
     const held = new Set<string>();
     return {
       held,
-      request: (name: string, options: { signal?: AbortSignal }, callback: (lock: unknown) => Promise<unknown>) => {
-        if (held.has(name)) {
-          return new Promise((_, reject) => options.signal?.addEventListener('abort', () => reject(new Error('AbortError'))));
-        }
+      request: (name: string, _options: { ifAvailable?: boolean }, callback: (lock: unknown) => unknown) => {
+        if (held.has(name)) return Promise.resolve(callback(null));
         held.add(name);
-        return callback({});
+        return Promise.resolve(callback({})).finally(() => held.delete(name));
       },
     };
   }
 
-  it('a free id is claimed; one another live page holds isn’t (after the wait)', async () => {
+  it('a free id is claimed; one another live page holds isn’t', async () => {
     const locks = fakeLocks();
-    expect(await claimTabId('tab-a', locks, 20)).toBe(true);
-    expect(locks.held.has('nebula-tab:tab-a')).toBe(true);
-    expect(await claimTabId('tab-a', locks, 20)).toBe(false);
+    const storage = window.sessionStorage;
+    storage.clear();
+    const a = createTabIdentity(storage, locks);
+    expect(await a.ready()).toBe(a.id);
+    expect(locks.held.has(`nebula-tab:${a.id}`)).toBe(true);
+    storage.setItem('nebula:tabIdFree', a.id);
+    const b = createTabIdentity(storage, locks);
+    expect(await b.ready()).not.toBe(a.id);
+    storage.clear();
   });
 
   it('the copy whose id another live page holds moves to its own id, stored for its reload; the free mark still let it in', async () => {
-    const original = TAB_ID;
     const storage = window.sessionStorage;
     try {
       storage.clear();
       // Tab A left Nebula in its tab (its free mark), was copied, and both came back.
       const a = takeTabId(storage);
       storage.setItem('nebula:tabIdFree', a);
-      const copy = takeTabId(storage);
-      expect(copy).toBe(a);
       const locks = fakeLocks();
       locks.held.add(`nebula-tab:${a}`);
-      setTabIdForTests(copy);
-      const moved = await claimOwnTabId(locks, 20, storage);
+      const copy = createTabIdentity(storage, locks);
+      expect(copy.id).toBe(a);
+      const moved = await copy.ready();
       expect(moved).not.toBe(a);
       expect(moved).toMatch(/^tab-/);
-      expect(TAB_ID).toBe(moved);
+      expect(copy.id).toBe(moved);
       expect(storage.getItem('nebula:tabId')).toBe(moved);
       expect(locks.held.has(`nebula-tab:${moved}`)).toBe(true);
     } finally {
-      setTabIdForTests(original);
+      storage.clear();
     }
   });
 
   it('a reload whose old page let go keeps its id', async () => {
-    const original = TAB_ID;
-    try {
-      const locks = fakeLocks();
-      setTabIdForTests('tab-kept');
-      expect(await claimOwnTabId(locks, 20, null)).toBe('tab-kept');
-      expect(TAB_ID).toBe('tab-kept');
-      // Claimed: a second claim (pageshow) changes nothing.
-      expect(await claimOwnTabId(locks, 20, null)).toBe('tab-kept');
-    } finally {
-      setTabIdForTests(original);
-    }
+    const locks = fakeLocks();
+    const storage = window.sessionStorage;
+    storage.clear();
+    const before = createTabIdentity(storage, locks);
+    const id = await before.ready();
+    before.pageHide();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const reload = createTabIdentity(storage, locks);
+    expect(await reload.ready()).toBe(id);
+    // Claimed: a plain pageshow changes nothing.
+    expect(await reload.pageShow(false)).toBe(id);
+    storage.clear();
   });
 
   it('no Web Locks: the free mark alone, as before', async () => {
-    expect(await claimTabId('tab-x', null)).toBe(true);
+    const page = createTabIdentity(null, null);
+    expect(page.confirmed).toBe(true);
+    expect(await page.ready()).toBe(page.id);
   });
 
   it('W14: back from the back/forward cache, the page takes its id back (its free mark goes); a plain pageshow leaves it', () => {
@@ -526,23 +546,32 @@ describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page 
 });
 
 describe('review 20 lines-ui LOW-1 (GM r34 A4): no callout over open Run History', () => {
+  const clock = frames();
+  beforeEach(() => clock.install());
+  afterEach(() => clock.uninstall());
   it('the rail callout goes while the history dock is open and comes back when it closes', () => {
     useProjectStore.setState({ heldReopenLine: { id: 'alpha', line: LINES.recovery, place: 'runHistory' } });
     const { container } = render(<ReopenHoldCallout place="runHistory" />);
+    clock.flush();
     expect(container.querySelector('[data-reopen-hold-callout]')?.textContent).toBe(LINES.recovery);
     act(() => { useUIStore.getState().setLeftDock('history'); });
     expect(container.querySelector('[data-reopen-hold-callout]')).toBeNull();
     act(() => { useUIStore.getState().setLeftDock(null); });
+    clock.flush();
     expect(container.querySelector('[data-reopen-hold-callout]')?.textContent).toBe(LINES.recovery);
   });
 });
 
 describe('review 20 lines-ui NIT-2: each live region is in the page before its text', () => {
+  const clock = frames();
+  beforeEach(() => clock.install());
+  afterEach(() => clock.uninstall());
   it('useAnnounced: empty on the mount render, the text after', () => {
     const seen: string[] = [];
     function Probe({ text }: { text: string }) { const shown = useAnnounced(text); seen.push(shown); return <p>{shown}</p>; }
     const { container } = render(<Probe text="Line" />);
     expect(seen[0]).toBe('');
+    clock.flush();
     expect(container.textContent).toBe('Line');
   });
 
@@ -562,6 +591,7 @@ describe('review 20 lines-ui NIT-2: each live region is in the page before its t
     const { read, Peek } = atFirstCommit('[data-reopen-hold-callout]');
     render(<><ReopenHoldCallout place="runHistory" /><Peek /></>);
     expect(read.text).toBe('');
+    clock.flush();
     expect(document.querySelector('[data-reopen-hold-callout]')?.textContent).toBe(LINES.recovery);
   });
 
@@ -569,6 +599,7 @@ describe('review 20 lines-ui NIT-2: each live region is in the page before its t
     const { read, Peek } = atFirstCommit('.provider-recovery-status');
     render(<><ProviderRecoveryStatus reopenLine={{ line: LINES.params, onDismiss: () => {} }} /><Peek /></>);
     expect(read.text).toBe('');
+    clock.flush();
     expect(document.querySelector('.provider-recovery-status')?.textContent).toBe(LINES.params);
   });
 });

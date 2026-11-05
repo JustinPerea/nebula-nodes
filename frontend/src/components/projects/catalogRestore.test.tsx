@@ -200,11 +200,11 @@ describe('the Agent log line (round 2)', () => {
     expect(catalogRestoreLogLine(restore({ addedBack: rows('A', 'B', 'C', 'D'), addedBackCount: 4 })))
       .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Added back 4 projects.`);
     expect(catalogRestoreLogLine(restore({ notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 })))
-      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn’t add back “Hero study”.`);
+      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Nebula couldn’t add back “Hero study”.`);
     expect(catalogRestoreLogLine(restore({ addedBack: trashedRows('Logo'), addedBackCount: 1 })))
       .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Put “Logo” in Recently deleted.`);
     expect(catalogRestoreLogLine(restore({ notAddedBack: failedRows(null, null), notAddedBackCount: 2 })))
-      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn’t add back 2 projects.`);
+      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Nebula couldn’t add back 2 projects.`);
   });
 });
 

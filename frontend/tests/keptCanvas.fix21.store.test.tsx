@@ -7,7 +7,7 @@
  * - 4 and 5: the reload line has its subject, and its name stays true until
  *   the reload (a rename follows; a copy gone from the list drops the name).
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
@@ -56,7 +56,7 @@ vi.mock('../src/lib/projects', async (original) => ({
 }));
 
 import { RELOAD_FOR_UPDATE_UNNAMED, refreshOpenHold, reopenHold, reopenHoldLine, reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave,
-  subscribeReopenHold, useProjectStore } from '../src/store/projectStore';
+  subscribeReopenHold, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
 import { useCinemaUploadStore } from '../src/store/cinemaUploadStore';
 import { UNLOCK_LABEL } from '../src/lib/worldLabsWaiting';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';
@@ -108,6 +108,10 @@ const sync = (workspaceRevision: string, more: Record<string, unknown> = {}) => 
 let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
+
+// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// tests are about the lines themselves, so it is loaded first.
+beforeAll(async () => { await loadReopenHoldLines(); });
 
 beforeEach(async () => {
   vi.clearAllMocks();

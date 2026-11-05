@@ -171,6 +171,24 @@ describe('L-1: every edit is gated, following and offline', () => {
     for (const name of ['deleteCanvasElements', 'clearBackendNodes', 'adoptAcceptedProposal']) expect(gated.has(name)).toBe(true);
   });
 
+  it("Run History's record matcher is listed as a read, and calling it changes nothing", () => {
+    expect(graphStoreModule.NOT_GRAPH_EDITS.has('providerRecoveryOnCanvas')).toBe(true);
+    expect(graphStoreModule.gatedGraphActions()).not.toContain('providerRecoveryOnCanvas');
+    useGraphStore.setState({
+      runHistory: [{ id: 'wl-run', status: 'success', startedAt: 1, nodes: [], edges: [] } as never],
+      providerRecoveries: [{ runId: 'wl-run', nodeId: 'n1', resumeOperationId: 'op-1', existingWorldId: null } as never],
+    });
+    const before = useGraphStore.getState();
+    const seen: unknown[] = [];
+    const stop = useGraphStore.subscribe((state) => seen.push(state));
+    expect(before.providerRecoveryOnCanvas(before.providerRecoveries[0])).toBe(true);
+    expect(before.providerRecoveryOnCanvas({ runId: 'elsewhere', nodeId: 'n9', resumeOperationId: 'op-9', existingWorldId: null } as never)).toBe(false);
+    stop();
+    expect(seen).toEqual([]);
+    expect(useGraphStore.getState()).toBe(before);
+    expect(graphWrites.sent).toEqual([]);
+  });
+
   for (const mode of ['following', 'offline'] as const) {
     it(`${mode}: the Delete key, the chat's clear and Accept change nothing and send nothing`, async () => {
       if (mode === 'following') {

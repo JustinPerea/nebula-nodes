@@ -201,11 +201,18 @@ export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevi
     ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
     // Review 18 MEDIUM-1: the tab-local nodes this tab deleted; nothing else is a delete.
     ...(pending?.deleted?.length ? { deletedNodeIds: pending.deleted } : {}),
-  })).then((result: ProjectActivation & { deletesKept?: unknown }) => {
+  })).then((result: ProjectActivation & { deletesKept?: unknown; deletesHeld?: unknown }) => {
     // A handoff's listed deletes Nebula kept (another window saved the node
     // last): the tab says so (review 19 item 5).
     const kept = Array.isArray(result.deletesKept) ? result.deletesKept.filter((id): id is string => typeof id === 'string') : [];
-    return kept.length > 0 ? { ...result.project, deletesKept: kept } : result.project as SavedProject & { deletesKept?: string[] };
+    // The ones a guard refused (World Labs state, a rendering scene; PR #199
+    // round 23, review 21 NIT-2), each with the person's line for it.
+    const held = Array.isArray(result.deletesHeld)
+      ? result.deletesHeld.map((entry) => (entry as { line?: unknown } | null)?.line)
+        .filter((line): line is string => typeof line === 'string' && line.length > 0)
+      : [];
+    if (kept.length === 0 && held.length === 0) return result.project as SavedProject & { deletesKept?: string[]; deletesHeld?: string[] };
+    return { ...result.project, ...(kept.length > 0 ? { deletesKept: kept } : {}), ...(held.length > 0 ? { deletesHeld: held } : {}) };
   });
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);

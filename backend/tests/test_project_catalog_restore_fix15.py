@@ -199,7 +199,7 @@ def test_low3_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         projects_cli.run_new(cli, "Fourth")
     assert capsys.readouterr().err.strip() == (
-        'error: Project limit reached (413, {"limit": "projects", "projectLimit": 3})')
+        'error: Project limit reached (413, {"limit": "projects", "projectLimit": 3, "projectCount": 3, "deletes": 1})')
 
 
 # -- Merge-integrity LOW-2 B2: an open's dropped ports, said ---------------------------------

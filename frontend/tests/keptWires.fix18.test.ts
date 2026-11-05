@@ -4,7 +4,7 @@
  *   name-list join ("images and masks");
  * - GM r25, 2: "takes only one connection there", "doesn’t have that input
  *   anymore";
- * - GM r26, 3: a loop is "Couldn’t connect to “B”. It would make a loop.",
+ * - GM r26, 3: a loop is "Nebula couldn’t connect to “B”. It would make a loop.",
  *   and a drop the canvas refused gets its line (refusedConnectionLine);
  * - review 16 kept-ui NIT-1: "3D models" and "lists" pinned;
  * - review 16 kept-ui LOW-1: the multiple-port lookup falls back to the
@@ -37,7 +37,7 @@ describe('GM r25, 1: what an input takes, every type, by the shared join', () =>
   it('the refusal names masks: “It takes images and masks, not text.”', () => {
     expect(checkKeptWire({ source: 't', sourceHandle: 'text', target: 's', targetHandle: 'images' },
       [node('t', 'text-input'), node('s', 'seedream-4-5')], []))
-      .toEqual({ ok: false, line: 'Couldn’t connect to “References”. It takes images and masks, not text.' });
+      .toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It takes images and masks, not text.' });
   });
 
   it('review 16 NIT-1: “3D models” and “lists” as GM wrote them', () => {
@@ -56,22 +56,22 @@ describe('GM r25, 2: the two edited left-out reasons', () => {
       .toBe('Nebula left out the connection from “A” to “B” because “B” takes up to 10 connections there.');
     expect(droppedConnectionsLine([wire('port')]))
       .toBe('Nebula left out the connection from “A” to “B” because “B” doesn’t have that input anymore.');
-    expect(KEPT_WIRE_NO_PORT).toBe('Couldn’t make that connection. That input or output isn’t on the node anymore.');
+    expect(KEPT_WIRE_NO_PORT).toBe('Nebula couldn’t make that connection. That input or output isn’t on the node anymore.');
   });
 });
 
 describe('GM r26, 3: a loop, and a refused drop’s line', () => {
   const nodes = [node('a', 'seedream-4-5'), node('b', 'seedream-4-5'), node('t', 'text-input')];
-  it('a loop: “Couldn’t connect to “References”. It would make a loop.”', () => {
+  it('a loop: “Nebula couldn’t connect to “References”. It would make a loop.”', () => {
     expect(checkKeptWire({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, nodes,
-      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It would make a loop.' });
+      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It would make a loop.' });
   });
 
   it('refusedConnectionLine: the wrong kind, a loop, a missing port; nothing for a drop the rules take', () => {
     expect(refusedConnectionLine({ source: 't', sourceHandle: 'text', target: 'a', targetHandle: 'images' }, nodes, []))
-      .toBe('Couldn’t connect to “References”. It takes images and masks, not text.');
+      .toBe('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     expect(refusedConnectionLine({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, nodes,
-      [edge('a', 'image', 'b', 'images')])).toBe('Couldn’t connect to “References”. It would make a loop.');
+      [edge('a', 'image', 'b', 'images')])).toBe('Nebula couldn’t connect to “References”. It would make a loop.');
     expect(refusedConnectionLine({ source: 't', sourceHandle: 'nope', target: 'a', targetHandle: 'images' }, nodes, []))
       .toBe(KEPT_WIRE_NO_PORT);
     expect(refusedConnectionLine({ source: 't', sourceHandle: 'text', target: 'a', targetHandle: 'prompt' }, nodes, [])).toBe('');
@@ -81,7 +81,7 @@ describe('GM r26, 3: a loop, and a refused drop’s line', () => {
     const ten = Array.from({ length: 10 }, (_, index) => edge(`i${index}`, 'image', 'a', 'images'));
     const images = Array.from({ length: 10 }, (_, index) => node(`i${index}`, 'image-input'));
     expect(refusedConnectionLine({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, [...nodes, ...images],
-      [...ten, edge('a', 'image', 'b', 'images')])).toBe('Couldn’t connect to “References”. It would make a loop.');
+      [...ten, edge('a', 'image', 'b', 'images')])).toBe('Nebula couldn’t connect to “References”. It would make a loop.');
   });
 });
 
