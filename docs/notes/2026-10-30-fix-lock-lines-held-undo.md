@@ -2231,3 +2231,88 @@ Not killed:
 `git diff origin/main` of `backend/main.py`, `frontend/src/lib/graphFile.ts`
 and `docs/MCP-SETUP.md`: every hunk is this PR's change. Nothing of main's
 was reformatted or reverted; nothing was undone.
+
+## Round 11 (the survivors of round 10, and post-merge shots)
+
+### 68. `forgetStepsKeepsHolds` did not lose its kill in the merge
+
+Round 10 reported it surviving. It does not. `forgetStepsInFlight` is the
+same text before the merge (222273d3) and after (8f9a0bd8): `heldCopies.clear();
+forgetHoldsOfReplacedCanvas();` then the arrival timers. The merge changed none
+of its callers (`loadGraph`, the project switch, `forgetHeldHistoryForTests`;
+the import and the clear call `forgetHoldsOfReplacedCanvas` as well). The
+mutant (that line removed) fails the same three tests on both trees:
+`heldUndo.pr205r8` "a restore waiting on its echo when another project
+opens", `heldUndo.pr205r9` "another canvas opened while it waits" and
+"... while the person's Delete waits for its sync" (3 failed, 114 passed of 117
+on both 222273d3 and 8f9a0bd8; 3 failed of 120 with the r10 file).
+So it was never a regression and not equivalent: round 10's mutation tree
+reported a pass for a mutant that fails here, so that run's tree was not the
+merged one (it no longer exists). Rerun on a fresh copy of HEAD.
+
+### 69. The other survivors
+
+- `gap_emptyNoBind`: killed. Round 10's four scenarios all sent the empty
+  sync without `canvasRevision`, which reads as a clear (`graphReplaced`), where
+  no held node is kept. With `canvasRevision` of the same canvas, a restore
+  holding n1, and Claude deleting n1 and n2 in one sync that empties the
+  canvas, the sync leaves n1 (held) and takes n2 off: that is a step, and n1's
+  removal is its held link. `bindHeldLinks(topBefore)` ties the link to that
+  step, so n1's removal joins it when the hold ends: one step, one Undo brings
+  both back. Without it, `setLinkStep` finds no step for the link and makes a
+  second one (two F(Claude) steps). (`heldUndo.pr205r11`: gap_emptyNoBind.)
+- `clearHeldOffEdgeEndsOff`: killed. The check in `asLastSaved` keeps a
+  connection of a set-aside node only when both ends are in the step. A
+  synced copy of n1 can name a wire to n2 after the person deleted n2 (its
+  answer in, its echo not yet): without the check the clear's step carries
+  `n1>n2`. Nothing shows it until n2 comes back by a sync nobody signed (no
+  step); then the clear's Undo draws a wire that no longer existed, on the
+  canvas and in Nebula (the restore's `wire` list). The test does that.
+- `syncForgetsClearedHeldOffOff`: killed. The throw round 10 asked for: the
+  clear's sync throws in `hydrateProviderStartAmbiguities` (after
+  `replaceCanvasByClear` set the node aside, before `asLastSaved` reads it).
+  Without the reset at the top of the next `applyGraphSyncNow`, the next sync's
+  step (Codex adds n3) carries n1, and its Undo puts n1 back on the canvas and
+  in Nebula. With it, it does not.
+- `importKeepsHolds`: equivalent, and the dead call is gone. In
+  `applyGraphSyncNow`, `forgetStepsInFlight()` (which `replacedPresses` takes)
+  already clears `heldCopies` and calls `forgetHoldsOfReplacedCanvas()`; the
+  lines between it and the second call (`renameDrafts`, `labelsInFlight`,
+  `labelsSavedBefore`, `pendingConnectedNodeCreationAttempt`, `wireWrites`,
+  `nodeWrites`) fill none of what that call forgets (`syncWaits`,
+  `heldStartedWith`, `heldStartedEdges`, `refusedRenames`). The second call
+  was removed, with a comment. (`heldCopies.clear()` stays: it is not mutated.)
+- `syncedLabelsKeptOnReplace`: dropped. Its text names code removed in an
+  earlier round.
+
+Mutation, `heldUndo.pr205r7/8/9/10/11`: 45 of 45 killed (the 46th, syncedLabelsKeptOnReplace, is dropped; importKeepsHolds is gone with its dead call).
+
+### 70. Live shots after the merge
+
+Isolated backend (8797) and Vite (5797); every request to 8000-8010, 5173,
+8840 and 5840 aborted, canaries refused, no provider calls. The size
+refusal's 409 is the backend's answer shape (main.py `proposal_too_complex`
+with `limit: {kind: "size"}`), answered by the harness: a real one needs a
+project near 16 MB. Everything else is the app's own code. Shots in the
+scratchpad `ll11/live/shots/`, 1440 wide, no duplicate md5.
+
+- The size-refusal bar line, in place: "Nebula couldn’t accept this because
+  the canvas would be too large to save. Reject it, or ask Claude to change
+  it." (`role="status"`, neutral ink).
+- A value nested to 65 levels from the file's root (60 `next` keys; 64 reads
+  64): Save says "Nebula couldn’t save the canvas. It’s too complex to
+  save. Undo your last change, then try again." and, with one more change
+  on top, "... Undo the last 2 changes, then try again." The project's chip
+  reads "Save failed · Retry": the backend refuses the same nesting on the
+  autosave. The card shows "[object Object]" (the harness's value).
+- A file with 10,001 nodes: "Nebula couldn’t load the canvas. This file has
+  more than 10,000 nodes."
+- Cinema's shot panel: reloaded rows with only [Remove] ("You can generate
+  after you remove “ref.png” and “lost.png”."); a failed row with Try again
+  beside a reloaded one (two sentences); other shots' uploads on their way
+  ("You can generate all when the uploads in “Shot 2” and “Shot 3” finish."); the failed and the reloaded forms for other shots.
+- The pinned Inspector: "2 nodes selected" / "Select one node to see its
+  settings."
+- Settings > Preferences > Personal agents: "Use Claude (your setup) in chat"
+  held while its save is out (aria-disabled, the held look, the thumb where
+  the person put it; the section's other switches held too).

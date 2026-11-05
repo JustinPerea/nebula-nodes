@@ -11172,8 +11172,8 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
     pendingConnectedNodeCreationAttempt = null;
     wireWrites.clear();
     nodeWrites.clear();
-    heldCopies.clear();
-    forgetHoldsOfReplacedCanvas();
+    // (forgetStepsInFlight above already cleared heldCopies and forgot the
+    // holds of the replaced canvas; nothing between fills them again.)
     clearUnsavedParamEdits();
     // The committed import can arrive before, or instead of, its HTTP ack.
     // Revoke old same-ID uploads/writes and suspended drafts before merging.
