@@ -1,5 +1,3 @@
-import type { InternalNode, Node } from '@xyflow/react';
-import type { NodeData } from '../types';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
@@ -16,6 +14,29 @@ export interface SpringConfig {
   damping: number;
   mass: number;
 }
+
+/** What an anchor needs of a node: where it is drawn, how big, and where its
+ *  ports sit. React Flow's InternalNode has all of it, so the canvas passes its
+ *  own nodeLookup; any other surface can pass the same shape (CursorSpace,
+ *  lib/agentCursorSpace.ts). */
+export interface AnchorNode {
+  measured?: { width?: number; height?: number };
+  internals: {
+    positionAbsolute: { x: number; y: number };
+    handleBounds?: {
+      source?: readonly AnchorHandle[] | null;
+      target?: readonly AnchorHandle[] | null;
+    } | null;
+  };
+}
+export interface AnchorHandle {
+  id?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export type AnchorLookup = ReadonlyMap<string, AnchorNode>;
 
 export const AGENT_CURSOR_SPRING: SpringConfig = { stiffness: 300, damping: 24, mass: 1 };
 
@@ -58,7 +79,7 @@ export function isAtRest(state: SpringState, target: Point): boolean {
 /** Where an anchor sits in flow coordinates right now, or null if its node isn't drawn. */
 export function resolveAnchor(
   anchor: AgentCursorAnchor,
-  nodeLookup: Map<string, InternalNode<Node<NodeData>>>,
+  nodeLookup: AnchorLookup,
 ): Point | null {
   if (!('nodeId' in anchor)) return { x: anchor.x, y: anchor.y };
   const node = nodeLookup.get(anchor.nodeId);
@@ -83,7 +104,7 @@ export function resolveAnchor(
  *  node isn't drawn. */
 export function chainPoint(
   anchor: AgentCursorAnchor,
-  nodeLookup: Map<string, InternalNode<Node<NodeData>>>,
+  nodeLookup: AnchorLookup,
 ): Point | null {
   if (!('nodeId' in anchor) || !anchor.handle) return resolveAnchor(anchor, nodeLookup);
   const node = nodeLookup.get(anchor.nodeId);

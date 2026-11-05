@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { getBezierPath, Position, useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
+import { useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
 import { Check, StickyNote } from 'lucide-react';
 import type { NodeData } from '../../types';
 import {
@@ -8,7 +8,8 @@ import {
   useAgentPresenceStore,
   type AgentCursor,
 } from '../../store/agentPresenceStore';
-import { chainPoint, resolveAnchor, stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
+import { stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
+import { canvasSpace, type CursorLabels, type CursorSpace } from '../../lib/agentCursorSpace';
 import {
   frameAt,
   impulseCurve,
@@ -153,9 +154,6 @@ const arcDash = (deg: number) => `${deg} ${360 - deg}`;
  *  (GM r56 item D). */
 const DASHED_GROW = `translate(${AGENT_CURSOR_ARROW_TIP.x} ${AGENT_CURSOR_ARROW_TIP.y}) scale(${AGENT_CURSOR_DASHED.grow}) translate(${-AGENT_CURSOR_ARROW_TIP.x} ${-AGENT_CURSOR_ARROW_TIP.y})`;
 
-/** The node lookup as the say lines read it: each node's card title. */
-type NodeLabels = Map<string, { data?: { label?: unknown } } | undefined>;
-
 interface SayInfo {
   /** The line beside the cursor ('' for none). */
   text: string;
@@ -166,7 +164,7 @@ interface SayInfo {
 }
 
 /** The cursor's line for this event: its own say, or its action's default (r54). */
-function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined): SayInfo {
+function sayFor(cursor: AgentCursor, lookup: CursorLabels | undefined): SayInfo {
   const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
   const handle = 'nodeId' in cursor.target ? cursor.target.handle : undefined;
   const field = cursor.action === 'type' && nodeId ? findTypeField(nodeId, handle) : null;
@@ -193,13 +191,13 @@ function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined): SayInfo {
  * with its node and zooms with the card's text. Measured when the state
  * starts and on each keystroke, never per frame; a node move only moves it.
  */
-function FieldMark({ field, nodeId, blinking, keystrokeAt }: {
+function FieldMark({ space, field, nodeId, blinking, keystrokeAt }: {
+  space: CursorSpace;
   field: TypeField;
   nodeId: string;
   blinking: boolean;
   keystrokeAt: number;
 }) {
-  const store = useStoreApi<Node<NodeData>>();
   const ref = useRef<HTMLDivElement | null>(null);
   const [kind, setKind] = useState<FieldBox['kind']>(field.kind === 'param' ? 'underline' : 'caret');
   useLayoutEffect(() => {
@@ -207,8 +205,7 @@ function FieldMark({ field, nodeId, blinking, keystrokeAt }: {
     const place = () => {
       const el = ref.current;
       if (!el) return;
-      const node = store.getState().nodeLookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined;
-      const at = node?.internals?.positionAbsolute;
+      const at = space.nodeInfo(nodeId)?.at;
       if (!box || !at) {
         el.style.visibility = 'hidden';
         return;
@@ -219,19 +216,19 @@ function FieldMark({ field, nodeId, blinking, keystrokeAt }: {
       el.style.height = `${box.height}px`;
     };
     const measure = () => {
-      box = fieldBox(field, nodeId, store.getState().transform?.[2] ?? 1, AGENT_CURSOR_TYPE.caretPx, AGENT_CURSOR_TYPE.underlinePx);
+      box = fieldBox(field, nodeId, space.zoom() ?? 1, AGENT_CURSOR_TYPE.caretPx, AGENT_CURSOR_TYPE.underlinePx);
       if (box) setKind(box.kind);
       place();
     };
     measure();
     // Once more after the card has drawn the text this keystroke brought.
     const frame = requestAnimationFrame(measure);
-    const unsubscribe = store.subscribe(place);
+    const unsubscribe = space.subscribe(place);
     return () => {
       cancelAnimationFrame(frame);
       unsubscribe();
     };
-  }, [field, nodeId, store, keystrokeAt]);
+  }, [field, nodeId, space, keystrokeAt]);
   return (
     <div
       ref={ref}
@@ -1167,7 +1164,9 @@ const COUNT_FILL = '#52525b';
 /** The count cursor's list: up to this many names, then how many more. */
 const COUNT_LIST_NAMES = 3;
 
-function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving = false, nameTaken = false, onExited }: {
+function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, leaving = false, nameTaken = false, onExited }: {
+  /** The surface it is drawn on. */
+  space: CursorSpace;
   cursor: AgentCursor;
   zoom: number;
   peers: number;
@@ -1180,7 +1179,6 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   nameTaken?: boolean;
   onExited?: (key: string) => void;
 }) {
-  const store = useStoreApi<Node<NodeData>>();
   const haloId = `agent-cursor-halo-${useId().replace(/:/g, '')}`;
   const cursorRef = useRef<HTMLDivElement | null>(null);
   const pointerRef = useRef<SVGSVGElement | null>(null);
@@ -1243,7 +1241,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   // default line (GM - Design r54, lib/agentCursorSays), worked out once per
   // event from the canvas as it is then. A default is display only: the
   // accessible name and the Agent log keep the agent's own words.
-  const sayInfo = useMemo(() => sayFor(cursor, store.getState().nodeLookup as unknown as NodeLabels),
+  const sayInfo = useMemo(() => sayFor(cursor, space.labels()),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
     [cursor.seq, cursor.say, cursor.action]);
   const say = sayInfo.text;
@@ -1309,16 +1307,16 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // Only the field's text counts: a run status or any other change to the
     // node's data is not a keystroke (the blink doesn't restart, nothing is
     // measured again).
-    const dataOf = () => (store.getState().nodeLookup.get(typingNode) as { data?: unknown } | undefined)?.data;
+    const dataOf = () => space.nodeInfo(typingNode)?.data;
     let seen = dataOf();
-    return store.subscribe(() => {
+    return space.subscribe(() => {
       const now = dataOf();
       if (now === seen) return;
       const typed = fieldTextChanged(seen, now, typingHandle);
       seen = now;
       if (typed) setExpr((current) => onKeystroke(current, performance.now()));
     });
-  }, [typingNode, typingHandle, store]);
+  }, [typingNode, typingHandle, space]);
 
   // A pill hidden by a takeover stays hidden for the rest of that exit, even
   // if the new holder leaves first (GM - Design, PR #211 review 5, item 6).
@@ -1561,12 +1559,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // pane's box is cached on the field: no layout read per frame.
     const pointerInFlow = (): Point | null => {
       const client = field.pointer;
-      const { domNode, transform } = store.getState();
-      if (!client || !domNode || !transform) return null;
-      const box = field.paneRect(domNode);
+      const dom = space.pane();
+      if (!client || !dom) return null;
+      const box = field.paneRect(dom);
       if (client.x < box.left || client.x > box.right || client.y < box.top || client.y > box.bottom) return null;
-      const [tx, ty, scale] = transform;
-      return { x: (client.x - box.left - tx) / scale, y: (client.y - box.top - ty) / scale };
+      return space.fromClient(client, box);
     };
     // A cursor that isn't flying sits on whole device pixels and off its own
     // compositor layer, so its pill and the pill's edge draw crisp; it is
@@ -1574,14 +1571,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // item 1). Snapped where it is drawn, never in the motion, so nothing
     // drifts.
     const onPixels = (p: Point): Point => {
-      const { domNode, transform } = store.getState();
-      if (!domNode || !transform) return p;
-      const box = field.paneRect(domNode);
-      const [tx, ty, scale] = transform;
+      const dom = space.pane();
+      if (!dom) return p;
+      const box = field.paneRect(dom);
       const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-      const snap = (flow: number, origin: number, shift: number) =>
-        (Math.round((origin + shift + flow * scale) * dpr) / dpr - origin - shift) / scale;
-      return { x: snap(p.x, box.left, tx), y: snap(p.y, box.top, ty) };
+      return space.snap(p, box, dpr);
     };
     const apply = () => {
       const el = cursorRef.current;
@@ -1640,16 +1634,13 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       field.placers.set(cursor.key, apply);
       field.markers.set(cursor.key, paintMarks);
     }
-    // The drag's wire: the canvas's own bezier (React Flow's getBezierPath,
-    // as the edges draw it) from the port to an end that trails the tip on
+    // The drag's wire: the surface's own bezier (the canvas's is React Flow's
+    // getBezierPath, as the edges draw it) from the port to an end that trails the tip on
     // the wire's lag spring, so it visibly gets pulled (§2 drag). Its width
     // is in flow units, like an edge's.
     const drawWire = (path: SVGPathElement, from: Point, to: Point) => {
-      const [d] = getBezierPath({
-        sourceX: from.x, sourceY: from.y, sourcePosition: Position.Right,
-        targetX: to.x, targetY: to.y, targetPosition: Position.Left,
-      });
-      path.setAttribute('d', d);
+      const d = space.wire?.(from, to);
+      if (d !== undefined) path.setAttribute('d', d);
     };
     const updateWire = (start: Point | null, arrivedNow = false, dt = 0) => {
       const path = wireRef.current;
@@ -1763,9 +1754,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         request();
         return;
       }
-      const lookup = store.getState().nodeLookup;
-      const resolved = resolveAnchor(cursor.target, lookup);
-      const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
+      const resolved = space.resolve(cursor.target);
+      const start = dragging && cursor.from ? space.resolve(cursor.from) : null;
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
         if ('nodeId' in cursor.target) field.nodeGone(cursor.target.nodeId);
@@ -1784,15 +1774,14 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       field.stalled.delete(cursor.key);
       // The zoom this frame, from the store: a zoom in progress carries the
       // column at its screen-px steps on this very frame (review 6, item 5).
-      const z = store.getState().transform?.[2] ?? zoomRef.current;
+      const z = space.zoom() ?? zoomRef.current;
       zoomRef.current = z;
       const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
-      const nodeAt = nodeId !== null
-        ? (lookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined)?.internals?.positionAbsolute ?? null
-        : null;
-      const nodeDragged = nodeId !== null && Boolean((lookup.get(nodeId) as { dragging?: boolean } | undefined)?.dragging);
+      const nodeState = nodeId !== null ? space.nodeInfo(nodeId) : undefined;
+      const nodeAt = nodeState?.at ?? null;
+      const nodeDragged = nodeState?.dragging ?? false;
       field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged,
-        chainPoint(cursor.target, lookup) ?? resolved);
+        space.chainPoint(cursor.target) ?? resolved);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -1898,9 +1887,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       // item 2). A drag says so on the node; a nudge or an Arrange leaves the
       // node where the person put it. The planner reads this only when the
       // node jumped, so a node merely sitting there changes nothing.
-      const anchor = 'nodeId' in cursor.target
-        ? lookup.get(cursor.target.nodeId) as { dragging?: boolean; position?: { x: number; y: number } } | undefined
-        : undefined;
+      const anchor = 'nodeId' in cursor.target ? space.nodeInfo(cursor.target.nodeId) : undefined;
       const dragged = goal === target && anchor !== undefined && 'nodeId' in cursor.target
         && (Boolean(anchor.dragging) || placedByPerson(cursor.target.nodeId, anchor.position));
       const restAt = onPixels(goal);
@@ -2004,9 +1991,9 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // steps change their flow size with the zoom, and a frame late they'd
     // show the wrong step while the person zooms (GM - Design, PR #211
     // review 6, item 4: zoom carries the column like a drag).
-    let seenZoom = store.getState().transform?.[2];
-    const unsubscribe = store.subscribe(() => {
-      const zoomNow = store.getState().transform?.[2];
+    let seenZoom = space.zoom();
+    const unsubscribe = space.subscribe(() => {
+      const zoomNow = space.zoom();
       const zoomed = zoomNow !== seenZoom;
       seenZoom = zoomNow;
       if (zoomed && !leavingRef.current && motion.current) {
@@ -2047,7 +2034,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
-  }, [cursor.seq, cursor.key, cursor.target, cursor.from, cursor.receivedAt, cursor.replayed, dragging, leaving, store, field]);
+  }, [cursor.seq, cursor.key, cursor.target, cursor.from, cursor.receivedAt, cursor.replayed, dragging, leaving, space, field]);
 
   // A cursor leaves the stack as its exit starts, so it isn't counted for
   // de-stacking while it fades: the cleanup below runs as `leaving` turns
@@ -2118,7 +2105,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       </svg>
       {fieldShown && (
         <div className="agent-cursor__field-layer" style={{ ['--agent-color' as string]: fill }}>
-          <FieldMark field={sayInfo.field!} nodeId={typeNode!} blinking={expressed.blinking} keystrokeAt={expr?.keystrokeAt ?? 0} />
+          <FieldMark space={space} field={sayInfo.field!} nodeId={typeNode!} blinking={expressed.blinking} keystrokeAt={expr?.keystrokeAt ?? 0} />
         </div>
       )}
       <div
@@ -2222,11 +2209,14 @@ export function AgentCursorLayer() {
   const agents = useAgentPresenceStore((s) => s.agents);
   const prune = useAgentPresenceStore((s) => s.prune);
   const zoom = useStore((s) => s.transform[2]);
-  // One zoom for the draw order, the store's, read when it is worked out
-  // (CursorField.syncOrder). The store's API is the same object for the
+  // The canvas as a CursorSpace: the one thing here that knows React Flow
+  // (lib/agentCursorSpace.ts). The store's API is the same object for the
   // layer's life.
-  const orderStore = useStoreApi<Node<NodeData>>();
-  const [field] = useState(() => new CursorField(() => orderStore.getState().transform?.[2] ?? 1));
+  const storeApi = useStoreApi<Node<NodeData>>();
+  const space = useMemo(() => canvasSpace(storeApi), [storeApi]);
+  // One zoom for the draw order, the space's, read when it is worked out
+  // (CursorField.syncOrder).
+  const [field] = useState(() => new CursorField(() => space.zoom() ?? 1));
   useEffect(() => () => field.dispose(), [field]);
   // Fonts that finish loading can widen a pill measured with the fallback:
   // every cursor measures again (review 7, MEDIUM-4).
@@ -2286,16 +2276,16 @@ export function AgentCursorLayer() {
 
   // The cached pane box and hover boxes go stale when the viewport moves or
   // the pane resizes: drop them then, and only then.
-  const storeApi = useStoreApi<Node<NodeData>>();
   useEffect(() => {
-    let transform = storeApi.getState().transform;
-    const unsubscribe = storeApi.subscribe((state) => {
-      if (state.transform !== transform) {
-        transform = state.transform;
+    let view = space.viewKey();
+    const unsubscribe = space.subscribe(() => {
+      const now = space.viewKey();
+      if (now !== view) {
+        view = now;
         field.invalidateLayout();
       }
     });
-    const dom = storeApi.getState().domNode;
+    const dom = space.pane();
     const observer = dom && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => field.invalidateLayout()) : null;
     if (dom) observer?.observe(dom);
     window.addEventListener('resize', field.invalidateLayout);
@@ -2304,7 +2294,7 @@ export function AgentCursorLayer() {
       observer?.disconnect();
       window.removeEventListener('resize', field.invalidateLayout);
     };
-  }, [storeApi, field]);
+  }, [space, field]);
 
   // A tab hidden mid-flight lands its cursors unseen on return (review 2,
   // M1): count each hide. A cursor in flight then has a frame pending, which
@@ -2351,6 +2341,7 @@ export function AgentCursorLayer() {
         {views.map(({ cursor, leaving: out }) => (
           <AgentCursorView
             key={cursor.key}
+            space={space}
             cursor={cursor}
             zoom={zoom}
             peers={cursors.length}
