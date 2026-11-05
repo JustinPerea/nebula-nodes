@@ -387,6 +387,16 @@ _FAL_FIELDS: dict[str, dict[str, tuple[str, bool]]] = {
     "fal-ai/flux-2-flex": {},
     "fal-ai/flux-2/klein/9b": {},
     "fal-ai/flux-2/klein/4b": {},
+    # Talking heads (read 2026-11-04 from fal's per-endpoint queue OpenAPI):
+    # BytedanceOmnihumanV15Input, BytedanceOmnihumanV2Input and
+    # KlingVideoAiAvatarV2{Standard,Pro}Input all take ``image_url`` and
+    # ``audio_url`` (both required) and an optional ``prompt``. Keyed by
+    # whole id: the last segments ("v1.5", "v2", "standard", "pro") say
+    # nothing about the shape.
+    "fal-ai/bytedance/omnihuman/v1.5": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/bytedance/omnihuman/v2": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/kling-video/ai-avatar/v2/standard": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/kling-video/ai-avatar/v2/pro": {"image": ("image_url", False), "audio": ("audio_url", False)},
 }
 FAL_KEYFRAMES = "keyframes-to-video"
 # A route param that picks the endpoint (endpointWhen) and isn't a request
@@ -411,6 +421,10 @@ FAL_ENDPOINT_DROPS: dict[str, frozenset[str]] = {
     "fal-ai/flux-2-flex": _FLUX2_SWITCHES,
     "fal-ai/flux-2/klein/9b": _FLUX2_SWITCHES,
     "fal-ai/flux-2/klein/4b": _FLUX2_SWITCHES,
+    # Kling AI Avatar v2: ``mode`` (std or pro) picks fal's endpoint; neither
+    # schema has a mode field (Replicate's does, and gets it).
+    "fal-ai/kling-video/ai-avatar/v2/standard": frozenset({"mode"}),
+    "fal-ai/kling-video/ai-avatar/v2/pro": frozenset({"mode"}),
 }
 
 
@@ -518,9 +532,31 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
 REPLICATE_SOURCE_VIDEO: dict[str, str] = {"black-forest-labs/flux-video-upscale": "input_video"}
 
 
+# Talking-head models: a still ``image`` and an ``audio`` track, both
+# required, and an optional ``prompt``; the output is the video's URL.
+# bytedance/omni-human-1.5 (image, audio, prompt, fast_mode, seed) and
+# kwaivgi/kling-avatar-v2 (image, audio, prompt, mode), from each model's
+# Input schema (replicate.com/<model>/api/schema), read 2026-11-04.
+REPLICATE_AUDIO_DRIVEN = frozenset({"bytedance/omni-human-1.5", "kwaivgi/kling-avatar-v2"})
+
+
 def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where: str,
                     model: str = "") -> tuple[dict[str, Any], set[str]]:
     """The prediction input and which of its fields are media."""
+    if model in REPLICATE_AUDIO_DRIVEN:
+        refuse_unwired(inputs, {"prompt", "image", "audio"}, where)
+        body = _set(params)
+        prompt = prompt_of(inputs)
+        if prompt is not None:
+            body["prompt"] = prompt
+        image = one_value(inputs, "image", where)
+        if image is None:
+            raise refuse(where, "needs an image", "needs an image. Connect one, then run the node again.")
+        audio = one_value(inputs, "audio", where)
+        if audio is None:
+            raise refuse(where, "needs an audio", "needs an audio track. Connect one, then run the node again.")
+        body["image"], body["audio"] = image, audio
+        return body, {"image", "audio"}
     if model in REPLICATE_SOURCE_VIDEO:
         field = REPLICATE_SOURCE_VIDEO[model]
         refuse_unwired(inputs, {"prompt", "video"}, where)

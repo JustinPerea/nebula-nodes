@@ -137,6 +137,8 @@ Three nodes made by Black Forest Labs list Replicate as one route of several (`d
 | `flux-3-image` | `black-forest-labs/flux-3-image` | every shared setting, plus `grounding`; up to 10 `images` |
 | `flux-3-video` | `black-forest-labs/flux-3` | `hd` and `fhd` only, no 9:21, `duration` sent as the strings "5" to "20", `draft` (720p only) |
 | `flux-video-upscale` | `black-forest-labs/flux-video-upscale` | `creativity`, `upscale_factor`, the source `video` |
+| `omnihuman-1-5` | `bytedance/omni-human-1.5` | `fast_mode`, `seed`, the `image` and `audio` (uploaded through the Files API), `prompt`; $0.16/s of audio |
+| `kling-ai-avatar-v2` | `kwaivgi/kling-avatar-v2` | `mode` (std $0.056/s, pro $0.11/s), `image`, `audio`, `prompt` |
 
 No Replicate route for FLUX 3 Image Klein, Klein Base or FLUX Video Edit [fast]: Replicate has no such model (404, checked 2026-10-15). Krea 3 isn't on Replicate either, though Krea's blog says it is.
 

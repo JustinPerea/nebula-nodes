@@ -1,6 +1,6 @@
 # Nebula Nodes — Agent Instructions
 
-AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 308 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and mirrored in `backend/data/node_definitions.json`, which the backend and every script read. `scripts/export-node-defs.ts` writes the JSON from the TS, but four existing nodes (`gemini-tts`, `veo-3`, `gemini-omni-flash`, `quiver-arrow-generate`) carry JSON-only fixes it would undo, so check its diff before keeping it. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
+AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 311 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and mirrored in `backend/data/node_definitions.json`, which the backend and every script read. `scripts/export-node-defs.ts` writes the JSON from the TS, but four existing nodes (`gemini-tts`, `veo-3`, `gemini-omni-flash`, `quiver-arrow-generate`) carry JSON-only fixes it would undo, so check its diff before keeping it. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
 ## Where tests run
 
@@ -31,7 +31,7 @@ Before logging, check it's a real gap:
 1. Search `backend/data/node_definitions.json` — including `params` model enums. Several nodes are multi-model: `nano-banana` covers the whole Nano Banana family incl. Pro; `runway-video` covers Gen-4.5 / Gen-4 Turbo / Seedance 2.0 (+ Fast, Mini) / Seedance 2.5 / Happy Horse / Veo 3.1; `runway-image` covers Seedream 5.0 Pro / Lite (via Runway, a reseller); `minimax-*` covers Hailuo 2.3; the `veo-3` node is actually Veo 3.1. Route-table nodes cover one model on several providers: `flux-3-video`, `flux-video-edit` and `flux-video-upscale` also cover Krea's "Flux 3 Video", "Flux Video Edit" and "Flux Video Upscale", `krea-3` is Krea 3 on Krea or fal, and `flux-2-pro` ("FLUX.2") covers FLUX.2 [pro] / [max] / [flex] / [klein] 9B / [klein] 4B on BFL or fal, plus fal's FLUX 2 Flash.
 2. Reachability through universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) does **not** count as coverage — log it anyway, noting the universal fallback.
 
-The full baseline comparison (2026-07-25) lives in `docs/flora-gap-audit.md`. Known top gaps: Enhancor skin-realism i2i, audio-driven lipsync/avatar models, first/last-frame video category, Kling Pro/Edit/Motion tiers, Magnific/Topaz upscalers.
+The full baseline comparison (2026-07-25) lives in `docs/flora-gap-audit.md`. Known top gaps: Enhancor skin-realism i2i, audio-driven avatar models beyond OmniHuman and Kling Avatar (Fabric, Aurora, maker-API routes), first/last-frame video category, Kling Pro/Edit/Motion tiers, Magnific/Topaz upscalers.
 
 ### Closing gaps (separate chat)
 

@@ -626,8 +626,9 @@ def size_note(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) ->
     sizing = entry["sizing"]  # type: ignore[index]
     port = next((p for p in definition.get("inputPorts") or []
                  if isinstance(p, Mapping) and p.get("id") == sizing.get("port")), {})
-    kind = "video" if str(port.get("dataType") or "").lower() == "video" else "image"
-    return f"{str(sizing.get('say') or '').strip()}; priced from your {kind}'s size when you run it"
+    kind = {"video": "video", "audio": "audio"}.get(str(port.get("dataType") or "").lower(), "image")
+    measure = "length" if kind == "audio" else "size"
+    return f"{str(sizing.get('say') or '').strip()}; priced from your {kind}'s {measure} when you run it"
 
 
 def estimate_node(

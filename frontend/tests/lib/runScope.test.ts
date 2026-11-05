@@ -357,17 +357,21 @@ describe('a run priced from its input file (cases shared with the backend)', () 
   const cases = (pricingCases as unknown as { sizedRunCases: SizedRunCase[] }).sizedRunCases;
   for (const testCase of cases) {
     it(testCase.name, () => {
-      const video = NODE_DEFINITIONS[testCase.nodeId].inputPorts.find((port) => port.id === testCase.port)?.dataType === 'Video';
-      const ref = video ? '/out/clip.mp4' : '/out/in.png';
+      const dataType = NODE_DEFINITIONS[testCase.nodeId].inputPorts.find((port) => port.id === testCase.port)?.dataType;
+      const video = dataType === 'Video';
+      const audio = dataType === 'Audio';
+      const ref = video ? '/out/clip.mp4' : audio ? '/out/voice.mp3' : '/out/in.png';
       const source: Node<NodeData> = {
         id: 'in', position: { x: 0, y: 0 },
-        data: { definitionId: video ? 'video-input' : 'image-input', label: 'In', params: { filePath: ref } } as unknown as NodeData,
+        data: {
+          definitionId: video ? 'video-input' : audio ? 'audio-input' : 'image-input', label: 'In', params: { filePath: ref },
+        } as unknown as NodeData,
       };
       const target: Node<NodeData> = {
         id: 'n1', position: { x: 0, y: 0 },
         data: { definitionId: testCase.nodeId, label: 'Node', params: testCase.params } as unknown as NodeData,
       };
-      const wires: Edge[] = [{ id: 'w', source: 'in', sourceHandle: video ? 'video' : 'image', target: 'n1', targetHandle: testCase.port }];
+      const wires: Edge[] = [{ id: 'w', source: 'in', sourceHandle: video ? 'video' : audio ? 'audio' : 'image', target: 'n1', targetHandle: testCase.port }];
       const { cost } = summarizeRunScope([source, target], wires, { kind: 'graph' }, {
         pricing: shippedTable as unknown as PricingTable, apiKeys: testCase.apiKeys,
         sizes: testCase.size ? { [ref]: testCase.size } : {},

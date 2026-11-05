@@ -2994,6 +2994,92 @@
       ],
       "checked": "2026-10-14"
     },
+    "kling-ai-avatar-v2": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "provider": "fal",
+          "rows": [
+            {
+              "match": {
+                "mode": "std"
+              },
+              "price": 0.0562
+            },
+            {
+              "match": {
+                "mode": "pro"
+              },
+              "price": 0.115
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "Standard $0.0562 a second, Pro $0.115. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more). fal's pricing API needs a key and wasn't cross-checked; the model pages and their llms.txt agree.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/standard",
+              "quote": "Your request will cost $0.0562 per second."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/pro",
+              "quote": "Your request will cost $0.115 per second."
+            }
+          ],
+          "checked": "2026-11-04",
+          "sizing": {
+            "port": "audio",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.0562 (Standard) or $0.115 (Pro) per second of the audio track (the output video runs as long as the audio), rounded up to a whole second"
+          }
+        },
+        "replicate": {
+          "currency": "usd",
+          "per": "second",
+          "provider": "replicate",
+          "rows": [
+            {
+              "match": {
+                "mode": "std"
+              },
+              "price": 0.056
+            },
+            {
+              "match": {
+                "mode": "pro"
+              },
+              "price": 0.11
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "Standard $0.056 a second of output video, Pro $0.11. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
+          "sources": [
+            {
+              "url": "https://replicate.com/kwaivgi/kling-avatar-v2",
+              "quote": "model variant is std: $0.056 per second of output video"
+            },
+            {
+              "url": "https://replicate.com/kwaivgi/kling-avatar-v2",
+              "quote": "model variant is pro: $0.11 per second of output video"
+            }
+          ],
+          "checked": "2026-11-04",
+          "sizing": {
+            "port": "audio",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.056 (Standard) or $0.11 (Pro) per second of the audio track (the output video runs as long as the audio), rounded up to a whole second"
+          }
+        }
+      }
+    },
     "kling-v3": {
       "currency": "usd",
       "per": "second",
@@ -12669,6 +12755,109 @@
             }
           ],
           "checked": "2026-10-14"
+        }
+      }
+    },
+    "omnihuman-1-5": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "provider": "fal",
+          "rows": [
+            {
+              "match": {},
+              "price": 0.16
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "$0.16 a second. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more). fal's pricing API needs a key and wasn't cross-checked; the model page and its llms.txt agree.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/bytedance/omnihuman/v1.5",
+              "quote": "Your request will cost $0.16 per second."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/bytedance/omnihuman/v1.5/llms.txt",
+              "quote": "**Price**: $0.16 per seconds"
+            }
+          ],
+          "checked": "2026-11-04",
+          "sizing": {
+            "port": "audio",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.16 per second of the audio track (the output video runs as long as the audio), rounded up to a whole second"
+          }
+        },
+        "replicate": {
+          "currency": "usd",
+          "per": "second",
+          "provider": "replicate",
+          "rows": [
+            {
+              "match": {},
+              "price": 0.16
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "$0.16 a second of output video. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
+          "sources": [
+            {
+              "url": "https://replicate.com/bytedance/omni-human-1.5",
+              "quote": "$0.16 per second of output video"
+            }
+          ],
+          "checked": "2026-11-04",
+          "sizing": {
+            "port": "audio",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.16 per second of the audio track (the output video runs as long as the audio), rounded up to a whole second"
+          }
+        }
+      }
+    },
+    "omnihuman-2": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "provider": "fal",
+          "rows": [
+            {
+              "match": {},
+              "price": 0.105
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "$0.105 a second. Billed per second of output video, which runs as long as the audio. Priced from the audio's length when the run is checked, and unpriced while the audio doesn't exist yet. Nebula rounds the audio's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more). ByteDance's own page lists OmniHuman 2.0 at $0.07 a second on BytePlus, which this node doesn't offer yet (BytePlus signs its OmniHuman calls with an access key and secret, not the ModelArk key Nebula holds).",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/bytedance/omnihuman/v2",
+              "quote": "Your request will cost $0.105 per second."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/bytedance/omnihuman/v2/llms.txt",
+              "quote": "**Price**: $0.105 per seconds"
+            }
+          ],
+          "checked": "2026-11-04",
+          "sizing": {
+            "port": "audio",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.105 per second of the audio track (the output video runs as long as the audio), rounded up to a whole second"
+          }
         }
       }
     },

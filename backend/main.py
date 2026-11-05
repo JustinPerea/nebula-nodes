@@ -12844,8 +12844,9 @@ MAX_SIZE_REFS = 64
 async def get_input_sizes(body: dict[str, Any]) -> dict:
     """The size of input files, for the canvas's estimate of a price that
     depends on it (model_pricing ``sizing``: SeedVR2, FLUX Video Upscale and
-    Edit). ``refs`` is a list of {ref, kind: Image | Video}; each comes back
-    as {width, height[, seconds, frames]} or null. Only files in the output
+    Edit, the talking-head nodes' audio). ``refs`` is a list of {ref, kind:
+    Image | Video | Audio}; each comes back as {width, height[, seconds,
+    frames]} ({seconds} for audio) or null. Only files in the output
     store are read, by the same rule the spending check uses (the path as
     given and its resolved path both inside the store, no ``..``, nothing
     Nebula is still writing: services/input_sizes.py), so the canvas and the
@@ -12860,8 +12861,8 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     for item in refs:
         ref = item.get("ref") if isinstance(item, dict) else None
         kind = item.get("kind") if isinstance(item, dict) else None
-        if not isinstance(ref, str) or kind not in ("Image", "Video"):
-            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image or Video}")
+        if not isinstance(ref, str) or kind not in ("Image", "Video", "Audio"):
+            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image, Video or Audio}")
         wanted.append((ref, kind))
 
     def measure_all() -> dict[str, Any]:

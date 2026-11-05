@@ -55,7 +55,7 @@ export interface RunCost {
    * `awaitingInput`. Present only when there are some. */
   sizeUnreadable?: string[];
   /** Input files to measure (inputSizeStore) before those can be priced. */
-  sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' }>;
+  sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' | 'Audio' }>;
   /** Each node that makes the chip open, with why, in the order the run
    * walks them: the store's node order (the order nodes were added), not
    * their position on screen. The Run chip's tooltip reads it. */
@@ -111,7 +111,11 @@ export interface RunCostContext {
   sizes?: Readonly<Record<string, InputSize | null>>;
 }
 
-const INPUT_NODES: Record<string, 'Image' | 'Video'> = { 'image-input': 'Image', 'video-input': 'Video' };
+const INPUT_NODES: Record<string, 'Image' | 'Video' | 'Audio'> = {
+  'image-input': 'Image',
+  'video-input': 'Video',
+  'audio-input': 'Audio',
+};
 
 /**
  * `node` with `direct: false` is a run of a node that isn't the person's

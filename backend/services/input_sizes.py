@@ -1,6 +1,7 @@
 """The size of a run's input file, read when the run is checked, for prices
 that depend on it (model_pricing ``sizing``: SeedVR2 per megapixel, FLUX
-Video Upscale per megapixel-second, FLUX Video Edit per second).
+Video Upscale per megapixel-second, FLUX Video Edit per second, and the
+talking-head nodes per second of the audio track).
 
 What may be measured (security review 2026-10-21, finding 1). The price is
 measured when the run is checked, but the handler reads the file later
@@ -45,8 +46,8 @@ All of it reads files and may run ffprobe for many seconds, so it runs in a
 worker thread (``measure_run``, asyncio.to_thread); called on the event
 loop it raises instead of blocking every other request.
 
-Where the input comes from (run_input_sizes): an Image Input or Video Input
-in the run gives the file it holds; a node outside the run gives the output
+Where the input comes from (run_input_sizes): an Image Input, Video Input or
+Audio Input in the run gives the file it holds; a node outside the run gives the output
 it already has (a proposal's cached ancestor). Any other node in the same
 run makes its output during the run, so its size isn't known yet, and the
 node it feeds is unpriced until it is.
@@ -72,7 +73,7 @@ from urllib.parse import unquote, urlsplit
 from services import model_pricing
 
 # Image and Video Input nodes: their output is the file they hold.
-INPUT_NODES = {"image-input": "Image", "video-input": "Video"}
+INPUT_NODES = {"image-input": "Image", "video-input": "Video", "audio-input": "Audio"}
 # An inline image is decoded in memory; past this it isn't measured.
 MAX_DATA_URI_CHARS = 64 * 1024 * 1024
 _CACHE: OrderedDict[tuple[Any, ...], dict[str, Any] | None] = OrderedDict()
@@ -276,6 +277,42 @@ def _probe_video(path: Path) -> dict[str, Any] | None:
     return {"width": width, "height": height, "seconds": seconds, "frames": frames}
 
 
+def _probe_audio(path: Path) -> dict[str, Any] | None:
+    """A local audio file as {seconds}, an upper bound of what a provider
+    demuxing it would process (the module docstring); None when it can't be
+    bounded. For the talking-head nodes, which bill the audio's length.
+
+    The same two demux-only passes as _probe_video: every stream's header,
+    then every packet of the one audio stream (_scan_packets, capped, killed
+    at the deadline). Exactly one audio stream and no video stream: cover art
+    (an attached picture, an MP3's album image) doesn't count, but a clip
+    with real video isn't audio, and a second audio stream is one a provider
+    might take instead. Seconds are the largest of the stream's duration,
+    the container's and the span of the packets, so a falsified header
+    can't bring the bound under what the demuxer delivers."""
+    deadline = time.monotonic() + SIZE_PROBE_TIMEOUT_SECONDS
+    try:
+        header = _ffprobe(path, [
+            "-show_entries", "stream=index,codec_type,duration:stream_disposition=attached_pic:format=duration",
+        ], deadline)
+        if header is None:
+            return None
+        streams = [stream for stream in header.get("streams") or [] if isinstance(stream, dict)]
+        audio = [stream for stream in streams if stream.get("codec_type") == "audio"]
+        video = [stream for stream in streams if stream.get("codec_type") == "video"
+                 and not int((stream.get("disposition") or {}).get("attached_pic") or 0)]
+        if len(audio) != 1 or video:
+            return None
+        stream = audio[0]
+        scanned = _scan_packets(path, int(stream["index"]), deadline)
+    except (OSError, ValueError, TypeError, KeyError, IndexError, subprocess.TimeoutExpired):
+        return None
+    if scanned is None:
+        return None
+    seconds = max(_number(stream.get("duration")), _number((header.get("format") or {}).get("duration")), scanned[1])
+    return {"seconds": seconds} if seconds > 0 else None
+
+
 def _image_size(source: Any) -> dict[str, Any] | None:
     """An image's {width, height} from its header (Pillow's lazy open), or
     None when it has more than one frame or size (the module docstring)."""
@@ -378,7 +415,7 @@ def store_path(ref: str) -> Path | None:
 
 def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | None:
     """{width, height} for an image, {width, height, seconds, frames} for a
-    clip; None when it can't be known here. Only an inline image (with
+    clip, {seconds} for an audio file; None when it can't be known here. Only an inline image (with
     ``inline``) and a file in Nebula's output folder are read (module
     docstring). Off the event loop only."""
     _off_loop()
@@ -399,7 +436,8 @@ def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | Non
     if key in _CACHE:
         _CACHE.move_to_end(key)
         return _CACHE[key]
-    size = _image_size(path) if kind == "Image" else _probe_video(path) if kind == "Video" else None
+    size = (_image_size(path) if kind == "Image" else _probe_video(path) if kind == "Video"
+            else _probe_audio(path) if kind == "Audio" else None)
     _CACHE[key] = size
     while len(_CACHE) > _CACHE_SIZE:
         _CACHE.popitem(last=False)
@@ -409,7 +447,8 @@ def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | Non
 def _port_kind(definition: Mapping[str, Any], port: str) -> str:
     for spec in definition.get("inputPorts") or []:
         if isinstance(spec, Mapping) and spec.get("id") == port:
-            return "Video" if str(spec.get("dataType") or "") == "Video" else "Image"
+            data_type = str(spec.get("dataType") or "")
+            return data_type if data_type in ("Video", "Audio") else "Image"
     return "Image"
 
 
