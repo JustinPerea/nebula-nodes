@@ -30,6 +30,9 @@ export function wideFrom(widths: readonly number[], zoom: number): number {
 /** `wideFrom` for the board as it is now: a card at least this wide shows its file. */
 export const BoardWideContext = createContext<number>(Number.POSITIVE_INFINITY);
 
+/** The board draft key the cards belong to (for the reading's citation hover ring). */
+export const BoardKeyContext = createContext<string | undefined>(undefined);
+
 /** A card the server hasn't placed yet (an image dropped a moment ago): drawn, never moved. */
 export const isProvisionalCard = (placementId: string) => placementId.startsWith('new-');
 

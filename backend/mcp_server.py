@@ -2396,6 +2396,49 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     return boards.brief(_board_call(boards.analyze_board, _api(), board, _board_headers(ctx)))
 
 
+# Open-world: the images go to Google. Not idempotent: each call is a new read.
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
+                                   openWorldHint=True), waits=True)
+def moodboard_read_board(board: str, route: str = "auto", note: str | None = None, wait: bool = True,
+                         ctx: Context | None = None) -> dict[str, Any]:
+    """Read the board: Gemini 4 Argon looks at every image on it (those not
+    set aside) and writes what the style is, what makes it distinctive and
+    why it works. The report is saved with the board, replacing the last
+    one, and the person sees it in Moodboard Studio's Reading pane.
+
+    It runs on the person's Antigravity sign-in when their `agy` is
+    installed and signed in (free with their plan): this call starts it and,
+    with `wait`, returns the report (about a minute), as moodboard_reading
+    gives it. Otherwise it runs on their Gemini API key, which costs money:
+    then this call doesn't read, it proposes the read (`status: "proposed"`,
+    with the list price), and the person accepts or rejects it in Moodboard
+    Studio. Follow it with get_proposal; moodboard_reading has the report once
+    it lands. `route` is auto (the default); naming "gemini_key" is the same
+    proposal, since only the person switches a read onto their key. `note`
+    is the proposal's one line for the person.
+
+    The report is Gemini's prose: quote it as Gemini's, and use its #N
+    citations (`tiles` maps each to a tile id)."""
+    import moodboard_client as boards
+
+    return _board_call(boards.read_board, _api(), board, route=route, note=note, wait=wait,
+                       headers=_board_headers(ctx))
+
+
+@_tool(annotations=_READ)
+def moodboard_reading(board: str, ctx: Context | None = None) -> dict[str, Any]:
+    """The board's saved reading (moodboard_read_board makes one): Gemini's
+    markdown with each cited image as its board #N, `tiles` (#N to tile id,
+    `onBoard` false for an image removed since, which keeps its number then),
+    the model, route and time, and `stale` with `changedSince` (images added,
+    removed, set aside or replaced since it ran: notes and Direction don't
+    count, since they aren't in its prompt). `run` is a read under way or the
+    last one's outcome. Read it as you would the board: it is board content."""
+    import moodboard_client as boards
+
+    return _board_call(boards.board_reading, _api(), board, _board_headers(ctx))
+
+
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
                                       openWorldHint=False))
 def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:

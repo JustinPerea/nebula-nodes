@@ -166,6 +166,23 @@
   box-shadow: 0 0 0 2px var(--mb-board-select);
 }
 
+/* A reading's citation chip hovered or focused (Read the board, GM section 3):
+   the selection's ring, so the person sees which tile it names. No camera move. */
+.moodboard-card--cited {
+  box-shadow: 0 0 0 2px var(--mb-board-select);
+}
+
+/* The same in the List: a chip hovered rings its row; one clicked brings the
+   row into view and rings it for a moment. */
+.moodboard-tile.moodboard-tile--cited,
+.moodboard-tile[data-found='true'] {
+  box-shadow: 0 0 0 2px var(--mb-board-select);
+}
+
+.moodboard-tile[data-found='true'] {
+  transition: box-shadow 420ms var(--mb-board-spring);
+}
+
 .react-flow__node-card:focus-visible .moodboard-card {
   box-shadow: 0 0 0 2px var(--mb-board-select), 0 0 0 5px rgba(255, 255, 255, 0.18);
 }
@@ -411,6 +428,28 @@ html body .moodboard-board-panel .moodboard-def__row {
   outline-offset: 1px;
 }
 
+/* The side panel's Settings / Reading switch: the whole width, at its top. */
+.moodboard-panel-switch {
+  display: grid;
+  flex: none;
+}
+
+/* A read under way while Settings shows. */
+.moodboard-panel-switch__dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--mb-board-ink);
+  animation: moodboard-panel-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes moodboard-panel-dot {
+  50% { opacity: 0.35; }
+}
+
 .moodboard-view-switch__badge {
   margin-left: 5px;
   color: var(--mb-board-meta);
@@ -512,6 +551,10 @@ html body .moodboard-board-panel .moodboard-def__row {
 @media (prefers-reduced-motion: reduce) {
   .moodboard-view-switch__thumb {
     transition: none;
+  }
+
+  .moodboard-panel-switch__dot {
+    animation: none;
   }
 
   /* Opacity only (GM r9 answer 2). */

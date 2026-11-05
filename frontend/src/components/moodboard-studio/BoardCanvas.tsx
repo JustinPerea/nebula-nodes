@@ -10,7 +10,8 @@ import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { springViewport } from '../../lib/viewportSpring';
 import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasStore';
 import { BoardCardNode } from './BoardCardNode';
-import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
+import { BoardKeyContext, BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
+import { bringIntoView } from './bringIntoView';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
@@ -335,11 +336,18 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
       const wanted = new Set(frameRequest.placementIds);
       const targets = nodesRef.current.filter((node) => wanted.has(node.id));
       if (!width || !height || targets.length === 0) return;
-      springTo(getViewportForBounds(getNodesBounds(targets), width, height, MIN_ZOOM, 1, FIT_PADDING));
+      const bounds = getNodesBounds(targets);
+      if (frameRequest.onlyIfOutside) {
+        // A citation chip's click: the camera moves only when the tile isn't wholly in view.
+        const to = bringIntoView(bounds, getViewport(), width, height, FIT_PADDING);
+        if (to) springTo(to);
+        return;
+      }
+      springTo(getViewportForBounds(bounds, width, height, MIN_ZOOM, 1, FIT_PADDING));
     };
     frame = window.requestAnimationFrame(attempt);
     return () => { if (frame) window.cancelAnimationFrame(frame); };
-  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo]);
+  }, [frameRequest, boardKey, flowStore, getNodesBounds, getViewport, springTo]);
 
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = flowStore.getState();
@@ -426,6 +434,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
       onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       {/* Behind the cards, for the reader's ripple while Analyze runs (PR10b). */}
       <div className="moodboard-board__underlay" aria-hidden="true" data-layer="ripple" />
+      <BoardKeyContext.Provider value={boardKey}>
       <BoardWideContext.Provider value={wide}>
         <ReactFlow
           className="moodboard-board__flow"
@@ -465,6 +474,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           </Panel>
         </ReactFlow>
       </BoardWideContext.Provider>
+      </BoardKeyContext.Provider>
       {nodes.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>

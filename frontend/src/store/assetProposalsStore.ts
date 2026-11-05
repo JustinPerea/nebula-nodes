@@ -27,6 +27,9 @@ export interface ReviewRequest {
   kind: AssetProposalKind;
   targetId: string;
   at: number;
+  /** The proposal its Update names, when it does: a board's Reading pane and
+   *  its Send notes strip each take only their own (Read the board). */
+  proposalId?: string;
 }
 
 interface AssetProposalsState {

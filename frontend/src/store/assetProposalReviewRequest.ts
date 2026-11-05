@@ -12,8 +12,9 @@ import type { AssetProposalKind } from '../lib/assetProposals';
 const REVIEW_TTL_MS = 10_000;
 
 /** Ask the strip for this target to come into view when it shows. */
-export function requestReview({ kind, targetId }: { kind: AssetProposalKind; targetId: string }): void {
-  const review: ReviewRequest = { kind, targetId, at: Date.now() };
+export function requestReview({ kind, targetId, proposalId }: { kind: AssetProposalKind; targetId: string;
+  proposalId?: string }): void {
+  const review: ReviewRequest = { kind, targetId, at: Date.now(), ...(proposalId ? { proposalId } : {}) };
   useAssetProposalsStore.setState({ review });
   // The strip never came (the proposal closed meanwhile): drop the request so
   // nothing can act on it later, e.g. the Commons reopening that reference.
@@ -36,9 +37,11 @@ export function openOnce(review: ReviewRequest): boolean {
 }
 
 /** The strip for this target takes the request: true once (while fresh), then it is gone. */
-export function takeReview(kind: AssetProposalKind, targetId: string): boolean {
+export function takeReview(kind: AssetProposalKind, targetId: string, shown?: ReadonlySet<string>): boolean {
   const { review } = useAssetProposalsStore.getState();
   if (!review || review.kind !== kind || review.targetId !== targetId) return false;
+  // A request naming a proposal is the strip's that shows it.
+  if (shown && review.proposalId && !shown.has(review.proposalId)) return false;
   useAssetProposalsStore.setState({ review: null });
   return Date.now() - review.at <= REVIEW_TTL_MS;
 }

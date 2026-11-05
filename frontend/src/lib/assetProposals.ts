@@ -31,6 +31,9 @@ export interface AssetProposalView {
     cover?: { from: string | null; to: string | null; fromBy: { kind: string; name: string } | null;
       lostPin?: { url: string; by: { kind: string; name: string } | null }; auto?: string | null };
     sendNotes?: { from: boolean; to: boolean };
+    /** Read the board on the Gemini key (backend main._read_proposal_before): what it sends and its list price. */
+    read?: { route: 'gemini_key'; model: string; modelName: string; images: number; provider: string;
+      cost: { low: number | null; high: number | null; unconfirmed?: boolean; unpriced?: boolean } | null } | true;
     /** A Commons reference's edits (kind commons), the agent's own values. */
     edits?: CommonsEdit[];
   };

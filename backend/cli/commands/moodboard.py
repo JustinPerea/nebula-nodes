@@ -1,4 +1,4 @@
-"""nebula moodboard list|show|new|add|set|edit|analyze [--dry-run] [--read-with MODEL]|move|delete.
+"""nebula moodboard list|show|new|add|set|edit|analyze [--dry-run] [--read-with MODEL]|read|reading|move|delete.
 
 The boards Moodboard Studio edits, from the terminal. The work is in
 moodboard_client.py, which the MCP server's moodboard tools share; this file
@@ -469,6 +469,46 @@ def _read_with(api, args, headers: dict[str, str]) -> None:
                   f"{'it' if unknown == 1 else 'them'}, so read it as a minimum.")
 
 
+def _print_reading(result: dict[str, Any]) -> None:
+    """A board's reading: Gemini's markdown as it wrote it (citations as #N), then the tile map."""
+    board = result.get("board") or {}
+    if not result.get("markdown"):
+        print(f"{board.get('name')} has no reading yet. `nebula moodboard read {shlex.quote(str(board.get('id')))}` "
+              "makes one.")
+        return
+    when = str(result.get("at") or "")
+    print(f"{result.get('model')}'s reading of {board.get('name')} · {when} · {result.get('images')} images "
+          f"· {'Antigravity' if result.get('route') == 'antigravity' else 'Gemini API key'}")
+    if result.get("stale"):
+        changed = result.get("changedSince") or {}
+        parts = [f"{count} {word}" for word, count in (("added", changed.get("added")), ("removed", changed.get("removed")),
+                 ("set aside", changed.get("setAside")), ("replaced", changed.get("replaced"))) if count]
+        print("The board changed after this reading (" + ", ".join(parts) + "). `nebula moodboard read` reads it again.")
+    print()
+    print(result.get("markdown"))
+    print()
+    for tile in result.get("tiles") or []:
+        where = "" if tile.get("onBoard") else " (removed from the board)"
+        print(f"#{tile.get('number')}  {tile.get('imageId')}{where}")
+
+
+def _print_reading_result(result: dict[str, Any]) -> None:
+    status = result.get("status")
+    board = result.get("board") or {}
+    if status == "proposed":
+        proposal = result.get("proposal") or {}
+        cost = ((proposal.get("change") or {}).get("read") or {}).get("cost") or {}
+        price = f" (about ${cost['high']:.2f}, list price)" if isinstance(cost.get("high"), (int, float)) else ""
+        print(f"Proposed {proposal.get('id')}: read {board.get('name')} on the Gemini API key{price}. "
+              "The person decides in Moodboard Studio; `nebula proposal` follows it.")
+        return
+    if status == "running":
+        print(f"Reading {board.get('name')}. `nebula moodboard reading {shlex.quote(str(board.get('id')))}` "
+              "shows the report once it lands.")
+        return
+    _print_reading(result)
+
+
 def run(client: NebulaClient, args) -> None:
     api = client.api
     headers = client._identity_headers()
@@ -634,6 +674,19 @@ def run(client: NebulaClient, args) -> None:
                 _print_json(boards.brief(board))
             else:
                 _print_board(board, boards.project_names(api, headers) if board.get("projectId") else None)
+        elif verb == "read":
+            result = boards.read_board(api, args.board, route=args.route, note=args.note, wait=not args.no_wait,
+                                       headers=headers)
+            if args.json:
+                _print_json(result)
+            else:
+                _print_reading_result(result)
+        elif verb == "reading":
+            result = boards.board_reading(api, args.board, headers)
+            if args.json:
+                _print_json(result)
+            else:
+                _print_reading(result)
         elif verb == "move":
             result = boards.move_board(api, args.board, args.to, headers)
             if args.json:
@@ -845,6 +898,25 @@ def add_parser(sub) -> None:
     analyze_p.add_argument("--quiet", action="store_true",
                            help="With --read-with: print the summary only, not each line")
     analyze_p.add_argument("--json", action="store_true", help="Print JSON")
+
+    read_p = msub.add_parser(
+        "read", help="Read the board: Gemini 4 Argon's report on its style, saved with the board",
+        description=("Sends every image on the board (not set aside) to Gemini 4 Argon with one prompt: what is "
+                     "the style, what makes it distinctive, why it works. It runs on your Antigravity sign-in when "
+                     "agy is installed and signed in, else on your Gemini API key. An agent's read on the key "
+                     "costs money, so it becomes a proposal the person accepts in Moodboard Studio."))
+    read_p.add_argument("board", help=board_help)
+    read_p.add_argument("--route", choices=("auto", "antigravity", "gemini_key"), default="auto",
+                        help="auto (default): Antigravity first, then the key. An agent naming gemini_key proposes it")
+    read_p.add_argument("--note", help="An agent's one line for the person, with a proposal")
+    read_p.add_argument("--no-wait", dest="no_wait", action="store_true",
+                        help="Start the read and return; `nebula moodboard reading` shows it once it lands")
+    read_p.add_argument("--json", action="store_true", help="Print JSON")
+
+    reading_p = msub.add_parser(
+        "reading", help="Show the board's reading: Gemini's markdown with #N citations and the tile map")
+    reading_p.add_argument("board", help=board_help)
+    reading_p.add_argument("--json", action="store_true", help="Print JSON")
 
     move_p = msub.add_parser(
         "move", help="Move a board to Global or to a canvas project",

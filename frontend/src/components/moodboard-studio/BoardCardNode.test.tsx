@@ -13,7 +13,9 @@ const view = { zoom: 1 };
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => url }));
 
 import { BoardCardNode, type BoardCardData } from './BoardCardNode';
-import { BoardWideContext, wideFrom, type BoardCardNodeType } from './boardNodes';
+import { BoardKeyContext, BoardWideContext, wideFrom, type BoardCardNodeType } from './boardNodes';
+import { useBoardCanvasStore } from '../../store/boardCanvasStore';
+import { act } from '@testing-library/react';
 
 afterEach(() => { cleanup(); view.zoom = 1; });
 
@@ -24,9 +26,11 @@ function mount(data: Partial<BoardCardData> = {}, width = 480) {
     positionAbsoluteX: 0, positionAbsoluteY: 0, draggable: true, selectable: true, deletable: false,
   } as unknown as NodeProps<BoardCardNodeType>;
   return render(
-    <BoardWideContext.Provider value={wideFrom([270, 480, 600], view.zoom)}>
-      <BoardCardNode {...props} />
-    </BoardWideContext.Provider>,
+    <BoardKeyContext.Provider value="k1">
+      <BoardWideContext.Provider value={wideFrom([270, 480, 600], view.zoom)}>
+        <BoardCardNode {...props} />
+      </BoardWideContext.Provider>
+    </BoardKeyContext.Provider>,
   );
 }
 const src = (container: HTMLElement) => container.querySelector('img')!.getAttribute('src');
@@ -61,5 +65,18 @@ describe('a card on the board', () => {
     const { container } = mount({ url: 'https://example.com/a.jpg' });
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain('Image link from outside Nebula');
+  });
+
+  it('takes the selection’s ring while a reading’s chip for it is hovered, on its own board only', () => {
+    const { container } = mount();
+    const cardEl = container.querySelector('.moodboard-card')!;
+    expect(cardEl.className).not.toContain('moodboard-card--cited');
+    act(() => useBoardCanvasStore.getState().setCiteHover({ boardKey: 'k1', imageId: 'i1' }));
+    expect(cardEl.className).toContain('moodboard-card--cited');
+    act(() => useBoardCanvasStore.getState().setCiteHover({ boardKey: 'k2', imageId: 'i1' }));
+    expect(cardEl.className).not.toContain('moodboard-card--cited');
+    act(() => useBoardCanvasStore.getState().setCiteHover({ boardKey: 'k1', imageId: 'i9' }));
+    expect(cardEl.className).not.toContain('moodboard-card--cited');
+    act(() => useBoardCanvasStore.getState().setCiteHover(null));
   });
 });

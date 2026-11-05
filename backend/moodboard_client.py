@@ -1713,6 +1713,135 @@ def dry_read(api: NebulaAPI, ref: str, model: str, *, only: Iterable[Any] | None
     return {**result, "trace": trace}
 
 
+# -- Read the board: one whole-board style report (services/board_reading.py) ---------------------
+
+READING_UNSUPPORTED = ("this version of Nebula can't read a board, so nothing was sent. Update Nebula to use "
+                       "`nebula moodboard read`.")
+# A read takes about a minute; the backend stops one after 5 minutes.
+READING_WAIT_S = 330.0
+READING_POLL_S = 2.0
+READING_ROUTES = ("auto", "antigravity", "gemini_key")
+# What a failed read says, by cause (the Studio's lines, services/board_reading.FAILURE_LINES).
+READING_FAILURES = {
+    "timeout": "Gemini didn't answer in time. Try again.",
+    "signed_out": "Antigravity signed out during the read. Sign in again, then try again.",
+    "plan_limit": "Your Antigravity plan has reached its limit for now. Try again later, or use your Gemini API key.",
+    "key_refused": "Google refused your Gemini API key. Check it in Settings, then try again.",
+}
+
+
+def _reading_refusal(exc: NebulaAPIError) -> Exception:
+    if exc.status == 405 or (exc.status == 404 and str(exc.detail).strip() == "Not Found"):
+        return MoodboardError(READING_UNSUPPORTED)
+    if exc.status in (400, 403, 409, 422):
+        return MoodboardError(exc.detail)
+    return exc
+
+
+def reading_answer(board: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """The reading as agents get it: the markdown with every citation as #N
+    (the tile's number on the board now), the tile map, who made it and
+    whether the board changed since. Nothing of how it ran beyond its route."""
+    reading = data.get("reading") or None
+    stale = data.get("stale") or {}
+    out: dict[str, Any] = {"board": {"id": board.get("id"), "name": board.get("name")}}
+    if reading is None:
+        out.update({"reading": None, "note": "This board has no reading yet. `moodboard_read_board` makes one."})
+    else:
+        out.update({
+            "markdown": data.get("markdown"),
+            "tiles": data.get("tiles") or [],
+            "model": reading.get("modelName") or reading.get("model"),
+            "route": reading.get("route"),
+            "at": reading.get("at"),
+            "by": reading.get("by"),
+            "images": len(reading.get("citations") or []),
+            "stale": bool(stale.get("stale")),
+            "changedSince": {key: len(stale.get(key) or []) for key in ("added", "removed", "setAside", "replaced")},
+            "writtenBy": "Gemini (its own prose, unedited; citations are the board's #N)",
+        })
+    run = data.get("run")
+    if run:
+        out["run"] = {key: run.get(key) for key in ("status", "route", "count", "cause", "elapsedMs")}
+        if run.get("status") == "failed":
+            out["run"]["line"] = READING_FAILURES.get(str(run.get("cause")), "The read failed. Try again.")
+    route = data.get("route") or {}
+    if route:
+        out["nextRead"] = {"route": route.get("route"), "images": route.get("count"),
+                           "keyRouteListPrice": {k: (route.get("estimate") or {}).get(k) for k in ("low", "high")}}
+    return out
+
+
+def board_reading(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """The board's reading, as `reading_answer` shapes it."""
+    board = get_board(api, ref, headers)
+    try:
+        data = api.request("GET", f"/api/moodboards/{board['id']}/reading", headers=headers)
+    except NebulaAPIError as exc:
+        raise _reading_refusal(exc) from exc
+    return reading_answer(board, data)
+
+
+def read_board(api: NebulaAPI, ref: str, *, route: str = "auto", note: str | None = None, wait: bool = True,
+               headers: dict[str, str] | None = None, timeout: float = READING_WAIT_S,
+               poll: float = READING_POLL_S, sleep: Callable[[float], None] | None = None,
+               clock: Callable[[], float] | None = None) -> dict[str, Any]:
+    """Read the board with Gemini 4 Argon. On the person's Antigravity
+    sign-in it runs (free with their plan) and, with ``wait``, this waits
+    for the reading. On the Gemini API key it costs money, so an agent's
+    call becomes a proposal the person accepts in Moodboard Studio
+    (``status: "proposed"``). Naming ``gemini_key`` is that same proposal:
+    agents never switch the route themselves."""
+    import time
+
+    if route not in READING_ROUTES:
+        raise MoodboardError("route is auto, antigravity or gemini_key")
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    board = get_board(api, ref, headers)
+    body: dict[str, Any] = {"route": route}
+    if note:
+        body["note"] = note
+    path = f"/api/moodboards/{board['id']}/reading"
+    try:
+        started = api.request("POST", path, json=body, headers=headers)
+    except NebulaAPIError as exc:
+        raise _reading_refusal(exc) from exc
+    if started.get("status") == "proposed":
+        proposal = started.get("proposal") or {}
+        return {"status": "proposed", "board": {"id": board.get("id"), "name": board.get("name")},
+                "proposal": {key: proposal.get(key) for key in ("id", "status", "summary", "expiresAt", "change")},
+                "next": ("The read costs money on the Gemini API key, so it waits for the person's Accept in "
+                         "Moodboard Studio. `get_proposal` with wait follows it; `moodboard_reading` has the "
+                         "report once it lands.")}
+    run_id = (started.get("run") or {}).get("id")
+    if not wait:
+        return {"status": "running", "board": {"id": board.get("id"), "name": board.get("name")},
+                "run": started.get("run")}
+    deadline = clock() + timeout
+    data: dict[str, Any] = {}
+    while True:
+        try:
+            data = api.request("GET", path, headers=headers)
+        except NebulaAPIError as exc:
+            raise _reading_refusal(exc) from exc
+        run = data.get("run") or {}
+        if run.get("id") == run_id and run.get("status") != "running":
+            break
+        if clock() >= deadline:
+            return {"status": "running", "board": {"id": board.get("id"), "name": board.get("name")},
+                    "run": run, "next": "Still reading. `moodboard_reading` has the report once it lands."}
+        sleep(poll)
+    answer = reading_answer(board, data)
+    status = run.get("status")
+    if status == "failed":
+        raise MoodboardError("Nebula couldn't read the board: " + READING_FAILURES.get(
+            str(run.get("cause")), "the read failed. Try again."))
+    if status == "stopped":
+        raise MoodboardError("The read was stopped. The earlier reading, if any, is as it was.")
+    return {"status": "done", **answer}
+
+
 def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None) -> bool:
     """True when this Nebula moves a deleted board to Recently deleted
     (`/api/trash` exists), so a delete can be undone. Older backends delete

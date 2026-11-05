@@ -63,6 +63,8 @@ export interface AgentNoteProposal {
   changes?: number;
   /** A Commons ask only to take a reference out of the inbox (GM, PR #202 r1). */
   inbox?: true;
+  /** A board read on the Gemini key (Read the board). */
+  read?: true;
   /** PR #202 review 2 LOW-A: when the ask was made (its createdAt, ms), so a held tab orders as the promoted line does. */
   since?: number;
 }

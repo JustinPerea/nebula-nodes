@@ -15,7 +15,7 @@ import { isSetAside, setAsidePatch } from './steering';
  * its tile in the List. Several: how many, and Remove. None: the board
  * itself (`children`: its fields, Direction and the brief, the analysis).
  */
-export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove, onTextDone, children }: {
+export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove, onTextDone, children, top, reading }: {
   images: MoodboardImage[];
   /** The selected references' image ids, in board order. */
   selected: string[];
@@ -24,13 +24,20 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
   onRemove: (ids: string[]) => void;
   onTextDone: () => void;
   children: ReactNode;
+  /** The Settings / Reading switch (GM's board reading design section 1), above everything. */
+  top?: ReactNode;
+  /** The Reading part: shown in place of the rest while chosen. */
+  reading?: ReactNode;
 }) {
   const titleId = useId();
   const picked = images.flatMap((image, index) => (selected.includes(image.id) ? [{ image, number: index + 1 }] : []));
   const title = picked.length === 0 ? 'Board' : picked.length === 1 ? `Reference #${picked[0].number}`
     : `${picked.length} references`;
   return (
-    <aside className="moodboard-board-panel" aria-labelledby={titleId}>
+    <aside className="moodboard-board-panel" aria-labelledby={reading ? undefined : titleId}
+      aria-label={reading ? 'Reading' : undefined}>
+      {top}
+      {reading ?? (<>
       <div className="moodboard-board-panel__head">
         <h2 id={titleId} className="moodboard-board-panel__title">{title}</h2>
         {picked.length === 1 && <span className="moodboard-board-panel__sub">{referenceLine(picked[0].image)}</span>}
@@ -50,6 +57,7 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
             onClick={() => onRemove(picked.map((item) => item.image.id))}>Remove {picked.length} references</button>
         </div>
       )}
+      </>)}
     </aside>
   );
 }

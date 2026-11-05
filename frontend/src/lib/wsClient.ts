@@ -10,6 +10,7 @@ import type {
 } from './runHistory';
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
+import type { BoardReadingRunEvent } from './boardReading';
 
 export type ErrorCategory =
   | 'blocked'
@@ -354,6 +355,7 @@ export type ExecutionEvent = (
   | QuestionsOpenedEvent
   | QuestionsSyncEvent
   | QuestionsClosedEvent
+  | BoardReadingRunEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 

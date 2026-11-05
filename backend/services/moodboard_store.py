@@ -893,6 +893,54 @@ class MoodboardStore:
             result.board = board
             return moodboard, board, result
 
+    # -- Read the board (services/board_reading.py) --------------------------------------------
+    # The whole-board reading lives on the board as ``boardReading``; the one
+    # it replaced stays as ``boardReadingPrevious`` for the Studio's Undo.
+    # Neither is ever set through create or update (the API models forbid
+    # them): only a finished read writes them, and Undo swaps them.
+
+    def save_board_reading(self, moodboard_id: str, reading: dict[str, Any]) -> dict[str, Any]:
+        """Save a finished reading; the one it replaces is kept for Undo.
+        KeyError: no live board."""
+        from services.board_reading import check_reading
+
+        check_reading(reading)
+        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        if path is None:
+            raise KeyError(f"Moodboard {moodboard_id} not found")
+        with _board_lock(moodboard_id):
+            moodboard = _read_for_write(path, moodboard_id)
+            current = moodboard.get("boardReading")
+            moodboard["boardReadingPrevious"] = current if isinstance(current, dict) else None
+            moodboard["boardReading"] = reading
+            _stamp_layout(moodboard)
+            moodboard["version"] = int(moodboard.get("version", 1)) + 1
+            moodboard["updatedAt"] = _now_iso()
+            _write_json(path, moodboard)
+            return moodboard
+
+    def undo_board_reading(self, moodboard_id: str, reading_id: str) -> dict[str, Any]:
+        """Put back the reading ``reading_id`` replaced, while it is still the
+        board's reading. The two swap, so undoing again brings it back.
+        KeyError: no live board; ValueError: nothing to put back."""
+        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        if path is None:
+            raise KeyError(f"Moodboard {moodboard_id} not found")
+        with _board_lock(moodboard_id):
+            moodboard = _read_for_write(path, moodboard_id)
+            current = moodboard.get("boardReading")
+            previous = moodboard.get("boardReadingPrevious")
+            if not isinstance(current, dict) or current.get("id") != reading_id:
+                raise ValueError("That reading is no longer the board's reading, so there is nothing to undo.")
+            if not isinstance(previous, dict):
+                raise ValueError("There is no earlier reading to put back.")
+            moodboard["boardReading"], moodboard["boardReadingPrevious"] = previous, current
+            _stamp_layout(moodboard)
+            moodboard["version"] = int(moodboard.get("version", 1)) + 1
+            moodboard["updatedAt"] = _now_iso()
+            _write_json(path, moodboard)
+            return moodboard
+
     def keep_brief_override(self, moodboard_id: str, *, by: str = "agent") -> dict[str, Any]:
         """Keep the hand-written brief for the board as it is now: the
         "changed since you edited this" notice goes until the board changes again.

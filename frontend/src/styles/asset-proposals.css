@@ -101,6 +101,27 @@
   overflow-wrap: anywhere;
 }
 
+/* A board read on the Gemini key (Read the board, GM section 6): what, then what it sends and costs. */
+.asset-proposal__read {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-proposal__read-line {
+  margin: 0;
+  color: var(--sr-ink, #fff);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.asset-proposal__read-detail {
+  margin: 0;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
 .asset-proposal__covers {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

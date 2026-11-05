@@ -4,7 +4,8 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { overviewThumbnailUrl } from '../../lib/canvasOverview';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
-import { BoardWideContext, type BoardCardNodeType } from './boardNodes';
+import { useCiteHovered } from '../../store/boardCanvasStore';
+import { BoardKeyContext, BoardWideContext, type BoardCardNodeType } from './boardNodes';
 
 export type { BoardCardData } from './boardNodes';
 export { BOARD_THUMB_MAX_CSS_PX } from './boardNodes';
@@ -17,6 +18,8 @@ export { BOARD_THUMB_MAX_CSS_PX } from './boardNodes';
 function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   // The canvas says which widths are wide at this zoom (one check per zoom, not one per card).
   const wide = (width ?? 0) >= useContext(BoardWideContext);
+  // A reading's citation chip hovered or focused: the selection-style ring, no camera move.
+  const cited = useCiteHovered(useContext(BoardKeyContext), data.imageId);
   const [failedThumb, setFailedThumb] = useState<string | null>(null);
   // Only Nebula's own files are loaded (lib/storedImage.ts): an old board's
   // link to another site gets the placeholder (Q98).
@@ -25,7 +28,8 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   const useThumb = thumb !== null && thumb !== failedThumb;
   const src = useThumb ? backendAssetUrlSync(thumb) : view.src;
   return (
-    <div className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId}>
+    <div className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}${cited ? ' moodboard-card--cited' : ''}`}
+      data-image-id={data.imageId}>
       {src === null ? (
         <div className="moodboard-card__placeholder">{view.outside && <OutsideImageNote />}</div>
       ) : <img

@@ -8796,6 +8796,14 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
         board = None
     if board is None:
         return "the board was deleted"
+    if proposal.change.get("read"):
+        from services import board_reading
+
+        if not await asyncio.to_thread(board_reading.sendable_images, board):
+            return "the board has no images to read"
+        if _board_reading_key(load_settings()) is None:
+            return "there's no Gemini API key in Settings"
+        return None
     if board.get("sendNotes") is True:
         return "Send notes to generators is already on"
     return None
@@ -9164,6 +9172,23 @@ async def _asset_proposal_sync_message() -> dict[str, Any]:
     return _asset_proposal_open_message()
 
 
+async def _read_proposal_before(board: Mapping[str, Any]) -> dict[str, Any]:
+    """A read proposal's ``before``: what the read sends and its list price
+    on the key route (409 when it couldn't run: no images, no key)."""
+    from services import board_reading
+
+    state = await _board_reading_route_state(board)
+    if not state["count"]:
+        raise HTTPException(status_code=409, detail=BOARD_READING_NO_IMAGES)
+    if not state["hasKey"]:
+        raise HTTPException(status_code=409, detail=(
+            "There's no Gemini API key in Settings, so there's no paid read to propose."))
+    estimate = state["estimate"]
+    return {"route": "gemini_key", "model": board_reading.MODEL_ID, "modelName": state["model"]["name"],
+            "images": state["count"], "provider": "Google",
+            "cost": {key: estimate.get(key) for key in ("low", "high", "unconfirmed", "unpriced")}}
+
+
 async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]
                                  ) -> tuple[str, dict[str, Any], dict[str, Any] | None, str | None]:
     """(the target's name, its state now, a lost pin, the automatic cover's
@@ -9194,6 +9219,8 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
         board = None
     if board is None:
         raise HTTPException(status_code=404, detail=f"No moodboard {target_id[:40]} (moodboard_list lists them)")
+    if change.get("read"):
+        return str(board.get("name") or ""), await _read_proposal_before(board), None, None
     if board.get("sendNotes") is True:
         raise HTTPException(status_code=409, detail=(
             f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
@@ -9326,6 +9353,21 @@ async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
     return proposal
 
 
+async def _apply_read_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    """Accept & run: the read starts on the key route as the person's (an
+    accepted proposal's run is the person's, as on the canvas)."""
+    from services import board_reading
+
+    board = _reader_board(proposal.target_id)
+    board_id = str(board.get("id"))
+    if board_reading.runs.running(board_id):
+        raise HTTPException(status_code=409, detail="a read is already running on this board")
+    images = await asyncio.to_thread(board_reading.sendable_images, board)
+    run = _start_board_read(board_id, "gemini_key", images,
+                            {"kind": "person", "acceptedFrom": proposal.agent.name})
+    return {"applied": {"read": True}, "run": run.view()}
+
+
 async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
     """Make the change as the person, through the route their own click uses."""
     note = f" (accepted from {proposal.agent.name})"
@@ -9335,6 +9377,8 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
         url = proposal.change.get("cover")
         result = await _set_project_cover(proposal.target_id, url, expect=proposal.before, note=note)
         return {"applied": {"cover": url}, "project": result["project"]}
+    if proposal.change.get("read"):
+        return await _apply_read_proposal(proposal)
     # Without the tab id, the write isn't this tab's echo: the Studio that
     # clicked Accept reads the board again like every other open one.
     headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
@@ -19099,6 +19143,9 @@ def _moodboard_out(board: dict) -> dict:
     out = with_brief(board)
     if isinstance(out, dict) and (outside := outside_image_ids(out)):
         out = {**out, "outsideImages": outside}
+    if isinstance(out, dict) and "boardReadingPrevious" in out:
+        # Kept for the Studio's Undo only (POST .../reading/undo); never sent.
+        out = {key: value for key, value in out.items() if key != "boardReadingPrevious"}
     return out
 
 
@@ -19777,6 +19824,262 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+
+
+# ---------- Moodboards: Read the board (services/board_reading.py) ----------
+#
+# One whole-board style report by Gemini 4 Argon, saved with the board. It
+# runs on the person's Antigravity sign-in (their own agy CLI) when agy is
+# installed and signed in, else on their Gemini API key. The person's own
+# read never asks. An agent's read on the subscription runs; on the key it
+# costs money, so it becomes a proposal (kind moodboard, {"read": true}) the
+# person accepts in Moodboard Studio. Agents never pick the key route
+# themselves: asking for it is that same proposal.
+
+# Tests point the key route's requests at a mock transport; None is the real network.
+_board_reading_transport: Any = None
+BOARD_READING_LOCKED = ("You can read the board after you sign in to Antigravity on this Mac or add a Gemini "
+                        "API key in Settings.")
+BOARD_READING_LOCKED_NO_AGY = ("You can read the board after you install Antigravity and sign in, or add a "
+                               "Gemini API key in Settings.")
+BOARD_READING_NO_IMAGES = "You can read the board after you add images."
+BOARD_READING_NOTE = "Read the board for its style."
+
+
+def _board_reading_temp_root() -> Path:
+    """Nebula's own temp root for read folders (0700; services/board_reading.py)."""
+    return _STATE_DIR / "tmp" / "board-reading"
+
+
+def _board_reading_key(settings: Mapping[str, Any]) -> str | None:
+    from services import board_reading
+
+    entry = board_reading.reader_entry()
+    value = (settings.get("apiKeys") or {}).get(str(entry["keyName"]))
+    return str(value) if value else None
+
+
+async def _board_reading_route_state(board: Mapping[str, Any], settings: Mapping[str, Any] | None = None
+                                     ) -> dict[str, Any]:
+    """What the pane's route and cost lines say: agy's state, whether the key
+    is set, the route a read would take, how many images go and the key
+    route's list price."""
+    from services import board_reading
+
+    settings = load_settings() if settings is None else settings
+    detection = await asyncio.to_thread(board_reading.detect_antigravity, temp_root=_board_reading_temp_root())
+    has_key = _board_reading_key(settings) is not None
+    images = await asyncio.to_thread(board_reading.sendable_images, board)
+    entry = board_reading.reader_entry()
+    return {"antigravity": detection, "hasKey": has_key, "route": board_reading.choose_route(detection, has_key),
+            "count": len(images), "model": {"id": board_reading.MODEL_ID, "name": entry["name"]},
+            "estimate": board_reading.estimate_key_read(len(images), entry)}
+
+
+def _board_reading_out(board: Mapping[str, Any], reading: Mapping[str, Any] | None) -> dict[str, Any]:
+    from services import board_reading
+
+    if not isinstance(reading, Mapping):
+        return {"reading": None, "markdown": None, "tiles": []}
+    markdown, tiles = board_reading.numbered_markdown(reading, board)
+    return {"reading": dict(reading), "markdown": markdown, "tiles": tiles}
+
+
+@app.get("/api/moodboards/{moodboard_id}/reading")
+async def get_board_reading(moodboard_id: str) -> dict:
+    """The board's reading and what goes with it: ``reading`` (as saved:
+    the model's markdown, model, route, time, image-set fingerprint, the
+    images sent and the tile ids cited), ``markdown`` (each citation as #N,
+    the tile's number now), ``tiles`` (#N to tile id), ``stale`` (images
+    added, removed, set aside or replaced since), ``run`` (the read under
+    way or the last one's outcome) and ``route`` (where a read would run and
+    its price). A reading is board content: whoever reads the board reads it."""
+    from services import board_reading
+
+    board = _reader_board(moodboard_id)
+    reading = board.get("boardReading") if isinstance(board.get("boardReading"), dict) else None
+    stale = await asyncio.to_thread(board_reading.staleness, reading, board)
+    run = board_reading.runs.get(str(board.get("id")))
+    return {**_board_reading_out(board, reading), "stale": stale, "hasPrevious": isinstance(
+        board.get("boardReadingPrevious"), dict), "run": run.view() if run else None,
+        "route": await _board_reading_route_state(board)}
+
+
+class BoardReadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # auto: Antigravity when it can run, else the key. An agent naming
+    # gemini_key is proposing that route (it never switches itself).
+    route: str = "auto"
+    # An agent's proposal note (one line); the person's read has none.
+    note: str | None = None
+
+
+async def _board_reading_broadcast(run: Any) -> None:
+    from services import board_reading
+
+    try:
+        await manager.broadcast_raw({"type": "boardReadingRun", "boardId": run.board_id, "run": run.view()})
+    except Exception:  # noqa: BLE001 - a screen reads it again on its next fetch
+        pass
+    if run.status == "failed" and run.cause == "signed_out":
+        board_reading.forget_status()
+    if run.status == "failed" and run.agent is not None:
+        try:
+            await manager.broadcast_raw(_point(run.agent, target=None, action="click",
+                                               say=board_reading.agent_failure_say(run.cause)))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _start_board_read(board_id: str, route: str, images: list[Any], by: dict[str, Any],
+                      agent: Any = None) -> Any:
+    """Start a read in the background; it saves the reading on the board
+    when it lands and says so on every socket."""
+    import httpx
+
+    from services import board_reading, moodboard_reader
+
+    run = board_reading.Run(board_id=board_id, route=route, count=len(images), by=by,
+                            started=_time_module.time(), agent=agent)
+
+    async def work(this: Any) -> None:
+        hashes = {image.image_id: await asyncio.to_thread(board_reading.file_hash, image.path) for image in images}
+        cost = None
+        if route == "antigravity":
+            agy = await asyncio.to_thread(board_reading.find_agy)
+            if agy is None:
+                raise board_reading.ReadFailure("not_installed", "agy isn't installed")
+            markdown = await board_reading.run_antigravity(images, agy=agy, temp_root=_board_reading_temp_root())
+        else:
+            entry = board_reading.reader_entry()
+            try:
+                key = moodboard_reader.check_key(entry, load_settings().get("apiKeys") or {})
+            except moodboard_reader.NoReaderKeyError as exc:
+                raise board_reading.ReadFailure("no_key", "no Gemini API key") from exc
+            estimate = board_reading.estimate_key_read(len(images), entry)
+            cost = {key_: estimate.get(key_) for key_ in ("low", "high", "unconfirmed", "unpriced")}
+            client = (httpx.AsyncClient(transport=_board_reading_transport, timeout=httpx.Timeout(30.0, read=None))
+                      if _board_reading_transport is not None else None)
+            try:
+                markdown = await board_reading.run_gemini_key(images, api_key=key, client=client, entry=entry)
+            finally:
+                if client is not None:
+                    await client.aclose()
+        reading = board_reading.build_reading(markdown, images, route=route, by=by, hashes=hashes, cost=cost)
+        try:
+            board = await asyncio.to_thread(_moodboard_store().save_board_reading, board_id, reading)
+        except KeyError as exc:
+            raise board_reading.ReadFailure("other", "the board was deleted during the read") from exc
+        this.reading_id = reading["id"]
+        this.status, this.finished = "done", _time_module.time()
+        await _broadcast_stored_asset("moodboard", board)
+
+    started = board_reading.runs.start(run, work, on_end=_board_reading_broadcast)
+    # Every tab (and the person's, for an agent's read) shows it running at once.
+    asyncio.get_running_loop().create_task(_board_reading_broadcast(started))
+    return started
+
+
+def _board_reading_locked(route_state: Mapping[str, Any]) -> str:
+    installed = bool((route_state.get("antigravity") or {}).get("installed"))
+    return BOARD_READING_LOCKED if installed else BOARD_READING_LOCKED_NO_AGY
+
+
+@app.post("/api/moodboards/{moodboard_id}/reading")
+async def read_board(moodboard_id: str, body: BoardReadRequest | None = None) -> Any:
+    """Read the board (Moodboard Studio's Read the board, `nebula moodboard
+    read`, moodboard_read_board). It starts in the background and answers
+    at once with ``{status: "running", run}``: GET .../reading says when it
+    lands. 422 with nothing to read or no route; 409 while a read runs.
+
+    The person's read runs on the route asked for (auto: Antigravity first,
+    then the key) and never asks. An agent's read runs on Antigravity; on
+    the key route (auto falling back to it, or naming it) it becomes a
+    proposal the person accepts: 202 ``{status: "proposed", proposal}``."""
+    from services import board_reading
+
+    request = body or BoardReadRequest()
+    if request.route not in board_reading.ROUTE_CHOICES:
+        raise HTTPException(status_code=422, detail="route is auto, antigravity or gemini_key")
+    board = _reader_board(moodboard_id)
+    board_id = str(board.get("id"))
+    images = await asyncio.to_thread(board_reading.sendable_images, board)
+    if not images:
+        raise HTTPException(status_code=422, detail=BOARD_READING_NO_IMAGES)
+    if board_reading.runs.running(board_id):
+        raise HTTPException(status_code=409, detail="A read is already running on this board.")
+    headers = current_request_headers()
+    person = _is_person_request()
+    identity = None if person else identify_agent(headers)
+    if not person and identity is None:
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    state = await _board_reading_route_state(board)
+    route = board_reading.choose_route(state["antigravity"], state["hasKey"], request.route)
+    if route is None:
+        if request.route == "antigravity":
+            raise HTTPException(status_code=422, detail=(
+                "Antigravity isn't signed in on this Mac, so it can't read the board. "
+                + ("Read with route auto to use the Gemini API key." if state["hasKey"] else "")).strip())
+        if request.route == "gemini_key":
+            raise HTTPException(status_code=422, detail="There's no Gemini API key in Settings to read the board with.")
+        raise HTTPException(status_code=422, detail=_board_reading_locked(state))
+    if not person and route == "gemini_key":
+        proposal = await create_asset_proposal({"kind": "moodboard", "id": board_id, "change": {"read": True},
+                                                "note": request.note or BOARD_READING_NOTE})
+        return JSONResponse(status_code=202, content={"status": "proposed", **proposal, "estimate": state["estimate"]})
+    by = ({"kind": "person"} if person else
+          {"kind": "agent", "name": identity.name if identity else "An agent",
+           "id": identity.id if identity else None})
+    try:
+        run = _start_board_read(board_id, route, images, by, agent=identity)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail="A read is already running on this board.") from exc
+    if identity is not None:
+        await _say_agent_action("Reading the board")
+    return {"status": "running", "run": run.view()}
+
+
+@app.post("/api/moodboards/{moodboard_id}/reading/stop")
+async def stop_board_reading(moodboard_id: str) -> dict:
+    """Stop the read under way. The earlier reading stays as it was. The
+    person may stop any read; an agent only one it started."""
+    from services import board_reading
+
+    board = _reader_board(moodboard_id)
+    board_id = str(board.get("id"))
+    run = board_reading.runs.running(board_id)
+    if run is None:
+        return {"status": "idle", "run": None}
+    if not _is_person_request():
+        identity = identify_agent(current_request_headers())
+        if identity is None or run.by.get("id") != identity.id:
+            raise HTTPException(status_code=403, detail="Only the person, or the agent that started it, can stop this read.")
+    stopped = await board_reading.runs.stop(board_id)
+    return {"status": "stopped", "run": stopped.view() if stopped else None}
+
+
+class BoardReadingUndo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    readingId: str
+
+
+@app.post("/api/moodboards/{moodboard_id}/reading/undo")
+async def undo_board_reading(moodboard_id: str, body: BoardReadingUndo) -> dict:
+    """Put back the reading a re-read replaced (the Studio's "Replaced the
+    reading · Undo"), while ``readingId`` is still the board's reading. The
+    two swap, so undoing again brings the newer one back. 409 when it no
+    longer applies."""
+    _reader_board(moodboard_id)
+    try:
+        board = await asyncio.to_thread(_moodboard_store().undo_board_reading, moodboard_id, body.readingId)
+    except KeyError:
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    await _broadcast_stored_asset("moodboard", board)
+    return {"status": "undone", **_board_reading_out(board, board.get("boardReading"))}
 
 
 @app.delete("/api/moodboards/{moodboard_id}")

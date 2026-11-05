@@ -247,6 +247,26 @@ describe('Show from an Update (Q113 c)', () => {
   });
 });
 
+describe('a reading’s citation chip, clicked (Read the board)', () => {
+  it('leaves the camera alone when the tile is wholly in view', async () => {
+    spring.calls = [];
+    mount();
+    flow.getNodesBounds.mockReturnValueOnce({ x: 520, y: 0, width: 480, height: 270 });
+    act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c2'], { onlyIfOutside: true }));
+    await vi.waitFor(() => expect(useBoardCanvasStore.getState().frameRequest).toBeNull());
+    expect(spring.calls).toHaveLength(0);
+  });
+
+  it('brings a tile out of view in on Fit’s spring, at the same zoom', async () => {
+    spring.calls = [];
+    mount();
+    flow.getNodesBounds.mockReturnValueOnce({ x: 1040, y: 0, width: 312, height: 416 });
+    act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c3'], { onlyIfOutside: true }));
+    await vi.waitFor(() => expect(spring.calls).toHaveLength(1));
+    expect(spring.calls[0].to).toEqual({ zoom: 1, x: 500 - 1196, y: 350 - 208 });
+  });
+});
+
 describe('the camera, kept for the visit', () => {
   it('a Fit or a zoom button is remembered, so List and back to Board shows the same view', () => {
     spring.calls = [];

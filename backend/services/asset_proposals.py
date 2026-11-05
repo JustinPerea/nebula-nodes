@@ -11,6 +11,11 @@ Some of the person's calls live on an asset or a project instead:
 - ``moodboard`` ``{"sendNotes": true}``: send the board's notes to
   generators, which only the person may turn on (moodboard_store
   ``NotesOptInProtected``). Decided in Moodboard Studio.
+- ``moodboard`` ``{"read": true}``: read the board with Gemini 4 Argon on
+  the person's Gemini API key (services/board_reading.py), which costs money,
+  so an agent asks. ``before`` holds what the read sends and its list price
+  as proposed; Accept starts the read as the person's. Decided in Moodboard
+  Studio's Reading pane.
 - ``commons`` (a reference's asset id) ``{"correction" | "region" |
   "membership": {...}}`` or ``{"edits": [...]}``: curating the Commons,
   which only the person may do (services/commons_proposals.py, Justin's
@@ -59,7 +64,7 @@ KINDS = ("project", "moodboard", "commons")
 # Assets whose Studio has nothing only the person may change yet.
 LATER_KINDS = ("character", "style")
 # What each kind may propose, and where the person decides it.
-CHANGE_KEYS = {"project": ("cover",), "moodboard": ("sendNotes",),
+CHANGE_KEYS = {"project": ("cover",), "moodboard": ("sendNotes", "read"),
                "commons": ("edits", "correction", "region", "membership")}
 DECIDE_IN = {"project": "projects", "moodboard": "moodboard-studio", "commons": "commons"}
 _ALLOWED_KEYS = frozenset({"kind", "id", "change", "note", "brand"})
@@ -112,7 +117,7 @@ def parse_change(body: Any) -> AssetChange:
     raw = body.get("change")
     if not isinstance(raw, dict) or not raw:
         raise ProposalError(422, "change must be an object, e.g. " + {
-            "project": '{"cover": "/api/outputs/..."}', "moodboard": '{"sendNotes": true}',
+            "project": '{"cover": "/api/outputs/..."}', "moodboard": '{"sendNotes": true} or {"read": true}',
             "commons": '{"correction": {"field_path": "summary", "value": "..."}}'}[kind])
     if kind == "commons":
         return _parse_commons(body, target_id.strip(), raw)
@@ -130,6 +135,12 @@ def parse_change(body: Any) -> AssetChange:
             raise ProposalError(422, "cover must be one of the project's image URLs (list_project_covers), "
                                 "or null for the automatic cover")
         change: dict[str, Any] = {"cover": cover}
+    elif "read" in raw:
+        if len(raw) > 1:
+            raise ProposalError(422, "a moodboard proposal changes one thing: send sendNotes or read, not both")
+        if raw.get("read") is not True:
+            raise ProposalError(422, "read must be true (read the board with Gemini 4 Argon on the Gemini API key)")
+        change = {"read": True}
     else:
         value = raw.get("sendNotes")
         if not isinstance(value, bool):
@@ -220,6 +231,8 @@ def summary(proposal: AssetProposal) -> str:
         to = proposal.change.get("cover")
         return (f"set the cover of “{name}” back to automatic" if to is None
                 else f"make another image the cover of “{name}”")
+    if proposal.change.get("read"):
+        return f"read “{name}” with {proposal.before.get('modelName') or 'Gemini 4 Argon'}"
     return f"send the notes of “{name}” to generators"
 
 
@@ -231,6 +244,9 @@ def update_text(proposal: AssetProposal) -> str:
     name = " ".join((proposal.target_name or "").split())[:120]
     if proposal.kind == "project":
         return f"{agent} asks to change the cover of {name or 'a project'}"
+    if proposal.kind == "moodboard" and proposal.change.get("read"):
+        model = proposal.before.get("modelName") or "Gemini 4 Argon"
+        return f"{agent} wants to read “{name or 'a board'}” with {model}."
     if proposal.kind == "moodboard":
         whose = name + "'s" if name else "a board's"
         return f"{agent} asks to send {whose} notes to generators"
@@ -271,6 +287,8 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
             detail["inbox"] = True
         detail["since"] = since
         return detail
+    if proposal.change.get("read"):
+        return {"read": True, "since": since}
     return {"since": since}
 
 
@@ -285,6 +303,8 @@ def outcome_line(proposal: AssetProposal) -> str:
     person's reason or the agent's note)."""
     status = proposal.status
     if status == "accepted":
+        if proposal.change.get("read"):
+            return "Accepted: reading the board"
         return {"project": "Accepted: the cover changed", "moodboard": "Accepted: the notes go to generators",
                 "commons": "Applied"}[proposal.kind]
     if status == "rejected":
@@ -292,7 +312,8 @@ def outcome_line(proposal: AssetProposal) -> str:
             by = proposal.before.get("coverBy") or {}
             return ("You kept your cover" if by.get("kind") == "person" and not proposal.lost_pin
                     else "You kept this cover")
-        return "You kept the notes here" if proposal.kind == "moodboard" else "You said no"
+        return ("You kept the notes here" if proposal.kind == "moodboard" and not proposal.change.get("read")
+                else "You said no")
     if status == "withdrawn":
         return f"Withdrawn by {proposal.agent.name}"
     if status == "expired":
@@ -352,6 +373,9 @@ class AssetProposalBook(ProposalBook):
                 change = {"cover": {"from": proposal.before.get("cover"), "to": proposal.change.get("cover"),
                                     "fromBy": copy.deepcopy(proposal.before.get("coverBy"))}}
             change["cover"]["auto"] = proposal.auto_cover
+        elif proposal.change.get("read"):
+            # What the read sends and its list price, as proposed (main fills ``before``).
+            change = {"read": copy.deepcopy(proposal.before)}
         else:
             change = {"sendNotes": {"from": bool(proposal.before.get("sendNotes")), "to": True}}
         return {

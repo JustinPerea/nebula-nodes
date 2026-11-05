@@ -1,4 +1,4 @@
-import type { DragEvent as ReactDragEvent } from 'react';
+import { useEffect, useRef, type DragEvent as ReactDragEvent } from 'react';
 import type { MoodboardAnalysis, MoodboardImage } from '../../types';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -16,8 +16,11 @@ export const PRIVATE_NOTE_LIMIT = 2000;
  * was before the Board view (moodboard canvas PR5), moved here, with the
  * cover's mark and Use as cover / Back to #1 (lib/moodboardCover).
  */
+/** How long a row a reading's chip sent the person to stays highlighted. */
+export const LIST_FOCUS_MS = 1600;
+
 export function MoodboardListView({ images, analysis, cover, uploading, onFiles, onDrop, onRemove, onUpdate,
-  onSetCover, onTextDone }: {
+  onSetCover, onTextDone, focus = null, citeHover = null }: {
   images: MoodboardImage[];
   analysis: MoodboardAnalysis | null;
   /** The image the board opens on (the chosen one, else #1). */
@@ -31,7 +34,27 @@ export function MoodboardListView({ images, analysis, cover, uploading, onFiles,
   onSetCover: (id: string | null) => void;
   /** A note lost focus: send it now. */
   onTextDone: () => void;
+  /** A reading's citation chip, clicked: scroll to this row and highlight it (GM, Read the board section 3). */
+  focus?: { imageId: string; seq: number } | null;
+  /** A reading's citation chip hovered or focused: this row takes the selection-style ring. */
+  citeHover?: string | null;
 }) {
+  const grid = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focus) return;
+    const row = Array.from(grid.current?.querySelectorAll<HTMLElement>('[data-list-image-id]') ?? [])
+      .find((element) => element.dataset.listImageId === focus.imageId);
+    if (!row) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+    // A mark React doesn't own, so a re-render meanwhile keeps it.
+    row.dataset.found = 'true';
+    const timer = window.setTimeout(() => { delete row.dataset.found; }, LIST_FOCUS_MS);
+    return () => {
+      window.clearTimeout(timer);
+      delete row.dataset.found;
+    };
+  }, [focus]);
   return (
     <section
       className={`moodboard-dropzone ${uploading ? 'moodboard-dropzone--busy' : ''}`}
@@ -61,13 +84,15 @@ export function MoodboardListView({ images, analysis, cover, uploading, onFiles,
           />
         </label>
       </div>
-      <div className="moodboard-grid">
+      <div className="moodboard-grid" ref={grid}>
         {images.map((img, index) => {
           const isCover = cover?.id === img.id;
           // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
           const view = storedImageView(img.url);
           return (
-          <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
+          <div key={img.id} data-list-image-id={img.id}
+            className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}${
+              citeHover === img.id ? ' moodboard-tile--cited' : ''}`}>
             <div className="moodboard-tile__image">
               {view.src ? <img src={view.src} alt="" draggable={false} />
                 : view.outside && <span className="moodboard-tile__outside"><OutsideImageNote /></span>}

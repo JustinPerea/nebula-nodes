@@ -69,9 +69,19 @@ interface BoardCanvasState {
    *  cards in the Board view and frames them. Taken (set to null) once handled. */
   showRequest: { boardId: string; imageIds: string[]; seq: number } | null;
   requestShow: (boardId: string, imageIds: string[]) => void;
-  /** The Board view on `boardKey` springs its camera to these cards, then clears it. */
-  frameRequest: { boardKey: string; placementIds: string[]; seq: number } | null;
-  requestFrame: (boardKey: string, placementIds: string[]) => void;
+  /** The Board view on `boardKey` springs its camera to these cards, then clears it.
+   *  `onlyIfOutside`: leave the camera where it is when they're wholly in view
+   *  (a reading's citation chip, GM's board reading design section 3). */
+  frameRequest: { boardKey: string; placementIds: string[]; seq: number; onlyIfOutside?: boolean } | null;
+  requestFrame: (boardKey: string, placementIds: string[], options?: { onlyIfOutside?: boolean }) => void;
+  /** The image a reading's citation chip is hovered or focused on: its tile
+   *  takes the selection-style ring, and the camera doesn't move. */
+  citeHover: { boardKey: string; imageId: string } | null;
+  setCiteHover: (hover: { boardKey: string; imageId: string } | null) => void;
+  /** A citation clicked in the List view: that row scrolls into view and is
+   *  highlighted for a moment. */
+  listFocus: { boardKey: string; imageId: string; seq: number } | null;
+  focusListRow: (boardKey: string, imageId: string) => void;
 }
 
 let requestSeq = 0;
@@ -101,9 +111,24 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   showRequest: null,
   requestShow: (boardId, imageIds) => set({ showRequest: { boardId, imageIds: [...imageIds], seq: ++requestSeq } }),
   frameRequest: null,
-  requestFrame: (boardKey, placementIds) => set({
-    frameRequest: { boardKey, placementIds: [...placementIds], seq: ++requestSeq } }),
+  requestFrame: (boardKey, placementIds, options) => set({
+    frameRequest: { boardKey, placementIds: [...placementIds], seq: ++requestSeq,
+      ...(options?.onlyIfOutside ? { onlyIfOutside: true } : {}) } }),
+  citeHover: null,
+  setCiteHover: (hover) => {
+    const now = get().citeHover;
+    if (now === hover || (now && hover && now.boardKey === hover.boardKey && now.imageId === hover.imageId)) return;
+    set({ citeHover: hover });
+  },
+  listFocus: null,
+  focusListRow: (boardKey, imageId) => set({ listFocus: { boardKey, imageId, seq: ++requestSeq } }),
 }));
+
+/** Whether this board's tile for `imageId` has a citation chip hovered (one boolean per card). */
+export function useCiteHovered(boardKey: string | undefined, imageId: string): boolean {
+  return useBoardCanvasStore((state) => state.citeHover !== null && state.citeHover.imageId === imageId
+    && state.citeHover.boardKey === boardKey);
+}
 
 const NO_SELECTION: string[] = [];
 

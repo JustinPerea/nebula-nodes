@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowRight } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { takeReview } from '../../store/assetProposalReviewRequest';
 import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../lib/assetProposals';
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
-import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
+import { PROPOSAL_GATE_COPY, countdown } from '../../lib/canvasProposals';
+import { readProposalDetail, readProposalLine } from '../../lib/boardReading';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 import { askedOrder, HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
@@ -22,7 +23,11 @@ function editCount(view: AssetProposalView): number {
   return view.change.edits?.length ?? 0;
 }
 
+const isRead = (view: AssetProposalView) => view.kind === 'moodboard' && Boolean(view.change.read);
+
 function headline(view: AssetProposalView): string {
+  // GM, Read the board section 6: the bar says "Claude Code proposes".
+  if (isRead(view)) return 'proposes';
   if (view.kind === 'moodboard') return 'asks to send these notes to generators';
   if (view.kind === 'commons') {
     const count = editCount(view);
@@ -32,10 +37,23 @@ function headline(view: AssetProposalView): string {
 }
 
 function labels(view: AssetProposalView): { accept: string; reject: string } {
+  if (isRead(view)) return { accept: 'Accept & run', reject: 'Reject' };
   if (view.kind === 'moodboard') return { accept: 'Send them', reject: 'Keep them here' };
   if (view.kind === 'commons') return { accept: editCount(view) === 1 ? 'Apply' : 'Apply all', reject: "Don't" };
   const accept = view.change.cover?.to ? 'Use this cover' : 'Use automatic';
   return { accept, reject: view.change.cover?.fromBy?.kind === 'person' ? 'Keep mine' : 'Keep this one' };
+}
+
+/** A paid read's foot (GM section 6): "List prices, not a quote · expires in 14:59", by the second. */
+function ReadExpiry({ view }: { view: AssetProposalView }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const read = typeof view.change.read === 'object' ? view.change.read : null;
+  const priced = typeof read?.cost?.high === 'number';
+  return <>{priced ? 'List prices, not a quote · ' : 'No list price · '}expires in {countdown(view.expiresAt, now)}</>;
 }
 
 function minutesLeft(view: AssetProposalView, now: number): string {
@@ -201,12 +219,19 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
         <span className="asset-proposal__agent">{view.agent.name}</span>
         <span className="asset-proposal__asks">{said}</span>
       </div>
-      {view.note && <p className="asset-proposal__note">{view.note}</p>}
+      {isRead(view) && (
+        <div className="asset-proposal__read">
+          <p className="asset-proposal__read-line">{readProposalLine(view.change.read)}</p>
+          <p className="asset-proposal__read-detail">{readProposalDetail(view.change.read)}</p>
+        </div>
+      )}
+      {view.note && !isRead(view) && <p className="asset-proposal__note">{view.note}</p>}
       {view.kind === 'project' && <CoverChange view={view} />}
       {view.kind === 'commons' && <CommonsChange view={view} names={names} />}
       {error && <p className="asset-proposal__error" role="alert">{error}</p>}
       <div className="asset-proposal__foot">
-        <span className="asset-proposal__expires">{closing ? '' : minutesLeft(view, Math.max(now, shownAt))}</span>
+        <span className="asset-proposal__expires">{closing ? '' : isRead(view) ? <ReadExpiry view={view} />
+          : minutesLeft(view, Math.max(now, shownAt))}</span>
         <button type="button" className="asset-proposal__button" disabled={busy || gateHeld}
           title={gateHeld ? PROPOSAL_GATE_COPY.reject : undefined}
           onClick={() => void reject(view.id)}>{pending === 'reject' ? 'Saying no…' : words.reject}</button>
@@ -256,10 +281,15 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
  * Moodboard Studio, on the reference's detail in the Commons. Nothing changes
  * until they accept (backend /api/asset-proposals).
  */
-export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind: AssetProposalKind; targetId: string;
-  names?: ProposalNames }) {
-  const entries = useAssetProposalsStore(useShallow((state) => proposalsFor(state, kind, targetId)));
-  const held = useHeldProposals(kind, targetId);
+export function AssetProposalStrip({ kind, targetId, names = NO_NAMES, reads }: { kind: AssetProposalKind; targetId: string;
+  names?: ProposalNames;
+  /** A board's strips (kind moodboard): true shows only its read proposals (the Reading pane),
+   *  false only the rest (beside Send notes). Unset: all of them. */
+  reads?: boolean }) {
+  const all = useAssetProposalsStore(useShallow((state) => proposalsFor(state, kind, targetId)));
+  const allHeld = useHeldProposals(kind, targetId);
+  const entries = reads === undefined ? all : all.filter((entry) => isRead(entry.view) === reads);
+  const held = reads === undefined ? allHeld : allHeld.filter((item) => Boolean(item.read) === reads);
   // A real card that comes in where its placeholder was takes its place
   // without springing in (GM r34: "no extra motion").
   // (Derived state, set during render: the real card's first render already knows.)
@@ -267,6 +297,8 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   if (held.some((item) => !wasHeld.has(item.proposalId))) setWasHeld(new Set([...wasHeld, ...held.map((item) => item.proposalId)]));
   const [now, setNow] = useState(() => Date.now());
   const showing = entries.length > 0 || held.length > 0;
+  const shownKey = [...entries.map((entry) => entry.view.id), ...held.map((item) => item.proposalId)].join(' ');
+  const shownIds = useMemo(() => new Set(shownKey ? shownKey.split(' ') : []), [shownKey]);
   const root = useRef<HTMLDivElement>(null);
   // Review 20 NIT-4: the placeholder that had focus when it left; its real
   // card takes focus in the same commit, unless focus has gone elsewhere.
@@ -289,7 +321,7 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   useEffect(() => {
     const element = root.current;
     if (!asked || !showing || !element) return;
-    if (!takeReview(kind, targetId)) return;
+    if (!takeReview(kind, targetId, reads === undefined ? undefined : shownIds)) return;
     element.scrollIntoView({ block: 'center', inline: 'nearest' });
     element.querySelector<HTMLElement>('[role="group"]')?.focus({ preventScroll: true });
     element.dataset.review = 'true';
@@ -298,7 +330,7 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
       ringTimer.current = null;
       delete element.dataset.review;
     }, REVIEW_RING_MS);
-  }, [asked, showing, kind, targetId]);
+  }, [asked, showing, kind, targetId, reads, shownIds]);
   useEffect(() => () => {
     if (ringTimer.current !== null) window.clearTimeout(ringTimer.current);
   }, []);

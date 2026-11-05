@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
@@ -58,6 +58,15 @@ import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+import { BoardPanelSwitch } from './BoardReadingSwitch';
+import { useBoardReadingSync } from '../../hooks/useBoardReadingSync';
+import { useBoardReadingStore, useReadingRunning } from '../../store/boardReadingStore';
+import { useAssetProposalsStore } from '../../store/assetProposalsStore';
+import { useHeldProposals } from '../../store/heldAssetProposals';
+import { REPLACED_TOAST } from '../../lib/boardReading';
+
+// Read the board's pane and its markdown reader load on demand (GM: never in the first load).
+const BoardReadingPane = lazy(() => import('./BoardReadingPane'));
 
 interface MoodboardDraft {
   name: string;
@@ -295,6 +304,35 @@ export function MoodboardStudioView() {
     setToast({ ...next, id: toastSeq.current, key });
   }, [key]);
   const dismissToast = useCallback(() => setToast(null), []);
+
+  // Read the board (GM's design, 2026-10-31): the saved board's reading, kept
+  // current from the socket; the side panel's Settings / Reading switch.
+  const readingBoardId = loaded && savedId ? savedId : null;
+  useBoardReadingSync(readingBoardId);
+  const panelTab = useBoardReadingStore((state) => state.tab);
+  const setPanelTab = useBoardReadingStore((state) => state.setTab);
+  const readingRunning = useReadingRunning(readingBoardId);
+  // A read that landed over an earlier one: "Replaced the reading · Undo".
+  const replaced = useBoardReadingStore((state) => state.replaced);
+  useEffect(() => {
+    if (!replaced || replaced.boardId !== readingBoardId) return;
+    const { boardId, readingId } = replaced;
+    useBoardReadingStore.getState().clearReplaced();
+    showToast({ text: REPLACED_TOAST, action: { label: 'Undo', run: () => {
+      setToast(null);
+      void useBoardReadingStore.getState().undo(boardId, readingId);
+    } } });
+  }, [replaced, readingBoardId, showToast]);
+  // Review on a read proposal's Update opens the Reading part, where its card is.
+  const reviewProposal = useAssetProposalsStore((state) => (state.review?.kind === 'moodboard'
+    && state.review.targetId === readingBoardId ? state.review.proposalId ?? null : null));
+  const reviewIsRead = useAssetProposalsStore((state) => Boolean(reviewProposal
+    && typeof state.proposals[reviewProposal]?.view.change.read !== 'undefined'));
+  const heldForBoard = useHeldProposals('moodboard', readingBoardId ?? '');
+  const reviewHeldRead = Boolean(reviewProposal && heldForBoard.some((item) => item.proposalId === reviewProposal && item.read));
+  useEffect(() => {
+    if (reviewIsRead || reviewHeldRead) setPanelTab('reading');
+  }, [reviewIsRead, reviewHeldRead, setPanelTab]);
   // Undo steps are this board's, in this tab, at this epoch: a board switch,
   // a new epoch or leaving the Studio clears them (plan section 5.4).
   // Board field steps (Q83, fieldSteps.ts) go with them.
@@ -1176,7 +1214,7 @@ export function MoodboardStudioView() {
       <NotesSwitch on={draft.sendNotes === true}
         onChange={(sendNotes) => changeField('sendNotes', () => setBriefFields({ sendNotes }))} />
       {/* An agent asking to turn it on: only the person may. */}
-      {savedId && <AssetProposalStrip kind="moodboard" targetId={savedId} />}
+      {savedId && <AssetProposalStrip kind="moodboard" targetId={savedId} reads={false} />}
     </div>
   );
 
@@ -1249,6 +1287,29 @@ export function MoodboardStudioView() {
     </section>
   );
 
+  // A reading's citation chip, clicked (GM section 3): on the Board, select
+  // the tile and bring it in on Fit's spring only if it isn't wholly in view;
+  // in the List, scroll to its row and highlight it.
+  const showCitedImage = (imageId: string) => {
+    const boards = useBoardCanvasStore.getState();
+    if (view !== 'board') {
+      boards.focusListRow(key, imageId);
+      return;
+    }
+    const cards = (draft.images.find((image) => image.id === imageId)?.placements ?? []).map((card) => card.id);
+    if (cards.length === 0) return;
+    boards.setSelection(key, cards);
+    boards.requestFrame(key, cards, { onlyIfOutside: true });
+  };
+  const readingPane = (
+    <Suspense fallback={null}>
+      <BoardReadingPane boardId={readingBoardId} boardKey={key} images={draft.images} selectedImageIds={selectedIds}
+        onShowImage={showCitedImage} />
+    </Suspense>
+  );
+  const listFocus = useBoardCanvasStore((state) => (state.listFocus?.boardKey === key ? state.listFocus : null));
+  const listCiteHover = useBoardCanvasStore((state) => (state.citeHover?.boardKey === key ? state.citeHover.imageId : null));
+
   const shownToast = toast && toast.key === key ? toast : null;
   // Both toasts leave as they entered (fix round 7 of PR #200, GM r11 answer 2).
   const trashToast = (
@@ -1276,7 +1337,9 @@ export function MoodboardStudioView() {
         </main>
         {!loading && (
           <BoardSidePanel images={draft.images} selected={selectedIds} analysis={analysis} onUpdate={updateImage}
-            onRemove={removeImages} onTextDone={imageTextDone}>
+            onRemove={removeImages} onTextDone={imageTextDone}
+            top={<BoardPanelSwitch tab={panelTab} onChange={setPanelTab} running={readingRunning} />}
+            reading={panelTab === 'reading' ? readingPane : undefined}>
             <div className="moodboard-board-panel__section">{boardFields}</div>
             {briefFields}
             {analysisSection}
@@ -1316,9 +1379,10 @@ export function MoodboardStudioView() {
 
             <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploading={uploading}
               onFiles={handleFiles} onDrop={handleDrop} onRemove={removeImage} onUpdate={updateImage}
-              onSetCover={setCover} onTextDone={imageTextDone} />
+              onSetCover={setCover} onTextDone={imageTextDone} focus={listFocus} citeHover={listCiteHover} />
 
             {briefFields}
+            {readingPane}
             {analysisSection}
           </>
         )}

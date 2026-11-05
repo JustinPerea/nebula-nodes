@@ -1,0 +1,265 @@
+/* Read the board (GM's surface design, 2026-10-31): the Reading part of the
+   Board view's side panel, the List view's Reading section, the citation
+   chips and the rings they put on the board's tiles and the List's rows.
+
+   Loaded with BoardReadingPane (on demand), except the rings, the switch's
+   dot and the List's rows, which live in moodboard-board.css with the board
+   they draw on. Every colour is a --mb-board-* token (moodboard-board.css),
+   so it draws in either skin. The report is Gemini's prose: Inter 13/20 at
+   the panel's measure, its headings as h3. */
+
+.board-reading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  color: var(--mb-board-ink);
+  font-family: var(--mb-board-font);
+}
+
+/* In the List, a section after Direction like Extraction's. */
+.moodboard-studio-view__main .board-reading {
+  padding-top: 14px;
+  border-top: 1px solid var(--mb-board-edge-strong);
+}
+
+.board-reading__heading {
+  margin: 0;
+  color: var(--mb-board-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-reading__intro {
+  margin: 0;
+  color: var(--mb-board-meta);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.board-reading__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.board-reading__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 2px;
+  background: none;
+  color: var(--mb-board-ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.board-reading__button--primary {
+  border-color: var(--mb-board-meta);
+}
+
+.board-reading__button:hover:not(:disabled) {
+  border-color: var(--mb-board-ink);
+}
+
+.board-reading__button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The route and cost line, and a lock: small, muted. */
+.board-reading__route {
+  margin: 0;
+  color: var(--mb-board-meta);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.board-reading__running {
+  margin: 0;
+  color: var(--mb-board-ink);
+  font-size: 12px;
+}
+
+.board-reading__time {
+  font-family: var(--mb-board-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.board-reading__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.board-reading__failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 4px;
+}
+
+.board-reading__failure-heading,
+.board-reading__failure-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.board-reading__failure-heading {
+  font-weight: 600;
+}
+
+.board-reading__failure-body {
+  color: var(--mb-board-meta);
+}
+
+.board-reading__report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Neutral, with its way forward (GM section 4). */
+.board-reading__stale {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 4px;
+  color: var(--mb-board-ink);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.board-reading__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mb-board-ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.board-reading__link:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.board-reading__meta {
+  margin: 0;
+  color: var(--mb-board-meta);
+  font-family: var(--mb-board-mono);
+  font-size: 11px;
+}
+
+/* The report is Gemini's, and says so. */
+.board-reading__label {
+  margin: 0;
+  color: var(--mb-board-meta);
+  font-family: var(--mb-board-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.board-reading__body {
+  min-width: 0;
+  color: var(--mb-board-ink);
+  font-family: var(--mb-board-font);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.board-reading__body > * {
+  margin: 0 0 10px;
+}
+
+.board-reading__body > :last-child {
+  margin-bottom: 0;
+}
+
+.board-reading__h {
+  margin-top: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.board-reading__body > .board-reading__h:first-child {
+  margin-top: 0;
+}
+
+.board-reading__list {
+  padding-left: 18px;
+}
+
+.board-reading__list > li + li {
+  margin-top: 4px;
+}
+
+.board-reading__code {
+  font-family: var(--mb-board-mono);
+  font-size: 12px;
+}
+
+.board-reading__rule {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--mb-board-edge-strong);
+}
+
+/* A citation: "#3" with a 16 px thumb. Hover or focus rings its tile. */
+.board-reading__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 1px;
+  padding: 0 5px 0 2px;
+  height: 20px;
+  vertical-align: top;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 3px;
+  background: none;
+  color: var(--mb-board-ink);
+  font-family: var(--mb-board-mono);
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.board-reading__chip:hover {
+  border-color: var(--mb-board-ink);
+}
+
+.board-reading__chip-thumb {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  object-fit: cover;
+  background: var(--mb-board-edge-strong);
+}
+
+/* Its tile is selected (the other way, GM section 3): the selection's ink. */
+.board-reading__chip--selected {
+  border-color: var(--mb-board-select);
+  box-shadow: 0 0 0 1px var(--mb-board-select);
+}
+
+/* Removed from the board: dimmed, and not a link. */
+.board-reading__chip--removed {
+  padding: 0 5px;
+  opacity: 0.45;
+  cursor: default;
+}

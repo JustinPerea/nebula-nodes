@@ -29,7 +29,8 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   if (kind === 'commons' && !ui.commonsEnabled) {
     throw writtenLine('Turn on the Commons in Settings to review this proposal.');
   }
-  requestReview({ kind, targetId });
+  const proposalId = typeof op.proposalId === 'string' ? op.proposalId : undefined;
+  requestReview({ kind, targetId, proposalId });
   if (kind === 'project') {
     await useProjectStore.getState().goHome();
     return;
