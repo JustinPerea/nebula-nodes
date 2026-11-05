@@ -2,6 +2,7 @@ import { getBezierPath, Position, type Node, type useStoreApi } from '@xyflow/re
 import type { NodeData } from '../types';
 import { chainPoint, resolveAnchor, type AnchorLookup, type Point } from './agentCursorMotion';
 import { area, intersect, type AnchorResolver, type Box, type Resolution } from './agentAnchorResolve';
+import type { CursorLayer } from './agentCursorLayerOf';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
@@ -33,6 +34,8 @@ export interface CursorNodeInfo {
 export type CursorLabels = ReadonlyMap<string, { data?: { label?: unknown } } | undefined>;
 
 export interface CursorSpace {
+  /** Which layer this space is (the hand-off writes and reads by it). */
+  readonly layer: CursorLayer;
   /** The space's zoom: screen px per unit. undefined until the view exists. */
   zoom(): number | undefined;
   /** The element whose box is the visible surface (its rect is cached by the
@@ -51,6 +54,9 @@ export interface CursorSpace {
   /** A client-pixel point (inside `box`, the pane's rect) in this space, or
    *  null while there is no view. */
   fromClient(client: Point, box: DOMRect): Point | null;
+  /** The inverse: a point in this space as client px, at the view as it is
+   *  now (a zoom in progress included), or null while there is no view. */
+  toClient(point: Point, box: DOMRect): Point | null;
   /** `p` moved to whole device pixels on screen, in this space. */
   snap(p: Point, box: DOMRect, dpr: number): Point;
   /** The anchor resolved to the same element as the last frame, so a move of
@@ -58,6 +64,10 @@ export interface CursorSpace {
    *  to: a resting cursor rides it. Absent on a surface with no such moves
    *  (the canvas has the person's drags instead: `nodeInfo`). */
   carried?(anchor: AgentCursorAnchor): boolean;
+  /** Where the item is, in client px, when the cursor is parked at the edge
+   *  of its panel because the item is scrolled or panned out of view (the
+   *  chevron points there); null otherwise. Absent on a surface with none. */
+  edgeToward?(anchor: AgentCursorAnchor): Point | null;
   /** The drag wire's path from a port to the free end; absent on a surface
    *  with no wires. */
   wire?(from: Point, to: Point): string;
@@ -69,6 +79,7 @@ type FlowStoreApi = ReturnType<typeof useStoreApi<Node<NodeData>>>;
 export function canvasSpace(store: FlowStoreApi): CursorSpace {
   const lookup = () => store.getState().nodeLookup as unknown as AnchorLookup;
   return {
+    layer: 'canvas',
     zoom: () => store.getState().transform?.[2],
     pane: () => store.getState().domNode ?? null,
     viewKey: () => store.getState().transform,
@@ -87,6 +98,12 @@ export function canvasSpace(store: FlowStoreApi): CursorSpace {
       if (!transform) return null;
       const [tx, ty, scale] = transform;
       return { x: (client.x - box.left - tx) / scale, y: (client.y - box.top - ty) / scale };
+    },
+    toClient: (point, box) => {
+      const transform = store.getState().transform;
+      if (!transform) return null;
+      const [tx, ty, scale] = transform;
+      return { x: box.left + tx + point.x * scale, y: box.top + ty + point.y * scale };
     },
     snap: (p, box, dpr) => {
       const transform = store.getState().transform;
@@ -228,6 +245,7 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
     a !== undefined && a.kind === b.kind && 'element' in a && 'element' in b && a.element === b.element;
 
   return {
+    layer: 'screen',
     zoom: () => 1,
     pane,
     viewKey: () => 0,
@@ -252,9 +270,14 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
     // The same read as this frame's resolve: a cursor's chain is its own.
     chainPoint: (anchor) => last.get(anchorKey(anchor))?.point ?? resolutionPoint(locate(anchor)),
     carried: (anchor) => last.get(anchorKey(anchor))?.same === true,
+    edgeToward: (anchor) => {
+      const resolution = last.get(anchorKey(anchor))?.resolution;
+      return resolution?.kind === 'edge' ? resolution.toward : null;
+    },
     nodeInfo: () => undefined,
     labels: () => new Map(),
     fromClient: (client) => client,
+    toClient: (point) => point,
     snap: (p, _box, dpr) => ({ x: Math.round(p.x * dpr) / dpr, y: Math.round(p.y * dpr) / dpr }),
     refresh: notify,
     resolution: (anchor) => last.get(anchorKey(anchor))?.resolution,

@@ -5,6 +5,7 @@ import type { Box, ResolverEnv } from '../src/lib/agentAnchorResolve';
 import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { useBoardCanvasStore } from '../src/store/boardCanvasStore';
+import { AGENT_SAY_FADE_MS } from '../src/store/agentPresenceStore';
 
 /**
  * Phase 3 slice 5: the screen layer (components/agent-cursor/AgentScreenLayer.tsx)
@@ -299,6 +300,48 @@ describe('a resting cursor rides its item; a new place is a flight', () => {
   });
 });
 
+describe('a panel unmounting mid-flight re-plans: no jump, no fade (slice 6)', () => {
+  it('dock closes under a flight to a row: the chain runs row, tab, rail and it flies on to the rail', () => {
+    const tile = put('anchor', 'moodboard:b1/i1', { left: 900, top: 300, width: 160, height: 120 });
+    const row = put('launcher', 'moodboard:b1', { left: 900, top: 100, width: 200, height: 40 });
+    const tab = put('launcher', 'moodboard', { left: 880, top: 60, width: 80, height: 28 });
+    const rail = put('launcher', 'moodboard', { left: 8, top: 400, width: 40, height: 40 });
+    rail.setAttribute('data-rail-item', 'assets');
+    renderLayer();
+    send(event());
+    step(5);
+    const tips: { x: number; y: number }[] = [tipOf(cursors()[0])!];
+    const opacities: number[] = [Number(cursors()[0].style.opacity)];
+    // The dock closes: its tile, row and tab go in one frame.
+    for (const el of [tile, row, tab]) el.remove();
+    for (let i = 0; i < 120; i += 1) {
+      step(1);
+      tips.push(tipOf(cursors()[0])!);
+      opacities.push(Number(cursors()[0].style.opacity));
+    }
+    // It landed beside the rail's button.
+    expect(tips[tips.length - 1]).toEqual({ x: 8 + 40 + 6, y: 420 });
+    // No jump: no frame stepped further than a flight of this length does (about 900 px over half a second).
+    const steps = tips.slice(1).map((tip, i) => Math.hypot(tip.x - tips[i].x, tip.y - tips[i].y));
+    expect(Math.max(...steps)).toBeLessThan(60);
+    // No fade: the opacity never fell back.
+    expect(Math.min(...opacities.slice(1))).toBeGreaterThanOrEqual(opacities[0] - 0.01);
+  });
+
+  it('a dock that closes on a resting cursor sends it on to the rail', async () => {
+    const tile = put('anchor', 'moodboard:b1/i1', TILE);
+    const rail = put('launcher', 'moodboard', { left: 8, top: 400, width: 40, height: 40 });
+    rail.setAttribute('data-rail-item', 'assets');
+    renderLayer();
+    send(event());
+    flush();
+    tile.remove();
+    await dom();
+    flush();
+    expect(tipOf(cursors()[0])).toEqual({ x: 54, y: 420 });
+  });
+});
+
 describe('several agents in one panel (design section 4 holds)', () => {
   it('show their names at two, and the second lands in a column under the first', () => {
     put('anchor', 'moodboard:b1/i1', TILE);
@@ -326,6 +369,54 @@ describe('several agents in one panel (design section 4 holds)', () => {
     send(event({ ...session('b', 2), target: { surface: 'moodboard', itemId: 'b1/i2' } }));
     flush();
     expect(cursors().map((el) => tipOf(el))).toEqual([aim(TILE), aim(other)]);
+  });
+});
+
+describe('type always shows a caret on the screen layer (GM, 2026-11-05)', () => {
+  // The Studio has no field caret in this PR: type shows one on the say pill's end while it
+  // shows, and beside the tip otherwise, as the shared field does for any non-node target.
+  const sayCaret = () => document.querySelector('.agent-cursor__say .agent-cursor__say-caret');
+  const tipCaret = () => document.querySelector('.agent-cursor__tip-caret');
+
+  it('ends the say pill while the say shows, with nothing doubled on the tip', () => {
+    put('anchor', 'moodboard:b1:direction', TILE);
+    renderLayer();
+    send(event({ action: 'type', target: { surface: 'moodboard', itemId: 'b1', part: 'direction' }, say: 'Writing the direction' }));
+    flush();
+    expect(cursors()[0].dataset.expr).toBe('type');
+    expect(sayCaret()).not.toBeNull();
+    expect(tipCaret()).toBeNull();
+  });
+
+  it('moves onto the cursor, beside the tip, once the say\'s hold ends', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    try {
+      put('anchor', 'moodboard:b1/i1', TILE);
+      renderLayer();
+      send(event({ action: 'type', say: 'Writing a note' }));
+      flush();
+      expect(sayCaret()).not.toBeNull();
+      expect(tipCaret()).toBeNull();
+      act(() => { vi.advanceTimersByTime(3000 + AGENT_SAY_FADE_MS + 100); });
+      expect(document.querySelector('.agent-cursor__say')).toBeNull();
+      expect(cursors()[0].dataset.expr).toBe('type');
+      expect(tipCaret()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a count cursor that is typing has no say pill, so the caret sits beside its tip', () => {
+    put('anchor', 'moodboard:b1/i1', TILE);
+    renderLayer();
+    for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
+      send(event({ ...session(key, i + 1), action: 'type', say: 'Writing' }));
+      flush();
+    }
+    const counting = document.querySelector<HTMLElement>('.agent-screen-layer .agent-cursor[data-count]')!;
+    expect(counting).not.toBeNull();
+    expect(counting.querySelector('.agent-cursor__say')).toBeNull();
+    expect(counting.querySelector('.agent-cursor__tip-caret')).not.toBeNull();
   });
 });
 

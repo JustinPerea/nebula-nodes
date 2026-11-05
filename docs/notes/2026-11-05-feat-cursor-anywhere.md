@@ -11,6 +11,8 @@ Branch from main dbc53287. Plan and GM rulings are in the coordinator's scratchp
 | 3 protocol (frontend: types, `isAnchor`, says) | 501,168 | 156,792 | 60.29 kB / 21.11 kB |
 | 4 anchors, attributes, resolver, `layerOf` | 501,664 | 156,994 | 60.54 kB / 21.22 kB |
 | 5 screen layer | 502,046 | 157,145 | shared field 65.87 kB, canvas layer 0.75 kB, screen layer 4.24 kB (js raw) |
+| 6 hand-off | 502,046 | 157,152 | shared field 67.39 kB, canvas layer 0.76 kB, screen layer 4.24 kB |
+| 7 edge park chevron | 502,046 | 157,160 | shared field 68.42 kB, canvas layer 0.76 kB, screen layer 4.24 kB |
 
 Slice 2 adds 0 B to the entry (limit 300 B); `agentCursorSpace.ts` is in `DEFERRED_MODULES`, so it rides the cursor chunk (+0.39 kB raw). `entrySplit` passes.
 
@@ -89,3 +91,30 @@ GM - Design's ruling on #233 wording, built in the shared helpers so the Agent l
 - No board line has a separate `log` (the Agent log shows the say), so there is no log variant to give a period; says have none.
 - Not touched: the r90 Studio notices (copy PR), edit refusals' straight apostrophes (other copy), `test_mcp_channel.py`'s journal fixtures (inputs, not produced).
 - Mutations: `board_where` returning "board “Dusk”" fails 18 tests; a "; " joiner fails `test_describe_change_is_the_journal_summary...` and the `[fields and send notes]` table row.
+
+## Slice 3c: the names rule for added and removed images (GM, after 3b)
+
+`MAX_NAMED_IMAGES = 3` in `moodboard_edits.py`: add and remove name up to 3 images ("images 1 and 2", "images 4, 5 and 6"), from 4 a count ("Added 4 images to ..."). "Made “Dusk” with 3 images" keeps `image_count_words`. `SENTENCE_LABELS["sendNotes"]` is the Studio's "Send notes to generators". Table rows: add two / three / four, remove two / four; contract 07 quotes the new lines. Mutation: `MAX_NAMED_IMAGES = 0` fails 8 tests.
+
+## Slice 6: the hand-off
+
+- `lib/agentCursorHandoff.ts`: `CursorHandoff` (`write`, `take`, `bump`), the tab's `cursorHandoff`. Entries are client px, px/s, opacity, lean, dated, stamped with `screenEpoch`. `take` gives an entry only to the other layer, at most 100 ms old, from this epoch, and consumes it.
+- `CursorSpace` gains `layer` and `toClient` (the inverse of `fromClient`); the view writes the registry in `apply()` (every drawn frame) and in a layout-effect cleanup as its view goes (a resting cursor has no recent frame; layout, not passive, so it is written before the receiving layer's first frame).
+- The receiving view, on first sighting, takes the entry and builds its motion from it (`handedOff`): position through `space.fromClient` at the live viewport, velocity / zoom, opacity, lean; then `planMove` as for any flight, which continues along the carried velocity. Its name doesn't flash again (`firstSightAt` set in the past). Reduced motion never takes it: the existing snap.
+- No exit on the layer it left: `AgentCursorSurface` takes `everyone` (the whole store) and a cursor still in it but no longer in `agents` was handed over, not removed. Both layers pass it.
+- `screenEpoch`: `cursorHandoff.epoch`, bumped by zustand subscriptions on `uiStore.viewMode` and `projectStore.screen` (they fire before React renders). The view's final write is stamped with the epoch of its last drawn frame, not the current one: the first test caught the layer's own unmount write restamping a pre-switch point with the new epoch. Consequence, accepted: a screen-layer cursor that rested through two screen switches (canvas, Studio, canvas) and is then moved to the canvas makes an entrance rather than a hand-off.
+- Panel unmounting mid-flight needed no new code: the screen space resolves every frame in flight and the resolver re-queries a disconnected element, so the chain runs row, tab, rail and the flight re-plans from where it is. Now tested (no frame step over 60 px, opacity never falls).
+- Tests: `tests/agentCursorHandoff.test.tsx` (both layers in one tree: canvas to panel and back start at the registry point, one cursor drawn, no exit, no frame jump, a flight in progress keeps its heading and speed, a zoom between the last frame and the hand-off, epoch bump gives an entrance, reduced motion snaps, registry freshness and epoch units) and two in `agentScreenLayer.test.tsx`. Mutations, both caught: `handedOff` ignores the registry (5 fail), no epoch bump (2 fail).
+
+## Slice 7: the edge park and chevron
+
+- The clamp was built in slice 4 (`clampToClip`) and flies like an exact item since slice 5. New: `lib/agentCursorPark.ts` (`parkChevron`, `arrowExitPx`) and the chevron, an inline SVG child of `.agent-cursor` rendered only while `space.edgeToward(anchor)` is set (React state toggles on park or unpark only). Its angle and place are written in `apply()` from the tip as drawn, toward the item, so it turns as the cursor glides. It sits 4 px clear of the arrow's box: at once for an item above or left, past the tail for one below or right.
+- CSS in `agentCursorAnywhere.css` (not agentCursor.css): 6 px, stroke in `--agent-color`, `pointer-events: none`, the soft spring in, none under reduced motion. The golden DOM is untouched (no element unless parked).
+- Gliding in: edge to anchor on the same element is a change of resolution kind, so `carried` is false and it is a flight from the edge, as asked; while still out of view the clamp point slides along the edge and the cursor rides it at 0 px.
+- Tests: `tests/agentEdgePark.test.tsx` (clamp 12 px inside the bottom and top of a List clip, the Board's left edge, the window as a clip, stick while scrolling, chevron angle up and down, only while parked, glide in, reduced motion, no scroll call). Mutation: clamp removed fails 11 tests across it and `agentAnchorResolve.test.ts`.
+- **Flag: the Board view culls.** `BoardCanvas` sets `onlyRenderVisibleElements`, so a card panned fully out of the pane has no DOM element and no anchor: the chain falls to the board's launcher, not an edge park. Partly visible cards work. Making "panned away" an edge park needs the card's position from the Studio's store plus the viewport (not DOM), or the anchored card kept rendered; not done here.
+- The ratchet `agentCursorNoOpen.test.ts` now also scans `agentCursorHandoff.ts` and `agentCursorPark.ts`.
+
+## The type caret on the screen layer (GM, 2026-11-05)
+
+The shared field already draws `sayCaret` / `tipCaret` for any non-node target; no code change. Screen-layer tests pin: a `type` cursor on a Studio anchor shows `.agent-cursor__say-caret` while its say shows, `.agent-cursor__tip-caret` after the hold ends, and a count cursor has the tip caret. Mutation: `sayCaret` false for a surface target fails all three. GM also confirmed the outlines as built (2 rings, "+N" on the outermost counts the agents without a ring).

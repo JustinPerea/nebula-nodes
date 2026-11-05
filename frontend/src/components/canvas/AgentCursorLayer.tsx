@@ -54,6 +54,7 @@ export function AgentCursorLayer() {
   return (
     <AgentCursorSurface
       agents={agents}
+      everyone={everyone}
       space={space}
       zoom={zoom}
       inLayer={(layer) => <ViewportPortal>{layer}</ViewportPortal>}

@@ -301,6 +301,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'lib/agentCursorSpace.ts',
   'lib/agentAnchorResolve.ts',
   'lib/agentCursorLayerOf.ts',
+  'lib/agentCursorHandoff.ts',
+  'lib/agentCursorPark.ts',
   // Its store: the normalising and the replay load with their readers; the
   // entry keeps only the socket feed (store/agentPresenceFeed.ts).
   'store/agentPresenceStore.ts',

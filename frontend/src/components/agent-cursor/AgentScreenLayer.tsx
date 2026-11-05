@@ -99,6 +99,7 @@ export function AgentScreenLayer({ canvasMounted, env }: {
     <div className="agent-screen-layer" ref={(el) => context.setPane(el)} style={cursorSpringVars()}>
       <AgentCursorSurface
         agents={agents}
+        everyone={everyone}
         space={space}
         zoom={1}
         layerClass="agent-cursor-layer agent-cursor-layer--screen"

@@ -19,6 +19,8 @@ const CHUNK = [
   'lib/agentCursorSpace.ts',
   'lib/agentCursorLayerOf.ts',
   'lib/agentCursorOutlines.ts',
+  'lib/agentCursorHandoff.ts',
+  'lib/agentCursorPark.ts',
 ];
 /** A person's press, in its own file, may pan (slice 9's edge chip). */
 const PRESS_HANDLERS: string[] = [];

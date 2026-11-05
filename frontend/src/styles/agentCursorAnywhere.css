@@ -55,6 +55,28 @@
   white-space: nowrap;
 }
 
+/* The edge park's chevron (slice 7): 6 px, in the agent colour, 4 px clear of the
+   arrow, turned toward the item that is scrolled or panned out of view. Its
+   place and angle are set from the cursor's loop (--park-x, --park-y,
+   --park-angle); it is a mark, never a control. It comes in on the soft spring. */
+.agent-cursor__park-chevron {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  overflow: visible;
+  pointer-events: none;
+  transform: translate(var(--park-x, 0px), var(--park-y, 0px)) rotate(var(--park-angle, 0rad));
+  fill: none;
+  stroke: var(--agent-color);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
 @keyframes agent-item-outline-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -62,6 +84,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-item-outline {
+    animation: none;
+  }
+
+  .agent-cursor__park-chevron {
     animation: none;
   }
 }

@@ -47,6 +47,8 @@ import {
   stepMotion,
   type CursorMotion,
 } from '../../lib/agentCursorPlanner';
+import { cursorHandoff } from '../../lib/agentCursorHandoff';
+import { parkChevron, PARK_CHEVRON_PX } from '../../lib/agentCursorPark';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
   AGENT_CURSOR_ARROW_PATH,
@@ -1153,6 +1155,13 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   const wake = useRef<() => void>(() => {});
   const updateLabel = useRef<() => void>(() => {});
   const place = useRef<() => void>(() => {});
+  const writeHandoff = useRef<(final?: boolean) => void>(() => {});
+  const handoffEpoch = useRef(cursorHandoff.epoch);
+  // Parked at the edge of its panel, its item scrolled out of view (the
+  // chevron's render only: its angle is written from the loop, never state per frame).
+  const [parked, setParked] = useState(false);
+  const parkedRef = useRef(false);
+  const parkRef = useRef<SVGSVGElement | null>(null);
   const leavingRef = useRef(leaving);
   // What put it on its spot last frame (StackSpot.sig), and the events that
   // moved the targets of the members above it: the spot moving with neither
@@ -1530,6 +1539,24 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
       return space.snap(p, box, dpr);
     };
+    // The hand-off registry (lib/agentCursorHandoff.ts): where this cursor is
+    // on screen and how fast, written each frame it is drawn and as its view
+    // goes, for the other layer to start from if a new event moves it there.
+    // `final`: the view is going. It writes under the epoch of its last drawn
+    // frame, not the current one: a resting view that goes because the screen
+    // under it did must not carry its point across the switch.
+    writeHandoff.current = (final = false) => {
+      const m = motion.current;
+      const dom = space.pane();
+      if (!m || !dom || leavingRef.current) return;
+      const z = zoomRef.current;
+      const at = space.toClient(m.pos, field.paneRect(dom));
+      if (!at) return;
+      if (!final) handoffEpoch.current = cursorHandoff.epoch;
+      cursorHandoff.write(cursor.key, {
+        layer: space.layer, at, velocity: { x: m.vel.x * z, y: m.vel.y * z }, opacity: m.opacity.x, lean: m.lean.x,
+      }, handoffEpoch.current);
+    };
     const apply = () => {
       const el = cursorRef.current;
       const m = motion.current;
@@ -1537,9 +1564,22 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const flying = m.plan !== null || m.landing !== null;
       const at = flying ? m.pos : onPixels(m.pos);
       el.style.transform = `translate(${at.x}px, ${at.y}px) scale(${1 / zoomRef.current})`;
+      writeHandoff.current();
       el.style.willChange = flying ? 'transform, opacity' : 'auto';
       el.style.opacity = String(Math.min(1, Math.max(0, m.opacity.x)));
       if (pointerRef.current) pointerRef.current.style.transform = m.lean.x === 0 ? '' : `rotate(${m.lean.x}deg)`;
+      // The edge park's chevron: toward the item from where the tip is drawn now.
+      const toward = leaving ? null : space.edgeToward?.(cursor.target) ?? null;
+      if ((toward !== null) !== parkedRef.current) {
+        parkedRef.current = toward !== null;
+        setParked(toward !== null);
+      }
+      if (toward !== null && parkRef.current) {
+        const { angle, distance } = parkChevron(m.pos, toward);
+        parkRef.current.style.setProperty('--park-angle', `${angle}rad`);
+        parkRef.current.style.setProperty('--park-x', `${AGENT_CURSOR_ARROW_TIP.x + Math.cos(angle) * distance}px`);
+        parkRef.current.style.setProperty('--park-y', `${AGENT_CURSOR_ARROW_TIP.y + Math.sin(angle) * distance}px`);
+      }
       // Set outside React so a re-render never hides a placed cursor again.
       el.dataset.placed = 'true';
       // Gliding past or under the member above it: drawn under it, so the
@@ -1680,6 +1720,18 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       frame.current = requestAnimationFrame(tick);
       field.dueAt.set(cursor.key, field.frameTime);
     };
+    // The other layer's hand-off, as this space's motion at the viewport as
+    // it is now (mid-zoom safe), or null.
+    const handedOff = (z: number): CursorMotion | null => {
+      const dom = space.pane();
+      const entry = dom ? cursorHandoff.take(cursor.key, space.layer) : null;
+      const at = entry ? space.fromClient(entry.at, field.paneRect(dom!)) : null;
+      if (!entry || !at) return null;
+      const m = createMotion(at, entry.opacity);
+      m.vel = { x: entry.velocity.x / z, y: entry.velocity.y / z };
+      m.lean = { x: entry.lean, v: 0 };
+      return m;
+    };
     const tick = (time: number, carried = false) => {
       frame.current = null;
       field.dueAt.delete(cursor.key);
@@ -1813,12 +1865,18 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       }
 
       if (!motion.current) {
-        // First sighting: in from 64 px back along the line to its first target.
+        // First sighting. Handed off from the other layer a moment ago (a new
+        // event moved it from the canvas to a panel, or back): it goes on from
+        // where that layer drew it, at its speed, opacity and lean: one cursor
+        // travelling, no jump and no fade. A reduced-motion hand-off is a snap.
+        const handed = reduced ? null : handedOff(z);
+        // Otherwise in from 64 px back along the line to its first target.
         motion.current = reduced
           ? createMotion(target, opacityTarget())
-          : createMotion(entranceStart(goal, start ? { from: start, to: target } : null, z), 0);
+          : handed ?? createMotion(entranceStart(goal, start ? { from: start, to: target } : null, z), 0);
         field.motions.set(cursor.key, motion.current);
-        firstSightAt.current = performance.now();
+        // A hand-off isn't a first sighting: its name doesn't flash again.
+        firstSightAt.current = handed ? performance.now() - AGENT_CURSOR_NAME_FIRST_SIGHT_MS : performance.now();
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
         if (!reduced) planMove(motion.current, goal, { zoom: z, pointer, others });
       } else if (planPending.current && !reduced) {
@@ -2006,6 +2064,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   // commit wakes it (forget), and a tick run after its cleanup would stamp
   // its old spot again, a ghost that pushes the next cursor there aside
   // (live, after a backend restart's empty replay).
+  useLayoutEffect(() => () => writeHandoff.current(true), []);
   useEffect(() => () => {
     wake.current = () => {};
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -2041,6 +2100,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
     zoomRef.current = zoom;
     place.current();
   }, [zoom]);
+  // The chevron just mounted: it is placed now, not on the next frame.
+  useLayoutEffect(() => {
+    if (parked) place.current();
+  }, [parked]);
 
   // The expression as drawn (§2). Under reduced motion each state is a
   // still frame (§3): no sweep, breath, press, ring or shake.
@@ -2122,6 +2185,12 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
             <circle key={`ring-${gestureKey}`} className="agent-cursor__ring agent-cursor__fx" cx={1.5} cy={1.5} r={AGENT_CURSOR_CLICK.ringFromPx} />
           )}
         </svg>
+        {parked && !collapsed && !leaving && (
+          <svg ref={parkRef} className="agent-cursor__park-chevron" width={PARK_CHEVRON_PX} height={PARK_CHEVRON_PX}
+            viewBox="0 0 6 6" aria-hidden="true">
+            <path d="M1.5 0.75 L4.25 3 L1.5 5.25" />
+          </svg>
+        )}
         {tipCaret && <span className="agent-cursor__tip-caret" data-blink={expressed.blinking ? 'true' : undefined} aria-hidden="true" />}
         {(fx === 'propose' || fx === 'wait') && (
           <span className={`agent-cursor__mark agent-cursor__mark--${fx}`} aria-hidden="true">
@@ -2180,9 +2249,13 @@ export interface CursorLandings {
  * item outlines drawn `beside` the cursors. Draws nothing while there is
  * nothing to draw.
  */
-export function AgentCursorSurface({ agents, space, zoom, layerClass = 'agent-cursor-layer', inLayer, beside }: {
+export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass = 'agent-cursor-layer', inLayer, beside }: {
   /** The cursors this surface draws (already filtered by layerOf). */
   agents: Record<string, AgentCursor>;
+  /** Every cursor in the presence store. One in it that this surface no
+   *  longer draws was handed to the other layer, not removed: it leaves with
+   *  no exit fade (the other layer carries on from where it was). */
+  everyone: Record<string, AgentCursor>;
   space: CursorSpace;
   zoom: number;
   layerClass?: string;
@@ -2216,8 +2289,10 @@ export function AgentCursorSurface({ agents, space, zoom, layerClass = 'agent-cu
   if (shown.agents !== agents) {
     const next: Record<string, AgentCursor> = {};
     const fade = !prefersReducedMotion();
-    for (const [key, cursor] of Object.entries(shown.leaving)) if (!(key in agents)) next[key] = cursor;
-    for (const [key, cursor] of Object.entries(shown.agents)) if (fade && !(key in agents)) next[key] = cursor;
+    // Handed to the other layer (still in the store): no exit.
+    const handedOver = (key: string) => key in everyone;
+    for (const [key, cursor] of Object.entries(shown.leaving)) if (!(key in agents) && !handedOver(key)) next[key] = cursor;
+    for (const [key, cursor] of Object.entries(shown.agents)) if (fade && !(key in agents) && !handedOver(key)) next[key] = cursor;
     leaving = next;
     setShown({ agents, leaving: next });
   }

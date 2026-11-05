@@ -36,6 +36,17 @@ describe('agentCursorAnywhere.css', () => {
     expect(reduced).toMatch(/\.agent-item-outline\s*\{[^}]*animation:\s*none/);
   });
 
+  it('the edge park\'s chevron is a 6 px mark in the agent colour, never a control, on the soft spring and still under reduced motion', () => {
+    const chevron = rule('.agent-cursor__park-chevron');
+    expect(chevron).toMatch(/width:\s*6px/);
+    expect(chevron).toMatch(/height:\s*6px/);
+    expect(chevron).toMatch(/stroke:\s*var\(--agent-color\)/);
+    expect(chevron).toMatch(/pointer-events:\s*none/);
+    expect(chevron).toMatch(/animation:[^;]*var\(--agent-cursor-soft\)/);
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.agent-cursor__park-chevron\s*\{[^}]*animation:\s*none/);
+  });
+
   it('draws propose dashed and type solid', () => {
     expect(rule('.agent-item-outline')).toMatch(/border:\s*1\.5px solid var\(--agent-color\)/);
     expect(rule('.agent-item-outline[data-kind="dashed"]')).toMatch(/border-style:\s*dashed/);
