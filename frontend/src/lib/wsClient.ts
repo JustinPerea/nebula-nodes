@@ -448,6 +448,10 @@ export type ExecutionEvent = (
       arranged?: { id: string; nodeIds: string[] };
       activeProjectId?: string | null;
       workspaceRevision?: string;
+      /** Grows with each sync, in the order Nebula read the graph; each
+       * socket gets them in that order. A restore's or node delete's answer
+       * names its own sync's (graphStore whenSynced; PR #205 review 8). */
+      syncSeq?: number;
       /** Someone other than the person (an agent, a script) opened or made a
        * project: the canvas follows and offers the way back. */
       projectSwitch?: ProjectSwitch;

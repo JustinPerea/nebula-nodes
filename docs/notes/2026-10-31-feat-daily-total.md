@@ -62,7 +62,7 @@ Justin decided: "Add a default daily total for everything that isn't you, shown 
 |---|---|---|
 | runs | wait: "…which has $X left." | 28 |
 | runs | wait: "…which is used up." | 60 |
-| refused: per-run limit | wait: "…and costs more than $1 per run." | 88 |
+| refused: per-run limit | wait: "…and cost more than $1 per run." | 88 |
 | refused: no list price | wait: "…and has a node with no list price." | 40 |
 | refused: session or outside cap | wait: "…which has $X left." / "…is used up." | 12 |
 
@@ -201,3 +201,34 @@ Shots wait until the springs rest (the bar, cards, cursors, the header and its l
 - **GM 7.** Two cursors on Writer: pills do not overlap (Claude Code 719,151 to 802.6,171; Codex 719,193 to 767.8,213 at 1440; no overlap at 1000). Main already stacks them; shown in `two-cursors-1440/1000`.
 - **Missed by the tests, found by pr_tests.** The daily total select was not under the person lock (#204): `presenceRound10.locks` failed until `DailyTotalRow` took the section's `lock`.
 - **Bundle.** `npm run build` budget line: 504,602 bytes raw (limit 512,000), after the merge; main alone was about 444 KB on 2026-10-31.
+
+## Round 4 (2026-11-05)
+
+GM's round 3 rulings. No merge of main: `git merge-tree` against origin/main showed no conflict.
+
+### Built (uncommitted in the worktree)
+
+- **GM 1.** One label "Waiting for your OK" for one or several (`NodeWaitSwap.tsx`); the count is in the header's description (`waitDescription` in `lib/nodeWait.ts`): "2 proposals are waiting for your OK." and, new copy, "A proposal is waiting for your OK." Width 207.52 px unchanged from idle to 1 to 2 at 1440 (170 at 1000).
+- **GM 2.** While a node's header waits, every cursor on it is drawn at the header's left end, tip over the icon (`restPoints`/`waitRestPoint` in `lib/agentCursorMotion.ts`, used in `AgentCursorLayer.tsx`); the chain point stays the header middle. A say under a wait header keeps the name's slot. Measured: arrow origin equals the icon centre; no visible cursor piece overlaps the label at 1440 and 1000 (one cursor, two cursors, long-title node), except a transient glide of an idle second cursor right after load.
+- **GM 3.** "cost more than $X per run" (backend `agent_spend.py` and the two exact-string tests).
+- **GM 6.** Cinema scene title row takes the wait (`CinemaSceneNode.tsx`, `cinema-node.css`, `node-wait.css`); model, dynamic and Video QC already had it; other kinds are utilities that never bill. `tests/nodeWaitCards.test.tsx` classifies every `CANVAS_CARDS` kind. Flag: at 200 px the scene title is cut to the glyph.
+- **Contrast.** One ink `--sr-wait-ink` (white) on the accent at 16% over opaque `#18181a`; worst accent (white) 10.85:1, Claude 13.83, Codex 13.81, lime 11.66; pixels in shots 12.0 to 15.2 (8.2 when a selection toolbar's shadow overlaps at 1440). `tests/nodeWaitContrast.test.ts` reads the CSS tokens.
+- **Dimmed canvas.** Not an app state: Puppeteer `clip` screenshots resize the viewport and restart every CSS transition (animations 9 to 20, label opacity 0.09 mid-capture), so frames were caught mid-fade. Full-viewport captures are stable. Not Show's preview.
+- **Mutants:** 14 of 14 frontend killed plus the backend "costs" mutant killed; all files restored byte for byte (hashes compared).
+- **Tests added:** `tests/nodeWaitContrast.test.ts`, `tests/nodeWaitCards.test.tsx`, `tests/agentCursorWaitRest.test.ts`; edits to `tests/nodeWaitHeader.test.tsx` and `tests/agentCursorLayer.test.tsx`.
+
+### Round 4 handoff (paused for restart)
+
+Done and verified: `tsc` rc 0; `npm run lint` rc 0; `check:ratchets` ok (frontend 193 files, 5928 tests; backend 82 files); isolated pytest on `test_daily_total.py` and `test_daily_total_round2.py` 69 passed; `person_gate.py` diff empty; all new tests pass; shots taken at 1440 and 1000 (full captures, viewed).
+
+Left:
+1. `pr_tests.sh` re-run (the last run was killed by the restart; the earlier run only failed on the ratchet now fixed by `resetDeletedSceneEditsForTests` in `nodeWaitCards.test.tsx`).
+2. `npm run build` plus the budget line (last known 504,602 bytes of 512,000 in round 3; this round adds a little).
+3. Commit message: not written to the repo. Use the subject "fix(spend): the daily total, round 4: one waiting label, the cursor beside it, one ink, the Cinema scene", a short body of the bullets above, ending with exactly:
+   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+   Claude-Session: https://claude.ai/code/session_01KQGNB346VWPzXRTrUUBJHr
+4. Shots are in /private/tmp (wiped on reboot); re-take with the harness if GM needs them (phases r4 with spend 4.99 and cinema with spend 0; use full-viewport screenshots, not `clip`).
+
+Flags for GM: below zoom about 0.48 the cursor's mark can reach the label; the header tint is now opaque (covers the top 34 px of an image preview while waiting); Cinema scene title truncates to its glyph at 200 px.
+
+No half-done edit. Servers on 8791/5791 and the gate run were stopped.

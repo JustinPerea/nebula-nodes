@@ -799,7 +799,7 @@ class DailyWait:
         if not self.over:
             return self._cannot_count()
         if self.also == ALSO_PER_RUN and self.per_run_limit is not None:
-            return f"This would pass {total} and costs more than {limit_usd(self.per_run_limit)} per run."
+            return f"This would pass {total} and cost more than {limit_usd(self.per_run_limit)} per run."
         if self.also == ALSO_MODEL_PER_RUN and self.per_run_limit is not None and self.model:
             return (f"This would pass {total} and cost more than the {limit_usd(self.per_run_limit)} per-run "
                     f"limit for {quoted(self.model)}.")

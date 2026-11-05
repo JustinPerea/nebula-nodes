@@ -32,7 +32,7 @@ CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 # simply preselected, no option says "(default)").
 BAR_LEFT = "This would pass the $5 daily total, which has $0.20 left."
 BAR_USED_UP = "This would pass the $5 daily total, which is used up."
-BAR_AND_PER_RUN = "This would pass the $5 daily total and costs more than $1 per run."
+BAR_AND_PER_RUN = "This would pass the $5 daily total and cost more than $1 per run."
 UPDATE = "Claude Code wants to run “Writer” and “Editor”. " + BAR_LEFT
 AGENTS = ("Waiting for the person’s OK: this run (about $0.40) would pass their $5 daily total for "
           "everything that isn’t them ($4.80 used in the last 24 hours). Sent as proposal p_1234abcd. "

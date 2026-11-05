@@ -119,10 +119,19 @@ describe('the waiting state in the node card\'s header', () => {
     expect(label(other.container)).toBeNull();
   });
 
-  it('shows a count when several wait on the node', () => {
+  it('draws one label for one proposal or several: no count, so the node never changes width (GM r3 item 1)', () => {
     const { container } = card();
-    open(view('p_one', ['n1'], CLAUDE, 1), view('p_two', ['n1', 'n3'], CODEX, 2));
-    expect(label(container)!.textContent).toBe(`${WAITING_FOR_OK} · 2`);
+    open(view('p_one', ['n1'], CLAUDE, 1));
+    const one = label(container)!.textContent;
+    const swapOne = container.querySelector('.node-wait-swap')!.outerHTML.replace(/<span id="[^"]*" class="node-wait-swap__reason">.*?<\/span>/, '');
+    open(view('p_two', ['n1', 'n3'], CODEX, 2));
+    // The same text, the same markup: nothing in the header can be wider with two than with one.
+    expect(label(container)!.textContent).toBe(one);
+    expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
+    expect(label(container)!.textContent).not.toMatch(/\d|·/);
+    const swapTwo = container.querySelector('.node-wait-swap')!.outerHTML.replace(/<span id="[^"]*" class="node-wait-swap__reason">.*?<\/span>/, '');
+    const bare = (html: string) => html.replace(/ (data-[a-z-]+|style)="[^"]*"/g, '');
+    expect(bare(swapTwo)).toBe(bare(swapOne));
     // One label per node, whatever the count; the newest speaks for its colour.
     expect(container.querySelectorAll('.node-wait-swap__label')).toHaveLength(1);
     expect(header(container).style.getPropertyValue('--agent-color')).toBe(CODEX.color);
@@ -174,17 +183,17 @@ describe('the waiting state in the node card\'s header', () => {
     open(view('p_one', ['n1'], CLAUDE, 1, BAR_TWO));
     const head = header(container);
     const id = head.getAttribute('aria-describedby')!;
-    expect(document.getElementById(id)!.textContent).toBe(BAR_TWO);
+    expect(document.getElementById(id)!.textContent).toBe(`A proposal is waiting for your OK. ${BAR_TWO}`);
     expect(head.getAttribute('role')).toBe('group');
     // Visually hidden: the reason isn't drawn on the node.
     expect(rule('node-wait.css', '.node-wait-swap__reason')).toMatch(/clip-path:\s*inset\(50%\)/);
     expect(container.querySelector('.node-wait-band')).toBeNull();
     // The label itself is announced politely as the state starts.
     expect(label(container)!.getAttribute('role')).toBe('status');
-    // With two proposals the description carries both reasons.
+    // With two proposals the description carries the count (GM r3 item 1) and both reasons.
     open(view('p_two', ['n1'], CODEX, 2));
     expect(document.getElementById(header(container).getAttribute('aria-describedby')!)!.textContent)
-      .toBe(`${BAR} ${BAR_TWO}`);
+      .toBe(`2 proposals are waiting for your OK. ${BAR} ${BAR_TWO}`);
   });
 
   it('is gone when the proposal is decided: the label crossfades out and the chip comes back', () => {
@@ -212,11 +221,13 @@ describe('the waiting state in the node card\'s header', () => {
   it('stops counting a proposal that is closing', () => {
     const { container } = card();
     open(view('p_one', ['n1'], CLAUDE, 1), view('p_two', ['n1'], CODEX, 2));
-    expect(label(container)!.textContent).toBe(`${WAITING_FOR_OK} · 2`);
+    const describe = () => document.getElementById(header(container).getAttribute('aria-describedby')!)!.textContent;
+    expect(describe()).toMatch(/^2 proposals are waiting for your OK\./);
     act(() => useCanvasProposalsStore.setState((state) => ({
       proposals: { ...state.proposals, p_two: { ...state.proposals.p_two, closing: 'rejected' } },
     })));
     expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
+    expect(describe()).toMatch(/^A proposal is waiting for your OK\./);
     expect(header(container).style.getPropertyValue('--agent-color')).toBe(CLAUDE.color);
   });
 
@@ -227,7 +238,7 @@ describe('the waiting state in the node card\'s header', () => {
     expect(text).toMatch(/transition:\s*opacity var\(--spring-soft-ms\) var\(--spring-soft\)/);
     const on = rule('node-wait.css', ".node-wait-swap[data-on='true'] .node-wait-swap__label");
     expect(on).toMatch(/transition:\s*opacity var\(--spring-pop-ms\) var\(--spring-pop\)/);
-    expect(rule('node-wait.css', "body.app-slava-restraint .model-node__header")).toMatch(
+    expect(rule('node-wait.css', "body.app-slava-restraint .cinema-scene-node__title")).toMatch(
       /transition:\s*background-color var\(--spring-soft-ms/);
     expect(css('node-wait.css')).not.toMatch(/ease-in-out|ease-out|ease-in|\bease\b/);
   });

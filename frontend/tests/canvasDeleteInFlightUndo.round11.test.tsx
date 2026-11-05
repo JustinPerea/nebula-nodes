@@ -12,9 +12,9 @@ import type { NodeData } from '../src/types';
 // come back, here and on the backend (a restore after the delete), with no
 // extra step and no stray redo. Every delete path, and every other step taken
 // before a backend request (beginUndoStep), waits the same way.
-// Round 18 (GM option (c)): a delete now leaves the canvas at once, and a
-// Cmd+Z while it is on its way is dropped with DROPPED_UNDO_TEXT (not held);
-// once it lands, a new Cmd+Z undoes it. Other steps still hold a press.
+// Round 18 (GM option (c)): a delete now leaves the canvas at once. Its
+// Cmd+Z was then dropped with DROPPED_UNDO_TEXT; GM r39 item 3 brings the
+// hold back: the press waits silently and restores once the delete answers.
 
 type Answer = { status: number; body: unknown };
 const net = vi.hoisted(() => ({
@@ -59,7 +59,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { useGraphStore } from '../src/store/graphStore';
+import { forgetHeldHistoryForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -112,7 +112,16 @@ describe('Cmd+Z while a delete is on its way', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     useUIStore.setState({ ...initialUI, viewMode: 'canvas' }, true);
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Review 1 of PR #205 (NIT-2): each test on its own. A test that timed
+    // out left its Delete on its way and its press held, and every later
+    // test read them; answer what is still on its way, then forget the rest.
+    for (const [id, resolve] of [...net.held]) {
+      net.held.delete(id);
+      await act(async () => { resolve({ status: 200, body: { status: 'deleted', id } }); });
+    }
+    await settle();
+    forgetHeldHistoryForTests();
     cleanup();
     document.body.innerHTML = '';
     vi.unstubAllGlobals();
@@ -138,16 +147,12 @@ describe('Cmd+Z while a delete is on its way', () => {
     // Round 18 (GM option (c)): the node and its wire leave the canvas the moment Delete is pressed.
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     await undo();
-    // Round 18 (GM option (c)): still on its way: the press says nothing was undone and changes nothing.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: still on its way, the press waits with nothing said and nothing changed.
+    expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
-    await answer('n2');
-    // Round 18 (GM option (c)): the dropped press is never applied late; the delete's step stays.
-    expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
-    expect(stacks()).toEqual({ undo: 1, redo: 0 });
     expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
-    // Round 18 (GM option (c)): once it has landed, a new Cmd+Z brings the node and its wire back.
-    await undo();
+    await answer('n2');
+    // GM r39 item 3 / r40 item 1: once the delete answers, the held press restores it, with the usual toast.
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
     expect(useGraphStore.getState().undoNotice?.text).toBe('Restored the node.');
@@ -171,19 +176,16 @@ describe('Cmd+Z while a delete is on its way', () => {
     sync([textNode('n1')], []);
     await settle();
     await undo();
-    // Round 18 (GM option (c)): the press while the delete is on its way is dropped at once, not held.
-    expect(dropped()).toBe(true);
-    await answer('n2');
-    expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
+    // GM r39 item 3: held, silently.
+    expect(dropped()).toBe(false);
     expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
-    // Round 18 (GM option (c)): once it has landed, a new Cmd+Z undoes it.
-    await undo();
+    await answer('n2');
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
     expect(sent('POST', '/api/graph/restore')).toHaveLength(1);
   });
 
-  it('a refused delete: the undo aimed at it undoes nothing else (the step before stays)', async () => {
+  it('a refused delete: the undo aimed at it undoes nothing else (the step before stays), and says nothing of its own', async () => {
     setGraph([textNode('n1'), textNode('n2', true)], [wire('n1', 'n2')]);
     renderCanvas();
     // An earlier step of the person's: an edit.
@@ -191,14 +193,16 @@ describe('Cmd+Z while a delete is on its way', () => {
     expect(stacks().undo).toBe(1);
     await pressDelete();
     await undo();
-    // Round 18 (GM option (c)): the press while the delete is on its way is dropped at once.
-    expect(dropped()).toBe(true);
+    expect(dropped()).toBe(false);
     await answer('n2', 409);
     // Round 18 (GM option (c)): the failed delete puts the node back with its wire.
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('Edited');
     expect(stacks()).toEqual({ undo: 1, redo: 0 });
     expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
+    // GM r39 item 3: the held press goes silently beside the delete's own failure line.
+    expect(dropped()).toBe(false);
+    expect(JSON.stringify([useGraphStore.getState().undoNotice, useGraphStore.getState().messageNotice])).not.toMatch(/skipped|Nothing was undone/);
   });
 
   it('a refused delete with a separate selected wire: the wire comes back (the step held it)', async () => {
@@ -208,16 +212,11 @@ describe('Cmd+Z while a delete is on its way', () => {
     // Round 18 (GM option (c)): n2 and its wire leave at once, with the selected wire.
     expect(graph()).toEqual({ nodes: ['n1', 'n3', 'n4'], edges: [] });
     await undo();
-    // Round 18 (GM option (c)): the press while the delete is on its way is dropped at once and changes nothing.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: held, silently, nothing changed yet.
+    expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1', 'n3', 'n4'], edges: [] });
     await answer('n2', 409);
-    // Round 18 (GM option (c)): the refused delete puts n2 back with its wire; the wire's removal did happen, so the step stays for it.
-    expect(graph()).toEqual({ nodes: ['n1', 'n2', 'n3', 'n4'], edges: ['e-n1-n2'] });
-    expect(stacks()).toEqual({ undo: 1, redo: 0 });
-    expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
-    // Round 18 (GM option (c)): a new Cmd+Z brings the wire back (the step held it) and takes nothing off.
-    await undo();
+    // The refused delete puts n2 back with its wire; the held press then undoes the step's wire removal.
     expect(graph()).toEqual({ nodes: ['n1', 'n2', 'n3', 'n4'], edges: ['e-n1-n2', 'e-n3-n4'] });
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
   });
@@ -229,20 +228,11 @@ describe('Cmd+Z while a delete is on its way', () => {
     await pressDelete();
     await undo();
     await undo();
-    // Round 18 (GM option (c)): both presses target the delete still on its way: dropped at once, nothing changed.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: both held, nothing said, nothing changed yet.
+    expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('Edited');
     await answer('n2');
-    // Round 18 (GM option (c)): neither press is applied late.
-    expect(stacks()).toEqual({ undo: 2, redo: 0 });
-    expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
-    // Round 18 (GM option (c)): once it has landed, two new presses undo the delete, then the step before it, in order.
-    net.holdDeletes = false;
-    await undo();
-    expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
-    expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('Edited');
-    await undo();
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('n1');
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
@@ -258,15 +248,11 @@ describe('Cmd+Z while a delete is on its way', () => {
     act(() => { remove(); });
     await settle();
     await undo();
-    // Round 18 (GM option (c)): the press while the delete is on its way is dropped at once and changes nothing.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: held, silently.
+    expect(dropped()).toBe(false);
+    expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
     // A generation's delete takes the text input feeding only it, too (n1).
     for (const id of [...net.held.keys()]) await answer(id);
-    // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z undoes the delete.
-    expect(stacks()).toEqual({ undo: 1, redo: 0 });
-    expect(sent('POST', '/api/graph/restore')).toHaveLength(0);
-    net.holdDeletes = false;
-    await undo();
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
     expect(sent('POST', '/api/graph/restore')).toHaveLength(1);

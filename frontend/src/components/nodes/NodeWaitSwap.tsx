@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { WAITING_FOR_OK } from '../../lib/canvasProposals';
-import { waitKey, waitReasonId, type NodeWait } from '../../lib/nodeWait';
+import { waitDescription, waitKey, waitReasonId, type NodeWait } from '../../lib/nodeWait';
 import { springCssVars, springLinear, SPRING_SOFT } from '../../lib/springs';
 import '../../styles/node-wait.css';
 
@@ -11,15 +11,16 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * The header's right side. While a run waits, "Waiting for your OK" (or
- * "Waiting for your OK · 2") replaces what is there (the model chip), in
- * the same box: both sit in one grid cell and crossfade on the opacity
+ * The header's right side. While a run waits, "Waiting for your OK" (one
+ * label for one proposal or several: the count is in the description, GM
+ * - Design r3 item 1) replaces what is there (the model chip), in the same
+ * box: both sit in one grid cell and crossfade on the opacity
  * spring (SOFT), so the node never changes size. The title truncates before
  * the label does. Under reduced motion it changes at once.
  *
- * The reason line is not drawn here: the bar and the Updates card show it.
- * It is the header's description for assistive tech (a visually hidden line
- * named by the header's aria-describedby).
+ * The count and the reason lines are not drawn here: the bar ("1 of 2") and
+ * the Updates card show them. They are the header's description for
+ * assistive tech (a visually hidden line named by its aria-describedby).
  */
 export function NodeWaitSwap({ nodeId, wait, children }: { nodeId: string; wait: NodeWait | null; children?: ReactNode }) {
   // The last wait, kept while the label fades out; `on` drives the opacity.
@@ -57,9 +58,9 @@ export function NodeWaitSwap({ nodeId, wait, children }: { nodeId: string; wait:
       {shown && (
         <>
           <span className="node-wait-swap__label" role="status">
-            {shown.count > 1 ? `${WAITING_FOR_OK} · ${shown.count}` : WAITING_FOR_OK}
+            {WAITING_FOR_OK}
           </span>
-          <span id={waitReasonId(nodeId)} className="node-wait-swap__reason">{shown.reason}</span>
+          <span id={waitReasonId(nodeId)} className="node-wait-swap__reason">{waitDescription(shown)}</span>
         </>
       )}
     </span>

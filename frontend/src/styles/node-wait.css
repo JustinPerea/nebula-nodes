@@ -2,19 +2,33 @@
    lives in the node card's header, so a node never changes size and never
    covers a neighbour (components/nodes/NodeWaitSwap.tsx).
 
-   - The header row takes the proposal's accent (--agent-color) as a tint.
-   - On the right, "Waiting for your OK" (or "... · 2") replaces the model
-     chip: both sit in one grid cell and crossfade on the opacity spring
+   - The header row takes the proposal's accent (--agent-color) as a tint, on
+     an opaque base (--sr-wait-base), so what the label sits on is known
+     whatever the card draws behind its header (an image preview, a text
+     surface) and the label's ink is one colour in every state (GM r3
+     defect: 4.5:1 or better; tests/nodeWaitContrast.test.ts resolves these
+     tokens and asserts it for the brightest accent there can be).
+   - On the right, "Waiting for your OK" (one label for one proposal or
+     several; the count is in the description) replaces the model chip: both sit in one grid cell and crossfade on the opacity spring
      (SOFT, lib/springs.ts; never stock easing; at once under reduced motion).
    - The title truncates first; the label never does.
    - The reason is not drawn: the bar and the Updates card show it. The header
      has it as its accessible description (.node-wait-swap__reason, visually
      hidden). */
-body.app-slava-restraint .model-node__header[data-waiting='true'] {
-  background-color: color-mix(in srgb, var(--agent-color) 16%, transparent);
+body.app-slava-restraint {
+  --sr-wait-base: #18181a;
+  --sr-wait-tint: 16%;
+  --sr-wait-ink: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .model-node__header {
+body.app-slava-restraint .model-node__card .model-node__header[data-waiting='true'],
+body.app-slava-restraint .cinema-scene-node .cinema-scene-node__title[data-waiting='true'] {
+  background-color: color-mix(in srgb, var(--agent-color) var(--sr-wait-tint), var(--sr-wait-base));
+  background-image: none;
+}
+
+body.app-slava-restraint .model-node__header,
+body.app-slava-restraint .cinema-scene-node__title {
   transition: background-color var(--spring-soft-ms, 0ms) var(--spring-soft, linear);
 }
 
@@ -57,7 +71,7 @@ body.app-slava-restraint .model-node__header {
 }
 
 body.app-slava-restraint .node-wait-swap__label {
-  color: var(--sr-ink);
+  color: var(--sr-wait-ink);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-label);
   font-weight: 600;
@@ -75,6 +89,7 @@ body.app-slava-restraint .node-wait-swap__label {
 
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .model-node__header,
+  body.app-slava-restraint .cinema-scene-node__title,
   .node-wait-swap__rest,
   .node-wait-swap__label,
   .node-wait-swap[data-on='true'] .node-wait-swap__label {

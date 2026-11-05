@@ -741,6 +741,12 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
+/* A refusal on the click, not a fault (GM PR #205 r16 item 2): the bar's
+ * own line ink. */
+.proposal-bar__error--neutral {
+  color: rgb(255 255 255 / 0.6);
+}
+
 /* 6. The footer: a hairline on top, always at the card's foot. Show on the
    left; Reject, then Accept, on the right. */
 .proposal-bar__footer {

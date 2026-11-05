@@ -65,7 +65,7 @@ def test_a_models_own_per_run_limit_names_the_model():
         "This would pass the $5 daily total and cost more than the $0.50 per-run limit for “FLUX.2 [pro]”.")
     # The general per-run limit keeps GM's round-1 line.
     general = _decide([node("n1", "paid")], settings={"runCostConfirmUsd": 1})
-    assert general.wait.bar_line() == "This would pass the $5 daily total and costs more than $1 per run."
+    assert general.wait.bar_line() == "This would pass the $5 daily total and cost more than $1 per run."
 
 
 @pytest.mark.parametrize("key, settings, extra, line", [

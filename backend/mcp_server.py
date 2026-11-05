@@ -888,6 +888,10 @@ def propose_change(
     note stays as you wrote it. `changeCount`
     is the number of changes the person sees on the card and the Update:
     each new node, connection, changed node and removed connection.
+    A proposal that would leave the canvas past the limits the person's Save
+    checks, or the open project over its 16 MiB save limit, is refused as the
+    same edit would be (400 nested too deeply; 413 too many values, or over
+    the size limit with `limit: "size"` and `sizeBytes`; nothing changed).
     Then call get_proposal(id, wait_seconds=...).
     """
     body: dict[str, Any] = {"note": note}
@@ -922,6 +926,13 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     or the canvas changed; `reason` says why). When the canvas was cleared or
     replaced after you proposed, the person's Accept is refused (they read
     "Ask the agent for a new one."): read the canvas again and propose anew.
+    When accepting it would leave the canvas past the limits the person's
+    Save checks, or the open project over its save limit (the canvas
+    changed since you proposed), the Accept is refused and the proposal
+    stays open: a proposal.accept_refused event gives the `limit`
+    ({"kind": "depth", "max": 64}, {"kind": "values", "max": 1000000} or
+    {"kind": "size", "max": 16777216}, in bytes). Withdraw it and propose
+    something smaller.
     An invalidated one can be open
     again: when the person (or you) undoes the delete and it still fits, it
     reopens with the same id and expiry (event proposal.reopened). When accepted, `idMap` maps
@@ -1425,7 +1436,7 @@ def upload_file(path: str, position: dict[str, float] | None = None,
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False), waits=True)
 def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Open a graph file (`nebula load <file>`) as the person's Load graph
+    """Open a graph file (`nebula load <file>`) as the person's Load canvas
     does: a .nebula or .json, or a .nebula.zip bundle, whose files Nebula
     restores into its output folder, with the graph's links pointing at them.
 

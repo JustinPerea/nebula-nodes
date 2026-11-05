@@ -12,6 +12,7 @@
   {"method": "GET", "path": "/api/canvas/channel", "handler": "main.read_channel_listeners"},
   {"method": "POST", "path": "/api/canvas/pins", "handler": "main.create_canvas_pin"},
   {"method": "DELETE", "path": "/api/canvas/pins/{pin_id}", "handler": "main.delete_canvas_pin"},
+  {"method": "POST", "path": "/api/canvas/proposals", "handler": "main.create_canvas_proposal"},
   {"method": "POST", "path": "/api/canvas/proposals/{proposal_id}/accept", "handler": "main.accept_canvas_proposal"},
   {"method": "POST", "path": "/api/canvas/proposals/{proposal_id}/reject", "handler": "main.reject_canvas_proposal"},
   {"method": "POST", "path": "/api/canvas/questions/{set_id}/answer", "handler": "main.answer_agent_questions"},

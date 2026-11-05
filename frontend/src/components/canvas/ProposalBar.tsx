@@ -14,7 +14,7 @@ import {
   proposalPlan,
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
-import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { isNeutralProposalLine, useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
@@ -511,7 +511,10 @@ export function ProposalBar() {
                 </div>
               )}
               {errorLeave.shown && (
-                <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
+                // A neutral line (a coded save-limit refusal) reads as a status, not an alert.
+                isNeutralProposalLine(errorLeave.shown)
+                  ? <p className="proposal-bar__error proposal-bar__error--neutral" role="status" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
+                  : <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
               )}
             </div>
           </div>

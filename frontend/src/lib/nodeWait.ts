@@ -4,7 +4,8 @@ import type { useCanvasProposalsStore } from '../store/canvasProposalsStore';
 export interface NodeWait {
   /** The proposal it speaks for: the newest of those waiting on the node. */
   proposalId: string;
-  /** How many proposals wait on the node ("Waiting for your OK · 2"). */
+  /** How many proposals wait on the node: the header's accessible description
+   * says it ("2 proposals are waiting for your OK."), never its label. */
   count: number;
   color: string;
   /** The full reason, for the header's accessible description: each waiting
@@ -38,4 +39,13 @@ export function waitKey(wait: NodeWait | null): string {
  * aria-describedby names. */
 export function waitReasonId(nodeId: string): string {
   return `node-wait-reason-${nodeId}`;
+}
+
+/** The header's accessible description (GM - Design, PR #212 round 3, item 1):
+ * the count the label no longer draws, then each waiting proposal's reason.
+ * One proposal: "A proposal is waiting for your OK." (new copy, the singular
+ * of GM's "2 proposals are waiting for your OK"). */
+export function waitDescription(wait: NodeWait): string {
+  const count = wait.count > 1 ? `${wait.count} proposals are waiting for your OK.` : 'A proposal is waiting for your OK.';
+  return wait.reason ? `${count} ${wait.reason}` : count;
 }

@@ -5878,6 +5878,57 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
     expect(document.querySelector('.agent-cursor__mark')).not.toBeNull();
   });
 
+  // GM - Design, PR #212 round 3, item 2: while the node's header shows the wait, the
+  // cursor is DRAWN at the header's left end, its tip over the node's icon, so the mark and
+  // the pill never cover the label on the right; what it counts as for its target chain stays
+  // the header's middle (the same split as a port's).
+  it('draws the cursor at the header\'s left end while the header waits, and back at the middle when it stops', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(heldRun('p1', ['n2']));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    // n2 is drawn at (900, 300), 200 wide: the icon's centre, 18 in; the header's row, 344.
+    expect(tipOf(cursors()[0])).toEqual({ x: 918, y: 344 });
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'rejected' }); });
+    flush();
+    expect(tipOf(cursors()[0])).toEqual({ x: 1000, y: 344 });
+  });
+
+  it('draws any cursor on a waiting node at the left end, a proposer\'s or not: the label is the node\'s', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'move', target: { nodeId: 'n2' } }));
+    flush();
+    expect(tipOf(cursors()[0])).toEqual({ x: 1000, y: 344 });
+    // Another agent's held run starts waiting on n2: this cursor (no proposal of its own) makes room.
+    holdProposals(heldRun('p9', ['n2']));
+    flush();
+    expect(tipOf(cursors()[0])).toEqual({ x: 918, y: 344 });
+  });
+
+  it('keeps the name\'s slot for a say while the header waits, so the say pill never rises onto the label', () => {
+    // A lone cursor on its way hides its name and the say takes the name's row ('say');
+    // under a wait header the name keeps its slot and the say stays below it.
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p2'));
+    send(event({ action: 'propose', proposalId: 'p2', target: { nodeId: 'n2' }, say: 'Running the final render' }));
+    tickFrames(3);
+    expect(cursors()[0].dataset.label).toBe('say');
+    cleanup();
+    holdProposals(heldRun('p1', ['n2']));
+    render(<AgentCursorLayer />);
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' }, say: 'Running the final render' }));
+    tickFrames(3);
+    expect(cursors()[0].dataset.label).toBe('name+say');
+  });
+
+  it('keeps the middle of the header for a node whose header does not wait, and for a held run on another node', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(heldRun('p1', ['n1']));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    expect(tipOf(cursors()[0])).toEqual({ x: 1000, y: 344 });
+  });
+
   it('shows the default again once the header no longer does (the proposal closes before the cursor goes)', () => {
     render(<AgentCursorLayer />);
     holdProposals(heldRun('p1', ['n2']));

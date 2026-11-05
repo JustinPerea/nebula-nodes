@@ -8,7 +8,7 @@ import {
   useAgentPresenceStore,
   type AgentCursor,
 } from '../../store/agentPresenceStore';
-import { chainPoint, resolveAnchor, stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
+import { resolveAnchor, restPoints, stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
 import {
   frameAt,
   impulseCurve,
@@ -25,6 +25,7 @@ import {
 import { defaultSay, errorCause, heldDefault, sayHoldMs, type SayContext } from '../../lib/agentCursorSays';
 import { isSettled } from '../../lib/agentCursorSettled';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { waitFor } from '../../lib/nodeWait';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { fieldBox, fieldTextChanged, findTypeField, onScreen, type FieldBox, type TypeField } from '../../lib/agentCursorField';
 import {
@@ -1252,6 +1253,13 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     const entry = cursor.proposalId ? state.proposals[cursor.proposalId] : undefined;
     return Boolean(entry && !entry.closing && targetNode && entry.view.wait?.nodeIds.includes(targetNode));
   });
+  // While the node's header shows a wait (any agent's held run on it), every
+  // cursor on that node is drawn at the header's left end (waitRestPoint), a
+  // proposer's or not: its loop reads this each frame. The wait is the
+  // node's, so a cursor that only looks at the node must not cover it either.
+  const nodeWaits = useCanvasProposalsStore((state) => Boolean(targetNode && waitFor(state, targetNode)));
+  const headerWaitsRef = useRef(nodeWaits);
+  headerWaitsRef.current = nodeWaits;
   const sayInfo = useMemo(() => sayFor(cursor, store.getState().nodeLookup as unknown as NodeLabels, headerWaits),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
     [cursor.seq, cursor.say, cursor.action, headerWaits]);
@@ -1718,7 +1726,10 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const sinceFirstSightMs = firstSightAt.current === null ? 0 : performance.now() - firstSightAt.current;
       const shown = nameVisible({
         moving: !reduced && m !== null && isMoving(m, zoomRef.current),
-        peers: peersRef.current,
+        // A say under a wait-state header keeps the name's slot, as with two
+        // or more cursors: with the name hidden the say pill moves up into the
+        // name's row, onto the header's "Waiting for your OK" (GM r3, item 2).
+        peers: headerWaitsRef.current && sayShownRef.current ? Math.max(2, peersRef.current) : peersRef.current,
         hovered: hovered.current,
         sinceFirstSightMs,
       });
@@ -1773,7 +1784,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         return;
       }
       const lookup = store.getState().nodeLookup;
-      const resolved = resolveAnchor(cursor.target, lookup);
+      // Drawn at the header's left end while the node's header shows a wait,
+      // counted for its target chain where it always is (restPoints).
+      const points = restPoints(cursor.target, lookup, headerWaitsRef.current,
+        { dom: (store.getState() as unknown as { domNode?: HTMLElement | null }).domNode ?? null, zoom: store.getState().transform?.[2] ?? zoomRef.current });
+      const resolved = points?.drawn ?? null;
       const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
@@ -1801,7 +1816,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         : null;
       const nodeDragged = nodeId !== null && Boolean((lookup.get(nodeId) as { dragging?: boolean } | undefined)?.dragging);
       field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged,
-        chainPoint(cursor.target, lookup) ?? resolved);
+        points!.chain);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -2082,6 +2097,10 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   useEffect(() => {
     wake.current();
   }, [idle, drawsSay]);
+  // The header's wait starting or ending moves where it is drawn: it glides.
+  useEffect(() => {
+    wake.current();
+  }, [nodeWaits]);
   // A new backend arrival with no new event (a node move carried it,
   // agentPresenceArrival): the loop reads it and takes its new place.
   useEffect(() => {
