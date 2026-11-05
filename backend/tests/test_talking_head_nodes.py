@@ -580,7 +580,7 @@ async def test_a_data_uri_that_isnt_base64_or_is_too_large_stops_before_any_uplo
         await run(node("omnihuman-2", **saved), av_ports(image=image, audio="data:audio/mpeg,not-base64"), dict(KEYS))
     assert _person(caught.value) == (
         "Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because its audio file couldn\u2019t be read. "
-        "Connect it again, then run it again.")
+        "Reconnect the file, then run it again.")
     big = "data:audio/mpeg;base64," + "A" * (16 * 1024 * 1024 * 4 // 3 + 4)  # 16 MB decoded, over fal's 15 MB
     with pytest.raises(ValueError) as caught:
         await run(node("omnihuman-2", **saved), av_ports(image=image, audio=big), dict(KEYS))

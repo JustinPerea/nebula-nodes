@@ -621,7 +621,7 @@ async def upload_local_media(fields: dict[str, Any], api_key: str, where: Where)
                 raise with_person_line(
                     ValueError(f"{where} got an {what} data: URI that isn't base64"),
                     f"Nebula couldn\u2019t run {named} because its {what} file couldn\u2019t be read. "
-                    "Connect it again, then run it again.")
+                    "Reconnect the file, then run it again.")
             data, mime = inline
             sources[value] = (data, f"{what}{mimetypes.guess_extension(mime) or ''}", mime, what)
     if sources and not api_key:
