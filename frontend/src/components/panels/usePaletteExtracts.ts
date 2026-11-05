@@ -33,7 +33,14 @@ export type PaletteExtractView = {
 
 /** A palette that came back to a node it could no longer be written to
  *  (GM r22 Q1): said on that node when the person is back on it. */
-export type PaletteDropNote = { text: string; definitionId: string };
+export type PaletteDropNote = {
+  text: string;
+  definitionId: string;
+  /** A file param's dropped upload (GM r48 bug 2 on #222): the param and
+   *  the value it held at the pick. Any change to that value clears the
+   *  line (fileDropNotes.ts). */
+  file?: { project: string | null; nodeId: string; key: string; value: unknown };
+};
 
 /**
  * Review 8 LOW-1 / GM r22 Q2 on #208: one source of truth per palette
@@ -109,11 +116,14 @@ export function startPaletteExtract<T>(key: string, run: () => Promise<T | null>
   say(key, '');
   const owner = entry;
   const ticket = ++owner.ticket;
+  // The older run's held landing is void once a newer one starts.
+  if (owner.holdTimer) { clearTimeout(owner.holdTimer); owner.holdTimer = null; }
   changed();
   void run().then((value) => {
     if (value === null || entries.get(key) !== owner || owner.ticket !== ticket) return;
     const finish = () => {
-      if (entries.get(key) !== owner) return;
+      // A newer pick took the key while this one's line was held: it answers.
+      if (entries.get(key) !== owner || owner.ticket !== ticket) return;
       entries.delete(key);
       if (owner.showTimer) clearTimeout(owner.showTimer);
       if (owner.holdTimer) clearTimeout(owner.holdTimer);
@@ -144,6 +154,11 @@ export function setPaletteCantRun(key: string, file: File | null): void {
 
 export function paletteDropNote(key: string): PaletteDropNote | null {
   return notes.get(key) ?? null;
+}
+
+/** Every dropped line waiting, by its key. */
+export function paletteDropNotes(): [string, PaletteDropNote][] {
+  return [...notes];
 }
 
 export function setPaletteDropNote(key: string, note: PaletteDropNote | null): void {

@@ -436,9 +436,12 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    connections, the user's selection, and other agents' cursors. An input node
-    holding an uploaded file has `fileName`, the name it was uploaded with
-    (its `filePath` is a stored, hashed name). `view.stale` is
+    connections, the user's selection, and other agents' cursors. A node
+    holding a file has `fileName` (its filePath's) and, with other file
+    params, `fileNames` ({param: name}): the name the canvas shows, which is
+    the name the file was uploaded with, else the path's own name, and
+    "Uploaded file" for a bare stored hash (a `filePath` is a stored, hashed
+    name). `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,

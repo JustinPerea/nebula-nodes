@@ -62,6 +62,25 @@ describe('the palette extract store', () => {
     expect(paletteExtractView(key)).toMatchObject({ working: false, shown: false, status: 'done' });
   });
 
+  it("an older run's held landing never takes the key from a newer pick", async () => {
+    const key = paletteRunKey('pA', 1, 'n1', 'palette');
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const landed: string[] = [];
+    startPaletteExtract(key, () => first.promise, (v) => { landed.push(v); return v; });
+    await vi.advanceTimersByTimeAsync(PALETTE_PENDING_DELAY_MS + 50); // the line shows
+    first.resolve('first'); // held for the rest of PALETTE_LINE_MIN_MS
+    await vi.advanceTimersByTimeAsync(100);
+    startPaletteExtract(key, () => second.promise, (v) => { landed.push(v); return v; });
+    await vi.advanceTimersByTimeAsync(PALETTE_LINE_MIN_MS + 100); // past the first's hold
+    expect(landed).toEqual([]);
+    expect(paletteExtractView(key).working).toBe(true);
+    second.resolve('second');
+    await vi.advanceTimersByTimeAsync(PALETTE_LINE_MIN_MS + 100);
+    expect(landed).toEqual(['second']);
+    expect(paletteExtractView(key)).toMatchObject({ working: false, status: 'second' });
+  });
+
   it('a retry shows no line and holds 400 ms from its start', async () => {
     const key = paletteRunKey('pA', 1, 'n1', 'palette');
     startPaletteExtract(key, () => Promise.resolve('again'), (v) => v, { retry: true });
