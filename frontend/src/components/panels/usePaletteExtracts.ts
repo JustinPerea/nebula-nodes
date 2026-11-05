@@ -116,11 +116,14 @@ export function startPaletteExtract<T>(key: string, run: () => Promise<T | null>
   say(key, '');
   const owner = entry;
   const ticket = ++owner.ticket;
+  // The older run's held landing is void once a newer one starts.
+  if (owner.holdTimer) { clearTimeout(owner.holdTimer); owner.holdTimer = null; }
   changed();
   void run().then((value) => {
     if (value === null || entries.get(key) !== owner || owner.ticket !== ticket) return;
     const finish = () => {
-      if (entries.get(key) !== owner) return;
+      // A newer pick took the key while this one's line was held: it answers.
+      if (entries.get(key) !== owner || owner.ticket !== ticket) return;
       entries.delete(key);
       if (owner.showTimer) clearTimeout(owner.showTimer);
       if (owner.holdTimer) clearTimeout(owner.holdTimer);

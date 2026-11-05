@@ -103,6 +103,18 @@ def test_cli_set_to_a_missing_file_clears_the_preview(held, monkeypatch):
     assert "_previewUrl" not in params and "_fileName" not in params
 
 
+def test_a_missing_file_under_the_output_root_gets_no_preview(held, monkeypatch):
+    """_preview_follows_file and _follow_file_params share one existence check:
+    a path under the output root with no file there has no preview URL."""
+    import main
+    api, node_id, _before, _agents = held
+    missing = str(main.OUTPUT_ROOT / "chat-uploads" / "never-made.png")
+    monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=api.client))
+    mcp_server.edit_canvas(note="gone", params=[{"nodeId": node_id, "params": {"filePath": missing}}])
+    assert _after(api, node_id)["filePath"] == missing
+    assert "_previewUrl" not in _after(api, node_id)
+
+
 def test_an_edit_of_another_param_or_the_same_file_keeps_the_preview(held, monkeypatch):
     api, node_id, before, _agents = held
     same = _after(api, node_id)["filePath"]

@@ -139,6 +139,26 @@ describe('a file upload into a file param', () => {
     expect(params().filePath).toBe('/out/chat-uploads/fourth.png');
   });
 
+  it("keeps a newer pick that came in while the older one's \"Uploading…\" row was held", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = show();
+      const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+      await pick(container, 'a.png');
+      await advance(350);
+      uploads[0].answer('/out/chat-uploads/a.png'); // a's row showed at 300 ms: held to 700 ms
+      await advance(150); // 500 ms: inside a's hold
+      await pick(container, 'b.png');
+      await advance(250); // past 700 ms: a's timer must not land a, nor take b's entry
+      expect(params().filePath).toBe('');
+      uploads[1].answer('/out/chat-uploads/b.png');
+      await advance(1000);
+      expect(params()).toMatchObject({ filePath: '/out/chat-uploads/b.png', _fileName: { file: 'b.png', name: 'b.png' } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says nothing of an older pick's failure once a newer one replaced it", async () => {
     const { container } = show();
     await pick(container, 'old.png');

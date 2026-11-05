@@ -2687,7 +2687,7 @@ def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent
     file_path = params.get("filePath")
     if ("filePath" in sent and "_previewUrl" not in sent
             and not _same_ref_file(before.get("filePath"), file_path)):
-        url = _output_url_from_ref(file_path) if isinstance(file_path, str) and file_path else None
+        url = _file_preview_url(file_path)  # the same existence check as _follow_file_params
         if url is not None and params.get("_previewUrl") != url:
             params["_previewUrl"] = url
             changed = True
@@ -2750,7 +2750,7 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
             value = rewritten.get(key)
             if not isinstance(value, str) or not value:
                 continue
-            preview_url = _output_url_from_ref(value)
+            preview_url = _file_preview_url(value)  # none for a file that isn't there
             if preview_url is not None:
                 rewritten["_previewUrl"] = preview_url
                 break

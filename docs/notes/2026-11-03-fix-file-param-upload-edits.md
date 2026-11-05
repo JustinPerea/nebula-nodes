@@ -235,3 +235,17 @@ and its name, in both orders.
 - `Inspector.tsx`, imports: kept this PR's file-name/upload-notice imports plus main's `previewSize`/`previewSizeAttributes`; `inputFileName` was unused here (this PR's `fileParamName` replaced its one use) and is dropped.
 - `Inspector.tsx`, the file input's onChange: kept this PR's `uploadIntoParam` (edits made during the upload survive). Main's inline upload code is gone with it; its `_previewSize` behaviour moved into `uploadIntoParam` (the upload's `previewSize` is stored, a file without one drops the last file's via a new `drop` argument on `writeParamsNow`), and main's inline `<img>` is `FilePreviewFrame`, which now takes the stored size for the `<img>` width/height.
 - Semantic conflict found by main's test `test_another_input_kind_gets_no_preview_from_its_file` (#226 review 4, NIT-2: an Audio or Document Input's file write gets no `_previewUrl`, since a mask source's fallback would read it). This PR's `follow_file_params` gave every file param a preview. Both kept: `follow_file_params` takes `previews=False` for video, audio and document inputs (the ones whose Inspector draws no image), so their preview is left as sent and only the name follows; every other file param keeps this PR's behaviour. New unit test added.
+
+## Final review fixes
+
+- MEDIUM, a newer pick lost to the older upload's hold timer: `startPaletteExtract`
+  (`usePaletteExtracts.ts`) now returns from `finish` when `owner.ticket !== ticket`,
+  and a new ticket for the same key clears the owner's `holdTimer`. The Extract
+  palette path shares the helper and gets the same fix. Tests: the hold-window case
+  in `Inspector.fileUploadEdits.test.tsx` and a unit test in `paletteExtractStore.test.ts`;
+  removing the ticket check fails both.
+- LOW, a missing file got a broken preview: two places put a preview URL back
+  without checking the file exists, `_preview_follows_file` and the image-input
+  normalizer's fallback. Both now use `_file_preview_url` (the check
+  `_follow_file_params` already used). Test: an agent sets a missing path under the
+  output root, no `_previewUrl` results; reverting either call fails it.
