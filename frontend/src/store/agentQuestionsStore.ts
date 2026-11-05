@@ -152,8 +152,11 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
     closed: (setId, status, view) => set((state) => {
       const entry = state.sets[setId];
       const next = view ?? (entry ? { ...entry.view, status } : null);
+      // A set closed without a view (send()'s "already answered" 409) still records when it
+      // closed, so a cursor waiting on it ends (agentCursorSettled reads closedAt).
       return {
-        sets: next ? { ...state.sets, [setId]: { view: { ...next, status } } } : state.sets,
+        sets: next ? { ...state.sets, [setId]: { view: { ...next, status, closedAt: next.closedAt ?? Date.now() } } }
+          : state.sets,
         drafts: without(state.drafts, setId),
         errors: without(state.errors, setId),
         busy: without(state.busy, setId),

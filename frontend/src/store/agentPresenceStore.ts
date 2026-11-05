@@ -192,7 +192,8 @@ function withEvent(
     seq: nextSeq(key, previous?.seq),
     did: cleanDid(event.did, now),
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
-    proposalId: typeof event.proposalId === 'string' && event.proposalId ? event.proposalId : null,
+    proposalId: typeof event.proposalId === 'string' && event.proposalId && event.proposalId.length <= 128
+      ? event.proposalId : null,
     replayed,
     arrivedAt: arrivalOf(event, previous),
     arrivalKnown: typeof event.since === 'number' && Number.isFinite(event.since)
