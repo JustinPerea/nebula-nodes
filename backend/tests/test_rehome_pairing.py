@@ -9,6 +9,7 @@ set to it); nothing touches the person's own ~/.nebula."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -208,8 +209,8 @@ def test_a_linked_part_of_a_paired_store_keeps_the_id_listed(tmp_path, what, cap
 
 
 def test_the_rehome_then_leaves_a_linked_trash_alone(tmp_path):
-    """The review's chain: the purge keeps the id, so the re-home (which follows
-    a linked .trash) doesn't move the real trashed board to Global."""
+    """The review's chain: the purge keeps the id, and the re-home never follows
+    a linked .trash either, so the real trashed board isn't moved to Global."""
     state, store, real_asset, real_record, _side = _paired_store_with_link(tmp_path, "trash")
     catalog_store = _catalog(state, LIVE, purging=(GONE,))
     done, _ = purge.finish(catalog_store.read(), state_dir=state, stores=[store])
@@ -238,7 +239,7 @@ def test_an_empty_folder_where_the_store_should_be_keeps_the_id_listed(tmp_path,
         done, _ = purge.finish(catalog, state_dir=state, stores=[store])
     assert done == [] and purge.pending(catalog) == [GONE]
     assert not (root / "_global").exists()  # nothing is made in an unproven folder
-    assert any("nothing to show it ever held assets" in r.getMessage() for r in caplog.records)
+    assert any("until that folder holds something Nebula saved" in r.getMessage() for r in caplog.records)
     # The disk comes back: its boards are purged, not moved to Global.
     board = _asset(root, GONE, "b1")
     done, removed = purge.finish(catalog, state_dir=state, stores=[store])
@@ -336,24 +337,6 @@ def test_a_store_on_another_device_than_its_folder_is_unpaired(tmp_path, monkeyp
     assert not purge.roots_paired(state, root)
 
 
-def test_a_folder_that_is_not_the_one_expected_is_unpaired(tmp_path, monkeypatch):
-    """Same path, a different folder by device and inode (a mount over it)."""
-    state = tmp_path / ".nebula"
-    root = state / "moodboards"
-    root.mkdir(parents=True)
-    real_ident = purge._ident
-    calls: list[Path] = []
-
-    def swapped(path):
-        calls.append(Path(path))
-        dev, ino = real_ident(path)
-        # The first folder asked about (the store's parent) reads as another inode.
-        return (dev, ino + 1) if len(calls) == 1 else (dev, ino)
-
-    monkeypatch.setattr(purge, "_ident", swapped)
-    assert not purge.roots_paired(state, root)
-
-
 def test_a_bind_mounted_real_store_in_a_copy_is_not_purged(tmp_path, monkeypatch):
     """The review's LOW-4: a copy with the real store mounted into its home
     (a different device here, simulated: bind mounts need root)."""
@@ -424,3 +407,185 @@ def test_a_folder_holding_only_a_link_is_not_evidence(tmp_path):
     store = purge.AssetStore("moodboard", root)
     assert not purge.has_evidence(store)
     assert purge.finish({"projects": {}, "trash": {}, PENDING: [GONE]}, state_dir=state, stores=[store])[0] == []
+
+
+# -- round 2: the re-home never follows a link inside a store ------------------------
+
+def test_a_copys_rehome_never_follows_a_linked_trash(tmp_path, caplog):
+    """The final review's p1: a copy with its own HOME holds ``state`` and a real
+    ``moodboards/`` (so it pairs), but its ``.trash`` links to the real store's.
+    The real catalog has GONE live; the copy's doesn't, and GONE isn't pending
+    there. The re-home must leave the real trash record byte for byte, and write
+    no backup anywhere."""
+    real_root = tmp_path / "real" / ".nebula" / "moodboards"
+    real_asset, real_record = _trashed(real_root, "t1", GONE)
+    copy = tmp_path / "copy" / ".nebula"
+    root = copy / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    (root / ".trash").symlink_to(real_root / ".trash", target_is_directory=True)
+    store = _catalog(copy, LIVE)
+    assert purge.roots_paired(copy, root)  # the root itself pairs: only the link is wrong
+    before = _snapshot(real_root)
+    report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
+    assert report["moved"] == 0 and report["global"] == 0
+    assert _snapshot(real_root) == before
+    assert real_asset.is_file() and real_record.is_file()
+    assert not list(tmp_path.rglob("*-backups")) and not list(tmp_path.rglob("migration-log.json"))
+
+
+def test_the_rehome_uses_the_purges_own_link_check(monkeypatch, tmp_path):
+    """One rule for "a link inside a store is never followed", not two."""
+    root = tmp_path / "moodboards"
+    (root / ".trash").mkdir(parents=True)
+    seen = []
+    real = rehome._linked
+    monkeypatch.setattr(rehome, "_linked", lambda store, name: seen.append((store.root, name)) or real(store, name))
+    assert rehome._legacy_trash(root, set()) == []
+    assert seen == [(root, ".trash")]
+
+
+# -- round 2: a store Nebula made proves itself ---------------------------------------
+
+DESKTOP_STORES = ("characters", "moodboards", "presets")
+
+
+def _desktop_data(tmp_path: Path) -> Path:
+    """The desktop app's data folder as ``ensureAppDataDirs`` (desktop/paths.mjs)
+    leaves it before the first start (the test below pins the two together)."""
+    data = tmp_path / "Library" / "Application Support" / "Nebula Nodes"
+    for sub in ("state", "output", *DESKTOP_STORES):
+        (data / sub).mkdir(parents=True)
+    for sub in DESKTOP_STORES:
+        (data / sub / "_global").mkdir()
+    return data
+
+
+def _desktop_stores(data: Path) -> list[purge.AssetStore]:
+    return [purge.AssetStore("moodboard", data / "moodboards", explicit=True),
+            purge.AssetStore("character", data / "characters", explicit=True),
+            purge.AssetStore("style", data / "presets", explicit=True)]
+
+
+def test_a_fresh_desktop_install_clears_every_deleted_id_and_logs_nothing(tmp_path, caplog):
+    """The final review's p2: 20 projects deleted for good on an install that
+    never made a character or a style."""
+    data = _desktop_data(tmp_path)
+    ids = [f"{i:02x}" * 16 for i in range(20)]
+    catalog = {"projects": {}, "trash": {}, PENDING: list(ids)}
+    with caplog.at_level("WARNING"):
+        done, _ = purge.finish(catalog, state_dir=data / "state", stores=_desktop_stores(data))
+    assert sorted(done) == sorted(ids)
+    assert not [r for r in caplog.records if "deleted for good keep" in r.getMessage()]
+
+
+def test_the_desktop_paths_module_makes_the_same_folders_this_test_assumes():
+    """Pin the creator: desktop/paths.mjs lists these stores and makes each one's _global."""
+    source = (Path(__file__).resolve().parents[2] / "desktop" / "paths.mjs").read_text(encoding="utf-8")
+    listed = re.search(r"APP_DATA_STORE_SUBDIRS = \[([^\]]*)\]", source)
+    assert listed and tuple(re.findall(r"'([^']+)'", listed.group(1))) == DESKTOP_STORES
+    assert "STORE_GLOBAL_DIR = '_global'" in source
+    assert "join(root, sub, STORE_GLOBAL_DIR)" in source
+    # Every NEBULA_*_ROOT the desktop sets is one of those stores (none is left out).
+    env = dict(re.findall(r"(NEBULA_\w+_ROOT): join\(root, '(\w+)'\)", source))
+    assert {env[name] for name in purge.ROOT_ENV.values()} == set(DESKTOP_STORES)
+
+
+def _saved_into_each_store(monkeypatch, tmp_path: Path):
+    """Save one of each asset kind in a store folder that did not exist."""
+    from services import character_store, moodboard_store, preset_store
+    roots = {"moodboard": tmp_path / "m", "character": tmp_path / "c", "style": tmp_path / "p"}
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(roots["moodboard"]))
+    monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(roots["character"]))
+    monkeypatch.setenv("NEBULA_PRESET_ROOT", str(roots["style"]))
+    return roots, {
+        "moodboard": lambda pid: moodboard_store.MoodboardStore().create("b", projectId=pid),
+        "character": lambda pid: character_store.CharacterStore().create(
+            "c", "person", ["a", "b", "c"], "x", 1, 0.5, projectId=pid),
+        "style": lambda pid: preset_store.PresetStore().create(
+            name="s", category="look", prompt="p", params={}, modelId=None, refImages=[],
+            scope="project" if pid else "global", projectId=pid, params_version=preset_store.PARAMS_VERSION),
+    }
+
+
+@pytest.mark.parametrize("kind", ["moodboard", "character", "style"])
+@pytest.mark.parametrize("scope", ["global", "project"])
+def test_saving_an_asset_makes_a_real_folder_so_the_store_proves_itself(tmp_path, monkeypatch, kind, scope):
+    roots, save = _saved_into_each_store(monkeypatch, tmp_path)
+    root = roots[kind]
+    assert not root.exists()
+    save[kind](LIVE if scope == "project" else None)
+    assert purge.has_evidence(purge.AssetStore(kind, root))
+
+
+def test_an_existing_empty_store_stays_unproven_until_something_is_saved(tmp_path, monkeypatch, caplog):
+    """(b): the old install's empty folder with no ``_global``: ids stay pending (the safe side:
+    boards could only reach Global, never be deleted), and clear after the first save."""
+    data = tmp_path / "Library" / "Application Support" / "Nebula Nodes"
+    for sub in ("state", *DESKTOP_STORES):
+        (data / sub).mkdir(parents=True)
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(data / "moodboards"))
+    monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(data / "characters"))
+    monkeypatch.setenv("NEBULA_PRESET_ROOT", str(data / "presets"))
+    catalog = {"projects": {}, "trash": {}, PENDING: [GONE]}
+    stores = _desktop_stores(data)
+    done, _ = purge.finish(catalog, state_dir=data / "state", stores=stores)
+    assert done == [] and purge.pending(catalog) == [GONE]
+    # The person saves a style: that store proves itself, the other two still wait.
+    from services import preset_store
+    preset_store.PresetStore().create(name="s", category="look", prompt="p", params={}, modelId=None,
+                                      refImages=[], scope="global", projectId=None,
+                                      params_version=preset_store.PARAMS_VERSION)
+    assert purge.has_evidence(stores[2]) and not purge.has_evidence(stores[1])
+    from services import character_store, moodboard_store
+    character_store.CharacterStore().create("c", "person", ["a", "b", "c"], "x", 1, 0.5)
+    moodboard_store.MoodboardStore().create("b")
+    done, _ = purge.finish(catalog, state_dir=data / "state", stores=stores)
+    assert done == [GONE]
+
+
+# -- round 2: a pending id on an unproven store costs nothing -------------------------
+
+def test_an_unproven_store_is_decided_once_and_never_scanned_for_the_ids(tmp_path, monkeypatch):
+    data = _desktop_data(tmp_path)
+    (data / "characters" / "_global").rmdir()  # an old install's empty store
+    _asset(data / "moodboards", LIVE, "b-live")
+    stores = _desktop_stores(data)
+    ids = [f"{i:02x}" * 16 for i in range(20)]
+    catalog = {"projects": {}, "trash": {}, PENDING: list(ids)}
+    calls: dict[str, list[str]] = {"evidence": [], "scan": [], "paired": []}
+    for name, key, kind_of in (("has_evidence", "evidence", lambda store, *a: store.kind),
+                               ("_left", "scan", lambda store, *a: store.kind),
+                               ("_linked", "scan", lambda store, *a: store.kind),
+                               ("delete_store_assets", "scan", lambda store, *a, **k: store.kind),
+                               ("roots_paired", "paired", lambda root, *a, **k: Path(a[0] if a else root).name)):
+        real = getattr(purge, name)
+
+        def counted(*args, _real=real, _key=key, _kind=kind_of, **kwargs):
+            calls[_key].append(_kind(*args, **kwargs))
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(purge, name, counted)
+    done, _ = purge.finish(catalog, state_dir=data / "state", stores=stores)
+    assert done == [] and len(purge.pending(catalog)) == 20  # nothing clears: one store is unproven
+    assert "character" not in calls["scan"]                   # never scanned or deleted from
+    assert sorted(calls["evidence"]) == ["character", "moodboard", "style"]  # decided once, up front
+    assert len(calls["paired"]) == 3                          # and so is the pairing, not once per id
+    scanned = len(calls["scan"])
+    purge.finish(catalog, state_dir=data / "state", stores=stores)
+    assert "character" not in calls["scan"] and len(calls["scan"]) == 2 * scanned
+
+
+def test_the_unproven_line_is_true_once_per_start_and_only_with_pending_ids(tmp_path, caplog):
+    data = _desktop_data(tmp_path)
+    (data / "characters" / "_global").rmdir()
+    stores = _desktop_stores(data)
+    with caplog.at_level("WARNING", logger="services.project_asset_purge"):
+        purge.finish({"projects": {}, "trash": {}}, state_dir=data / "state", stores=stores)
+        assert not caplog.records                       # no pending id: nothing to say
+        catalog = {"projects": {}, "trash": {}, PENDING: [GONE, "c3" * 16]}
+        purge.finish(catalog, state_dir=data / "state", stores=stores)
+        purge.finish(catalog, state_dir=data / "state", stores=stores)  # the next call: not again
+    lines = [r.getMessage() for r in caplog.records]
+    assert lines == ["2 project(s) deleted for good keep their characters until that folder holds "
+                     "something Nebula saved"]
+    assert "mounted" not in lines[0] and str(tmp_path) not in lines[0] and GONE not in lines[0]

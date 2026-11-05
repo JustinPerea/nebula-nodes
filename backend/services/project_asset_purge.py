@@ -67,18 +67,26 @@ there (in no tab, and never moved to Global) and the id stays on the list.
 Linking the whole ``~/.nebula`` or the desktop app's data folder still
 purges: the store and the catalog are then both followed to the same place.
 
-Two more checks on a store that does pair. Its folder is the very folder
-the catalog expects by device and inode, and the store sits on that
-folder's own device: a bind mount or container volume of the real store
-inside a copy resolves like a plain path, so paths alone can't refuse it.
-(A store on a disk of its own, mounted at its folder, is therefore unpaired
-too, the same accepted cost as a linked store.) And the folder must be
-shown to be a store: an empty folder where the store should be (the mount
-point of a disk that is out) says nothing about what the project had, so
-the id stays listed until the folder holds a real folder of any kind (a
-project's, ``_global``, ``.trash``; ``has_evidence``). Otherwise, once the
-disk is back, the re-home would move the boards the purge never saw to
-Global.
+Two more checks on a store that does pair. The store sits on the device of
+the folder holding it: a volume of another disk, or the real store mounted
+into a copy's home, resolves like a plain path, so paths alone can't refuse
+it, but its device differs. (A store on a disk of its own, mounted at its
+folder, is therefore unpaired too, the same accepted cost as a linked
+store. A bind mount from the same filesystem has the same device and isn't
+caught: it needs root, which a copy of the data isn't assumed to have.) And
+the folder must be shown to be a store: an empty folder where the store
+should be (the mount point of a disk that is out) says nothing about what
+the project had, so the id stays listed until the folder holds a real
+folder of any kind (a project's, ``_global``, ``.trash``; ``has_evidence``).
+Otherwise, once the disk is back, the re-home would move the boards the
+purge never saw to Global. A store Nebula makes itself proves itself from
+the start: whatever creates a store folder (the desktop app's data folder,
+desktop/paths.mjs) creates its ``_global`` with it, and saving anything
+into a store makes a real folder in it. Only a folder that already existed
+empty, with no ``_global`` (an old install that never saved a character or
+a style, a mount point), waits; its ids stay listed, which costs nothing:
+the store is skipped up front, never scanned for them, and one line is
+logged per start.
 
 An unpaired store is left alone: the id stays on the list (the re-home
 keeps skipping it, so nothing is hidden or moved: the project's files stay
@@ -188,8 +196,11 @@ _OTHER_CATALOG_LOGGED: set[str] = set()
 
 
 def _ident(path: Path) -> tuple[int, int]:
-    """A folder's device and inode: what it is, whatever path reaches it
-    (``resolve()`` follows links but can't see a mount)."""
+    """A folder's device and inode; the pairing compares the device. It
+    catches a store mounted on its folder (another disk's volume, or the
+    real store mounted into a copy's home): that store is on another device
+    than the folder around it, which ``resolve()`` can't see. It can't catch
+    a bind mount from the same filesystem (same device; it needs root)."""
     stat = os.stat(path)
     return stat.st_dev, stat.st_ino
 
@@ -209,13 +220,9 @@ def _pairing(state_dir: Path, store_root: Path, explicit: bool) -> str | None:
             expected = state.parent
         else:
             return "not beside"
-        # Resolved paths can't see a mount: a copy's folder with the real
-        # store bind-mounted into it resolves to a plain path beside the
-        # copy's catalog. The folder holding the store must be the very
-        # folder it is expected to be (device and inode), and the store must
-        # sit on that folder's own device (a mount boundary says it doesn't).
-        if (expected.exists() and _ident(home) != _ident(expected)) or (
-                store_root.exists() and _ident(store_root)[0] != _ident(home)[0]):
+        # Resolved paths can't see a mount, so the store must sit on the
+        # device of the folder holding it (see ``_ident``).
+        if store_root.exists() and _ident(store_root)[0] != _ident(home)[0]:
             return "mounted elsewhere"
         own = (state / "projects" / "catalog.json").resolve()
         for catalog in (home / "projects" / "catalog.json", home / "state" / "projects" / "catalog.json"):
@@ -233,10 +240,9 @@ def roots_paired(state_dir: Path, store_root: Path, *, explicit: bool = False) -
     its real folder, and that folder's parent (``home``) must be the
     catalog's real folder (``~/.nebula`` holds both), or, for a root set
     explicitly (``explicit``: its NEBULA_*_ROOT), the desktop app's data
-    folder holding ``state/`` (the catalog's) beside it. And ``home`` must be
-    that very folder by device and inode, with the store on its device (a
-    bind mount or a volume of the real store inside a copy resolves like a
-    plain path, but not like that). Never paired: a store root that is a link
+    folder holding ``state/`` (the catalog's) beside it. And the store must
+    be on its ``home``'s device (``_ident``: a store mounted on its folder
+    resolves like a plain path, but is on another device). Never paired: a store root that is a link
     to nothing (an unmounted disk) or a loop, a path that can't be resolved,
     or a ``home`` that holds another catalog (``projects/catalog.json`` or
     ``state/projects/catalog.json`` that isn't this one's: logged once per
@@ -518,9 +524,15 @@ def _keep_evidence(store: AssetStore) -> None:
         pass  # a link or a file in the way: evidence isn't needed that badly
 
 
+def _unproven(store: AssetStore, evidenced: Container[str]) -> bool:
+    """A store folder that is there but has shown nothing (``has_evidence``)."""
+    return store.kind not in evidenced and store.root.is_dir()
+
+
 def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: Path,
                           stores: list[AssetStore] | None = None,
-                          evidenced: Container[str] | None = None) -> tuple[bool, Removed]:
+                          evidenced: Container[str] | None = None,
+                          split: tuple[list[AssetStore], list[AssetStore]] | None = None) -> tuple[bool, Removed]:
     """``delete_store_assets`` in every store that is the catalog's. Returns
     ``(complete, removed)``: ``complete`` is False when a store was skipped
     as not the catalog's, when part of a store was skipped for being a link
@@ -529,18 +541,21 @@ def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: P
     before anything was deleted, as ``finish`` does for the whole list), or
     when anything of the project's is still there after the last pass (a
     store busy the whole time); the id then stays on the list and the next
-    purge, listing or start goes on. And what went, by kind."""
-    paired, unpaired = paired_stores(state_dir, stores)
+    purge, listing or start goes on. And what went, by kind. ``finish`` passes
+    ``evidenced`` and ``split`` (``paired_stores``) so they are decided once
+    for the whole list. An unproven store is skipped outright: not read,
+    not scanned for the project, only counted as the reason the id waits."""
+    paired, unpaired = split if split is not None else paired_stores(state_dir, stores)
     if evidenced is None:
         evidenced = {store.kind for store in paired if has_evidence(store)}
     removed = _empty_removed()
-    for store in paired:
-        if store.kind in evidenced:
-            _keep_evidence(store)
+    proven = [store for store in paired if store.kind in evidenced]
+    for store in proven:
+        _keep_evidence(store)
         removed[store.kind].extend(delete_store_assets(store, project_id, keep=keep))
-    left = any(_left(store, project_id) or _linked(store, project_id) or (
-        store.root.is_dir() and store.kind not in evidenced) for store in paired)
-    return not unpaired and not left, removed
+    left = any(_left(store, project_id) or _linked(store, project_id) for store in proven)
+    waits = any(_unproven(store, evidenced) for store in paired)
+    return not unpaired and not left and not waits, removed
 
 
 # Once per start (per process): why a project's files are kept, by store
@@ -548,16 +563,23 @@ def delete_project_assets(project_id: str, *, keep: Container[str], state_dir: P
 _WAITING_LOGGED: set[tuple[str, str]] = set()
 
 
-def _log_waiting(state_dir: Path, stores: list[AssetStore], evidenced: Container[str],
+def _log_waiting(split: tuple[list[AssetStore], list[AssetStore]], evidenced: Container[str],
                  project_ids: list[str], waiting: int) -> None:
-    paired, unpaired = paired_stores(state_dir, stores)
+    paired, unpaired = split
     reasons = {
         "isn't beside this project catalog": [store.kind for store in unpaired],
         "has a linked folder inside it (a link is never followed)": [
-            store.kind for store in paired if any(_linked(store, pid) for pid in project_ids)],
-        "is empty with nothing to show it ever held assets (a disk that isn't mounted?)": [
-            store.kind for store in paired if store.root.is_dir() and store.kind not in evidenced],
+            store.kind for store in paired if store.kind in evidenced
+            and any(_linked(store, pid) for pid in project_ids)],
     }
+    # Only a store that holds pending ids (every waiting id does, an unproven
+    # store is skipped for all of them): what is true, no guess at why.
+    fresh = [store.kind for store in paired
+             if _unproven(store, evidenced) and ("unproven", store.kind) not in _WAITING_LOGGED]
+    if fresh:
+        _WAITING_LOGGED.update(("unproven", kind) for kind in fresh)
+        logger.warning("%d project(s) deleted for good keep their %s until that folder holds something "
+                       "Nebula saved", waiting, ", ".join(PLURAL[kind] for kind in fresh))
     for reason, kinds in reasons.items():
         fresh = [kind for kind in kinds if (reason, kind) not in _WAITING_LOGGED]
         if not fresh:
@@ -579,8 +601,11 @@ def finish(catalog: dict[str, Any], *, state_dir: Path,
     may still hold, stays on the list."""
     keep = known_projects(catalog)
     stores = stores if stores is not None else default_stores()
-    paired = paired_stores(state_dir, stores)[0]
-    evidenced = {store.kind for store in paired if has_evidence(store)}  # before anything is deleted
+    split = paired_stores(state_dir, stores)
+    paired = split[0]
+    # Decided once, before anything is deleted: a store that has shown
+    # nothing is skipped for every id (``delete_project_assets``).
+    evidenced = {store.kind for store in paired if has_evidence(store)}
     done: list[str] = []
     removed = _empty_removed()
     waiting: list[str] = []
@@ -590,7 +615,7 @@ def finish(catalog: dict[str, Any], *, state_dir: Path,
             continue
         try:
             complete, went = delete_project_assets(project_id, keep=keep, state_dir=state_dir, stores=stores,
-                                                   evidenced=evidenced)
+                                                   evidenced=evidenced, split=split)
         except OSError as exc:
             logger.warning("A deleted project's moodboards, characters or styles weren't all removed (%s); "
                            "trying again later", type(exc).__name__)
@@ -602,7 +627,7 @@ def finish(catalog: dict[str, Any], *, state_dir: Path,
         else:
             waiting.append(project_id)
     if waiting:
-        _log_waiting(state_dir, stores, evidenced, waiting, len(waiting))
+        _log_waiting(split, evidenced, waiting, len(waiting))
     return done, removed
 
 

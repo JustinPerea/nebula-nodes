@@ -35,6 +35,17 @@ export const APP_DATA_SUBDIRS = [
   'presets',
 ];
 
+/**
+ * The subdirectories that are asset stores (moodboards, Characters, Styles),
+ * and the folder each keeps its Global assets in. A store is made with its
+ * `_global` in it, so the backend can tell from the first start that the
+ * folder is a store Nebula made, not an empty mount point or a folder left
+ * by hand (backend/services/project_asset_purge.py, `has_evidence`: a
+ * project deleted for good keeps its files until the folder shows it).
+ */
+export const APP_DATA_STORE_SUBDIRS = ['characters', 'moodboards', 'presets'];
+export const STORE_GLOBAL_DIR = '_global';
+
 /** NEBULA_* path env var names injected into the sidecar environment. */
 export const NEBULA_PATH_ENV_VARS = [
   'NEBULA_STATE_DIR',
@@ -110,7 +121,8 @@ export function resolveDesktopDataPaths({ userDataDir, home, repoRoot }) {
 /**
  * Ensure the App Support directory tree exists.
  *
- * Creates the root directory and all required subdirectories. Idempotent —
+ * Creates the root directory, all required subdirectories and each asset
+ * store's `_global` folder (see APP_DATA_STORE_SUBDIRS). Idempotent —
  * safe to call when directories already exist. Must be called BEFORE
  * spawning the sidecar so the backend finds the directories on first access.
  *
@@ -120,7 +132,11 @@ export function resolveDesktopDataPaths({ userDataDir, home, repoRoot }) {
  */
 export function ensureAppDataDirs(root, deps = {}) {
   const mkdir = deps.mkdirSync ?? mkdirSync;
-  const dirs = [root, ...APP_DATA_SUBDIRS.map((sub) => join(root, sub))];
+  const dirs = [
+    root,
+    ...APP_DATA_SUBDIRS.map((sub) => join(root, sub)),
+    ...APP_DATA_STORE_SUBDIRS.map((sub) => join(root, sub, STORE_GLOBAL_DIR)),
+  ];
   for (const dir of dirs) {
     mkdir(dir, { recursive: true });
   }

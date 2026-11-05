@@ -3649,8 +3649,10 @@ never moves the person's real boards of a project the copy lacks. The count
 it left is logged once per start, with no path. The project also stays on the
 list, and its files stay, when part of a store was a link (its `.trash`, a
 side folder or the project's folder: never followed), when the store folder is
-empty with nothing to show it ever held assets (a disk that isn't mounted),
-or when the store sits on another device than its folder (a mount). A stray
+empty with no real folder in it (a mount point, or an older install that never
+saved one of that kind: the desktop app now makes each store with its `_global`,
+and saving anything makes a folder, after which the id clears; the backend logs
+one line per start when this holds an id), or when the store sits on another device than its folder (a mount). A stray
 `projects/catalog.json` beside the stores (left by a test run or a copied data
 folder) turns the purge and the move off for those stores; the backend logs
 it once per start, and it has to be removed by hand. A moodboard, character or

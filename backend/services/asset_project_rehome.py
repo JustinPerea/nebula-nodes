@@ -72,7 +72,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from uuid import uuid4
 
-from services.project_asset_purge import roots_paired
+from services.project_asset_purge import AssetStore, _linked, roots_paired
 
 logger = logging.getLogger(__name__)
 
@@ -260,9 +260,11 @@ def _legacy_folders(root: Path, canvas_ids: set[str]) -> list[Path]:
 
 def _legacy_trash(root: Path, canvas_ids: set[str]) -> list[tuple[Path, Path, dict[str, Any]]]:
     """(asset file, record file, record) for each trashed asset deleted from an
-    old folder. A record without its file is ignored, as the trash does."""
+    old folder. A record without its file is ignored, as the trash does. A
+    linked ``.trash`` is never followed, as in the purge (``_linked``): it may
+    be another store's, and the records in it would be rewritten there."""
     folder = root / TRASH_DIR
-    if not folder.is_dir():
+    if _linked(AssetStore("", root), TRASH_DIR) or not folder.is_dir():
         return []
     found = []
     for record_path in sorted(folder.glob(f"*{RECORD_SUFFIX}")):

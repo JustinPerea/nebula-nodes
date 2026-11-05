@@ -16,13 +16,14 @@
 
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, statSync, lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
   APP_DATA_DIR_NAME,
   APP_DATA_SUBDIRS,
+  APP_DATA_STORE_SUBDIRS,
   NEBULA_PATH_ENV_VARS,
   computeAppDataRoot,
   ensureAppDataDirs,
@@ -109,12 +110,12 @@ describe('computeAppDataRoot', () => {
 // ---------------------------------------------------------------------------
 
 describe('ensureAppDataDirs', () => {
-  test('creates root and all 5 subdirectories', () => {
+  test('creates root, all 5 subdirectories and each store\'s _global', () => {
     const base = mkTemp();
     const root = join(base, 'AppSupport', 'Nebula Nodes');
     const dirs = ensureAppDataDirs(root);
 
-    assert.equal(dirs.length, 6); // root + 5 subdirs
+    assert.equal(dirs.length, 9); // root + 5 subdirs + 3 store _global folders
     for (const dir of dirs) {
       assert.ok(existsSync(dir), `directory should exist: ${dir}`);
       const stat = statSync(dir);
@@ -130,6 +131,27 @@ describe('ensureAppDataDirs', () => {
     for (const sub of APP_DATA_SUBDIRS) {
       const dir = join(root, sub);
       assert.ok(existsSync(dir), `subdir should exist: ${join(root, sub)}`);
+    }
+  });
+
+  test('each asset store is made with its _global as a real directory (so it proves itself)', () => {
+    const base = mkTemp();
+    const root = join(base, 'AppSupport', 'Nebula Nodes');
+    ensureAppDataDirs(root);
+    assert.deepEqual(APP_DATA_STORE_SUBDIRS, ['characters', 'moodboards', 'presets']);
+    for (const sub of APP_DATA_STORE_SUBDIRS) {
+      const dir = join(root, sub, '_global');
+      assert.ok(lstatSync(dir).isDirectory() && !lstatSync(dir).isSymbolicLink(), `${dir} is a real folder`);
+    }
+    // The state, output and settings places are not stores: nothing extra in them.
+    assert.deepEqual(readdirSync(join(root, 'state')), []);
+  });
+
+  test('prepareAppDataEnv makes the stores with their _global too', () => {
+    const base = mkTemp();
+    const { root } = prepareAppDataEnv({ root: join(base, 'Data') });
+    for (const sub of APP_DATA_STORE_SUBDIRS) {
+      assert.ok(existsSync(join(root, sub, '_global')));
     }
   });
 
@@ -160,7 +182,7 @@ describe('ensureAppDataDirs', () => {
     const root = '/fake/root';
     ensureAppDataDirs(root, { mkdirSync: fakeMkdir });
 
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 9);
     assert.deepEqual(calls[0], { path: root, opts: { recursive: true } });
     assert.equal(calls[0].opts.recursive, true);
   });
@@ -321,7 +343,7 @@ describe('prepareAppDataEnv', () => {
       mkdirSync: fakeMkdir,
     });
 
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 9);
     assert.ok(result.root.includes('Nebula Nodes'));
     assert.equal(Object.keys(result.envVars).length, 6);
   });
