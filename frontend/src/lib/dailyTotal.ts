@@ -38,10 +38,24 @@ export function dailyMeterShown(spent: number, limit: number | null): limit is n
   return limit !== null && spent > 0;
 }
 
-/** A typed amount the field saves: a positive dollar figure, at most to the cent. */
+/** agent_spend.MAX_DAILY_TOTAL_USD: the most a typed total may be. */
+export const MAX_DAILY_TOTAL_USD = 100_000;
+
+/** A typed amount the field saves: a positive dollar figure, at most to the
+ * cent, up to MAX_DAILY_TOTAL_USD. */
 export function parseDailyAmount(text: string): number | null {
   const trimmed = text.trim().replace(/^\$/, '').replace(/,/g, '');
   if (!/^\d+(\.\d{0,2})?$|^\.\d{1,2}$/.test(trimmed)) return null;
   const value = Number(trimmed);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return Number.isFinite(value) && value > 0 && value <= MAX_DAILY_TOTAL_USD ? value : null;
 }
+
+/** The field's draft for a saved amount: "5", "7.50" (to the cent, as the
+ * select writes it, never "7.5"). */
+export function dailyAmountDraft(limit: number): string {
+  return Number.isInteger(limit) ? String(limit) : limit.toFixed(2);
+}
+
+/** The line under the field when what's typed can't be saved. A plain draft
+ * for GM - Design to word. */
+export const DAILY_AMOUNT_INVALID = 'Type an amount from $0.01 to $100,000, like 7.50.';

@@ -10863,10 +10863,12 @@ function withdrawRunStart(runId: string, set: GraphSet, before: ReadonlyMap<stri
 
 /**
  * A start the backend made a proposal of instead (status "waiting": a run
- * that isn't the person's would pass the daily total, from a tab not opened
- * from the link). Nothing ran: the run leaves Run history and its queued
- * nodes go back to how they were, and the proposal bar shows it, locked on
- * this tab with the not-connected line (GM - Design, 2026-10-31).
+ * that isn't the person's would pass the daily total). Only a caller that
+ * names itself gets one, so a tab, which never does, is refused instead and
+ * shows the not-connected line from the person gate's code (round 2 of PR
+ * #212); this keeps a "waiting" answer from ever reading as a started run.
+ * Nothing ran: the run leaves Run history and its queued nodes go back to
+ * how they were.
  */
 function settleWaitingStart(runId: string, set: GraphSet): void {
   withdrawRunStart(runId, set, new Map(), []);

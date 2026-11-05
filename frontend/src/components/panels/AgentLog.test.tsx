@@ -252,3 +252,24 @@ describe('the expanded state lives in uiStore', () => {
     expect(useUIStore.getState().agentLogOpen).toBe(false);
   });
 });
+
+describe('a neutral line (PR #212 round 2)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true });
+    useAgentLogStore.getState().clear();
+  });
+
+  it('shows a muted entry in the muted colour, under the agent\'s name', () => {
+    const agent = { id: 'ext:claude-code', name: 'Claude Code', color: '#c7f36b' };
+    useAgentLogStore.getState().add({ ts: 1, source: 'agent', agent, tone: 'muted',
+      message: 'couldn’t run “Writer” because it would pass the $5 daily total and its 3 proposal slots are full.' });
+    useAgentLogStore.getState().add({ ts: 2, source: 'agent', agent, message: 'Added “Writer”' });
+    const { container } = render(<AgentLog />);
+    const rows = [...container.querySelectorAll('.agent-log__entry')];
+    const muted = rows.find((row) => row.textContent!.includes('proposal slots are full'))!;
+    expect(muted.classList.contains('agent-log__entry--muted')).toBe(true);
+    expect(muted.querySelector('.agent-log__source')!.textContent).toBe('Claude Code');
+    expect(rows.find((row) => row.textContent!.includes('Added'))!.classList.contains('agent-log__entry--muted')).toBe(false);
+  });
+});

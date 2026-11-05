@@ -116,6 +116,11 @@ class ParamChange:
     params: dict[str, Any]
 
 
+# What an agent's cursor says when a run it asked for waits for the
+# person's OK (the spec default; the canvas's WAITING_FOR_OK).
+WAITING_FOR_OK = "Waiting for your OK"
+
+
 @dataclass(frozen=True)
 class ProposalSpec:
     note: str

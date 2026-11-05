@@ -267,8 +267,17 @@ One that would pass their daily total (everything that isn't them shares it
 over the last 24 hours, $5 unless they picked another) isn't refused:
 Nebula sends it as a proposal for you, and `nebula run` prints "Waiting for
 the person’s OK: … Sent as proposal <id>. Check it with nebula proposals."
-and exits 4. Nothing ran; tell the person, and check it with `nebula
-proposals`. `nebula spend` shows the total, what's used and what's left.
+and the numbers ("Daily total $5: $4.80 used in the last 24 hours,
+$0.20 left; this run about $0.40."), and exits 4. MCP `run_nodes` returns
+`status: "waiting"`, `proposalId`, `message`, `dailyTotal` (`limitUsd`,
+`usedUsd`, `leftUsd`, `runUsd`: the total, used, left and this run's
+estimate) and, when it also needs their OK for another reason, `alsoNeeds`
+(`perRun`, `modelPerRun`, `unpriced`, `limit` or `planRuns`), and its
+message ends `Check it with get_proposal("<id>").` Nothing ran; tell the
+person, check it with `nebula proposals`, and don't propose it again: it was
+already sent. Without `NEBULA_AGENT_NAME` (or `--as`) it is refused instead,
+and so is a run when your 3 proposal slots are full. `nebula spend` and
+`nebula context` show the total, what's used and what's left.
 Only the person changes it.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
 per megapixel of the larger of input and output, rounded up; `nebula info`

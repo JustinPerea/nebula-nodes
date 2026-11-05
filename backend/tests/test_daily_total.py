@@ -155,7 +155,7 @@ def test_the_combined_reason_puts_the_total_first():
                        items=[{"id": "n1", "definitionId": "paid", "params": {}},
                               {"id": "n2", "definitionId": "unpriced", "params": {}}])
     assert unpriced.wait is not None and unpriced.wait.also == agent_spend.ALSO_UNPRICED
-    assert unpriced.wait.bar_line().startswith("This would pass the $5 daily total and ")
+    assert unpriced.wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
 
 
 def test_the_total_alone_never_makes_an_unpriced_node_ask():
@@ -352,8 +352,29 @@ def _chat_headers():
     return {"Authorization": f"Agent {token}"}, token
 
 
-@pytest.mark.parametrize("kind", ["chat agent", "outside agent", "script", "unconnected tab"])
-def test_each_kind_that_isnt_the_person_counts_toward_the_total(api, kind):
+# A caller that didn't name itself, over the total (round 2 of PR #212: only
+# callers that name themselves get the automatic proposal). GM - Design, 2026-10-31.
+NAMELESS = ("This would pass the $5 daily total. Name yourself with NEBULA_AGENT_NAME or --as to send it "
+            "as a proposal.")
+
+
+@pytest.fixture
+def connected_app(api, tmp_path, monkeypatch):
+    from services import app_tokens
+
+    store = app_tokens.AppTokens(tmp_path / "app-tokens.json")
+    monkeypatch.setattr(api.main, "app_token_store", store)
+    monkeypatch.setattr(app_tokens, "_store", store)
+    _app, token = store.create("Claude Desktop", None)
+    return {"Authorization": f"Agent {token}"}
+
+
+@pytest.mark.parametrize("kind", ["chat agent", "outside agent", "connected app", "personal agent", "script",
+                                  "unconnected tab"])
+def test_each_kind_that_isnt_the_person_counts_toward_the_total(api, kind, request):
+    """Every caller that isn't the person counts, by its own key shape (a chat's
+    copy, the shared outside key, an app's, a personal agent's). One that names
+    itself waits as a proposal; a nameless one is refused, with no proposal."""
     from commons.actors import agent_registry
 
     price(2.0)
@@ -361,6 +382,12 @@ def test_each_kind_that_isnt_the_person_counts_toward_the_total(api, kind):
     token = None
     if kind == "chat agent":
         headers, token = _chat_headers()
+    elif kind == "personal agent":
+        token = agent_registry.mint("claude", [], session="chat-personal", spend_key="outside:personal:hermes",
+                                    display_name="Hermes")
+        headers = {"Authorization": f"Agent {token}"}
+    elif kind == "connected app":
+        headers = request.getfixturevalue("connected_app")
     else:
         headers = {"outside agent": CLAUDE, "script": {}, "unconnected tab": FORGED_ORIGIN}[kind]
     try:
@@ -369,26 +396,40 @@ def test_each_kind_that_isnt_the_person_counts_toward_the_total(api, kind):
         assert api.main.agent_spend_ledger.spent_daily().total == pytest.approx(2.0)
         api.client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=headers)
         third = api.client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=headers)
-        assert third.status_code == 202, third.text  # $4 used, $2 more passes $5
-        assert third.json()["dailyTotal"]["usedUsd"] == pytest.approx(4.0)
+        if kind in ("script", "unconnected tab"):
+            assert third.status_code == 403, third.text  # $4 used, $2 more passes $5
+            assert third.json()["detail"] == NAMELESS
+            # Neither names itself with a marker: the person gate's code, so a
+            # tab shows its own not-connected line (the canvas reads the code).
+            assert third.json()["code"] == "person_required"
+            assert api.main.canvas_proposals.open_list() == []
+        else:
+            assert third.status_code == 202, third.text  # $4 used, $2 more passes $5
+            assert third.json()["dailyTotal"]["usedUsd"] == pytest.approx(4.0)
+        assert api.main.agent_spend_ledger.spent_daily().total == pytest.approx(4.0)
+        assert api.main.execute_graph.await_count == 2
     finally:
         if token:
             agent_registry.revoke(token)
 
 
-def test_an_unconnected_tabs_canvas_run_shows_the_proposal(api):
+@pytest.mark.parametrize("route", ["execute", "execute-node", "graph/run"])
+@pytest.mark.parametrize("who", ["script", "unconnected tab"])
+def test_a_nameless_caller_over_the_total_is_refused_with_no_proposal(api, route, who):
     price(3.0)
-    node_id = _node(api)
+    node_id = _node(api, "Writer")
     api.main.agent_spend_ledger.record("outside:shared", "Agents", {PAID: 4.0})
+    headers = {} if who == "script" else FORGED_ORIGIN
     nodes = [{"id": node_id, "definitionId": PAID, "params": {}, "outputs": {}}]
-    response = api.client.post("/api/execute", headers=FORGED_ORIGIN, json={"nodes": nodes, "edges": []})
-    assert response.status_code == 202, response.text
-    body = response.json()
-    assert body["status"] == "waiting" and body["runId"]
-    opened = [m for m in api.browser if m.get("type") == "proposalOpened"]
-    assert opened and opened[-1]["proposal"]["agent"]["name"] == "Unnamed client"
-    assert opened[-1]["proposal"]["wait"]["barLine"] == "This would pass the $5 daily total, which has $1.00 left."
+    body = {"graph/run": {"targetNodeId": node_id}, "execute": {"nodes": nodes, "edges": []},
+            "execute-node": {"nodes": nodes, "edges": [], "targetNodeId": node_id}}[route]
+    response = api.client.post(f"/api/{route}", headers=headers, json=body)
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == NAMELESS and response.json()["code"] == "person_required"
+    assert api.main.canvas_proposals.open_list() == []
+    assert not [m for m in api.browser if m.get("type") == "proposalOpened"]
     api.main.execute_graph.assert_not_awaited()
+    assert api.main.agent_spend_ledger.spent_daily().total == pytest.approx(4.0)
 
 
 def test_the_second_of_two_runs_that_fit_alone_waits(api):
@@ -432,7 +473,8 @@ def test_nebula_spend_prints_it():
     out = io.StringIO()
     with redirect_stdout(out):
         spend.run(Client())
-    assert ("Daily total, everything that isn't the person, last 24 hours: $5.00, $3.35 used, $1.65 left"
+    # The limit as Settings writes it, used and left to the cent (review 1, NIT-3).
+    assert ("Daily total, everything that isn't the person, last 24 hours: $5, $3.35 used, $1.65 left"
             in out.getvalue())
 
 
@@ -445,9 +487,12 @@ def test_the_cli_and_mcp_pass_the_waiting_line_as_it_is():
     out = io.StringIO()
     with redirect_stdout(out):
         code = execute._report(answer)
-    assert code == execute.EXIT_WAITING and out.getvalue().strip() == AGENTS
+    assert code == execute.EXIT_WAITING and out.getvalue().splitlines()[0] == AGENTS
     shown = json.loads(mcp_server._run_result(answer, None)[0])
-    assert shown["message"] == AGENTS and shown["dailyTotal"]["usedUsd"] == 4.8 and shown["status"] == "waiting"
+    # MCP's check-it hint names its own call (GM - Design, 2026-10-31).
+    assert shown["message"] == AGENTS.replace("Check it with nebula proposals.",
+                                              'Check it with get_proposal("p_1234abcd").')
+    assert shown["dailyTotal"]["usedUsd"] == 4.8 and shown["status"] == "waiting"
 
 
 def test_agents_cant_change_the_total(api):

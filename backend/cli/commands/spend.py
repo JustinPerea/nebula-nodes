@@ -5,6 +5,7 @@ from typing import Any
 from services import money
 
 from ..client import NebulaClient
+from ..formatter import daily_total_line
 
 
 def _usd(value: Any) -> str:
@@ -27,12 +28,9 @@ def run(client: NebulaClient) -> None:
     print("Spending limits (set by the person in Settings > Preferences):")
     daily = view.get("dailyTotal") or {}
     if daily:
-        # The umbrella every agent, script and unlinked tab shares, exact.
-        daily_cap = daily.get("limitUsd")
-        line = f"  Daily total, everything that isn't the person, last 24 hours: {_usd(daily_cap)}"
-        line += (f", {_usd(daily.get('usedUsd', 0))} used, {_usd(daily.get('leftUsd', 0))} left"
-                 if daily_cap is not None else f" ({_usd(daily.get('usedUsd', 0))} used)")
-        print(line)
+        # The umbrella every agent, script and unlinked tab shares: the limit
+        # as Settings writes it ("$5"), used and left to the cent.
+        print(f"  {daily_total_line(daily)}")
     print(f"  Per run:      {_usd(limits.get('perRunUsd'))}")
     used = spent.get("totalUsd", 0)
     plan_cap = limits.get("kreaPlanRuns")

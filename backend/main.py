@@ -29,13 +29,13 @@ import time as _time_module
 import unicodedata
 import zipfile
 from collections import OrderedDict, deque
-from contextlib import ExitStack, aclosing, contextmanager, nullcontext
+from contextlib import ExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
 from contextvars import Context, ContextVar
 import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
+from typing import Any, AsyncIterator, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -205,6 +205,8 @@ from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_out
 # Each canvas proposal's Update too (Justin's Q112 a).
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 from services.canvas_proposals import MAX_RUN as PROPOSAL_MAX_RUN
+from services.canvas_proposals import MAX_OPEN_PER_AGENT
+from services.canvas_proposals import WAITING_FOR_OK as PROPOSAL_WAITING_SAY
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
 from services.agent_questions import (
     CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
@@ -3053,10 +3055,52 @@ def _require_spend_approval(
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
 
 
-# Who a waiting run's proposal is from when the caller didn't name itself
-# (a script, a canvas tab not opened from the link): the name Nebula gives
-# such a caller everywhere else (canvas_events.actor_label).
-_UNNAMED_CALLER = AgentIdentity(id="unnamed", name="Unnamed client", color="#8C8C8C", verified=False)
+# Only a caller that names itself gets a waiting run's proposal (the
+# coordinator, round 2 of PR #212, until Justin decides otherwise): a script,
+# curl or a tab not opened from the link over the total is refused, as POST
+# /api/canvas/proposals refuses it. Where a name is missing elsewhere, "An
+# agent" stands in (GM - Design, 2026-10-31).
+
+# One waiting run's dedupe and proposal at a time per (caller, nodes,
+# project): _open_canvas_proposal awaits (it measures inputs) before it
+# creates, so without this, retries of one run arriving together each opened
+# a copy (review 1 of PR #212, L-1). Each entry is [lock, users], dropped
+# when its last user leaves.
+_waiting_locks: dict[tuple[str, tuple[str, ...], str | None], list[Any]] = {}
+
+
+@asynccontextmanager
+async def _waiting_section(key: tuple[str, tuple[str, ...], str | None]) -> AsyncIterator[None]:
+    entry = _waiting_locks.setdefault(key, [asyncio.Lock(), 0])
+    entry[1] += 1
+    try:
+        async with entry[0]:
+            yield
+    finally:
+        entry[1] -= 1
+        if entry[1] == 0 and _waiting_locks.get(key) is entry:
+            _waiting_locks.pop(key, None)
+
+
+def _open_waiting_proposal(identity: AgentIdentity, run_ids: list[str], project_id: str | None) -> Any:
+    """The caller's open proposal for a waiting run of these nodes here, if any."""
+    for proposal in canvas_proposals.open_list():
+        if (proposal.wait and proposal.agent.id == identity.id and list(proposal.spec.run) == run_ids
+                and proposal.project_id == project_id):
+            return proposal
+    return None
+
+
+async def _log_slots_full(identity: AgentIdentity, line: str) -> None:
+    """The person's Agent log line for a run that waited with no slot left
+    for its proposal: neutral, with no bar or card (GM - Design,
+    2026-10-31: "there's nothing to OK"). Decoration; never fails the route."""
+    try:
+        event = _point(identity, target=None, action="click", say="", log=line)
+        event["tone"] = "muted"
+        await manager.broadcast_raw(event)
+    except Exception:  # noqa: BLE001 - the agent's answer still says why
+        pass
 
 
 def _waiting_answer(wait: agent_spend.DailyWait, proposal_id: str, *, run_id: str | None = None) -> JSONResponse:
@@ -3075,33 +3119,65 @@ def _waiting_answer(wait: agent_spend.DailyWait, proposal_id: str, *, run_id: st
     return JSONResponse(status_code=202, content=body)
 
 
-async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | None = None) -> JSONResponse:
+def _asked_matches_canvas(asked: tuple[list[GraphNode], list[GraphEdge]], run_ids: list[str]) -> bool:
+    """Whether the nodes and wires a run was priced on are the canvas's own
+    for these run ids, as Accept will run them (run_approvals.fingerprint:
+    definitions, params, inputs, placeholders)."""
+    nodes, edges = asked
+    asked_nodes = {node.id: {"definitionId": node.definition_id, "params": node.params} for node in nodes}
+    asked_edges = [{"source": e.source, "sourceHandle": e.source_handle, "target": e.target,
+                    "targetHandle": e.target_handle} for e in edges]
+    return (approvals.fingerprint(asked_nodes, asked_edges, run_ids)
+            == approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids))
+
+
+async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | None = None,
+                               asked: tuple[list[GraphNode], list[GraphEdge]] | None = None) -> JSONResponse:
     """A run that isn't the person's would pass the daily total: it becomes a
     proposal to run the same canvas nodes, which the person accepts on the
     canvas (Accept runs it, as the person's), and the caller hears that it
     waits (GM - Design, 2026-10-31). The same caller asking again for the
-    same nodes is pointed at the proposal it already has. A run Nebula can't
-    make a proposal of (more nodes than a proposal runs, a node not on the
-    canvas, too many proposals open) is refused as before, saying why."""
+    same nodes is pointed at the proposal it already has.
+
+    Refused instead, in the total's words: a caller that didn't name itself
+    (a script is told to name itself; a tab not opened from the link reads
+    its own lock line, from the person gate's code); a run Nebula can't make
+    a proposal of (more nodes than a proposal runs, a node not on the
+    canvas, a proposal error); one whose slots are full (GM's line, and the
+    person's Agent log says so); and, on the routes that run the request's
+    own nodes (``asked``: /api/execute, /api/execute-node), one whose nodes
+    aren't the canvas's as Accept would run them, so the line and its
+    estimate never price something else (review 1 of PR #212, N-3)."""
     wait = held.decision.wait
     assert wait is not None
     refusal = held.decision.refusal or ""
     run_ids = list(dict.fromkeys(held.run_ids))
-    identity = identify_agent(current_request_headers()) or _UNNAMED_CALLER
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise _person_only_refusal(wait.nameless_line())
     project_id = _workspace_context()["activeProjectId"]
     if len(run_ids) > PROPOSAL_MAX_RUN or any(node_id not in cli_graph.nodes for node_id in run_ids):
         raise _person_only_refusal(refusal)
-    for proposal in canvas_proposals.open_list():
-        if (proposal.wait and proposal.agent.id == identity.id and list(proposal.spec.run) == run_ids
-                and proposal.project_id == project_id):
-            return _waiting_answer(wait, proposal.id, run_id=run_id)
-    details = {**wait.as_dict(), "nodeIds": run_ids, "names": [_node_label(node_id) for node_id in run_ids]}
-    try:
-        proposal, _view, _still_open = await _open_canvas_proposal(
-            identity, ProposalSpec(note=wait.bar_line(), run=tuple(run_ids)), fence, models={}, wait=details)
-    except HTTPException as exc:
-        raise _person_only_refusal(f"{refusal} Nebula couldn't send it as a proposal: {exc.detail}") from exc
-    return _waiting_answer(wait, proposal.id, run_id=run_id)
+    if asked is not None and not _asked_matches_canvas(asked, run_ids):
+        raise _person_only_refusal(refusal)
+    async with _waiting_section((identity.id, tuple(run_ids), project_id)):
+        existing = _open_waiting_proposal(identity, run_ids, project_id)
+        if existing is not None:
+            return _waiting_answer(wait, existing.id, run_id=run_id)
+        mine = [p for p in canvas_proposals.open_list() if p.agent.id == identity.id]
+        if len(mine) >= MAX_OPEN_PER_AGENT:
+            names = [_node_label(node_id) for node_id in run_ids]
+            await _log_slots_full(identity, wait.slots_full_log(names, len(mine)))
+            raise _person_only_refusal(wait.slots_full_line(len(mine)))
+        # Nodes with no list price by the names the canvas shows them by.
+        wait.names.update({node_id: _node_label(node_id) for node_id in wait.unpriced if node_id in cli_graph.nodes})
+        details = {**wait.as_dict(), "nodeIds": run_ids, "names": [_node_label(node_id) for node_id in run_ids]}
+        try:
+            proposal, _view, _still_open = await _open_canvas_proposal(
+                identity, ProposalSpec(note=wait.bar_line(), run=tuple(run_ids)), fence, models={}, wait=details)
+        except HTTPException as exc:
+            raise _person_only_refusal(f"{refusal} Nebula couldn't send it as a proposal: {exc.detail}") from exc
+        return _waiting_answer(wait, proposal.id, run_id=run_id)
 
 
 def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
@@ -8085,7 +8161,9 @@ async def _open_canvas_proposal(
     else:
         target = None
     if target is not None:
-        await _show_agent(target, action="click", say=spec.note,
+        # A held run's cursor says the spec's default; its reason is on the
+        # bar, the cards and the Updates card (GM - Design, 2026-10-31).
+        await _show_agent(target, action="click", say=PROPOSAL_WAITING_SAY if wait else spec.note,
                           did=_did("Proposed", target.get("nodeId")))
     return proposal, view, still_open
 
@@ -8115,6 +8193,14 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         spec = parse_spec(body, internal_ok=BILLING_PARAMS, ports=_wire_end_ports)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    if spec.run and not (spec.nodes or spec.edges or spec.params or spec.rename):
+        # A run-only proposal of what a run of the caller's already waits on
+        # (a run over the daily total was sent as a proposal for it): that
+        # proposal, not a second card (review 1 of PR #212, LOW-3).
+        waiting = _open_waiting_proposal(identity, list(dict.fromkeys(spec.run)),
+                                         _workspace_context()["activeProjectId"])
+        if waiting is not None:
+            return JSONResponse(status_code=200, content=agent_wording({"proposal": _proposal_view(waiting)}))
     for node in spec.nodes:
         _check_krea_auth(node.definition_id, node.params, node.ref)
         _check_provider(node.definition_id, node.params, node.ref)
@@ -10624,9 +10710,9 @@ async def execute(request: ExecuteRequest) -> dict:
                                           run_ids=_end_node_ids(nodes, edges), settings=settings, fence=fence,
                                           propose=True)
     except _WaitForOk as held:
-        # Over the daily total: nothing ran; it waits for the person's OK
-        # (a tab not opened from the link sees the proposal, locked).
-        return await _propose_waiting_run(held, fence, run_id=run_id)
+        # Over the daily total: nothing ran; it waits for the person's OK as
+        # a proposal of the canvas nodes, when they are the ones asked to run.
+        return await _propose_waiting_run(held, fence, run_id=run_id, asked=(requested_nodes, requested_edges))
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -10819,8 +10905,9 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                                           run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
                                           settings=settings, fence=fence, propose=True)
     except _WaitForOk as held:
-        # Over the daily total: nothing ran; it waits for the person's OK.
-        return await _propose_waiting_run(held, fence, run_id=run_id)
+        # Over the daily total: nothing ran; it waits for the person's OK, as
+        # in execute.
+        return await _propose_waiting_run(held, fence, run_id=run_id, asked=(requested_nodes, requested_edges))
     # Placeholders turn normal and an agent's run is kept once it registered
     # (_admit_registered_run, as in execute).
 

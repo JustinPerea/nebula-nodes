@@ -4,12 +4,14 @@ Justin decided: "Add a default daily total for everything that isn't you, shown 
 
 ## What it does
 
-- **Setting:** `agentSpend.dailyTotalUsd`. Unset is $5 (`DEFAULT_DAILY_TOTAL_USD`). An explicit null is "No limit". An unreadable value is $5, never no limit. Only the person can change it (the settings route is person-only; agents get 403).
+- **Setting:** `agentSpend.dailyTotalUsd`. Unset is $5 (`DEFAULT_DAILY_TOTAL_USD`). An explicit null is "No limit". An unreadable value is $5, never no limit, and so is anything over $100,000 (`MAX_DAILY_TOTAL_USD`) or a number too large for a float. Only the person can change it (the settings route is person-only; agents get 403).
 - **What counts:** every run that isn't the person's: chat agents, outside agents, connected apps, personal agents, scripts, and a tab not opened from the link. It covers the last 24 hours, rolling.
   - `SpendLedger.spent_daily()` sums the outside keys' events (the same records the outside cap counts).
   - It also sums `daily:chats`, a timed copy of every chat run. A chat key keeps a session total, which doesn't roll, so the copy is what lets chats roll in the same window.
   - A give-back with a time subtracts from the copy at the run's own time. One without a time stays counted (over-counting is the safe side).
   - The copy is pruned with the outside events and is never dropped by the chat-session cap.
+  - A ledger file from before the daily total gets its chats' last 24 hours seeded into the copy once, at each chat's `updated` time (`_seed_chats_daily`, marked `chatsDailySeeded` in the file).
+  - Each key is summed and held at 0 on its own before the keys are added, so one key's give-backs can't erase another's spend.
 - **Order:** the daily total is the first budget for every key (`session_budgets(..., daily_spent=)`). `decide` checks it first.
 - **Over the total:**
   - `decide` returns a refusal with `Decision.wait` set (`DailyWait`).
@@ -17,9 +19,11 @@ Justin decided: "Add a default daily total for everything that isn't you, shown 
     - The note is the bar line. `proposal.wait` holds the lines, node ids and names.
     - The caller gets `202 {status: "waiting", proposalId, message, dailyTotal, alsoNeeds?, runId?}`.
     - Accept runs it as the person's, with an approval id, uncounted.
-    - The same caller, project and nodes asking again get the proposal they already have.
-    - A caller with no name gets an "Unnamed client" proposal.
-    - More nodes than a proposal runs, a node not on the canvas, or a proposal that can't open falls back to the refusal, saying why.
+    - The same caller, project and nodes asking again get the proposal they already have, even when the requests arrive together: dedupe-then-create is one critical section per (caller, nodes, project) (`_waiting_section`). A run-only `POST /api/canvas/proposals` of the same nodes answers with that proposal too.
+    - Only a caller that names itself gets the proposal. A nameless one (a script, curl, a tab not opened from the link) is refused in the total's words with no proposal: "This would pass the $5 daily total. Name yourself with NEBULA_AGENT_NAME or --as to send it as a proposal." It carries the person gate's `code: person_required`, so a tab shows its own not-connected line.
+    - A caller whose 3 proposal slots are full gets GM's line, "This would pass the $5 daily total, and you already have 3 open proposals. Wait until the person accepts or rejects one, then propose it again.", and the person's Agent log gets a neutral line. No bar or card.
+    - On `/api/execute` and `/api/execute-node`, a request whose nodes aren't the canvas's (by the run approval's fingerprint) is refused, not proposed, because the proposal would run the canvas's nodes and its line would price something else.
+    - More nodes than a proposal runs, a node not on the canvas, or another proposal error falls back to the refusal, saying why.
   - Off-canvas runs (`/api/quick`, a moodboard read, a Cinema shot) have no canvas nodes to propose, so they're refused in the total's words.
 - **Combined reason:** when the run also needs an OK for another reason, the line names the total first, then that reason (`also`).
   - The reasons are a per-run limit that trips (the per-model cap first, then the general one) or, when a USD limit applies, a node with no list price.
@@ -28,15 +32,18 @@ Justin decided: "Add a default daily total for everything that isn't you, shown 
 - **The person's runs:** `_require_spend_approval` returns before any check for the person, as before. Their runs never reach the ledger, so they never count and never wait.
 - **Agents read it:**
   - `GET /api/agent/spend` → `dailyTotal {limitUsd, usedUsd, leftUsd, window: "24h"}`.
+  - `start_here` / `nebula context` → `spend.daily {limitUsd, usedUsd, leftUsd}` and a "Daily total" line.
   - `/api/agent/apps` → `daily.spentUsd`.
   - `nebula spend` prints the line, and `get_spend_limits` describes it.
-  - `run_nodes` and `nebula run` report the waiting proposal; `nebula run` exits with 4.
+  - `run_nodes` and `nebula run` report the waiting proposal; `nebula run` exits with 4 and prints the numbers. The check-it hint follows the surface: "Check it with nebula proposals." for the CLI and HTTP, `Check it with get_proposal("<id>").` over MCP.
+  - The in-app chat prompt says a run answered "waiting" was already sent as a proposal: wait on it with get_proposal, don't propose it again.
 - **UI:**
   - Settings › Preferences › Agent spending, first row: Daily total. Choices are $1, $2, $5, $10, $20 and $50 a day, plus Other amount… and No limit, with GM's usage line and a thin meter. The row lives in the lazy PreferencesTab chunk, not the entry.
   - The proposal bar shows `wait.barLine`.
-  - Each waiting card gets a "Waiting for your OK" tag (role=status) whose `aria-describedby` points at the bar line while the bar shows that proposal.
+  - Each waiting node gets a band at the top of its own card, above the title, in the proposal's accent: "Waiting for your OK" and "This run would pass the $5 daily total." (`NodeWaitBand`, drawn by every card's wrapper). Several proposals on one node: one band for the shown proposal (else the newest) with a count, "Waiting for your OK · 2". Its role=status points at the bar line through `aria-describedby` while the bar shows that proposal. The node grows by the band's height on the POP spring and shrinks back on SOFT; at once under reduced motion.
   - The Updates card reads "<agent> wants to run “Writer” and “Editor”. <bar line>".
-  - A tab not opened from the link whose run waits leaves its nodes idle and its Run history unchanged (`settleWaitingStart`).
+  - A "waiting" start never reads as a started run: its nodes go back to idle and Run history is unchanged (`settleWaitingStart`). Tabs don't get one any more (they are nameless), so this is a guard.
+  - Settings: Escape in "Other amount…" goes back to the select without closing Settings (the field claims Escape in the capture phase). After Enter saves, focus returns to the select once it's enabled. The draft reads "7.50", not "7.5". What can't be saved keeps the field open with a line saying why, and never saves No limit.
 - Docs: `docs/MCP-SETUP.md` (Spending limits, the spend read, the table row) and `skills/nebula/SKILL.md` (waiting runs, `nebula spend`).
 
 ## Decisions not in the brief
@@ -44,7 +51,7 @@ Justin decided: "Add a default daily total for everything that isn't you, shown 
 - **Auto-proposal only on canvas run routes.** GM's agent line says "Sent as proposal <id>", so a canvas run that passes the total opens the proposal itself; the agent doesn't have to ask. Every other refusal still leaves proposing to the agent, as before. Off-canvas routes can't be proposals, so they refuse.
 - **The total doesn't make unpriced nodes ask.** Changing that would alter rows that don't pass the total, which the brief rules out. Unpriced spend can't be counted against the total either way. Question for Justin below.
 - **`node_name_list` in the backend** mirrors the frontend `nodeNameList`, so the Updates line names nodes the same way the bar does: up to three quoted, repeats counted, then a count.
-- **The waiting tag is an overlay in ProposalLayer**, positioned on each node, not drawn inside every card component. That keeps one place for it across all node kinds.
+- **The waiting tag is a band inside the card** (GM, round 2), not round 1's overlay. It is drawn by `withNodeCardBoundary`, the wrapper every card goes through, as the node's first child, so it lands in every node kind from one place. It takes the card's width without widening it (`width: 0; min-width: 100%`), and the card meets it square while it's up.
 - **The focus ring for the Other amount field** sits on the field wrapper (`:has(input:focus-visible)`), like the API key field. focusRingCss's list names it.
 
 ## Guard tables (1944d052 → this branch)
@@ -115,16 +122,36 @@ Run on 2026-10-31 in the worktree, on a machine at load average 30–50. All npm
   - The key was fake, the $0.20 gpt-image-1 price was a fixture, and the spend was fixture spend. Nothing ran a provider.
   - Shots: 10 of Settings (nothing, $3.40, $5.20, No limit and Other amount…, each at 1440 and 700) and 5 of the canvas (full frame with the arrival card, full frame, bar, cards, Updates card). No two share an md5 (`uniq -d` is empty), and I opened every one.
 
+## Round 2 (GM's review, review 1's findings, GM's answers)
+
+Items and their tests are listed in the commit message. What a reader needs to trust them:
+
+- **Gates**, 2026-11-05, from this worktree (branch still behind main; main is not merged yet):
+  - `tsc -b --noEmit` clean. `npm run lint` clean (check:inline-styles, 256 files; check:slava-css-scope; eslint). `check:ratchets` doesn't exist on this branch; the ratchet tests ran inside vitest.
+  - `vite build` plus `check-build-budget.mjs`: 447,408 bytes raw (limit 512,000).
+  - vitest, explicit list of 413 files (every changed test, every importer of a changed module, every test that reads source from disk), `--maxWorkers=2`: 5,645 passed, 3 failed, no "Errors" line.
+    - The 3 were `errorCopy.round3e.cards`. The node card now imports the proposals store for its band, and that store subscribes to the socket when it loads, so the test's "last subscriber" was no longer the graph store's. The test now sends the event to every subscriber (it passed on 696c3c85 and passes again). Then tsc, lint and the 160 tests of the six affected files passed again.
+  - pytest, 158 backend files that touch the changed modules, isolated (temp HOME and every NEBULA_* path), seven chunks of 25: 5,119 passed.
+    - One chunk showed 66 failures in `test_moodboard_cli`, `test_moodboard_edits` and `test_moodboard_private_note`. They come from `test_krea_gateway.py` running before them in the same process, and they are identical on 696c3c85 (51 failures with just those two files). Run apart, `test_krea_gateway` passes (86) and the rest of the chunk passes (870). Not caused by this change; worth its own fix.
+- **Mutants**, each applied, the tests run, the file restored byte for byte (the tree diff was identical before and after):
+  - Backend: 31 of 32 killed. The survivor is equivalent: seeding events from outside the window, which the window sum and the save drop anyway.
+  - Frontend, earlier set: 25 of 25 killed.
+  - The band, against the restructured NodeWaitBand (`NodeWaitBand.tsx`, `lib/nodeWaitBand.ts`): 15 mutants. 14 killed at once. The survivor was "a band that arrives after the node doesn't open at once under reduced motion". New test: `opens at once under reduced motion when the band arrives after the node, and closes at once`; the mutant is killed.
+- **Live check** (backend through `harness/serve_isolated.py` on 8791, Vite on 5791 with `VITE_NEBULA_BACKEND_PORT=8791`, canaries first, fake keys, fixture spend seeded in the ledger file at start):
+  - Backend blocked log: canary lines only, for every phase. Browser: 8000-8010, 5173, 8840 and 5840 blocked through CDP, canaries blocked, 0 requests blocked during the shots. No run was accepted.
+  - Settings, at 1440 and 1000: nothing, $3.40 of $5, $5.20 of $5 (new runs wait), No limit, Other amount… open, and "Same as chats · $5". Help, usage line and the 2 px meter 8 px under it; the outside select fits, not cut off.
+  - The agent runs, each a 202 with the cursor saying "Waiting for your OK": a run that passes the total ("has $0.02 left"), one with a node that has no list price ("and “Sketch” has no list price"), one over a model's per-run limit ("…and cost more than the $0.01 per-run limit for “FLUX.2”"), one over the outside limit ("…and the $1 limit for agents outside Nebula chats"). A nameless caller got `403 person_required` and no proposal. The bar, the band and the Updates card for each line.
+  - The band: one node; two proposals on one node ("Waiting for your OK · 2"); a neighbour 12.8 px below. Shots wait for the height to stop moving.
+- **Correction to round 1.** Round 1 said the live check ran nothing against a provider. Its backend guard patched Python's socket module, but uvicorn used uvloop, which connects in libuv and never goes through it, so a guard check can't prove that. No round-1 run was accepted, so none executed, but background calls can't be ruled out. In the first round-2 shot attempt, two runs ($4.80 and $0.20) reached api.openai.com with a fake key at both widths and got 401, unbilled. This pass used the shared `serve_isolated.py` (uvloop made unimportable, every outbound connect refused, canaries inside the running loop); its log held canary lines only.
+- **Why $100,000.** A typed total above it isn't a limit anyone means, and No limit already says that. Capping it keeps every sum and label finite.
+- **Invalid amount line** (draft, for GM): "Type an amount from $0.01 to $100,000, like 7.50."
+
 ## Open questions
 
-For GM:
-1. **The combined line for a node with no list price.** It reads "This would pass the $5 daily total and has a node with no list price." Your design gives the per-run variant; this one follows its pattern.
-2. **A per-model per-run cap in the combined line.** I used that model's cap: "…costs more than $0.50 per run".
-3. **A session or outside cap passed together with the total.** The line names only the total ("which has $X left"), with no second reason. Should it say the cap too?
-4. **A caller with no name.** Its proposal shows "Unnamed client". Is that the right name?
-5. **The Updates line names the nodes** ("“Writer” and “Editor”", up to three, then a count) rather than your example's "2 nodes".
-6. **The combined case for agents.** The agent line stays your single line, and `alsoNeeds` sits beside it in the JSON.
-7. **The waiting tag position.** It's an overlay above each card, not drawn inside the card.
+For GM (items 1-6 of round 1 were answered in the round 2 brief and are built):
+1. **The Agent log line omits the agent's name**, because the source column shows it. Right?
+2. **The band pushes the card down.** An upper node that grows by the band's height (52 px, 61 with a long line) overlaps a neighbour 12.8 px below it by about 39 px; the neighbour draws on top. I read "layout spring" as POP to open and SOFT to close. Should the neighbour move, or the band sit inside the node's own height?
+3. **The 12-total proposal cap** still uses the old fallback line, and `propose_hint` still names both surfaces (MCP and CLI).
 
 For Justin:
 1. **Unpriced nodes.** Should the total alone make a node with no list price ask? Today it doesn't (no other USD limit set means unpriced nodes run). Turning that on would change rows that don't pass the total, so I left it off.

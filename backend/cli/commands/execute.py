@@ -3,6 +3,9 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from services.agent_spend import limit_usd
+
+from .spend import _usd
 from ..client import NebulaClient
 from ..formatter import format_run_results, format_graph
 
@@ -17,6 +20,13 @@ EXIT_CANCELLED = 3
 EXIT_WAITING = 4
 
 
+def _limit(value: Any) -> str:
+    """A limit as Settings writes it ("$5", "$7.50")."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "no limit"
+    return limit_usd(value)
+
+
 def _report(result: dict[str, Any]) -> int:
     status = result.get("status")
     run_id = result.get("runId", "")
@@ -28,6 +38,11 @@ def _report(result: dict[str, Any]) -> int:
     if status == "waiting":
         print(result.get("message") or f"Waiting for the person\u2019s OK. Sent as proposal {result.get('proposalId')}. "
               "Check it with nebula proposals.")
+        daily = result.get("dailyTotal") or {}
+        if daily:
+            # The numbers exact beside the line (GM - Design, 2026-10-31).
+            print(f"  Daily total {_limit(daily.get('limitUsd'))}: {_usd(daily.get('usedUsd'))} used in the last "
+                  f"24 hours, {_usd(daily.get('leftUsd'))} left; this run about {_usd(daily.get('runUsd'))}.")
         return EXIT_WAITING
     if status == "running":
         print(

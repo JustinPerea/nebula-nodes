@@ -555,6 +555,9 @@ def format_start(start: dict[str, Any]) -> str:
         plan_limit = plan.get("limit")
         plan_text = f"Krea plan runs {plan.get('used') or 0} of {plan_limit if plan_limit is not None else 'no limit'}"
         lines.append(f"SPEND: {per_run_text}; {spend.get('budget')} budget {budget}; {plan_text}")
+        daily = spend.get("daily")
+        if isinstance(daily, dict):
+            lines.append(f"  {daily_total_line(daily)}")
         lines.append("  (a run over a limit goes through `nebula propose`; `nebula spend` has the detail)")
 
     nxt = start.get("next") or {}
@@ -884,6 +887,21 @@ def _cost_line(cost: dict[str, Any]) -> str:
     low, high = float(estimate.get("low") or 0), float(estimate["high"])
     amount = _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
     return line + f" — {amount}{'+' if estimate.get('open') else ''} at list prices"
+
+
+def daily_total_line(daily: dict[str, Any]) -> str:
+    """The daily total over everything that isn't the person, as `nebula
+    context` and `nebula spend` print it: the limit as Settings writes it
+    ("$5"), used and left to the cent."""
+    from services import agent_spend, money
+
+    limit = daily.get("limitUsd")
+    used = money.usd_spent(float(daily.get("usedUsd") or 0))
+    if not isinstance(limit, (int, float)) or isinstance(limit, bool):
+        return f"Daily total, everything that isn't the person, last 24 hours: no limit ({used} used)"
+    left = money.usd_spent(float(daily.get("leftUsd") or 0))
+    return (f"Daily total, everything that isn't the person, last 24 hours: "
+            f"{agent_spend.limit_usd(limit)}, {used} used, {left} left")
 
 
 def _usd(amount: float) -> str:

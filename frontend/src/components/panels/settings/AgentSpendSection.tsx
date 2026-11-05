@@ -129,7 +129,7 @@ export function AgentSpendSection() {
             none="No limit" disabled={pending} describedBy="settings-agent-spend-help"
             onChange={(sessionUsd) => save({ ...limits, sessionUsd })} />
         </div>
-        <div className="settings-pref">
+        <div className="settings-pref settings-pref--stacked">
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-outside">Agents outside Nebula chats</label>
             <span className="settings-pref__description" id="settings-agent-outside-help">
@@ -137,7 +137,7 @@ export function AgentSpendSection() {
               last 24 hours; restarting Nebula doesn&rsquo;t reset it.
               {outside.view && (
                 <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
-                  {' '}{spentUsd(outside.view.outside.spentUsd)} in the last 24 h
+                  {' '}{spentUsd(outside.view.outside.spentUsd)} in the last 24 hours
                   {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
                 </span>
               )}
@@ -221,7 +221,7 @@ function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
           <span className="settings-pref__text">
             <span className="settings-pref__title">{agent.name}</span>
             <span className="settings-pref__description">
-              {spentUsd(agent.spentUsd)} in the last 24 h
+              {spentUsd(agent.spentUsd)} in the last 24 hours
               {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}, inside the budget above
             </span>
           </span>
@@ -268,9 +268,10 @@ function OutsideSelect({ limits, disabled, onChange }: {
   const own = limits.outsideDailyUsd;
   const current = own === undefined ? SAME_AS_SESSION : own === null ? 'none' : String(own);
   const custom = typeof own === 'number' && !(SESSION_CHOICES as readonly number[]).includes(own);
-  const session = limits.sessionUsd === null ? 'no limit' : usd(limits.sessionUsd);
+  const session = limits.sessionUsd === null ? 'No limit' : usd(limits.sessionUsd);
   return (
-    <select id="settings-agent-outside" className="settings__select settings__select--compact"
+    // Under its help (settings-pref--stacked), so "Same as chats · No limit" is never cut off.
+    <select id="settings-agent-outside" className="settings__select settings__select--compact settings__select--fits"
       aria-describedby="settings-agent-outside-help" value={current} disabled={disabled}
       onChange={(event) => {
         const { value } = event.target;
@@ -279,7 +280,7 @@ function OutsideSelect({ limits, disabled, onChange }: {
         else next.outsideDailyUsd = value === 'none' ? null : Number(value);
         onChange(next);
       }}>
-      <option value={SAME_AS_SESSION}>Same as a chat ({session})</option>
+      <option value={SAME_AS_SESSION}>Same as chats &middot; {session}</option>
       {custom && <option value={current}>{usd(own)} / 24 h</option>}
       {SESSION_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{usd(choice)} / 24 h</option>)}
       <option value="none">No limit</option>

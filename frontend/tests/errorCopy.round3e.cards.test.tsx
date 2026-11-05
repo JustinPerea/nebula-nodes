@@ -155,8 +155,10 @@ describe('a linked Paper source keeps its run error through a graph sync', () =>
     const { wsClient } = await import('../src/lib/wsClient');
     const { GRAPH_PARAMS_VERSION } = await import('../src/lib/savedParamsUpgrades');
     const subscribe = wsClient.subscribe as unknown as { mock: { calls: [(event: ExecutionEvent) => void][] } };
-    const listener = subscribe.mock.calls.at(-1)![0];
-    act(() => listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [], ...event } as unknown as ExecutionEvent));
+    // Every store listens to the socket (the node card's waiting band pulls the proposals store in
+    // too), so the event goes to all of them, not to whichever subscribed last.
+    const sync = { type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [], ...event } as unknown as ExecutionEvent;
+    act(() => { for (const [listener] of subscribe.mock.calls) listener(sync); });
   };
   const synced = (withSnapshot: boolean, patch: Partial<NodeData>) => ({
     id: 'n1', type: 'paperSourceNode', position: { x: 0, y: 0 },

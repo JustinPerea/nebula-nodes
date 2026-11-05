@@ -13,6 +13,8 @@ export interface AgentLogEntry {
   /** Who acted, as their cursor names them. Absent on the chat's thinking lines. */
   agent?: { id: string; name: string; color: string };
   message: string;
+  /** Shown neutral, in the muted colour (an event's `tone`). */
+  tone?: 'muted';
 }
 
 interface AgentLogState {
@@ -55,6 +57,7 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
     source: 'agent',
     agent: { id: agent.id, name: agent.name, color: SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR },
     message,
+    ...(event.tone === 'muted' ? { tone: 'muted' as const } : {}),
   };
 }
 

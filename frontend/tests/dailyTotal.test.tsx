@@ -5,7 +5,8 @@ import type { ProposalView, ProposalWait } from '../src/lib/wsClient';
 /**
  * The daily total (Justin decided, 2026-10-31; GM - Design's design,
  * verbatim): the Settings row, the proposal bar's line, the waiting node's
- * status and line, and the lock a tab not opened from the link keeps.
+ * status and line (its band, NodeWaitBand), and the bar's lock while the
+ * tab isn't connected as the person.
  */
 
 const flow = vi.hoisted(() => ({
@@ -32,15 +33,15 @@ const {
 } = await import('../src/lib/dailyTotal');
 const { DailyTotalRow } = await import('../src/components/panels/settings/DailyTotalRow');
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
-const { ProposalLayer } = await import('../src/components/canvas/ProposalLayer');
+const { NodeWaitBand } = await import('../src/components/nodes/NodeWaitBand');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 const { readAgentSpend } = await import('../src/store/settingsDraftStore');
 const { PROPOSAL_GATE_COPY, WAITING_FOR_OK, waitLineId } = await import('../src/lib/canvasProposals');
 const { notePersonPromoted, reportPersonRequired } = await import('../src/lib/personSession');
 
 // GM - Design, 2026-10-31, verbatim.
-const DESCRIPTION = 'Shared by everything that isn’t you: agent chats, agents outside Nebula, scripts and tabs '
-  + 'not opened from your link. Counts the last 24 hours.';
+const DESCRIPTION = 'Agent chats, agents outside Nebula, scripts and tabs not opened from your link all count '
+  + 'toward it. Your own runs don’t.';
 const BAR = 'This would pass the $5 daily total, which has $0.20 left.';
 const CARD = 'This run would pass the $5 daily total.';
 
@@ -97,8 +98,8 @@ describe('Settings: the Daily total row', () => {
   it('labels it as GM wrote it, with $5 preselected and no "(default)"', () => {
     const { container } = row({});
     expect(screen.getByLabelText('Daily total')).toBeTruthy();
-    expect(container.querySelector('#settings-agent-daily-help')!.textContent).toBe(
-      `${DESCRIPTION} Nothing spent in the last 24 hours.`);
+    expect(container.querySelector('#settings-agent-daily-help')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(DESCRIPTION);
+    expect(screen.getByTestId('settings-agent-daily-spent').textContent).toBe('Nothing spent in the last 24 hours.');
     const select = container.querySelector<HTMLSelectElement>('#settings-agent-daily')!;
     expect([...select.options].map((option) => option.textContent)).toEqual(
       ['$1 / day', '$2 / day', '$5 / day', '$10 / day', '$20 / day', '$50 / day', 'Other amount…', 'No limit']);
@@ -180,7 +181,7 @@ describe('Settings: the Daily total row', () => {
 
 describe('a run the daily total holds', () => {
   const wait: ProposalWait = {
-    limitUsd: 5, usedUsd: 4.8, leftUsd: 0.2, runUsd: 0.4, also: null, perRunLimitUsd: null,
+    limitUsd: 5, usedUsd: 4.8, leftUsd: 0.2, runUsd: 0.4, also: null, alsoLimitUsd: null, alsoModel: null, alsoFor: null, alsoPlanRuns: null,
     barLine: BAR, cardLine: CARD, nodeIds: ['n3'], names: ['Writer'],
   };
   const view = (): ProposalView => ({
@@ -214,12 +215,11 @@ describe('a run the daily total holds', () => {
   });
 
   it('shows "Waiting for your OK" and the line on each waiting node, pointing at the bar while it shows', () => {
-    const layer = render(<ProposalLayer />);
-    const tag = layer.container.querySelector<HTMLElement>('.proposal-wait__tag')!;
-    expect(layer.container.querySelector('.proposal-wait__status')!.textContent).toBe(WAITING_FOR_OK);
+    const band = render(<NodeWaitBand nodeId="n3" />);
+    const tag = band.container.querySelector<HTMLElement>('.node-wait-band__tag')!;
+    expect(band.container.querySelector('.node-wait-band__status')!.textContent).toBe(WAITING_FOR_OK);
     expect(WAITING_FOR_OK).toBe('Waiting for your OK');
-    expect(layer.container.querySelector('.proposal-wait__line')!.textContent).toBe(CARD);
-    expect(layer.container.querySelector<HTMLElement>('.proposal-wait')!.style.transform).toBe('translate(100px, 200px)');
+    expect(band.container.querySelector('.node-wait-band__line')!.textContent).toBe(CARD);
     expect(tag.getAttribute('aria-describedby')).toBeNull();
     render(<ProposalBar />);
     expect(tag.getAttribute('aria-describedby')).toBe(waitLineId('p_wait'));

@@ -22,6 +22,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
                         offline_read_only, unanswered, with_identity)
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
+from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
@@ -400,8 +401,11 @@ def start_here(ctx: Context | None = None) -> str:
       what a price can't say. Past its budget `rest` counts what's left per
       category; find_nodes(category=...) lists them.
     - `spend`: the per-run limit, this budget's kind, limit and use (for
-      outside agents, what all of them used together), and Krea plan runs
-      (get_spend_limits has per-model limits).
+      outside agents, what all of them used together), Krea plan runs, and
+      `daily`: the daily total over everything that isn't the person
+      (`limitUsd`, null for no limit, `usedUsd` and `leftUsd`, the last 24
+      hours), which holds on top of the budget (get_spend_limits has
+      per-model limits).
     - `next`: `events` (cursor and journal for wait_for_canvas_change), then
       the exact calls, arguments named as each tool takes them: `describe`,
       `build` (a whole edit_canvas plan), `propose`, `point` (with or
@@ -1581,8 +1585,12 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     if status == "waiting":
         # Over the person's daily total: nothing ran, and it waits for their
         # OK as a proposal (GM's line in `message`, the numbers exact).
-        return [_json.dumps({key: payload[key] for key in ("status", "proposalId", "message", "dailyTotal",
-                                                            "alsoNeeds") if key in payload})]
+        # The check-it hint in MCP's words: get_proposal("<id>") (GM - Design, 2026-10-31).
+        shown = {key: payload[key] for key in ("status", "proposalId", "message", "dailyTotal", "alsoNeeds")
+                 if key in payload}
+        if isinstance(shown.get("message"), str) and isinstance(shown.get("proposalId"), str):
+            shown["message"] = _agent_spend.for_mcp(shown["message"], shown["proposalId"])
+        return [_json.dumps(shown, ensure_ascii=False)]
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
                                                             "source", "startedBy", "nodes", "neverStarted", "noRecord",
@@ -1638,8 +1646,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     pass the person's daily total (everything that isn't them shares it, over
     the last 24 hours) isn't refused: Nebula sends it as a proposal and
     answers status "waiting" with `proposalId`, `message` (say it to the
-    person as it is) and `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd).
-    Nothing ran; get_proposal tells you when they decide. A node priced
+    person as it is), `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd: the
+    total, used, left and this run's estimate) and, when it also needs their
+    OK for another reason, `alsoNeeds` (perRun, modelPerRun, unpriced, limit
+    or planRuns). Nothing ran; get_proposal tells you when they decide. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this

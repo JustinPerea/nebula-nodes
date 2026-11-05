@@ -1,0 +1,65 @@
+/* A run the daily total holds (GM - Design, 2026-10-31, round 2 of PR #212):
+   a band at the top of each node card it waits on, above the title, in the
+   proposal's accent (--agent-color), inside the node's own box so it never
+   covers a neighbour (components/nodes/NodeWaitBand.tsx). The node grows by
+   its height while it is up: the grid row springs from 0fr to 1fr on POP and
+   back on SOFT (lib/springs.ts), never stock easing; at once under reduced
+   motion. It takes the card's width and never widens it. */
+body.app-slava-restraint .node-wait-band {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 0;
+  min-width: 100%;
+  transition: grid-template-rows var(--spring-soft-ms) var(--spring-soft);
+  pointer-events: none;
+}
+
+body.app-slava-restraint .node-wait-band[data-open='true'] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--spring-pop-ms) var(--spring-pop);
+}
+
+body.app-slava-restraint .node-wait-band__clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .node-wait-band__tag {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 6px 10px 7px;
+  box-sizing: border-box;
+  border: 1px solid var(--agent-color);
+  border-bottom: 0;
+  border-radius: var(--sr-radius-node) var(--sr-radius-node) 0 0;
+  background: color-mix(in srgb, var(--agent-color) 16%, var(--sr-canvas-elevated, #141416));
+  font-family: var(--sr-ui);
+}
+
+body.app-slava-restraint .node-wait-band__status {
+  color: var(--sr-ink);
+  font-size: var(--sr-type-label);
+  font-weight: 600;
+  line-height: var(--sr-line-meta, 1.3);
+}
+
+body.app-slava-restraint .node-wait-band__line {
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta, 1.35);
+}
+
+/* The card under an open band meets it square, so the two read as one box. */
+body.app-slava-restraint .node-wait-band[data-open='true'] + * {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .node-wait-band,
+  body.app-slava-restraint .node-wait-band[data-open='true'] {
+    transition: none;
+  }
+}

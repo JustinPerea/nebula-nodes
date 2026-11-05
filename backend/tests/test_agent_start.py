@@ -355,6 +355,29 @@ def test_spend_shows_what_the_budget_it_runs_against_has_used(start, monkeypatch
     assert spend["kreaPlanRuns"] == {"used": 1, "limit": 4}
 
 
+def test_spend_names_the_daily_total_over_the_budget(start, monkeypatch):
+    """The daily total holds on top of the budget: an outside agent with no
+    budget limit of its own (limitUsd None) still reads the $5 total, what is
+    used and what's left (review 1 of PR #212, MEDIUM-1)."""
+    from services import agent_spend
+
+    ctx = start
+    ledger = agent_spend.SpendLedger(None)
+    monkeypatch.setattr(ctx.main, "agent_spend_ledger", ledger)
+    monkeypatch.setattr(ctx.main, "load_settings", lambda: {
+        "runCostConfirmUsd": 1.0, "agentSpend": {"sessionUsd": None, "models": {}}})
+    ledger.record(agent_spend.OUTSIDE_SHARED, "Codex", {"gpt-image-2-generate": 2.0})
+
+    for via in ("mcp", "cli"):
+        response = ctx.client.get("/api/agent/start", params={"via": via}, headers=CLAUDE)
+        spend = response.json()["spend"]
+        assert spend["limitUsd"] is None
+        assert spend["daily"] == {"limitUsd": 5.0, "usedUsd": 2.0, "leftUsd": 3.0}
+        assert _size(spend) <= BUDGETS["spend"] * 4
+    import mcp_server
+    assert "`daily`" in mcp_server.start_here.__doc__
+
+
 def test_spend_for_an_app_gives_its_own_line_and_the_shared_budget():
     from cli.formatter import format_start
     from services import agent_start

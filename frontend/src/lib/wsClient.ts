@@ -55,6 +55,9 @@ export interface AgentPresenceEvent {
    * label) still has its line here. Absent: the log uses `say` (and a bare
    * cursor move has none). */
   log?: string;
+  /** "muted": a line the Agent log shows neutral, not as an action or an
+   * error (a run that waited with no proposal slot left, round 2 of PR #212). */
+  tone?: 'muted';
   /** Backend wall-clock milliseconds. */
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
@@ -257,8 +260,13 @@ export interface ProposalWait {
   usedUsd: number;
   leftUsd: number;
   runUsd: number;
-  also: 'perRun' | 'unpriced' | null;
-  perRunLimitUsd: number | null;
+  /** The other reason it needs an OK, when it has one (agent_spend.ALSO_*). */
+  also: 'perRun' | 'modelPerRun' | 'unpriced' | 'limit' | 'planRuns' | null;
+  /** That reason's amount: the per-run limit, a model's own, or the budget's. */
+  alsoLimitUsd: number | null;
+  alsoModel: string | null;
+  alsoFor: string | null;
+  alsoPlanRuns: number | null;
   /** GM's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
   barLine: string;
   /** GM's line for each waiting node's card ("This run would pass the $5 daily total."). */
