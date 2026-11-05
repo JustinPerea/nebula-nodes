@@ -19,7 +19,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 interface Site { file: string; text: string; table: string | null; isKey: boolean }
 
-/** Every backendText(...) call in src (tests included) and where it sits. */
+/** Every backendText(...) call in src and where it sits. */
 function sites(): Site[] {
   const found: Site[] = [];
   for (const path of walk(SRC)) {
@@ -63,8 +63,16 @@ describe('backendText stays a match-string marker', () => {
     expect(all.length).toBeGreaterThan(0);
     for (const { text } of all) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
-      if (text.startsWith("That reference isn't there anymore")) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
-      expect(backend, text).toContain(text);
+      if (text.startsWith("That reference isn't there anymore")) {
+        expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}.");
+        // ...and the backend still raises it with these parts.
+        expect(backend).toContain('"reference", "references"');
+        expect(text).toBe("That reference isn't there anymore. Reload to get the latest references.");
+        continue;
+      }
+      // A whole Python string literal, not a substring: 'not found' must not pass on "asset not found".
+      const literal = new RegExp(`(["'])${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1`);
+      expect(literal.test(backend), text).toBe(true);
     }
   });
 
