@@ -4404,7 +4404,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       settle(200);
       // A nudge of its own, inside its stamp radius: it keeps its arrival
       // (500), so it heads the column again, before the hold ends.
-      send(event({ ...session('a', 3), target: { x: 504, y: 344 }, since: 500, action: 'look' }));
+      // A move, not a look: a look now says "Looking here" (cursor Phase 2's
+      // default says), and that line is taller than the slot this test reads.
+      send(event({ ...session('a', 3), target: { x: 504, y: 344 }, since: 500, action: 'move' }));
       settle(700); // still inside the 1.5 s hold
       expect(where()).toEqual({ a: { x: 504, y: 344 }, d: { x: 504, y: 344 + S }, e: { x: 504, y: 344 + 2 * S } });
     } finally {
