@@ -1,0 +1,376 @@
+"""Channel readiness: which Claude Code sessions are listening to the canvas.
+
+An MCP server started with ``--channel`` (mcp_channel.py, docs/MCP-SETUP.md
+"Claude Code channels (experiment)") says so to Nebula: once Claude Code is
+ready it posts ``POST /api/agent/channel`` every ``BEAT_SECONDS`` while it
+runs, with ``state`` "listening" or, once its listener has stopped (2 h with
+nothing from the person, or a failure), "stopped" and the ``reason``. It
+deletes its entry when its session ends. An entry with no word for
+``TTL_SECONDS`` (the process was killed, Nebula restarted) is gone.
+
+So the canvas can tell three things apart (GM r50, the Message box's lines):
+
+- no entry for a session: **not connected** (never started with the
+  channel, or that session ended);
+- ``state: "stopped"``: **the listener stopped** while the session runs on
+  (/mcp > nebula-listen > Reconnect starts it again);
+- ``state: "listening"``: connected and accepting pushes.
+
+Nebula can't see whether Claude Code delivers a push (it never acknowledges
+one): a session started without ``--dangerously-load-development-channels``,
+or one whose org keeps Channels off, still reads "listening". The docs say so.
+
+Each entry is one agent session: the agent identity plus the session its
+requests name (agent_presence.presence_session), the same pair that gives it
+its own cursor. Nebula gives each a ``listenerId``: a message the person
+sends one session names it, and only that listener wakes. The id is an HMAC
+of (agent, session) under a secret this backend process makes at launch, so
+it stays the same when the entry lapses and comes back (a beat gap past the
+TTL, an eviction) and the person's sent or held messages to it still reach
+it (review 1 of #225, boundary LOW-1). It can't be worked back to the
+session, and a restarted Nebula gives new ids. The person's messages
+name their listener by agent and session too (person_thread.route_key),
+so one sent before a restart and never pushed is still read after it.
+
+Only an agent holding a valid agent token registers (Justin, 2026-11-03;
+main._channel_caller refuses a name alone), so every entry is a token's
+agent. Entries are capped per agent identity (MAX_PER_AGENT, its own least
+recently heard goes) and in all (MAX_LISTENERS, the least recently heard
+goes): one token's sessions can't push out another agent's listener. The person's tabs also get the session's cursor key and
+number, so "Message Claude · 2" names the cursor it reaches; agents only ever
+read their own entries, without cursor keys (those are the person's form).
+Memory only, never saved.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
+import threading
+import time
+from dataclasses import dataclass
+from typing import Any, Callable
+
+from services import push_ledger
+from services.agent_presence import AgentIdentity
+
+BEAT_SECONDS = 15.0  # how often a listener says it is there
+TTL_SECONDS = 45.0   # an entry with no word this long is gone (three beats)
+MAX_LISTENERS = 64   # entries kept; past this the least recently heard goes
+MAX_PER_AGENT = 8    # entries kept per agent identity; past this its own least recently heard goes
+STATES = ("listening", "stopped")
+# How long a lapsed listener (its beats stopped, never ended) may still come
+# back to the messages sent before it lapsed: the send's own 10-minute cap
+# (DELIBERATE_SPAN_CAP). Beats keep going while Claude works, so a lapse is a
+# stopped process, not a long task; ten minutes covers a quick reconnect, and
+# after that the row drops for good and a resend is offered. Not a new number.
+# (push_ledger.KEEP_SECONDS, 24 h, is the reply-matching bound and stays.)
+LAPSE_WINDOW_SECONDS = push_ledger.DELIBERATE_SPAN_CAP
+# A settle that failed (the project store couldn't be written) is given back
+# and tried again after this long, never dropped and never spun on.
+SETTLE_RETRY_SECONDS = 5.0
+# Justin, 2026-11-03: only an agent holding a valid agent token (Settings ›
+# Connect your agent) registers, so only a token's agent is ever addressed by
+# the person's messages. GM r81's lines (the listener prints them after
+# "error: "); an unknown token is refused this way by the token middleware
+# (agent_workspaces.AgentWorkspaceContext) before the route runs.
+CHANNEL_PATH = "/api/agent/channel"
+NO_TOKEN_CODE = "listener_no_token"
+BAD_TOKEN_CODE = "listener_token_invalid"
+NO_TOKEN_LINE = ("Nebula couldn’t connect this listener because it has no token. Copy one from Settings › Connect "
+                 "your agent, then run this command again.")
+BAD_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token isn’t valid anymore. Copy a new one from "
+                  "Settings › Connect your agent, then run this command again.")
+# J3 (Justin, 2026-11-04): only a Settings app token registers. An in-app
+# agent's turn token (commons.actors.agent_registry: the in-app Claude, Codex
+# and the rest) is verified too, but is refused here with this line.
+IN_APP_TOKEN_CODE = "listener_in_app_token"
+IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because it uses an in-app agent’s token, and only a "
+                     "token from Settings › Connect your agent can listen. Copy one there, then run this command "
+                     "again.")
+# Round 5 (D2): one session is one process. Each listener process sends a
+# nonce of its own with every beat; while an entry lives, a second process
+# naming the same agent and session is refused (409) with this line, and
+# its DELETE never removes the first's entry. The launch command gives every
+# Claude Code its own NEBULA_AGENT_SESSION, so this takes a copied or
+# exported session to happen.
+SESSION_TAKEN_CODE = "listener_session_taken"
+SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
+                      "session. Start each Claude Code with this command, which gives each one its own session, then "
+                      "start this listener again.\nnebula mcp connect claude-code --channel")  # GM r108, string 4
+# channel_status with no agent token (review 3, NIT-2: `nebula channel`
+# says the same in its own words, cli/commands/thread.NO_TOKEN_CHANNEL_LINE).
+NO_TOKEN_STATUS_LINE = ("This Nebula server has no agent token, so Nebula can’t tell which listeners are yours. Run "
+                        "this command, then start Claude Code as it says.\nnebula mcp connect claude-code --channel")
+APP_ID_PREFIX = "app:"
+# A listening entry heard from this recently is fresh: a crashed session's
+# leftover entry (up to TTL_SECONDS old) is not, so it never counts when a
+# reply looks for the listener it answers (round 5, D2). Two beats and a
+# beat's 5 s timeout: one missed beat never makes a live listener stale
+# (review 4 NIT-3: at 25 s a single failed beat left it unfresh for ~5 s).
+FRESH_SECONDS = 2 * BEAT_SECONDS + 5.0
+REASONS = ("idle", "error")
+
+
+def is_app_agent(agent: AgentIdentity) -> bool:
+    """A Settings › Connect your agent token's agent (services/app_tokens)."""
+    return agent.verified and agent.id.startswith(APP_ID_PREFIX)
+
+
+class ListenerError(ValueError):
+    pass
+
+
+class SessionTaken(ListenerError):
+    """Another process already listens as this agent session (D2)."""
+
+
+@dataclass
+class Listener:
+    listener_id: str
+    agent: AgentIdentity
+    session: str  # the raw session id ("" for none); never leaves the backend
+    state: str
+    reason: str | None
+    project_id: str | None
+    since: float     # when it entered this state
+    seen_at: float   # its last word
+    nonce: str | None = None  # the process's own (D2); None from a listener that sends none
+
+
+def parse_beat(body: Any) -> tuple[str, str | None, str | None]:
+    """(state, reason, project id) from a POST body."""
+    if not isinstance(body, dict):
+        raise ListenerError("Send {state: listening|stopped, reason?, projectId?}")
+    state = body.get("state")
+    if state not in STATES:
+        raise ListenerError("state must be listening or stopped")
+    reason = body.get("reason")
+    if state == "listening":
+        reason = None
+    elif reason not in REASONS:
+        reason = "error"
+    project = body.get("projectId")
+    project = project if isinstance(project, str) and 0 < len(project) <= 128 else None
+    return state, reason, project
+
+
+def parse_nonce(raw: Any) -> str | None:
+    """The listener process's nonce (a beat body's ``nonce``, a DELETE's
+    query), or None when it sent none or one that isn't 8 to 64 of
+    [A-Za-z0-9_-]."""
+    if isinstance(raw, str) and 8 <= len(raw) <= 64 and all(c.isalnum() or c in "_-" for c in raw):
+        return raw
+    return None
+
+
+class ListenerBook:
+    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._entries: dict[tuple[str, str], Listener] = {}
+        # Listeners that expired, ended or stopped, not yet settled by the
+        # caller (round 5c, LOW-2): (agent id, raw session, listener id).
+        self._gone: list[tuple[str, str, str]] = []
+        # When a settle the caller gave back may be tried again (give_back).
+        self._retry_at = 0.0
+        # Round 5d: a listener whose beats lapsed is not gone for good until
+        # its window ends. ``_lapsed_new`` are the ones nobody has marked yet;
+        # ``_lapse_until`` maps (agent id, raw session) to (listener id,
+        # window end) while the same agent and session may still return.
+        self._lapsed_new: list[tuple[str, str, str]] = []
+        self._lapse_until: dict[tuple[str, str], tuple[str, float]] = {}
+        self._secret = secrets.token_bytes(16)
+        self.revision = 0
+
+    def listener_id(self, agent_id: str, session: str) -> str:
+        """The stable id of (agent, session) for this backend process."""
+        digest = hmac.new(self._secret, f"{agent_id}\0{session}".encode("utf-8"), hashlib.sha256).hexdigest()
+        return "ch_" + digest[:16]
+
+    def _evict_for(self, agent: AgentIdentity) -> None:
+        """Make room for one more entry of ``agent`` (lock held)."""
+        own = [k for k in self._entries if k[0] == agent.id]
+        if len(own) >= MAX_PER_AGENT:
+            self._evict(min(own, key=lambda k: self._entries[k].seen_at))
+        if len(self._entries) >= MAX_LISTENERS:
+            self._evict(min(self._entries, key=lambda k: self._entries[k].seen_at))
+
+    def _evict(self, key: tuple[str, str]) -> None:
+        """Pushed out for room: final, its waiting messages settle as dropped."""
+        entry = self._entries.pop(key)
+        self._forget_lapse(key)
+        self._gone.append((key[0], key[1], entry.listener_id))
+
+    def now(self) -> float:
+        return self._clock()
+
+    def beat(self, agent: AgentIdentity, session: str | None, *, state: str, reason: str | None,
+             project_id: str | None, nonce: str | None = None) -> tuple[Listener, bool]:
+        """A listener's word. Returns its entry and whether anything the
+        person's tabs show changed (a new entry, a new state or reason).
+        Raises SessionTaken when another process (another ``nonce``) holds
+        this agent session's entry (D2)."""
+        now = self._clock()
+        key = (agent.id, session or "")
+        with self._lock:
+            self._expire(now)
+            entry = self._entries.get(key)
+            changed = False
+            if entry is not None and entry.nonce != nonce:
+                raise SessionTaken(SESSION_TAKEN_LINE)
+            if entry is None:
+                self._forget_lapse(key)  # back within its window: it is no longer lapsed
+                self._evict_for(agent)
+                entry = Listener(listener_id=self.listener_id(*key), agent=agent, session=key[1],
+                                 state=state, reason=reason, project_id=project_id, since=now, seen_at=now,
+                                 nonce=nonce)
+                self._entries[key] = entry
+                changed = True
+            else:
+                if (entry.state, entry.reason) != (state, reason):
+                    entry.state, entry.reason, entry.since = state, reason, now
+                    changed = True
+                    if state == "stopped":
+                        self._forget_lapse(key)
+                        self._gone.append((agent.id, key[1], entry.listener_id))
+                if entry.agent != agent or entry.project_id != project_id:
+                    entry.agent, entry.project_id = agent, project_id
+                    changed = True
+                entry.seen_at = now
+            if changed:
+                self.revision += 1
+            return entry, changed
+
+    def taken_by_another(self, agent: AgentIdentity, session: str | None, nonce: str | None) -> bool:
+        """Whether another process (another ``nonce``) holds this agent
+        session's entry: its inbox, accepted and held calls are refused then
+        (review 4 LOW-4), as its beats are. No entry: nothing to take."""
+        key = (agent.id, session or "")
+        with self._lock:
+            self._expire(self._clock())
+            entry = self._entries.get(key)
+            return entry is not None and entry.nonce != nonce
+
+    def gone(self, agent: AgentIdentity, session: str | None, nonce: str | None = None) -> bool:
+        """Its session ended. Returns whether there was an entry. Another
+        process's entry (another ``nonce``, D2) stays."""
+        key = (agent.id, session or "")
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None or entry.nonce != nonce:
+                return False
+            removed = self._entries.pop(key, None) is not None
+            if removed:
+                self._forget_lapse(key)
+                self._gone.append((key[0], key[1], entry.listener_id))
+                self.revision += 1
+            return removed
+
+    def drop_agent(self, agent_id: str) -> list[Listener]:
+        """Its token was revoked (boundary LOW-1): every entry of that agent
+        goes at once, so the canvas stops offering it. Returns the entries."""
+        with self._lock:
+            keys = [key for key in self._entries if key[0] == agent_id]
+            dropped = [self._entries.pop(key) for key in keys]
+            for key in keys:
+                self._forget_lapse(key)
+            for key in [k for k in self._lapse_until if k[0] == agent_id]:
+                self._forget_lapse(key)
+            if dropped:
+                self.revision += 1
+            return dropped
+
+    def _expire(self, now: float) -> bool:
+        stale = [key for key, entry in self._entries.items() if now - entry.seen_at > TTL_SECONDS]
+        for key in stale:
+            entry = self._entries.pop(key)
+            self._lapsed_new.append((key[0], key[1], entry.listener_id))
+            self._lapse_until[key] = (entry.listener_id, now + LAPSE_WINDOW_SECONDS)
+        for key in [k for k, (_, until) in self._lapse_until.items() if until <= now]:
+            listener_id, _ = self._lapse_until.pop(key)
+            self._forget_lapse(key)
+            self._gone.append((key[0], key[1], listener_id))  # the window ended: final
+        if stale:
+            self.revision += 1
+        return bool(stale)
+
+    def _forget_lapse(self, key: tuple[str, str]) -> None:
+        self._lapse_until.pop(key, None)
+        self._lapsed_new = [item for item in self._lapsed_new if (item[0], item[1]) != key]
+
+    def take_lapsed(self) -> list[tuple[str, str, str]]:
+        """The listeners whose beats lapsed since the last call, as (agent
+        id, raw session, listener id): their waiting messages read "lapsed"
+        (they still reach the listener if it comes back within the window)."""
+        with self._lock:
+            lapsed, self._lapsed_new = self._lapsed_new, []
+            return lapsed
+
+    def take_gone(self) -> list[tuple[str, str, str]]:
+        """The listeners gone for good since the last call (the lapse window
+        ended, ended, stopped, evicted), as (agent id, raw session, listener
+        id): their messages still in flight can't be taken any more."""
+        with self._lock:
+            gone, self._gone = self._gone, []
+            return gone
+
+    def give_back(self, lapsed: list[tuple[str, str, str]] = (),
+                  gone: list[tuple[str, str, str]] = ()) -> None:
+        """Put back what a settle couldn't finish (the project store failed),
+        ahead of anything newer, to be tried again after SETTLE_RETRY_SECONDS:
+        a row is never left "sent" or lapsed because one write failed."""
+        with self._lock:
+            self._lapsed_new = [*lapsed, *self._lapsed_new]
+            self._gone = [*gone, *self._gone]
+            self._retry_at = self._clock() + SETTLE_RETRY_SECONDS
+
+    def sweep(self) -> bool:
+        """Drop entries past TTL_SECONDS. Returns whether any went."""
+        with self._lock:
+            return self._expire(self._clock())
+
+    def next_deadline(self) -> float | None:
+        with self._lock:
+            if self._gone or self._lapsed_new:
+                # An expiry nobody settled yet: check again at once, or once a
+                # failed settle's retry is due.
+                return max(self._clock() - 0.5, self._retry_at)
+            times = [entry.seen_at + TTL_SECONDS for entry in self._entries.values()]
+            times += [until for _, until in self._lapse_until.values()]
+            return min(times) if times else None
+
+    def entries(self) -> list[Listener]:
+        with self._lock:
+            self._expire(self._clock())
+            return sorted(self._entries.values(), key=lambda e: e.since)
+
+    def by_listener_id(self, listener_id: str) -> Listener | None:
+        """The entry a message names (PR C's send route), if it still lives."""
+        return next((entry for entry in self.entries() if entry.listener_id == listener_id), None)
+
+    def for_agent(self, agent_id: str) -> list[Listener]:
+        return [entry for entry in self.entries() if entry.agent.id == agent_id]
+
+    def fresh_listening(self, agent_id: str) -> list[Listener]:
+        """The agent's entries that listen and were heard within FRESH_SECONDS (D2)."""
+        now = self._clock()
+        return [entry for entry in self.for_agent(agent_id)
+                if entry.state == "listening" and now - entry.seen_at <= FRESH_SECONDS]
+
+
+def view(entry: Listener, *, session: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One listener as the readiness answers show it. ``session`` (the
+    cursor's {key, ordinal}) only in the person's form."""
+    shown: dict[str, Any] = {
+        "listenerId": entry.listener_id,
+        "agent": entry.agent.as_dict(),
+        "state": entry.state,
+        "reason": entry.reason,
+        "projectId": entry.project_id,
+        "since": int(entry.since * 1000),
+        "seenAt": int(entry.seen_at * 1000),
+    }
+    if session is not None:
+        shown["session"] = session
+    return shown

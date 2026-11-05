@@ -41,7 +41,7 @@ from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Match
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -89,6 +89,9 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
+from services.file_param_preview import NO_PREVIEW_DEFINITIONS, follow_file_params
+from services import upload_names
+from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
@@ -96,7 +99,7 @@ from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
 from services.node_errors import NodeErrors
-from services import project_cover
+from services import project_asset_purge, project_cover
 from services import graph_file_links, project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -149,9 +152,11 @@ from services.agent_presence import (
     current_request_headers,
     identify as identify_agent,
     parse_target,
+    presence_session,
 )
 from services.canvas_events import (
     MOVE_THRESHOLD_PX,
+    OWN_REPLY_KIND,
     TooManyWaiters,
     actor_for_headers,
     actor_for_identity,
@@ -161,9 +166,11 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
+from services.agent_notes import for_reader as notes_for_reader
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
@@ -189,6 +196,7 @@ from services.canvas_proposals import (
     ProposalError,
     ProposalSpec,
     agent_wording,
+    billed_to,
     canvas_proposals,
     clean_note,
     clean_positions,
@@ -203,10 +211,11 @@ from services.asset_proposals import parse_change as parse_asset_change, summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
                                       update_detail as asset_update_detail, update_text as asset_update_text)
 # Each canvas proposal's Update too (Justin's Q112 a).
+from services.canvas_proposals import model_label
+from services.canvas_proposals import plan_name as card_name
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 from services.canvas_proposals import MAX_RUN as PROPOSAL_MAX_RUN
-from services.canvas_proposals import MAX_OPEN_PER_AGENT
-from services.canvas_proposals import WAITING_FOR_OK as PROPOSAL_WAITING_SAY
+from services.canvas_proposals import MAX_OPEN_PER_AGENT, MAX_OPEN_TOTAL
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
 from services.agent_questions import (
     CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
@@ -224,6 +233,9 @@ from services.agent_questions import (
 from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
+from services import channel_listeners
+from services import person_thread
+from services import push_ledger
 from services import pending_nodes
 from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
@@ -292,6 +304,9 @@ except Exception as exc:
     _STATE_PATH: Path | None = None
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
+# The names files were uploaded with, by their stored (content-hash) name
+# (services/upload_names.py, GM r48 Q1 on #222).
+upload_names.configure(_STATE_DIR / "upload-names.json")
 
 # Whether a canvas was saved before this boot (round 21): a missing
 # canvas-revisions.json then can't be a first run, so the canvas revisions
@@ -336,6 +351,17 @@ agent_notes = AgentNotes(lambda: project_store)
 agent_questions = QuestionBook(store=lambda: project_store)
 # Each agent's status line (Q125 item 2): in memory only, like cursors.
 agent_status = AgentStatusBook()
+# Which --channel listeners are around (services/channel_listeners.py). Memory only.
+channel_book = channel_listeners.ListenerBook()
+# The Message box's thread (services/person_thread.py): kept on the project
+# record; the send cap is memory only.
+thread_book = person_thread.PersonThread(lambda: project_store)
+thread_send_cap = person_thread.SendCap()
+# reply_to_person's pace per agent (Justin, 2026-11-03): 5 in a row, then one every 2 s.
+thread_reply_pace = person_thread.ReplyPace()
+# Which push each reply answers (review 4 of #225): the listener reports each
+# deliberate push; a reply answers its session's oldest open one. Memory only.
+thread_ledger = push_ledger.PushLedger()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -2271,6 +2297,26 @@ def _output_url_from_ref(value: str) -> str | None:
     return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
 
 
+def _file_preview_url(value: Any) -> str | None:
+    """The served URL of a file Nebula holds (in its output folder), for a
+    file param's preview; None when it holds no such file."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        path = _output_path_from_ref(value)
+        url = _output_url_from_ref(value)
+    except Exception:  # a protected or unreadable path makes no preview
+        return None
+    return url if url and path is not None and path.is_file() else None
+
+
+def _follow_file_params(definition_id: str, before: Mapping[str, Any],
+                        update: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """services/file_param_preview.follow_file_params for this node's definition."""
+    return follow_file_params(node_registry.get(definition_id), before, update, _file_preview_url,
+                              previews=definition_id not in NO_PREVIEW_DEFINITIONS)
+
+
 def _output_file_time(url: str) -> float | None:
     path = _output_path_from_ref(url)
     try:
@@ -2518,6 +2564,148 @@ def _preset_thumbnail_path_from_ref(value: str) -> Path | None:
     return path if path.is_file() else None
 
 
+def _ref_file_name(value: Any) -> str | None:
+    """The file a path or served URL names (its last part), or None."""
+    if not isinstance(value, str) or not value:
+        return None
+    return PurePosixPath(urlsplit(value).path).name or None
+
+
+def _ref_identity(value: Any) -> tuple[str, str] | None:
+    """Which file a path or served URL names, or None when it resolves to none.
+
+    A ref under the output root (a served URL, with or without the backend's
+    origin, a path under the root, or one under a root the outputs moved
+    from) is its root-relative path; any other path is the file it resolves
+    to, when that file exists. Two refs with the same name in different
+    folders (a node's ``{id}_final.png`` in two run folders, ``~/a/photo.png``
+    and ``~/b/photo.png``) are different files (#226 review 4, LOW-1)."""
+    if not isinstance(value, str) or not value:
+        return None
+    ref = value
+    if ref.startswith(("http://", "https://")):
+        ref = urlsplit(ref).path
+        if not ref.startswith(_OUTPUTS_URL_PREFIX):
+            return ("url", value)
+    rel = _output_relative_from_ref(ref)
+    if rel is not None:
+        return ("output", rel.as_posix())
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return None
+    try:
+        return ("path", str(Path(ref).expanduser().resolve(strict=True)))
+    except (OSError, RuntimeError):
+        return None
+
+
+def _ref_local_file(identity: tuple[str, str]) -> Path | None:
+    """The local file an identity stands for, or None (an outside URL)."""
+    kind, value = identity
+    if kind == "output":
+        return OUTPUT_ROOT / value
+    if kind == "path":
+        return Path(value)
+    return None
+
+
+def _unresolved_ref_key(value: str) -> tuple[str, str]:
+    """What is left of a ref whose file is gone (it names nothing on disk).
+
+    A ref into an output folder (a served URL, or a path under any directory
+    named like the output root or ``output``, the root the outputs moved from)
+    is its path under that folder: the folder itself is what is gone, the
+    rest still says which output it was. Any other path is the path itself,
+    absolute and in the filesystem's own case spelling, so ``a/photo.png``
+    and ``b/photo.png`` stay two files after both are deleted (#226 review 5,
+    NIT-3)."""
+    ref = urlsplit(value).path if value.startswith(("http://", "https://")) else value
+    if ref is not value and not ref.startswith(_OUTPUTS_URL_PREFIX):
+        # An outside URL is its whole URL, as _ref_identity reads it: never a
+        # local path that happens to share its path (#226 6d check, LOW).
+        return ("url", value)
+    if ref.startswith(_OUTPUTS_URL_PREFIX):
+        return ("output", ref[len(_OUTPUTS_URL_PREFIX):])
+    parts = Path(ref).parts
+    names = {OUTPUT_ROOT.name, "output"}
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx] in names and parts[idx + 1:]:
+            return ("output", PurePosixPath(*parts[idx + 1:]).as_posix())
+    return ("path", os.path.normcase(os.path.abspath(os.path.expanduser(ref))))
+
+
+def _same_ref_file(old: Any, new: Any) -> bool:
+    """Whether two refs name the same file: by what they resolve to (the same
+    file on disk however it is spelled: a symlink, a ``..``, a differently
+    cased name on a case-insensitive filesystem, as ``os.path.samefile``
+    reads it), and, when the old one no longer resolves (outputs moved from a
+    root that is gone, a file deleted), by what is left of its path."""
+    if _ref_file_name(old) is None or _ref_file_name(new) is None:
+        return _ref_file_name(old) == _ref_file_name(new)
+    old_id = _ref_identity(old)
+    new_id = _ref_identity(new)
+    if old_id is None:
+        old_key = _unresolved_ref_key(old)
+        return old_key == new_id or old_key == _unresolved_ref_key(new)
+    if old_id == new_id:
+        return True
+    if new_id is None:
+        return False
+    old_file, new_file = _ref_local_file(old_id), _ref_local_file(new_id)
+    if old_file is None or new_file is None:
+        return False
+    try:
+        return os.path.samefile(old_file, new_file)
+    except OSError:
+        return False
+
+
+def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:
+    """A `_previewSize` belongs to the file it was read from (services/preview_size.py).
+    When the preview now names another file, or none, the size goes with the
+    old one (#226 review 2, NIT-2). A move of the same file keeps it."""
+    if "_previewSize" not in after:
+        return
+    shown = _ref_file_name(after.get("_previewUrl"))
+    if shown is None or shown != _ref_file_name(before.get("_previewUrl")):
+        after.pop("_previewSize", None)
+
+
+def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent: Mapping[str, Any]) -> None:
+    """After a merge of ``sent`` into an Image Input's params, the preview
+    follows the file (#226 review 3, NIT-2). An agent or the CLI that names
+    another ``filePath`` without a ``_previewUrl`` gets the new file's served
+    URL as its preview, or no preview when the file isn't under the output
+    root (the canvas sync's normalizer imports it and fills one in). One that
+    names another file (``filePath``, ``_previewUrl``) also leaves the old
+    file's ``_previewSize`` behind, so it goes (#226 review 2, NIT-2). The
+    Inspector's own upload sends the new file's URL and size with it, and
+    keeps them."""
+    node = graph.nodes.get(node_id)
+    if not node or node.get("definitionId") != "image-input":
+        return
+    params = node.get("params")
+    if not isinstance(params, dict):
+        return
+    changed = False
+    file_path = params.get("filePath")
+    if ("filePath" in sent and "_previewUrl" not in sent
+            and not _same_ref_file(before.get("filePath"), file_path)):
+        url = _file_preview_url(file_path)  # the same existence check as _follow_file_params
+        if url is not None and params.get("_previewUrl") != url:
+            params["_previewUrl"] = url
+            changed = True
+        elif url is None and "_previewUrl" in params:
+            params.pop("_previewUrl")
+            changed = True
+    if "_previewSize" not in sent and "_previewSize" in params and any(
+            key in sent and not _same_ref_file(before.get(key), params.get(key))
+            for key in ("filePath", "_previewUrl")):
+        params.pop("_previewSize")
+        changed = True
+    if changed:
+        graph._maybe_persist()
+
+
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
     validate_file_references(params)
@@ -2565,11 +2753,12 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
             value = rewritten.get(key)
             if not isinstance(value, str) or not value:
                 continue
-            preview_url = _output_url_from_ref(value)
+            preview_url = _file_preview_url(value)  # none for a file that isn't there
             if preview_url is not None:
                 rewritten["_previewUrl"] = preview_url
                 break
 
+    _drop_stale_preview_size(params, rewritten)
     return rewritten
 
 
@@ -3152,6 +3341,9 @@ async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | No
     assert wait is not None
     refusal = held.decision.refusal or ""
     run_ids = list(dict.fromkeys(held.run_ids))
+    # Nodes with no list price by the names the canvas shows them by (the
+    # lines below name them).
+    wait.names.update({node_id: _node_label(node_id) for node_id in wait.unpriced if node_id in cli_graph.nodes})
     identity = identify_agent(current_request_headers())
     if identity is None:
         raise _person_only_refusal(wait.nameless_line())
@@ -3164,14 +3356,18 @@ async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | No
         existing = _open_waiting_proposal(identity, run_ids, project_id)
         if existing is not None:
             return _waiting_answer(wait, existing.id, run_id=run_id)
-        mine = [p for p in canvas_proposals.open_list() if p.agent.id == identity.id]
+        everyone = canvas_proposals.open_list()
+        mine = [p for p in everyone if p.agent.id == identity.id]
+        run_names = [_node_label(node_id) for node_id in run_ids]
         if len(mine) >= MAX_OPEN_PER_AGENT:
-            names = [_node_label(node_id) for node_id in run_ids]
-            await _log_slots_full(identity, wait.slots_full_log(names, len(mine)))
+            await _log_slots_full(identity, wait.slots_full_log(run_names, len(mine)))
             raise _person_only_refusal(wait.slots_full_line(len(mine)))
-        # Nodes with no list price by the names the canvas shows them by.
-        wait.names.update({node_id: _node_label(node_id) for node_id in wait.unpriced if node_id in cli_graph.nodes})
-        details = {**wait.as_dict(), "nodeIds": run_ids, "names": [_node_label(node_id) for node_id in run_ids]}
+        if len(everyone) >= MAX_OPEN_TOTAL:
+            # Nebula's own cap, GM's lines (PR #212 r2, item 3).
+            await _log_slots_full(identity, wait.total_full_log(run_names, len(everyone)))
+            raise _person_only_refusal(wait.total_full_line(len(everyone)))
+        details = {**wait.as_dict(), "nodeIds": run_ids, "names": run_names,
+                   "updateLine": wait.update_line(run_names)}
         try:
             proposal, _view, _still_open = await _open_canvas_proposal(
                 identity, ProposalSpec(note=wait.bar_line(), run=tuple(run_ids)), fence, models={}, wait=details)
@@ -3507,8 +3703,16 @@ async def _moodboard_brief_fields_startup() -> None:
     """Give boards saved before Direction / Avoid / pinned colours existed those
     fields, once, backing each file up first (services/moodboard_brief.py).
     Then save the colour check (gap 18) on boards whose saved one is missing
-    or stale, so it isn't run again on every generation and read."""
-    from services.moodboard_store import migrate_brief_fields, save_colour_checks
+    or stale, so it isn't run again on every generation and read. Then store
+    whether each image of a board analyzed before alpha counted has
+    transparency (``stamp_transparency_once``). First, the create request-id
+    records older than 7 days go (.creates/)."""
+    from services.moodboard_store import migrate_brief_fields, prune_create_records, save_colour_checks, stamp_transparency_once
+    try:
+        # Request-id records older than a week (services/moodboard_store.py).
+        await asyncio.to_thread(prune_create_records)
+    except Exception as exc:  # never block startup; a lookup ignores old records anyway
+        print(f"[main] moodboard create records not pruned: {type(exc).__name__}: {exc}", flush=True)
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
@@ -3517,6 +3721,43 @@ async def _moodboard_brief_fields_startup() -> None:
         await asyncio.to_thread(save_colour_checks)
     except Exception as exc:  # never block startup; the check runs in memory until a board is saved
         print(f"[main] moodboard colour check not saved: {type(exc).__name__}: {exc}", flush=True)
+    # Whether each image of a board analyzed before alpha counted has
+    # transparency, stored once so reads never decode an image. In the
+    # background: it decodes images, and a board reads as current until then.
+    _MOODBOARD_STARTUP_TASKS.add(asyncio.create_task(_stamp_moodboard_transparency(stamp_transparency_once)))
+
+
+_MOODBOARD_STARTUP_TASKS: set[asyncio.Task] = set()
+
+
+async def _stamp_moodboard_transparency(stamp: Any) -> None:
+    try:
+        await asyncio.to_thread(stamp)
+    except Exception as exc:  # never fatal; such a board reads as current until it's stored
+        print(f"[main] moodboard transparency not stored: {type(exc).__name__}: {exc}", flush=True)
+
+
+@app.on_event("startup")
+async def _project_asset_purge_startup() -> None:
+    """Every start, before the re-home below: finish deleting the
+    moodboards, characters and styles of projects deleted for good whose
+    purge stopped part way (services/project_asset_purge.py). Without it the
+    re-home would leave them in their folders (it skips a listed id). Only
+    ids on the catalog's own list are deleted: an asset filed under an id the
+    catalog doesn't know is the re-home's, which moves it to Global."""
+    if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
+        return
+
+    def run() -> None:
+        if not project_store.path.exists():
+            return
+        with project_store.transaction() as catalog:
+            _purge_noted_assets(catalog)
+
+    try:
+        await asyncio.to_thread(run)
+    except Exception as exc:  # never block startup; it runs again next start
+        print(f"[main] files of deleted projects not removed yet: {type(exc).__name__}", flush=True)
 
 
 @app.on_event("startup")
@@ -3638,6 +3879,16 @@ def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, nod
     return False
 
 
+@app.get("/api/uploads/names")
+async def upload_names_route(file: list[str] = Query(default=[])) -> dict[str, Any]:
+    """{"names": {stored name: the name it was uploaded with}} for the stored
+    names asked (``?file=<name>``, repeated; at most 200), those Nebula
+    recorded. The canvas reads it to name a file param (frontend
+    lib/uploadNames.ts, GM r48 Q1 on #222); agents get the same name in
+    look_at_canvas."""
+    return {"names": upload_names.recorded_names(file[:200])}
+
+
 @app.post("/api/uploads")
 @graph_write(checks_in_route=True)
 async def upload_file_consolidated(
@@ -3749,6 +4000,9 @@ async def upload_file_consolidated(
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
+    # The name it was sent with, for every surface that names a file param
+    # holding it (services/upload_names.py, GM r48 Q1 on #222).
+    upload_names.record(saved_path.name, file.filename)
 
     # Base response — present for every caller.
     response: dict[str, Any] = {
@@ -3758,6 +4012,13 @@ async def upload_file_consolidated(
         # The input node it routes to (upload_client: `nebula upload`, MCP upload_file).
         "nodeType": node_type,
     }
+    # An image's size as shown, so its preview has its height before it
+    # decodes (services/preview_size.py; the Inspector keeps it as
+    # `_previewSize`, and a node made here gets it below). Header only, and
+    # off the event loop (#226 review 2, MEDIUM-2).
+    shown_size = await asyncio.to_thread(preview_size, content) if node_type == "image-input" else None
+    if shown_size is not None:
+        response["previewSize"] = shown_size
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
@@ -3775,6 +4036,8 @@ async def upload_file_consolidated(
             # URL. Only Image Input draws the preview; the shape matches the
             # Inspector's own upload for each of them.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
+            if shown_size is not None:
+                node_params["_previewSize"] = shown_size
         else:
             # video-input: probe at upload so the source owns its own
             # metadata. Downstream consumers (editor surface, edit handler,
@@ -3921,14 +4184,63 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
+# PR #204 round 4: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
+# sends on writes; the CLI and MCP never send it) on its Updates reads, and ``?tab=1`` on its
+# socket, where a browser can't set headers. It is a claim, not an agent marker: it never makes a
+# request the person (person_gate is untouched) and only decides who sees a shared asset Update's
+# ``asks`` and ``firstSince`` (agent_notes.for_reader). The claim needs no secret (security
+# review LOW-2, r5): any local program, a page on any localhost origin, or an agent sandboxed
+# with localhost network access can send it without a marker and read those two counts. Agents
+# that reach Nebula only through MCP or the CLI can't: neither ever sends the claim.
+# The counts are payload shape, not a secret: GET /api/asset-proposals and the journal let any
+# agent work them out (security review LOW-1).
+TAB_CLAIM_HEADER = "x-nebula-tab"
+TAB_CLAIM_PARAM = "tab"
+
+
+def _share_view(headers: Mapping[str, str] | None, *, tab_claim: bool | None = None) -> dict[str, Any]:
+    """Who this reader is for a shared Update's share fields: the person, a tab not connected as
+    the person (claims to be a tab, carries no agent marker), or the agent it names (only a marked
+    reader is one). ``tab_claim``: a socket's, from its URL."""
+    lower = {str(k).lower(): v for k, v in (headers or {}).items()}
+    marked = has_agent_marker(lower)
+    claim = bool(str(lower.get(TAB_CLAIM_HEADER) or "").strip()) if tab_claim is None else tab_claim
+    if is_person(lower) or (claim and not marked):
+        return {"sees_share": True, "agent_id": None}
+    identity = identify_agent(lower) if marked else None
+    return {"sees_share": False, "agent_id": identity.id if identity is not None else None}
+
+
+def _socket_share_view(websocket: WebSocket) -> dict[str, Any]:
+    try:
+        claim = websocket.query_params.get(TAB_CLAIM_PARAM) == "1"
+        return _share_view(websocket.headers, tab_claim=claim)
+    except Exception:  # noqa: BLE001 - a malformed handshake is another reader
+        return {"sees_share": False, "agent_id": None}
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
         self.browser_connections: set[WebSocket] = set()
+        self.share_views: dict[WebSocket, dict[str, Any]] = {}
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
+        self.share_views[websocket] = _socket_share_view(websocket)
+
+    def share_view(self, websocket: WebSocket) -> dict[str, Any]:
+        """The person's verified canvas sees everything; any other socket as it connected."""
+        if websocket in self.browser_connections:
+            return {"sees_share": True, "agent_id": None}
+        return self.share_views.get(websocket) or {"sees_share": False, "agent_id": None}
+
+    def for_socket(self, websocket: WebSocket, data: dict[str, Any]) -> dict[str, Any]:
+        """An Updates message as this socket may see it (agent_notes.for_reader)."""
+        if data.get("type") != "agentNotes":
+            return data
+        return notes_for_reader(data, **self.share_view(websocket))
 
     def promote(self, websocket: WebSocket, person_token: object) -> bool:
         """Mark a socket as the person's canvas after a valid hello frame.
@@ -3956,6 +4268,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        self.share_views.pop(websocket, None)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -3966,24 +4279,40 @@ class ConnectionManager:
         """Send `data` to every socket; with `others`, only the person's canvas
         sockets (a verified hello) get `data` and every other socket gets
         `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
-        message = json.dumps(data)
-        other_message = message if others is None else json.dumps(others)
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
-                await connection.send_text(message if connection in self.browser_connections else other_message)
+                base = data if others is None or connection in self.browser_connections else others
+                await connection.send_text(self._form(connection, base, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
             self.disconnect(conn)
 
+    def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
+        """`base` as this socket gets it, serialised once per form. An Updates message always
+        goes through its reader's form (agent_notes.for_reader), whichever form a broadcast
+        hands this socket (PR #204 r5, security review NIT-1: an `others=` form or a
+        broadcast_others of Updates never skips the filter)."""
+        if base.get("type") == "agentNotes":
+            view = self.share_view(connection)
+            key: tuple[Any, ...] = (id(base), view["sees_share"], view["agent_id"])
+            if key not in forms:
+                forms[key] = json.dumps(notes_for_reader(base, **view))
+            return forms[key]
+        key = (id(base),)
+        if key not in forms:
+            forms[key] = json.dumps(base)
+        return forms[key]
+
     async def broadcast_others(self, data: dict[str, Any]) -> None:
         """Send to every socket that isn't the person's canvas (CLI/MCP listeners)."""
-        message = json.dumps(data)
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in [c for c in self.active_connections if c not in self.browser_connections]:
             try:
-                await connection.send_text(message)
+                await connection.send_text(self._form(connection, data, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
@@ -4189,7 +4518,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
-        await websocket.send_text(json.dumps(_canvas_notes_message()))
+        await websocket.send_text(json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -4213,18 +4542,47 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
+                # Who listens to the canvas (channel readiness), person form (before
+                # the pins and the replay, which stay the last syncs).
+                await websocket.send_text(json.dumps(_channel_listeners_message()))
+                # The Message box's thread, person form (services/person_thread.py).
+                await websocket.send_text(json.dumps(await asyncio.to_thread(_thread_sync_message)))
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
+                # Every live cursor, person form, for this tab only (GM -
+                # Design, PR #211 r3): numbers match across tabs because each
+                # shows the backend's. Built here, after the other syncs, so
+                # every cursor event built before it is reflected in it. An
+                # event built before it can still reach this tab after it
+                # (broadcast_raw picks each socket's form at send time); it
+                # carries the same key and number, so nothing doubles.
+                await websocket.send_text(json.dumps({"type": "agentPresenceReplay",
+                                                      "cursors": agent_presence.replay()}))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
                     "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
     except WebSocketDisconnect:
+        pass
+    finally:
+        # Every exit leaves the manager, not only a clean WebSocketDisconnect:
+        # a cancelled task (server shutdown, a client that closes while this
+        # handler is still between sends) or any other error used to leave the
+        # socket counted, and canvas_open() then told agents a canvas was open
+        # when none was (the CI flake of 2026-11-02, test_cli_apply's arrange line).
         manager.disconnect(websocket)
 
 
 # ---------- Chat WebSocket (/ws/chat) ----------
+
+def _chat_ref(payload: dict[str, Any]) -> dict[str, str]:
+    """The tab's own `ref` for a message, echoed on its person_required refusal so the tab
+    reads the refusal against the promote that message went out under (PR #204 round 7).
+    A short string only; anything else is left out."""
+    ref = payload.get("ref")
+    return {"ref": ref} if isinstance(ref, str) and 0 < len(ref) <= 64 else {}
+
 
 @app.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket) -> None:
@@ -4541,7 +4899,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
                     await send_event({"type": "error", "code": "person_required", "message": (
                         "Only the person can answer or close a personal agent, from a Nebula canvas connected as them."
-                    ), "source": "system"})
+                    ), "source": "system", **_chat_ref(payload)})
                     continue
                 if msg_type == "permission":
                     for host in acp_sessions.live():
@@ -4612,7 +4970,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "error", "code": "person_required", "message": (
                     "Only the person can start a chat, from a Nebula canvas connected as them. Open the "
                     "link the backend printed at launch (backend/devserver.py, or restart it with --open)."
-                ), "source": "system"})
+                ), "source": "system", **_chat_ref(payload)})
                 await send_event({"type": "done", "source": "system"})
                 continue
             from commons.activation import is_enabled
@@ -5020,6 +5378,24 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
+    # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
+    # offering them, and a send to one is refused as stopped.
+    agent_id = f"{channel_listeners.APP_ID_PREFIX}{app_id}"
+    dropped = channel_book.drop_agent(agent_id)
+    if dropped:
+        await _broadcast_channel_listeners()
+        _schedule_channel_expiry()
+    thread_ledger.forget_agent(agent_id)
+    # Its messages still in flight can't be delivered any more (a new token
+    # is a new agent): they settle as dropped (#225 review 2), whether one of
+    # its listeners was still registered or not (review 4: by agent, not by
+    # listener id, which a Nebula restart changes).
+    try:
+        settled = await asyncio.to_thread(thread_book.drop_for, agent_id)
+    except (ProjectStoreError, OSError):
+        settled = []
+    for project_id, rows in settled:
+        await _broadcast_thread(project_id, rows)
     return {"status": "revoked"}
 
 
@@ -5080,8 +5456,10 @@ def _agent_node_context() -> dict[str, Any]:
             "pricing": pricing, "definitions": node_registry.get_all()}
 
 
-# find_nodes' and `nebula context`'s price for a node priced from its input's size.
+# find_nodes' and `nebula context`'s price for a node priced from its input's size,
+# or from its audio's length (the talking-head nodes).
 SIZED_PRICE = "by input size"
+LENGTH_PRICE = "by audio length"
 
 
 def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
@@ -5120,10 +5498,12 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
         estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
-        note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
+        routed = model_pricing.entry_for_route(entry, provider)
+        note = model_pricing.size_note(routed, definition)
         if row["price"] is None and note:
             # Priced at run time from the input file (model_pricing sizing).
-            row["price"] = SIZED_PRICE
+            row["price"] = (LENGTH_PRICE if model_pricing.sizing_kind(routed, definition) == "audio"
+                            else SIZED_PRICE)
             row["priceNote"] = note
     return row
 
@@ -5537,15 +5917,80 @@ def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
     return agent_presence.point(identity, project_id=project_id, **kwargs)
 
 
+_HEADERS_SESSION = object()
+
+
+def _person_form(event: dict[str, Any], identity: Any, headers: Any, *, session: Any = _HEADERS_SESSION,
+                 **kwargs: Any) -> dict[str, Any] | None:
+    """agent_presence.person_form, built apart from the agent form, so a
+    failure in the person's copy is logged and never silences the agent form
+    or fails the route (review 1, LOW-1).
+
+    On that failure the person's tabs get the agent form with this session's
+    real number when its cursor is already live (``session_tag``), else
+    nothing for this event (None). Never the bare agent form: a tab reads an
+    event with no session as the plain cursor, number 1, and would drop
+    whichever session holds 1 (review 2, NIT-3)."""
+    if session is _HEADERS_SESSION:
+        session = presence_session(headers)
+    try:
+        return agent_presence.person_form(event, identity, session=session, **kwargs)
+    except Exception:  # noqa: BLE001 - decoration: the agent form still goes out
+        logging.getLogger("nebula.presence").exception("person form failed; sending the agent form only")
+    if "target" not in event:
+        return event  # the Agent log only: no cursor, so no number to get wrong
+    try:
+        tag = agent_presence.session_tag(identity, session)
+    except Exception:  # noqa: BLE001 - no number is better than a wrong one
+        tag = None
+    return {**event, "session": tag} if tag else None
+
+
+async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any] | None) -> None:
+    """Send a cursor event: ``person`` (agent_presence.person_form) to the
+    person's canvas sockets and ``event``, the agent form, to every other
+    socket. One form, as before sessions, when the two are the same object:
+    whatever an agent can read stays as it was. With no ``person`` (a
+    failed person form, _person_form), only the other sockets get it."""
+    if person is None:
+        await manager.broadcast_others(event)
+    elif person is event:
+        await manager.broadcast_raw(event)
+    else:
+        await manager.broadcast_raw(person, others=event)
+
+
+def _accepted_person_form(event: dict[str, Any], proposal: Proposal) -> dict[str, Any] | None:
+    """The person tabs' copy of the "Accepted" click: on the cursor of the
+    session that proposed it (GM - Design, PR #211 r9 item 1). The request
+    is the person's, so the session is the one recorded on the proposal when
+    it was made (``Proposal.presence_session``, person side only). When that
+    session's cursor has left by now, None: the person's tabs get no click
+    (a cursor coming back for an ended session would be false; the node's
+    run state shows what happened), and agents still get the agent form.
+    The same holds for an agent past the agent memory, whose cursor has no
+    session to tie the click to (GM - Design, PR #211 review 4). On any
+    failure, None too: never the bare agent form, which a tab would draw as
+    the plain cursor."""
+    try:
+        return agent_presence.person_form(event, proposal.agent, session=proposal.presence_session, live_only=True)
+    except Exception:  # noqa: BLE001 - no click is better than a wrong cursor
+        logging.getLogger("nebula.presence").exception("accepted person form failed; agents get the agent form only")
+        return None
+
+
 async def _show_agent(
     target: dict[str, Any],
     *,
     action: str = "click",
+    shows: str | None = None,
     say: str = "",
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
+    person_say: str | None = None,
+    proposal_id: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5558,8 +6003,18 @@ async def _show_agent(
     computes (say, log) inside the guard (_set_params_bubble). Never fails
     the route that called it: presence is decoration on top of an edit that
     already succeeded.
+
+    ``shows`` is what the edit really was on the person's tabs (``type`` for
+    a param edit, ``run``, ``propose``, ``error``); ``action`` stays the
+    value agents read in the snapshot and on /ws, as before. ``person_say``
+    is the same for the words: the person's tabs (the bubble, the Agent log
+    and a reload's replay) show it, and agents read ``say`` as before.
+    ``proposal_id`` is the proposal a ``propose`` cursor waits on: the event
+    carries it (``proposalId``), so a tab ends the cursor's held state when
+    that proposal is settled, and a reload's replay still knows which.
     """
-    identity = identify_agent(current_request_headers())
+    headers = current_request_headers()
+    identity = identify_agent(headers)
     if identity is None:
         return
     try:
@@ -5574,7 +6029,17 @@ async def _show_agent(
         if log is not None and clean_say(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
-        await manager.broadcast_raw(event)
+        if proposal_id:
+            event["proposalId"] = proposal_id
+        person = _person_form(event, identity, headers, shown=shows)
+        if person is not None and person is not event and person_say:
+            # In place: the slot keeps this dict for the replay.
+            person["say"] = clean_say(person_say)
+            # The Agent log keeps its own line (the nodes an edit named, GM
+            # r83.1) unless it now says what the bubble says.
+            if clean_say(str(person.get("log") or "")) in ("", person["say"]):
+                person.pop("log", None)
+        await _broadcast_presence(event, person)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
 
@@ -5604,6 +6069,7 @@ def _journal(
     summary: str = "",
     actor: dict[str, Any] | None = None,
     project_id: str | None | Any = ...,
+    session: str | None = None,
 ) -> None:
     """Record a canvas change for `nebula watch`; never fails the route that called it.
 
@@ -5622,6 +6088,7 @@ def _journal(
             summary=summary,
             edit=_canvas_edit_link.get(),
             **({"project_id": project_id} if project_id is not ... else {}),
+            **({"session": session} if session else {}),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -6059,6 +6526,13 @@ def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
     return node_route.node_name(definition, node.get("label"), str(node.get("definitionId") or node_id))
 
 
+def _node_model(node_id: str, graph: CLIGraph | None = None) -> str:
+    """A node's model as the canvas titles it ("Krea 2"), whatever its label."""
+    node = (graph or cli_graph).nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
+    return node_route.canvas_title(definition) if definition else str(node.get("definitionId") or "")
+
+
 def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
     """A node's name in a run, from the run's own nodes, for a refusal: the
     label it carries (a run's node has none today: GraphNode keeps no label),
@@ -6135,15 +6609,18 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, or a canvas spot.
 
     Body: {target?: {nodeId, handle?} | {x, y}, from?: same shape,
-    action?: move|click|drag|look, say?: text}. The caller must identify
-    itself (agent token or X-Nebula-Agent).
+    action?: one of agent_presence.ACTIONS (move, look, think, type, click,
+    drag, run, propose, wait, error), say?: text}. The caller must identify
+    itself (agent token or X-Nebula-Agent). Any other action is a 422 that
+    lists the valid ones.
 
     With `say` and no target, the line shows where the agent's cursor
     already is, without moving it; an agent with no cursor yet gets one at
     the middle of the person's view (when the browser reported one), else
     at (0, 0). `placed` says which: cursor, view or origin.
     """
-    identity = identify_agent(current_request_headers())
+    headers = current_request_headers()
+    identity = identify_agent(headers)
     if identity is None:
         raise HTTPException(
             status_code=400,
@@ -6162,6 +6639,8 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
         action = body.get("action") or "move"
+        if not isinstance(action, str) or action not in CURSOR_ACTIONS:
+            raise PresenceError(cursor_action_refusal(action))
         event = _point(
             identity,
             target=target,
@@ -6174,7 +6653,10 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         )
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    await manager.broadcast_raw(event)
+    # The person's tabs draw this session's own cursor; the response and the
+    # agent form are what they were (a line said in place keeps `target`).
+    person = _person_form(event, identity, headers, in_place=placed != "target")
+    await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed}
 
@@ -6378,6 +6860,632 @@ async def list_canvas_agents() -> dict[str, Any]:
                           pending=pending_nodes.by_agent(cli_graph.nodes),
                           running=[(agent, running[agent.id]) for agent in agent_runs.agents_in(project_id)])
     return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
+
+
+# ---------- Channel readiness (services/channel_listeners.py) ----------
+#
+# Whether a Claude Code session listens to the canvas (mcp_server.py
+# --channel), per agent session: the Message box's lines read it (PR C).
+# The person's tabs get every listener, with its cursor's key and number,
+# in a channelListeners message on each change and after a verified hello;
+# an agent reads only its own (GET /api/canvas/channel, MCP channel_status).
+
+_channel_expiry: asyncio.TimerHandle | None = None
+_channel_sweeps: set[asyncio.Task] = set()
+
+
+def _channel_person_view(entry: channel_listeners.Listener) -> dict[str, Any]:
+    tag = agent_presence.session_tag(entry.agent, entry.session or None)
+    session = {"key": agent_presence.session_key(entry.agent.id, entry.session),
+               "ordinal": tag["ordinal"] if tag else None}
+    return channel_listeners.view(entry, session=session)
+
+
+def _channel_listeners_message() -> dict[str, Any]:
+    """The person's form: every listener, oldest first, with the open project."""
+    return {"type": "channelListeners", "projectId": _workspace_context()["activeProjectId"],
+            "listeners": [_channel_person_view(entry) for entry in channel_book.entries()],
+            "rev": channel_book.revision}
+
+
+async def _broadcast_channel_listeners() -> None:
+    try:
+        await manager.broadcast_browser(_channel_listeners_message())
+    except Exception:  # noqa: BLE001 - a tab that missed it gets the next one, or reads the GET
+        pass
+
+
+def _schedule_channel_expiry() -> None:
+    """Check again just after the oldest listener would run out (a beat that
+    came meanwhile moves that out, and the check schedules itself again)."""
+    global _channel_expiry
+    if _channel_expiry is not None:
+        _channel_expiry.cancel()
+        _channel_expiry = None
+    deadline = channel_book.next_deadline()
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _channel_expiry = loop.call_later(max(0.0, deadline - channel_book.now()) + 0.5, _start_channel_sweep,
+                                      context=Context())
+
+
+def _start_channel_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_channel_listeners())
+    _channel_sweeps.add(task)
+    task.add_done_callback(_channel_sweeps.discard)
+
+
+_listener_settle_lock = asyncio.Lock()
+
+
+async def _settle_gone_listeners() -> None:
+    """Settle what the listener book saw go (round 5c LOW-2, round 5d).
+    Lapsed listeners (beats stopped, window open): their waiting messages
+    read "lapsed" (a comeback beat forgets a pending lapse under the same lock). Gone for
+    good (window over, ended, stopped, evicted): dropped. One lock orders this
+    against a comeback beat's revive, so a row is never dropped while its own
+    listener listens inside its window."""
+    async with _listener_settle_lock:
+        await _settle_gone_listeners_locked()
+
+
+async def _settle_gone_listeners_locked() -> None:
+    # A store that fails mid-way gives the rest back (the failed one first) to
+    # be tried again shortly: taken items are never just lost (5d check, LOW).
+    lapsed_items = channel_book.take_lapsed()
+    for index, (agent_id, session, listener_id) in enumerate(lapsed_items):
+        try:
+            lapsed = await asyncio.to_thread(thread_book.lapse_route, agent_id, session, listener_id)
+        except (ProjectStoreError, OSError):
+            channel_book.give_back(lapsed=lapsed_items[index:], gone=channel_book.take_gone())
+            return
+        for project_id, rows in lapsed:
+            await _broadcast_thread(project_id, rows)
+    gone_items = channel_book.take_gone()
+    for index, (agent_id, session, listener_id) in enumerate(gone_items):
+        try:
+            settled = await asyncio.to_thread(thread_book.drop_route, agent_id, session, listener_id)
+        except (ProjectStoreError, OSError):
+            channel_book.give_back(gone=gone_items[index:])
+            return
+        for project_id, rows in settled:
+            await _broadcast_thread(project_id, rows)
+
+
+async def _sweep_channel_listeners() -> None:
+    if channel_book.sweep():
+        await _broadcast_channel_listeners()
+    await _settle_gone_listeners()
+    _schedule_channel_expiry()
+
+
+def _channel_caller() -> tuple[AgentIdentity, str | None]:
+    """The listener's agent, by its Settings app token only. A tokenless
+    caller (a name alone) or a token Nebula doesn't know is refused (401)
+    with GM r81's line and a code: listener_no_token or
+    listener_token_invalid. An in-app agent's turn token is refused too
+    (J3, Justin 2026-11-04: listener_in_app_token): only a token from
+    Settings › Connect your agent listens. The identity comes from the
+    token, so one agent's token never registers as another (a name header
+    beside it is ignored)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None or not identity.verified:
+        lower = {k.lower(): v for k, v in (headers or {}).items()}
+        presented = lower.get("authorization", "").startswith("Agent ") and lower["authorization"][6:].strip()
+        code, line = ((channel_listeners.BAD_TOKEN_CODE, channel_listeners.BAD_TOKEN_LINE) if presented
+                      else (channel_listeners.NO_TOKEN_CODE, channel_listeners.NO_TOKEN_LINE))
+        raise HTTPException(status_code=401, detail=line, headers={"X-Nebula-Code": code})
+    if not channel_listeners.is_app_agent(identity):
+        raise HTTPException(status_code=401, detail=channel_listeners.IN_APP_TOKEN_LINE,
+                            headers={"X-Nebula-Code": channel_listeners.IN_APP_TOKEN_CODE})
+    return identity, presence_session(headers)
+
+
+@app.post("/api/agent/channel")
+async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
+    """A --channel listener's beat: {state: listening|stopped, reason?:
+    idle|error, projectId?, nonce?}. Answers with its entry, whose listenerId a
+    person.message names to reach it. ``nonce`` is the listener process's
+    own (D2): a second process naming the same agent session gets 409
+    listener_session_taken while the first's entry lives."""
+    identity, session = _channel_caller()
+    try:
+        state, reason, project_id = channel_listeners.parse_beat(body)
+    except channel_listeners.ListenerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    nonce = channel_listeners.parse_nonce(body.get("nonce"))
+    known = any(entry.session == (session or "") and entry.nonce == nonce
+                for entry in channel_book.for_agent(identity.id))
+    async with _listener_settle_lock:
+        try:
+            entry, changed = channel_book.beat(identity, session, state=state, reason=reason,
+                                               project_id=project_id, nonce=nonce)
+        except channel_listeners.SessionTaken as exc:
+            raise HTTPException(status_code=409, detail=str(exc),
+                                headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE}) from exc
+        if changed:
+            await _broadcast_channel_listeners()
+        await _settle_gone_listeners_locked()
+        if state == "listening" and (not known or changed):
+            # Back inside its lapse window, in the same session: what was marked
+            # lapsed for its going away is served to it once (round 5d). A
+            # settle and this revive run under one lock, so a row is never
+            # dropped while its own listener is listening inside the window.
+            try:
+                revived = await asyncio.to_thread(thread_book.revive_route, identity.id, session)
+            except (ProjectStoreError, OSError):
+                revived = []
+            for project_id, rows in revived:
+                await _broadcast_thread(project_id, rows)
+    _schedule_channel_expiry()
+    answer: dict[str, Any] = {"listener": channel_listeners.view(entry), "beatSeconds": channel_listeners.BEAT_SECONDS}
+    if not known:
+        # A new process on this session (a listener that restarted): the
+        # pushes Nebula recorded for the session that no reply answered yet,
+        # so its span picks up where the old process left it (review 4).
+        answer["openPushes"] = thread_ledger.open_pushes(identity.id, session)
+    return answer
+
+
+@app.delete("/api/agent/channel")
+async def end_channel_listener(nonce: str | None = None) -> dict[str, Any]:
+    """Its session ended: the canvas shows it as not connected. ``nonce``:
+    the listener process's own (D2), so another process's entry stays."""
+    identity, session = _channel_caller()
+    if channel_book.gone(identity, session, channel_listeners.parse_nonce(nonce)):
+        await _broadcast_channel_listeners()
+    await _settle_gone_listeners()
+    _schedule_channel_expiry()
+    return {"listener": None}
+
+
+@app.get("/api/canvas/channel")
+async def read_channel_listeners() -> dict[str, Any]:
+    """Who listens. The person: every listener with its cursor's {key,
+    ordinal} (the channelListeners message's form). An agent: only its own
+    entries, without cursor keys. No entry for a session means it isn't
+    connected; state "stopped" means its listener stopped."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    project_id = _workspace_context()["activeProjectId"]
+    if identity is not None:
+        return {"projectId": project_id,
+                "listeners": [channel_listeners.view(entry) for entry in channel_book.for_agent(identity.id)]}
+    require_person(headers)
+    message = _channel_listeners_message()
+    return {key: value for key, value in message.items() if key != "type"}
+
+
+# ---------- The Message box's thread (services/person_thread.py) ----------
+#
+# GM r50: the person messages a listening Claude Code session from the
+# Agent log; it answers with reply_to_person. Rows are kept per project. The
+# person reads every row (the personThread message, GET /api/canvas/thread).
+# Every connected agent reads the whole thread too, as pins (Justin,
+# 2026-11-03): the journal's person.message and thread.replied, and the read
+# tool. The rule is one switch, person_thread.AGENTS_READ_WHOLE_THREAD. Only
+# the listener named in `to` wakes, and it reads its messages back from the
+# inbox route.
+
+def _thread_session(identity: AgentIdentity, session: str | None) -> dict[str, Any]:
+    """The cursor key and number of an agent's session, person form only."""
+    try:
+        tag = agent_presence.session_tag(identity, session or None)
+        key = agent_presence.session_key(identity.id, session or "")
+    except Exception:  # noqa: BLE001 - a row without a shade still reads
+        return {"key": None, "ordinal": None}
+    return {"key": key, "ordinal": tag["ordinal"] if tag else None}
+
+
+def _thread_message(change: str, project_id: str | None, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"type": "personThread", "change": change, "projectId": project_id,
+            "rows": [person_thread.person_view(row) for row in rows]}
+
+
+def _thread_sync_message() -> dict[str, Any]:
+    try:
+        project_id, rows = thread_book.rows()
+    except ProjectStoreError:
+        project_id, rows = _workspace_context()["activeProjectId"], []
+    return _thread_message("sync", project_id, rows)
+
+
+async def _broadcast_thread(project_id: str | None, rows: list[dict[str, Any]]) -> None:
+    """New or changed rows, to the person's tabs only (never an agent socket)."""
+    if not rows:
+        return
+    try:
+        await manager.broadcast_browser(_thread_message("rows", project_id, rows))
+    except Exception:  # noqa: BLE001 - a tab that missed it reads the thread on its next hello
+        pass
+
+
+def _listening(identity: AgentIdentity, session: str | None) -> channel_listeners.Listener | None:
+    """This agent session's listener entry, while it listens."""
+    for entry in channel_book.for_agent(identity.id):
+        if entry.session == (session or "") and entry.state == "listening":
+            return entry
+    return None
+
+
+async def _thread_ref(kind: str, fields: dict[str, Any], *, identity: AgentIdentity | None = None,
+                      headers: Mapping[str, str] | None = None, project_id: str | None = None) -> None:
+    """A row that points at something kept elsewhere (a question, a
+    proposal, an Update, a pin), added only when it crosses the channel: an
+    agent's while that session listens, the person's while any session
+    listens. Decoration: never fails the route that called it."""
+    try:
+        if identity is not None:
+            session = presence_session(headers)
+            if _listening(identity, session) is None:
+                return
+            fields = {**fields, "agent": identity.as_dict(), "session": _thread_session(identity, session)}
+        elif not any(entry.state == "listening" for entry in channel_book.entries()):
+            return
+        project_id, row = await asyncio.to_thread(thread_book.add_row, kind, fields, project_id=project_id)
+    except Exception:  # noqa: BLE001 - the thread is decoration on a write that already succeeded
+        return
+    await _broadcast_thread(project_id, [row])
+
+
+def _thread_refusal(exc: person_thread.ThreadError) -> JSONResponse:
+    content: dict[str, Any] = {"detail": exc.detail}
+    if exc.code:
+        content["code"] = exc.code
+    if exc.person:
+        content["person"] = exc.person
+    return JSONResponse(status_code=exc.status, content=content)
+
+
+def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[str]:
+    return [entry.listener_id for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
+
+
+def _listener_process(identity: AgentIdentity, session: str | None, nonce: str | None) -> None:
+    """The inbox, accepted and held routes answer only the process that
+    holds this session's listener entry (review 4 LOW-4: the nonce bound the
+    beat only, so a process refused there could still read the inbox and
+    take a message meant for the live one). 409, as for a beat."""
+    if channel_book.taken_by_another(identity, session, channel_listeners.parse_nonce(nonce)):
+        raise HTTPException(status_code=409, detail=channel_listeners.SESSION_TAKEN_LINE,
+                            headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE})
+
+
+def _reply_listeners(identity: AgentIdentity, session: str | None) -> tuple[list[channel_listeners.Listener], int]:
+    """The listeners a reply answers for, and how many fresh ones it
+    wouldn't guess between. This session's own entry (the launch command
+    gives Claude Code's shell its listener's session, D2). Else the agent's
+    one fresh listening entry (a terminal started some other way); with two
+    or more, none: Nebula won't guess which session the reply is from
+    (round 5, D2), and the count says so. A crashed session's leftover entry
+    isn't fresh (channel_listeners.FRESH_SECONDS), so it never blocks one."""
+    own = [entry for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
+    if own:
+        return own, 0
+    fresh = channel_book.fresh_listening(identity.id)
+    if len(fresh) == 1:
+        return fresh, 0
+    return [], len(fresh)
+
+
+def _reply_listener_ids(identity: AgentIdentity, session: str | None) -> list[str]:
+    return [entry.listener_id for entry in _reply_listeners(identity, session)[0]]
+
+
+@app.get("/api/canvas/thread")
+async def read_person_thread(limit: int = 50) -> Any:
+    """The open project's thread, newest last, at most ``limit`` (1-300).
+    The person reads every row; a connected agent reads every row too, in
+    the agents' form (person_thread.for_agent under the one switch)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None and has_agent_marker(headers) and not is_person(headers):
+        # An agent that didn't say who it is (review 1, NIT-3): the thread is
+        # read by name, so say how to give one.
+        raise HTTPException(status_code=400, detail=(
+            "Nebula couldn’t show the thread because this agent has no name. Set NEBULA_AGENT_NAME or pass --as "
+            "with a name, then read the thread again."))
+    limit = max(1, min(int(limit), person_thread.MAX_ROWS))
+    try:
+        if identity is not None:
+            project_id, rows = await asyncio.to_thread(thread_book.for_agent, identity.id, limit=limit)
+            return {"projectId": project_id, "rows": rows}
+        require_person(headers)
+        project_id, rows = await asyncio.to_thread(thread_book.rows)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"projectId": project_id, "rows": [person_thread.person_view(row) for row in rows[-limit:]]}
+
+
+@app.post("/api/canvas/thread/messages", status_code=201)
+async def send_person_message(body: Any = Body(None)) -> Any:
+    """The person messages one listening session: {text, to: <listenerId>,
+    nodeIds?, clientId?}. Only the person can. The listener named in ``to``
+    wakes at once (PR A's deliberate send). Refused only when that listener
+    is gone or stopped (409 listener_stopped, with the person's line). Past
+    SEND_CAP messages to that listener in an hour it is accepted and held
+    (GM r55): the row reads ``held`` until the listener pushes it."""
+    require_person(current_request_headers())
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {text, to, nodeIds?, clientId?}")
+    unknown = sorted(set(body) - {"text", "to", "nodeIds", "clientId"})
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown field {unknown[0][:40]!r}")
+    client_id = body.get("clientId")
+    if client_id is not None and (not isinstance(client_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",
+                                                                                      client_id)):
+        raise HTTPException(status_code=422, detail="clientId must be up to 64 letters, digits, - or _")
+    try:
+        text = person_thread.clean_message(body.get("text"))
+        node_ids = [node_id for node_id in person_thread.clean_node_ids(body.get("nodeIds"))
+                    if node_id in cli_graph.nodes]
+        listener = channel_book.by_listener_id(str(body.get("to") or ""))
+        if listener is None or listener.state != "listening":
+            raise person_thread.ThreadError(409, "That session isn't listening any more",
+                                            person_thread.STOPPED_CODE, person_thread.STOPPED_LINE)
+        held = thread_send_cap.full(listener.listener_id)
+        to = {"listenerId": listener.listener_id, "agent": listener.agent.as_dict(),
+              "session": _channel_person_view(listener).get("session")}
+        project_id, row, new = await asyncio.to_thread(thread_book.add_message, text=text, node_ids=node_ids,
+                                                       to=to, client_id=client_id, held=held,
+                                                       route=person_thread.route_key(listener.agent.id,
+                                                                                     listener.session))
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if new:
+        thread_send_cap.take(listener.listener_id)
+        # Its data follows the thread's read rule (person_thread.message_event_data).
+        # Only the listener named in `to` wakes; it reads the message back
+        # from its inbox (GET /api/agent/thread/inbox).
+        _journal(person_thread.MESSAGE_EVENT, actor=dict(_PERSON_ACTOR), data=person_thread.message_event_data(row),
+                 summary="sent a message", project_id=project_id)
+        await _broadcast_thread(project_id, [row])
+    return {"projectId": project_id, "row": person_thread.person_view(row)}
+
+
+@app.get("/api/agent/thread/inbox")
+async def read_thread_inbox(nonce: str | None = None) -> dict[str, Any]:
+    """A --channel listener reads the messages sent to its own session that
+    it hasn't pushed yet (answered for this agent session only, matched by
+    agent and session so a restart of Nebula loses none). ``nonce``: the
+    listener process's own; another process on the session gets 409."""
+    # Only a token's listener (Justin, 2026-11-03): the same refusal as registering.
+    identity, session = _channel_caller()
+    _listener_process(identity, session, nonce)
+    listener_ids = _thread_listener_ids(identity, session)
+    try:
+        project_id, messages = await asyncio.to_thread(thread_book.inbox, listener_ids,
+                                                       person_thread.route_key(identity.id, session))
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"projectId": project_id, "messages": messages}
+
+
+def _id_list(raw: Any) -> list[str] | None:
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw) or len(raw) > 100:
+        return None
+    return raw
+
+
+@app.post("/api/agent/thread/accepted")
+async def accept_thread_messages(body: Any = Body(None), nonce: str | None = None) -> dict[str, Any]:
+    """The listener pushed these to its session: {messageIds, questionIds?}
+    (one push). The person's box then reads "Waiting for Claude" for each
+    message (Nebula saw the push go, never that Claude read it). The push
+    goes in the push ledger (review 4): a reply from this session answers
+    its oldest open push. A message counts when it is this caller's and was
+    sent or held, or (a re-send after Nebula restarted) already accepted
+    for this agent; a question set when this agent asked it and the person
+    answered it. A retry with the same ids records nothing new."""
+    identity, session = _channel_caller()  # a token's listener only, as registering
+    _listener_process(identity, session, nonce)
+    ids = _id_list(body.get("messageIds") if isinstance(body, dict) else None)
+    questions = _id_list(body.get("questionIds") if isinstance(body, dict) else None)
+    if ids is None or questions is None or not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {messageIds: [...], questionIds?: [...]} (at most 100 each)")
+    listener_ids = _thread_listener_ids(identity, session)
+    counted: dict[str, str] = {}
+    try:
+        changed = await asyncio.to_thread(thread_book.accept, ids, listener_ids,
+                                          person_thread.route_key(identity.id, session), identity.id, counted)
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)  # type: ignore[return-value]
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    items: list[tuple[str, str, str | None]] = [(i, push_ledger.MESSAGE, counted[i]) for i in ids if i in counted]
+    for question_id in questions:
+        asked = agent_questions.get(question_id)
+        if asked is not None and asked.agent.id == identity.id and asked.status == "answered":
+            items.append((question_id, push_ledger.QUESTION, asked.project_id))
+    thread_ledger.record(identity.id, session, items)
+    for project_id, rows in changed:  # wherever each was sent (boundary LOW-2)
+        await _broadcast_thread(project_id, rows)
+    return {"accepted": [row["id"] for _, rows in changed for row in rows]}
+
+
+@app.post("/api/agent/thread/held")
+async def hold_thread_messages(body: Any = Body(None), nonce: str | None = None) -> dict[str, Any]:
+    """The listener holds these messages at its runaway cap (200 deliberate
+    sends an hour): {messageIds}. The person's box reads "Sends in a few
+    minutes because you’ve sent 200 this hour." until it pushes them."""
+    identity, session = _channel_caller()  # a token's listener only, as registering
+    _listener_process(identity, session, nonce)
+    ids = body.get("messageIds") if isinstance(body, dict) else None
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
+        raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
+    listener_ids = _thread_listener_ids(identity, session)
+    try:
+        changed = await asyncio.to_thread(thread_book.hold, ids, listener_ids,
+                                          person_thread.route_key(identity.id, session))
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)  # type: ignore[return-value]
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    for project_id, rows in changed:
+        await _broadcast_thread(project_id, rows)
+    return {"held": [row["id"] for _, rows in changed for row in rows]}
+
+
+@app.post("/api/canvas/thread/replies", status_code=201)
+async def reply_to_person(body: Any = Body(None)) -> Any:
+    """An agent answers the person in the thread: {text, nodeId?}. With a
+    node, its cursor flies there and says the reply's first sentence (140
+    characters at most), on the person's tabs only. The person can't post
+    here: they send messages. Only an agent with a Settings token replies
+    (J1, Justin 2026-11-04, the same as listening): a name alone or an
+    in-app agent's turn token gets 401 with a line saying what to do
+    (reply_no_token, reply_in_app_token). Paced per token agent (ReplyPace:
+    5 in a row, then one every 2 s): past it, 429 replies_rate_limited with
+    retryAfter (s) and a line saying when it can reply again; nothing is
+    saved, and a reply Nebula refuses later never spends one.
+
+    Review 4 (the push ledger, services/push_ledger.py): the reply answers
+    the oldest open push of this session's listener (D2: Claude Code's shell
+    shares its listener's session; a terminal started otherwise answers for
+    the agent's one fresh listener, and with two or more Nebula won't
+    guess: ``replyTo`` None and a ``note`` saying why). It goes to that
+    push's project's thread (GM r100.3, r112.2), with an Update on the open
+    project when that is another one (GM r112.1: one per agent and project
+    while unread). A reply that answers no push is a follow-up in the open
+    project's thread, with no Update; with no project open, 409 no_project
+    (GM r110's line). ``nodeId`` is checked against the open canvas only
+    when the reply goes there; for another project's thread it is ignored,
+    with a ``note``, and no cursor flies (GM r108 b). The cursor that flies
+    is the session's that took the push (GM r100.1)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None and is_person(headers):
+        raise HTTPException(status_code=403, detail="The person sends messages; replies are an agent's")
+    if identity is None or not identity.verified:
+        raise HTTPException(status_code=401, detail=person_thread.REPLY_NO_TOKEN_LINE,
+                            headers={"X-Nebula-Code": person_thread.REPLY_NO_TOKEN_CODE})
+    if not channel_listeners.is_app_agent(identity):
+        raise HTTPException(status_code=401, detail=person_thread.REPLY_IN_APP_LINE,
+                            headers={"X-Nebula-Code": person_thread.REPLY_IN_APP_CODE})
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {text, nodeId?}")
+    unknown = sorted(set(body) - {"text", "nodeId"})
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown field {unknown[0][:40]!r}: a reply takes text and "
+                                                    "nodeId")
+    node_id = body.get("nodeId")
+    if node_id is not None and not isinstance(node_id, str):
+        raise HTTPException(status_code=422, detail=f"No node {str(node_id)[:40]!r} on the canvas: read it again "
+                                                    "(look_at_canvas), or reply without node_id")
+    session = presence_session(headers)
+    listeners, unmatched = _reply_listeners(identity, session)
+    taker = listeners[0] if listeners else None
+    key = (identity.id, taker.session) if taker is not None else None
+    # Where it would go, before checking the node: only the open canvas's
+    # nodes can be checked (review 4 LOW-3: node ids repeat across projects).
+    try:
+        target = await asyncio.to_thread(thread_book.reply_target, thread_ledger, key)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    open_id = _workspace_context()["activeProjectId"]
+    elsewhere = target is not None and target != open_id
+    if node_id is not None and not elsewhere and node_id not in cli_graph.nodes:
+        raise HTTPException(status_code=422, detail=f"No node {str(node_id)[:40]!r} on the canvas: read it again "
+                                                    "(look_at_canvas), or reply without node_id")
+    ignored_node = node_id if elsewhere else None
+    if elsewhere:
+        node_id = None
+    try:
+        text = person_thread.clean_reply(body.get("text"))
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)
+    # Paced after the body checks, so a malformed call doesn't spend a reply.
+    wait = thread_reply_pace.take(identity.id)
+    if wait > 0:
+        retry = max(1, math.ceil(wait))
+        return JSONResponse(status_code=429, headers={"Retry-After": str(retry)},
+                            content={"detail": person_thread.reply_limited_detail(wait),
+                                     "code": person_thread.REPLY_LIMITED_CODE, "retryAfter": retry})
+    try:
+        fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
+                  "session": _thread_session(identity, session)}
+        taker_session = _thread_session(identity, taker.session) if taker is not None else None
+        project_id, row = await asyncio.to_thread(thread_book.add_reply, fields, ledger=thread_ledger, key=key,
+                                                  taker_session=taker_session)
+    except person_thread.ThreadError as exc:
+        thread_reply_pace.refund(identity.id)  # nothing was saved (live L1)
+        return _thread_refusal(exc)
+    except ProjectStoreError as exc:
+        thread_reply_pace.refund(identity.id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    # Always journaled (only its ids when narrowed): its own listener removes
+    # the push it names (replyTo; PR A, J4; review 4).
+    _journal(person_thread.REPLY_EVENT, node_id=row.get("nodeId"), data=person_thread.reply_event_data(row),
+             summary="replied to the person", project_id=project_id)
+    await _broadcast_thread(project_id, [row])
+    open_id = _workspace_context()["activeProjectId"]
+    if project_id != open_id:
+        await _post_reply_elsewhere(identity, project_id, row["id"])
+    # The cursor that flies is the session's that took the push (GM r100.1:
+    # one Claude is one cursor), so a reply from its own shell never makes a
+    # "· 2"; with no push answered, the caller's own. Only on the canvas the
+    # reply is about (GM r108 b): one saved in another project's thread
+    # flies nothing, and the Update is the signal.
+    cursor_session = (taker.session or None) if taker is not None and row.get("replyTo") else session
+    if node_id is not None and project_id == open_id:
+        try:
+            # The first sentence goes on the person's tabs; on the agents'
+            # form (and what look_at_canvas and the roster keep) only while
+            # the thread is open to every agent (person_thread's one rule).
+            shared = person_thread.say_reaches_agents()
+            event = _point(identity, target={"nodeId": node_id}, action="move",
+                           say=person_thread.first_sentence(text) if shared else "",
+                           did=_did("Replied on", node_id))
+            person = _person_form(event, identity, headers, session=cursor_session)
+            if person is not None:
+                person = {**person, "say": person_thread.first_sentence(text)}
+            await _broadcast_presence(event, person)
+        except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
+            pass
+    answer: dict[str, Any] = {"projectId": project_id, "reply": person_thread.agent_view(row, identity.id)}
+    if unmatched > 1:
+        answer["note"] = person_thread.reply_unmatched_line(identity.name, unmatched)
+    elif ignored_node is not None:
+        answer["note"] = person_thread.reply_node_elsewhere_line(str(ignored_node)[:40], _project_name(project_id))
+    return answer
+
+
+def _project_name(project_id: str) -> str:
+    """A project's name as the person reads it; an unnamed one is “Untitled” (GM r108 d)."""
+    try:
+        project = (project_store.read().get("projects") or {}).get(project_id) or {}
+    except Exception:  # noqa: BLE001 - a name is decoration
+        project = {}
+    return str(project.get("name") or "").strip() or person_thread.UNTITLED
+
+
+async def _post_reply_elsewhere(identity: AgentIdentity, project_id: str, reply_id: str) -> None:
+    """GM r100.3, r112.1: the reply went to another project's thread (the
+    push it answers was sent there): an Update on the open project names
+    that project, and its Open action opens that thread at the reply. One
+    per agent and project while unread, updated in place with a count from
+    the second reply; the agent's Updates limit applies. Decoration: never
+    fails the saved reply."""
+    try:
+        name = _project_name(project_id)
+        result = await asyncio.to_thread(
+            agent_notes.post_replied, author={"kind": "agent", **identity.as_dict()}, project_id=project_id,
+            reply_id=reply_id, text_for=lambda count: person_thread.replied_elsewhere_text(identity.name, name, count))
+    except Exception:  # noqa: BLE001 - the reply is saved; the Update is a pointer to it (or rate limited)
+        return
+    note = result["note"]
+    _journal_note(note, "canvas", project_id=result["projectId"])
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
 
 
 @app.post("/api/canvas/view")
@@ -6626,10 +7734,14 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     Query: after (seq; default "from now"), journal (id from a previous
     response), wait (seconds, capped at 25), limit (1-100), kinds (comma
     list of groups or exact kinds), self=1 to include the caller's own
-    events. Resume with after=<cursor>.
+    events, ownReplies=1 to include only its own thread.replied, and its own
+    pin.resolved made from this same session (a channel listener: its reply
+    by any route ends its deliberate span, and its pin answer the span that
+    pin's push opened; a sibling session's never does). Resume with
+    after=<cursor>.
     """
     query = request.query_params
-    known = {"after", "journal", "wait", "limit", "kinds", "self"}
+    known = {"after", "journal", "wait", "limit", "kinds", "self", "ownReplies"}
     await _sweep_proposals()
     unknown = sorted(set(query) - known)
     if unknown:
@@ -6647,6 +7759,9 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     include_self = (query.get("self") or "0").lower()
     if include_self not in {"0", "1", "true", "false"}:
         raise HTTPException(status_code=422, detail="self must be 1 or 0")
+    own_replies = (query.get("ownReplies") or "0").lower()
+    if own_replies not in {"0", "1", "true", "false"}:
+        raise HTTPException(status_code=422, detail="ownReplies must be 1 or 0")
     identity = identify_agent(current_request_headers())
     exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
     try:
@@ -6658,6 +7773,10 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
             limit=int(limit) if limit is not None else 50,
             kinds=kinds,
             exclude_actor_id=exclude,
+            keep_own=frozenset({OWN_REPLY_KIND}) if own_replies in {"1", "true"} else frozenset(),
+            # ...and its own pin answers, from this same session only (round 5, D1).
+            own_session=(presence_session(current_request_headers()) if identity is not None
+                         and own_replies in {"1", "true"} else None),
         )
     except TooManyWaiters as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -6882,8 +8001,10 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
         return ANOTHER_PROJECT
     try:
         _refuse_overwriting_later_edits(proposal)
+        dropped: list[dict[str, str]] = []
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
-                                                                models=models)
+                                                                models=models, drops=dropped)
+        _refuse_changed_drops(proposal, dropped)
         _refuse_changed_runs(proposal, candidate, id_map, run_ids)
     except HTTPException as exc:
         return str(exc.detail)
@@ -6912,7 +8033,8 @@ def _proposal_closed(proposal_id: str) -> bool:
 
 
 async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
-                         detail: Mapping[str, Any] | None = None, text: str | None = None) -> None:
+                         detail: Mapping[str, Any] | None = None, text: str | None = None,
+                         share: Callable[[], Mapping[str, Any]] | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
     proposal's ref carries its ``detail`` again (asset_proposals.update_detail), and its
     words are that proposal's (``text``, asset_proposals.update_text; review 1 LOW-1)."""
@@ -6920,7 +8042,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
         return
     try:
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
-                                         detail, text, _proposal_closed)
+                                         detail, text, _proposal_closed, share)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -7102,7 +8224,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
             })
         except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
             pass
-        await _reopen_update(proposal.update, proposal.id)
+        await _reopen_update(proposal.update, proposal.id, {"since": int(proposal.created_at * 1000)})
         _schedule_canvas_expiry(proposal)
 
     reopened_assets: list[AssetProposal] = []
@@ -7131,8 +8253,25 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal))
+        # PR #204 round 4: a newer ask from the same agent on the same target posted while this
+        # one was closed, and its Update replaced this one's (_same_ask). This ask joins that live
+        # Update, as if it had been open then; the refresh below counts it there. Without this it
+        # pointed at an Update that's gone: no Update of its own, and one too few on the live one.
+        live = next((other.update for other in _open_sharers(proposal)
+                     if other is not proposal and other.update and other.update != proposal.update), None)
+        if live is not None:
+            proposal.update = dict(live)
+        else:
+            await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
+                                 _share_reader(proposal, proposal.update))
+        # Review 3 LOW-2 (#204 r5): either way it is open again with a new expiry, and its old
+        # timer may have fired while it was closed: check it when it is due.
         _schedule_asset_expiry(proposal)
+    # MEDIUM-1: an ask reopened under an Update another open ask still holds
+    # leaves that Update on the other ask (reopen_proposal); it now stands for
+    # one more, so it says so.
+    for ref in {_ref_key(p.update): p.update for p in reopened_assets if p.update}.values():
+        await _refresh_asset_update(ref)
     if reopened_assets:
         try:
             await manager.broadcast_browser(_asset_proposal_open_message())
@@ -7238,6 +8377,8 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
         project_id=project_id,
     )
     await _broadcast_pins()
+    await _thread_ref("pin", {"pinId": pin["id"], "text": pin.get("text") or "", "nodeId": anchor.get("nodeId")},
+                      project_id=project_id)
     return {"pin": pin}
 
 
@@ -7286,16 +8427,25 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         data={"pinId": pin_id, "text": event_text(pin.get("text")), "reply": event_text(reply, multiline=False)},
         summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
+        # Its own session's listener ends the span this pin's push opened
+        # (canvas_events.OWN_SESSION_KINDS, round 5 D1); kept beside the journal.
+        session=presence_session(current_request_headers()),
     )
     await _broadcast_pins()
+    await _thread_ref("pinReply", {"pinId": pin_id, "text": reply, "nodeId": anchor.get("nodeId")},
+                      identity=identity, headers=current_request_headers(), project_id=project_id)
     try:
         target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
         )
         target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
         node = target.get("nodeId")
-        await manager.broadcast_raw(_point(identity, target=target, action="click", say=reply,
-                                           did=_did("Replied on", node) if node else {"verb": "Replied"}))
+        event = _point(identity, target=target, action="click", say=reply,
+                       did=_did("Replied on", node) if node else {"verb": "Replied"})
+        # The resolving request's own session's cursor on the person's tabs,
+        # kept for the replay (PR #211 review 3, MEDIUM-1); agents read the
+        # agent form, as before.
+        await _broadcast_presence(event, _person_form(event, identity, current_request_headers()))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
@@ -7398,7 +8548,8 @@ async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
         await _settle_proposal_updates()  # never list an expired proposal as waiting
-        return agent_notes.canvas_list(unread_only=bool(unread))
+        return notes_for_reader(agent_notes.canvas_list(unread_only=bool(unread)),
+                                             **_share_view(current_request_headers()))
     except NoteError as exc:
         return _raise_note_error(exc)
 
@@ -7417,6 +8568,8 @@ async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
                                                 note=result["note"], unread=result["unread"],
                                                 removed=result["removed"]))
+    await _thread_ref("note", {"noteId": result["note"].get("id")}, identity=identity,
+                      headers=current_request_headers(), project_id=result["projectId"])
     return result
 
 
@@ -7466,7 +8619,8 @@ async def list_board_agent_notes(moodboard_id: str, unread: int = 0) -> Any:
     board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
     if isinstance(board, JSONResponse):
         return board
-    return agent_notes.board_list(board, unread_only=bool(unread))
+    return notes_for_reader(agent_notes.board_list(board, unread_only=bool(unread)),
+                                         **_share_view(current_request_headers()))
 
 
 @app.post("/api/moodboards/{moodboard_id}/agent-notes", status_code=201)
@@ -7606,8 +8760,50 @@ async def _sweep_proposals() -> None:
     await _announce_closed_proposals(expired, actor=dict(_SYSTEM_ACTOR))
 
 
+def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
+    """The names, on the canvas now, of the existing nodes an open proposal
+    touches, the far ends of the connections it removes among them (GM - Design,
+    PR #216 r4 4: names follow renames live; review 3 LOW-2). None for
+    a closed one, or one for a project that isn't open: its ids name nodes
+    there, not here."""
+    if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
+        return {}
+    return {node_id: _node_label(node_id) for node_id in sorted(proposal.touched) if node_id in cli_graph.nodes}
+
+
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
-    return canvas_proposals.view(proposal, registry=node_registry)
+    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal))
+
+
+# What each open proposal's card last showed for its nodes' names: a rename
+# re-sends the card (_follow_renamed_proposals).
+_proposal_names_sent: dict[str, dict[str, str]] = {}
+
+
+async def _follow_renamed_proposals() -> None:
+    """After a canvas edit, re-send each open proposal whose nodes were
+    renamed to the person's canvases, so the card and plan line read the new
+    names (GM - Design, PR #216 r4 4)."""
+    for proposal in canvas_proposals.open_list():
+        live = _proposal_live_names(proposal)
+        shown = _proposal_names_sent.get(proposal.id) or {
+            node_id: name for node_id, name in proposal.shown_names().items() if node_id in live}
+        if live == shown:
+            continue
+        _proposal_names_sent[proposal.id] = live
+        try:
+            await manager.broadcast_browser({
+                "type": "proposalOpened",
+                "proposal": _proposal_view(proposal),
+                "acceptKey": proposal.accept_key,
+                "personValues": canvas_proposals.person_values(proposal),
+            })
+        except Exception:  # noqa: BLE001 - the next sync carries the names too
+            pass
+    for proposal_id in list(_proposal_names_sent):
+        kept = canvas_proposals.get(proposal_id)
+        if kept is None or not kept.is_open:
+            _proposal_names_sent.pop(proposal_id, None)
 
 
 def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
@@ -7656,19 +8852,8 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
     node = graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
     params = node.get("params") or {}
-    definition = node_registry.get(definition_id) or {}
-    inputs = node_ports(definition_id, params, definition, "inputPorts")
-    outputs = node_ports(definition_id, params, definition, "outputPorts")
     configured = universal_ports.stored_ports(definition_id, params) is not None
-    # A node never configured with no declared ports in a direction takes any
-    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
-    def fits(edge: dict[str, Any]) -> bool:
-        if edge.get("source") == node_id and (outputs or configured):
-            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
-        if edge.get("target") == node_id and (inputs or configured):
-            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
-        return True
-    orphans = [edge for edge in graph.edges if not fits(edge)]
+    orphans = _orphaned_wires(graph, node_id)
     if orphans:
         wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
         model = universal_ports.model_of(definition_id, params)
@@ -7684,6 +8869,82 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
             f"{why}: {wires}. Disconnect them in the same edit (`unwire`), or pick a model that takes them."))
 
 
+def _model_set(graph: CLIGraph, node_id: str) -> bool:
+    node = graph.nodes.get(node_id) or {}
+    return bool(universal_ports.model_of(str(node.get("definitionId") or ""), node.get("params")))
+
+
+class PortsUnread(HTTPException):
+    """_refuse_orphaned_wires's refusal for a canvas proposal (``drops``)
+    whose new model's ports can't be read right now (review 2, wire-drop
+    LOW-4): an agent (create, a reopen) reads the same `unwire` words as
+    before, while Accept tells the person in theirs and keeps the proposal
+    open, so it accepts once the read works again."""
+
+    def __init__(self, graph: CLIGraph, node_id: str, reason: str) -> None:
+        try:
+            _refuse_orphaned_wires(graph, node_id, reason=reason)
+            detail = reason
+        except HTTPException as exc:
+            detail = str(exc.detail)
+        super().__init__(status_code=400, detail=detail)
+        node = graph.nodes.get(node_id) or {}
+        definition_id = str(node.get("definitionId") or "")
+        self.node_name = _node_label(node_id, graph)
+        self.model = universal_ports.model_of(definition_id, node.get("params"))
+        self.provider = universal_ports.PROVIDER_NAME.get(universal_ports.PROVIDER.get(definition_id, ""), "the provider")
+        self.missing_key = getattr(reason, "kind", "") == "missing-key"
+
+
+def _ports_unread_line(exc: PortsUnread) -> str:
+    """The person's line when Accept can't read a new model's ports (review 2
+    LOW-4; error copy's style: what happened, then what to do, and never the
+    agents' `unwire`). The proposal stays open: Accept again works once the
+    read does."""
+    name = card_name(exc.node_name) or exc.node_name
+    if exc.missing_key:
+        return (f"Nebula can't read which inputs {exc.model} takes until your {exc.provider} key is set, so it "
+                f"can't tell which connections “{name}” keeps. Add it in Settings, then accept again.")
+    return (f"Nebula couldn't read which inputs {exc.model} takes from {exc.provider}'s server, so it can't tell "
+            f"which connections “{name}” keeps. Try Accept again in a moment.")
+
+
+def _orphaned_wires(graph: CLIGraph, node_id: str) -> list[dict[str, Any]]:
+    """The wires on a node that its ports, as its params now set them, don't
+    take: _refuse_orphaned_wires's test, shared."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    return [edge for edge in graph.edges if not fits(edge)]
+
+
+def _drop_orphaned_wires(graph: CLIGraph, node_id: str, *, keep: set[str]) -> list[dict[str, str]]:
+    """Removes, from a staged graph, the wires already on it (not in `keep`,
+    the ids this proposal made) that ``node_id``'s new model has no port for,
+    and returns them by their ends (_stage_proposal's `drops`)."""
+    dropped: list[dict[str, str]] = []
+    for edge in _orphaned_wires(graph, node_id):
+        if str(edge.get("id") or "") in keep:
+            continue
+        ends = {key: str(edge.get(key) or "") for key in ("source", "sourceHandle", "target", "targetHandle")}
+        if graph.remove_edge(ends["source"], ends["sourceHandle"], ends["target"], ends["targetHandle"]):
+            dropped.append(ends)
+    return dropped
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
@@ -7692,6 +8953,7 @@ def _stage_proposal(
     what: str = "a proposal",
     models: Mapping[tuple[str, str], Any] | None = None,
     report: dict[str, dict[str, Any]] | None = None,
+    drops: list[dict[str, str]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -7708,6 +8970,14 @@ def _stage_proposal(
     known (no key, unknown model) is refused with the reason. `report`, when
     given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
     {node id: reason} for those nodes.
+
+    `drops`, when given (a canvas proposal: the person sees each one before
+    Accept, GM - Design, PR #216 r3), takes the wires already on the canvas
+    that a model change leaves on ports the new model doesn't have: they are
+    removed from the candidate, as the picker removes them for the person,
+    and listed there. Only when the new model's ports are known; a wire this
+    proposal makes, or ports that can't be read, are still refused. Direct
+    edits never pass it: they stay all or nothing (`unwire`).
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
@@ -7732,7 +9002,13 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
-            candidate.update_params(change.node_id, update)
+            # GM r46 Q2 on #222: the preview and name follow a file param
+            # an agent sets (services/file_param_preview.py); an Image Input's
+            # preview size follows too (#226, _preview_follows_file).
+            before = copy.deepcopy(node.get("params") or {})
+            update, dropped = _follow_file_params(definition_id, before, update)
+            candidate.update_params(change.node_id, update, drop=dropped)
+            _preview_follows_file(candidate, change.node_id, before, update)
     names = spec.names
     raw_nodes = [
         {
@@ -7782,8 +9058,25 @@ def _stage_proposal(
                     f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        if drops is not None:
+            made = set(edge_ids)
+            for node_id, reason in configured.items():
+                # Only a swap to a model whose ports are known (GM - Design, PR
+                # #216 r4 8): a cleared model, or ports that can't be read,
+                # still refuse with the agents' `unwire`.
+                if reason or node_id in new_ids or not _model_set(candidate, node_id):
+                    continue
+                drops.extend(_drop_orphaned_wires(candidate, node_id, keep=made))
         for node_id, reason in configured.items():
+            if reason and drops is not None and _orphaned_wires(candidate, node_id):
+                # A canvas proposal's swap whose ports can't be read now: the
+                # person's Accept says so in their words (_ports_unread_line).
+                raise PortsUnread(candidate, node_id, reason)
             _refuse_orphaned_wires(candidate, node_id, reason=reason)
+    except PortsUnread as exc:
+        if ref_for:
+            exc.detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), str(exc.detail))
+        raise
     except HTTPException as exc:
         # The validators name nodes by id; a new node's staged id (n12) means
         # nothing to the agent, which wrote +img.
@@ -7914,13 +9207,16 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
 
 
 def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
-                   measured: input_sizes.Measured) -> dict[str, Any]:
+                   measured: input_sizes.Measured,
+                   models: Mapping[tuple[str, str], Any] | None = None) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
 
     Each node is free (utility) or paid (a provider call), with its list
     price when model_pricing.json has one. "Up to" when ancestors are counted,
     because the execution cache may skip them. ``measured`` holds the input
     sizes for prices read from them (_measure_proposal_inputs, awaited first).
+    ``models`` (_look_up_models) gives a universal node's chosen model its
+    catalog name for the plan line.
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
@@ -7937,12 +9233,18 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             # The input ports wired into it: a Krea-only one keeps the run on Krea (cost_for).
             wired = {str(edge.get("targetHandle")) for edge in graph_edges
                      if str(edge.get("target")) == node_id and edge.get("targetHandle")}
+            params = candidate.nodes[node_id].get("params") or {}
+            entry = cost_for(definition, params, definitions, api_keys, wired=wired)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
-                           wired=wired),
+                **entry,
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
+                # The plan line's words (canvas_proposals.plan_line): the node
+                # by its name, its model, and who pays for its run.
+                "name": _node_label(node_id, candidate),
+                "model": model_label(definition, params, models),
+                "billedTo": billed_to(definition, params, entry, wired=wired),
             })
         if estimate:
             estimate = {
@@ -7965,6 +9267,21 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             cost["pendingSkipped"] = skipped
         return cost
     return summarize_cost(entries, up_to=up_to)
+
+
+def _model_reread(change: Any, models: Mapping[tuple[str, str], Any]) -> dict[str, str] | None:
+    """{key, name} when a change sets a universal node's model to the model it
+    already has: its ports are read again, so the card's model line reads
+    "Krea 2 · inputs updated", never "X → X" (GM - Design, PR #216 r4 8)."""
+    node = cli_graph.nodes.get(change.node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    key = universal_ports.MODEL_PARAM.get(definition_id)
+    if not key or key not in change.params:
+        return None
+    model = universal_ports.model_of(definition_id, change.params)
+    if not model or model != universal_ports.model_of(definition_id, node.get("params")):
+        return None
+    return {"key": key, "name": universal_ports.model_name(definition_id, model, models.get((definition_id, model)))}
 
 
 def _not_ready_nodes(
@@ -8006,11 +9323,62 @@ def _not_ready_nodes(
                 # The line the proposal bar and layer show (error copy round
                 # 3f): the key by its provider, the node by its name. Agents
                 # keep `missing`, find_nodes' words, as before.
-                "person": node_readiness.instance_missing_line(
+                "person": _quoted_name_line(node_readiness.instance_missing_line(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
-                    wired.get(node_id, {}), name=name) or need,
+                    wired.get(node_id, {}), name=_card_quoted(name)) or need, name, definition),
             })
     return rows
+
+
+def _wire_words(ends: Mapping[str, Any], graph: CLIGraph, id_map: Mapping[str, str]) -> dict[str, str]:
+    """A wire as the card's panel names it: “Prompt” → “Second take” ·
+    Prompt (GM - Design, PR #216 r3): both nodes by name and the target's
+    port by its label, read on ``graph`` (the staged one for a wire the
+    proposal makes, with its new nodes under ``id_map``; the live one for a
+    wire it removes, whose port the new model drops)."""
+    source = id_map.get(str(ends.get("source")), str(ends.get("source")))
+    target = id_map.get(str(ends.get("target")), str(ends.get("target")))
+    handle = str(ends.get("targetHandle") or "")
+    node = graph.nodes.get(target) or {}
+    definition_id = str(node.get("definitionId") or "")
+    ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, "inputPorts")
+    label = next((str(port.get("label") or handle) for port in ports or []
+                  if isinstance(port, Mapping) and port.get("id") == handle), handle)
+    return {"sourceName": _node_label(source, graph), "targetName": _node_label(target, graph), "targetLabel": label}
+
+
+def _dropped_ends(dropped: Iterable[Mapping[str, Any]]) -> list[tuple[str, str, str, str]]:
+    return sorted((str(e.get("source")), str(e.get("sourceHandle")), str(e.get("target")), str(e.get("targetHandle")))
+                  for e in dropped)
+
+
+def _refuse_changed_drops(proposal: Proposal, dropped: list[dict[str, str]]) -> None:
+    """409 when Accept would now remove other wires than the proposal listed
+    (one was made or removed on that node since): the person decides on the
+    removals the card showed."""
+    if _dropped_ends(dropped) != _dropped_ends(proposal.removed_edges):
+        raise HTTPException(status_code=409, detail="the connections it removes changed after it was proposed")
+
+
+def _card_quoted(name: str) -> str:
+    """A node's name on the proposal card, quoted once by the plan line's rule
+    (canvas_proposals.plan_name; review 2 L4: “Hero” never reads ““Hero””)."""
+    return f"“{card_name(name) or name}”"
+
+
+def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
+    """The card names nodes in curly quotes (GM - Design, PR #216 r1):
+    "“Hero shot” needs your Krea account. Connect it in Settings." A route's
+    line (node_route.route_unavailable_line) starts with the model's name;
+    it gets the node's, quoted, the same way."""
+    if line.startswith("“"):
+        return line
+    # Only the model's own names: a line that starts with neither isn't about
+    # the node by name, so nothing is quoted (review 1 L2).
+    for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition)):
+        if lead and line.startswith(f"{lead} "):
+            return f"{_card_quoted(name)}{line[len(lead):]}"
+    return line
 
 
 def _estimate_proposal_run(
@@ -8073,9 +9441,11 @@ async def _open_canvas_proposal(
     the daily total holds does (_propose_waiting_run, with ``wait``). Returns
     the proposal, its view and the agent's other open proposals here that
     can't run."""
+    headers = current_request_headers()
     _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
+    dropped: list[dict[str, str]] = []
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models, drops=dropped)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
@@ -8084,15 +9454,26 @@ async def _open_canvas_proposal(
     positions = place_new_nodes(spec, known, visible_area)
     measured = await _measure_proposal_inputs(candidate, run_ids)
     _refuse_if_graph_moved(fence)
-    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
+    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured, models=models)
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
             "name": f"{_node_label(node_id)} ({node_id})",
+            # The person's words for it (the card names nodes, never ids).
+            "title": _node_label(node_id),
+            # The model it runs after Accept: a universal node's chosen model by
+            # name ("GPT-4o"), never its provider (GM - Design, PR #216 r5).
+            "model": model_label(node_registry.get(str((candidate.nodes.get(node_id) or {}).get("definitionId") or ""))
+                                 or {}, (candidate.nodes.get(node_id) or {}).get("params") or {}, models)
+            or _node_model(node_id),
             "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
         }
         for node_id in spec.references
     }
+    for change in spec.params:
+        reread = _model_reread(change, models)
+        if reread and change.node_id in existing:
+            existing[change.node_id]["inputsUpdated"] = reread
     try:
         proposal = canvas_proposals.create(
             agent=identity,
@@ -8110,8 +9491,14 @@ async def _open_canvas_proposal(
         # numbers, in the step that made it, so every view and its Update
         # carry them.
         proposal.wait = wait
+    # The card's words for its wires, and the wires Accept removes (GM - Design, PR #216 r3).
+    proposal.wires = [_wire_words(edge.as_dict(), candidate, id_map) for edge in spec.edges]
+    proposal.removed_edges = [{**ends, **_wire_words(ends, cli_graph, {})} for ends in dropped]
     # The canvas it was made on, in the step that made it (review 20 L-3).
     proposal.canvas_revision = _canvas_revision()
+    # Which of the agent's cursors proposed it, for the "Accepted" click on
+    # the person's tabs only (_accepted_person_form; never in a view).
+    proposal.presence_session = presence_session(headers)
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
@@ -8124,6 +9511,9 @@ async def _open_canvas_proposal(
             "adds": len(spec.nodes),
             "wires": len(spec.edges),
             "sets": len(spec.params),
+            # The wires its model change removes on Accept (review 2 N1): the
+            # same count as the Update's (canvas_proposals.change_count).
+            "removes": len(proposal.removed_edges),
             "runs": len(spec.run),
             "paidRuns": cost["paidRuns"],
             **({"waiting": wait} if wait is not None else {}),
@@ -8153,6 +9543,8 @@ async def _open_canvas_proposal(
         })
     except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
         pass
+    await _thread_ref("proposal", {"proposalId": proposal.id, "nodeId": first_reference}, identity=identity,
+                      headers=headers, project_id=proposal.project_id)
     if first_reference is not None:
         target: dict[str, Any] = {"nodeId": first_reference}
     elif spec.nodes:
@@ -8161,10 +9553,13 @@ async def _open_canvas_proposal(
     else:
         target = None
     if target is not None:
-        # A held run's cursor says the spec's default; its reason is on the
-        # bar, the cards and the Updates card (GM - Design, 2026-10-31).
-        await _show_agent(target, action="click", say=PROPOSAL_WAITING_SAY if wait else spec.note,
-                          did=_did("Proposed", target.get("nodeId")))
+        # A held run's cursor has no say of its own: the default line
+        # ("Waiting for your OK") shows until the node's header says it
+        # (GM - Design, PR #212 round 2, item 8); the reason is on the bar and
+        # the Updates card.
+        await _show_agent(target, action="click", shows="propose",
+                          say="" if wait else spec.note,
+                          did=_did("Proposed", target.get("nodeId")), proposal_id=proposal.id)
     return proposal, view, still_open
 
 
@@ -8420,11 +9815,19 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         raise _proposal_http_error(exc) from exc
     positions = {**proposal.positions, **dragged}
     staging_error: HTTPException | None = None
+    unread: PortsUnread | None = None
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
+            dropped: list[dict[str, str]] = []
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models,
+                                                                   drops=dropped)
+            _refuse_changed_drops(proposal, dropped)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
+        except PortsUnread as exc:
+            # The provider can't be read right now: nothing changed, and the
+            # proposal stays open to accept again (review 2 LOW-4).
+            unread = exc
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
             staging_error = exc
@@ -8435,6 +9838,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
                 [candidate.nodes[node_id] for node_id in touched],
                 source="proposal",
             )
+    if unread is not None:
+        raise HTTPException(status_code=409, detail=_ports_unread_line(unread))
     if staging_error is not None:
         detail = str(staging_error.detail)
         try:
@@ -8475,6 +9880,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     # Each names the proposal in data: nebula-mcp --channel leaves these out
     # of the person's edits by that field, never by the summary's note.
     _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
+    # The wires its model changes dropped, as the card listed them (GM - Design, PR #216 r3).
+    for ends in dropped:
+        _journal_edge("edge.removed", dict(ends), actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
         before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
         changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
@@ -8505,7 +9913,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         try:
             event = _point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted",
                            did=_did("Proposed", focus))
-            await manager.broadcast_raw(event)
+            await _broadcast_presence(event, _accepted_person_form(event, proposal))
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
     return {
@@ -8635,7 +10043,9 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
     try:
         result = await asyncio.to_thread(
             agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
-            text=question_update_text(question_set), questions={"id": question_set.id},
+            text=question_update_text(question_set),
+            questions={"id": question_set.id, "count": len(question_set.spec.questions),
+                       "since": int(question_set.created_at * 1000)},
             refs=list(question_set.spec.node_ids), project_id=question_set.project_id, save_set=save_set)
     except (NoteError, ProjectStoreError):
         question_set.update = None  # never committed: no later save may keep it
@@ -8675,6 +10085,25 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
 
+async def _thread_question_outcome(question_set: QuestionSet) -> None:
+    """GM r79.5: the thread's question row keeps how the set closed (and the
+    person's answers), so "You chose …" survives any reload. Person form
+    only: agents never read ``outcome`` (person_thread.agent_view), as no
+    agent route reads the set's answers but the asker's. Decoration: never
+    fails the close."""
+    view = _question_view(question_set)
+    outcome: dict[str, Any] = {"status": question_set.status, "closedAt": view.get("closedAt")}
+    if question_set.status == "answered":
+        outcome["answers"] = [{"questionId": answer.get("questionId"), "choices": list(answer.get("choices") or []),
+                               "text": answer.get("text")} for answer in (question_set.answers or [])]
+    try:
+        project_id, rows = await asyncio.to_thread(thread_book.close_question, question_set.id, outcome,
+                                                   project_id=question_set.project_id)
+    except Exception:  # noqa: BLE001 - the thread is decoration on a close that already succeeded
+        return
+    await _broadcast_thread(project_id, rows)
+
+
 async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
     """Journal each, tell the person's sockets (only theirs: the message
     carries their answers back to them), then settle each one's Update.
@@ -8682,6 +10111,7 @@ async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str
     for question_set in sets:
         _journal_question(question_set, actor=actor)
     for question_set in sets:
+        await _thread_question_outcome(question_set)
         try:
             await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
                                              "status": question_set.status, "agentId": question_set.agent.id,
@@ -8739,6 +10169,9 @@ async def create_agent_questions(body: dict[str, Any]) -> Any:
                                              "answerKey": question_set.answer_key})
         except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
             pass
+        await _thread_ref("question", {"questionId": question_set.id,
+                                       "questions": [q.as_dict() for q in question_set.spec.questions]},
+                          identity=identity, headers=headers, project_id=question_set.project_id)
     return {"questions": _question_view(question_set), **({"dropped": dropped} if dropped else {})}
 
 
@@ -8909,7 +10342,8 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=asset_update_text(proposal),
             proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id,
-                      **asset_update_detail(proposal)})
+                      **asset_update_detail(proposal)},
+            share=_share_reader(proposal, None))
     except (NoteError, ProjectStoreError):
         return  # no project open: the Agent log line is the only notice, as before
     note = result["note"]
@@ -8924,10 +10358,77 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
     _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
+    # PR #204 round 4 (review 2 LOW-1): an ask that closed after the write counted it, but before
+    # it joined this Update, had its follow land on the Update this one replaced. Count again now
+    # that every sharer points here; the Update stays on this ask (no write when the count holds).
+    if proposal.is_open:
+        try:
+            recount = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], proposal.id,
+                                              asset_update_detail(proposal), asset_update_text(proposal),
+                                              _share_reader(proposal, ref))
+        except (NoteError, ProjectStoreError):
+            recount = None
+        if recount is not None and recount["projectId"] == _open_project_id():
+            await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=recount["projectId"],
+                                                        ids=[ref["id"]], note=recount["note"]))
 
 
 def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
     return one.agent.id == other.agent.id and one.kind == other.kind and one.target_id == other.target_id
+
+
+def _open_sharers(proposal: AssetProposal, ref: Mapping[str, Any] | None = None) -> list[AssetProposal]:
+    """The same agent's open asks on this proposal's target (given ``ref``, only those under that
+    Update): the asks one asset Update stands for."""
+    return [p for p in asset_proposals.open_list()
+            if isinstance(p, AssetProposal) and p.is_open and _same_asker(p, proposal)
+            and (ref is None or p.update == ref)]
+
+
+def _asset_share_detail(sharers: list[AssetProposal]) -> dict[str, Any]:
+    """PR #204 review 1 MEDIUM-1 (GM, 2026-10-30): what a shared asset Update stands for, so a
+    tab not connected as the person counts and orders it as the connected tab does and nothing
+    moves on the promote: ``asks``, how many open asks share it, and ``firstSince``, the oldest
+    one's createdAt (ms). Kept current wherever an ask joins or leaves it (post, the follow's
+    resolve or retarget, an undo's reopen). Its agent's own asks: nothing it didn't know."""
+    if not sharers:
+        return {}
+    return {"asks": len(sharers), "firstSince": int(min(p.created_at for p in sharers) * 1000)}
+
+
+def _share_reader(proposal: AssetProposal | None, ref: Mapping[str, Any] | None):
+    """The share fields as they are when the notes write runs, not when the caller looked (PR #204
+    round 3: a follow that closed an ask in between already wrote the smaller count). Given no
+    ``proposal``, every open ask under ``ref``."""
+    def read() -> dict[str, Any]:
+        if proposal is None:
+            return _asset_share_detail([p for p in asset_proposals.open_list()
+                                        if isinstance(p, AssetProposal) and p.is_open and p.update == ref])
+        return _asset_share_detail(_open_sharers(proposal, ref))
+    return read
+
+
+def _ref_key(ref: Mapping[str, Any]) -> tuple[str, str]:
+    return (str(ref.get("projectId") or ""), str(ref.get("id") or ""))
+
+
+async def _refresh_asset_update(ref: Mapping[str, Any]) -> None:
+    """The Update reviews the newest of the open asks under it, and its ref says how many share it
+    and the oldest one's time (MEDIUM-1). No write when it already does (retarget_proposal)."""
+    sharers = [p for p in asset_proposals.open_list()
+               if isinstance(p, AssetProposal) and p.is_open and p.update == ref]
+    if not sharers:
+        return
+    newest = max(sharers, key=lambda p: p.created_at)
+    try:
+        result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
+                                         asset_update_detail(newest), asset_update_text(newest),
+                                         _share_reader(None, ref))
+    except (NoteError, ProjectStoreError):
+        return
+    if result is not None and result["projectId"] == _open_project_id():
+        await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
+                                                    ids=[ref["id"]], note=result["note"]))
 
 
 async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
@@ -8944,13 +10445,15 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             if waiting:
                 newest = max(waiting, key=lambda p: p.created_at)
                 result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
-                                                 asset_update_detail(newest), asset_update_text(newest))
+                                                 asset_update_detail(newest), asset_update_text(newest),
+                                                 _share_reader(proposal, ref))
                 op, extra = "changed", {}
             else:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id)
+                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id,
+                                                 closed=_proposal_closed)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
             continue
@@ -9134,7 +10637,7 @@ async def _settle_proposal_updates() -> None:
             # over meanwhile (reopen_proposal; PR #202 review 3 LOW-2).
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"},
-                                             proposal_id=str(ref.get("id") or ""))
+                                             proposal_id=str(ref.get("id") or ""), closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is not None:
@@ -9197,7 +10700,9 @@ async def _post_canvas_update(proposal: Proposal) -> None:
         result = await asyncio.to_thread(
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=canvas_update_text(proposal), project_id=proposal.project_id,
-            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id})
+            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id,
+                      # When it was asked (the view's createdAt), as asset refs say (GM 2026-10-29).
+                      "since": int(proposal.created_at * 1000)})
     except (NoteError, ProjectStoreError):
         return
     note = result["note"]
@@ -9237,7 +10742,8 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
                                              outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id)
+                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id,
+                                             closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:
@@ -11772,8 +13278,9 @@ MAX_SIZE_REFS = 64
 async def get_input_sizes(body: dict[str, Any]) -> dict:
     """The size of input files, for the canvas's estimate of a price that
     depends on it (model_pricing ``sizing``: SeedVR2, FLUX Video Upscale and
-    Edit). ``refs`` is a list of {ref, kind: Image | Video}; each comes back
-    as {width, height[, seconds, frames]} or null. Only files in the output
+    Edit, the talking-head nodes' audio). ``refs`` is a list of {ref, kind:
+    Image | Video | Audio}; each comes back as {width, height[, seconds,
+    frames]} ({seconds} for audio) or null. Only files in the output
     store are read, by the same rule the spending check uses (the path as
     given and its resolved path both inside the store, no ``..``, nothing
     Nebula is still writing: services/input_sizes.py), so the canvas and the
@@ -11788,8 +13295,8 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     for item in refs:
         ref = item.get("ref") if isinstance(item, dict) else None
         kind = item.get("kind") if isinstance(item, dict) else None
-        if not isinstance(ref, str) or kind not in ("Image", "Video"):
-            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image or Video}")
+        if not isinstance(ref, str) or kind not in ("Image", "Video", "Audio"):
+            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image, Video or Audio}")
         wanted.append((ref, kind))
 
     def measure_all() -> dict[str, Any]:
@@ -12031,6 +13538,11 @@ async def _broadcast_graph_sync(
     # (_broadcast_admitted_run) is paid by this one.
     global _graph_sync_owed
     _graph_sync_owed = False
+    # Every node move goes out in a sync, whichever route made it: the one
+    # place session cursors are carried (#219 review 1, MEDIUM-1).
+    await _carry_cursors()
+    if not graph_replaced:
+        await _follow_renamed_proposals()
     if graph_replaced:
         # Its events went to the journal above, before any await. (The pins
         # listing follows catalog.json, so one taken between the commit and
@@ -13519,6 +15031,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
+        # GM r46 Q2 on #222: a file param set without its preview fields
+        # (an agent's `nebula set`, a script) takes the new file's preview
+        # and name, or clears them (services/file_param_preview.py).
+        params, dropped = _follow_file_params(str(node.get("definitionId") or ""), params_before, params)
         if models is not None and node.get("definitionId") == current_definition:
             # Universal nodes carry no recovery checkpoint or Cinema scene.
             full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
@@ -13530,17 +15046,17 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
-            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params), drop=dropped))
             if not _is_person_request():
                 grown = cli_graph.clone()
-                grown.update_params(node_id, copy.deepcopy(params))
+                grown.update_params(node_id, copy.deepcopy(params), drop=dropped)
                 _refuse_agent_growth_past_save_limit(grown)
             _author_cinema_scene(cli_graph, node_id, node, params)
             recovery_update = _keep_recovery_checkpoint(node, params)
             if recovery_update:
                 candidate = cli_graph.clone()
                 try:
-                    candidate.update_params(node_id, params)
+                    candidate.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
@@ -13550,9 +15066,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 )
             else:
                 try:
-                    cli_graph.update_params(node_id, params)
+                    cli_graph.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
+            _preview_follows_file(cli_graph, node_id, params_before, params)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -13587,9 +15104,45 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     # review 1 N2): a failure there never turns this saved PUT into a 500.
     # An empty change says nothing and logs nothing: the cursor only moves
     # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
-    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
+    await _show_agent({"nodeId": node_id}, shows="type" if keys else None,
+                      words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
                       did=_did("Changed", node_id) if keys else None)
     return updated
+
+
+def _names_and(names: Sequence[str]) -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C” (GM r83: no serial comma)."""
+    names = list(names)
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
+                   others: Sequence[tuple[str, str]] = ()) -> str:
+    """An edit_canvas with no note, as the Agent log and the Message box's
+    working line word it (GM r83.1; never the bubble's terse "changed 1",
+    never an "and N more" hybrid). ``others`` are the edit's other nodes, as
+    (verb, name). One node names its settings: "Changed “Prompt” on “Hero
+    shot”", "Changed “Prompt” and “Seed” on “Hero shot”", "Changed
+    “Prompt”, “Seed” and “Size” on “Hero shot”", from 4 "Changed 4 settings
+    on “Hero shot”"; else the verb and the node ("Moved “Hero shot”").
+    Several nodes name the nodes and drop the settings: "Changed “Hero
+    shot” and “Sky”", "Changed “Hero shot”, “Sky” and “Prompt”", from 4
+    "Changed 4 nodes". Their verb is the one they all share, else
+    "Changed"."""
+    node = _quoted(_node_label(node_id))
+    if others:
+        verbs = {verb, *(other_verb for other_verb, _ in others)}
+        word = verb if len(verbs) == 1 else "Changed"
+        names = [node, *(_quoted(name) for _, name in others)]
+        return f"{word} {len(names)} nodes" if len(names) >= 4 else f"{word} {_names_and(names)}"
+    if verb != "Changed" or not keys:
+        return f"{verb} {node}"
+    record = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get(str(record.get("definitionId") or "")) or {}
+    labels = [label for label in (_card_label(definition, record, key) for key in keys) if label]
+    if len(labels) == len(keys) and len(labels) <= 3:
+        return f"Changed {_names_and([f'“{label}”' for label in labels])} on {node}"
+    return f"Changed {'a setting' if len(keys) == 1 else f'{len(keys)} settings'} on {node}"
 
 
 def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
@@ -13943,6 +15496,50 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
+
+
+def _edit_say(parts: list[tuple[Any, ...]]) -> str:
+    """An edit's counts as person copy: each with what it counts, in the
+    singular or plural, one verb per run ("Added 2 nodes and 1 connection,
+    moved 1 node"). Parts are (verb, count, noun[, after the noun])."""
+    said: list[tuple[str, list[str]]] = []
+    for verb, count, noun, *after in parts:
+        if not count:
+            continue
+        phrase = f"{count} {noun}{'' if count == 1 else 's'}{after[0] if after else ''}"
+        if said and said[-1][0] == verb:
+            said[-1][1].append(phrase)
+        else:
+            said.append((verb, [phrase]))
+    text = ", ".join(f"{verb} {' and '.join(phrases)}" for verb, phrases in said) or "no change"
+    return text[:1].upper() + text[1:]
+
+
+async def _carry_cursors() -> None:
+    """The session cursors on nodes a graph sync moved (a drag, an arrange,
+    `nebula move`, an apply or edit_canvas move, an undo or redo): one
+    whose target chain the move changed arrives now
+    (agent_presence.carry_nodes, GM - Design, #219 r24 Q2), and the
+    person's tabs get its new arrival so they, and a reload, stack it the
+    same way. Called from _broadcast_graph_sync, so no route that moves
+    nodes can miss it. The positions are read now, in one step with no
+    await, so syncs that overlap can't hand it an older graph after a newer
+    one. A replaced graph needs nothing more: forget_graph, earlier in the
+    same sync, already dropped the old positions; a cleared one has no nodes
+    to compare. Person tabs only: no agent reads it. Decoration: it never
+    fails the write that synced."""
+    try:
+        nodes = list(cli_graph.nodes.values())
+        positions = _display_positions(nodes)
+        # Nodes with no stored position keep their last box: their computed
+        # spot shifts with their siblings, and an open canvas doesn't move
+        # them for it (#219 review 2, LOW-3).
+        placed = {n["id"] for n in nodes if isinstance(n.get("position"), dict)}
+        updates = agent_presence.carry_nodes(positions, placed)
+        if updates:
+            await manager.broadcast_browser({"type": "agentPresenceArrival", "cursors": updates})
+    except Exception:  # noqa: BLE001 - decoration must not break a graph sync
+        logging.getLogger("nebula.presence").exception("cursor carry failed")
 
 
 def _require_clear_intent(force: bool) -> None:
@@ -14611,10 +16208,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
     _journal_cluster(list(id_map.values()), edge_ids, note=note)
     changed: list[str] = []
+    changed_keys: dict[str, list[str]] = {}
     for node_id, before in params_before.items():
         changes = param_changes(before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
         if changes:
             changed.append(node_id)
+            changed_keys[node_id] = [str(key) for key in changes.get("keys") or []]
             _journal(
                 "node.params",
                 node_id=node_id,
@@ -14671,6 +16270,15 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         f"made {len(made_ready)} ready" if made_ready else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
+    # The person's copy of it, on the agent's cursor and in the Agent log:
+    # what each count is of ("Moved 1 node"). Agents keep reading `summary`.
+    said = _edit_say([
+        ("added", len(added), "node"), ("added", len(edge_ids), "connection"),
+        ("changed", len(changed), "node"), ("renamed", len(renamed), "node"),
+        ("moved", len(moves), "node"), ("removed", len(removed), "node"),
+        ("removed", len(spec.unwire), "connection"),
+        ("made", len(made_pending), "placeholder"), ("made", len(made_ready), "node", " ready"),
+    ])
     if made_pending:
         _schedule_pending_expiry()
     publish_action(f"{identity.name} edited the canvas: {summary}")
@@ -14678,7 +16286,21 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
-        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
+        # A param value change is typing, as through PUT (GM - Design, PR
+        # #211 r2): the person's tabs show `type`; agents still read `click`.
+        # The edit's other nodes, each with its own verb, for the log line
+        # (GM r83.1: several nodes are named, never "and N more").
+        others = [("Added" if key in added else "Changed" if key in (changed or ()) else "Renamed"
+                   if key in renamed else "Moved", _node_label(key))
+                  for key in dict.fromkeys([*added, *changed, *renamed, *moves]) if key != focus]
+        others += [("Removed", str(gone["name"])) for gone in removed if gone["id"] != focus]
+        # With no note the bubble keeps the terse summary ("changed 1"); the
+        # Agent log and the Message box's working line get the person's
+        # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others),
+                          person_say=None if note else said,
+                          shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
@@ -17050,6 +18672,9 @@ async def list_projects() -> dict[str, Any]:
             _adopt_run_canvases(adopted)
             if filed_from is not None:
                 _note_canvas_filed(*filed_from, _workspace_context())
+        # Trash past its 30 days takes its boards (and a purge that stopped
+        # part way finishes here).
+        assets_gone = _purge_noted_assets(catalog)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -17063,6 +18688,7 @@ async def list_projects() -> dict[str, Any]:
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     return listing
 
 
@@ -17317,6 +18943,13 @@ async def _broadcast_projects_changed(change: str, project_id: str | None = None
         await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id})
     except Exception:  # noqa: BLE001 - the catalog is saved; a tab lists it again on its next visit to Projects
         pass
+    if change in ("opened", "created"):
+        # Another project is open: the person's tabs get its Message box thread
+        # (person_thread rows are kept per project).
+        try:
+            await manager.broadcast_browser(await asyncio.to_thread(_thread_sync_message))
+        except Exception:  # noqa: BLE001 - a tab reads the thread on its next hello
+            pass
 
 
 _PROJECT_SUMMARIES = {
@@ -17929,7 +19562,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             project_store.commit(catalog)
         result = {
             "deletedProjectId": project_id,
-            "trashedProject": trash_metadata(trashed),
+            "trashedProject": _trash_entry(trashed),
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
@@ -17941,9 +19574,63 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     return result
 
 
+def _purge_noted_assets(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """After a commit that deleted projects for good (they're on the
+    catalog's ``assetPurges`` list, services/project_asset_purge.py): delete
+    their moodboards, characters and styles, then take them off the list and
+    commit again. Returns what went, by kind, for _broadcast_assets_gone.
+    Call it inside the transaction, after the commit: a failure leaves the
+    ids on the list, and the next purge, listing or start finishes them.
+    Never fails the route, whose own change is already saved."""
+    if not project_asset_purge.pending(catalog):
+        return {}
+    try:
+        done, removed = project_asset_purge.finish(catalog, state_dir=_catalog_folder())
+        if done:
+            project_asset_purge.clear(catalog, done)
+            project_store.commit(catalog)
+    except Exception as exc:  # noqa: BLE001 - retried by the next purge, listing or start
+        logging.getLogger(__name__).warning("Files of projects deleted for good not removed yet: %s",
+                                            type(exc).__name__)
+        return {}
+    return removed
+
+
+async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) -> None:
+    """Tell canvases each moodboard, character and style that went with its
+    project is gone, before projectsChanged, so a Studio, card or list that
+    re-checks on either finds it gone. A style is journaled as deleted for
+    good too, as a Style purged from Recently deleted is."""
+    for kind in project_asset_purge.KINDS:
+        for item in removed.get(kind) or ():
+            if kind == "style":
+                _journal_style("purged", item, style_id=item["id"])
+            await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
+
+
+def _catalog_folder() -> Path:
+    """The folder holding the catalog's ``projects/`` (``~/.nebula``, or the
+    desktop app's ``<data>/state``): a store's files are deleted with a
+    project only when the store sits beside it
+    (project_asset_purge.roots_paired)."""
+    return project_store.root.parent
+
+
 def _trash_listing(catalog: dict[str, Any]) -> list[dict[str, Any]]:
-    entries = (catalog.get("trash") or {}).values()
-    return sorted((trash_metadata(entry) for entry in entries), key=lambda entry: entry["deletedAt"], reverse=True)
+    """Recently deleted projects, newest first. Each says what deleting it
+    for good also deletes (``goesWith``: the names of its ``moodboards``,
+    ``characters`` and ``styles``, live and trashed), for the Projects
+    screen's confirmation lines. One read of each store for the whole list."""
+    entries = list((catalog.get("trash") or {}).values())
+    goes = project_asset_purge.goes_with([entry["id"] for entry in entries], state_dir=_catalog_folder())
+    listed = [{**trash_metadata(entry), "goesWith": goes[entry["id"]]} for entry in entries]
+    return sorted(listed, key=lambda entry: entry["deletedAt"], reverse=True)
+
+
+def _trash_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """One Recently deleted project as listed, with ``goesWith`` (_trash_listing)."""
+    return {**trash_metadata(entry),
+            "goesWith": project_asset_purge.names(entry["id"], state_dir=_catalog_folder())}
 
 
 def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
@@ -17966,10 +19653,12 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)  # trash past its 30 days took its boards
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("restored", project_id)
     return result
@@ -17982,12 +19671,16 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
+        # Its boards go with it: noted in this commit, deleted after it.
+        project_asset_purge.note_purged(catalog, [project_id])
         project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
         result = {"trash": _trash_listing(catalog)}
     # Its question sets went with its record; the book forgets them too.
     agent_questions.keep_projects(kept)
+    await _broadcast_assets_gone(assets_gone)
     await _broadcast_projects_changed("purged", project_id)
     return result
 
@@ -18004,13 +19697,18 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         doomed = [project_id for project_id in trash if shown is None or project_id in shown]
         for project_id in doomed:
             del trash[project_id]
+        assets_gone: dict[str, list[dict[str, Any]]] = {}
         if doomed:
+            # Their boards go with them: noted in this commit, deleted after it.
+            project_asset_purge.note_purged(catalog, doomed)
             project_store.commit(catalog)
+            assets_gone = _purge_noted_assets(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
         kept = set(catalog["projects"]) | set(trash)
         result = {"trash": _trash_listing(catalog)}
     if doomed:
         agent_questions.keep_projects(kept)
+        await _broadcast_assets_gone(assets_gone)
         await _broadcast_projects_changed("purged")
     return result
 
@@ -18298,7 +19996,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
         )
         if target:
-            await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+            await _show_agent({"nodeId": target}, shows="run", say=f"Running {_quoted(_node_label(target))}",
+                              did=_did("Ran", target))
         else:
             # The whole canvas has no one node to point at: the Agent log only.
             await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -18337,7 +20036,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     if first is not None:
         # The cursor quotes the node like every other bubble; the log keeps its line.
         bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
-        await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
+        await _show_agent({"nodeId": first}, shows="error", say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,
@@ -19043,6 +20742,14 @@ class MoodboardImageModel(BaseModel):
     # Where its cards sit (services/moodboard_layout.py). Ignored on an
     # image already on the board; on a new one, where it goes.
     placements: list[MoodboardPlacementModel] | None = None
+    # Whether its file has transparency: Nebula stores it
+    # (services/moodboard_analysis.HAS_TRANSPARENCY). A client that sends the
+    # board's images back may echo it; what it sends is ignored. The same
+    # for hasClearPixels (services/moodboard_analysis.HAS_CLEAR_PIXELS) and
+    # the file stat they were read at (services/moodboard_analysis.ALPHA_STAMP).
+    hasTransparency: bool | None = None
+    hasClearPixels: bool | None = None
+    alphaFileStat: list[int] | None = None
 
 
 class MoodboardPinnedColorsModel(BaseModel):
@@ -19093,6 +20800,16 @@ class MoodboardCreate(BaseModel):
     lastRead: Any = None
     # Updates are written only through /agent-notes (refused here by name).
     agentNotes: Any = None
+    # The client's id for this create (optional). Sent again with the same
+    # id, the create returns the board the first send made instead of a
+    # second one (services/moodboard_store.create_once). Any, so the store
+    # checks it and answers in its own words.
+    requestId: Any = None
+    # The Studio's count of its sends of this create (1 to 1,000,000), only
+    # with requestId. A repeat answers which attempt made the board
+    # (madeAttempt) and the version it was made at (madeVersion), so the
+    # Studio replays only what changed after that attempt. Agents leave it out.
+    attempt: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -19508,11 +21225,17 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
     _refuse_moodboard_layout(body)
-    from services.moodboard_store import NotesOptInProtected
+    from services.moodboard_store import (
+        REQUEST_BOARD_UNREADABLE, REQUEST_ID_OTHER_SCOPE, NotesOptInProtected, RequestBoardUnreadable,
+        RequestIdOtherScope,
+    )
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
-        moodboard = store.create(
+        # Off the event loop: a new image's file is decoded to store its
+        # transparency (services/moodboard_store._warm_new_files).
+        moodboard, earlier = await asyncio.to_thread(
+            store.create_or_repeat,
             name=body.name,
             # Only what was sent: an image's weight left out comes from its
             # placements, if it asks for any.
@@ -19531,11 +21254,28 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             sendNotes=body.sendNotes,
             coverImageId=body.coverImageId,
             by=_moodboard_author(),
+            requestId=body.requestId,
+            attempt=body.attempt,
         )
     except NotesOptInProtected as exc:
         _refuse_override_change(exc)
+    except RequestIdOtherScope:
+        # Never the other scope's board: the id is refused.
+        return JSONResponse(status_code=409, content={"detail": REQUEST_ID_OTHER_SCOPE,
+                                                      "code": "request_id_scope"})
+    except RequestBoardUnreadable:
+        raise HTTPException(status_code=500, detail=REQUEST_BOARD_UNREADABLE)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    if earlier is not None:
+        # A repeat of a create already made (same requestId) changed
+        # nothing, so nobody is told twice. `repeated` tells the client the
+        # board is the earlier send's, as it is now: what this send held
+        # beyond it (the draft moved on meanwhile) isn't on it yet.
+        # `madeAttempt` / `madeVersion` say which attempt made it, and at
+        # which version, so the Studio rebases on that attempt's sends.
+        return {**_moodboard_out(moodboard), "repeated": True,
+                "madeAttempt": earlier.get("attempt"), "madeVersion": earlier.get("version")}
     await _broadcast_stored_asset("moodboard", moodboard)
     await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)
@@ -19651,8 +21391,8 @@ async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposa
     from services.moodboard_edits import diff
     from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected, VersionConflict
     try:
-        before, moodboard = store.update_with_before(moodboard_id, by=_moodboard_author(),
-                                                     base_version=base_version, **updates)
+        before, moodboard = await asyncio.to_thread(  # off the loop: new files are decoded
+            store.update_with_before, moodboard_id, by=_moodboard_author(), base_version=base_version, **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
@@ -19691,8 +21431,8 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
     base_version = _base_version(body.baseVersion)
     store = _moodboard_store()
     try:
-        before, board, result = store.apply_edits(moodboard_id, body.ops, by=_moodboard_author(),
-                                                  base_version=base_version)
+        before, board, result = await asyncio.to_thread(  # off the loop: new files are decoded
+            store.apply_edits, moodboard_id, body.ops, by=_moodboard_author(), base_version=base_version)
     except KeyError:
         return _asset_not_found("moodboard", moodboard_id)
     except VersionConflict as exc:
@@ -19896,7 +21636,9 @@ async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest)
     """What reading these references would cost (C10, Q16), sending nothing:
     ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
     them. ``available`` says whether the reader's key is set."""
-    _, entry, _, _, estimate = _reader_plan(moodboard_id, body)
+    # Off the event loop: which references are too transparent to send can
+    # take a decode (services/moodboard_reader.clear_targets).
+    _, entry, _, _, estimate = await asyncio.to_thread(_reader_plan, moodboard_id, body)
     keys = node_readiness.configured_keys(load_settings())
     return {**estimate, "available": str(entry["keyName"]) in keys}
 
@@ -19920,7 +21662,9 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
         raise HTTPException(status_code=422, detail=(
             "Reading references can only be a dry run in this version of Nebula: send dryRun=1. "
             "It reads and prices them and says how Analyze would sort them, and moves nothing."))
-    board, entry, source, targets, estimate = _reader_plan(moodboard_id, body)
+    # Off the event loop; it works out once which targets are clear, and the
+    # read reuses that (moodboard_reader.Target.clear).
+    board, entry, source, targets, estimate = await asyncio.to_thread(_reader_plan, moodboard_id, body)
     if not estimate["count"]:
         raise HTTPException(status_code=422, detail=(
             "Nothing to read: none of these references is a file on this computer."
@@ -20167,17 +21911,20 @@ def _trash_scope(scope: str | None, project_id: str | None) -> None:
         raise HTTPException(status_code=400, detail="projectId is required for scope=project")
 
 
-def _project_trash_items() -> list[dict[str, Any]]:
+def _project_trash_items() -> tuple[list[dict[str, Any]], list[str]]:
+    """Trashed projects as GET /api/trash lists them, and the ids of the
+    boards that went with any past their 30 days (for _broadcast_assets_gone)."""
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         if expired:
             project_store.commit(catalog)
+        assets_gone = _purge_noted_assets(catalog)
         items = [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
-    return items
+    return items, assets_gone
 
 
 @app.get("/api/trash")
@@ -20185,19 +21932,30 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
                      projectId: str | None = None) -> dict[str, Any]:
     """What's in Recently deleted, newest first. ``kind`` narrows it to
     moodboards, characters or projects; ``scope`` (global, or project with
-    ``projectId``) narrows boards and characters the way their lists do."""
+    ``projectId``) narrows boards and characters the way their lists do.
+    A board, character or style that goes when its project is deleted for
+    good has ``goesWithProject: true`` (deleted from that project's own
+    folder, in a store beside this catalog: project_asset_purge)."""
     if kind is not None:
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     items: list[dict[str, Any]] = []
+    purging: set[str] | None = None
     for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             try:
-                items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
+                records = _asset_store(asset_kind).list_trash(scope=scope, projectId=projectId)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if purging is None:
+                purging = project_asset_purge.purging_trash_kinds(_catalog_folder())
+            for record in records:
+                items.append({**record, "goesWithProject": True}
+                             if project_asset_purge.goes_with_project(asset_kind, record, purging) else record)
     if kind in (None, "project") and scope is None:
-        items.extend(_project_trash_items())
+        trashed_projects, assets_gone = _project_trash_items()
+        items.extend(trashed_projects)
+        await _broadcast_assets_gone(assets_gone)
     items.sort(key=lambda item: str(item.get("deletedAt") or ""), reverse=True)
     return {"items": items}
 
@@ -20290,14 +22048,19 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
             for project_id in doomed:
                 del trash[project_id]
+            assets_gone: dict[str, list[dict[str, Any]]] = {}
             if doomed:
                 purged += len(doomed)
+                # Their boards go with them: noted in this commit, deleted after it.
+                project_asset_purge.note_purged(catalog, doomed)
                 project_store.commit(catalog)
+                assets_gone = _purge_noted_assets(catalog)
                 node_errors.keep_projects(set(catalog["projects"]) | set(trash))
             kept = set(catalog["projects"]) | set(trash)
         if doomed:
             # Their question sets went with their records; the book forgets them too.
             agent_questions.keep_projects(kept)
+            await _broadcast_assets_gone(assets_gone)
             await _broadcast_projects_changed("purged")
     return {"purged": purged}
 

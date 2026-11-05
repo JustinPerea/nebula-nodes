@@ -169,8 +169,12 @@ function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: Ret
   wired: Iterable<string>): { price: string; priceTitle?: string } {
   if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
   const estimate = estimates[route.id];
-  if (!estimate && awaitsInput(entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id))) {
-    return { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
+  const entry = entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id);
+  if (!estimate && awaitsInput(entry)) {
+    // A node priced from its audio says "by length": the price follows the audio's length, not a size.
+    const audio = definition.inputPorts?.find((port) => port.id === entry!.sizing!.port)?.dataType === 'Audio';
+    return audio ? { price: 'by length', priceTitle: 'Priced from the audio\u2019s length when it runs' }
+      : { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
   }
   if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);

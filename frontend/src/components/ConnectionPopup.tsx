@@ -19,6 +19,8 @@ import { isBackendOffline, isOfflineRefusal, refuseEditWhileOffline } from '../l
 import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/canvas-next-steps.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { LineText } from './LineText';
+import { useCappedPopover } from '../lib/noticeWaiting';
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
@@ -42,6 +44,8 @@ interface CompatibleNode {
 export function ConnectionPopup() {
   const popup = useUIStore((s) => s.connectionPopup);
   const { visible, position, nodeId, handleId, handleType, nextStep } = popup;
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  useCappedPopover(visible);
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
@@ -266,7 +270,7 @@ export function ConnectionPopup() {
           ref={inputRef}
           className="connection-popup__search"
           type="text" aria-label="Search compatible nodes"
-          placeholder={`Search ${compatibleNodes.length} compatible nodes...`}
+          placeholder={`Search ${compatibleNodes.length} compatible nodes…`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
@@ -297,7 +301,7 @@ export function ConnectionPopup() {
             onClick={() => { setIntent(value); setExpanded({}); }}>{label}</button>)}
       </div>}
       {pending && <div className="next-step-status" role="status">Adding connected step…</div>}
-      {error && <div className="next-step-error" role="alert">{error}</div>}
+      {error && <div className="next-step-error" role="alert"><LineText text={error} /></div>}
       <ScrollFade className="connection-popup__list">
         {totalCount === 0 && (
           <div className="connection-popup__empty">No compatible nodes found</div>

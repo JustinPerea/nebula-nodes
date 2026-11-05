@@ -32,7 +32,8 @@ def _defs():
 
 def test_every_definition_names_an_unnamed_node_by_its_canvas_title(monkeypatch):
     defs = _defs()
-    assert len(defs) == 308
+    # 308 + OmniHuman 1.5, OmniHuman 2.0 and Kling AI Avatar v2 (talking heads).
+    assert len(defs) == 311
     graph = CLIGraph()
     monkeypatch.setattr(main_module, "cli_graph", graph)
     wrong = []
@@ -103,7 +104,7 @@ def client(monkeypatch):
 
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", CLIGraph())

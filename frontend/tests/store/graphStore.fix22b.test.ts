@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 22, on graphStore.fix21stops' keyed backend:
@@ -28,6 +29,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -239,6 +243,8 @@ const putCalls = (id: string) => fetchMock.mock.calls.filter(([url, init]) => (i
   && String(url).includes(`/api/graph/node/${id}`)).length;
 async function deleteAndWait(id: string) {
   useGraphStore.getState().deleteNode(id);
+  // The store's hold, not only the notice text (PR #221 review 2 LOW-3).
+  await deleteLanded(useGraphStore);
   await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
   await sleep(20);
 }

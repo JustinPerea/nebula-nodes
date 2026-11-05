@@ -22,7 +22,10 @@ import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
 import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import { CATEGORY_COLORS } from '../src/constants/ports';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 afterEach(() => { cleanup(); useGraphStore.setState({ nodes: [], isExecuting: false }); });
 

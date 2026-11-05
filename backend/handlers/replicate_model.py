@@ -171,7 +171,7 @@ async def _save_output(client: httpx.AsyncClient, key: str, output: Any, media_t
 async def run_model(
     model: str, prediction_input: dict[str, Any], key: str, *, media_type: str, media_fields: set[str],
     node_id: str = "", emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
-    poll_interval: float | None = None,
+    poll_interval: float | None = None, max_polls: int | None = None,
 ) -> str:
     """Run one official-model prediction and save its output as ``media_type``.
 
@@ -207,7 +207,7 @@ async def run_model(
                 terminal_success={"succeeded"},
                 terminal_failure={"failed", "canceled"},
                 poll_interval=POLL_INTERVAL if poll_interval is None else poll_interval,
-                max_polls=MAX_POLLS,
+                max_polls=MAX_POLLS if max_polls is None else max_polls,
                 cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
                 cancel_method="POST",
                 provider="Replicate",

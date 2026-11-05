@@ -7,6 +7,7 @@ import {
   UNLOCK_LABEL, UNLOCK_TITLE, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
 } from '../lib/worldLabsWaiting';
 import { useCanvasLock } from '../lib/canvasLock';
+import { LineText } from './LineText';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -53,7 +54,7 @@ export function ProviderRecoveryStatus() {
   };
 
   return (
-    <div className="provider-recovery-status" role="alert" aria-live="assertive">
+    <div className="provider-recovery-status" role="alert" aria-live="assertive" data-line-box="">
       <span>
         <strong>{ambiguity
           ? WORLD_LABS_RUN_NEEDS_CHECK
@@ -66,7 +67,7 @@ export function ProviderRecoveryStatus() {
         {ambiguities.length > 1 && (
           <> {moreNodesNeedCheck(ambiguities.length - 1)}</>
         )}
-        {unlockError && <span className="provider-recovery-status__error"> {unlockError}</span>}
+        {unlockError && <span className="provider-recovery-status__error"> <LineText text={unlockError} /></span>}
       </span>
       {ambiguity ? (
         <button

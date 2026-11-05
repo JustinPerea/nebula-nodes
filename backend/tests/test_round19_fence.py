@@ -55,7 +55,7 @@ def api(tmp_path, monkeypatch, person):
         store.commit(catalog)
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

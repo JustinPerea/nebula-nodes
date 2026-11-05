@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssetDetail, CommonsStatus } from '../src/lib/commonsTypes';
 import type { RunRecord } from '../src/lib/runHistory';
+import { withFocusFixup } from './helpers/focusFixup';
 
 /**
  * Round 16 of PR #114, offline read-only (review 15 and GM's round-16
@@ -53,6 +54,8 @@ import { useUIStore } from '../src/store/uiStore';
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 
+// Round 18o (review 18 logic LOW-1): Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+const fixup = withFocusFixup();
 beforeEach(() => {
   cleanup();
   resetBackendConnectionForTests();
@@ -156,17 +159,15 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     fireEvent.doubleClick(screen.getByText('Text Input'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Node name' }), { target: { value: 'Brief draft' } });
     act(() => noteBackendConnection('offline'));
-    // A browser blurs a field as it becomes disabled; jsdom doesn't, so the
-    // focus moves away by hand.
-    const elsewhere = document.createElement('button');
-    document.body.append(elsewhere);
-    act(() => elsewhere.focus());
+    // Round 18o (review 18 logic LOW-1): the field is disabled offline, and the focus fixup blurs it
+    // as Chrome does (tests/helpers/focusFixup), with no hand move.
+    act(() => fixup.current().flush());
     expect(screen.getByRole('textbox', { name: 'Node name' })).not.toHaveFocus();
+    expect(document.activeElement).toBe(document.body);
     act(() => noteBackendConnection('online'));
     const input = screen.getByRole('textbox', { name: 'Node name' });
     expect(input).toHaveValue('Brief draft');
     expect(input).toHaveFocus();
-    elsewhere.remove();
   });
 
   it('is dropped, with GM\'s line and no refocus, when the node was renamed while offline (no source: no actor, round 17)', () => {

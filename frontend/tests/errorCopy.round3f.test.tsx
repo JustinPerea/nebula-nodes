@@ -36,7 +36,7 @@ import { NodeError } from '../src/components/nodes/NodeError';
 import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel';
 import { StatusLine } from '../src/components/commons/CommonsView';
 import type { CommonsStatus } from '../src/lib/commonsTypes';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCinemaMotionStore } from '../src/store/cinemaMotionStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
@@ -46,6 +46,9 @@ import { NOTHING_RAN_LINE } from '../src/lib/validationCopy';
 import { notReadyLine } from '../src/lib/canvasProposals';
 import { WORLD_LABS_RECONNECTING_NOTE } from '../src/lib/runHistory';
 import { saveToFolder } from '../src/lib/createFiles';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const RUN_HEADING = "Couldn't run the node.";
 const SHOT_HEADING = "Couldn't generate the shot.";
@@ -232,7 +235,7 @@ describe('the shared lines GM rewrote', () => {
     useGraphStore.setState({ isImportingGraph: true });
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'flux-2-pro' } as never)
       .catch((caught: unknown) => caught);
-    expect(errorCopy.failureCopy(error)).toEqual({ heading: "Couldn't start the generation.",
+    expect(errorCopy.failureCopy(error)).toEqual({ heading: 'Nebula couldn’t start the generation.',
       reason: 'Wait for the graph import to finish.' });
   });
 });

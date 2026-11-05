@@ -18,7 +18,7 @@ const { AssetProposalStrip } = await import('./AssetProposalStrip');
 const { ProposalsFor } = await import('./ProposalsFor');
 const { useAssetProposalsStore } = await import('../../store/assetProposalsStore');
 const { useAgentNotesStore } = await import('../../store/agentNotesStore');
-const { heldProposalsFor, HELD_PROPOSAL_LINE } = await import('../../store/heldAssetProposals');
+const { heldProposalsFor, heldProposalLine } = await import('../../store/heldAssetProposals');
 const { coverProposal, commonsProposal } = await import('../../test/assetProposalFixtures');
 const { surfaceKey } = await import('../../lib/agentNotes');
 const session = await import('../../lib/personSession');
@@ -123,7 +123,7 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     const four = update('pa_c4', { text: 'Claude Code asks to make 4 changes to a reference in the Commons', proposal: { changes: 4 } }, 'commons', 'ast_1');
     expect(heldProposalsFor([one, four], {}, true, 'commons', 'ast_1').map((item) => item.header))
       .toEqual(['proposes a change to this reference', 'proposes 4 changes to this reference']);
-    expect(HELD_PROPOSAL_LINE).toBe('You can review this when this tab is connected as you.');
+    expect(heldProposalLine()).toBe('You can review this when this tab is connected as you.');
   });
 
   it('the gate holding is what starts the wait; the person\'s sync ends it', () => {

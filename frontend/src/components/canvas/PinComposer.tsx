@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
-  pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
+  onPinTextLoaded, pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
-import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
+import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -15,6 +16,8 @@ import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import { fitNoteHeading, HEADING_END, HEADING_START, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
+import { LineText } from '../LineText';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
  *
@@ -72,9 +75,16 @@ export function PinComposer() {
   // GM r27 item 2: and after the banner's ×, while the tab still isn't
   // connected as the person (× hides the banner, not the condition).
   const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
-  const gateBanner = bannerUp || gateHeld;
+  // GM r7 (3): the one held state (useTabHeld: held, demoted, or not answered yet), with the
+  // same lock and the 150 ms rule as every other ask (useLockPending), never a second flag.
+  // PR #204 round 10 (GM r15): through the one lock (components/PersonLock): aria-disabled with
+  // its line under the buttons, no tooltip. The banner being up locks it at once.
+  const sendLock = usePersonLock('send notes');
+  const tabHeld = sendLock.locked;
+  const heldPending = tabHeld && !sendLock.shown && !bannerUp;
   const lock = useCanvasLock();
+  // PR #204 round 14 (GM r23 3): offline comes first; the general notice's Send line waits too.
+  const gateBanner = (bannerUp && !lock.offline) || sendLock.shown;
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
   const [textReady, setTextReady] = useState(pinTextSettled);
@@ -84,6 +94,14 @@ export function PinComposer() {
     void pinTextSettling().then(() => { if (live) setTextReady(true); });
     return () => { live = false; };
   }, [textReady]);
+  // PR #218 review 1 LOW-1: the data can land after the dialog is up: a
+  // failed chunk loaded again (compose retries it), with textReady already
+  // true from the failure. Everything here that reads the data is worked out
+  // as it draws ("N left" and Send note's empty check over the draft, each
+  // kept note's text), so one more render shows it all in the full form at
+  // once, not at the next keystroke or store change.
+  const [, setTextLoads] = useState(0);
+  useEffect(() => onPinTextLoaded(() => setTextLoads((loads) => loads + 1)), []);
   // GM r23 item 2: the node the dialog is for left the canvas (the person
   // or an agent removed it): Send note is disabled with the line as its
   // reason, and the line shows once; Cancel and the typed text stay.
@@ -174,7 +192,12 @@ export function PinComposer() {
   // as the banner leaves.
   const errorLine = errorPersonGate && bannerUp
     ? (errorPersonGate === 'delete' ? PIN_REFUSAL_COPY.notDeleted : PIN_REFUSAL_COPY.notAdded) : error;
-  const errorLeave = useLeave(errorLine && (errorProject === null || errorProject === here) ? errorLine : null);
+  // Round 17 (review 13 LOW-3): offline first, the toast with it. A because line hidden offline
+  // (hooks/useOfflineFirstBecause) leaves nothing in the toast but its ×, so the toast doesn't show.
+  const errorShown = useOfflineFirstBecause(errorLine);
+  const errorLeave = useLeave(errorShown && (errorProject === null || errorProject === here) ? errorShown : null);
+  // Going offline it goes at once: a leave would draw the toast with its words already hidden.
+  const errorHiddenOffline = !!errorLine && errorShown === null;
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -314,9 +337,14 @@ export function PinComposer() {
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
-            : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected }
-            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) })}
+          confirm={{ ...lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+            : gateBanner ? {}
+            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) }),
+            ...(heldPending && !targetGone ? { 'aria-disabled': true as const, 'data-held-pending': '' as const } : {}),
+            ...(gateBanner && !targetGone ? { 'aria-disabled': true as const, 'aria-describedby': sendLock.id, 'data-person-lock': 'send notes' } : {}) }}
+          footer={gateBanner && !targetGone ? (
+            <p id={sendLock.id} className="person-lock-line"><LineText text={PIN_REFUSAL_COPY.sendWhenConnected} /></p>
+          ) : null}
           onRefused={() => { if (!targetGone && !gateBanner && !noteEmpty) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
@@ -325,10 +353,10 @@ export function PinComposer() {
         />
       )}
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
-      {errorLeave.shown && (
+      {errorLeave.shown && !errorHiddenOffline && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" {...errorLeave.props}>
-            <span>{errorLeave.shown}</span>
+          <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" data-line-box="" {...errorLeave.props}>
+            <span><LineText text={errorLeave.shown} /></span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>
@@ -353,7 +381,7 @@ export function PinComposer() {
               {rows.map(({ key, item: note, leaving }) => {
                 const leave = rowProps(key, leaving);
                 return (
-                <div key={key} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}
+                <div key={key} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-line-box="" data-project={note.project}
                   data-entering={(!leaving && entering.has(note.project)) || undefined}
                   ref={leave.ref} data-leaving={leave['data-leaving']} inert={leave.inert}
                   onAnimationEnd={(event) => {

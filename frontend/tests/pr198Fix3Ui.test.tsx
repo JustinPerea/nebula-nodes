@@ -34,8 +34,11 @@ import { ContextMenu } from '../src/components/ContextMenu';
 import { nodeCardBoundaryLine } from '../src/lib/studioBoundary';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { useOfflineHiddenNotice } from '../src/hooks/useOfflineHiddenNotice';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;
@@ -177,8 +180,8 @@ describe('GM r3 (a): Composition\'s offline row sits under the top header, above
     const view = source('components/video-editor/RemotionEditorView.tsx');
     expect(view).toMatch(/<WorkspaceHeader[^>]*\/>\s*\{\/\*[^]*?\*\/\}\s*<div className="remotion-editor-view__toolbar"/);
     expect(view).not.toMatch(/<WorkspaceHeader[^/]*>\s*<RemotionEditorToolbar/);
-    const rule = css('styles/workspace-header.css');
-    expect(rule).toMatch(/\.remotion-editor-view\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
+    const rule = css('styles/remotion-editor.css');
+    expect(rule).toMatch(/\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
     expect(rule).toMatch(/\.remotion-editor-view__toolbar\s*\{[^}]*grid-area:\s*toolbar/);
   });
 });
@@ -228,7 +231,7 @@ describe('N1: a load-failure notice doesn\'t flash back on reconnect', () => {
   it('the first render back online shows nothing; the check clears it, so it never shows', () => {
     const shown: string[] = [];
     function Probe() {
-      const [notice, setNotice] = useState<string | null>("Couldn't check the Commons status. Commons is disabled.");
+      const [notice, setNotice] = useState<string | null>("Couldn't check Commons status. Commons is disabled.");
       const visible = useOfflineHiddenNotice(notice, () => setNotice(null));
       shown.push(visible ?? 'none');
       return <p>{visible ?? 'none'}</p>;

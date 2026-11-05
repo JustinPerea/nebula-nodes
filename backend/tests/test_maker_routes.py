@@ -368,6 +368,8 @@ MULTI_ROUTED: set[str] = {
     "flux-video-upscale", "krea-3",
     # PR 4: FLUX.2 (BFL first, then the fal route it always ran on).
     "flux-2-pro",
+    # Talking heads: a still image and an audio track become a video.
+    "omnihuman-1-5", "omnihuman-2", "kling-ai-avatar-v2",
 }
 
 

@@ -114,3 +114,28 @@ describe('the measured top line', () => {
     expect(bottomBar.floatingTopLimit(16)).toBe(16);
   });
 });
+
+// GM r72 on #226: the unpinned Inspector beside a node grows to the band's
+// line with a 12 px gap ("Cap to the BAND line, not the bar"), under one
+// toolbar+12 top line that a resize reaching up to the chrome reuses.
+describe('the content-fit lines (GM r72)', () => {
+  it('a clearance keeps the panel that much further above the band, not above the bar', () => {
+    bar();
+    band();
+    expect(bottomBar.floatingBottomLimit(16, 800, undefined, bottomBar.FLOATING_CHROME_CLEARANCE)).toBe(667 - 12);
+  });
+
+  it('with no bar, 12 px above the band\'s own top; with no band either, the window\'s gutter', () => {
+    band(776);
+    expect(bottomBar.floatingBottomLimit(16, 800, undefined, 12)).toBe(722 - 12);
+    added.splice(0).forEach((element) => element.remove());
+    expect(bottomBar.floatingBottomLimit(16, 800, undefined, 12)).toBe(784);
+  });
+
+  it('the chrome top line is the toolbar\'s, 12 px below it', () => {
+    header();
+    toolbar();
+    expect(bottomBar.FLOATING_CHROME_CLEARANCE).toBe(12);
+    expect(bottomBar.floatingChromeTopLine(16)).toBe(141 + 12);
+  });
+});

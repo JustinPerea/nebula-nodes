@@ -9,24 +9,33 @@ afterEach(() => {
   resetPersonSessionForTests();
 });
 
+// Round 8 (review 6 NIT-3): the visible notice is no longer a live region; one polite region,
+// mounted and empty, says its words. So the notice is found by its class, and what is said by
+// the region.
+const notice = () => document.querySelector('.person-required');
+const said = () => screen.getByRole('status').textContent;
+
 describe('PersonRequiredBanner', () => {
   it('stays hidden until a person-only action is refused, then explains and dismisses', () => {
     render(<PersonRequiredBanner />);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(notice()).toBeNull();
+    expect(said()).toBe('');
     act(() => reportPersonRequired());
     // GM - Design, 2026-10-23 (round 4), verbatim.
-    expect(screen.getByRole('status').textContent).toBe(
+    expect(notice()!.textContent).toBe(
       "This tab isn’t connected as you. Open the link Nebula printed when it started.×");
+    expect(said()).toBe("This tab isn’t connected as you. Open the link Nebula printed when it started.");
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(notice()).toBeNull();
     act(() => reportPersonRequired());
-    expect(screen.getByRole('status')).toBeTruthy();
+    expect(notice()).toBeTruthy();
     // GM r29 item 3 (PR #200 fix round 19): a link taken in isn't proof; the
     // server promoting this tab (a verified hello) hides it.
     act(() => { window.dispatchEvent(new CustomEvent('nebula:person-connected')); });
-    expect(screen.getByRole('status')).toBeTruthy();
+    expect(notice()).toBeTruthy();
     act(() => notePersonPromoted());
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(notice()).toBeNull();
+    expect(said()).toBe('');
   });
 
   it("in the desktop app, says GM's app banner (round 4), chosen by the preload bridge", () => {
@@ -37,6 +46,7 @@ describe('PersonRequiredBanner', () => {
     render(<PersonRequiredBanner />);
     act(() => reportPersonRequired());
     // GM - Design, 2026-10-23 (round 4), verbatim.
-    expect(screen.getByRole('status').textContent).toBe("This window isn’t connected as you. Quit Nebula and open it again.×");
+    expect(notice()!.textContent).toBe("This window isn’t connected as you. Quit Nebula and open it again.×");
+    expect(said()).toBe("This window isn’t connected as you. Quit Nebula and open it again.");
   });
 });

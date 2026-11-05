@@ -2,6 +2,9 @@ import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type 
 import type { AgentQuestion } from '../../lib/agentQuestions';
 import { canSend, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AuthorDot } from './AgentNoteParts';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { LineText } from '../LineText';
 
 /**
  * The answer form (Q125 item 1): a popover from the Updates corner, at the
@@ -31,6 +34,15 @@ export function AgentQuestionsForm({
   const setText = useAgentQuestionsStore((s) => s.setText);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
+  // GM r7 (1): a form open when the tab stops being confirmed as the person (demoted, or held)
+  // stays open with its draft and caret, and typing stays live; Send and Dismiss lock where
+  // they are (aria-disabled, still focusable, the 150 ms rule) and unlock in place on the
+  // promote. The store refuses them too (agentQuestionsStore). GM r10 (1): the reason shows
+  // on its own row under the buttons, as on the permission card, and they point at it.
+  const lock = usePersonLock('answer this');
+  const tabHeld = lock.locked;
+  const lockProps = lock.control();
+  const lockClass = tabHeld ? ' agent-notes-btn--held' : '';
 
   // Focus starts on the first control, so Tab walks the questions in order.
   useEffect(() => {
@@ -43,12 +55,12 @@ export function AgentQuestionsForm({
   const heading = many ? `Questions from ${view.agent.name}` : `A question from ${view.agent.name}`;
 
   async function send() {
-    if (!sendable || busy) return;
+    if (!sendable || busy || tabHeld) return;
     if (await useAgentQuestionsStore.getState().send(setId)) onClose();
   }
 
   async function dismiss() {
-    if (busy) return;
+    if (busy || tabHeld) return;
     if (await useAgentQuestionsStore.getState().dismiss(setId)) onClose();
   }
 
@@ -136,20 +148,23 @@ export function AgentQuestionsForm({
         {view.note && <p className="agent-questions-form__note">{view.note}</p>}
         {view.questions.map(question)}
       </div>
-      {error && <div className="agent-notes-panel__error" role="alert">{error}</div>}
+      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} /></div>}
       <div className="agent-questions-form__foot">
-        <button type="button" className="agent-notes-btn" disabled={busy} onClick={() => void dismiss()}>
+        <button type="button" className={`agent-notes-btn${lockClass}`} disabled={busy} {...lockProps}
+          onClick={() => void dismiss()}>
           Dismiss
         </button>
         <button
           type="button"
-          className="agent-notes-btn agent-notes-btn--primary"
+          className={`agent-notes-btn agent-notes-btn--primary${lockClass}`}
           disabled={!sendable || busy}
+          {...lockProps}
           aria-busy={busy || undefined}
           onClick={() => void send()}
         >
           Send
         </button>
+        <PersonLockLine lock={lock} place="control" className="agent-questions-form__held-line" />
       </div>
     </div>
   );

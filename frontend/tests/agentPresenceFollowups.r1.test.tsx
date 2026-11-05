@@ -44,10 +44,13 @@ import { noteKeptLine, NOTE_KEPT_LINE } from '../src/lib/canvasPins';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
 import { useProjectStore } from '../src/store/projectStore';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 import { useCinemaUploadStore } from '../src/store/cinemaUploadStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const SRC = join(__dirname, '../src');
 const read = (file: string) => readFileSync(join(SRC, file), 'utf8');

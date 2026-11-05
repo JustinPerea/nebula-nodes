@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 
 // Review 7, L3: a notice that arrives while the canvas notice offers an
@@ -15,6 +15,10 @@ vi.mock('../src/lib/wsClient', () => ({
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { NOTICE_SLOTS } from '../src/lib/noticeSlots';
 import { useGraphStore } from '../src/store/graphStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const ANOTHER_RUN = 'Nothing ran. Another run started first. Click “Run” again when it finishes.';

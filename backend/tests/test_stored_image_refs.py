@@ -55,7 +55,7 @@ def client(tmp_path, monkeypatch):
     importlib.reload(ps)
     monkeypatch.setattr(main_module, "preset_store", ps.PresetStore())
 
-    async def quiet(_data):
+    async def quiet(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", quiet)

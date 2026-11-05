@@ -50,6 +50,19 @@ export interface StudioBoard {
   imageIds: string[];
 }
 
+/**
+ * "The view is fitted" (#210 round 6r, GM r101): the camera is where the app
+ * last framed it, and which cards that framing was for: the whole board (a
+ * fit), the cards an Update's Show named, or the area of the tiles the
+ * outside chip brought into view (round 6s, GM r105 1). Null once the person
+ * has moved the camera. It travels with the kept camera (GM r105 2): going
+ * to List and back isn't a pan, so the Board view reopens with it.
+ */
+export type BoardPlaced =
+  | { kind: 'board' }
+  | { kind: 'cards'; ids: readonly string[] }
+  | { kind: 'area'; bounds: { x: number; y: number; width: number; height: number } };
+
 interface BoardCanvasState {
   view: MoodboardView;
   setView: (view: MoodboardView) => void;
@@ -58,7 +71,24 @@ interface BoardCanvasState {
   setSelection: (boardKey: string, placementIds: string[]) => void;
   /** The camera per board draft key, for this visit: back to List and to Board keeps it. */
   viewports: Record<string, Viewport>;
-  setViewport: (boardKey: string, viewport: Viewport) => void;
+  /** Whether that camera was where a whole-board fit left it (#209: a board kept
+   *  fitted refits when its column resizes; components/moodboard-studio/boardFitFollow.ts). */
+  fitted: Record<string, boolean>;
+  setViewport: (boardKey: string, viewport: Viewport, fitted: boolean) => void;
+  /** Whether that camera is where the app framed it, and for what (BoardPlaced), per board draft key. */
+  placed: Record<string, BoardPlaced | null>;
+  setPlaced: (boardKey: string, placed: BoardPlaced | null) => void;
+  /**
+   * The board's draft moved to `to` (a new board's first save: its draft
+   * leaves the shared "new" key for the saved board's own, #210 round 6t):
+   * its camera, its flag and its selection go with it, so the Board view
+   * opens on the saved key where the person left it, and the next New board
+   * starts fresh. A draft already at `to` (the board open from the rail)
+   * keeps its own.
+   */
+  moveBoard: (from: string, to: string) => void;
+  /** A fresh draft at `boardKey` (New, a forgotten draft): nothing of the last board's view is kept for it. */
+  forgetBoard: (boardKey: string) => void;
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
@@ -88,8 +118,38 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
     set((state) => ({ selection: { ...state.selection, [boardKey]: placementIds } }));
   },
   viewports: {},
-  setViewport: (boardKey, viewport) => set((state) => ({ viewports: { ...state.viewports,
-    [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } } })),
+  fitted: {},
+  setViewport: (boardKey, viewport, fitted) => set((state) => ({ viewports: { ...state.viewports,
+    [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } }, fitted: { ...state.fitted, [boardKey]: fitted } })),
+  placed: {},
+  setPlaced: (boardKey, placed) => {
+    if (get().placed[boardKey] === placed) return;
+    set((state) => ({ placed: { ...state.placed, [boardKey]: placed } }));
+  },
+  moveBoard: (from, to) => {
+    if (from === to) return;
+    set((state) => {
+      const moved = <T,>(table: Record<string, T>): Record<string, T> => {
+        if (!(from in table)) return table;
+        const { [from]: value, ...rest } = table;
+        return to in rest ? rest : { ...rest, [to]: value };
+      };
+      return { viewports: moved(state.viewports), fitted: moved(state.fitted), placed: moved(state.placed),
+        selection: moved(state.selection) };
+    });
+  },
+  forgetBoard: (boardKey) => {
+    const state = get();
+    if (!(boardKey in state.viewports) && !(boardKey in state.fitted) && !(boardKey in state.placed)
+      && !(boardKey in state.selection)) return;
+    const without = <T,>(table: Record<string, T>): Record<string, T> => {
+      const { [boardKey]: _gone, ...rest } = table;
+      void _gone;
+      return rest;
+    };
+    set({ viewports: without(state.viewports), fitted: without(state.fitted), placed: without(state.placed),
+      selection: without(state.selection) });
+  },
   studioBoard: null,
   setStudioBoard: (board) => {
     if (!sameBoard(get().studioBoard, board)) set({ studioBoard: board });

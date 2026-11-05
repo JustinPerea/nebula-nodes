@@ -8,8 +8,17 @@ const flow = vi.hoisted(() => ({
   internalNodes: new Map<string, { measured: { width?: number; height?: number } }>(),
   fitProp: true,
 }));
+// The roster store (brought in with the agent mark layer) reads the roster on
+// mount and on a graph replacement. The read never answers here: no request
+// goes out (tests/setup.ts) and the roster stays empty, with no update after a test.
+vi.mock('../src/lib/agentRoster', async (original) => ({
+  ...await original<typeof import('../src/lib/agentRoster')>(),
+  fetchAgentRoster: () => new Promise(() => {}),
+}));
 vi.mock('@xyflow/react', async (importOriginal) => {
   const original = await importOriginal<typeof import('@xyflow/react')>();
+  // Selectors run against an empty 1280x800 flow, fresh each test (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...original,
     ReactFlow: ({ children, fitView }: { children: React.ReactNode; fitView: boolean }) => {
@@ -26,9 +35,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       getEdges: () => useGraphStore.getState().edges,
     }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
-    useStore: () => 1,
+    useStore: fakeFlow.useStore,
     // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }), setState: () => {} }),
+    useStoreApi: fakeFlow.useStoreApi,
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -48,9 +57,13 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { useGraphStore } from '../src/store/graphStore';
+import { quietConsole, installFakeFlowStore } from './helpers/fakeFlowStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 /**
  * PR #198 fix round 4, M1 (review 4): React Flow's own Delete key is off
@@ -73,6 +86,9 @@ const scene = { id: 'n4', type: 'cinemaSceneNode', position: { x: 0, y: 0 }, sel
 const brief = { id: 'n5', type: 'model-node', position: { x: 300, y: 0 }, selected: true,
   data: { label: 'Brief', definitionId: 'text-input', params: { text: '' }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
+// The canvas's store-reading layers draw in every test, and a test fails if one
+// crashes on the fake store's answers.
+installFakeFlowStore();
 describe('M1: the Delete key during the tab\'s own run', () => {
   beforeEach(() => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -80,8 +96,8 @@ describe('M1: the Delete key during the tab\'s own run', () => {
     fetchMock.mockImplementation(async (url: string) => (String(url).includes('/api/cinema/generate-shot')
       ? json({ status: 'started', runId: 'own-run' }) : json({})));
     resetBackendConnectionForTests();
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Quiet, but a canvas layer that crashes still fails the test (fakeFlowStore.ts).
+    quietConsole();
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     useUIStore.setState(initialUI, true);
     useGraphStore.getState().resetExecution();

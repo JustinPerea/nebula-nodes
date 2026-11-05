@@ -51,7 +51,7 @@ def root(tmp_path, monkeypatch) -> Path:
 def client(root, monkeypatch, canvas_project):
     import main as main_module
 
-    async def quiet(_data):
+    async def quiet(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", quiet)
@@ -444,7 +444,7 @@ def test_agents_are_told_board_images_must_be_nebulas_own():
 # ------------------------------------------------------------- review fixes (Q98)
 
 def _counted(summary: str, count: int) -> bool:
-    return summary.startswith(f"{count} reference image(s) analyzed as ")
+    return summary.startswith(f"{count} reference image{'' if count == 1 else 's'} analyzed as ")
 
 
 @pytest.mark.asyncio

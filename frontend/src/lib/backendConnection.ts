@@ -36,10 +36,54 @@ export function startHealthProbe(): number {
 /** Applies probe `seq`'s answer unless a newer probe's answer was applied
  * already. Returns whether it was applied. */
 export function noteProbeAnswer(seq: number, next: BackendConnection): boolean {
-  if (seq < newestApplied) return false;
-  newestApplied = seq;
-  noteBackendConnection(next);
-  return true;
+  const applied = seq >= newestApplied;
+  if (applied) {
+    newestApplied = seq;
+    noteBackendConnection(next);
+    const waiting = [...answerWaiters];
+    answerWaiters.clear();
+    for (const listener of waiting) listener(next === 'online');
+  }
+  for (const listener of [...probeAnswerListeners]) listener();
+  return applied;
+}
+
+const probeAnswerListeners = new Set<() => void>();
+
+/**
+ * Whether the tab is offline once a health probe has answered (PR #210 round
+ * 6d, review 8 MEDIUM-2): a write that got no answer may be one dropped
+ * request, or the backend gone. This asks for a probe now
+ * (requestHealthProbe) and resolves when one answers, or the tab goes
+ * offline, or after `timeoutMs` (with no banner mounted to probe), with
+ * whether the tab is offline then.
+ */
+export function probeOffline(timeoutMs = 5_000): Promise<boolean> {
+  if (isBackendOffline()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stop = () => {};
+    const done = () => {
+      probeAnswerListeners.delete(done);
+      stop();
+      if (timer !== null) clearTimeout(timer);
+      resolve(isBackendOffline());
+    };
+    probeAnswerListeners.add(done);
+    stop = subscribeBackendConnection(() => { if (isBackendOffline()) done(); });
+    timer = setTimeout(done, timeoutMs);
+    requestHealthProbe();
+  });
+}
+
+const answerWaiters = new Set<(online: boolean) => void>();
+
+/** Calls `listener` once with whether the backend is reachable, as soon as a health probe's
+ * answer has been applied: at once if one has, else on the first one (Justin, 2026-10-31: a
+ * person token is never dropped while Nebula is starting, before its health has settled). */
+export function afterHealthAnswer(listener: (online: boolean) => void): void {
+  if (newestApplied > 0) listener(connection === 'online');
+  else answerWaiters.add(listener);
 }
 
 export function isBackendOffline(): boolean {
@@ -280,6 +324,7 @@ export function resetBackendConnectionForTests(): void {
   connection = 'online';
   probesStarted = 0;
   newestApplied = 0;
+  answerWaiters.clear();
   lastPulseAt = Number.NEGATIVE_INFINITY;
   knownBootId = null;
   retiredBootIds.clear();

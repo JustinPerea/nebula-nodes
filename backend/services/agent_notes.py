@@ -52,7 +52,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from services.agent_presence import AgentIdentity
-from services.agent_questions import closed_update_text, open_update_ids
+from services.agent_questions import MAX_QUESTIONS, closed_update_text, open_update_ids
+from services.canvas_proposals import MAX_OPEN_PER_AGENT
 from services.project_store import ProjectStore
 
 MAX_TEXT = 240
@@ -86,6 +87,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     # A question set's Update (Q125 item 1): opens the answer form in the
     # Updates corner. Only the person's canvas answers (services/agent_questions.py).
     "question.answer": {"labels": ("Answer",), "keys": {"questionId": str}},
+    # A reply that landed in another project's thread (GM r100.3): opens that
+    # project and its thread in the Agent log.
+    "thread.open": {"labels": ("Open",), "keys": {"projectId": str, "replyId": str}},
 }
 
 # A board image ref inside saved text: private-use characters, which
@@ -808,9 +812,54 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
 
+    # -- a reply saved in another project's thread (GM r100.3, r112.1) ------------
+    def post_replied(self, *, author: Mapping[str, Any], project_id: str, reply_id: str,
+                     text_for: Callable[[int], str]) -> dict[str, Any]:
+        """The Update a reply posts on the open project's list when it went to
+        ``project_id``'s thread (``source: "nebula"``, attributed to the
+        replying agent, an Open action that opens that thread at the reply).
+        GM r112.1: one per agent and project while it is unread. A later
+        reply updates it in place (same id, the latest time, moved to the
+        top) and counts: ``text_for(count)``. Once read, the next reply
+        starts a new one. The agent's own rate limit applies (6 a minute on
+        this list, shared with its post_note): past it the Update is left as
+        it is (the reply is saved either way)."""
+        clean_author = _clean_author(author)
+        actions = _clean_actions([{"label": "Open", "op": {"kind": "thread.open", "projectId": project_id,
+                                                          "replyId": reply_id}}])
+        open_id, _ = self._read_project()
+        if not open_id:
+            raise NoteError(409, "Open or create a project first: updates are kept with a project", "no_project")
+
+        def same(note: Mapping[str, Any]) -> bool:
+            author_of = note.get("author") or {}
+            replied = note.get("replied") if isinstance(note.get("replied"), Mapping) else {}
+            return (_unread(note) and replied.get("projectId") == project_id
+                    and author_of.get("kind") == clean_author["kind"] and author_of.get("id") == clean_author["id"])
+
+        def mutate(notes: list[dict[str, Any]], keep: frozenset[str]) -> tuple[dict[str, Any], int, list[str], bool]:
+            old = next((note for note in notes if same(note)), None)
+            count = int((old.get("replied") or {}).get("count") or 1) + 1 if old is not None else 1
+            note = self._new_note(author=clean_author, source="nebula", about="other",
+                                  text=clean_note_text(text_for(count)), refs=[], actions=actions)
+            note["replied"] = {"projectId": project_id, "count": count}
+            if old is not None:
+                note["id"] = old["id"]  # in place: the same Update, now on top
+                notes.remove(old)
+            notes.append(note)
+            removed = _prune(notes, MAX_PROJECT_NOTES, keep)
+            return note, unread_count(notes), removed, old is not None
+
+        with self._limiter.slot(self._surface_key(("canvas", None), open_id), str(clean_author["id"])):
+            project, (note, unread, removed, updated) = self._write_project(mutate, project_id=open_id,
+                                                                            keep_open=True)
+        return {"note": note_view(note), "unread": unread, "projectId": project, "removed": removed,
+                "updated": updated}
+
     # -- a proposal's Update (Justin's Q92 a, Q112 a) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,
-                      proposal: Mapping[str, Any], project_id: str | None = None) -> dict[str, Any]:
+                      proposal: Mapping[str, Any], project_id: str | None = None,
+                      share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:
         """The Update a proposal posts on the open project's list (or
         ``project_id``'s, the project a canvas proposal was made in): written
         by Nebula from names only (``source: "nebula"``), attributed to the
@@ -822,7 +871,11 @@ class AgentNotes:
         ``removed``), so a re-proposal replaces it instead of stacking. A
         canvas proposal's replaces only the same agent's canvas Updates it
         withdrew itself (``_same_ask``); every other one stays (Q112 a:
-        "every one")."""
+        "every one").
+
+        ``share`` (PR #204 round 4): what a shared asset Update stands for,
+        read inside the write as ``retarget_proposal`` does, so an ask closed
+        while this one posts isn't counted."""
         clean_author = _clean_author(author)
         ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
                "targetId": str(proposal["targetId"])[:128], **proposal_detail(proposal)}
@@ -833,6 +886,9 @@ class AgentNotes:
         note["proposal"] = ref
 
         def mutate(notes: list[dict[str, Any]], keep: frozenset[str]) -> tuple[int, list[str]]:
+            if share is not None:
+                note["proposal"] = {"id": ref["id"], "kind": ref["kind"], "targetId": ref["targetId"],
+                                    **proposal_detail(_with_share(proposal, share))}
             removed = []
             for old in [n for n in notes if _same_ask(n, note)]:
                 notes.remove(old)
@@ -860,7 +916,7 @@ class AgentNotes:
         project's record in the same commit (main._post_question_update), so
         a set is never kept without its Update nor an Update without its set."""
         clean_author = _clean_author(author)
-        ref = {"id": str(questions["id"])[:64]}
+        ref = {"id": str(questions["id"])[:64], **questions_detail(questions)}
         actions = _clean_actions([{"label": "Answer", "op": {"kind": "question.answer", "questionId": ref["id"]}}])
         asked = _ref_list(refs)
         _check_ref_count(asked)
@@ -939,17 +995,29 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str,
-                          detail: Mapping[str, Any] | None = None, text: str | None = None) -> dict[str, Any] | None:
+                          detail: Mapping[str, Any] | None = None, text: str | None = None,
+                          share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the
         Update now reviews that one, and its ref says that one's ``detail``
         (``proposal_detail``) and, given ``text``, its words say that one's
         too (PR #202 review 1 LOW-1: the count and the words come from the
-        same proposal). None when the update has left the list."""
+        same proposal). None when the update has left the list, or already
+        reviews that proposal with those words (nothing to say again).
+
+        ``share`` (PR #204 round 3): what a shared asset Update stands for
+        (``asks``, ``firstSince``), read inside the write so a count taken
+        before another follow closed an ask never lands after it."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            ref = _retargeted_ref(note.get("proposal"), proposal_id, _with_share(detail, share))
+            words = clean_note_text(text) if text is not None else note.get("text")
+            # PR #202 review 5 NIT-1: already on that proposal, as it is (another
+            # follow moved it there first): no write, so no second "changed".
+            if note.get("proposal") == ref and note.get("text") == words:
+                return None
+            note["proposal"] = ref
             if text is not None:
                 note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
@@ -962,7 +1030,8 @@ class AgentNotes:
 
     def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str,
                         detail: Mapping[str, Any] | None = None, text: str | None = None,
-                        closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
+                        closed: Callable[[str], bool] | None = None,
+                        share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
         """The undo of a node delete reopened the proposal (GM, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
@@ -984,7 +1053,7 @@ class AgentNotes:
                     return None
             for key in ("resolvedAt", "resolvedBy", "outcome"):
                 note.pop(key, None)
-            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, _with_share(detail, share))
             if text is not None:
                 note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
@@ -999,21 +1068,32 @@ class AgentNotes:
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
 
     def resolve_proposal(self, project_id: str, note_id: str, *, outcome: str,
-                         by: Mapping[str, Any], proposal_id: str | None = None) -> dict[str, Any] | None:
+                         by: Mapping[str, Any], proposal_id: str | None = None,
+                         closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
         """The proposal closed (accepted, rejected, withdrawn, expired or no
         longer fits): the Update says how in one short line (``outcome``) and
         is read, so no stale Review stays. None when it has left the list,
         or (given ``proposal_id``) when it no longer reviews that proposal:
-        an undo reopened another in the meantime (PR #202 review 2 LOW-C)."""
-        return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id)
+        an undo reopened another in the meantime (PR #202 review 2 LOW-C).
+
+        Given ``closed``, it is asked again inside the write, as
+        ``reopen_proposal`` asks it: an undo can reopen the very proposal
+        this resolve is for between the caller's check and this write, and
+        its reopen then found the Update not yet resolved and left it
+        (review 5 LOW-1). A proposal open again keeps its Update."""
+        return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id, closed=closed)
 
     def _resolve(self, project_id: str, note_id: str, *, outcome: str, by: Mapping[str, Any],
-                 retext: Callable[[str], str] | None = None, proposal_id: str | None = None) -> dict[str, Any] | None:
+                 retext: Callable[[str], str] | None = None, proposal_id: str | None = None,
+                 closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
         def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            if proposal_id is not None and (note.get("proposal") or {}).get("id") != proposal_id[:64]:
+            current = str((note.get("proposal") or {}).get("id") or "")
+            if proposal_id is not None and current != proposal_id[:64]:
+                return None
+            if closed is not None and current and not closed(current):
                 return None
             now = _iso(self._clock())
             note["resolvedAt"] = now
@@ -1043,8 +1123,36 @@ MAX_PROPOSAL_CHANGES = 999
 MAX_PROPOSAL_SINCE = 2**53 - 1
 
 
+# A question set's ref (GM, 2026-10-29, the held needs-you count): how many
+# questions it asks, which its Update's line already says, and when it was
+# asked (ms, the set view's createdAt). A tab not connected as the person holds
+# no set views, so its Agents panel counts and orders from these. The bound is
+# the set's own (PR #204 review 1 NIT-2: one constant, not a copy).
+MAX_REF_QUESTIONS = MAX_QUESTIONS
+# An asset Update one agent's open asks on one target share (PR #204 review 1
+# MEDIUM-1, GM 2026-10-30): ``asks``, how many of them it stands for, and
+# ``firstSince``, the oldest one's createdAt (ms). A held tab counts and orders
+# from these, so nothing moves on the promote. At most the agent's open cap.
+MAX_SHARED_ASKS = MAX_OPEN_PER_AGENT
+
+
+def questions_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The checked ``count`` and ``since`` of a question set's ref; anything else is dropped."""
+    detail: dict[str, Any] = {}
+    if not isinstance(raw, Mapping):
+        return detail
+    count = raw.get("count")
+    if isinstance(count, int) and not isinstance(count, bool) and 1 <= count <= MAX_REF_QUESTIONS:
+        detail["count"] = count
+    since = raw.get("since")
+    if isinstance(since, int) and not isinstance(since, bool) and 0 <= since <= MAX_PROPOSAL_SINCE:
+        detail["since"] = since
+    return detail
+
+
 def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    """The checked ``cover``, ``changes``, ``inbox`` and ``since`` of a proposal ref; anything else is dropped."""
+    """The checked ``cover``, ``changes``, ``inbox``, ``since``, ``asks`` and ``firstSince`` of a
+    proposal ref; anything else is dropped."""
     detail: dict[str, Any] = {}
     if not isinstance(raw, Mapping):
         return detail
@@ -1058,14 +1166,64 @@ def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
     since = raw.get("since")
     if isinstance(since, int) and not isinstance(since, bool) and 0 <= since <= MAX_PROPOSAL_SINCE:
         detail["since"] = since
+    asks = raw.get("asks")
+    if isinstance(asks, int) and not isinstance(asks, bool) and 1 <= asks <= MAX_SHARED_ASKS:
+        detail["asks"] = asks
+    first = raw.get("firstSince")
+    if isinstance(first, int) and not isinstance(first, bool) and 0 <= first <= MAX_PROPOSAL_SINCE:
+        detail["firstSince"] = first
     return detail
+
+
+_DETAIL_KEYS = ("cover", "changes", "inbox", "since", "asks", "firstSince")
+
+
+SHARE_KEYS = ("asks", "firstSince")
+
+
+def for_reader(payload: Any, *, sees_share: bool, agent_id: str | None) -> Any:
+    """``payload`` (a note, a listing ``{notes}``, or a socket message with ``note``/``notes``) as
+    this reader may see it (PR #204 round 4, a product decision): a shared asset
+    Update's ``asks`` and ``firstSince`` go to the person's tabs (``sees_share``) and to the agent
+    that made the asks (``agent_id`` is the note's author id); every other reader gets the Update
+    as before they existed. Copies only what it changes; the stored note is never touched."""
+    if sees_share or not isinstance(payload, Mapping):
+        return payload
+
+    def one(note: Any) -> Any:
+        if not isinstance(note, Mapping):
+            return note
+        ref = note.get("proposal")
+        if not isinstance(ref, Mapping) or not any(key in ref for key in SHARE_KEYS):
+            return note
+        author = note.get("author") if isinstance(note.get("author"), Mapping) else {}
+        if agent_id is not None and author.get("kind") == "agent" and author.get("id") == agent_id:
+            return note
+        return {**note, "proposal": {key: value for key, value in ref.items() if key not in SHARE_KEYS}}
+
+    out = dict(payload)
+    if "proposal" in out and "author" in out:
+        return one(out)
+    if isinstance(out.get("note"), Mapping):
+        out["note"] = one(out["note"])
+    if isinstance(out.get("notes"), list):
+        out["notes"] = [one(note) for note in out["notes"]]
+    return out
+
+
+def _with_share(detail: Mapping[str, Any] | None,
+                share: Callable[[], Mapping[str, Any]] | None) -> Mapping[str, Any] | None:
+    """``detail`` with the share fields read now, inside the write (``retarget_proposal``)."""
+    if share is None:
+        return detail
+    return {**(detail or {}), **share()}
 
 
 def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None) -> dict[str, Any]:
     """The ref now about ``proposal_id``: the kind and target stay; the detail is the new proposal's
     (an older caller that passes none keeps none, rather than the closed one's)."""
     base = {key: value for key, value in (old if isinstance(old, Mapping) else {}).items()
-            if key not in ("cover", "changes", "inbox", "since")}
+            if key not in _DETAIL_KEYS}
     return {**base, "id": proposal_id[:64], **proposal_detail(detail)}
 
 

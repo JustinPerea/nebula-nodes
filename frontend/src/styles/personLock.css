@@ -1,0 +1,10 @@
+/* PR #204 round 10 (GM r15): a person-only control's lock line (components/PersonLock.tsx), in the
+   held cards' grey (their __held-line), on its own row under the controls it holds. */
+.person-lock-line {
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font-size: var(--sr-type-label, 12px);
+  line-height: 1.4;
+}

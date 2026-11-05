@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
 import { Download, Repeat2, Sparkles, Plus, SlidersHorizontal } from 'lucide-react';
@@ -38,9 +38,11 @@ import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
+import { useCardWidthSpring, useNodeRemeasure } from '../../lib/cardWidthSpring';
 import { NodeRunStatus } from './NodeRunStatus';
 import { MoodboardAdapterRow } from './MoodboardAdapterRow';
-import { inputFileName, middleTruncate } from '../../lib/fileName';
+import { fileParamName, middleTruncate } from '../../lib/fileName';
+import { useUploadNames } from '../../lib/uploadNames';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
@@ -69,7 +71,7 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
     // "Couldn't download the output. <reason>" (downloadWorldAsset's own
     // lines keep their reason; anything else reads GM's general line).
     // A canvas notice, not a window.alert (round 3f).
-    showNotice(failureMessage(err, "Couldn't download the output."));
+    showNotice(failureMessage(err, "Couldn't download the output."), 'error', err);
   }
 }
 
@@ -94,7 +96,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const batchPreview = useBatchPreview(id, nodeData);
+  // An input card's name may come from Nebula's upload record (GM r48 Q1).
+  useUploadNames();
   const actionSlot = useSelectionActionSlot(id);
+  // GM r107: the card's width springs when its own content widens it.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useCardWidthSpring(cardRef, useNodeRemeasure(id));
   const previewOutputs = batchPreview.outputs;
   const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
@@ -287,8 +294,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
   // Every input card names the file it holds, an image under its picture
   // (GM - Design, 2026-10-24: similar images are hard to tell apart).
+  // The name the Inspector shows too, never a bare content hash (GM r48 Q1
+  // on #222: lib/fileName.ts fileParamName).
   const inputFile = INPUT_FILE_CARDS.has(nodeData.definitionId)
-    ? inputFileName(nodeData.params)
+    ? fileParamName(nodeData.params, 'filePath')
     : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData
@@ -372,7 +381,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     ? definition.params.find((param) => param.key === inlineTextParamKey)
     : null;
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
-  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
+  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text…';
   const isNodeSelected = selected || selectedInUi;
   const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
   // The Jev result below hides its echo of the field's text.
@@ -444,7 +453,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
        * .model-node directly (this wrapper inherits transparency); Slava
        * Restraint skin moves the dark-glass surface here so the type label
        * and settings bar can float above the card cleanly. */}
-      <div className="model-node__card" data-node-inspector-anchor={id}>
+      <div className="model-node__card" data-node-inspector-anchor={id} ref={cardRef}>
       <div className="model-node__header">
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />

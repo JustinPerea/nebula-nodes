@@ -9,7 +9,9 @@ import {
   type QuestionSetStatus,
   type QuestionSetView,
 } from '../lib/agentQuestions';
-import { failureMessage } from '../lib/errorCopy';
+import { RequestFailedError, failureMessage } from '../lib/errorCopy';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
+import { personUnconfirmed } from '../lib/personSession';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -24,6 +26,9 @@ import { failureMessage } from '../lib/errorCopy';
  * the socket reconnects brings the same set under a new key, and `synced`
  * keeps its draft and an open form.
  */
+
+/** The most words one answer takes (the backend's limit). */
+export const ANSWER_TEXT_MAX = 1000;
 
 export interface QuestionSetEntry {
   view: QuestionSetView;
@@ -127,7 +132,10 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       const entry = state.sets[setId];
       if (!entry) return {};
       const view: QuestionSetView = { ...entry.view, status, answers, closedAt: Date.now() };
+      // In the same update as the close: a set this tab closed was busy until
+      // it closed (the composer tells it from one closed in another tab).
       return {
+        busy: without(state.busy, setId),
         sets: { ...state.sets, [setId]: { view } },
         drafts: without(state.drafts, setId),
         errors: without(state.errors, setId),
@@ -146,8 +154,11 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
     closed: (setId, status, view) => set((state) => {
       const entry = state.sets[setId];
       const next = view ?? (entry ? { ...entry.view, status } : null);
+      // A set closed without a view (send()'s "already answered" 409) still records when it
+      // closed, so a cursor waiting on it ends (agentCursorSettled reads closedAt).
       return {
-        sets: next ? { ...state.sets, [setId]: { view: { ...next, status } } } : state.sets,
+        sets: next ? { ...state.sets, [setId]: { view: { ...next, status, closedAt: next.closedAt ?? Date.now() } } }
+          : state.sets,
         drafts: without(state.drafts, setId),
         errors: without(state.errors, setId),
         busy: without(state.busy, setId),
@@ -189,45 +200,58 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
     setText: (setId, questionId, text) => {
       const question = get().sets[setId]?.view.questions.find((q) => q.id === questionId);
       if (!question?.allowText) return;
-      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, 1000) }));
+      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, ANSWER_TEXT_MAX) }));
     },
 
     send: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       const inputs = answerInputs(entry.view, get().drafts[setId]);
       if (inputs.length === 0) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
       try {
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't send the answers.") },
-        }));
+        // The set closed first (withdrawn, or answered in another tab): it is
+        // closed here too, and nothing went out (GM r79.6's race). The
+        // composer then says what happened; the row shows its outcome.
+        const already = error instanceof RequestFailedError && error.status === 409
+          ? /already (answered|dismissed|withdrawn)/.exec(String(error.detail ?? '')) : null;
+        if (already) {
+          get().closed(setId, already[1] as Exclude<QuestionSetStatus, 'open'>, null);
+          return false;
+        }
+        const line = failureMessage(error, "Couldn't send the answers.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.answer
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       // The socket's questionsClosed brings the server's copy; until then, ours.
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'answered', localAnswers(entry.view, inputs));
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 
     dismiss: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
       try {
         await dismissQuestions(setId, entry.answerKey);
       } catch (error) {
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't dismiss the questions.") },
-        }));
+        const line = failureMessage(error, "Couldn't dismiss the questions.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.dismiss
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'dismissed', null);
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 

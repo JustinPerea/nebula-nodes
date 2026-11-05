@@ -1,5 +1,6 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
-import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
+import { withTabClaim } from './tabId';
+import { dropRefusedPersonToken, notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type { AgentNotesEvent } from './agentNotes';
@@ -10,6 +11,7 @@ import type {
 } from './runHistory';
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
+import type { ChannelListenersEvent, PersonThreadEvent } from './personThread';
 
 export type ErrorCategory =
   | 'blocked'
@@ -39,6 +41,17 @@ export interface ProjectSwitch {
   created?: boolean;
 }
 
+export { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from './agentPresenceActions';
+
+/** Which session of its agent a cursor is: an opaque key the backend derives
+ * (never the agent's own id) and its number, the lowest free among the
+ * agent's live sessions, held until its cursor leaves. The backend is the one
+ * place that numbers, so every tab agrees ("Claude · 2"). Display only. */
+export interface AgentPresenceSession {
+  key: string;
+  ordinal: number;
+}
+
 export interface AgentPresenceEvent {
   type: 'agentPresence';
   agent: { id: string; name: string; color: string; verified: boolean };
@@ -46,7 +59,8 @@ export interface AgentPresenceEvent {
    * the Agent log lists it (agentLogStore) and no cursor moves. */
   target?: AgentCursorAnchor;
   from?: AgentCursorAnchor;
-  action: 'move' | 'click' | 'drag' | 'look';
+  /** One of AGENT_CURSOR_ACTIONS; anything else is read as 'move' (forward compatible). */
+  action: string;
   say: string;
   /** The Agent log's words when they differ from the bubble's (GM - Design,
    * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
@@ -62,10 +76,42 @@ export interface AgentPresenceEvent {
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
   projectId?: string | null;
+  /** On a `propose` cursor: the proposal it waits on (lib/agentCursorSettled). */
+  proposalId?: string;
   /** What the action was, for the Agents panel (Q125 item 2): a past-tense
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
   did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
+  /** Person tabs only: which session of this agent and its number (display
+   * only). Every cursor event a person tab gets carries it, the agent's plain
+   * cursor's too; the agents' form never does. */
+  session?: AgentPresenceSession;
+  /** Person tabs only: backend wall-clock ms when this cursor came to where
+   * it is (a move to the same node, or a nudge, keeps it). Columns stack by
+   * it, so every tab, before and after a reload, draws the same cursors in
+   * full (GM - Design, PR #211 r21). */
+  since?: number;
+  /** Person tabs only: this event's own id, so the Agent log lists an action
+   *  once, a live event and its replay alike, and never drops a real repeat
+   *  (#211 follow-up, LOW-5). */
+  eventId?: string;
+}
+
+/** Person tabs only: a node move changed these session cursors' target
+ *  chains (the other cursors linked to each through targets 16 canvas units
+ *  apart), so they arrive now (backend agent_presence.carry_nodes, GM -
+ *  Design #219 r24 Q2). Every tab, and a reload, stack them by these. */
+export interface AgentPresenceArrivalEvent {
+  type: 'agentPresenceArrival';
+  cursors: { agentId: string; key: string; ordinal: number; since: number }[];
+}
+
+/** Person tabs only, right after a verified hello: every live cursor, so a
+ * tab that connects mid-session shows the same cursors and numbers as the
+ * others (GM - Design, PR #211 r3). Each is drawn where it is, no flight. */
+export interface AgentPresenceReplayEvent {
+  type: 'agentPresenceReplay';
+  cursors: (AgentPresenceEvent & { replay?: boolean; secondsAgo?: number })[];
 }
 
 /** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
@@ -125,6 +171,13 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
+/** Said by this client, never the backend: the server refused this socket's
+ *  hello (its `personRequired` frame), so it gets the agents' form from now
+ *  on. Person-only state the tab drew (numbered cursors) goes. */
+export interface SocketDemotedEvent {
+  type: 'socketDemoted';
+}
+
 /** A saved moodboard, character or Style changed (backend main.py
  *  _broadcast_stored_asset), so a card or list that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
@@ -138,7 +191,7 @@ export interface StoredAssetChangedEvent {
   version?: number;
   /** Who wrote it (`tab` only for the person's own tab: the Studio skips its
    *  own echo), what it touched, and its undo (null over 200 ops, or a PUT). */
-  edit?: { actor?: { kind?: string; name?: string } | null; tab?: string | null } | null;
+  edit?: { actor?: { kind?: string; id?: string; name?: string } | null; tab?: string | null } | null;
   touched?: { images: string[]; frames: string[]; looks: string[] } | null;
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }
@@ -202,6 +255,16 @@ export interface ProposalNotReady {
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
+export interface ProposalEdge {
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+  sourceName?: string;
+  targetName?: string;
+  targetLabel?: string;
+}
+
 export interface ProposalView {
   id: string;
   status: ProposalStatus;
@@ -226,8 +289,26 @@ export interface ProposalView {
     willRun: boolean;
     ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
   }>;
-  edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-  params: Array<{ nodeId: string; name: string; changes: Record<string, { from: unknown; to: unknown }> }>;
+  /** `sourceName`, `targetName` and `targetLabel` are the panel's words for
+   * each wire: “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3). */
+  edges: ProposalEdge[];
+  /** Wires Accept removes: a model change drops the ones its new model has
+   * no port for (backend main._stage_proposal `drops`). */
+  removedEdges?: ProposalEdge[];
+  /** Each node it touches, by id or ref, with its canvas name. */
+  names?: Record<string, string>;
+  /** The backend's one count of changes, for the card, the Update and MCP:
+   * each new node, wire, changed node and removed wire. */
+  changeCount?: number;
+  /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
+   * card's words, "Hero shot" and "Krea 2" (no id). `inputsUpdated`: the
+   * change sets the model param `key` to the model the node already has, so
+   * its inputs are read again; `name` is that model's own name (GM - Design,
+   * PR #216 r4 8: "Krea 2 · inputs updated"). Names follow renames while the
+   * proposal is open. */
+  params: Array<{ nodeId: string; name: string; title?: string; model?: string;
+    inputsUpdated?: { key: string; name: string };
+    changes: Record<string, { from: unknown; to: unknown }> }>;
   run: string[];
   cost: {
     paidRuns: number;
@@ -235,7 +316,10 @@ export interface ProposalView {
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** Each run node; `name`, `model` and `billedTo` ("your Krea plan") are
+     * the plan line's words (backend canvas_proposals.plan_line). */
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string;
+      name?: string; model?: string; billedTo?: string | null }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
@@ -251,6 +335,10 @@ export interface ProposalView {
   /** A run the daily total held (backend main._propose_waiting_run): its
    * lines and exact numbers. Absent on a proposal an agent made. */
   wait?: ProposalWait;
+  /** The card's plan line under the note, by node name: "Changes and runs
+   * “Hero shot” · Krea 2 on your Krea plan · no list price" (backend
+   * canvas_proposals.plan_line; agents read the same words). */
+  plan?: string;
 }
 
 /** Why a run waits for the person's OK: it would pass the daily total
@@ -269,8 +357,9 @@ export interface ProposalWait {
   alsoPlanRuns: number | null;
   /** GM's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
   barLine: string;
-  /** GM's line for each waiting node's card ("This run would pass the $5 daily total."). */
-  cardLine: string;
+  /** False when the run fits under the total and waits only for a node with
+   * no list price (Justin's Q165; absent on older proposals: true). */
+  over?: boolean;
   nodeIds: string[];
   names: string[];
 }
@@ -367,6 +456,9 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | AgentPresenceReplayEvent
+  | AgentPresenceArrivalEvent
+  | SocketDemotedEvent
   | AgentStatusEvent
   | AgentRunEvent
   | CanvasPinsEvent
@@ -382,6 +474,8 @@ export type ExecutionEvent = (
   | QuestionsOpenedEvent
   | QuestionsSyncEvent
   | QuestionsClosedEvent
+  | PersonThreadEvent
+  | ChannelListenersEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 
@@ -402,6 +496,12 @@ class WebSocketClient {
   /** The socket the server promoted as the person (its person-only
    * `proposalSync` came, which the backend sends on a verified hello only). */
   private promoted: WebSocket | null = null;
+  /** The tokens each socket's hellos carried, oldest first, one entry per hello, so a refusal
+   * drops exactly the token of the hello it answers (Justin, 2026-10-31). A socket can carry two
+   * hellos: a link taken while the first hello's answer is on its way says hello again, and the
+   * server answers hellos in order, one answer each (`personRequired`, or the promote's
+   * `proposalSync`). Kept in memory only, never logged. */
+  private helloTokens = new WeakMap<WebSocket, string[]>();
 
   constructor(path: string) {
     this.path = path;
@@ -414,9 +514,16 @@ class WebSocketClient {
     void personTokenForSocket(url).then((personToken) => {
       if (!personToken) {
         reportPersonRequired();
+        // No hello, so this socket gets the agents' form: numbered cursors
+        // from before (a token forgotten after a second 401) leave, as on a
+        // refused hello (GM - Design, PR #211 review 4, item 4).
+        if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
         return;
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
+        const sent = this.helloTokens.get(socket) ?? [];
+        sent.push(personToken);
+        this.helloTokens.set(socket, sent);
         socket.send(JSON.stringify({ type: 'hello', personToken }));
       }
     });
@@ -447,7 +554,7 @@ class WebSocketClient {
       .then((url) => {
         if (run !== this.connectRun) return;
         this.connecting = false;
-        const socket = new WebSocket(url);
+        const socket = new WebSocket(withTabClaim(url));
         this.ws = socket;
 
         socket.onopen = () => {
@@ -473,13 +580,21 @@ class WebSocketClient {
             if (parsed.type === 'personRequired') {
               // The server refused this socket's hello: demoted (GM r29 item 3).
               if (this.promoted === socket) this.promoted = null;
+              // Justin, 2026-10-31: that refusal is the backend saying the token this hello
+              // carried is invalid, so the tab drops it (lib/personSession, with its guards).
+              // This refusal answers the oldest hello still unanswered, so only its token can drop.
+              dropRefusedPersonToken(this.helloTokens.get(socket)?.shift() ?? null);
               reportPersonRequired();
+              if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
               return;
             }
             // GM r29 item 3: the person-only proposalSync comes on promote
             // only (backend websocket_endpoint), by whatever path the hello
             // came: a new link, the same link again, a reconnect, the desktop
             // app's token. The hold and the banner follow it.
+            // The promote answers a hello too: it takes that hello's entry, so a later answer
+            // on this socket lines up with its own hello.
+            if (parsed.type === 'proposalSync') this.helloTokens.get(socket)?.shift();
             if (parsed.type === 'proposalSync' && this.ws === socket) {
               this.promoted = socket;
               notePersonPromoted();

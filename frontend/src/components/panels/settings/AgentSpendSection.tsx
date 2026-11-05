@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
 import { getOutsideSpend, type OutsideSpend } from '../../../lib/api';
@@ -9,8 +10,14 @@ import {
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
 import { DailyTotalRow } from './DailyTotalRow';
-import { failureMessage } from '../../../lib/errorCopy';
+import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
+import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
+import { PersonLockLine, type LockProps } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
+import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
+import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -37,17 +44,35 @@ const spentUsd = formatSpentUsd;
 function useOutsideSpend() {
   const [view, setView] = useState<OutsideSpend | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const reload = useCallback(() => {
+  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows (the
+  // list is the person's to read). PR #204 round 11: and it doesn't ask, only to be refused: the
+  // list is read on a tab connected as the person, again after a held view ends.
+  const { held, ready, epoch, readsOnPromote } = usePersonView();
+  const reload = useCallback(function readAgain() {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
-      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load the connected apps.")));
-  }, []);
-  useEffect(() => { reload(); }, [reload]);
-  return { view, error, reload };
+      .catch((exc: unknown) => {
+        // GM r6 (2): what retries on the promote says why in the "because" form.
+        const line = isPersonRefusal(exc) ? notConnectedBecause('load the connected apps') : failureMessage(exc, "Couldn't load the connected apps.");
+        setError(line);
+        // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
+        // promote the line goes and the read runs again, through retryOnPromote.
+        clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.spend-load
+        // Round 13 (review 10 NIT-1): unless the held view settled, whose promote reads it anyway.
+        retryOnPromote(exc, 'settings.spend-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.spend-load-retry
+      });
+  }, [readsOnPromote]);
+  useReadAsPerson(reload, ready, epoch);
+  // Round 14 (GM r23 answer 3): offline comes first, so a not-connected line (the held view's,
+  // or a load refused as not the person) waits until Nebula is back; any other failure shows.
+  const shown = useOfflineFirstBecause(held ? notConnectedBecause('load the connected apps') : error);
+  if (held) return { view: null, error: shown, reload, held };
+  return { view, error: shown, reload, held };
 }
 
-function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, onChange, describedBy }: {
+function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, onChange, describedBy, lock }: {
   id?: string;
+  lock: (describedBy?: string) => LockProps;
   suffix?: string;
   label?: string;
   value: number | null;
@@ -60,8 +85,8 @@ function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, o
   const current = value === null ? 'none' : String(value);
   const custom = value !== null && !choices.includes(value);
   return (
-    <select id={id} aria-label={label} aria-describedby={describedBy} className="settings__select settings__select--compact"
-      value={current} disabled={disabled}
+    <select id={id} aria-label={label} className="settings__select settings__select--compact"
+      value={current} disabled={disabled} {...lock(describedBy)}
       onChange={(event) => onChange(event.target.value === 'none' ? null : Number(event.target.value))}>
       {custom && <option value={current}>{usd(value!)}{suffix}</option>}
       {choices.map((choice) => <option key={choice} value={String(choice)}>{usd(choice)}{suffix}</option>)}
@@ -78,6 +103,17 @@ export function AgentSpendSection() {
   const error = useSettingsDraftStore((s) => s.errors.agentSpend);
   const perRun = useUIStore((s) => s.runCostConfirmUsd);
   const outside = useOutsideSpend();
+  // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
+  // focus to the section's line, not to the page.
+  const sectionRef = useRef<HTMLElement>(null);
+  // Round 18h (review 16 MEDIUM-1): a save disables the limits in place, which drops focus to the
+  // page in Chrome; it goes to the heading and back to the field once the save answers.
+  const handoverChange = useMemo(() => ({ held: outside.held, pending }), [outside.held, pending]);
+  const handover = useFocusHandover(handoverChange, () => sectionRef.current,
+    () => document.getElementById('settings-agent-spend-heading'));
+  // PR #204 round 10 (GM r15, r17 item 1): every limit is PUT /api/settings, the person's alone,
+  // so they lock as a group, with one line under the heading.
+  const lock = usePersonLock('change limits');
 
   const paidModels = useMemo(() => {
     const groups = new Map<string, { id: string; name: string }[]>();
@@ -93,7 +129,7 @@ export function AgentSpendSection() {
 
   if (!saved) return null;
   const limits: AgentSpendLimits = saved;
-  const save = (next: AgentSpendLimits) => void saveField('agentSpend', next);
+  const save = lock.guard((next: AgentSpendLimits) => saveField('agentSpend', next));
   const setModel = (id: string, next: ModelSpendLimit | null) => {
     const models = { ...limits.models };
     if (next && (next.perRunUsd !== null || next.sessionUsd !== null)) models[id] = next; else delete models[id];
@@ -103,12 +139,13 @@ export function AgentSpendSection() {
     (NODE_DEFINITIONS[a]?.displayName ?? a).localeCompare(NODE_DEFINITIONS[b]?.displayName ?? b));
 
   return (
-    <section aria-labelledby="settings-agent-spend-heading">
-      <div className="settings-label"><h3 id="settings-agent-spend-heading">Agent spending</h3></div>
+    <section aria-labelledby="settings-agent-spend-heading" ref={sectionRef} onFocus={handover.onFocus}>
+      <div className="settings-label"><h3 id="settings-agent-spend-heading" tabIndex={-1}>Agent spending</h3></div>
+      <PersonLockLine lock={lock} place="heading" />
       <p className="settings-hint" id="settings-agent-spend-help">
-        Agents must ask before going over these, and before any node without a published price.
-        Your own runs aren&rsquo;t limited.{' '}
-        {perRun === null ? 'There is no per-run limit.' : `The per-run limit above (${usd(perRun)}) applies to agents too.`}
+        Agents must ask before going over these, and before running any node without a list price.
+        Your own runs aren&rsquo;t limited.
+        {perRun === null ? '' : ` The per-run limit above (${usd(perRun)}) applies to agents too.`}
       </p>
       <p className="settings-hint" id="settings-agent-spend-who">
         &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
@@ -126,7 +163,7 @@ export function AgentSpendSection() {
             <span className="settings-pref__description">Everything one agent chat may run in total</span>
           </span>
           <LimitSelect id="settings-agent-session" value={limits.sessionUsd} choices={SESSION_CHOICES}
-            none="No limit" disabled={pending} describedBy="settings-agent-spend-help"
+            none="No limit" disabled={pending} describedBy="settings-agent-spend-help" lock={lock.control}
             onChange={(sessionUsd) => save({ ...limits, sessionUsd })} />
         </div>
         <div className="settings-pref settings-pref--stacked">
@@ -143,7 +180,7 @@ export function AgentSpendSection() {
               )}
             </span>
           </span>
-          <OutsideSelect limits={limits} disabled={pending} onChange={save} />
+          <OutsideSelect limits={limits} disabled={pending} onChange={save} lock={lock.control} />
         </div>
         <PersonalAgentSpend view={outside.view} />
         <div className="settings-pref">
@@ -155,7 +192,7 @@ export function AgentSpendSection() {
               have to ask.
             </span>
           </span>
-          <PlanRunsSelect limits={limits} disabled={pending} onChange={save} />
+          <PlanRunsSelect limits={limits} disabled={pending} onChange={save} lock={lock.control} />
         </div>
         {modelIds.map((id) => {
           const name = NODE_DEFINITIONS[id]?.displayName ?? id;
@@ -168,11 +205,11 @@ export function AgentSpendSection() {
               </span>
               <span className="settings-model-limit__controls">
                 <LimitSelect label={`${name} per run`} value={limit.perRunUsd} choices={MODEL_RUN_CHOICES}
-                  none="General limit" suffix=" / run" disabled={pending} onChange={(perRunUsd) => setModel(id, { ...limit, perRunUsd })} />
+                  none="General limit" suffix=" / run" disabled={pending} lock={lock.control} onChange={(perRunUsd) => setModel(id, { ...limit, perRunUsd })} />
                 <LimitSelect label={`${name} per session`} value={limit.sessionUsd} choices={MODEL_SESSION_CHOICES}
-                  none="No session limit" suffix=" / session" disabled={pending} onChange={(sessionUsd) => setModel(id, { ...limit, sessionUsd })} />
+                  none="No session limit" suffix=" / session" disabled={pending} lock={lock.control} onChange={(sessionUsd) => setModel(id, { ...limit, sessionUsd })} />
                 <button type="button" className="settings__button settings__button--ghost settings-model-limit__remove"
-                  aria-label={`Remove the limits for ${name}`} disabled={pending} onClick={() => setModel(id, null)}>
+                  aria-label={`Remove the limits for ${name}`} disabled={pending} {...lock.control()} onClick={() => setModel(id, null)}>
                   <X size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
                 </button>
               </span>
@@ -185,7 +222,7 @@ export function AgentSpendSection() {
             <span className="settings-pref__description">Per run, per session, or both</span>
           </span>
           <select id="settings-agent-add-model" className="settings__select settings__select--compact" value=""
-            disabled={pending}
+            disabled={pending} {...lock.control()}
             onChange={(event) => {
               const id = event.target.value;
               if (id) setModel(id, { perRunUsd: perRun ?? 1, sessionUsd: null });
@@ -201,7 +238,7 @@ export function AgentSpendSection() {
           </select>
         </div>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
   );
@@ -232,7 +269,8 @@ function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
 }
 
 /** Krea plan runs: DEFAULT_PLAN_RUNS until the person picks a number, 0 (ask every time) or no limit. */
-function PlanRunsSelect({ limits, disabled, onChange }: {
+function PlanRunsSelect({ limits, disabled, onChange, lock }: {
+  lock: (describedBy?: string) => LockProps;
   limits: AgentSpendLimits;
   disabled: boolean;
   onChange: (next: AgentSpendLimits) => void;
@@ -242,7 +280,7 @@ function PlanRunsSelect({ limits, disabled, onChange }: {
   const custom = typeof own === 'number' && own !== 0 && !(PLAN_RUN_CHOICES as readonly number[]).includes(own);
   return (
     <select id="settings-agent-plan-runs" className="settings__select settings__select--compact"
-      aria-describedby="settings-agent-plan-runs-help" value={current} disabled={disabled}
+      value={current} disabled={disabled} {...lock('settings-agent-plan-runs-help')}
       onChange={(event) => {
         const { value } = event.target;
         const next = { ...limits };
@@ -260,7 +298,8 @@ function PlanRunsSelect({ limits, disabled, onChange }: {
 }
 
 /** The outside agents' 24-hour budget: the per-session amount until the person picks one. */
-function OutsideSelect({ limits, disabled, onChange }: {
+function OutsideSelect({ limits, disabled, onChange, lock }: {
+  lock: (describedBy?: string) => LockProps;
   limits: AgentSpendLimits;
   disabled: boolean;
   onChange: (next: AgentSpendLimits) => void;
@@ -272,7 +311,7 @@ function OutsideSelect({ limits, disabled, onChange }: {
   return (
     // Under its help (settings-pref--stacked), so "Same as chats · No limit" is never cut off.
     <select id="settings-agent-outside" className="settings__select settings__select--compact settings__select--fits"
-      aria-describedby="settings-agent-outside-help" value={current} disabled={disabled}
+      value={current} disabled={disabled} {...lock('settings-agent-outside-help')}
       onChange={(event) => {
         const { value } = event.target;
         const next = { ...limits };

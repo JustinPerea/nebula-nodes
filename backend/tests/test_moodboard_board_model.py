@@ -85,7 +85,7 @@ def root(tmp_path, monkeypatch) -> Path:
 def client(root, monkeypatch, canvas_project):
     import main as main_module
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
