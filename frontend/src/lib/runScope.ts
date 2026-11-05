@@ -12,7 +12,7 @@ import {
 } from './pricing';
 import { cleanPending, pendingIncludedLine, runSkips, skipSummaryOf, type PendingSkipSummary } from './pendingNodes';
 import {
-  AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
+  AUDIO_UNREADABLE, AWAITING_AUDIO, AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
   SIZE_UNREADABLE,
 } from './unpricedCopy';
 
@@ -28,7 +28,8 @@ import {
  * - `sizeUnreadable`: priced from its input's size, which can't be read;
  * - `leftOut`: priced, with a cost its price entry's `plus` names. */
 export type UnpricedReason =
-  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'noPrice' | 'cantRun' }
+  | { kind: 'awaitingInput' | 'sizeUnreadable'; audio?: boolean }
   | { kind: 'missingKey'; key: string | null }
   | { kind: 'leftOut'; plus: string };
 
@@ -54,8 +55,10 @@ export interface RunCost {
    * another host, never downloaded to price it, or one it can't read). Also in
    * `awaitingInput`. Present only when there are some. */
   sizeUnreadable?: string[];
+  /** Those of `awaitingInput` priced from an audio's length (the scope line says "length", not "size"). */
+  audioAwaiting?: string[];
   /** Input files to measure (inputSizeStore) before those can be priced. */
-  sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' }>;
+  sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' | 'Audio' }>;
   /** Each node that makes the chip open, with why, in the order the run
    * walks them: the store's node order (the order nodes were added), not
    * their position on screen. The Run chip's tooltip reads it. */
@@ -111,7 +114,11 @@ export interface RunCostContext {
   sizes?: Readonly<Record<string, InputSize | null>>;
 }
 
-const INPUT_NODES: Record<string, 'Image' | 'Video'> = { 'image-input': 'Image', 'video-input': 'Video' };
+const INPUT_NODES: Record<string, 'Image' | 'Video' | 'Audio'> = {
+  'image-input': 'Image',
+  'video-input': 'Video',
+  'audio-input': 'Audio',
+};
 
 /**
  * `node` with `direct: false` is a run of a node that isn't the person's
@@ -430,7 +437,11 @@ export function summarizeRunScope(
         cost.awaitingInput.push(name);
         ids.awaitingInput.push(node.id);
         if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
-        because(name, { kind: size === null ? 'sizeUnreadable' : 'awaitingInput' });
+        // A price read from an audio file's length has its own wording (GM r118).
+        const sizedPort = sizingPorts(entryForRoute(entry, priceKey))[0];
+        const audio = definition.inputPorts?.find((port) => port.id === sizedPort)?.dataType === 'Audio';
+        if (audio) cost.audioAwaiting = [...(cost.audioAwaiting ?? []), name];
+        because(name, { kind: size === null ? 'sizeUnreadable' : 'awaitingInput', ...(audio ? { audio: true } : {}) });
       } else if (keyUnset && envKeyNames(definition).length) {
         because(name, { kind: 'missingKey', key: keyPhrase(envKeyNames(definition)) });
       } else {
@@ -509,8 +520,10 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
         break;
       case 'noPrice': id = 'noPrice'; line = NO_LISTED_PRICE; break;
       case 'cantRun': id = 'cantRun'; line = ROUTE_CANT_RUN; break;
-      case 'awaitingInput': id = 'awaitingInput'; line = AWAITING_INPUT; break;
-      case 'sizeUnreadable': id = 'sizeUnreadable'; line = SIZE_UNREADABLE; break;
+      case 'awaitingInput':
+        id = reason.audio ? 'awaitingAudio' : 'awaitingInput'; line = reason.audio ? AWAITING_AUDIO : AWAITING_INPUT; break;
+      case 'sizeUnreadable':
+        id = reason.audio ? 'audioUnreadable' : 'sizeUnreadable'; line = reason.audio ? AUDIO_UNREADABLE : SIZE_UNREADABLE; break;
     }
     const group = groups.get(id) ?? { line, names: [] };
     group.names.push(name);
@@ -542,7 +555,9 @@ export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefine
 }
 
 const AWAITING = 'Priced when its input is known:';
+const AWAITING_AUDIO_LENGTH = 'Priced when its audio\u2019s length is known:';
 const UNREADABLE = "Nebula can't read the size of its input (a file on another host is never downloaded to price it):";
+const UNREADABLE_AUDIO = "Nebula can\u2019t read the length of its audio (a file on another host is never downloaded to price it):";
 
 /** The awaiting-input notes: still to be made, or there but unreadable. */
 function awaitingNotes(cost: RunCost): string[] {
@@ -550,9 +565,24 @@ function awaitingNotes(cost: RunCost): string[] {
   // Names repeat (two SeedVR2 nodes), so take each unreadable one out once.
   const pending = [...(cost.awaitingInput ?? [])];
   for (const name of unreadable) pending.splice(pending.indexOf(name), 1);
+  // A node priced from its audio's length says "length", never "size".
+  const split = (names: string[]): [string[], string[]] => {
+    const audio = [...(cost.audioAwaiting ?? [])];
+    const sized: string[] = [];
+    const lengths: string[] = [];
+    for (const name of names) {
+      const at = audio.indexOf(name);
+      if (at >= 0) { audio.splice(at, 1); lengths.push(name); } else sized.push(name);
+    }
+    return [sized, lengths];
+  };
+  const [pendingSized, pendingAudio] = split(pending);
+  const [unreadableSized, unreadableAudio] = split(unreadable);
   const notes: string[] = [];
-  if (pending.length) notes.push(`${AWAITING} ${nameList(pending)}`);
-  if (unreadable.length) notes.push(`${UNREADABLE} ${nameList(unreadable)}`);
+  if (pendingSized.length) notes.push(`${AWAITING} ${nameList(pendingSized)}`);
+  if (pendingAudio.length) notes.push(`${AWAITING_AUDIO_LENGTH} ${nameList(pendingAudio)}`);
+  if (unreadableSized.length) notes.push(`${UNREADABLE} ${nameList(unreadableSized)}`);
+  if (unreadableAudio.length) notes.push(`${UNREADABLE_AUDIO} ${nameList(unreadableAudio)}`);
   return notes;
 }
 
