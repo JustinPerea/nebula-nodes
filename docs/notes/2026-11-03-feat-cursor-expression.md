@@ -192,3 +192,45 @@ GM signed off round 2's design, with one tune to think. Built on bf178acd.
 - `AgentCursorLayer.tsx`, imports: kept this PR's expression, says, field and tuning imports and added main's `chainPoint` (#219 r62). Main's `AgentCursorAction` import is dropped: its only use, the ripple set, is replaced by the halo states in this PR.
 - `AgentCursorLayer.tsx`, the placer registration: kept this PR's wire drawing (`drawWire`, spring-trailed end, `updateWire(start, arrivedNow, dt)`) and added main's `field.markers.set(cursor.key, paintMarks)` registration beside `field.placers`, so main's draw order (aloft, crossing, column order) still repaints this cursor.
 - `tests/agentCursorLayer.test.tsx`, "the carried cursor's own event during the hold ends the preview at once": main's test nudges the cursor with a `look`, which this PR's default says now label ("Looking here"), so the slot below it sat 23 px lower than the test reads. The test is about the preview ending, not the say, so its nudge is a `move` (no default say). Both behaviours stand.
+
+## Final review fixes (2026-11-05)
+
+- **propose and wait now end when the person acts** (MEDIUM). Before, the docs
+  promised "until the person acts" but only the agent's next event or the 120 s
+  expiry ended them, and a reload replayed the stale state.
+  - `propose`: the proposal route sends `proposalId` on the cursor event
+    (`backend/main.py` `_show_agent(proposal_id=)`; the agent form carries it
+    too, an id the agent already holds), and the replay keeps it. The tab ends
+    the cursor once that proposal is not open here: accepted, rejected,
+    withdrawn, expired or superseded (`lib/agentCursorSettled.ts`).
+    `canvasProposalsStore` gets `synced` (set by `proposalSync`), so a replay
+    that lands before the proposals read as unknown, not settled; a tab with
+    no person socket never gets proposals, so it never settles (as before).
+    A `point_at propose` with no proposal id waits on the agent's open
+    proposals and ends at once when it has none.
+  - `wait` has no object of its own (`point_at` only names the action). It
+    waits on the agent's `ask_person` questions: it ends when a question set
+    that agent asked has closed since the cursor's event (answered, dismissed,
+    withdrawn or expired) and none of its sets is still open. With no question
+    set, only the agent's next event or the expiry end it; the docs say so.
+  - The default lines ("Waiting for your OK/answer") go with the state; the
+    agent's own say keeps its own timer. `onSettled` in `agentCursorExpression`
+    ends the held state at once; the layer applies it from a layout effect on
+    `[settled, expr, seq]`, so a landing after the answer ends at arrival.
+  - Words changed in the `point_at` docstring, `docs/MCP-SETUP.md` (table and
+    the held-state bullet) and `nebula point --action` help.
+- **type shows something always** (LOW): when there is no field mark and no say
+  pill to carry the caret (a count cursor, the say's hold over, a field off
+  screen with no line), the caret sits on the cursor beside the tip
+  (`.agent-cursor__tip-caret`, same colour and blink as the say caret). A
+  folded cursor is not drawn at all, as before.
+- **Only the field's text is a keystroke** (LOW): the layer compares the node's
+  `params` (the cursor's port param, else any text param) with
+  `fieldTextChanged`; run status, progress and outputs no longer restart the
+  blink or re-measure the field.
+- Tests: `tests/agentCursorSettled.test.ts` (pure), three new describes at the
+  end of `tests/agentCursorLayer.test.tsx`, one count-cursor test, and the
+  proposalId assertions in `backend/tests/test_agent_cursor_round4.py`.
+  Mutations (all killed): the settle effect removed (10 tests), `tipCaret`
+  off (2), every data change counting as a keystroke (2), the route not
+  passing `proposal_id` (2).

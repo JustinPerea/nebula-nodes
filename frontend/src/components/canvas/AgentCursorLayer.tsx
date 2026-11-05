@@ -16,13 +16,17 @@ import {
   onArrival,
   onEvent,
   onKeystroke,
+  onSettled,
   stepCurve,
   thinkCurve,
   type Expression,
   type ExpressionFrame,
 } from '../../lib/agentCursorExpression';
 import { defaultSay, errorCause, heldDefault, sayHoldMs, type SayContext } from '../../lib/agentCursorSays';
-import { fieldBox, findTypeField, onScreen, type FieldBox, type TypeField } from '../../lib/agentCursorField';
+import { isSettled } from '../../lib/agentCursorSettled';
+import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { fieldBox, fieldTextChanged, findTypeField, onScreen, type FieldBox, type TypeField } from '../../lib/agentCursorField';
 import {
   AGENT_CURSOR_CLICK,
   AGENT_CURSOR_DASHED,
@@ -1249,7 +1253,13 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const sayHold = sayInfo.isDefault && heldDefault(cursor.action) ? null : sayHoldMs(say);
   // propose and wait wait for the person: their default stays through idle.
   const sayOutlastsIdle = sayInfo.isDefault && (cursor.action === 'propose' || cursor.action === 'wait');
-  const showSay = Boolean(say) && sayDoneSeq !== cursor.seq;
+  // propose and wait end when the person settles what they wait on (their
+  // lines go with the state; an agent's own say keeps its own timer).
+  const proposalsSynced = useCanvasProposalsStore((s) => s.synced);
+  const proposals = useCanvasProposalsStore((s) => s.proposals);
+  const questionSets = useAgentQuestionsStore((s) => s.sets);
+  const settled = isSettled(cursor, { proposalsSynced, proposals, questionSets });
+  const showSay = Boolean(say) && sayDoneSeq !== cursor.seq && !(settled && sayInfo.isDefault && heldDefault(cursor.action));
   const sayHoldRef = useRef(sayHold);
   sayHoldRef.current = sayHold;
 
@@ -1264,6 +1274,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     setExpr((current) => onEvent(current, cursor.action, performance.now()));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per event
   }, [cursor.seq]);
+  // The person settled what propose or wait waited on: it ends at once (also
+  // when the settled state is what a reload brings, before the cursor lands).
+  useLayoutEffect(() => {
+    if (settled) setExpr((current) => onSettled(current, cursor.seq, performance.now()));
+  }, [settled, expr, cursor.seq]);
   const arrive = useRef<(watched: boolean) => void>(() => {});
   arrive.current = (watched: boolean) => {
     if (arrivedFor.current === cursor.seq) return;
@@ -1288,17 +1303,22 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   });
   // type: the field's text changing is a keystroke (the caret blinks).
   const typingNode = expressed.action === 'type' && !expressed.lingering && 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const typingHandle = typingNode && 'handle' in cursor.target ? cursor.target.handle ?? null : null;
   useEffect(() => {
     if (!typingNode) return undefined;
+    // Only the field's text counts: a run status or any other change to the
+    // node's data is not a keystroke (the blink doesn't restart, nothing is
+    // measured again).
     const dataOf = () => (store.getState().nodeLookup.get(typingNode) as { data?: unknown } | undefined)?.data;
     let seen = dataOf();
     return store.subscribe(() => {
       const now = dataOf();
       if (now === seen) return;
+      const typed = fieldTextChanged(seen, now, typingHandle);
       seen = now;
-      setExpr((current) => onKeystroke(current, performance.now()));
+      if (typed) setExpr((current) => onKeystroke(current, performance.now()));
     });
-  }, [typingNode, store]);
+  }, [typingNode, typingHandle, store]);
 
   // A pill hidden by a takeover stays hidden for the rest of that exit, even
   // if the new holder leaves first (GM - Design, PR #211 review 5, item 6).
@@ -2086,6 +2106,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const typeNode = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
   const fieldShown = fx === 'type' && sayInfo.field !== null && typeNode !== null && onScreen(sayInfo.field);
   const sayCaret = fx === 'type' && !fieldShown;
+  // type with no field mark and no say pill to end (a count cursor, a say
+  // whose hold is over, a field off screen with no say): the caret sits on the
+  // cursor itself, beside the tip, so the state never shows nothing.
+  const sayPillShown = showSay && (!idle || sayOutlastsIdle) && drawsSay;
+  const tipCaret = sayCaret && !sayPillShown;
   return (
     <>
       <svg className="agent-cursor__wire-layer" aria-hidden="true">
@@ -2152,6 +2177,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
             <circle key={`ring-${gestureKey}`} className="agent-cursor__ring agent-cursor__fx" cx={1.5} cy={1.5} r={AGENT_CURSOR_CLICK.ringFromPx} />
           )}
         </svg>
+        {tipCaret && <span className="agent-cursor__tip-caret" data-blink={expressed.blinking ? 'true' : undefined} aria-hidden="true" />}
         {(fx === 'propose' || fx === 'wait') && (
           <span className={`agent-cursor__mark agent-cursor__mark--${fx}`} aria-hidden="true">
             {fx === 'propose' && <Check size={8} strokeWidth={3} aria-hidden="true" />}
@@ -2176,7 +2202,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
             /* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */
             <span className="agent-cursor__name"><bdi>{cursor.name}</bdi>{name.slice(cursor.name.length)}</span>
           )}
-          {showSay && (!idle || sayOutlastsIdle) && drawsSay && (
+          {sayPillShown && (
             <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>
               {say}
               {/* type with its field off screen: the caret ends the say pill (§2). */}

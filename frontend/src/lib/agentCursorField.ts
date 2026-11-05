@@ -99,3 +99,24 @@ export function onScreen(field: TypeField): boolean {
   if (r.width === 0 && r.height === 0) return false;
   return r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight;
 }
+
+/**
+ * Whether the typed field's text changed between two states of a node's
+ * data: the param the cursor names (its port's), else any text param. A run
+ * status, progress or outputs changing is not a keystroke.
+ */
+export function fieldTextChanged(prev: unknown, next: unknown, handle?: string | null): boolean {
+  const paramsOf = (data: unknown): Record<string, unknown> => {
+    const params = (data as { params?: unknown } | undefined)?.params;
+    return params && typeof params === 'object' ? params as Record<string, unknown> : {};
+  };
+  const before = paramsOf(prev);
+  const after = paramsOf(next);
+  if (before === after) return false;
+  if (handle) return !Object.is(before[handle], after[handle]);
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const key of keys) {
+    if ((typeof before[key] === 'string' || typeof after[key] === 'string') && before[key] !== after[key]) return true;
+  }
+  return false;
+}

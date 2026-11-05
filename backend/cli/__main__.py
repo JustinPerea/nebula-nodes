@@ -238,8 +238,9 @@ def build_parser() -> argparse.ArgumentParser:
                               "a ring), drag (connecting, with --from; a connection is pulled: \"Connecting "
                               "“Brief” to “FLUX.2”\"), run (an arc circles once: \"Started “FLUX.2”\"), "
                               "propose (waiting for the person's OK; a dashed glow and a ghost card: "
-                              "\"Waiting for your OK\"), wait (for their answer; a dashed glow and a pin: "
-                              "\"Waiting for your answer\"), error (something failed; a shake and a red "
+                              "\"Waiting for your OK\", until that proposal is decided or expires), wait "
+                              "(for their answer to a question you asked; a dashed glow and a pin: "
+                              "\"Waiting for your answer\", until they answer or dismiss it), error (something failed; a shake and a red "
                               "flash: \"Couldn’t run “FLUX.2”\" or \"Couldn’t do that\"). "
                               "Default: move, or drag with --from")
     point_p.add_argument("--as", dest="agent_name",

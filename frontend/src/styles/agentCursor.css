@@ -256,6 +256,7 @@
 }
 
 .agent-cursor__field-mark[data-blink='true'],
+.agent-cursor__tip-caret[data-blink='true'],
 .agent-cursor__say-caret[data-blink='true'] {
   animation: agent-cursor-blink var(--agent-cursor-blink) infinite;
 }
@@ -268,6 +269,16 @@
   /* Into the pill's padding, so the pill keeps its measured width. */
   margin-right: calc(-1px - var(--agent-cursor-caret-width));
   vertical-align: -1px;
+  background: var(--agent-color);
+}
+
+/* type with nothing else to show it: the caret on the cursor itself, right of the tip. */
+.agent-cursor__tip-caret {
+  position: absolute;
+  left: 15px;
+  top: 3px;
+  width: var(--agent-cursor-caret-width);
+  height: 12px;
   background: var(--agent-color);
 }
 
@@ -521,6 +532,7 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   .agent-cursor__press,
   .agent-cursor__ring,
   .agent-cursor__field-mark[data-blink='true'],
+  .agent-cursor__tip-caret[data-blink='true'],
   .agent-cursor__say-caret[data-blink='true'] {
     animation: none;
   }

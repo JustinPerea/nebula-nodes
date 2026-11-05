@@ -654,20 +654,22 @@ most of them show.
 | `move` | going there, no gesture (the default) | nothing extra | none |
 | `look` | reading or checking something | the glow dims and a bright arc sweeps once around (1.4 s) | Looking at “Brief” (at a spot: Looking here) |
 | `think` | working something out at that spot | the glow breathes while you stay on it | Thinking |
-| `type` | writing a prompt or changing a field | a caret at the end of the card's text field, blinking while text arrives; at a port (`n2.resolution`), an underline under that row; with the field off screen, the caret ends the line | Writing the prompt for “FLUX.2”; at a port, Changing “Resolution” on “FLUX.2” (at a spot: Writing) |
+| `type` | writing a prompt or changing a field | a caret at the end of the card's text field, blinking while text arrives; at a port (`n2.resolution`), an underline under that row; with the field off screen, the caret ends the line, or sits beside the tip once the line is gone (a count cursor has none) | Writing the prompt for “FLUX.2”; at a port, Changing “Resolution” on “FLUX.2” (at a spot: Writing) |
 | `click` | pressing something | the arrow presses and a ring blooms from the tip | none |
 | `drag` | connecting, with `from_node_id`/`from_port` (`--from`; the default with it) | the canvas's own curved connection, pulled from the port behind the cursor; it lands like a click | Connecting “Brief” to “FLUX.2” (no source node: Connecting to “FLUX.2”; to a spot with no start, none: that is only a move) |
 | `run` | starting a run | a thin arc circles the arrow once (1.2 s); the node then shows the run | Started “FLUX.2” (at a spot: Started a run) |
-| `propose` | you proposed a change and wait for the person's OK | a dashed glow and a small ghost card by the tip; the cursor stays still | Waiting for your OK, until the person acts |
-| `wait` | you asked the person something and wait for the answer | a dashed glow and a pin by the tip; the cursor stays still | Waiting for your answer, until the person acts |
+| `propose` | you proposed a change and wait for the person's OK | a dashed glow and a small ghost card by the tip; the cursor stays still | Waiting for your OK, until that proposal is accepted, rejected, withdrawn or expired (a `propose` with no proposal open ends at once) |
+| `wait` | you asked the person something and wait for the answer | a dashed glow and a pin by the tip; the cursor stays still | Waiting for your answer, until the person answers or dismisses a question you asked with `ask_person` (with none asked, until your next action) |
 | `error` | something you tried failed | one sideways shake and a red flash of the glow | Couldn’t run “FLUX.2” after your run there; Couldn’t change “FLUX.2” after your edit or connection there; else Couldn’t do that |
 
 - A held state (look, think, type, propose, wait) shows for at least 0.4 s,
   and until your next action; a new action replaces it at once. think, look
-  and type also end when your cursor goes idle (20 s).
+  and type also end when your cursor goes idle (20 s). propose and wait end
+  when the person settles what they wait on (the table above), at once, and
+  after a reload too.
 - A line shows for max(3 s, 60 ms per character), at most 8 s. "Thinking",
   "Waiting for your OK" and "Waiting for your answer" stay as long as their
-  state does.
+  state does, and go with it when the person settles it.
 - The lines are display only: the Agent log keeps your own words.
 - Under reduced motion each state is a still frame: a dimmed glow (look), a
   steady glow (think), a steady caret (type), a full circle (run), the

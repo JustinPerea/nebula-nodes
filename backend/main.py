@@ -5709,6 +5709,7 @@ async def _show_agent(
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
     person_say: str | None = None,
+    proposal_id: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5727,6 +5728,9 @@ async def _show_agent(
     value agents read in the snapshot and on /ws, as before. ``person_say``
     is the same for the words: the person's tabs (the bubble, the Agent log
     and a reload's replay) show it, and agents read ``say`` as before.
+    ``proposal_id`` is the proposal a ``propose`` cursor waits on: the event
+    carries it (``proposalId``), so a tab ends the cursor's held state when
+    that proposal is settled, and a reload's replay still knows which.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -5744,6 +5748,8 @@ async def _show_agent(
         if log is not None and clean_say(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
+        if proposal_id:
+            event["proposalId"] = proposal_id
         person = _person_form(event, identity, headers, shown=shows)
         if person is not None and person is not event and person_say:
             # In place: the slot keeps this dict for the replay.
@@ -9263,7 +9269,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         target = None
     if target is not None:
         await _show_agent(target, action="click", shows="propose", say=spec.note,
-                          did=_did("Proposed", target.get("nodeId")))
+                          did=_did("Proposed", target.get("nodeId")), proposal_id=proposal.id)
     # Nodes of the run that can't run here, so the agent can say so or pick
     # another model before the person accepts (the canvas shows it too), and
     # the call that withdraws this one or an earlier one this replaces.

@@ -617,10 +617,13 @@ def point_at(
       “FLUX.2”";
     - `propose`: you proposed a change and wait for the person's OK; a
       dashed glow and a small ghost card, the cursor still; "Waiting for
-      your OK" until the person acts;
-    - `wait`: you asked the person something and wait for the answer; a
-      dashed glow and a pin, the cursor still; "Waiting for your answer"
-      until the person acts;
+      your OK" until that proposal is accepted, rejected, withdrawn or
+      expired (propose_change sets it for you; `propose` with no proposal
+      open ends at once);
+    - `wait`: you asked the person something (ask_person) and wait for the
+      answer; a dashed glow and a pin, the cursor still; "Waiting for your
+      answer" until the person answers or dismisses a question you asked
+      (with none asked, until your next action);
     - `error`: something you tried failed; one shake and a red flash;
       "Couldn’t run “FLUX.2”" after your run there, "Couldn’t change
       “FLUX.2”" after your edit or connection there, else "Couldn’t do

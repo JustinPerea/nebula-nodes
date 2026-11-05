@@ -60,6 +60,9 @@ import { resolve } from 'node:path';
 import { AGENT_CURSOR_IDLE_MS, AGENT_SAY_FADE_MS, AGENT_SAY_MS } from '../src/store/agentPresenceStore';
 import { agentActionEntry } from '../src/store/agentLogStore';
 import { forgetPersonPlaced, notePersonPlaced } from '../src/lib/personNodeMoves';
+import { useCanvasProposalsStore, type ProposalEntry } from '../src/store/canvasProposalsStore';
+import { useAgentQuestionsStore, type QuestionSetEntry } from '../src/store/agentQuestionsStore';
+import { AGENT_CURSOR_TYPE } from '../src/lib/agentCursorTuning';
 
 /**
  * GM - Design's agent cursor spec, phase 1 in the layer: each action draws
@@ -2324,6 +2327,19 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     });
     const pointer = (x: number, y: number) => act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y })); });
     const list = (el: HTMLElement) => [...el.querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent);
+
+    it('a count cursor that is typing has no say pill, so the caret sits on the cursor (final review)', () => {
+      render(<AgentCursorLayer />);
+      for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
+        send(event({ ...session(key, i + 1), action: 'type', say: 'Writing' }));
+        flush();
+      }
+      const counting = byKey('c');
+      expect(counting.dataset.count).toBe('2');
+      expect(counting.dataset.expr).toBe('type');
+      expect(counting.querySelector('.agent-cursor__say')).toBeNull();
+      expect(counting.querySelector('.agent-cursor__tip-caret')).not.toBeNull();
+    });
 
     it('four or more: two in full, then one neutral arrow with "2 more" that lists the names on hover; the later arrivals fade out into it', () => {
       render(<AgentCursorLayer />);
@@ -5794,5 +5810,294 @@ describe('GM r56: think, mark slot, dashed halo, quotes', () => {
     seen.push(document.querySelector('.agent-cursor__say')!.textContent!);
     expect(seen).toEqual(['Looking at “Brief”', 'Couldn’t run “FLUX.2”']);
     for (const text of seen) expect(text).not.toMatch(/["']/);
+  });
+});
+
+
+/**
+ * PR #224's final review: propose and wait end when the person settles what
+ * they wait on, and type never shows nothing.
+ */
+describe('propose and wait end when the person acts (final review, MEDIUM)', () => {
+  const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
+  const expr = () => cursors()[0].dataset.expr;
+  const proposal = (id: string, agentId = 'claude', expiresAt = Date.now() + 60_000) => ({
+    view: { id, status: 'open', agent: { id: agentId, name: 'Claude', color: '#E8825A', verified: true }, expiresAt },
+    acceptKey: 'k',
+  }) as unknown as ProposalEntry;
+  const holdProposals = (...entries: ProposalEntry[]) => act(() => {
+    useCanvasProposalsStore.setState({
+      synced: true,
+      proposals: Object.fromEntries(entries.map((e) => [e.view.id, e])),
+    });
+  });
+  const questionSet = (id: string, status: 'open' | 'answered' | 'dismissed', closedAt: number | null, agentId = 'claude') => ({
+    view: { id, status, closedAt, createdAt: 0, agent: { id: agentId, name: 'Claude', color: '#E8825A', verified: true } },
+  }) as unknown as QuestionSetEntry;
+  const holdQuestions = (...entries: QuestionSetEntry[]) => act(() => {
+    useAgentQuestionsStore.setState({ sets: Object.fromEntries(entries.map((e) => [e.view.id, e])) });
+  });
+
+  beforeEach(() => {
+    useCanvasProposalsStore.getState().clear();
+    useAgentQuestionsStore.getState().reset();
+  });
+  afterEach(() => {
+    useCanvasProposalsStore.getState().clear();
+    useAgentQuestionsStore.getState().reset();
+  });
+
+  const propose = () => {
+    holdProposals(proposal('p1'));
+    send(event({ action: 'propose', proposalId: 'p1' }));
+    flush();
+  };
+
+  it('a propose cursor holds while its proposal is open', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    expect(expr()).toBe('propose');
+    expect(sayText()).toBe('Waiting for your OK');
+  });
+
+  it.each([
+    ['accepting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' })],
+    ['rejecting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'rejected' })],
+    ['the agent withdrawing it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'withdrawn' })],
+    ['its expiry', () => useCanvasProposalsStore.getState().pruneExpired(Date.now() + 120_000)],
+    ['the store losing it (superseded, a project switch)', () => holdProposals()],
+  ])('%s ends the held state at once', (_name, settle) => {
+    render(<AgentCursorLayer />);
+    propose();
+    act(() => { settle(); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(document.querySelector('.agent-cursor__mark')).toBeNull();
+    expect(sayText()).toBeNull();
+  });
+
+  it('another proposal settling leaves this one held', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p1'), proposal('p2'));
+    send(event({ action: 'propose', proposalId: 'p1' }));
+    flush();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p2', status: 'rejected' }); });
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('a reload after the answer shows no held state (a fresh store with the proposal settled)', () => {
+    render(<AgentCursorLayer />);
+    // The replay lands first; the proposals arrive after (proposalSync: none open).
+    send({ ...event({ action: 'propose', proposalId: 'p1' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    expect(expr()).toBe('propose'); // not told yet: unknown, not settled
+    act(() => { useCanvasProposalsStore.getState().sync([]); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBeNull();
+  });
+
+  it('a reload with the proposal still open keeps the held state', () => {
+    render(<AgentCursorLayer />);
+    send({ ...event({ action: 'propose', proposalId: 'p1' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    holdProposals(proposal('p1'));
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('the agent’s next event still replaces it', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    send(event({ action: 'think' }));
+    flush();
+    expect(expr()).toBe('think');
+  });
+
+  it('a settled cursor is replaced by the agent’s next propose, which holds for its own proposal', () => {
+    render(<AgentCursorLayer />);
+    propose();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' }); });
+    flush();
+    expect(expr()).toBeUndefined();
+    holdProposals(proposal('p2'));
+    send(event({ action: 'propose', proposalId: 'p2' }));
+    flush();
+    expect(expr()).toBe('propose');
+  });
+
+  it('an agent’s own say on the proposal keeps its timer, not the state’s', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p1'));
+    send(event({ action: 'propose', proposalId: 'p1', say: 'Two nodes for the brief' }));
+    flush();
+    act(() => { useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' }); });
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBe('Two nodes for the brief');
+  });
+
+  it('wait holds until a question the agent asked is answered', () => {
+    render(<AgentCursorLayer />);
+    holdQuestions(questionSet('q1', 'open', null));
+    send(event({ action: 'wait' }));
+    flush();
+    expect(expr()).toBe('wait');
+    expect(sayText()).toBe('Waiting for your answer');
+    holdQuestions(questionSet('q1', 'answered', Date.now() + 1000));
+    flush();
+    expect(expr()).toBeUndefined();
+    expect(sayText()).toBeNull();
+  });
+
+  it('wait ends on a dismissed question too, and on a reload after the answer', () => {
+    render(<AgentCursorLayer />);
+    send({ ...event({ action: 'wait' }), replay: true, secondsAgo: 30 } as AgentPresenceEvent);
+    flush();
+    expect(expr()).toBe('wait');
+    holdQuestions(questionSet('q1', 'dismissed', Date.now() - 5000)); // closed since the event (30 s ago)
+    flush();
+    expect(expr()).toBeUndefined();
+  });
+
+  it('wait is not ended by a question closed before it, or by another agent’s', () => {
+    render(<AgentCursorLayer />);
+    holdQuestions(questionSet('q1', 'answered', Date.now() - 60_000), questionSet('q2', 'answered', Date.now() + 1000, 'someone-else'));
+    send(event({ action: 'wait' }));
+    flush();
+    expect(expr()).toBe('wait');
+  });
+
+  it('wait stays while another of its sets is still open', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'wait' }));
+    flush();
+    holdQuestions(questionSet('q1', 'answered', Date.now() + 1000), questionSet('q2', 'open', null));
+    flush();
+    expect(expr()).toBe('wait');
+  });
+});
+
+describe('type always shows something (final review, LOW)', () => {
+  const tipCaret = () => document.querySelector('.agent-cursor__tip-caret');
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const card = () => {
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    node.dataset.id = 'n1';
+    node.innerHTML = '<textarea class="model-node__textarea">A desert</textarea>';
+    document.body.appendChild(node);
+    const box = { left: 10, top: 10, right: 210, bottom: 90, width: 200, height: 80, x: 10, y: 10, toJSON() {} };
+    for (const el of node.querySelectorAll<HTMLElement>('*')) el.getBoundingClientRect = () => box as DOMRect;
+    return node;
+  };
+
+  it('with the field off screen and no say pill, the caret sits on the cursor', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'type', target: { x: 50, y: 50 } })); // a spot: no field, and the pill is its default
+    flush();
+    // the pill shows now, ending in the caret: nothing doubled
+    expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
+    expect(tipCaret()).toBeNull();
+  });
+
+  it('once the say’s hold ends while type is still held, the caret moves onto the cursor', () => {
+    fake();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
+      expect(tipCaret()).toBeNull();
+      act(() => { vi.advanceTimersByTime(3000 + AGENT_SAY_FADE_MS + 100); });
+      expect(document.querySelector('.agent-cursor__say')).toBeNull();
+      expect(cursors()[0].dataset.expr).toBe('type');
+      expect(tipCaret()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('with the field on screen, the caret is the field’s and not also the cursor’s', () => {
+    fake();
+    const node = card();
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      act(() => { vi.advanceTimersByTime(3000 + AGENT_SAY_FADE_MS + 100); });
+      expect(document.querySelector('.agent-cursor__field-mark')).not.toBeNull();
+      expect(tipCaret()).toBeNull();
+    } finally {
+      node.remove();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('only the field’s text is a keystroke (final review, LOW)', () => {
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const withData = (data: object) => {
+    const next = new Map(lookup as Map<string, object>);
+    next.set('n1', { ...(lookup.get('n1') as object), data });
+    lookupRef.current = next;
+  };
+  const card = () => {
+    const node = document.createElement('div');
+    node.className = 'react-flow__node';
+    node.dataset.id = 'n1';
+    node.innerHTML = '<textarea class="model-node__textarea">A desert</textarea>';
+    document.body.appendChild(node);
+    const box = { left: 10, top: 10, right: 210, bottom: 90, width: 200, height: 80, x: 10, y: 10, toJSON() {} };
+    for (const el of node.querySelectorAll<HTMLElement>('*')) el.getBoundingClientRect = () => box as DOMRect;
+    return node;
+  };
+  const blinking = () => document.querySelector('.agent-cursor__field-mark')?.getAttribute('data-blink') === 'true';
+
+  it('a status change on the node leaves the blink stopped; a text change restarts it', () => {
+    fake();
+    const node = card();
+    try {
+      withData({ label: 'Brief', state: 'idle', params: { prompt: 'A desert' } });
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', say: 'Writing' }));
+      flush();
+      expect(blinking()).toBe(true); // the event itself is a keystroke
+      act(() => { vi.advanceTimersByTime(AGENT_CURSOR_TYPE.blinkMs + 200); });
+      expect(blinking()).toBe(false);
+      withData({ label: 'Brief', state: 'running', progress: 0.4, params: { prompt: 'A desert' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(false);
+      withData({ label: 'Brief', state: 'running', params: { prompt: 'A desert at dusk' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(true);
+    } finally {
+      node.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('a port edit counts only that param', () => {
+    fake();
+    const node = card();
+    try {
+      withData({ label: 'Brief', params: { resolution: '1k', prompt: 'a' } });
+      render(<AgentCursorLayer />);
+      send(event({ action: 'type', target: { nodeId: 'n1', handle: 'resolution' }, say: 'Changing' }));
+      flush();
+      const wasBlinking = () => cursors()[0].querySelector('.agent-cursor__tip-caret, .agent-cursor__say-caret') !== null || blinking();
+      act(() => { vi.advanceTimersByTime(AGENT_CURSOR_TYPE.blinkMs + 200); });
+      withData({ label: 'Brief', params: { resolution: '1k', prompt: 'ab' } });
+      notifyStore();
+      flush();
+      expect(blinking()).toBe(false);
+      expect(wasBlinking()).toBeDefined();
+    } finally {
+      node.remove();
+      vi.useRealTimers();
+    }
   });
 });

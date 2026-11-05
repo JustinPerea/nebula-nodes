@@ -6,7 +6,8 @@
  *
  * - Held states (look, think, type, propose, wait) show from the cursor's
  *   arrival until the agent's next event. look, think and type also end when
- *   the cursor goes idle; propose and wait wait for the person.
+ *   the cursor goes idle; propose and wait wait for the person and end when
+ *   they settle it (onSettled; lib/agentCursorSettled).
  * - Gestures (click, drag's arrival, run, error) play once from arrival.
  *   look's sweep is a gesture inside its held state.
  * - A new action with a look of its own replaces the current one at once.
@@ -125,6 +126,16 @@ export function onArrival(
   }
   if (!watched && isGesture(action)) return null;
   return { action, seq, startedAt: now, endsAt: null, gesture: watched, keystrokeAt: now };
+}
+
+/**
+ * The person settled what propose or wait was waiting on (lib/agentCursorSettled):
+ * the held state ends now. Only for the event's own state; anything else is left.
+ */
+export function onSettled(current: Expression | null, seq: number, now: number): Expression | null {
+  if (!current || current.seq !== seq || (current.action !== 'propose' && current.action !== 'wait')) return current;
+  if (current.endsAt !== null && current.endsAt <= now) return current;
+  return { ...current, endsAt: now };
 }
 
 /** The field's text changed while typing: a keystroke. */
