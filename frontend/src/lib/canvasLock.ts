@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type OfflineVerb } from './useBackendOffline';
-import { RUN_LOCK_REASON } from './cinemaScene';
 import { offlineDisabledReason } from './errorCopy';
 import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept, useKeptCanvas, type KeptAction } from './keptCanvas';
 
@@ -82,7 +81,7 @@ export interface CanvasLock {
    * lock never re-renders when a run starts); its line then wins over
    * following and offline. Kept (PR #199, GM r19, 4) comes first of all:
    * GM's kept line for the control's `kept` action, unless it is 'live'. */
-  act(own: LockOwn, options?: RunLock): ActProps;
+  act(own: LockOwn, options?: RunLock & LockShown): ActProps;
   /** The tooltip `act` gives, for a control that isn't disabled by it (a
    * read-only field). */
   title(own?: LockTitleOwn): string | undefined;
@@ -107,13 +106,40 @@ export interface LockOwn extends LockTitleOwn {
   tabLocal?: TabLocalAction;
 }
 
-/** The run lock's hold on one control (M2): `runTitle` when a run holds it
- * for a reason of its own (a shot that is rendering), else GM's run line. */
-export interface RunLock { run?: boolean; runTitle?: string }
+/** The run lock's hold on one control (M2). A control the run can hold
+ * names its own line with it (GM r39 item 2: "You can <verb> when the run
+ * finishes.", lib/runLock's table, or a reason of its own such as a shot
+ * that is rendering): there is no shared default, so a new lock can't fall
+ * back to a generic line. */
+export type RunLock = { run?: undefined; runTitle?: undefined } | { run: boolean; runTitle: string };
+
+/**
+ * GM, PR #205 round 1: when a control's lock reason is already on screen
+ * beside it (the deferred run notice's line, Cinema's line under Generate),
+ * a tooltip only repeats it and covers what is next to it. `shown` names that
+ * line (its element's id and its text): when the reason a locked control
+ * would give as its tooltip is that text, whichever lock gave it, the
+ * control has no tooltip and points aria-describedby at the line, so the
+ * reason still reaches the keyboard and a screen reader. Any other reason
+ * (following, offline, a different line) keeps its tooltip.
+ */
+export interface LockShown {
+  shown?: { id: string; text: string | undefined };
+}
+
+/** `shown`'s rule, applied in `act` (so lockedAction, which starts from it,
+ * keeps it; offline, lockedAction's offline line is a different reason and
+ * sets its tooltip again). */
+export function tellOnce<P extends ActProps>(props: P, shown?: LockShown['shown']): P {
+  if (!shown?.text || !props.disabled || props.title !== shown.text) return props;
+  return { ...props, title: undefined, 'aria-describedby': shown.id };
+}
 
 export interface ActProps {
   disabled: boolean;
   title: string | undefined;
+  /** Set by `shown` (GM PR #205 r1): the on-screen line that gives the reason. */
+  'aria-describedby'?: string;
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
   'data-kept-disabled'?: '';
@@ -131,7 +157,7 @@ export interface ActProps {
  * Following plus offline keeps the following tooltip (GM round 22, A).
  */
 export function lockedAction(lock: CanvasLock, own: LockOwn,
-  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
+  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock & LockShown = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
   // Kept first (GM r19, 4): the offline line never replaces the kept line.
   if (props[KEPT_MARK] !== undefined) return props;
@@ -164,10 +190,11 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
       // tab-local id waits for the project's next open. Only the person
       // fixes it, so it goes before the reasons that clear by themselves.
       if (own?.tabLocal) return { [TAB_LOCAL_MARK]: '', disabled: true, title: TAB_LOCAL_LINES[own.tabLocal] };
-      // Then the run's line, alone (PR #198 M2, N1).
-      if (options.run) return { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON };
-      // Then following and offline (their marks and lines).
-      return { ...mark, disabled: locked || Boolean(own.disabled), title: title(own) };
+      return tellOnce(options.run
+        // Then the run's line, alone (PR #198 M2, N1).
+        ? { disabled: true, title: options.runTitle }
+        // Then following and offline (their marks and lines).
+        : { ...mark, disabled: locked || Boolean(own.disabled), title: title(own) }, options.shown);
     },
   };
 }

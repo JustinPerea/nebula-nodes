@@ -7,7 +7,7 @@ import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const boundary = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), status: vi.fn(),
   subscribe: vi.fn(), fetch: vi.fn(), apiFetch: vi.fn(),
-  clearCanvasViewport: vi.fn(), clearCinemaSelectedShots: vi.fn() }));
+  clearCanvasViewport: vi.fn(), clearCinemaSelectedShots: vi.fn(), selectNode: vi.fn() }));
 vi.mock('../src/lib/api', () => ({ executeGraph: boundary.execute, executeNode: boundary.execute,
   generateCinemaShot: vi.fn(), cancelExecution: boundary.cancel, getExecutionStatus: boundary.status,
   acknowledgeProviderStartAmbiguity: vi.fn(), deleteProviderRecovery: vi.fn(),
@@ -25,6 +25,8 @@ vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({
   settingsCache: { apiKeys: {}, loaded: true }, canvasFocusRequest: null,
   clearCanvasViewport: boundary.clearCanvasViewport,
   clearCinemaSelectedShots: boundary.clearCinemaSelectedShots,
+  // PR #205 r4: a Paste or Duplicate selects its copy in the UI too (one selection).
+  selectedNodeId: null, selectNode: boundary.selectNode,
 }) } }));
 
 type Store = (typeof import('../src/store/graphStore'))['useGraphStore'];
@@ -174,6 +176,8 @@ describe('Batch preview ownership through real graph store paths', () => {
     expect(copy.data.outputs).toEqual({}); expect(copy.data.batchOutputs).toBeUndefined();
     expect(copy.data.batchVariants).toBeUndefined(); expect(copy.data.batchRunId).toBeUndefined();
     expect(live().batchOutputs).toHaveLength(2); expect(boundary.execute).not.toHaveBeenCalled();
+    // PR #205 r4: Paste and Duplicate move the UI's one selection to the copy.
+    if (action !== 'duplicateNode') expect(boundary.selectNode).toHaveBeenCalledWith(copy.id, { keepPin: true });
   });
 
   it('empty and legacy events replace only their owner collections without retaining stale labels', async () => {

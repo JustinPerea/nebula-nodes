@@ -3,7 +3,7 @@ import { isKeptUpdateLine, keptEditsLine, useProjectStore } from '../../store/pr
 import { useGraphStore } from '../../store/graphStore';
 import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/keptCanvas';
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
-import { RUN_LOCK_REASON } from '../../lib/cinemaScene';
+import { runFinishesLine } from '../../lib/runLock';
 import { LineText } from '../LineText';
 import { SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
@@ -56,13 +56,16 @@ export function KeptEditsNotice() {
   const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
   // Review 14 (lock-order NIT-3): kept leaves these two on, so the next
   // locks apply in the app's order: the run, following, then offline.
-  const held: ({ disabled: boolean; title?: string } & Record<string, unknown>) | null = running ? { disabled: true, title: RUN_LOCK_REASON }
+  // GM r37 and r39 (lib/runLock): the run's line says what unlocks the button, by its verb.
+  const held = (runVerb: string): ({ disabled: boolean; title?: string } & Record<string, unknown>) | null => running ? { disabled: true, title: runFinishesLine(runVerb) }
     : lock.following ? { disabled: true, ...lock.mark, title: lock.title() }
       : offline ? { disabled: true, ...lock.mark } : null;
   // One busy state for both (review 14, kept-hold LOW-1).
   const busy = kept.saving || kept.discarding === true;
-  const saveHeld = held ? { ...held, ...(held.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: busy };
-  const discardHeld = held ? { ...held, ...(held.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: busy };
+  const savingHeld = held('save your edits as a project');
+  const discardingHeld = held('discard your edits');
+  const saveHeld = savingHeld ? { ...savingHeld, ...(savingHeld.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: busy };
+  const discardHeld = discardingHeld ? { ...discardingHeld, ...(discardingHeld.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: busy };
   return (
     <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}
       role="status" aria-live="polite" data-kept-edits="">

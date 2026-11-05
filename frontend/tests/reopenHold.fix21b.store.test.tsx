@@ -74,7 +74,7 @@ import { takeTabId } from '../src/lib/tabId';
 import { OPEN_HOLD_STATES, REOPEN_HOLD_PLACES } from '../src/lib/reopenHold';
 import { reopenHoldLine } from '../src/lib/reopenHoldLines';
 import { frames } from './helpers/frames';
-import { runFinishesLine } from '../src/lib/useBackendOffline';
+import { runFinishesLine } from '../src/lib/runLock';
 import { savedOrder } from '../src/components/projects/catalogRestoreCopy';
 import { ReopenHoldCallout } from '../src/components/ReopenHoldCallout';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';

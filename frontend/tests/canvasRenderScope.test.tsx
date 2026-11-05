@@ -224,7 +224,9 @@ describe('a card re-renders only when something it draws changes', () => {
     expect(rendered()).toEqual(['batch', 'image']);
     renders.clear();
     act(() => useGraphStore.getState().onNodesChange([{ type: 'select', id: 'dyn', selected: true }]));
-    expect(rendered()).toEqual(['dyn']);
+    // GM PR #205 r12: one selected node is the Inspector's node, so "batch"
+    // (the Inspector's until now) loses its ring too.
+    expect(rendered()).toEqual(['batch', 'dyn']);
   });
 
   it("the selection toolbar's action slot re-renders only the card it belongs to", () => {

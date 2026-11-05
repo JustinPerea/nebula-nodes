@@ -66,7 +66,8 @@ class GraphFileError(RuntimeError):
 
 
 def _size_line(size: int) -> str:
-    # GM's line for the same limit on the canvas (graphFile.ts graphSizeLine).
+    # The same limit as the canvas's (graphFile.ts graphSizeLine), in an
+    # agent's words: the person's line says "canvas" (GM PR #205 r9 item 2).
     return (f"This graph is {size / MIB:.1f} MB. "
             f"Nebula opens graphs up to {MAX_GRAPH_FILE_BYTES // MIB} MB.")
 

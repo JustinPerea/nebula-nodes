@@ -7,6 +7,8 @@ const flow = vi.hoisted(() => ({
   fitView: vi.fn(), initialized: false,
   internalNodes: new Map<string, { measured: { width?: number; height?: number } }>(),
   fitProp: true,
+  onSelectionStart: undefined as undefined | (() => void),
+  onSelectionEnd: undefined as undefined | (() => void),
 }));
 // The roster store (brought in with the agent mark layer) reads the roster on
 // mount and on a graph replacement. The read never answers here: no request
@@ -21,8 +23,11 @@ vi.mock('@xyflow/react', async (importOriginal) => {
   const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...original,
-    ReactFlow: ({ children, fitView }: { children: React.ReactNode; fitView: boolean }) => {
+    ReactFlow: ({ children, fitView, onSelectionStart, onSelectionEnd }: { children: React.ReactNode; fitView: boolean;
+      onSelectionStart?: () => void; onSelectionEnd?: () => void }) => {
       flow.fitProp = fitView;
+      flow.onSelectionStart = onSelectionStart;
+      flow.onSelectionEnd = onSelectionEnd;
       return <div>{children}</div>;
     },
     Background: () => null,
@@ -57,6 +62,7 @@ import { Canvas, CanvasFocusController } from '../src/components/Canvas';
 import { installFakeFlowStore } from './helpers/fakeFlowStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { isCanvasSelectionDragging, noteCanvasSelectionDrag } from '../src/lib/canvasSelectionDrag';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
@@ -133,6 +139,53 @@ describe('Canvas requested node focus', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
   });
 
+  // Review 6 of PR #205 (inspector-pin LOW-2): the keep-pin sites.
+  it('a focus request for a node that isn\'t on the canvas: the pinned Inspector stays pinned and on screen, empty', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
+  });
+
+  // Review 7 of PR #205 (inspector NIT-2): the UI store names what the canvas still has selected.
+  it('a focus request for a missing node while one node is ringed: the UI store names that node, as the pinned Inspector shows it', () => {
+    useGraphStore.setState({ nodes: [node('motion'), { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, 'sibling', true, true]);
+  });
+
+  it('control: two ringed, a focus request for a missing node names none', () => {
+    useGraphStore.setState({ nodes: [{ ...node('motion'), selected: true }, { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    expect(useUIStore.getState().selectedNodeId).toBeNull();
+  });
+
+  // Review 8 of PR #205, lines-inspector MEDIUM-1: as when the shown node
+  // leaves, an unpinned Inspector over several ringed stays on one of them.
+  it('unpinned, two ringed, a focus request for a missing node names one of them ("N nodes selected"), open', () => {
+    useGraphStore.setState({ nodes: [{ ...node('motion'), selected: true }, { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorVisible(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, 'motion', false, true]);
+  });
+
+  it('a canvas replaced while a focus request waits: the pinned Inspector stays pinned and on screen, empty', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('motion');
+    expect(useUIStore.getState().selectedNodeId).toBe('motion');
+    act(() => { useGraphStore.getState().loadGraph([node('imported')], []); });
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
+  });
+
   it('only fits while Canvas is active', () => {
     flow.initialized = true;
     flow.internalNodes.set('motion', { measured: { width: 280, height: 460 } });
@@ -204,6 +257,27 @@ describe('Canvas requested node focus', () => {
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(flow.fitView).not.toHaveBeenCalled();
+  });
+
+  // Review 8 of PR #205, lines-inspector NIT-1 and NIT-2: React Flow gets
+  // the drag-select handlers, and a drag the canvas started ends with it.
+  it('React Flow gets onSelectionStart and onSelectionEnd: a drag-select is on from its start to its end', () => {
+    render(<Canvas />);
+    expect(isCanvasSelectionDragging()).toBe(false);
+    act(() => { flow.onSelectionStart?.(); });
+    expect(isCanvasSelectionDragging()).toBe(true);
+    act(() => { flow.onSelectionEnd?.(); });
+    expect(isCanvasSelectionDragging()).toBe(false);
+  });
+
+  it('the canvas unmounting mid-drag ends the drag', () => {
+    const view = render(<Canvas />);
+    act(() => { flow.onSelectionStart?.(); });
+    expect(isCanvasSelectionDragging()).toBe(true);
+    view.unmount();
+    const after = isCanvasSelectionDragging();
+    noteCanvasSelectionDrag(false);
+    expect(after).toBe(false);
   });
 
   it('keeps ordinary node-added auto-fit through the accompanying node-count render', async () => {

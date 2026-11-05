@@ -7,6 +7,7 @@ import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { setCanvasKept } from '../src/lib/keptCanvas';
+import { takeInspectorFocusResume } from '../src/lib/inspectorFocusResume';
 
 const flow = vi.hoisted(() => ({ screenToFlowPosition: vi.fn() }));
 const reads = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -330,6 +331,8 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(ui.canvasFocusRequest).toMatchObject({ nodeId: 'n9' });
     expect(ui.leftDock).toBeNull();
     expect(ui.panels.inspector.visible).toBe(true);
+    // The one case the Inspector takes focus on its own (review 6 of PR #205).
+    expect(takeInspectorFocusResume()).toBe(true);
   });
 
   it('does not dismiss or focus over a newer picker when an old preparation finishes', async () => {
@@ -459,5 +462,30 @@ describe('PR #199 round 16 (GM r21, 3): the popup while the canvas is kept', () 
     expect(connect).not.toHaveBeenCalled();
     // Refused by the wire rules (null): the canvas notice says why; the popup goes.
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+// GM PR #205 r4 item 3 (review 2 lines NIT-1): the connected add works during
+// a run, as its add and its connect each do; an import still holds it.
+describe('ConnectionPopup during a run (PR #205 round 3)', () => {
+  it('a press while this tab runs adds the connected node, with no lock line', async () => {
+    useGraphStore.setState({ isExecuting: true, undoNotice: null });
+    openPopup();
+    await act(async () => { fireEvent.click(searchFor('veo-3')); });
+    expect(addConnected).toHaveBeenCalledTimes(1);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
+  });
+
+  it('a press during an import adds nothing, and the picker says the store\'s line (GM PR #205 r5 item 2); the line goes with the import', async () => {
+    useGraphStore.setState({ isImportingGraph: true });
+    openPopup();
+    const item = searchFor('veo-3');
+    const name = item.querySelector('.connection-popup__item-name')?.textContent;
+    await act(async () => { fireEvent.click(item); });
+    expect(addConnected).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent(`You can add “${name}” when the import finishes.`);
+    expect(screen.queryByRole('alert')).toBeNull();
+    act(() => { useGraphStore.setState({ isImportingGraph: false }); });
+    expect(screen.queryByText(/when the import finishes/)).toBeNull();
   });
 });

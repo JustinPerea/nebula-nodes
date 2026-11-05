@@ -213,11 +213,11 @@ describe('a dropped rename names who renamed the node only when its source is kn
 
   it.each([
     ['an agent', { actor: { kind: 'agent', name: 'Codex', id: 'codex' } },
-      'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
+      'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
     ['the person\'s other window', { tab: 'other-tab', actor: { kind: 'person' } },
-      'You renamed this node “Hero shot” in another window while Nebula was offline, so your rename to “Brief draft” here wasn\'t saved.'],
+      'You renamed this node “Hero shot” in another window while Nebula was offline, so your rename to “Brief draft” here wasn’t saved.'],
     ['an unknown source', {},
-      'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
+      'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
   ])('renamed by %s', async (_who, edit, line) => {
     setProjectContext({ id: 'A', revision: 'a' });
     const notify = vi.fn();

@@ -447,24 +447,24 @@ describe('round 18 (review 17)', () => {
       expect(valueOf('n1')).toBe('AGENT');
     });
 
-    it('Cmd+Z while the delete is on its way says nothing was undone; once it lands, one Cmd+Z brings it back with its wire', async () => {
+    it('Cmd+Z while the delete is on its way waits silently; once it lands, the held press brings it back with its wire (GM r39 item 3)', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [canvasWire('n1', 'n2')]);
       nebula().holdAnswers = true;
       await del('n2');
       await undo();
-      expect(lines()).toContain(DROPPED_UNDO_TEXT);
-      expect(ids()).toEqual(['n1']);
-      nebula().holdAnswers = false;
-      while (nebula().releaseAnswer()) await settle();
-      await tick(16_000);
-      // The dropped press is never applied late.
+      // GM r39 item 3 (reversing r18's option (c) refusal): no line while it waits.
+      expect(lines()).not.toContain(DROPPED_UNDO_TEXT);
       expect(ids()).toEqual(['n1']);
       expect(writes().filter((call) => call === 'POST /api/graph/restore')).toHaveLength(0);
-      await undo();
+      nebula().holdAnswers = false;
+      while (nebula().releaseAnswer()) await settle();
+      await settle();
+      // GM r40 item 1: then the usual Undo toast.
       expect(ids()).toEqual(['n1', 'n2']);
       expect(wires()).toEqual(['n1>n2']);
       expect(notice()).toBe('Restored the node.');
       expect(writes().filter((call) => call === 'POST /api/graph/restore')).toHaveLength(1);
+      expect(lines()).not.toContain(DROPPED_UNDO_TEXT);
       sameAsNebula();
     });
 

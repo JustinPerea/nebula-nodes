@@ -41,9 +41,10 @@ describe('round 7: the real backend', () => {
     const routes = gatedRoutes();
     // 67 since round 8: WS /ws/chat, whose refusals send the "person_required" code (LOW-5).
     // 70 with main's Message box: GET /api/canvas/channel, GET /api/canvas/thread, POST /api/canvas/thread/messages.
-    // 72 with this PR: POST /api/projects/catalog-restore/dismiss and /api/projects/canvas-held-unreadable/dismiss (the person's × on two notices).
-    expect(routes.length).toBe(72);
-    expect(snapshot.length).toBe(72);
+    // 71 with PR #205 round 10: POST /api/canvas/proposals, whose shape check (_refuse_agent_shape_past_save_limit) refuses an agent's proposal past Save's limits.
+    // 73 with PR #199: POST /api/projects/catalog-restore/dismiss and /api/projects/canvas-held-unreadable/dismiss (the person's × on two notices).
+    expect(routes.length).toBe(73);
+    expect(snapshot.length).toBe(73);
     expect(sortKeys(routes)).toEqual(sortKeys(snapshot));
   });
 

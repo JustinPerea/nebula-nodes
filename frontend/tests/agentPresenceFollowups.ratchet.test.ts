@@ -319,7 +319,12 @@ function reachOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen
     if (current !== root && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
     if (ts.isIdentifier(current)) {
       const name = current.text;
-      const local = localsAt(current, scope);
+      // The graph store is reached by its members (`useGraphStore.getState()
+      // .executeGraph()` names executeGraph), never its `create(…)` body,
+      // which names every action: as an import (exportedTarget) and, since
+      // review 8 of PR #205 (lines-inspector LOW-2), inside graphStore.ts too,
+      // where a helper that reads the store reached the whole store.
+      const local = STORE_NAMES.has(name) ? undefined : localsAt(current, scope);
       if (local && isReference(current)) {
         // Each definition once (fix round 25: by the definition, since two
         // functions' same-named locals are two things now).
@@ -386,12 +391,17 @@ function visibleLocals(id: ts.Identifier, scope: Scope): ts.Node[] | undefined {
   if (!all) return undefined;
   const depthOf = new Map<ts.Node, number>();
   let param = Infinity;
+  let paramIn: ts.Node | null = null;
   let depth = 0;
   for (let up: ts.Node | undefined = id.parent; up; up = up.parent, depth += 1) {
     depthOf.set(up, depth);
-    if (param === Infinity && ts.isFunctionLike(up) && up.parameters.some((parameter) => bindingNames(parameter.name).includes(id.text))) param = depth;
+    if (param === Infinity && ts.isFunctionLike(up) && up.parameters.some((parameter) => bindingNames(parameter.name).includes(id.text))) {
+      param = depth;
+      paramIn = up;
+    }
   }
   let nearest = Infinity;
+  let nearestIn: ts.Node | null = null;
   const kept: ts.Node[] = [];
   const assigned: ts.Node[] = [];
   for (const definition of all) {
@@ -399,11 +409,18 @@ function visibleLocals(id: ts.Identifier, scope: Scope): ts.Node[] | undefined {
     if (container === null) { assigned.push(definition); continue; }
     const at = depthOf.get(container);
     if (at === undefined || at > nearest) continue;
-    if (at < nearest) { nearest = at; kept.length = 0; }
+    if (at < nearest) { nearest = at; nearestIn = container; kept.length = 0; }
     kept.push(definition);
   }
-  if (param !== Infinity && param <= nearest) return assigned;
-  if (kept.length > 0) return [...kept, ...assigned];
+  // Review 8 of PR #205 (lines-inspector LOW-2): an assignment `a.b = f`
+  // counts for a name bound where it is read (a parameter, a local) only
+  // where that binding is, so a callback's `(node) => node.selected` no
+  // longer reaches some other function's `node.x = …` (in graphStore.ts that
+  // was most of the file, and the Inspector's close at none reached Undo).
+  const within = (container: ts.Node | null) => assigned.filter((definition) => !container
+    || (definition.pos >= container.pos && definition.end <= container.end));
+  if (param !== Infinity && param <= nearest) return within(paramIn);
+  if (kept.length > 0) return [...kept, ...within(nearestIn)];
   return scope.imports.has(id.text) ? undefined : all;
 }
 
@@ -805,6 +822,79 @@ const ownOf = (scope: Scope) => {
 };
 const reachesGated = (reach: Set<string>) => { for (const name of reach) if (GATED.has(name)) return true; return false; };
 
+/** Review 8 of PR #205 (lines-inspector LOW-2): whether a definition reaches
+ * a gated action, as reachesGated(reachCached(…)) says, but worked out once
+ * per definition: what a definition names itself (`direct`, no local
+ * followed) is kept, and a walk over the file's definitions stops at the
+ * first that is gated, or at one already known not to be. A walk that finds
+ * none knows none of what it passed is gated; one that finds one knows the
+ * path to it is. So a chain of n helpers costs n, not n² (each helper's
+ * reach from a fresh start walked the rest of the chain). */
+const directMemo = new WeakMap<ts.Node, Map<string, { gated: boolean; calls: ts.Node[] }>>();
+const gatedMemo = new WeakMap<ts.Node, Map<string, boolean>>();
+function reachKey(depth: number, ownNames: boolean, resolve: Resolve | undefined): string {
+  return `${depth}:${ownNames}:${resolve ? resolveIds.get(resolve) ?? resolveIds.set(resolve, resolveIds.size + 1).get(resolve) : 0}`;
+}
+function directOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, depth: number, ownNames: boolean, key: string) {
+  let byKey = directMemo.get(node);
+  if (!byKey) { byKey = new Map(); directMemo.set(node, byKey); }
+  const known = byKey.get(key);
+  if (known) return known;
+  const found = { gated: false, calls: [] as ts.Node[] };
+  // reachOf's walk, one definition deep: a local it names is a call to
+  // follow; any other name counts as reachOf counts it.
+  const stack: ts.Node[] = [node];
+  while (stack.length > 0 && !found.gated) {
+    const current = stack.pop()!;
+    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) continue;
+    if (ts.isIdentifier(current)) {
+      const name = current.text;
+      const local = STORE_NAMES.has(name) ? undefined : localsAt(current, scope);
+      if (local && isReference(current)) { found.calls.push(...local); continue; }
+      const imported = scope.imports.get(name);
+      const module = imported && resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, scope.file) : null;
+      if (GATED.has(name) && (ownNames || (module && reachesGraphStore(module.source, module.file)))) found.gated = true;
+      if (imported && module && depth < IMPORT_DEPTH && isReference(current)) {
+        const target = exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!);
+        if (target && reachesGated(reachCached(target.node, target.scope, resolve, depth + 1, ownOf(target.scope)))) found.gated = true;
+      }
+      continue;
+    }
+    if (ownNames && ts.isElementAccessExpression(current) && ts.isStringLiteralLike(current.argumentExpression)
+      && GATED.has(current.argumentExpression.text)) found.gated = true;
+    ts.forEachChild(current, (child) => { stack.push(child); });
+  }
+  byKey.set(key, found);
+  return found;
+}
+function gatedOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, depth: number, ownNames: boolean): boolean {
+  const key = reachKey(depth, ownNames, resolve);
+  const memo = (at: ts.Node) => gatedMemo.get(at)?.get(key);
+  const keep = (at: ts.Node, gated: boolean) => {
+    let byKey = gatedMemo.get(at);
+    if (!byKey) { byKey = new Map(); gatedMemo.set(at, byKey); }
+    byKey.set(key, gated);
+  };
+  const first = memo(node);
+  if (first !== undefined) return first;
+  const from = new Map<ts.Node, ts.Node | null>([[node, null]]);
+  const queue: ts.Node[] = [node];
+  for (let at = 0; at < queue.length; at += 1) {
+    const current = queue[at];
+    const known = memo(current);
+    if (known === false) continue;
+    if (known === true || directOf(current, scope, resolve, depth, ownNames, key).gated) {
+      for (let up: ts.Node | null = current; up; up = from.get(up) ?? null) keep(up, true);
+      return true;
+    }
+    for (const call of directOf(current, scope, resolve, depth, ownNames, key).calls) {
+      if (!from.has(call)) { from.set(call, current); queue.push(call); }
+    }
+  }
+  for (const passed of queue) keep(passed, false);
+  return false;
+}
+
 /** The states a handler's own refusal covers (fix rounds 5 and 6 of PR
  * #200, reviews 5 and 6 LOW-3). Each gated call the handler makes (a gated
  * name, or a call of a local or imported function that reaches one) must be
@@ -959,52 +1049,107 @@ function guardsAround(site: ts.Node, root: ts.Node, scope: Scope): number {
   return mask;
 }
 
+/* Review 8 of PR #205, lines-inspector LOW-2: the walk is iterative. Each
+ * function whose coverage is being worked out is a frame on an explicit
+ * stack, and the frame's own syntax is walked from a stack of its own, so
+ * neither a long chain of helpers calling helpers nor a deep tree grows the
+ * call stack (a Canvas handler calling a graph store export that names
+ * useGraphStore overflowed it after 404 s). Each function's coverage is
+ * worked out once per resolver and kept (coverageMemo); one still on the
+ * stack (it calls itself, or a cycle of helpers does) counts as LOCKED: its
+ * own calls add nothing. The same answers, in the same order, as the
+ * recursive walk this replaces. */
 const coverageMemo = new WeakMap<ts.Node, Map<number, number>>();
 const coverageBusy = new WeakSet<ts.Node>();
+type CoverageCallee = { node: ts.Node; scope: Scope; depth: number };
+type CoverageFrame = {
+  node: ts.Node; scope: Scope; depth: number; ownNames: boolean; mask: number;
+  /** The frame's syntax still to walk, the next one last. */
+  pending: ts.Node[];
+  /** A gated call waiting on the coverage of what it calls (all of it, `&`). */
+  call: { at: ts.Node; callees: CoverageCallee[]; next: number; all: number } | null;
+};
 function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefined, depth = 0): number {
   const rid = resolve ? resolveIds.get(resolve) ?? resolveIds.set(resolve, resolveIds.size + 1).get(resolve)! : 0;
-  let byResolve = coverageMemo.get(node);
-  if (!byResolve) { byResolve = new Map(); coverageMemo.set(node, byResolve); }
-  const known = byResolve.get(rid);
-  if (known !== undefined) return known;
-  // A function that calls itself: its own calls add nothing.
+  const known = (at: ts.Node) => coverageMemo.get(at)?.get(rid);
+  const keep = (at: ts.Node, mask: number) => {
+    let byResolve = coverageMemo.get(at);
+    if (!byResolve) { byResolve = new Map(); coverageMemo.set(at, byResolve); }
+    byResolve.set(rid, mask);
+  };
+  const first = known(node);
+  if (first !== undefined) return first;
   if (coverageBusy.has(node)) return LOCKED;
-  coverageBusy.add(node);
-  const ownNames = ownOf(scope);
-  let mask = LOCKED;
-  const visit = (current: ts.Node) => {
-    if (mask === 0) return;
-    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
-    let inner = -1; // -1: not a gated call; else the coverage of what it calls
+  const frames: CoverageFrame[] = [];
+  const open = (callee: CoverageCallee) => {
+    coverageBusy.add(callee.node);
+    frames.push({ ...callee, ownNames: ownOf(callee.scope), mask: LOCKED, pending: [callee.node], call: null });
+  };
+  // What one spot of a frame is: -1 not a gated call; a number, the coverage
+  // of a gated call known now; or the functions it calls, to work out first.
+  const classify = (frame: CoverageFrame, current: ts.Node): number | CoverageCallee[] => {
+    const { scope: at, depth: deep, ownNames } = frame;
     if (ts.isIdentifier(current)) {
       // Every same-named definition, not only the one in scope (localsAt):
       // more definitions only lower the coverage (`all & …`), so this stays
       // the stricter reading (and scoping here made G's walk far slower).
-      const local = scope.locals.get(current.text);
-      const imported = scope.imports.get(current.text);
+      // The graph store itself is reached by its members, never its body
+      // (reachOf).
+      const local = STORE_NAMES.has(current.text) ? undefined : at.locals.get(current.text);
+      const imported = at.imports.get(current.text);
       if (local && isReference(current)) {
-        if (local.some((definition) => reachesGated(reachCached(definition, scope, resolve, depth, ownNames)))) {
-          inner = local.reduce((all, definition) => all & refuseCoverage(definition, scope, resolve, depth), LOCKED);
+        if (local.some((definition) => gatedOf(definition, at, resolve, deep, ownNames))) {
+          return local.map((definition) => ({ node: definition, scope: at, depth: deep }));
         }
       } else if (imported && isReference(current)) {
-        const module = resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, scope.file) : null;
-        const target = module && depth < IMPORT_DEPTH ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!) : null;
-        if (target && reachesGated(reachCached(target.node, target.scope, resolve, depth + 1, ownOf(target.scope)))) {
-          inner = refuseCoverage(target.node, target.scope, resolve, depth + 1);
-        } else if (GATED.has(current.text) && (ownNames || (module && reachesGraphStore(module.source, module.file)))) inner = 0;
-      } else if (ownNames && GATED.has(current.text)) inner = 0;
-    } else if (ownNames && ts.isElementAccessExpression(current) && ts.isStringLiteralLike(current.argumentExpression)
-      && GATED.has(current.argumentExpression.text)) inner = 0;
-    if (inner >= 0) {
-      mask &= inner === LOCKED ? LOCKED : inner | guardsAround(current, node, scope);
-      return;
-    }
-    ts.forEachChild(current, visit);
+        const module = resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, at.file) : null;
+        const target = module && deep < IMPORT_DEPTH ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!) : null;
+        if (target && gatedOf(target.node, target.scope, resolve, deep + 1, ownOf(target.scope))) {
+          return [{ node: target.node, scope: target.scope, depth: deep + 1 }];
+        } else if (GATED.has(current.text) && (ownNames || (module && reachesGraphStore(module.source, module.file)))) return 0;
+      } else if (ownNames && GATED.has(current.text)) return 0;
+    } else if (frame.ownNames && ts.isElementAccessExpression(current) && ts.isStringLiteralLike(current.argumentExpression)
+      && GATED.has(current.argumentExpression.text)) return 0;
+    return -1;
   };
-  visit(node);
-  coverageBusy.delete(node);
-  byResolve.set(rid, mask);
-  return mask;
+  const settle = (frame: CoverageFrame, at: ts.Node, inner: number) => {
+    frame.mask &= inner === LOCKED ? LOCKED : inner | guardsAround(at, frame.node, frame.scope);
+  };
+  open({ node, scope, depth });
+  while (frames.length > 0) {
+    const frame = frames[frames.length - 1];
+    // A call waiting on what it calls: the next callee not known yet is
+    // worked out first (a frame of its own), then this one goes on.
+    if (frame.call) {
+      const { call } = frame;
+      let opened = false;
+      while (call.next < call.callees.length) {
+        const callee = call.callees[call.next];
+        const mask = known(callee.node);
+        if (mask === undefined && !coverageBusy.has(callee.node)) { open(callee); opened = true; break; }
+        call.all &= mask ?? LOCKED;
+        call.next += 1;
+      }
+      if (opened) continue;
+      settle(frame, call.at, call.all);
+      frame.call = null;
+    }
+    while (frame.pending.length > 0 && frame.mask !== 0 && !frame.call) {
+      const current = frame.pending.pop()!;
+      if (current !== frame.node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) continue;
+      const inner = classify(frame, current);
+      if (Array.isArray(inner)) { frame.call = { at: current, callees: inner, next: 0, all: LOCKED }; break; }
+      if (inner >= 0) { settle(frame, current, inner); continue; }
+      const children: ts.Node[] = [];
+      ts.forEachChild(current, (child) => { children.push(child); });
+      for (let at = children.length - 1; at >= 0; at -= 1) frame.pending.push(children[at]);
+    }
+    if (frame.call) continue;
+    frames.pop();
+    coverageBusy.delete(frame.node);
+    keep(frame.node, frame.mask);
+  }
+  return known(node)!;
 }
 
 /** Pointer handlers a disabled control still gets (review 5 LOW-3, live:
@@ -1157,8 +1302,10 @@ const CONTROL_ALLOWLIST: Record<string, string> = {
 const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string }> = [
   { file: 'components/CommandPalette.tsx', tag: 'input', at: 'className="command-palette__input"',
     reason: "the palette's search field: Enter runs the chosen command through run(), which refuses an acting command with refuseCanvasEdit (round23Surfaces' CommandPalette)" },
-  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...(act ?? {})} disabled={disabled}',
-    reason: "a palette row: a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` (`act ? act.disabled : …`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...act} aria-disabled={disabled || undefined}',
+    reason: "a palette row (an option of the listbox, PR #205 review 2 lines LOW-1): a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` as aria-disabled (`actDisabled`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'div', at: 'className="command-palette__list" id={listId}',
+    reason: "the palette's listbox (PR #205 review 2 lines LOW-1): a role and a name only, no handler; its rows are the options above, each run through run()" },
 ];
 
 /** Components that take the lock themselves for the gated handler they are
@@ -1484,6 +1631,68 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
       .map(([form]) => form);
     expect(missed, 'forms G lets through').toEqual([]);
+  });
+
+  // Review 8 of PR #205, lines-inspector LOW-2 (its mutant R1): a canvas
+  // handler that calls a graph store export whose body reads the store
+  // overflowed the stack after 404 s. The walk is iterative, and the store is
+  // reached by its members, never its body.
+  it('G corpus (review 8, LOW-2): a handler calling a graph store export that reads the store, and a long chain of helpers, finish in seconds', () => {
+    const real = readFileSync(join(SRC, 'store/graphStore.ts'), 'utf8');
+    const withExport = (body: string) => {
+      const store = `${real}\nexport function noteCanvasSelectionDragInStore(active: boolean): void {\n${body}\n}\n`;
+      const resolve: Resolve = (specifier, fromFile) => {
+        const found = resolveSource(specifier, fromFile);
+        return found?.file === 'store/graphStore.ts' ? { ...found, source: store } : found;
+      };
+      return resolve;
+    };
+    const probe = "import { noteCanvasSelectionDragInStore } from '../store/graphStore';\n"
+      + 'export const P = () => <div role="button" onPointerUp={() => noteCanvasSelectionDragInStore(false)}>Drag</div>;';
+    const started = performance.now();
+    // R1 itself: the export closes the Inspector, which reads the store and
+    // edits nothing.
+    expect(unlockedControls(probe, 'components/ProbeR1.tsx', withExport('  if (!active) closeUnpinnedInspectorAtNone();'))).toEqual([]);
+    // The same shape that does edit, through the store's member: caught.
+    expect(unlockedControls(probe, 'components/ProbeR1Loud.tsx',
+      withExport('  if (!active) { closeUnpinnedInspectorAtNone(); useGraphStore.getState().executeGraph(); }')))
+      .toEqual(['components/ProbeR1Loud.tsx:2 <div> executeGraph']);
+    // And guarded: quiet.
+    expect(unlockedControls(probe, 'components/ProbeR1Guarded.tsx',
+      withExport('  if (refuseCanvasEdit()) return;\n  if (!active) useGraphStore.getState().executeGraph();'))).toEqual([]);
+    // The Inspector's close before the guard edits nothing, so it needs none.
+    expect(unlockedControls(probe, 'components/ProbeR1GuardedAfter.tsx',
+      withExport('  if (!active) closeUnpinnedInspectorAtNone();\n  if (refuseCanvasEdit()) return;\n  useGraphStore.getState().executeGraph();'))).toEqual([]);
+    // 3,000 helpers, each calling the next, the last one running: each
+    // function's coverage was a call deeper on the stack.
+    const chain = (last: string) => {
+      const lines = ["import { useGraphStore } from './graphStore';", 'const run = () => useGraphStore.getState().executeGraph();'];
+      for (let at = 0; at < 3000; at += 1) lines.push(`function step${at}() { if (Math.random() > 2) return; step${at + 1}(); }`);
+      lines.push(`function step3000() { ${last} }`, 'export function go() { step0(); }');
+      return lines.join('\n');
+    };
+    const chained = (last: string): Resolve => (specifier, fromFile) => (specifier === '../store/chain'
+      ? { file: 'store/chain.ts', source: chain(last) } : resolveSource(specifier, fromFile));
+    const caller = "import { go } from '../store/chain';\nexport const C = () => <div role=\"button\" onClick={() => go()}>Go</div>;";
+    expect(unlockedControls(caller, 'components/ProbeChain.tsx', chained('run();'))).toEqual(['components/ProbeChain.tsx:2 <div> executeGraph']);
+    expect(unlockedControls(caller, 'components/ProbeChainGuarded.tsx', chained('if (refuseCanvasEdit()) return; run();'))).toEqual([]);
+    // Helpers that call each other: a cycle adds nothing of its own, and
+    // what runs in it is still found, or still guarded.
+    const cycle = (body: string): Resolve => (specifier, fromFile) => (specifier === '../store/chain'
+      ? { file: 'store/chain.ts', source: "import { useGraphStore } from './graphStore';\n"
+        + `function ping(n: number) { if (n > 0) pong(n - 1); ${body} }\nfunction pong(n: number) { ping(n); }\nexport function go() { pong(3); }` }
+      : resolveSource(specifier, fromFile));
+    expect(unlockedControls(caller, 'components/ProbeCycle.tsx', cycle('useGraphStore.getState().executeGraph();')))
+      .toEqual(['components/ProbeCycle.tsx:2 <div> executeGraph']);
+    expect(unlockedControls(caller, 'components/ProbeCycleGuarded.tsx',
+      cycle('if (refuseCanvasEdit()) return; useGraphStore.getState().executeGraph();'))).toEqual([]);
+    // A name with several definitions: its call's coverage is what all of
+    // them share, whichever comes last (the guarded one here).
+    const twoDefinitions = 'const run = useGraphStore((s) => s.executeGraph);\n'
+      + 'function B() { const go = () => run(); return go; }\n'
+      + 'export function A() { const go = () => { if (refuseCanvasEdit()) return; run(); }; B(); return <div role="button" onClick={() => go()}>Go</div>; }';
+    expect(unlockedControls(twoDefinitions, 'components/ProbeTwoDefinitions.tsx')).toEqual(['components/ProbeTwoDefinitions.tsx:3 <div> executeGraph']);
+    expect(performance.now() - started, 'ms').toBeLessThan(60_000);
   });
 
   it('the palette is allowlisted control by control, never tag-wide (review 4 LOW-4)', () => {
@@ -1856,6 +2065,41 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
   return [...clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
 }
 
+/**
+ * Review 23 MEDIUM-1 and review 24 NIT-2: the selectors in `css` that paint a
+ * locked button with !important, which would override the shared disabled
+ * look for one reason. Any paint (background and its longhands, colour, the
+ * border and outline and their longhands, box-shadow, opacity); any locked
+ * form (:disabled, [disabled], aria-disabled, the lock marks, the held
+ * look); the locked button the subject, or an ancestor of it (a label or an
+ * icon inside it).
+ */
+function importantPaintOnLocked(css: string, file: string, covered: (className: string) => boolean): string[] {
+  const LOCKED = /:disabled|\[disabled\]|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
+  // Review 1 of PR #205 (NIT-2): svg paint, filter and the text fill too;
+  // "! important" with a space; a property in any case.
+  const PAINT = /(?:^|;)\s*(?:background(?:-[\w-]+)?|color|border(?:-[\w-]+)*|outline(?:-[\w-]+)?|box-shadow|opacity|fill|stroke|filter|-webkit-text-fill-color)\s*:[^;]*!\s*important/i;
+  const found: string[] = [];
+  for (const { selector, body } of cssRules(css)) {
+    if (!PAINT.test(body)) continue;
+    for (const one of selectorsOf(selector)) {
+      if (/:not\(\.app-slava-restraint\)/.test(one)) continue;
+      // Each compound on its own: the locked one may be the subject or an ancestor.
+      const compounds = one.replace(/:not\([^)]*\)/g, '').split(/\s*[>+~]\s*|\s+(?![^(]*\))/).filter(Boolean);
+      const buttonish = (compound: string) => /^button\b/.test(compound)
+        || [...compound.matchAll(/\.([\w-]+)/g)].some((m) => covered(m[1]));
+      // The locked compound is the button (or an ancestor of the painted
+      // part), or (review 1 of PR #205, NIT-2) any ancestor is locked and the
+      // subject is a button or a covered class (`fieldset:disabled .x-button`).
+      const subject = compounds[compounds.length - 1] ?? '';
+      const hit = compounds.some((compound) => LOCKED.test(compound) && buttonish(compound))
+        || (compounds.some((compound) => LOCKED.test(compound)) && buttonish(subject));
+      if (hit) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
+    }
+  }
+  return found;
+}
+
 /** The class a selector styles: its last compound's last class. */
 function subjectClass(selector: string): string | null {
   const last = selector.replace(/:not\([^)]*\)/g, '').trim().split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
@@ -2067,24 +2311,48 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
   // (background, colour, border colour, with !important) a disabled, held or
   // lock-marked button: a bare `button` or a class this file covers.
   it('no other sheet overrides the shared look for any reason (offline, following, a hold): no !important paint on a disabled or lock-marked button', () => {
-    const LOCKED = /:disabled|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
-    const PAINT = /(?:^|;)\s*(?:background(?:-color)?|color|border-color)\s*:[^;]*!important/;
     const found: string[] = [];
     for (const path of walk(SRC, /\.css$/)) {
       const file = relative(SRC, path);
       if (file === SHARED) continue;
-      for (const { selector, body } of cssRules(readFileSync(path, 'utf8'))) {
-        if (!PAINT.test(body)) continue;
-        for (const one of selectorsOf(selector)) {
-          const state = one.replace(/:not\([^)]*\)/g, '');
-          if (!LOCKED.test(state) || /:not\(\.app-slava-restraint\)/.test(one)) continue;
-          const subject = state.split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
-          const className = subjectClass(state);
-          if (/^button\b/.test(subject) || (className && covered(className))) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
-        }
-      }
+      found.push(...importantPaintOnLocked(readFileSync(path, 'utf8'), file, covered));
     }
     expect(found).toEqual([]);
+  });
+
+  // PR #198 review 24 NIT-2: the check above missed the border shorthand,
+  // background-image, opacity, box-shadow, outline-color, [disabled]
+  // selectors and a label inside a locked button. The reviewer's crafted
+  // sheet, each case named: the first eleven are caught, the last two
+  // (an enabled hover, an uncovered class) are not.
+  it('review 24 NIT-2: the !important check catches every paint and every locked form, with no false positives', () => {
+    const cases: [string, boolean][] = [
+      ['.proposal-bar__button:disabled { background: #333 !important; }', true],
+      ['button[data-offline-disabled] { color: red !important; }', true],
+      ['.proposal-bar__button:disabled { border: 1px solid red !important; }', true],
+      ['.proposal-bar__button:disabled { background-image: linear-gradient(red, red) !important; }', true],
+      ['.proposal-bar__button:disabled { opacity: 0.3 !important; }', true],
+      ['.proposal-bar__button[disabled] { background: #333 !important; }', true],
+      ['.proposal-bar__button:disabled span { color: red !important; }', true],
+      ['.proposal-bar__button:disabled { box-shadow: 0 0 0 2px red !important; }', true],
+      ['.proposal-bar__button:disabled { outline-color: red !important; }', true],
+      ['@media (max-width: 900px) { .proposal-bar__button:disabled { background: #444 !important; } }', true],
+      ['.proposal-bar__button:is(:disabled, [aria-disabled=\'true\']) > svg { color: red !important; }', true],
+      ['.proposal-bar__button:not(:disabled):hover { background: #555 !important; }', false],
+      ['.some-uncovered-thing:disabled { color: red !important; }', false],
+      // Review 1 of PR #205 (NIT-2): the forms that slipped through.
+      ['.proposal-bar__button:disabled svg { fill: red !important; }', true],
+      ['.proposal-bar__button:disabled svg { stroke: red !important; }', true],
+      ['.proposal-bar__button:disabled { filter: brightness(2) !important; }', true],
+      ['.proposal-bar__button:disabled { -webkit-text-fill-color: red !important; }', true],
+      ['.proposal-bar__button:disabled { background: red ! important; }', true],
+      ['.proposal-bar__button:disabled { BACKGROUND: red !IMPORTANT; }', true],
+      ['fieldset:disabled .proposal-bar__button { background: red !important; }', true],
+      ['fieldset:disabled button { color: red !important; }', true],
+      ['fieldset:disabled .some-uncovered-thing { color: red !important; }', false],
+      ['.proposal-bar__button:disabled { fill: red; }', false],
+    ];
+    for (const [css, caught] of cases) expect(importantPaintOnLocked(css, 'zz_cases.css', covered).length > 0, css).toBe(caught);
   });
 
   // Fix round 2 of PR #200 (review 2 M-1, GM 2026-10-28 answers 2 and 3):
@@ -2268,7 +2536,9 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
 const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; fullColour?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
-  'remotion-properties-panel__anchor-button': { image: false, selected: /\.remotion-properties-panel__anchor-button\[data-active='true'\]/ },
+  // GM, PR #198 r39 item 1: the chosen cell is a chosen state, not a disabled
+  // one: no selected rule of its own here; locked, the cell's disabled look covers it.
+  'remotion-properties-panel__anchor-button': { image: false, selected: null },
   // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
   // Its edge is transparent at rest and stays so disabled.
   'project-home__cover-choice': { image: true, selected: /\.project-home__cover-choice\[aria-pressed='true'\]/, edgeKept: true },

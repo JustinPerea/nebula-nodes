@@ -10,7 +10,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { canvasLockOf, KEPT_MARK, lockedAction, refuseCanvasEdit } from '../src/lib/canvasLock';
 import { noteBackendConnection, resetBackendConnectionForTests, subscribeOfflinePulse } from '../src/lib/backendConnection';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
+import { runFinishesLine } from '../src/lib/runLock';
 import {
   KEPT_GENERIC_LINE, keptLockTitle, resetKeptCanvasForTests, setCanvasKept, subscribeKeptPulse,
 } from '../src/lib/keptCanvas';
@@ -163,7 +163,7 @@ describe('GM r17: every control names its own kept line', () => {
     for (const { path, call } of calls) {
       // SelectionToolbar's runLocked(running, own) passes its own LockOwn, whose `kept` tsc requires.
       // AssetsPanel's AssetItem passes each add's own (GM r22, 4: keptAdd, below).
-      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|keptAdd|'[a-z-]+')|^lock\.act\(own, \{ run: running \}\)$/);
+      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|keptAdd|'[a-z-]+')|^lock\.act\(own, \{ run: running, runTitle: runFinishesLine\(verb\) \}\)$/);
       expect(call, path).not.toMatch(/kept: 'other'/);
     }
     const assets = readFileSync(join(root, 'panels/AssetsPanel.tsx'), 'utf8');
@@ -203,8 +203,8 @@ describe('the lock reasons go kept, run, follow, offline (GM r16, 4; GM r19, 4)'
     expect(props).not.toHaveProperty('data-offline-neutral');
   });
   it('then the run, alone: its line and no mark, over a follow and offline', () => {
-    expect(canvasLockOf(following, true, false).act({ title: 'Run selected nodes', kept: 'run' }, { run: true }))
-      .toEqual({ disabled: true, title: RUN_LOCK_REASON });
+    expect(canvasLockOf(following, true, false).act({ title: 'Run selected nodes', kept: 'run' }, { run: true, runTitle: runFinishesLine('run it') }))
+      .toEqual({ disabled: true, title: runFinishesLine('run it') });
   });
   it('then the follow, then offline', () => {
     expect(canvasLockOf(following, true, false).act({ title: 'Run selected nodes', kept: 'run' }))

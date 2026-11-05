@@ -7,6 +7,7 @@ import { useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
 import { useCappedPopover } from '../lib/noticeWaiting';
 
 /** How close the menu may come to the window's edges. */
@@ -21,8 +22,9 @@ interface MenuItem {
   disabled?: boolean;
   /** Why it is disabled, when that isn't offline. */
   title?: string;
-  /** This tab's run locks it now: the run's line wins (lib/canvasLock). */
-  run?: boolean;
+  /** This tab's run locks it now: the run's line wins (lib/canvasLock),
+   * by the row's verb plus "it" (GM r39 item 2, lib/runLock). */
+  run?: { held: boolean; verb: RunLockVerb };
   /** GM r26 (4), a stopgap the bulk-create PR deletes: it acts on a node
    * with a tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
   tabLocal?: 'note';
@@ -125,7 +127,7 @@ export function ContextMenu() {
       label: 'Run This Node',
       kept: 'run',
       // The run lock's line wins (M2): run, follow, offline, kept.
-      run: isExecuting || runStarting,
+      run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
         executeNode(nodeId);
         hideContextMenu();
@@ -148,7 +150,7 @@ export function ContextMenu() {
       // Its copy stays on this tab while the canvas is kept (GM r17).
       kept: 'live',
       shortcut: 'Ctrl+D',
-      run: isExecuting,
+      run: { held: isExecuting, verb: RUN_LOCK_VERBS.duplicateIt },
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -160,7 +162,7 @@ export function ContextMenu() {
       kept: 'live',
       shortcut: 'Del',
       danger: true,
-      run: isExecuting,
+      run: { held: isExecuting, verb: RUN_LOCK_VERBS.deleteIt },
       disabled: sceneHeld !== null,
       title: sceneHeld ?? undefined,
       action: () => {
@@ -183,7 +185,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal }, { run: item.run })}
+          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal }, item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {})}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

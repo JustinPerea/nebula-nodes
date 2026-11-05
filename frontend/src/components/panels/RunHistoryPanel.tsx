@@ -11,7 +11,7 @@ import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, providerRecoveryPlaceKey, recordNodeType, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
-import { runFinishesLine } from '../../lib/useBackendOffline';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 import { showNotice } from '../../lib/canvasNotice';
 import { useAnnounced } from '../../lib/useAnnounced';
 import type { PaperSourceRecord } from '../../lib/paperSource';
@@ -159,7 +159,7 @@ export function RunHistoryPanel() {
               || providerStartAmbiguities.length > 0}
             aria-label="Clear run history"
             title={isExecuting
-              ? 'Wait for the run to finish first.'
+              ? runFinishesLine(RUN_LOCK_VERBS.clearRunHistory)
               : providerRecoveries.length > 0 || providerStartAmbiguities.length > 0
                 ? "Can't clear while a World Labs recovery ID is saved."
                 : 'Clear Run History'}
@@ -212,7 +212,7 @@ export function RunHistoryPanel() {
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         // Review 7, L5: canvasLock's order (run, then
                         // following, then offline); GM, round 15 of PR #114's title.
-                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting })}
+                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.forgetRun) })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordName(index, true))}

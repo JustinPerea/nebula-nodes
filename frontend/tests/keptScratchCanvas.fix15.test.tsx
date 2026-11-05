@@ -41,7 +41,7 @@ import { keepCanvasLocally, releaseKeptCanvas, useGraphStore } from '../src/stor
 import { useProjectStore } from '../src/store/projectStore';
 import { useUIStore } from '../src/store/uiStore';
 import { KEPT_MARK, canvasLockOf, lockedAction, refuseTabOnlyEdit } from '../src/lib/canvasLock';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
+import { runFinishesLine } from '../src/lib/runLock';
 import { keptLockTitle, resetKeptCanvasForTests, setKeptCanvasSaving, subscribeKeptPulse } from '../src/lib/keptCanvas';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { offlineReason } from '../src/lib/useBackendOffline';
@@ -187,10 +187,10 @@ describe('GM r19 (5): adding a node is the kept tab’s own', () => {
     cleanup();
     render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Text Input' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Text Input' } });
     // The node command (not the canvas search's "on canvas · focus" row).
-    const item = screen.getAllByRole('button', { name: /^Text Input/ }).find((b) => !/on canvas/.test(b.textContent ?? ''))!;
-    expect(item).toBeEnabled();
+    const item = screen.getAllByRole('option', { name: /^Text Input/ }).find((b) => !/on canvas/.test(b.textContent ?? ''))!;
+    expect(item).not.toHaveAttribute('aria-disabled');
     fireEvent.click(item);
     await act(async () => { await Promise.resolve(); });
     expect(ids()).toHaveLength(5);
@@ -280,8 +280,8 @@ describe('GM r19 (4): kept first in the lock order', () => {
   });
 
   it('merge-integrity LOW-2 (M2): unkept and offline, a control the run holds says the run’s line, not the offline one', () => {
-    const props = lockedAction(canvasLockOf(null, true, false), { title: 'Generate', kept: 'generate' }, { verb: 'generate', run: true });
-    expect(props.title).toBe(RUN_LOCK_REASON);
+    const props = lockedAction(canvasLockOf(null, true, false), { title: 'Generate', kept: 'generate' }, { verb: 'generate', run: true, runTitle: runFinishesLine('generate') });
+    expect(props.title).toBe(runFinishesLine('generate'));
     expect(props.title).not.toBe(offlineReason('generate'));
   });
 });
@@ -308,8 +308,8 @@ describe('GM r20: the routes that would replace a kept canvas hold, each with it
   it('the bottom bar’s Load and Import show their own kept lines', () => {
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: /Canvas actions/ }));
-    expect(screen.getByRole('button', { name: /Load graph/ })).toHaveAttribute('title', keptLockTitle('load'));
-    expect(screen.getByRole('button', { name: /Import CLI graph/ })).toHaveAttribute('title', keptLockTitle('import'));
+    expect(screen.getByRole('button', { name: /Load canvas/ })).toHaveAttribute('title', keptLockTitle('load'));
+    expect(screen.getByRole('button', { name: /Import CLI canvas/ })).toHaveAttribute('title', keptLockTitle('import'));
   });
 
   it('GM r19 (2): Forget ID has its own verb, verbatim, at both of its controls', () => {
@@ -359,7 +359,7 @@ describe('GM r20: [Save as a project] [Discard edits] on the kept line', () => {
     const view = render(<KeptEditsNotice />);
     for (const name of ['Save as a project', DISCARD_EDITS]) {
       expect(screen.getByRole('button', { name })).toBeDisabled();
-      expect(screen.getByRole('button', { name })).toHaveAttribute('title', RUN_LOCK_REASON);
+      expect(screen.getByRole('button', { name })).toHaveAttribute('title', runFinishesLine(name === DISCARD_EDITS ? 'discard your edits' : 'save your edits as a project'));
     }
     act(() => useGraphStore.setState({ isExecuting: false }));
     act(() => noteBackendConnection('offline'));

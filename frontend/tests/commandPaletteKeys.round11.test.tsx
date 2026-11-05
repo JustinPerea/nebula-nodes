@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 
-// Review 10, L-1: with focus on a palette item (Cmd+K, Tab to "Run graph"),
+// Review 10, L-1: with focus on a palette item (Cmd+K, Tab to "Run canvas"),
 // Escape and the arrows did nothing: only the search field handled them. The
 // dialog itself now handles them: Escape closes it (or leaves the agent
 // prompt, as from the field), and the arrows move the active item and focus
@@ -22,7 +22,7 @@ const initialGraph = useGraphStore.getState();
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
 const dialog = () => screen.queryByRole('dialog', { name: 'Search commands and nodes' });
 const field = () => screen.getByPlaceholderText('Search commands and nodes…');
-const enabledItems = () => [...document.querySelectorAll<HTMLButtonElement>('.command-palette__item:not([disabled])')];
+const enabledItems = () => [...document.querySelectorAll<HTMLButtonElement>('.command-palette__item:not([aria-disabled="true"])')];
 const selectedItem = () => document.querySelector('.command-palette__item--selected');
 const openPalette = async () => {
   act(() => { fireEvent.keyDown(document, { key: 'k', metaKey: true }); });
@@ -86,7 +86,7 @@ describe('the palette: Escape and the arrows with focus on an item', () => {
 
   it('they stop at the ends, as in the field', async () => {
     await openPalette();
-    const items = enabledItems();
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.command-palette__item')];
     act(() => { items[0].focus(); });
     act(() => { fireEvent.keyDown(items[0], { key: 'ArrowUp' }); });
     expect(document.activeElement).toBe(items[0]);
@@ -96,18 +96,23 @@ describe('the palette: Escape and the arrows with focus on an item', () => {
     expect(document.activeElement).toBe(last);
   });
 
-  it('a disabled item is passed over (it cannot take focus)', async () => {
+  it('a locked item is reached too (aria-disabled, never native disabled: review 2 of PR #205, lines LOW-1), and Enter on it does nothing', async () => {
     await openPalette();
-    // "Run graph" is disabled on an empty canvas, and it is the first item.
+    // "Run canvas" is locked on an empty canvas, and it is the first item.
     const all = [...document.querySelectorAll<HTMLButtonElement>('.command-palette__item')];
-    expect(all[0].disabled).toBe(true);
-    const items = enabledItems();
-    act(() => { items[1].focus(); });
-    act(() => { fireEvent.keyDown(items[1], { key: 'ArrowUp' }); });
-    expect(document.activeElement).toBe(items[0]);
-    act(() => { fireEvent.keyDown(items[0], { key: 'ArrowUp' }); });
-    expect(document.activeElement).toBe(items[0]);
-    expect(selectedItem()).toBe(items[0]);
+    expect(all[0]).toHaveAttribute('aria-disabled', 'true');
+    expect(all[0].disabled).toBe(false);
+    act(() => { all[1].focus(); });
+    act(() => { fireEvent.keyDown(all[1], { key: 'ArrowUp' }); });
+    expect(document.activeElement).toBe(all[0]);
+    expect(selectedItem()).toBe(all[0]);
+    const run = vi.fn();
+    useGraphStore.setState({ executeGraph: run } as never);
+    act(() => { fireEvent.keyDown(field(), { key: 'Enter' }); });
+    act(() => { fireEvent.click(all[0]); });
+    await settle();
+    expect(run).not.toHaveBeenCalled();
+    expect(dialog()).not.toBeNull();
   });
 
   it('from the field the arrows still move the active item and keep focus there (unchanged)', async () => {

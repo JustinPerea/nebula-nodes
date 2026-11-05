@@ -1,5 +1,5 @@
 import { inDesktopShell } from './personSession';
-import { runFinishesLine } from './useBackendOffline';
+import { runFinishesLine } from './runLock';
 import { UNLOCK_LABEL } from './worldLabsWaiting';
 import type { OpenHold, ReopenHold } from './reopenHold';
 
