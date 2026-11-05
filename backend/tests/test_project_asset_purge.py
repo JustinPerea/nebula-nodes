@@ -28,6 +28,16 @@ from services.provider_start_guard import ProviderStartGuard
 PENDING = purge.PENDING_KEY
 
 
+@pytest.fixture(autouse=True)
+def _fresh_start(monkeypatch):
+    """Each test is a fresh start: the once-per-start log lines are due again."""
+    from services import asset_project_rehome
+
+    for module, name in ((purge, "_WAITING_LOGGED"), (purge, "_OTHER_CATALOG_LOGGED"),
+                         (purge, "_UNRESOLVED_LOGGED"), (asset_project_rehome, "_UNPAIRED_LOGGED")):
+        monkeypatch.setattr(module, name, set())
+
+
 @pytest.fixture
 def ws(tmp_path, monkeypatch):
     roots = {"moodboard": tmp_path / "moodboards", "character": tmp_path / "characters", "style": tmp_path / "presets"}
@@ -489,7 +499,6 @@ def test_a_store_folder_linked_on_its_own_keeps_its_files_and_the_id_listed(tmp_
     binned = _raw_trashed(elsewhere, "b2", pid)
     assert not purge.roots_paired(state, roots["moodboard"])
     assert purge.names(pid, state_dir=state, stores=_stores(roots))["moodboards"] == []
-    monkeypatch.setattr(purge, "_UNPAIRED_LOGGED", set())
     catalog = {"projects": {}, "trash": {}, PENDING: [pid]}
     with caplog.at_level("WARNING", logger="services.project_asset_purge"):
         for _start_and_listing in range(2):
@@ -521,7 +530,6 @@ def test_a_symlink_loop_leaves_the_store_unpaired_and_the_routes_up(ws, person, 
     client, store, roots, _ = ws
     loop = tmp_path / "loop"
     loop.symlink_to(loop)
-    monkeypatch.setattr(purge, "_UNRESOLVED_LOGGED", set())
     with caplog.at_level("WARNING", logger="services.project_asset_purge"):
         assert not purge.roots_paired(tmp_path, loop / "moodboards")
         assert not purge.roots_paired(loop, tmp_path / "moodboards")
@@ -649,7 +657,6 @@ def _half_isolated(tmp_path, monkeypatch):
     assert [s.root for s in purge.default_stores()] == list(roots.values())
     store = ProjectStore(tmp_path / "copy" / "state" / "projects")
     monkeypatch.setattr(main_module, "project_store", store)
-    monkeypatch.setattr(purge, "_UNPAIRED_LOGGED", set())
     return store, roots
 
 
@@ -756,7 +763,6 @@ def _copy_with_linked_store(tmp_path, monkeypatch, pid, deleted_at):
         copy.commit(catalog)
     monkeypatch.setattr(main_module, "project_store", copy)
     monkeypatch.setattr(main_module, "_STATE_DIR", iso / ".nebula")
-    monkeypatch.setattr(purge, "_UNPAIRED_LOGGED", set())
     assert [store.root for store in purge.default_stores()][0] == iso / ".nebula" / "moodboards"
     return copy, files, iso / ".nebula"
 
@@ -965,7 +971,8 @@ def test_a_linked_trash_or_side_folder_inside_a_paired_store_is_never_followed(t
     store = purge.AssetStore("moodboard", root, BOARD_SIDE_FOLDERS)
     assert purge.names(pid, state_dir=state, stores=[store])["moodboards"] == ["b-live"]
     done, removed = purge.finish({"projects": {}, "trash": {}, PENDING: [pid]}, state_dir=state, stores=[store])
-    assert done == [pid] and [item["id"] for item in removed["moodboard"]] == ["b-live"]
+    # Its own live board goes; the id stays listed (a link was passed over).
+    assert done == [] and [item["id"] for item in removed["moodboard"]] == ["b-live"]
     assert not mine.exists()
     assert record.is_file() and (other / ".trash" / "b-binned.json").is_file() and notes.is_file()
 
