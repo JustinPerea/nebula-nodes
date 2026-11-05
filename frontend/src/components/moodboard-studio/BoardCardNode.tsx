@@ -4,6 +4,8 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { overviewThumbnailUrl } from '../../lib/canvasOverview';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
+import { agentAnchor } from '../../lib/agentAnchors';
+import { useStudioBoardId } from './useStudioBoardId';
 import { BoardFillContext, BoardWideContext, type BoardCardNodeType } from './boardNodes';
 
 export type { BoardCardData } from './boardNodes';
@@ -32,12 +34,13 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   const fill = useContext(BoardFillContext);
   const filling = data.filling === true;
   const cardRef = useRef<HTMLDivElement>(null);
+  const board = useStudioBoardId();
   useLayoutEffect(() => {
     const card = cardRef.current;
     if (card) card.style.opacity = filling ? String(fill.progress(data.imageId)) : '';
   }, [fill, filling, data.imageId]);
   return (
-    <div ref={cardRef} className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId}
+    <div ref={cardRef} className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId} data-agent-anchor={agentAnchor(board, data.imageId)}
       data-fill-id={filling ? data.imageId : undefined}>
       {src === null ? (
         <div className="moodboard-card__placeholder">{view.outside && <OutsideImageNote />}</div>

@@ -285,6 +285,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'lib/agentCursorTuning.ts',
   // The surface the cursor is drawn on (Phase 3): the canvas's space reads React Flow.
   'lib/agentCursorSpace.ts',
+  'lib/agentAnchorResolve.ts',
+  'lib/agentCursorLayerOf.ts',
   // Its store: the normalising and the replay load with their readers; the
   // entry keeps only the socket feed (store/agentPresenceFeed.ts).
   'store/agentPresenceStore.ts',

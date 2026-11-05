@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { studioBoundaryLine, studioBoundaryLogLine, studioDrawFailedLogLine, type DataProblem, type StudioScreen } from '../lib/studioBoundary';
 import { WorkspaceHeader } from './WorkspaceHeader';
+import { agentLauncher } from '../lib/agentAnchors';
 
 /** Each studio's own way back to the canvas (uiStore). The Commons' own exit
  * goes back where it was opened from (Create, a studio), which may be the
@@ -50,7 +51,7 @@ class SafeHeader extends Component<{ title: string; onBack: () => void }, { fail
     return (
       <header className="workspace-header studio-boundary__header" aria-label="Workspace">
         <div className="workspace-header__identity">
-          <button type="button" className="workspace-header__back" onClick={onBack} aria-label="Back to Canvas">
+          <button type="button" className="workspace-header__back" onClick={onBack} aria-label="Back to Canvas" data-agent-launcher={agentLauncher('canvas')}>
             Canvas
           </button>
           <h1 className="workspace-header__title">{title}</h1>
@@ -127,7 +128,7 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
         <div className="studio-boundary__body">
           <div className="studio-boundary__card" role="alert">
             <p className="studio-boundary__line">{studioBoundaryLine(studio, node?.label || null, damaged)}</p>
-            <button type="button" className="studio-boundary__back" onClick={exit}>
+            <button type="button" className="studio-boundary__back" onClick={exit} data-agent-launcher={agentLauncher('canvas')}>
               Back to canvas
             </button>
           </div>

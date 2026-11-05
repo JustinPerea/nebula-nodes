@@ -2,6 +2,7 @@ import { useRef, type ReactNode, type Ref } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ProjectWorkspaceControls } from './projects/ProjectWorkspaceControls';
 import { UpdatesSlot } from './agent-notes/UpdatesSlot';
+import { agentLauncher } from '../lib/agentAnchors';
 import { StudioOfflineRow } from './StudioOfflineRow';
 import { useTextCut } from '../hooks/useTextCut';
 import '../styles/workspace-header.css';
@@ -44,6 +45,7 @@ export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backAriaL
       <div className="workspace-header__identity">
         <ProjectWorkspaceControls onHome={onHome} homeBusy={homeBusy} />
         {onBack && <button ref={backRef} type="button" className={`workspace-header__back${navigation ? ' workspace-header__back--navigation' : ''}`} onClick={onBack}
+          data-agent-launcher={backLabel === 'Canvas' ? agentLauncher('canvas') : undefined}
           disabled={backDisabled} aria-label={backBusy ? 'Saving…' : backAriaLabel ?? `Back to ${backLabel}`} aria-busy={backBusy || undefined}
           title={navigation ? `Back to ${backLabel}` : undefined}>
           <ArrowLeft size={16} aria-hidden="true" />

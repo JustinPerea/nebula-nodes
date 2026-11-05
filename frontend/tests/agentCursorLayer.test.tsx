@@ -235,6 +235,17 @@ describe('each action draws its own look (Phase 2, spec §2)', () => {
     expect(ripple()).toBeNull();
   });
 
+  it('a cursor on a moodboard is the screen layer\'s: the canvas layer draws nothing for it', () => {
+    render(<AgentCursorLayer />);
+    send(event({ target: { surface: 'moodboard', itemId: 'b1/i3', part: 'note' }, action: 'type' }));
+    flush();
+    expect(cursors()).toHaveLength(0);
+    // One on the canvas beside it still draws.
+    send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, target: { nodeId: 'n1' } }));
+    flush();
+    expect(cursors()).toHaveLength(1);
+  });
+
   it('a new action replaces the current one at once', () => {
     render(<AgentCursorLayer />);
     send(event({ action: 'think' }));

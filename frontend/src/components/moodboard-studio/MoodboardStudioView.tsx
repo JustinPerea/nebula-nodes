@@ -63,6 +63,7 @@ import { outsideForChip, placeTiles, respot, spotFree, type SeenArea } from '../
 import type { NodeRect } from '../../lib/nodePlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
+import { agentAnchor } from '../../lib/agentAnchors';
 import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { useHoldBottom } from './useHoldBottom';
@@ -3141,8 +3142,8 @@ export function MoodboardStudioView() {
   );
 
   const boardFields = (
-    <div className="moodboard-def__fields">
-      <label className="moodboard-field">
+    <div className="moodboard-def__fields" data-agent-anchor={agentAnchor(savedId)}>
+      <label className="moodboard-field" data-agent-anchor={agentAnchor(savedId, null, 'name')}>
         <span>Name</span>
         <input
           value={draft.name}

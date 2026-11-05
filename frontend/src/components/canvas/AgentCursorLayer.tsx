@@ -10,6 +10,7 @@ import {
 } from '../../store/agentPresenceStore';
 import { stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
 import { canvasSpace, type CursorLabels, type CursorSpace } from '../../lib/agentCursorSpace';
+import { layerOf } from '../../lib/agentCursorLayerOf';
 import {
   frameAt,
   impulseCurve,
@@ -2206,7 +2207,16 @@ const PRUNE_INTERVAL_MS = 5_000;
 
 /** Live cursors for agents working on the canvas, drawn in flow coordinates. */
 export function AgentCursorLayer() {
-  const agents = useAgentPresenceStore((s) => s.agents);
+  const everyone = useAgentPresenceStore((s) => s.agents);
+  // This layer draws the cursors on the canvas; one on a surface beside it
+  // (a moodboard) is the screen layer's (lib/agentCursorLayerOf.ts).
+  const agents = useMemo(() => {
+    const own: typeof everyone = {};
+    for (const [key, cursor] of Object.entries(everyone)) {
+      if (layerOf(cursor.target, { canvasMounted: true }) === 'canvas') own[key] = cursor;
+    }
+    return Object.keys(own).length === Object.keys(everyone).length ? everyone : own;
+  }, [everyone]);
   const prune = useAgentPresenceStore((s) => s.prune);
   const zoom = useStore((s) => s.transform[2]);
   // The canvas as a CursorSpace: the one thing here that knows React Flow

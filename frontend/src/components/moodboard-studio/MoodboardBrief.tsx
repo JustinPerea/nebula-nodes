@@ -1,6 +1,8 @@
 import { useId, useState, type ReactNode } from 'react';
 import type { MoodboardBrief, MoodboardClash, MoodboardClashMode, MoodboardPinnedColors } from '../../types';
 import { BRIEF_LIMITS } from './briefLimits';
+import { agentAnchor } from '../../lib/agentAnchors';
+import { useStudioBoardId } from './useStudioBoardId';
 
 // The person's side of a board's brief (design-canvas gap 14): Direction,
 // Avoid and pinned colours, plus the brief generators get and its optional
@@ -242,6 +244,7 @@ export function BriefFields({
   onTextDone?: () => void;
 }) {
   const [avoidText, setAvoidText] = useState('');
+  const board = useStudioBoardId();
   const [advanced, setAdvanced] = useState(false);
   const advancedId = useId();
   const avoidFull = avoid.length >= BRIEF_LIMITS.avoidItems;
@@ -267,7 +270,7 @@ export function BriefFields({
         </div>
       </div>
       <div className="moodboard-analysis__body">
-        <label className="moodboard-field">
+        <label className="moodboard-field" data-agent-anchor={agentAnchor(board, null, 'direction')}>
           <span>What the board is for</span>
           <textarea
             rows={2}
@@ -278,7 +281,7 @@ export function BriefFields({
             onBlur={onTextDone}
           />
         </label>
-        <div className="moodboard-field">
+        <div className="moodboard-field" data-agent-anchor={agentAnchor(board, null, 'avoid')}>
           <span>Avoid</span>
           {avoid.length > 0 && (
             <ul className="moodboard-chips" aria-label="Avoid list">
@@ -306,12 +309,14 @@ export function BriefFields({
         </div>
         <PinnedColorRow
           label="Colors that must appear"
+          anchor={agentAnchor(board, null, 'colors')}
           colors={pinnedColors.include}
           other={pinnedColors.exclude}
           onChange={(include) => onChange({ pinnedColors: { ...pinnedColors, include } })}
         />
         <PinnedColorRow
           label="Colors to keep out"
+          anchor={agentAnchor(board, null, 'colors')}
           colors={pinnedColors.exclude}
           other={pinnedColors.include}
           onChange={(exclude) => onChange({ pinnedColors: { ...pinnedColors, exclude } })}
@@ -349,11 +354,14 @@ export function BriefFields({
 
 function PinnedColorRow({
   label,
+  anchor,
   colors,
   other,
   onChange,
 }: {
   label: string;
+  /** `data-agent-anchor` (lib/agentAnchors). */
+  anchor?: string;
   colors: string[];
   other: string[];
   onChange: (colors: string[]) => void;
@@ -368,7 +376,7 @@ function PinnedColorRow({
     setValue('');
   };
   return (
-    <div className="moodboard-field">
+    <div className="moodboard-field" data-agent-anchor={anchor}>
       <span>{label}</span>
       {colors.length > 0 && (
         <ul className="moodboard-chips" aria-label={label}>
