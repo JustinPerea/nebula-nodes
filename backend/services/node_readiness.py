@@ -287,7 +287,7 @@ def instance_missing_line(
         routed = node_route.with_wired_blockers(definition, params, wired)
         if node_route.uses_krea_plan(definition, routed):
             return sign_in
-        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured})
+        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured}, name=name)
         if line:
             return line
     if need == KREA_SIGN_IN:

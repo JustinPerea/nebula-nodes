@@ -180,8 +180,18 @@ export function moveFocusFromLeave(leaving: HTMLElement): void {
   const start = document.getElementById('recent-projects-title')
     ?? document.querySelector<HTMLElement>('.canvas-wrapper')
     ?? [...document.querySelectorAll<HTMLElement>('main')].find((main) => !main.closest('[inert]')) ?? null;
-  if (start) focusOn(start);
+  if (start) {
+    // PR #204 round 18h (GM r38 3d): the start of the page takes focus only so it never drops to
+    // <body>; it draws no ring there (styles/slava-restraint.css), from the keyboard either. The
+    // mark goes with the focus, so a person who Tabs to the canvas later sees its ring.
+    start.setAttribute(FOCUS_START_ATTR, '');
+    start.addEventListener('blur', () => start.removeAttribute(FOCUS_START_ATTR), { once: true });
+    focusOn(start);
+  }
 }
+
+/** The mark on the start of page content while it holds focus a leave put there (no ring). */
+export const FOCUS_START_ATTR = 'data-focus-start';
 
 export interface LeaveProps {
   ref: (element: HTMLElement | null) => void;

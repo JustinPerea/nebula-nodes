@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch, canvas_project):
 
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
@@ -138,4 +138,4 @@ def test_analyze_runs_off_the_event_loop(client, monkeypatch):
 
     analyzed = client.post(f"/api/moodboards/{board['id']}/analyze").json()
 
-    assert loops == [None] and analyzed["analysis"]["version"] == 5
+    assert loops == [None] and analyzed["analysis"]["version"] == 6

@@ -17,6 +17,8 @@ interface FakeGraph {
   authorGenerationCluster: (...args: unknown[]) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   executeClusterConcurrent: (...args: unknown[]) => Promise<void>;
   cancelCreateGeneration: () => void; cancelRun: () => Promise<void>; deleteGeneration: () => void;
+  // GM r8 (3), #204 r7: Generate's lines go to the app's notice region.
+  messageNotice: { text: string } | null; undoNotice: null; notify: (text: string) => void;
 }
 const mocks = vi.hoisted(() => ({
   graph: null as UseBoundStore<StoreApi<FakeGraph>> | null,
@@ -42,6 +44,7 @@ vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   const store = create<FakeGraph>(() => ({
     nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], unsavedScenes: {}, isImportingGraph: false,
+    messageNotice: null, undoNotice: null, notify: (text) => store.setState({ messageNotice: { text } }),
     reserveCreateGeneration: (id) => { store.setState({ createLaunchingIds: [...store.getState().createLaunchingIds, id] }); return true; },
     releaseCreateGeneration: (id) => store.setState({ createLaunchingIds: store.getState().createLaunchingIds.filter((entry) => entry !== id) }),
     authorGenerationCluster: (...args) => mocks.author(...args),

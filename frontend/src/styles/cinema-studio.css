@@ -10,13 +10,17 @@
  *   --sr-accent                                     → filmic gold accent
  */
 
+/* The whole grid, in this one place (fix/moodboard-board-layout,
+   tests/studioGridAreas.test.ts), the offline row included: right under the
+   top header, 0 tall until it opens (GM, PR #198 r2; StudioOfflineRow). */
 body.app-slava-restraint .cinema-studio-view {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "toolbar"
+    "offline"
     "body";
   background: var(--sr-canvas);
   color: var(--sr-ink);

@@ -5,6 +5,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
+import { useNoticeClearance } from '../../hooks/useNoticeClearance';
 import { inNoticeRegion, sitsBehind } from '../../lib/modalFocus';
 
 export interface ComparisonResult {
@@ -36,6 +37,8 @@ function available(element: HTMLElement): boolean {
 export function ResultComparison({ items, onClose, onReuseSettings }: ResultComparisonProps) {
   const [results] = useState(() => structuredClone(items));
   const overlayRef = useRef<HTMLDivElement>(null);
+  // Review 6 MEDIUM-3: the panel stops above the notice band.
+  const clearance = useNoticeClearance();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   const titleId = useId();
@@ -121,6 +124,7 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     <div
       ref={overlayRef}
       className="result-comparison"
+      style={clearance}
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) event.preventDefault();
       }}

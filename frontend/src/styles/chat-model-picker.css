@@ -225,3 +225,10 @@ body.app-slava-restraint .chat-model-picker__option input:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
 }
+
+/* PR #204 round 14 (GM r23 answer 6): the not-connected line under the picker's heading. */
+body.app-slava-restraint .chat-model-picker__dialog .chat-model-picker__held-line {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 12px 0;
+}

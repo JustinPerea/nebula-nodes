@@ -64,7 +64,9 @@ def test_stdin_failure_leaves_no_person_at_all(fresh_person_session, monkeypatch
         assert fresh_person_session.is_set
         return
     assert not fresh_person_session.is_set
-    assert "Person session unavailable" in caplog.text
+    # GM r60 23: the because form, not a label.
+    assert ("Nebula couldn’t start the person session because the startup pipe is missing or invalid. "
+            "Person-only actions are refused until Nebula restarts.") in caplog.text
 
 
 def test_stdin_eof_or_timeout_fails_closed(fresh_person_session, monkeypatch):

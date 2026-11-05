@@ -784,11 +784,11 @@ body:not(.app-slava-restraint) .mesh-modal__format {
 }
 
 body:not(.app-slava-restraint) .mesh-modal__download-error {
-  color: #ff9d87;
+  color: var(--line-warning, #ff9d87);
 }
 
 body.app-slava-restraint .mesh-modal__download-error {
-  color: var(--sr-status-error, #9b2c23);
+  color: var(--line-warning, #9b2c23);
 }
 
 body:not(.app-slava-restraint) .mesh-modal__download {

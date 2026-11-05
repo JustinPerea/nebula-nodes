@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix round 6 (GM's pr198 r8 and pr200 r2 rulings), the store side:
@@ -26,6 +26,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const setSceneRetryDelaysForTests = (delays: number[]) => (store as { setSceneRetryDelaysForTests?: (d: number[]) => void }).setSceneRetryDelaysForTests?.(delays);
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');

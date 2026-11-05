@@ -152,7 +152,7 @@ describe('Blind labeling keeps its draft across sections', () => {
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Labels changed in another window. Reload before saving.');
     expect(useUIStore.getState().viewMode).toBe('commons');
     expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('humanist_sans');
@@ -258,7 +258,7 @@ describe('Preparing the held-out set outlives the panel', () => {
     await waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     first.unmount();
     // Round 3e: the API's typed refusal; a plain Error's own text is never shown.
-    fail(new RequestFailedError("Couldn't prepare the held-out set.", 409, { reason: 'A reference is still downloading from iCloud.' }));
+    fail(new RequestFailedError("Couldn’t prepare the held-out set.", 409, { reason: 'A reference is still downloading from iCloud.' }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     await comeBack();

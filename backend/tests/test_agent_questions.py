@@ -295,7 +295,8 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
     assert note["source"] == "nebula" and note["author"]["name"] == "Claude Code"
     assert note["refs"] == [n1]
     assert note["actions"] == [{"label": "Answer", "op": {"kind": "question.answer", "questionId": view["id"]}}]
-    assert note["questions"] == {"id": view["id"]}
+    # GM 2026-10-29 (the held needs-you count): how many it asks, as its line says, and when.
+    assert note["questions"] == {"id": view["id"], "count": 2, "since": view["createdAt"]}
     assert view["update"] == {"id": note["id"], "projectId": asked.project_id}
     # Template words only: the questions and the note are the form's, not the Update's.
     assert "crop" not in json.dumps(note).lower()

@@ -224,6 +224,10 @@ describe('A: one source for the read-only state', () => {
     'components/commons/CommonsReview.tsx',
     'components/commons/CommonsSettings.tsx',
     'components/commons/CommonsView.tsx',
+    // PR #210 round 6c (GM r11 4): the Studio's autosave waits while offline
+    // (a write would be refused) and sends on reconnect. A network wait, not a
+    // canvas edit: following an agent's switch mustn't stop it.
+    'components/moodboard-studio/MoodboardStudioView.tsx',
     'components/panels/ChatPanel.tsx',
     'components/panels/ForgetRecoveryConfirm.tsx',
     'components/panels/PermissionCard.tsx',
@@ -234,6 +238,17 @@ describe('A: one source for the read-only state', () => {
     // PR #198's hook that hides a screen's load-failure notice offline: not a
     // canvas edit, so the lock has nothing to add (the #195 merge).
     'hooks/useOfflineHiddenNotice.ts',
+    // PR #204 round 14 (GM r23 3): offline comes first for not-connected lines and the general
+    // notice. They show nothing offline and edit nothing, so the canvas lock (which also covers
+    // following, when a lock line should still show) has nothing to add.
+    'components/PersonRequiredBanner.tsx',
+    // Round 18d (live LOW-1, GM r23 3): a Commons load line and the Commons-off line hide beside
+    // "Nebula is offline". They edit nothing.
+    'components/commons/CommonsErrorLine.tsx',
+    'components/commons/CommonsOffView.tsx',
+    'components/commons/useLockLineHold.ts',
+    'hooks/useOfflineFirstBecause.ts',
+    'hooks/usePersonLock.ts',
     'lib/canvasLock.ts',
     'lib/useBackendOffline.ts',
   ]);

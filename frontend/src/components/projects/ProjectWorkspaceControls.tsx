@@ -7,6 +7,7 @@ import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
+import { useSettleDelay } from '../../lib/saveSettle';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -20,6 +21,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
   const scenesUnsaved = useGraphStore((state) => Object.keys(state.unsavedScenes).length > 0);
+  const settled = status === 'saved' && !scenesUnsaved;
+  const settledDelay = useSettleDelay(settled);
   // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
   // banner says it); a retry couldn't reach Nebula anyway.
   const offline = useBackendOffline();
@@ -132,8 +135,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         // (short: the button is the retry), never another action's.
         ? <button type="button" className="project-workspace-controls__retry" title={saveError ? shortLine(saveError) : 'Retry saving'}
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
-        : <span className={`project-workspace-controls__status${status === 'saved' && !scenesUnsaved ? ' project-workspace-controls__status--settled' : ''}`}
-            role="status">{label}</span>}
+        : <span className={`project-workspace-controls__status${settled ? ' project-workspace-controls__status--settled' : ''}`}
+            style={settledDelay ? { animationDelay: settledDelay } : undefined} role="status">{label}</span>}
       {/* While following, the save state and the count (the canvas that is going) give their room to the
           opening line, which takes the whole slot at the locked width (GM round 22, B). */}
       {!following && <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>}

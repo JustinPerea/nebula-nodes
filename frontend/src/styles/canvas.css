@@ -94,6 +94,11 @@ body.app-slava-restraint .react-flow__minimap {
    toolbar's own height: 38 px buttons, 5 px padding, a 1 px border. */
 .selection-toolbar-panel.react-flow__panel {
   --selection-toolbar-h: 50px;
+  /* The width the slot reserves, shown or not (lib/bottomBar.ts
+     toolbarSlotSpan; GM - Design r70): the widest the toolbar draws, 896 px
+     at 1440 with a model node's actions, and some room. Read, not drawn:
+     the empty Panel stays 0 px wide. */
+  --selection-toolbar-slot-w: 960px;
   min-height: var(--selection-toolbar-h);
   margin-top: 92px;
   pointer-events: none;

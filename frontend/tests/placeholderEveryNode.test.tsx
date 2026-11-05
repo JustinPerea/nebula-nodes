@@ -23,9 +23,12 @@ const api = vi.hoisted(() => ({ lookupStoredAsset: vi.fn() }));
 vi.mock('../src/lib/api', async (importOriginal) => ({ ...await importOriginal<object>(), lookupStoredAsset: api.lookupStoredAsset }));
 
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useStoredAssetsStore } from '../src/store/storedAssetsStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;

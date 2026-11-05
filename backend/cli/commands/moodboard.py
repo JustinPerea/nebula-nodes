@@ -139,6 +139,9 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"    {composed['styleBrief']}")
     else:
         print(f"    Not built yet: `nebula moodboard analyze {board_id}`")
+    if composed.get("outdated"):
+        # Right after the brief's text (GM r5): its saved colours are out of date.
+        print(f"    {composed['outdated']}")
     if override and override.get("stale"):
         if override["by"] == "agent":
             print(f"    The board changed since this was written. Keep it with `nebula moodboard set {board_id} "
@@ -241,6 +244,9 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
         print(f"  Not analyzed since its last change. `nebula moodboard analyze {board.get('id')}`")
         return
     print("  Analysis:")
+    if analysis.get("outdated"):
+        # Made before alpha counted, on a board with transparent images.
+        print(f"    {analysis['outdated']} `nebula moodboard analyze {board.get('id')}`")
     if analysis.get("summary"):
         print(f"    {analysis['summary']}")
     _print_colours(analysis, board.get("id"))
@@ -280,7 +286,8 @@ def _print_colours(analysis: dict[str, Any], board_id: Any, indent: str = "    "
         print(f"{indent}{label} (share of the board · images it comes from, with its share of each):")
         for colour in (c for c in colours if c.get("role") == role):
             print(f"{indent}  {colour.get('hex')}  {_pct(colour.get('share')):>6}  {_sources_text(colour)}")
-    if (analysis.get("palette") or analysis.get("accents")) and not with_sources:
+    # An out-of-date analysis already says to analyze again, once (as Studio).
+    if (analysis.get("palette") or analysis.get("accents")) and not with_sources and not analysis.get("outdated"):
         print(f"{indent}Analyze again to see which images each colour comes from: "
               f"`nebula moodboard analyze {board_id}`")
 
@@ -319,8 +326,13 @@ def _print_dry_run(result: dict[str, Any]) -> None:
     saved = result.get("saved") or {}
     if not saved.get("analyzed"):
         print("  The board has no saved analysis, so everything below is new.")
-    elif not saved.get("current"):
-        print("  The saved analysis is out of date, so the changes include edits to the board.")
+    else:
+        # Both can hold: a board edited since, whose saved colours also
+        # counted transparent areas as dark.
+        if not saved.get("current"):
+            print("  The saved analysis is out of date, so the changes include edits to the board.")
+        if saved.get("outdated"):
+            print(f"  {saved['outdated']}")
     analysis = result.get("analysis") or {}
     print("  Would give:")
     _print_colours(analysis, result.get("id"))
@@ -383,6 +395,10 @@ def _price_text(est: dict[str, Any]) -> str:
     return text
 
 
+# A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
+TRANSPARENT_ESTIMATE_LINE = "#{number} wasn’t read because it’s too transparent."
+
+
 def _print_estimate(est: dict[str, Any]) -> None:
     reader = est.get("reader") or {}
     count, batches = est.get("count", 0), est.get("batches", 0)
@@ -391,6 +407,8 @@ def _print_estimate(est: dict[str, Any]) -> None:
           f"{_price_text(est)}.")
     if est.get("unreadable"):
         print(f"  Not on this computer, so not read: {', '.join(f'#{n}' for n in est['unreadable'])}")
+    for number in est.get("transparent") or []:
+        print(f"  {TRANSPARENT_ESTIMATE_LINE.format(number=number)}")
     price = est.get("price") or {}
     low = price.get("low") or {}
     if low:
@@ -511,9 +529,14 @@ def run(client: NebulaClient, args) -> None:
         elif verb == "new":
             board, skipped = boards.create_board(
                 api, args.name, args.sources, project=args.project, mode=args.mode, strength=args.strength,
-                notes=args.notes or "", headers=headers)
+                notes=args.notes or "", request_id=args.request_id, headers=headers)
             if args.json:
                 _print_json(boards.brief(board))
+                return
+            if board.get("repeated") is True:
+                count = len(board.get("images") or [])
+                print(f"{boards.repeated_line(board)} Its id is {board.get('id')}, with {count} "
+                      f"image{'' if count == 1 else 's'}. It's in Moodboard Studio.")
                 return
             print(f"Made {board.get('name')} ({board.get('id')}) with "
                   f"{_added_line(len(board.get('images') or []), skipped)}. It's in Moodboard Studio.")
@@ -698,6 +721,11 @@ def add_parser(sub) -> None:
                        help="look (style), world (setting) or subject (default: look)")
     new_p.add_argument("--strength", type=float, default=0.7, help="How strongly it steers, 0 to 1 (default 0.7)")
     new_p.add_argument("--notes", help="Notes for the whole board")
+    new_p.add_argument("--request-id", dest="request_id",
+                       help="Your own id for this create (8 to 128 letters, digits, '-' or '_'). Run again "
+                            "with the same id, it gives back the board the first run made instead of a second "
+                            "one, whatever the name and images say. Use a new id for each board; an id used "
+                            "in another project is refused")
     new_p.add_argument("--json", action="store_true", help="Print JSON")
 
     add_p = msub.add_parser("add", help="Add files, folders and links to a board")

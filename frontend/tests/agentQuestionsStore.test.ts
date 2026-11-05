@@ -211,3 +211,16 @@ describe('agentQuestionsStore', () => {
     expect(state.formId).toBeNull();
   });
 });
+
+describe('a set closed without a view', () => {
+  it('records when it closed, so a cursor waiting on it ends', () => {
+    useAgentQuestionsStore.getState().opened(view(), 'k1');
+    const before = Date.now();
+    // send()'s "already answered" 409 closes the set with no view from the server.
+    useAgentQuestionsStore.getState().closed('qs_00000001', 'answered', null);
+    const closed = useAgentQuestionsStore.getState().sets.qs_00000001.view;
+    expect(closed.status).toBe('answered');
+    expect(closed.closedAt).not.toBeNull();
+    expect(closed.closedAt as number).toBeGreaterThanOrEqual(before);
+  });
+});

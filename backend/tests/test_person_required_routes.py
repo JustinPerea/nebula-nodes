@@ -72,7 +72,7 @@ def client(monkeypatch, person, tmp_path):
     # These graphs have no keys or prompts; what's tested is who may do what.
     monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main.manager, "broadcast_raw", ignore)

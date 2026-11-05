@@ -15,10 +15,14 @@ export const CANVAS_NOTICE_EVENT = 'nebula:canvas-notice';
 export interface CanvasNoticeDetail {
   text: string;
   tone: 'error' | 'info';
+  /** The failure the line is for (review 4 LOW-2, round 6): its code and send-time stamp go to
+   * notify, so a line refused only for this tab clears on the promote, or at once when its
+   * request went out before the promote. */
+  error?: unknown;
 }
 
-export function showNotice(text: string, tone: 'error' | 'info' = 'error'): void {
+export function showNotice(text: string, tone: 'error' | 'info' = 'error', error?: unknown): void {
   // Empty: a write refused while offline, which says nothing (round 15).
   if (typeof window === 'undefined' || !text) return;
-  window.dispatchEvent(new CustomEvent<CanvasNoticeDetail>(CANVAS_NOTICE_EVENT, { detail: { text, tone } }));
+  window.dispatchEvent(new CustomEvent<CanvasNoticeDetail>(CANVAS_NOTICE_EVENT, { detail: { text, tone, error } }));
 }

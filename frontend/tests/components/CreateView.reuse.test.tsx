@@ -31,11 +31,12 @@ interface FakeGraph {
   cancelCreateGeneration: () => void;
   cancelRun: () => Promise<void>;
   deleteGeneration: () => void;
+  notify: (...args: unknown[]) => void;
 }
 
 const mocks = vi.hoisted(() => ({
   graph: null as UseBoundStore<StoreApi<FakeGraph>> | null,
-  fetch: vi.fn(), author: vi.fn(), execute: vi.fn(), exit: vi.fn(), dock: vi.fn(),
+  fetch: vi.fn(), author: vi.fn(), execute: vi.fn(), exit: vi.fn(), dock: vi.fn(), notify: vi.fn(),
   reuse: null as ((context: ResultContext) => void) | null,
   context: null as ResultContext | null,
 }));
@@ -63,6 +64,8 @@ vi.mock('../../src/store/graphStore', async () => {
     authorGenerationCluster: (...args) => mocks.author(...args),
     executeClusterConcurrent: (...args) => mocks.execute(...args),
     cancelCreateGeneration: vi.fn(), cancelRun: vi.fn(), deleteGeneration: vi.fn(),
+    // Create's lines show in the app's notice region (GM r8, #204 r7).
+    notify: (...args) => mocks.notify(...args),
   }));
   mocks.graph = store;
   return { useGraphStore: store };
@@ -154,7 +157,7 @@ beforeEach(() => {
   useCreateDraftStore.setState({ drafts: {} }); window.localStorage.clear();
   mocks.fetch.mockReset().mockResolvedValue(uploadResponse());
   mocks.author.mockReset().mockResolvedValue({ modelNodeIds: ['new-model'], allNodeIds: ['new-model'] });
-  mocks.execute.mockReset().mockResolvedValue(undefined); mocks.exit.mockReset(); mocks.dock.mockReset();
+  mocks.execute.mockReset().mockResolvedValue(undefined); mocks.exit.mockReset(); mocks.dock.mockReset(); mocks.notify.mockReset();
   mocks.reuse = null; mocks.context = null;
   mocks.graph!.setState({ nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false });
   seedSavedResult();
@@ -260,5 +263,8 @@ describe('Create result reuse', () => {
     fireEvent.click(view.getByRole('button', { name: 'Reuse settings' }));
     expect(currentDraft()).toEqual(before);
     expect(mocks.author).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
+    // The reason shows once, in the notice region, not in the toolbar row.
+    expect(mocks.notify).toHaveBeenCalledTimes(1);
+    expect(mocks.notify).toHaveBeenCalledWith(expect.any(String), 'error', expect.anything());
   });
 });

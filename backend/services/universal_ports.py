@@ -501,6 +501,33 @@ async def look_up(definition_id: str, model: str) -> dict[str, Any] | LookupFail
     return dict(row)
 
 
+def _cached_row(definition_id: str, model: str) -> Mapping[str, Any] | None:
+    """The catalog row the pickers' cache already holds for ``model``
+    (OpenRouter, Nous), without reading the provider: None when it isn't cached."""
+    from services.model_cache import model_cache
+
+    provider = PROVIDER.get(definition_id)
+    cached = model_cache.get(f"{provider}:models") if provider in ("openrouter", "nous") else None
+    if isinstance(cached, tuple) and cached:
+        cached = cached[-1]  # Nous keeps (credential identity, catalog)
+    rows = cached.get("models") if isinstance(cached, Mapping) else None
+    return next((row for row in rows or [] if isinstance(row, Mapping) and row.get("id") == model), None)
+
+
+def model_name(definition_id: str, model: str, data: Any = None) -> str:
+    """The chosen model as the person reads it (GM - Design, PR #216 r4:
+    "Claude Sonnet 4.5 on your OpenRouter key"): the provider's catalog name
+    without its maker's prefix ("Anthropic: Claude Sonnet 4.5"), from
+    ``data`` (look_up's row) or the pickers' cache; else the model id."""
+    row = data if isinstance(data, Mapping) else None
+    if definition_id != "replicate-universal" and (row is None or not row.get("name")):
+        row = _cached_row(definition_id, model) or row
+    name = str(row.get("name") or "").strip() if row is not None and definition_id != "replicate-universal" else ""
+    if ": " in name:
+        name = name.split(": ", 1)[1].strip()
+    return name[:80] or model
+
+
 def port_ids(ports: list[dict[str, Any]]) -> list[str]:
     return [str(port.get("id")) for port in ports if isinstance(port, Mapping)]
 

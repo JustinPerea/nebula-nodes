@@ -73,10 +73,10 @@ describe('GM derived: runs and Create while following', () => {
 
   it('G1: Create says it in its own error style, never "Nebula is opening another project." bare', () => {
     expect(createWhileFollowingLine({ agent: 'Codex', projectName: 'Second canvas' }))
-      .toBe("Couldn't start the generation. Codex is opening “Second canvas”.");
+      .toBe("Nebula couldn’t start the generation. Codex is opening “Second canvas”.");
     expect(createWhileFollowingLine({ agent: null, projectName: 'Second canvas' }))
-      .toBe("Couldn't start the generation. An agent is opening “Second canvas”.");
-    expect(createWhileFollowingLine(null)).toBe("Couldn't start the generation. Another project is opening.");
+      .toBe("Nebula couldn’t start the generation. An agent is opening “Second canvas”.");
+    expect(createWhileFollowingLine(null)).toBe("Nebula couldn’t start the generation. Another project is opening.");
   });
 
   it("G1: Create's own error style shows that same line (the store rejects with a FailureNotice under Create's heading)", () => {

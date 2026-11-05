@@ -351,6 +351,35 @@ body.app-slava-restraint {
   outline-offset: var(--sr-focus-offset);
 }
 
+/* PR #204 round 18g (GM r36): a heading or a line that takes focus from code draws no ring. A
+ * handover (a demote, going offline, the Commons turning off, Try again's line going, the off
+ * view opening into the Commons) moves focus to a page or section heading, or to the line that
+ * says why, so a screen reader announces it. Those targets have tabindex -1: a person can never
+ * Tab to them, so a ring there only marks where code put focus. Everything a person tabs to keeps
+ * its ring. Important, so no component's own :focus-visible ring can bring it back
+ * (tests/focusRingCss.test.ts). */
+body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible {
+  outline: none !important;
+}
+
+/* PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take it,
+ * focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops to
+ * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that. */
+body.app-slava-restraint [data-focus-start]:focus-visible {
+  outline: none !important;
+}
+
+/* The canvas itself with keyboard focus (round 3l, GM r69 Q2): it fills the
+ * window, so the baseline ring, drawn outside its box, was clipped away and
+ * Tab arrival showed nothing. The token ring goes inside its edge instead.
+ * A keyboard Accept or Reject that leaves focus on the canvas shows the
+ * same ring (ProposalBar DECISION_FOCUS_ATTR; the mark goes on its blur). */
+body.app-slava-restraint .canvas-wrapper:focus-visible,
+body.app-slava-restraint .canvas-wrapper[data-focus-decided]:focus {
+  outline: var(--sr-focus-outline);
+  outline-offset: -2px; /* the token ring's 2px width, inside the edge */
+}
+
 /* A canvas node with keyboard focus (Tab onto the card). React Flow clears
  * the wrapper's outline (.react-flow__node.selectable:focus-visible), and the
  * wrapper's box isn't the card's, so the ring goes on the drawn card. It is
@@ -658,7 +687,44 @@ body.app-slava-restraint .node-inspector-popover__body {
 }
 
 body.app-slava-restraint .node-inspector-popover__foot {
+  position: relative;
   padding: 0 var(--sr-space-3) var(--sr-space-3);
+}
+
+/* GM r87 (#226): while the body can scroll further down, a 1 px hairline in
+   the border token sits on the foot row's top edge, gone at the end. The
+   12 px fade alone shows nothing when the cut falls between fields. It comes
+   on the pop spring and goes on the soft one (lib/springs.ts, set on the foot
+   by NodeInspectorPopover.tsx). When it shows is decided there and written as
+   the foot's data-more-below: off through the open (GM r92: every image
+   complete and 2 stable frames, 300 ms at most), and held at its state while
+   a height spring runs (GM r98: on stays on, off stays off), then read again
+   when the spring rests. A held state, never a hide, so a line that's on
+   doesn't blink when content grows under a scrolled panel. Pinned or not:
+   wherever a body scrolls, it's the same cue (r92 Q2). */
+body.app-slava-restraint .node-inspector-popover__foot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--sr-edge);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+}
+
+body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before {
+  opacity: 1;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .node-inspector-popover__foot::before,
+  body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before {
+    transition: none;
+  }
 }
 
 body.app-slava-restraint .node-inspector-popover__pin--active {
@@ -2248,6 +2314,20 @@ body.app-slava-restraint .inspector__palette-hex {
   font-family: var(--sr-mono);
 }
 
+body.app-slava-restraint .inspector__palette-cant-run,
+body.app-slava-restraint .inspector__palette-note {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .inspector__palette-pending {
+  min-height: var(--sr-control-h-md);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
 /* Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the palette × is a
    control the lock greys, so its enabled ink is above the shared grey
    (it was --sr-ink-faint, dimmer than its own disabled look). It hovers
@@ -2258,7 +2338,7 @@ body.app-slava-restraint .inspector__palette-remove {
   transition: color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled) {
+body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
@@ -2842,7 +2922,9 @@ body.app-slava-restraint .agent-log__time {
 
 body.app-slava-restraint .agent-log__source {
   overflow: hidden;
-  color: var(--agent-log-source-color);
+  /* An agent's name: its cursor's shade, or the nearest tone of it that
+   * reads 4.5:1 here (agentLogTones); the dot keeps the shade. */
+  color: var(--agent-log-name-color, var(--agent-log-source-color));
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -4617,7 +4699,7 @@ body.app-slava-restraint .final-export__start {
 }
 
 body.app-slava-restraint .final-export__error {
-  color: #ff7a68;
+  color: var(--line-warning, #ff7a68);
   overflow-wrap: anywhere;
 }
 

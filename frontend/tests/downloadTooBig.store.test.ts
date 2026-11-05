@@ -25,6 +25,8 @@ describe('Download a copy', () => {
     vi.mocked(shared.saveProjectCopyToFile).mockRejectedValueOnce(new shared.BrowserStringLimitError());
     useProjectStore.setState({ activeProject: { id: 'p1', name: 'Glass campaign' } } as never);
     await useProjectStore.getState().downloadProjectCopy();
-    expect(showNotice).toHaveBeenCalledWith("Couldn't download a copy. It's too big to download in a browser.");
+    // PR #204 r6 (review 4 LOW-2): the failure goes with the line, for its code and stamp.
+    expect(showNotice).toHaveBeenCalledWith("Couldn't download a copy. It's too big to download in a browser.", 'error',
+      expect.any(shared.BrowserStringLimitError));
   });
 });

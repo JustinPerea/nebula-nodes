@@ -23,6 +23,7 @@ import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 function refreshLabel(value?: string): string {
   if (!value) return 'Never refreshed';
@@ -242,9 +243,9 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
           <button type="button" disabled={Boolean(busy)} onClick={() => { setSelection(null); setManual(false); }}>Cancel</button>
         </div>
       )}
-      {displayedError && <p className="paper-source-node__error" role="alert">{displayedError}{snapshot && ' Last good artwork retained.'}</p>}
+      {displayedError && <p className="paper-source-node__error" role="alert"><LineText text={displayedError} />{snapshot && ' Last good artwork retained.'}</p>}
       {recordDetails && <ErrorDetails raw={recordDetails} className="paper-source-node__error-details nodrag nowheel" />}
-      {notice && <p className="paper-source-node__note" role="status">{notice}</p>}
+      {notice && <p className="paper-source-node__note" role="status"><LineText text={notice} /></p>}
       {/* The node's run error (error copy round 3e), apart from the source's own refresh and link errors above. */}
       <NodeRunError data={nodeData} className="paper-source-node__run-error nodrag nopan" />
       <p className="paper-source-node__note">Refresh exports artwork only. Run the saved recipe separately.</p>

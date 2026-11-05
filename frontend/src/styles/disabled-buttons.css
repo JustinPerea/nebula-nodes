@@ -31,7 +31,9 @@
    styles live in many sheets with their own specificity (and some load with
    their studio's chunk); the disabled look wins over each of them, its
    hover included. PR #198's [data-offline-neutral] says the same for its
-   offline actions. */
+   offline actions. A Studio line's own action (.moodboard-studio__notice-action:
+   Restore project, aria-disabled offline so it keeps focus, #210 round 6q,
+   GM r95) is an outline button, so it is in the first list. */
 :root {
   /* white at 0.55 (--sr-ink-light): 6.3:1 on the canvas's black, 5.6:1 on
      the grey fill below; an enabled label (--sr-ink, 0.92) is 17.6:1. One
@@ -100,7 +102,13 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .agent-roster__row,
+  .agent-notes-btn--held,
+  .message-box__send,
+  .message-box__show,
+  .message-box__option,
+  .moodboard-studio__notice-action
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -127,7 +135,13 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .agent-roster__row,
+  .agent-notes-btn--held,
+  .message-box__send,
+  .message-box__show,
+  .message-box__option,
+  .moodboard-studio__notice-action
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
@@ -189,8 +203,8 @@
    change, the default cursor. Clicks are inert already (`disabled`). The
    colour's own swatch edge goes grey too, so the chip reads as a muted value,
    not a live control. */
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']),
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']):hover {
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true']):hover {
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
   box-shadow: none !important;
   filter: none !important;
@@ -198,8 +212,34 @@
   opacity: 0.45 !important;
 }
 
-:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true'])::-webkit-color-swatch {
+:is(.cinema-shared-controls__swatch input[type='color']):is(:disabled, [aria-disabled='true'])::-webkit-color-swatch {
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+}
+
+/* GM r20 on #208: the Inspector palette's chip is the content, so it keeps
+   its full colour disabled (no dimming, no filter); only its chrome, the
+   edge, goes to the disabled grey, with the default cursor. The hex field
+   and the × dim as above. */
+:is(.inspector__palette-color):is(:disabled, [aria-disabled='true']),
+:is(.inspector__palette-color):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+
+/* The Inspector palette's hex fields, read-only while "Extracting colors…"
+   shows (GM r17 on #208) or while the canvas is locked: the ghost look the
+   Add / Extract row has, the label and edge in the shared grey, unfilled. */
+.inspector__palette-hex:is(:disabled, [aria-disabled='true']),
+.inspector__palette-hex:is(:disabled, [aria-disabled='true']):hover {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55));
+  cursor: default;
+  opacity: 1 !important;
 }
 
 /* The Projects cover picker's image buttons, disabled while a change saves
@@ -240,6 +280,102 @@
 :is(.cinema-shared-controls__chip--active):is(:disabled, [aria-disabled='true']):hover {
   border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
   box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
+/* PR #204 round 11 (review 9 MEDIUM-1, GM r19 item 1): a person lock's control
+   (hooks/usePersonLock control(): data-person-lock, aria-disabled, focusable)
+   takes one disabled look through the helper, whatever its class: no class
+   list to forget. Past the held rule's first moment only (data-held-pending
+   keeps its own look then). No hover or press: these states are held to the
+   same look. Focus isn't: a locked control stays focusable, so it keeps the
+   shared focus ring (round 12; tests/focusRingCss).
+
+   Round 13 (review 10 MEDIUM-1): the ghost and filled lists win over this
+   block, and so does each per-class rule after it. The element part is
+   :where(), so the base rule is (0,2,0) against the lists' (0,3,0): a locked
+   filled button keeps the grey fill with its dark label (--disabled-fill,
+   --disabled-fill-label, GM r33), and a ghost keeps the ghost tokens. The
+   block sits above the filled list, so the list also wins while a locked
+   filled button is pressed from the keyboard (:active without :hover), where
+   this block's :active rule ties the list's base rule; the list's own hover
+   (0,4,0) wins on hover. :hover and :active are separate selectors, not
+   :is(:hover, :active), so tests/helpers/cssCascade reads them as states.
+
+   A select or input keeps its value visible in --disabled-label, so the
+   setting stays readable; a switch takes the 0.06 edge and a --disabled-label
+   knob, its on or off still readable by the knob's side.
+   tests/presenceRound11.lockLook.test.ts reads these rules,
+   tests/presenceRound13.lookCascade.test.ts resolves them through the
+   cascade, and the live check computes them on every locked control. */
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]),
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]):hover,
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]):active {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+:is(button, a, [role='button'])[data-person-lock]:not([data-held-pending]) :is(svg, span) {
+  color: inherit !important;
+}
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]),
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]):hover,
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]):active {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+/* PR #204 round 18c (GM r30 2): a control that waits on a read that failed or hasn't answered
+   (the Commons' Add to and Add, `data-not-loaded`) is disabled in the same look as a lock, with
+   its own reason in its label. A select whose only value says there is nothing to pick
+   ("No collections", `data-no-choice`) shows it in the disabled grey, and stays live. */
+button[data-not-loaded],
+button[data-not-loaded]:hover,
+button[data-not-loaded]:active {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+select[data-not-loaded],
+select[data-not-loaded]:hover,
+select[data-not-loaded]:active {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+select[data-no-choice] {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending]),
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):hover,
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):active {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):checked {
+  background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
+  background: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
 }
 
 /* Filled buttons: the accent (orange), the danger red (GM r8: #ff887d), white
@@ -324,6 +460,16 @@
   color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
 }
 
+/* A ghost control whose label is several lines of its own text (the Agents
+   panel's row: name, count, ask line). Disabled, every line takes the
+   shared grey, whatever colour each line has enabled; an author's dot keeps
+   its colour, since it says who is asking (GM, PR #204 round 1). List a new
+   multi-line ghost control here, next to its entry in the ghost list above. */
+:is(.agent-roster__row):is(:disabled, [aria-disabled='true']:not([data-held-pending]))
+  :not(.agent-notes-dot, .agent-notes-dot *) {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+}
+
 /* A text field the canvas lock makes read-only (Cinema's shot prompt): its
    text and edge in the same grey, no extra dimming (GM answer 1's offline
    shot read it as live). */
@@ -382,3 +528,15 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:n
   box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
+/* GM r22 on #208 (folded): the palette's × read-only while "Extracting
+   colors…" shows (aria-disabled, focus kept) has the default cursor and
+   snaps to the disabled look, no 120 ms colour fade. */
+:is(.inspector__palette-remove):is(:disabled, [aria-disabled='true']),
+:is(.inspector__palette-remove):is(:disabled, [aria-disabled='true']):hover {
+  transition: none !important;
+}
+
+:is(.inspector__palette-remove)[aria-disabled='true'],
+:is(.inspector__palette-remove)[aria-disabled='true']:hover {
+  cursor: default !important;
+}

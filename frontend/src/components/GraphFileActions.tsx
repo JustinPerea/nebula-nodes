@@ -59,7 +59,7 @@ export function GraphFileActions() {
         () => saveStepToFit(walk, state.nodes, state.edges, viewport, name));
     } catch (error) {
       console.error('Graph save failed:', error);
-      showNotice(failureMessage(error, "Nebula couldn’t save the canvas."));
+      showNotice(failureMessage(error, "Nebula couldn’t save the canvas."), 'error', error);
     } finally {
       actionInFlight.current = false;
     }
@@ -182,11 +182,11 @@ export function GraphFileActions() {
           limit: error.overSaveLimit ? 'size' : error.storageLimit,
         });
         if (line) {
-          showNotice(failureMessage(new FailureNotice('', line), LOAD_GRAPH));
+          showNotice(failureMessage(new FailureNotice('', line), LOAD_GRAPH), 'error', error);
           return;
         }
       }
-      showNotice(failureMessage(error, LOAD_GRAPH));
+      showNotice(failureMessage(error, LOAD_GRAPH), 'error', error);
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
       // Not replaced: the writes that waited go to the canvas still there.
@@ -231,7 +231,7 @@ export function GraphFileActions() {
       if (!loading && !after.unsavedEdits && !after.error) showNotice(failureMessage(null, LOAD_GRAPH));
     } catch (error) {
       console.error('Graph load failed:', error);
-      showNotice(failureMessage(error, LOAD_GRAPH));
+      showNotice(failureMessage(error, LOAD_GRAPH), 'error', error);
     } finally {
       actionInFlight.current = false;
     }

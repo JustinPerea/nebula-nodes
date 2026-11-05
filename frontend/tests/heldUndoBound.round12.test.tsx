@@ -66,6 +66,8 @@ const dropped = () => store().undoNotice?.text === DROPPED_UNDO_TEXT || store().
 /** GM r40 item 2: a held Undo's give-up line, in either notice place; with a name, that line exactly. */
 const broughtBack = (name?: string) => [store().undoNotice?.text, store().messageNotice?.text].some((text) => (name
   ? text === `Nebula couldn\u2019t bring back \u201c${name}\u201d. Try Undo again.` : Boolean(text?.startsWith('Nebula couldn\u2019t bring back'))));
+// delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
+// holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
 const redo = async () => { act(() => { store().redo(); }); await settle(); };

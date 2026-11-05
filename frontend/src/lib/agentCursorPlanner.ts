@@ -1,0 +1,712 @@
+import type { Point, SpringConfig } from './agentCursorMotion';
+import {
+  AGENT_CURSOR_BOW,
+  AGENT_CURSOR_DURATION,
+  AGENT_CURSOR_LAND_SPRING,
+  AGENT_CURSOR_LEAN,
+  AGENT_CURSOR_LEAN_SPRING,
+} from './agentCursorTuning';
+
+// The (t) numbers live in agentCursorTuning, one module GM retunes (r49).
+export { AGENT_CURSOR_BOW, AGENT_CURSOR_DURATION, AGENT_CURSOR_LAND_SPRING, AGENT_CURSOR_LEAN, AGENT_CURSOR_LEAN_SPRING };
+
+/**
+ * How an agent cursor travels (GM - Design, agent cursor §3): one arc per
+ * move, timed by distance, with a spring on progress along it, then a landing
+ * spring for the last stretch, and a lean toward where it's going.
+ *
+ * Pure, with no React and no React Flow, so the screen layer can reuse it.
+ * Motion runs in flow coordinates; every threshold here is in screen px and
+ * converts through the zoom. The values were tuned and measured by GM in the
+ * prototype (reviews.justinperea.com/nebula/agent-cursor/).
+ *
+ * The motion steps at a fixed 120 Hz inside each frame, the rate GM measured
+ * on, so the settle and follow-through are the same at any display rate.
+ * `AGENT_CURSOR_SPRING` is not used here: pins, ghosts and the camera share it.
+ */
+
+/** Progress along the arc at which the land spring takes over. */
+export const AGENT_CURSOR_LAND_HANDOFF = 0.8;
+/** ω = 6.64 / T puts 99% of the progress spring at T. */
+export const AGENT_CURSOR_PROGRESS_K = 6.64;
+/**
+ * Once the tip is at rest, a lean under `deg` turning slower than
+ * `degPerSecond` snaps to 0 and the loop sleeps (GM - Design, PR #211 r1).
+ * Why 3°/s: from upright, the lean spring (ω ≈ 13.4 rad/s, ζ ≈ 0.82) swings
+ * at most 0.031 s × v further, so 3°/s leaves under 0.1° unshown. With the
+ * 0.1° it may already have, the snap skips under 0.2°: a fraction of a pixel
+ * at the arrow's tail. It lets a 400 px or longer move sleep the frame its
+ * tip comes to rest.
+ */
+export const AGENT_CURSOR_LEAN_REST = { deg: 0.1, degPerSecond: 3 } as const;
+/** Opacity in and out: the entrance and the idle dim (and the ripple's curve in CSS). */
+export const AGENT_CURSOR_FADE_SPRING: SpringConfig = { stiffness: 170, damping: 26, mass: 1 };
+/** A first sighting starts this far back along the line to its first target. */
+export const AGENT_CURSOR_ENTRANCE_PX = 64;
+export const AGENT_CURSOR_IDLE_OPACITY = 0.45;
+/** Under this speed (px/s) a landing cursor counts as stopped, for its name. */
+export const AGENT_CURSOR_MOVING_SPEED = 30;
+/** A live target that moves further than this from where the move aimed re-plans it. */
+export const AGENT_CURSOR_REPLAN_PX = 24;
+/**
+ * The tip has arrived when the land spring brings it this close to the live
+ * target (screen px): the tool's action fires then, and the drag wire lets
+ * go (§3, "the action happens at arrival"). The hand-off at
+ * AGENT_CURSOR_LAND_HANDOFF only changes which spring moves it.
+ */
+export const AGENT_CURSOR_ARRIVE_PX = 2;
+/**
+ * The most the tip may run past its target after the hand-off, screen px
+ * (GM - Design, PR #211 r2). Up to about 1500 px a hand-off at p = 0.80
+ * already keeps within it, and those moves are unchanged. On longer chords
+ * the 20% left is far enough that the land spring (ζ ≈ 0.8) overshoots more
+ * than 2 px even from a standstill (about 8 px from 600 px), so no clamp on
+ * the hand-off speed alone can hold it: the arc carries on past 0.80 until a
+ * hand-off from where the tip is would run at most this far past.
+ */
+export const AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX = 2;
+/**
+ * When a new flight's arc would pass within this many screen px of another
+ * cursor's flight still under way, the new one bows to the other side
+ * (GM - Design, PR #211 r2), with the same 10% / 120 px cap.
+ */
+export const AGENT_CURSOR_CROSS_PX = 24;
+/** The fixed motion step. */
+export const AGENT_CURSOR_STEP_SECONDS = 1 / 120;
+/**
+ * A drag has ended once its target has held still this long (s): two frames
+ * at 60 Hz, so one frame with no pointer event mid-drag doesn't count. An
+ * action held by a fling (a target jumping further than
+ * AGENT_CURSOR_REPLAN_PX every frame, so the tip can't arrive) fires then,
+ * at the tip, wherever it is (GM - Design, PR #211 r9 item 5).
+ */
+export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
+
+/** A frame gap longer than this (a backgrounded tab) finishes the move at once. */
+/**
+ * A frame gap longer than this (s) means nobody watched the move: the tab
+ * was hidden or throttled, or the machine stalled. 0.25 s is 15 frames at
+ * 60 Hz, far past any jank the eye follows as motion (a heavy frame is 30 to
+ * 100 ms), and short enough that a return never shows a move as if it were
+ * happening now. The cursor lands on its target with no arrival: no ring, no
+ * wire (GM - Design, PR #211 r5: "the tip lands, and that's all").
+ */
+export const AGENT_CURSOR_STALE_GAP_SECONDS = 0.25;
+/**
+ * The longest a gliding cursor waits past its own rest for the rest of its
+ * column (ms): the layer's rest gate holds a column's glide so it lands on
+ * one frame (GM - Design, #219 r65), and this caps the hold (r66), so a drag
+ * that keeps retargeting one member can't keep the others unsettled for as
+ * long as the person drags. A spring lands the members of one move within
+ * about 220 ms of each other, so a column glide never reaches it.
+ */
+export const AGENT_CURSOR_REST_HOLD_MAX_MS = 300;
+/** The land spring snaps onto the target within these (screen px, px/s). */
+const REST_DISTANCE_PX = 0.2;
+const REST_SPEED_PX = 2;
+/** The re-plan tangent never shrinks below this share of half the new chord. */
+const MIN_TANGENT_SHARE = 0.25;
+
+export interface CursorPlan {
+  from: Point;
+  control: Point;
+  /** The end of the arc: the live target, updated every step. */
+  to: Point;
+  /** Where the move aimed when it was planned. */
+  aimed: Point;
+  durationMs: number;
+  /** Progress spring rate, per second. */
+  omega: number;
+  /** Progress per second at the start (0 from rest). */
+  v0: number;
+  /** Seconds since the plan started. */
+  elapsed: number;
+}
+
+interface Spring1 {
+  x: number;
+  v: number;
+}
+
+export interface CursorMotion {
+  pos: Point;
+  vel: Point;
+  plan: CursorPlan | null;
+  /** Where the land spring aimed when it took over; null when not landing. */
+  landing: Point | null;
+  /** Degrees. */
+  lean: Spring1;
+  opacity: Spring1;
+  /** Time not yet stepped, under one step. */
+  carry: number;
+  /** A planned move whose tip hasn't arrived yet (StepResult.arrived is still to come). */
+  awaiting: boolean;
+  /** The live target last step, and its carrier's velocity (flow px/s):
+   *  the land spring follows a target that keeps moving with no lag
+   *  (feed-forward). */
+  lastLive: Point | null;
+  liveVel: Point;
+  /** The live target's offset from its carrier (the node's own point, before
+   *  de-stacking) last step: when it changes, the spot moved on the node. */
+  lastRel: Point | null;
+  /**
+   * Riding: the tip is carried with its target at this offset, kinematically,
+   * with no spring, so it stops dead when the target stops (GM - Design,
+   * PR #211 r9 item 2). Set when a resting tip's target is carried (the
+   * person drags the node, a sync nudges it), or when a landing settles onto
+   * a target that is still moving. It is the offset the tip already had, 0
+   * after any landing: a ride never takes a new offset (review 3, N1). The
+   * agent's next action ends it (planMove), and that flies on the planner.
+   */
+  attached: Point | null;
+  /** The zoom it last stepped at: a zoom during a glide keeps the glide's
+   *  offset and speed in screen px (review 7, MEDIUM-3). */
+  lastZoom: number | null;
+  /** Consecutive frames the target has moved; a fling (an action held by a
+   *  target that jumps every frame) and how long the target has held still. */
+  chase: number;
+  held: boolean;
+  stillFor: number;
+  /** Its landing ended its last step within the rest distance and speed:
+   *  it would come to rest now. The layer's column gate reads it, so the
+   *  cursors one layout change sets gliding come to rest on one frame
+   *  (GM - Design, #219 r65). */
+  nearRest?: boolean;
+}
+
+export interface StepResult {
+  /** The tip came within AGENT_CURSOR_ARRIVE_PX of the target this frame: the tool's action fires now. */
+  arrived: boolean;
+  /** The arc handed off to the land spring this frame (motion only). */
+  handedOff: boolean;
+  /** Nothing moves any more: the loop can sleep. */
+  atRest: boolean;
+  /** A frame gap past AGENT_CURSOR_STALE_GAP_SECONDS: the cursor was put on
+   *  its target unseen. No arrival, so no action is shown as if it were now. */
+  caughtUp?: boolean;
+}
+
+const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+export function createMotion(at: Point, opacity = 0): CursorMotion {
+  return {
+    pos: { ...at },
+    vel: { x: 0, y: 0 },
+    plan: null,
+    landing: null,
+    lean: { x: 0, v: 0 },
+    opacity: { x: opacity, v: 0 },
+    carry: 0,
+    awaiting: false,
+    lastLive: null,
+    liveVel: { x: 0, y: 0 },
+    lastRel: null,
+    attached: null,
+    lastZoom: null,
+    chase: 0,
+    held: false,
+    stillFor: 0,
+  };
+}
+
+const BOW_ROOM_ALONG = [0.2, 0.8] as const;
+
+/**
+ * The bow for a new flight against every other flight still under way
+ * (GM - Design, PR #211 r5): the default side when it is clear of all of
+ * them by AGENT_CURSOR_CROSS_PX, else the other side when that one is, else
+ * whichever leaves the most room; the default side when neither has more.
+ */
+export function bowAgainst(
+  from: Point,
+  to: Point,
+  pointer: Point | null,
+  zoom: number,
+  others: readonly CursorPlan[] | undefined,
+): Point {
+  const usual = cursorBow(from, to, pointer, zoom);
+  if (!others || others.length === 0) return usual;
+  // Room along the middle of the new arc: its ends sit where they sit, and no
+  // bow moves them, so they would rate both sides the same.
+  const room = (control: Point) => Math.min(...others.map((other) => arcGapPx({ from, control, to }, other, zoom, BOW_ROOM_ALONG)));
+  const usualRoom = room(usual);
+  if (usualRoom >= AGENT_CURSOR_CROSS_PX) return usual;
+  const flipped = cursorBow(from, to, pointer, zoom, true);
+  return room(flipped) > usualRoom ? flipped : usual;
+}
+
+/** How long a move of this many screen px takes. */
+export function cursorDurationMs(distancePx: number): number {
+  const { baseMs, gainMs, scalePx, minMs, maxMs } = AGENT_CURSOR_DURATION;
+  const t = baseMs + gainMs * Math.log(1 + Math.max(0, distancePx) / scalePx);
+  return Math.min(maxMs, Math.max(minMs, t));
+}
+
+/**
+ * The arc's quadratic control point, so its apex sits `bow` off the chord.
+ * It bows away from the person's pointer when that is near the middle of the
+ * path, otherwise toward screen-up. `pointer` is in flow coordinates.
+ */
+export function cursorBow(from: Point, to: Point, pointer: Point | null, zoom: number, flip = false): Point {
+  const d = dist(from, to);
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const dPx = d * zoom;
+  if (dPx < AGENT_CURSOR_BOW.straightUnderPx) return mid;
+  const bow = Math.min(AGENT_CURSOR_BOW.maxPx, AGENT_CURSOR_BOW.fraction * dPx) / zoom;
+  const n = { x: -(to.y - from.y) / d, y: (to.x - from.x) / d };
+  let side = n.y < 0 ? 1 : -1;
+  if (pointer && dist(pointer, mid) * zoom < AGENT_CURSOR_BOW.pointerRadiusPx) {
+    const toward = Math.sign((pointer.x - mid.x) * n.x + (pointer.y - mid.y) * n.y);
+    if (toward !== 0) side = -toward;
+  }
+  if (flip) side = -side;
+  return { x: mid.x + n.x * bow * side * 2, y: mid.y + n.y * bow * side * 2 };
+}
+
+export function pathAt(plan: CursorPlan, p: number): Point {
+  const u = 1 - p;
+  return {
+    x: u * u * plan.from.x + 2 * u * p * plan.control.x + p * p * plan.to.x,
+    y: u * u * plan.from.y + 2 * u * p * plan.control.y + p * p * plan.to.y,
+  };
+}
+
+/** The closest two arcs come to each other, in screen px (sampled). `along`
+ *  limits the part of `a` that counts (progress from, to). */
+export function arcGapPx(
+  a: Pick<CursorPlan, 'from' | 'control' | 'to'>,
+  b: Pick<CursorPlan, 'from' | 'control' | 'to'>,
+  zoom: number,
+  along: readonly [number, number] = [0, 1],
+): number {
+  const samples = 32;
+  const at = (plan: Pick<CursorPlan, 'from' | 'control' | 'to'>, p: number) => {
+    const u = 1 - p;
+    return {
+      x: u * u * plan.from.x + 2 * u * p * plan.control.x + p * p * plan.to.x,
+      y: u * u * plan.from.y + 2 * u * p * plan.control.y + p * p * plan.to.y,
+    };
+  };
+  const bs = Array.from({ length: samples + 1 }, (_, j) => at(b, j / samples));
+  let gap = Infinity;
+  for (let i = 0; i <= samples; i += 1) {
+    const q = at(a, along[0] + ((along[1] - along[0]) * i) / samples);
+    for (const r of bs) gap = Math.min(gap, dist(q, r));
+  }
+  return gap * zoom;
+}
+
+/** Progress along the arc: a critically damped spring from v0. */
+export function progressAt(plan: Pick<CursorPlan, 'omega' | 'v0'>, seconds: number): number {
+  const { omega, v0 } = plan;
+  return 1 - (1 + (omega - v0) * seconds) * Math.exp(-omega * seconds);
+}
+
+/**
+ * Plan a move from wherever the cursor is now. From rest it is a fresh arc.
+ * Mid-flight it leaves along the current motion at the current speed, so a
+ * re-plan never jumps or kinks.
+ */
+export function planMove(
+  m: CursorMotion,
+  to: Point,
+  opts: { zoom: number; pointer: Point | null; others?: readonly CursorPlan[] },
+): void {
+  const { zoom, pointer } = opts;
+  const from = { ...m.pos };
+  const d = dist(from, to);
+  // A new event (or a re-plan) ends the ride along the last target, and
+  // `to` is where the target is now: its next move is measured from here.
+  m.attached = null;
+  m.held = false;
+  m.lastLive = { x: to.x, y: to.y };
+  m.liveVel = { x: 0, y: 0 };
+  if (d * zoom < AGENT_CURSOR_ARRIVE_PX) {
+    // Already there (a click on the spot it rests on): no arc to fly, so the
+    // action fires on the next step, not after a 380 ms progress spring.
+    m.plan = null;
+    m.landing = d > 0 ? { ...to } : null;
+    m.awaiting = true;
+    return;
+  }
+  const durationMs = cursorDurationMs(d * zoom);
+  const omega = AGENT_CURSOR_PROGRESS_K / (durationMs / 1000);
+  const speed = Math.hypot(m.vel.x, m.vel.y);
+  let control: Point;
+  let v0 = 0;
+  if (speed * zoom >= AGENT_CURSOR_MOVING_SPEED && d > 0) {
+    const along = { x: m.vel.x / speed, y: m.vel.y / speed };
+    const facing = ((to.x - from.x) * along.x + (to.y - from.y) * along.y) / d;
+    // Fast enough that the progress spring can't keep the speed on a short
+    // tangent: reach further along the old motion so it can.
+    const reach = Math.min(d, Math.max((d / 2) * Math.min(1, Math.max(MIN_TANGENT_SHARE, facing)), speed / (2 * omega)));
+    control = { x: from.x + along.x * reach, y: from.y + along.y * reach };
+    // dB/dp at 0 is 2·reach, so this keeps the speed.
+    v0 = Math.min(omega, speed / (2 * reach));
+  } else {
+    // Another cursor still in flight on a path this one would cross or
+    // graze: this later-starting flight takes the side with more room.
+    control = bowAgainst(from, to, pointer, zoom, opts.others);
+  }
+  m.plan = { from, control, to: { ...to }, aimed: { ...to }, durationMs, omega, v0, elapsed: 0 };
+  m.landing = null;
+  m.awaiting = true;
+}
+
+/** Where a first sighting starts: 64 px back along its line, or up-left with none. */
+export function entranceStart(first: Point, line: { from: Point; to: Point } | null, zoom: number): Point {
+  const back = AGENT_CURSOR_ENTRANCE_PX / zoom;
+  const d = line ? dist(line.from, line.to) : 0;
+  if (line && d > 0) {
+    return { x: first.x - ((line.to.x - line.from.x) / d) * back, y: first.y - ((line.to.y - line.from.y) / d) * back };
+  }
+  return { x: first.x - back * Math.SQRT1_2, y: first.y - back * Math.SQRT1_2 };
+}
+
+/** The lean's target in degrees, from the velocity in screen px/s. */
+export function leanTarget(vxPx: number, speedPx: number): number {
+  const { maxDeg, vxScale, fullSpeed } = AGENT_CURSOR_LEAN;
+  return maxDeg * Math.tanh(vxPx / vxScale) * Math.min(1, speedPx / fullSpeed);
+}
+
+/** How far past `target` the land spring would carry the tip from here, screen px. */
+export function landFollowThroughPx(pos: Point, vel: Point, target: Point, zoom: number): number {
+  const speed = Math.hypot(vel.x, vel.y);
+  if (speed === 0) return 0;
+  const ux = vel.x / speed;
+  const uy = vel.y / speed;
+  const { stiffness: k, damping: c, mass } = AGENT_CURSOR_LAND_SPRING;
+  const h = AGENT_CURSOR_STEP_SECONDS;
+  let px = pos.x; let py = pos.y; let vx = vel.x; let vy = vel.y;
+  let over = 0;
+  for (let i = 0; i < 240; i += 1) {
+    vx += ((-k * (px - target.x) - c * vx) / mass) * h;
+    vy += ((-k * (py - target.y) - c * vy) / mass) * h;
+    px += vx * h;
+    py += vy * h;
+    over = Math.max(over, (px - target.x) * ux + (py - target.y) * uy);
+  }
+  return over * zoom;
+}
+
+function stepSpring1(s: Spring1, target: number, config: SpringConfig, h: number): void {
+  const a = (-config.stiffness * (s.x - target) - config.damping * s.v) / config.mass;
+  s.v += a * h;
+  s.x += s.v * h;
+}
+
+/** True while the arc runs, or while landing faster than the moving speed. */
+export function isMoving(m: CursorMotion, zoom: number): boolean {
+  if (m.plan) return true;
+  return m.landing !== null && Math.hypot(m.vel.x, m.vel.y) * zoom > AGENT_CURSOR_MOVING_SPEED;
+}
+
+/** One fixed step. Mutates the motion in place: no allocation per step. */
+function substep(
+  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point, mayRest = true,
+): { handedOff: boolean; arrived: boolean } {
+  let handedOff = false;
+  const plan = m.plan;
+  if (plan) {
+    plan.elapsed += h;
+    plan.to.x = live.x;
+    plan.to.y = live.y;
+    const p = progressAt(plan, plan.elapsed);
+    const early = p < AGENT_CURSOR_LAND_HANDOFF
+      || (p < 0.999 && landFollowThroughPx(m.pos, m.vel, live, zoom) > AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX);
+    if (early) {
+      const u = 1 - p;
+      const qx = u * u * plan.from.x + 2 * u * p * plan.control.x + p * p * plan.to.x;
+      const qy = u * u * plan.from.y + 2 * u * p * plan.control.y + p * p * plan.to.y;
+      m.vel.x = (qx - m.pos.x) / h;
+      m.vel.y = (qy - m.pos.y) / h;
+      m.pos.x = qx;
+      m.pos.y = qy;
+    } else {
+      // Hand-off: the land spring starts from this position and velocity.
+      m.plan = null;
+      m.landing = { x: plan.aimed.x, y: plan.aimed.y };
+      handedOff = true;
+    }
+  }
+  if (!m.plan && !m.landing && m.attached) {
+    // Riding: carried with the target, no spring, so nothing to overshoot.
+    m.pos.x = live.x + m.attached.x;
+    m.pos.y = live.y + m.attached.y;
+    m.vel.x = 0;
+    m.vel.y = 0;
+  }
+  if (m.landing) {
+    const k = AGENT_CURSOR_LAND_SPRING.stiffness;
+    const c = AGENT_CURSOR_LAND_SPRING.damping;
+    const mass = AGENT_CURSOR_LAND_SPRING.mass;
+    // It comes to rest on whole device pixels (`rest`, see stepMotion), so
+    // drawing it there at rest moves nothing.
+    const aimX = live.x + rest.x;
+    const aimY = live.y + rest.y;
+    // Damping acts on the speed relative to the target (feed-forward), so a
+    // target that keeps moving (a node being dragged) is caught with no
+    // steady lag: the tip can arrive on it while it moves (GM - Design,
+    // PR #211 r5). A still target gives the same spring as before.
+    // The pull is toward where the target was at the start of this step, so
+    // that after the step the tip is where the target is now (no lead of one
+    // step's travel). For a still target both are the same.
+    m.vel.x += ((-k * (m.pos.x - (aimX - m.liveVel.x * h)) - c * (m.vel.x - m.liveVel.x)) / mass) * h;
+    m.vel.y += ((-k * (m.pos.y - (aimY - m.liveVel.y * h)) - c * (m.vel.y - m.liveVel.y)) / mass) * h;
+    m.pos.x += m.vel.x * h;
+    m.pos.y += m.vel.y * h;
+    // Settled onto the target, still or moving (speed relative to it): on a
+    // moving one the tip rides from here, at 0 px.
+    const targetMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+    m.nearRest = Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
+      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX;
+    if (m.nearRest && mayRest) {
+      m.nearRest = false;
+      m.pos.x = aimX;
+      m.pos.y = aimY;
+      m.vel.x = 0;
+      m.vel.y = 0;
+      m.landing = null;
+      m.attached = targetMoving && !m.awaiting ? { x: 0, y: 0 } : null;
+    }
+  }
+  let arrived = false;
+  if (m.awaiting && !m.plan && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
+    m.awaiting = false;
+    arrived = true;
+    // Fired at first arrival, within 2 px of where the target is now. The
+    // land spring then settles the tip onto the target, still or moving; on
+    // a moving one it rides from there at 0 px (no offset taken here).
+  }
+  const speedPx = Math.hypot(m.vel.x, m.vel.y) * zoom;
+  stepSpring1(m.lean, leanTarget(m.vel.x * zoom, speedPx), AGENT_CURSOR_LEAN_SPRING, h);
+  stepSpring1(m.opacity, opacityTarget, AGENT_CURSOR_FADE_SPRING, h);
+  return { handedOff, arrived };
+}
+
+function settled(m: CursorMotion, opacityTarget: number): boolean {
+  if (m.plan || m.landing) return false;
+  if (Math.abs(m.lean.x) >= AGENT_CURSOR_LEAN_REST.deg || Math.abs(m.lean.v) >= AGENT_CURSOR_LEAN_REST.degPerSecond) {
+    return false;
+  }
+  return Math.abs(m.opacity.x - opacityTarget) < 0.002 && Math.abs(m.opacity.v) < 0.01;
+}
+
+/**
+ * Advance one frame toward the live target. Under reduced motion the cursor
+ * snaps there, upright, at its opacity, as today.
+ */
+export function stepMotion(
+  m: CursorMotion,
+  live: Point,
+  dtSeconds: number,
+  opts: {
+    zoom: number;
+    reduced: boolean;
+    opacityTarget: number;
+    pointer?: Point | null;
+    /** What carries the target: the node's own point, before de-stacking
+     *  moves the spot off it. Its motion carries a riding tip; the spot
+     *  moving on it (de-stacking) is a short landing. Default: the target. */
+    carrier?: Point;
+    /** Where on the target the tip comes to rest, as an offset from it (flow
+     *  px): the layer's whole-device-pixel snap of the target, so a landing
+     *  settles exactly where the cursor is drawn at rest, with no jump as it
+     *  comes off its own layer (GM - Design, PR #211 r10 item 1). Default 0. */
+    restOffset?: Point;
+    /** The person is moving the target's node (a drag, a keyboard nudge,
+     *  Arrange). A tip already there rides it at any speed: a move past
+     *  AGENT_CURSOR_REPLAN_PX in one frame is their hand (or a late frame),
+     *  not a sync to fly to again. A tip still flying to it holds its action
+     *  from the first jump, and fires it once the node holds still. */
+    dragged?: boolean;
+    /** Whether the spot moved on its carrier because the layout changed (a
+     *  say, a join, a leave): it lands there on the land spring. When the
+     *  caller says no, the spot's moves on the carrier (a zoom changing the
+     *  flow size of a screen-px step, the column's head carried) carry the
+     *  tip kinematically (GM - Design, PR #211 review 6, item 4). Default:
+     *  any move of the spot on its carrier is a re-layout. */
+    shifted?: boolean;
+    /** The cursors gliding in its column come to rest together (the layer's
+     *  CursorField.restGate, GM - Design #219 r65): false holds its landing
+     *  on the spring past its own rest; true (each of them was within the
+     *  rest distance and speed on the last frame) lets it rest, as it does
+     *  with no column: on the step it is within them on this frame, so a
+     *  spot that moved on the gate's frame is never snapped to (r75.1).
+     *  Default: it rests on its own. */
+    restGate?: boolean;
+  },
+): StepResult {
+  const { zoom, reduced, opacityTarget } = opts;
+  const carrier = opts.carrier ?? live;
+  const rest = opts.restOffset ?? { x: 0, y: 0 };
+  const rel = { x: live.x - carrier.x, y: live.y - carrier.y };
+  const finish = (arrived: boolean): StepResult => {
+    m.awaiting = false;
+    m.attached = null;
+    m.held = false;
+    m.chase = 0;
+    m.stillFor = 0;
+    m.lastLive = { ...live };
+    m.lastRel = rel;
+    m.liveVel = { x: 0, y: 0 };
+    m.pos = { ...live };
+    m.vel = { x: 0, y: 0 };
+    m.plan = null;
+    m.landing = null;
+    m.lean = { x: 0, v: 0 };
+    m.opacity = { x: opacityTarget, v: 0 };
+    m.carry = 0;
+    m.lastZoom = opts.zoom;
+    return { arrived, handedOff: false, atRest: true };
+  };
+  if (reduced) return finish(false);
+  if (dtSeconds > AGENT_CURSOR_STALE_GAP_SECONDS) return { ...finish(false), caughtUp: true };
+
+  const replanPx = AGENT_CURSOR_REPLAN_PX;
+  const pointer = opts.pointer ?? null;
+  // The target's own motion since the last step. A jump past the re-plan
+  // distance in one step (a node synced or moved elsewhere at once) is a new
+  // place to fly to; anything less is a target moving (a drag), which the
+  // arc's end and the land spring track as it goes.
+  const prevLive = m.lastLive;
+  // The target's own motion is its carrier's: a de-stack shift isn't speed,
+  // and isn't a jump (a step down the column is 42 px or more, past the
+  // re-plan distance; it lands on the land spring, below).
+  const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
+  const jumpPx = prevCarrier ? dist(carrier, prevCarrier) * zoom : 0;
+  const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
+  // A zoom while it glides to a new spot (a say, a join, a leave): its
+  // offset from the spot and its speed keep their size in screen px, as the
+  // column's steps do, so the glide rides the zoom as a resting cursor does
+  // (review 7, MEDIUM-3).
+  if (m.landing && !m.plan && prevLive && !jumped && m.lastZoom !== null && m.lastZoom !== zoom && zoom > 0) {
+    const r = m.lastZoom / zoom;
+    m.pos.x = live.x + (m.pos.x - prevLive.x) * r;
+    m.pos.y = live.y + (m.pos.y - prevLive.y) * r;
+    m.vel.x *= r;
+    m.vel.y *= r;
+  }
+  m.lastZoom = zoom;
+  // The spot moved on its node (a de-stack), not with it.
+  const relShifted = opts.shifted ?? (m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01);
+  // Where the target was a frame ago, when it is moving: the steps in this
+  // frame see it move from there to here, as it did, not hold still and jump.
+  const glideFrom = prevLive && !jumped && jumpPx > 0 ? { x: prevLive.x, y: prevLive.y } : null;
+  const wasMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+  m.liveVel = prevCarrier && !jumped && dtSeconds > 0
+    ? { x: (carrier.x - prevCarrier.x) / dtSeconds, y: (carrier.y - prevCarrier.y) / dtSeconds }
+    : { x: 0, y: 0 };
+  m.lastLive = { x: live.x, y: live.y };
+  m.lastRel = rel;
+  const movingNow = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+  m.chase = jumpPx > 0 ? m.chase + 1 : 0;
+  m.stillFor = jumpPx > 0 ? 0 : m.stillFor + Math.max(0, dtSeconds);
+  let arrived = false;
+  if ((m.plan || m.landing) && jumped) {
+    // The person's own drag latches it on its first jump: input that lands
+    // every other frame never makes two in a row (review 4, L2).
+    const held = m.held || (m.awaiting && (Boolean(opts.dragged) || m.chase >= 2));
+    planMove(m, live, { zoom, pointer });
+    // A target jumping every frame (a fling): the tip can't arrive, so the
+    // action is held, but no later than the drag's end (below).
+    m.held = held;
+  } else if (m.plan) {
+    m.plan.aimed = { x: live.x, y: live.y };
+  } else if (m.landing) {
+    m.landing = { x: live.x, y: live.y };
+    // The target stopped under a tip that already arrived and was settling
+    // onto it: it stops dead with it (GM - Design, PR #211 r9 item 2).
+    if (!m.awaiting && wasMoving && !movingNow && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
+      m.pos.x = live.x;
+      m.pos.y = live.y;
+      m.vel.x = 0;
+      m.vel.y = 0;
+      m.landing = null;
+      m.attached = null;
+    }
+  } else {
+    // At rest. A jump flies there. The spot moving on its node (a de-stack)
+    // lands there on the land spring. Anything else carries the tip with its
+    // target, kinematically, at the offset it already has.
+    const offset = m.attached ?? (prevLive ? { x: m.pos.x - prevLive.x, y: m.pos.y - prevLive.y } : { x: 0, y: 0 });
+    const away = dist(m.pos, { x: live.x + offset.x, y: live.y + offset.y }) * zoom;
+    if (jumped && away > replanPx) planMove(m, live, { zoom, pointer });
+    else if (relShifted) {
+      m.attached = null;
+      m.landing = { ...live };
+    } else if (away > 0) m.attached = offset;
+  }
+  if (m.held && m.awaiting && m.stillFor >= AGENT_CURSOR_DRAG_END_SECONDS - 1e-9) {
+    // The fling ended: the held action fires now, at the tip.
+    m.held = false;
+    m.awaiting = false;
+    arrived = true;
+  }
+
+  let handedOff = false;
+  m.carry += Math.max(0, dtSeconds);
+  const h = AGENT_CURSOR_STEP_SECONDS;
+  const steps = Math.floor((m.carry + 1e-9) / h);
+  const at = { x: live.x, y: live.y };
+  for (let i = 1; m.carry >= h - 1e-9; i += 1) {
+    m.carry -= h;
+    if (glideFrom && steps > 0) {
+      const f = Math.min(1, i / steps);
+      at.x = glideFrom.x + (live.x - glideFrom.x) * f;
+      at.y = glideFrom.y + (live.y - glideFrom.y) * f;
+    }
+    // Held by its column (false), it stays on the spring past its own rest;
+    // otherwise it rests on its own the step it is within the rest distance
+    // and speed. So on the gate's frame (true) it lands only if it is still
+    // near rest on this frame's steps: a spot that moved on the gate's frame
+    // (a crossing, a say, a join or a leave then, or the cap firing) starts
+    // a fresh glide, never a snap (#219 review 3, MEDIUM-1; GM r75.1).
+    const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate !== false);
+    if (step.arrived) arrived = true;
+    if (step.handedOff) handedOff = true;
+  }
+  m.carry = Math.max(0, m.carry);
+  const atRest = settled(m, opacityTarget);
+  if (atRest) {
+    m.lean = { x: 0, v: 0 };
+    m.opacity = { x: opacityTarget, v: 0 };
+  }
+  return { arrived, handedOff, atRest };
+}
+
+/**
+ * One frame of a cursor's exit (GM - Design, PR #211 review 4: every
+ * removal). It stops where it is and fades to 0 on the same opacity spring
+ * idle dimming uses, which also brings the lean to rest; the tip, the pill
+ * and the say pill fade together, as one element. True once it is out (or
+ * when the frame gap says the tab was hidden or stalled: it went unseen).
+ * A cursor that comes back mid-exit reverses from here on stepMotion, with
+ * the spring's opacity and speed as they are.
+ */
+export function stepExit(m: CursorMotion, dtSeconds: number): boolean {
+  m.plan = null;
+  m.landing = null;
+  m.attached = null;
+  m.awaiting = false;
+  m.held = false;
+  m.vel.x = 0;
+  m.vel.y = 0;
+  if (dtSeconds > AGENT_CURSOR_STALE_GAP_SECONDS) {
+    m.opacity = { x: 0, v: 0 };
+    m.carry = 0;
+    return true;
+  }
+  m.carry += Math.max(0, dtSeconds);
+  const h = AGENT_CURSOR_STEP_SECONDS;
+  for (; m.carry >= h - 1e-9; m.carry -= h) {
+    stepSpring1(m.opacity, 0, AGENT_CURSOR_FADE_SPRING, h);
+    stepSpring1(m.lean, 0, AGENT_CURSOR_LEAN_SPRING, h);
+  }
+  m.carry = Math.max(0, m.carry);
+  if (m.opacity.x < 0.002 && Math.abs(m.opacity.v) < 0.01) {
+    m.opacity = { x: 0, v: 0 };
+    return true;
+  }
+  return false;
+}

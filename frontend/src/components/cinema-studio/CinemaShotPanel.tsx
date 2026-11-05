@@ -14,6 +14,7 @@ import { NodeError } from '../nodes/NodeError';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 import { RUN_LOCK_VERBS, lockLine } from '../../lib/runLock';
+import { LineText } from '../LineText';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -295,7 +296,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 : motionHandoff?.status === 'error' ? 'Retry connection' : 'Send to motion'}
           </button>
           {motionHandoff?.status === 'error' ? (
-            <p className="cinema-shot-panel__motion-feedback" role="alert">{motionHandoff.error}</p>
+            <p className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>
           ) : (
             <p className="cinema-shot-panel__motion-feedback" role={motionHandoff ? 'status' : undefined}>
               {motionHandoff?.status === 'ready' ? 'Video node connected. Open it to set the prompt and generate.'
@@ -358,8 +359,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                     {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
                         (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                     {upload.status === 'uploading' ? 'Uploading…'
-                      : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
-                        : upload.error ?? "Couldn't upload this image."}
+                      : upload.canRetry ? <LineText text={shortLine(upload.error ?? "Couldn't upload this image.")} />
+                        : <LineText text={upload.error ?? "Couldn't upload this image."} />}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {uploadOffersTryAgain(upload) && (

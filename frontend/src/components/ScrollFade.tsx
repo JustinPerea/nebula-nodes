@@ -1,5 +1,6 @@
 import { useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import type { HTMLAttributes, Ref } from 'react';
+import { hasMoreBelow } from '../lib/scrollMore';
 import '../styles/scroll-fade.css';
 
 type ScrollFadeProps = HTMLAttributes<HTMLElement> & {
@@ -22,9 +23,7 @@ export function ScrollFade({ as: Tag = 'div', ref, className = '', ...props }: S
     const measure = () => {
       frame = null;
       if (disposed) return;
-      const moreBelow = viewport.clientHeight > 0
-        && viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > 1;
-      if (moreBelow) viewport.setAttribute('data-scroll-more', 'true');
+      if (hasMoreBelow(viewport)) viewport.setAttribute('data-scroll-more', 'true');
       else viewport.removeAttribute('data-scroll-more');
     };
     const schedule = () => {

@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input, Video Input or Audio Input whose file measured `size` ({seconds} for audio) (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known.",
   "definitions": {
     "img": {
       "id": "img",
@@ -2791,6 +2791,46 @@
         "bfl": null,
         "fal": 0.005
       }
+    },
+    {
+      "name": "OmniHuman 1.5: priced by the audio's length, so unpriced before the run",
+      "nodeId": "omnihuman-1-5",
+      "params": {},
+      "wired": [
+        "image",
+        "audio"
+      ],
+      "expected": {
+        "fal": null,
+        "replicate": null
+      }
+    },
+    {
+      "name": "OmniHuman 2.0: priced by the audio's length, so unpriced before the run",
+      "nodeId": "omnihuman-2",
+      "params": {},
+      "wired": [
+        "image",
+        "audio"
+      ],
+      "expected": {
+        "fal": null
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2: priced by the audio's length, so unpriced before the run",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {
+        "mode": "pro"
+      },
+      "wired": [
+        "image",
+        "audio"
+      ],
+      "expected": {
+        "fal": null,
+        "replicate": null
+      }
     }
   ],
   "shippedRunCases": [
@@ -3497,6 +3537,174 @@
         "high": null,
         "awaitingInput": true
       }
+    },
+    {
+      "name": "OmniHuman 1.5 on fal: 12.3 s of audio rounds up to 13 s at $0.16",
+      "nodeId": "omnihuman-1-5",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 12.3
+      },
+      "expected": {
+        "low": 2.08,
+        "high": 2.08,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "OmniHuman 1.5 on Replicate: 12.3 s of audio rounds up to 13 s at $0.16",
+      "nodeId": "omnihuman-1-5",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 12.3
+      },
+      "expected": {
+        "low": 2.08,
+        "high": 2.08,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "OmniHuman 1.5 with no measured audio waits for its input",
+      "nodeId": "omnihuman-1-5",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "expected": {
+        "low": null,
+        "high": null,
+        "awaitingInput": true
+      }
+    },
+    {
+      "name": "OmniHuman 2.0 on fal: 4.2 s of audio rounds up to 5 s at $0.105",
+      "nodeId": "omnihuman-2",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 4.2
+      },
+      "expected": {
+        "low": 0.525,
+        "high": 0.525,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 Standard on fal: 10 s of audio is priced as 11 s (audio plus one second) at $0.0562",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 10
+      },
+      "expected": {
+        "low": 0.6182,
+        "high": 0.6182,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 Pro on fal: 10 s of audio is priced as 11 s at $0.115",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {
+        "mode": "pro"
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 10
+      },
+      "expected": {
+        "low": 1.265,
+        "high": 1.265,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 on fal: 12.6 s of audio (a real run billed 12.8 s, $0.72) is priced as 14 s, never under the bill",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 12.6
+      },
+      "expected": {
+        "low": 0.7868,
+        "high": 0.7868,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 Standard on Replicate: 10 s of audio is priced as 11 s at $0.056",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 10
+      },
+      "expected": {
+        "low": 0.616,
+        "high": 0.616,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "Kling AI Avatar v2 Pro on Replicate: 10 s of audio is priced as 11 s at $0.11",
+      "nodeId": "kling-ai-avatar-v2",
+      "params": {
+        "mode": "pro"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "port": "audio",
+      "size": {
+        "seconds": 10
+      },
+      "expected": {
+        "low": 1.21,
+        "high": 1.21,
+        "awaitingInput": false
+      }
+    }
+  ],
+  "sizeNoteCases": [
+    {
+      "name": "an Audio port says the audio's length",
+      "nodeId": "omnihuman-2",
+      "route": "fal",
+      "note": "$0.105 per second of audio, rounded up to a whole second. The video runs as long as the audio. Priced from your audio’s length when you run it"
+    },
+    {
+      "name": "an Image port says the image's size",
+      "nodeId": "seedvr2-upscale",
+      "route": null,
+      "note": "$0.001 per megapixel of the larger of input and output, rounded up to a whole megapixel; priced from your image's size when you run it"
     }
   ]
 }

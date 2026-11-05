@@ -23,7 +23,7 @@ export async function reviewCanvasProposal(
   frame?: (entry: ProposalEntry) => void,
 ): Promise<void> {
   const id = typeof op.proposalId === 'string' ? op.proposalId : '';
-  if (!id) throw writtenLine("This update's proposal can't be opened from here.");
+  if (!id) throw writtenLine('This update’s proposal can’t be opened from here.');
   await goToCanvas();
   const store = useCanvasProposalsStore;
   // Asked for at once, so the bar shows it the moment it draws.

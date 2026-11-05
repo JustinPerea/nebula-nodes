@@ -195,6 +195,17 @@ button[data-offline-neutral]:hover {
   box-shadow: none !important;
 }
 
+/* The banner's one live region (PersonRequiredBanner): read aloud, never seen. */
+.person-required__announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Placed by the app's notice region (NoticeRegion), like every toast. */
 .person-required {
   display: flex;

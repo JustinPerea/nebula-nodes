@@ -97,7 +97,7 @@ describe('an old board in Moodboard Studio', () => {
 describe('the List view and the Board view', () => {
   it('a tile for an outside image shows the placeholder', () => {
     const { container } = render(
-      <MoodboardListView images={[outside, local]} analysis={null} cover={null} uploading={false}
+      <MoodboardListView images={[outside, local]} analysis={null} cover={null}
         onFiles={vi.fn()} onDrop={vi.fn()} onRemove={vi.fn()} onUpdate={vi.fn()} onSetCover={vi.fn()}
         onTextDone={vi.fn()} />,
     );

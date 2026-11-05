@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { useHeldLook } from '../../../hooks/useHeldLook';
+import type { LockProps } from '../../PersonLock';
 
 /**
  * Settings' switch: a real checkbox with role="switch".
@@ -14,15 +15,20 @@ import { useHeldLook } from '../../../hooks/useHeldLook';
  * focus) and a press changes nothing. `disabled` stays a lock of its own
  * (not this switch's save): the locked look at once.
  */
-export function SettingsSwitch({ checked, saving = false, disabled, onChange, ...aria }: {
+export function SettingsSwitch({ checked, saving = false, disabled, onChange, lock, ...aria }: {
   checked: boolean;
   saving?: boolean;
   disabled?: boolean;
   onChange: (checked: boolean) => void;
+  /** A person-only setting's lock (components/PersonLock): aria-disabled, its line, its first-moment look. */
+  lock?: LockProps;
   'aria-label'?: string;
   'aria-describedby'?: string;
 }) {
   const held = useHeldLook(saving && !disabled);
+  // The lock's own attributes win where it sets them; its undefined keys leave the held look alone.
+  const lockProps = Object.fromEntries(Object.entries(lock ?? {}).filter(([, value]) => value !== undefined));
+  const describedBy = [aria['aria-describedby'], lock?.['aria-describedby']].filter(Boolean).join(' ') || undefined;
   return (
     <input
       type="checkbox"
@@ -32,13 +38,17 @@ export function SettingsSwitch({ checked, saving = false, disabled, onChange, ..
       disabled={disabled}
       {...aria}
       {...held}
-      onChange={(event) => { if (!saving) onChange(event.target.checked); }}
+      {...lockProps}
+      aria-describedby={describedBy}
+      onChange={(event) => { if (!saving && !lock?.['aria-disabled']) onChange(event.target.checked); }}
     />
   );
 }
 
 /** A labelled on/off row. The whole row is the hit target; the switch is a real checkbox. */
-export function SwitchRow({ title, description, checked, disabled, saving, nested, onChange }: {
+export function SwitchRow({ title, description, checked, disabled, saving, nested, onChange, lock }: {
+  /** A person-only setting's lock (components/PersonLock): aria-disabled and its line. */
+  lock?: LockProps;
   title: string;
   description?: string;
   checked: boolean;
@@ -55,7 +65,7 @@ export function SwitchRow({ title, description, checked, disabled, saving, neste
         <span className="settings-pref__title">{title}</span>
         {description && <span className="settings-pref__description" id={descriptionId}>{description}</span>}
       </span>
-      <SettingsSwitch checked={checked} disabled={disabled} saving={saving}
+      <SettingsSwitch checked={checked} disabled={disabled} saving={saving} lock={lock}
         aria-describedby={description ? descriptionId : undefined} onChange={onChange} />
     </label>
   );

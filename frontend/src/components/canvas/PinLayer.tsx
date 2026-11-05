@@ -7,6 +7,11 @@ import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
 import { pinDisplayText, pinPoint, relativeTime } from '../../lib/canvasPins';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { PIN_SHOW_EVENT } from '../../lib/personThread';
+import { viewportRevealing } from '../../lib/canvasFit';
+import { springViewport } from '../../lib/viewportSpring';
 import '../../styles/canvasPins.css';
 
 /** A pin newer than this pops in when it first appears (older ones are just there). */
@@ -25,6 +30,9 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
   // Round 23 (review 22, M-1): Delete note is a pin write, refused while
   // following or offline (the store gates it too); opening a note only looks.
   const lock = useCanvasLock();
+  // PR #204 round 10 (GM r15): deleting a note is the person's alone (DELETE /api/canvas/pins:
+  // require_person), so Delete locks through the one lock, its line under it.
+  const deleteLock = usePersonLock('delete notes');
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(zoom);
   const scale = useRef<SpringState>({ x: 1, y: 0, vx: 0, vy: 0 });
@@ -33,6 +41,29 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
   const [focused, setFocused] = useState(false);
   const [opened, setOpened] = useState(false);
   const expanded = hovered || focused || opened;
+
+  // The Message box's pin rows: Show pans the pin into view on a spring and opens its note.
+  useEffect(() => {
+    let stop = () => {};
+    const show = (event: Event) => {
+      if ((event as CustomEvent<{ pinId?: string }>).detail?.pinId !== pin.id) return;
+      const state = store.getState();
+      const point = pinPoint(pin, slot, state.nodeLookup);
+      if (point) {
+        const viewport = { x: state.transform[0], y: state.transform[1], zoom: state.transform[2] };
+        const block = { left: point.x - 20, top: point.y - 20, right: point.x + CARD_REACH_PX, bottom: point.y + 160 };
+        const target = viewportRevealing(block, viewport, { width: state.width, height: state.height }, state.minZoom);
+        stop();
+        if (target) stop = springViewport(viewport, target, (next) => { void store.getState().panZoom?.setViewport(next); });
+      }
+      setOpened(true);
+    };
+    window.addEventListener(PIN_SHOW_EVENT, show);
+    return () => {
+      stop();
+      window.removeEventListener(PIN_SHOW_EVENT, show);
+    };
+  }, [pin, slot, store]);
   const resolved = pin.status === 'resolved' && pin.reply !== null;
   // A new pin, or a new reply on an old one, earns a small pop.
   const popKey = `${pin.id}:${pin.reply?.at ?? ''}`;
@@ -160,11 +191,13 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             className="canvas-pin__delete"
             aria-label="Delete note"
             {...lock.act()}
-            onClick={() => void remove(pin.id)}
+            {...deleteLock.control()}
+            onClick={deleteLock.guard(() => remove(pin.id))}
           >
             <Trash2 size={12} aria-hidden="true" />
             <span>Delete</span>
           </button>
+          <PersonLockLine lock={deleteLock} place="control" className="canvas-pin__held-line" />
         </div>
       )}
     </div>

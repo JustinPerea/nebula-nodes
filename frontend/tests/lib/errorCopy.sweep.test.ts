@@ -22,6 +22,7 @@ const REFUSED = "Try again, or reload if it keeps happening.";
 const api = await import('../../src/lib/api');
 const renderJobs = await import('../../src/lib/renderJobs');
 const projects = await import('../../src/lib/projects');
+// pin-text-ratchet: off, only fetchPins, createPin and deletePin are called here; no text rule
 const pins = await import('../../src/lib/canvasPins');
 const notes = await import('../../src/lib/agentNotes');
 const assetProposals = await import('../../src/lib/assetProposals');

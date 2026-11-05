@@ -1,7 +1,8 @@
 import type { QuestionSetView } from '../../lib/agentQuestions';
 import type { AssetProposalKind, AssetProposalView } from '../../lib/assetProposals';
 import type { ProposalView } from '../../lib/wsClient';
-import { isWaiting, questionCount, waitingByAgent, type WaitingProposal } from './agentNeedsYou';
+import { heldProposalLine, heldQuestionsLine } from '../../store/heldAssetProposals';
+import { isWaiting, proposalCount, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
 
 /**
  * The Agents panel's rows (Q125 item 2, Justin 2026-10-24: "Yes, all four, in
@@ -83,6 +84,13 @@ export interface RosterInput {
   questions: QuestionSetView[];
   canvasProposals: ProposalView[];
   assetProposals: AssetProposalView[];
+  /** The asks this tab knows only from their Updates (agentNeedsYou heldAsks). */
+  held?: HeldAsk[];
+  /** Whether this tab isn't confirmed as the person (heldLock useTabHeld). Only then is a
+   * Needs-you row locked, whatever it would open (GM r5 2b: a demoted tab's synced asks lock
+   * too); in the person's tab an Update its ask hasn't reached opens and says what became of
+   * it. Default false (the connected tab). */
+  tabHeld?: boolean;
   /** A node's name on the canvas now (its label, else its type's name), or null when it isn't there. */
   nodeLabel: (nodeId: string) => string | null;
 }
@@ -94,9 +102,9 @@ export interface RosterCounts {
 
 /** What a Needs-you row opens: the oldest open item by creation time. */
 export type RosterNext =
-  | { kind: 'questions'; setId: string; createdAt: number }
+  | { kind: 'questions'; setId: string; createdAt: number; held?: boolean }
   | { kind: 'proposal'; proposalId: string; target: 'canvas' | AssetProposalKind; targetId: string | null;
-    createdAt: number };
+    createdAt: number; held?: boolean };
 
 export interface RosterRow {
   agent: RosterAgent;
@@ -113,6 +121,10 @@ export interface RosterRow {
   next: RosterNext | null;
   /** GM's tooltip; null when the row is not a button. */
   tooltip: string | null;
+  /** GM, 2026-10-29: why the row can't open its ask yet (this tab isn't
+   * connected as the person, so it knows the ask only from its Update): the
+   * row's action is locked, with this as its tooltip; null when it opens. */
+  locked: string | null;
   ariaLabel: string | null;
   /** Needs you: since when it waits (oldest item). Working: last activity. */
   sortAt: number;
@@ -142,7 +154,7 @@ interface Gathered {
   agent: RosterAgent;
   status: RosterStatus | null;
   cursor: RosterCursor | null;
-  questions: QuestionSetView[];
+  questions: WaitingQuestions[];
   proposals: WaitingProposal[];
 }
 
@@ -175,7 +187,7 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
   }
 
   const rows: RosterRow[] = [];
-  for (const entry of byAgent.values()) rows.push(rowFor(entry, now, nodeLabel));
+  for (const entry of byAgent.values()) rows.push(rowFor(entry, now, nodeLabel, input.tabHeld ?? false));
   rows.sort((a, b) => {
     if (a.group !== b.group) return a.group === 'needsYou' ? -1 : 1;
     if (a.group === 'needsYou') return a.sortAt - b.sortAt || a.agent.name.localeCompare(b.agent.name);
@@ -184,10 +196,10 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
   return rows;
 }
 
-function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string | null): RosterRow {
+function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string | null, tabHeld: boolean): RosterRow {
   const { agent, status, cursor } = entry;
   // Questions, not sets: a set of two reads "2 questions", as its Update does.
-  const counts = { questions: questionCount(entry), proposals: entry.proposals.length };
+  const counts = { questions: questionCount(entry), proposals: proposalCount(entry) };
   const needsYou = isWaiting(entry);
   const statusText = status?.text ?? null;
   const action = cursor?.did?.verb ? actionLine(cursor.did, cursor.at, now, nodeLabel) : null;
@@ -197,19 +209,25 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
 
   if (needsYou) {
     const items: RosterNext[] = [
-      ...entry.questions.map((set): RosterNext => ({ kind: 'questions', setId: set.id, createdAt: set.createdAt })),
+      ...entry.questions.map((set): RosterNext => ({ kind: 'questions', setId: set.id, createdAt: set.createdAt,
+        ...(set.held ? { held: true } : {}) })),
       ...entry.proposals.map((p): RosterNext => ({ kind: 'proposal', proposalId: p.id, target: p.target,
-        targetId: p.targetId, createdAt: p.createdAt })),
+        targetId: p.targetId, createdAt: p.createdAt, ...(p.held ? { held: true } : {}) })),
     ].sort((a, b) => a.createdAt - b.createdAt);
     const next = items[0];
-    const tooltip = counts.questions > 0 && counts.proposals > 0
-      ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL;
+    // The same rule as an Update's own Review and Answer (heldLock heldLockFor): every row
+    // locks while the tab isn't confirmed, held asks and synced ones alike.
+    const locked = tabHeld ? (next.kind === 'questions' ? heldQuestionsLine() : heldProposalLine()) : null;
+    const tooltip = locked ?? (counts.questions > 0 && counts.proposals > 0
+      ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL);
     const counted = countLine(counts);
     return {
       agent, group: 'needsYou', counts, countLine: counted, statusText,
       // GM: "A blocked agent 'looking at' a node tells the person nothing."
       line: statusText ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
-      flyTo, next, tooltip, ariaLabel: `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
+      flyTo, next, tooltip, locked,
+      // A locked row's reason is its line (aria-describedby, AgentRoster), not said twice in its name.
+      ariaLabel: locked ? `${who}, ${counted}.` : `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
     };
   }
 
@@ -217,7 +235,7 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
   const lastActive = Math.max(status?.at ?? -Infinity, cursor?.at ?? -Infinity);
   return {
     agent, group: 'working', counts, countLine: '', statusText, line, flyTo, next: null,
-    tooltip: flyTo ? SHOW_ON_CANVAS : null,
+    tooltip: flyTo ? SHOW_ON_CANVAS : null, locked: null,
     ariaLabel: flyTo ? `${who}${line ? `, ${line}` : ''}. ${SHOW_ON_CANVAS}` : null,
     sortAt: lastActive,
   };

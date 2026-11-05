@@ -6,6 +6,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { CATEGORY_LABELS, providerLabel, modelInputSummary, supportedModelProviders, matchesModelProvider } from '../../lib/modelDiscovery';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { ModalPortal } from '../ModalPortal';
+import { useNoticeClearance } from '../../hooks/useNoticeClearance';
 
 interface ModelPickerProps {
   value: string | null;
@@ -21,6 +22,8 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
   const providers = useMemo(() => [...new Set(getCreateModels().flatMap(supportedModelProviders))]
     .sort((left, right) => providerLabel(left).localeCompare(providerLabel(right))), []);
   usePanelFocus(true, panelRef, onClose, { initialFocus: 'input', trap: true });
+  // Review 6 MEDIUM-3: centred above the notice band, so a notice never lands on its list.
+  const clearance = useNoticeClearance();
 
   const groups = useMemo(() => {
     const matchesProvider = (model: ModelNodeDefinition) => matchesModelProvider(model, provider);
@@ -44,7 +47,7 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
 
   return (
     <ModalPortal>
-    <div className="model-picker-overlay" onMouseDown={onClose}>
+    <div className="model-picker-overlay" style={clearance} onMouseDown={onClose}>
     <div ref={panelRef} className="model-picker" role="dialog" aria-modal="true" aria-label="Choose a model"
       tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
       <div className="model-picker__search">

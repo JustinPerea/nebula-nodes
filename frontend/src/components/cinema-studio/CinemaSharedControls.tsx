@@ -8,6 +8,7 @@ import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 interface CinemaSharedControlsProps {
   cinemaNodeId: string;
@@ -160,8 +161,8 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
                 {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
                   (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                 {upload.status === 'uploading' ? 'Uploading…'
-                  : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
-                    : upload.error ?? "Couldn't upload this image."}
+                  : upload.canRetry ? <LineText text={shortLine(upload.error ?? "Couldn't upload this image.")} />
+                    : <LineText text={upload.error ?? "Couldn't upload this image."} />}
               </span>
               <div className="cinema-reference-upload__actions">
                 {uploadOffersTryAgain(upload) && (

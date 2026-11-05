@@ -121,6 +121,30 @@ describe('canvas proposals store', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('expired');
   });
 
+  it('a re-send of a card closed here on its expiry, before the backend\'s sweep, never brings it back (review 3 NIT-2)', () => {
+    vi.useFakeTimers();
+    try {
+      const late = proposal('p_late', { expiresAt: 5000 });
+      emit({ type: 'proposalOpened', proposal: late, acceptKey: 'key-late' });
+      useCanvasProposalsStore.getState().pruneExpired(6000);
+      // A rename re-sends it while it leaves, and again once it has gone.
+      emit({ type: 'proposalOpened', proposal: { ...late, note: 'renamed' }, acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late.closing).toBe('expired');
+      vi.advanceTimersByTime(PROPOSAL_EXIT_MS + 10);
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      emit({ type: 'proposalOpened', proposal: late, acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      // A sync that still lists it open does not either.
+      useCanvasProposalsStore.getState().sync([{ ...late, acceptKey: 'key-late' }]);
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      // Another proposal (another expiry) opens as ever.
+      emit({ type: 'proposalOpened', proposal: proposal('p_late'), acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late.closing).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('accepts with the key and dragged positions, adopts, then runs one target', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     useCanvasProposalsStore.getState().moveGhost('p_a', '+up', { x: 900, y: -40 });
@@ -145,6 +169,25 @@ describe('canvas proposals store', () => {
     expect(api.releaseApproval.mock.invocationCallOrder[0])
       .toBeGreaterThan(graph.state.executeNode.mock.invocationCallOrder[0]);
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('accepted');
+  });
+
+  it("hands the wires a model change removes to the accept's undo step (PR #216 r3)", async () => {
+    const removedEdges = [{ source: 'n2', sourceHandle: 'image', target: 'n1', targetHandle: 'images' }];
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { removedEdges, run: [] }), acceptKey: 'key-a' });
+    const result = { status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: [],
+      approvalId: null, nodes: [], edges: [], updatedNodes: [] };
+    api.acceptProposal.mockResolvedValue(result);
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result,
+      { undoStep: expect.any(Object), synced: syncs.seen, unwired: removedEdges });
+  });
+
+  it('takes the view a rename re-sends, keeping where the person dragged it (GM - Design, PR #216 r4 4)', () => {
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “Old”' }), acceptKey: 'key-a' });
+    useCanvasProposalsStore.setState((state) => ({ drag: { ...state.drag, p_a: { '+k': { x: 5, y: 6 } } } }));
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “New”' }), acceptKey: 'key-a' });
+    expect(useCanvasProposalsStore.getState().proposals.p_a.view.plan).toBe('Changes “New”');
+    expect(useCanvasProposalsStore.getState().drag.p_a).toEqual({ '+k': { x: 5, y: 6 } });
   });
 
   it('runs several targets with their inputs, or waits while a run is going', async () => {

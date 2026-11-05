@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * error-copy round 2 (GM - Design), the Commons:
- * - Upload per file: "heading 'Couldn't upload {filename}.' with the mapped
- *   reason line below it, e.g. 'Couldn't upload dusk.png. That's too large
+ * - Upload per file: "heading 'Couldn’t upload {filename}.' with the mapped
+ *   reason line below it, e.g. 'Couldn’t upload dusk.png. That's too large
  *   to save.' Never pass the raw backend text through." The backend sends,
  *   per refused file, its machine `reason` and the person's line (`person`,
  *   from backend/commons/person_copy.py, the one table of those words); the
@@ -77,11 +77,11 @@ describe('Commons upload, per file', () => {
     const shown = [...alert.querySelectorAll('.failure-lines')].map((item) => [
       item.querySelector('.failure-lines__heading')?.textContent, item.querySelector('.failure-lines__reason')?.textContent]);
     expect(shown).toEqual([
-      ["Couldn't upload dusk.png.", "That's too large to save."],
-      ["Couldn't upload notes.txt.", "Nebula can't read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV."],
-      ["Couldn't upload broken.png.", "That file couldn't be read. It may be damaged."],
-      ["Couldn't upload new.png.", 'Nebula is still checking that file.'],
-      ["Couldn't upload odd.png.", "Try again, or reload if it keeps happening."],
+      ["Couldn’t upload dusk.png.", "That's too large to save."],
+      ["Couldn’t upload notes.txt.", "Nebula can't read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV."],
+      ["Couldn’t upload broken.png.", "That file couldn't be read. It may be damaged."],
+      ["Couldn’t upload new.png.", 'Nebula is still checking that file.'],
+      ["Couldn’t upload odd.png.", "Try again, or reload if it keeps happening."],
     ]);
     for (const raw of RAW) expect(alert).not.toHaveTextContent(raw);
     // On 1fc3d846 the refresh after an upload cleared the error at once (a

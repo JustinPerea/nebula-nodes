@@ -94,7 +94,7 @@ async def test_moodboard_node_analyzes_again_when_the_board_changed(tmp_path, mo
 
     assert result["representative_images"]["value"] == [second, first]
     bundle = result["moodboard"]["value"]
-    assert bundle["analysis"]["warnings"][-1].startswith("The board changed after its saved analysis")
+    assert bundle["analysis"]["warnings"][0].startswith("The board changed after its saved analysis")
     assert bundle["palette"] == bundle["analysis"]["palette"] and bundle["accents"] == []
     assert store.get(board["id"])["analysis"]["representativeImages"] == [first, second]
 

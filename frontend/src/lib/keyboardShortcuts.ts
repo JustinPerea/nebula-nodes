@@ -1,9 +1,13 @@
+import { PRODUCT_LABEL } from './personThread';
+
 /** Every app shortcut, in one place, for the "?" sheet. Keys are listed as
  * separate caps; "Mod" renders as ⌘ on a Mac and Ctrl elsewhere. */
 export interface ShortcutEntry { keys: string[]; label: string }
 export interface ShortcutGroup { title: string; items: ShortcutEntry[] }
 
 export const SHORTCUTS_OPEN_EVENT = 'nebula:shortcuts-open';
+/** "/" focuses the Message box; the sheet labels it with availabilityLabel. */
+export const MESSAGE_SHORTCUT_KEY = '/';
 /** Asks one node's title to switch into its rename field. detail: { nodeId }. */
 export const NODE_RENAME_EVENT = 'nebula:node-rename';
 
@@ -34,6 +38,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'App',
     items: [
       { keys: ['Mod', 'K'], label: 'Search commands and nodes' },
+      // The sheet names the agent as the Message box does (MESSAGE_SHORTCUT_KEY, GM r94.2).
+      { keys: [MESSAGE_SHORTCUT_KEY], label: `Message ${PRODUCT_LABEL}` },
       { keys: ['Mod', 'S'], label: 'Save canvas' },
       { keys: ['Mod', 'O'], label: 'Load canvas' },
       { keys: ['?'], label: 'Show these shortcuts' },

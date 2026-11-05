@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { noticeHoldMs } from '../lib/canvasNoticeHold';
+import { useSlotWaiting } from '../lib/noticeWaiting';
 
 /** What a canvas notice's hold needs to know about it. */
 export interface HeldNotice {
@@ -14,14 +15,17 @@ export interface HeldNotice {
  * both leave it starts a full hold again (WCAG 2.2.1). `isShown` says whether
  * this notice, by id, is still the one in the store when the hold ends, so a
  * newer notice is never dismissed by an older one's timer (pass a stable
- * function). Returns the handlers for the notice's box.
+ * function). Returns the handlers for the notice's box. `slot`: the region slot it shows in;
+ * while it waits there behind a capped popover (GM r13 2, lib/noticeWaiting) it holds too, and
+ * starts a full hold when it shows again.
  */
-export function useNoticeHold(notice: HeldNotice | null, isShown: (id: number) => boolean, dismiss: () => void) {
+export function useNoticeHold(notice: HeldNotice | null, isShown: (id: number) => boolean, dismiss: () => void, slot?: string) {
   // The notice the pointer or focus is holding up, by id: a new notice starts its own hold.
   const [heldId, setHeldId] = useState<number | null>(null);
   const pointerIn = useRef(false);
   const focusIn = useRef(false);
-  const held = heldId !== null && heldId === notice?.id;
+  const waiting = useSlotWaiting(slot);
+  const held = (heldId !== null && heldId === notice?.id) || waiting;
 
   useEffect(() => {
     if (!notice || held) return;
