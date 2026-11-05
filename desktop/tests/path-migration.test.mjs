@@ -110,6 +110,18 @@ describe('computeAppDataRoot', () => {
 // ---------------------------------------------------------------------------
 
 describe('ensureAppDataDirs', () => {
+  test('a store whose _global can\'t be made (read-only) never stops the launch', () => {
+    const made = [];
+    const mkdirSync = (dir) => {
+      if (dir.endsWith(`${'/'}_global`) || dir.endsWith('\\_global')) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+      made.push(dir);
+    };
+    const root = join(tmpdir(), 'nebula-readonly-store');
+    assert.doesNotThrow(() => ensureAppDataDirs(root, { mkdirSync }));
+    assert.ok(made.includes(root));
+    assert.ok(made.some((dir) => dir.endsWith('moodboards')));
+  });
+
   test('creates root, all 5 subdirectories and each store\'s _global', () => {
     const base = mkTemp();
     const root = join(base, 'AppSupport', 'Nebula Nodes');

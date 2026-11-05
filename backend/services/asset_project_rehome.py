@@ -332,6 +332,13 @@ def _rehome_root(spec: AssetRoot, run: _Run, canvas_ids: set[str],
                                     "reason": f"could not read it: {exc}", "file": str(path)})
                 continue
             target, reason = decide_home(spec.kind, users.get(asset_id, []))
+            if (root / (target or GLOBAL_DIR)).is_symlink():
+                # A linked destination (``_global`` or the project's folder) may be
+                # another store's: the move would write into it. Never followed,
+                # as the purge never follows a link (#230 round 2 check).
+                run.skipped.append(run.entry(asset_id, asset, folder.name, target,
+                                             "not moved: its destination folder is a link", file=str(path)))
+                continue
             try:
                 destination = move_asset(spec.kind, root, path, target, before_change=run.backup)
             except FileExistsError as exc:

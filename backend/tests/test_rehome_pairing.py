@@ -589,3 +589,41 @@ def test_the_unproven_line_is_true_once_per_start_and_only_with_pending_ids(tmp_
     assert lines == ["2 project(s) deleted for good keep their characters until that folder holds "
                      "something Nebula saved"]
     assert "mounted" not in lines[0] and str(tmp_path) not in lines[0] and GONE not in lines[0]
+
+
+# #230 round 2 check: the re-home never writes into a linked destination either,
+# ``_global`` or the project's own folder (probes p6 and p7).
+
+def _copy_linking(tmp_path, link_name):
+    real_root = tmp_path / "real" / ".nebula" / "moodboards"
+    (real_root / "_global").mkdir(parents=True)
+    (real_root / LIVE).mkdir(parents=True)
+    _asset(real_root, "_global", "r-glob", None)
+    copy = tmp_path / "copy" / ".nebula"
+    root = copy / "moodboards"
+    root.mkdir(parents=True)
+    (root / link_name).symlink_to(real_root / link_name, target_is_directory=True)
+    _asset(root, OLD, "c-old")  # a copy-only old-style board
+    return real_root, copy, root
+
+
+def test_a_copys_rehome_never_writes_into_a_linked_global(tmp_path):
+    real_root, copy, root = _copy_linking(tmp_path, "_global")
+    store = _catalog(copy, LIVE)
+    assert purge.roots_paired(copy, root)
+    before = _snapshot(real_root)
+    report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
+    assert _snapshot(real_root) == before
+    assert report["moved"] == 0 and (root / OLD / "c-old.json").is_file()
+
+
+def test_a_copys_rehome_never_writes_into_a_linked_project_folder(tmp_path):
+    real_root, copy, root = _copy_linking(tmp_path, LIVE)
+    store = _catalog(copy, LIVE)
+    with store.transaction() as cat:
+        cat["projects"][LIVE]["snapshot"] = {"nodes": [{"data": {"params": {"moodboard": "c-old"}}}]}
+        store.commit(cat)
+    before = _snapshot(real_root)
+    report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
+    assert _snapshot(real_root) == before
+    assert report["moved"] == 0 and (root / OLD / "c-old.json").is_file()

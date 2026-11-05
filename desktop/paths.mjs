@@ -137,8 +137,20 @@ export function ensureAppDataDirs(root, deps = {}) {
     ...APP_DATA_SUBDIRS.map((sub) => join(root, sub)),
     ...APP_DATA_STORE_SUBDIRS.map((sub) => join(root, sub, STORE_GLOBAL_DIR)),
   ];
+  const markers = new Set(APP_DATA_STORE_SUBDIRS.map((sub) => join(root, sub, STORE_GLOBAL_DIR)));
   for (const dir of dirs) {
-    mkdir(dir, { recursive: true });
+    if (!markers.has(dir)) {
+      mkdir(dir, { recursive: true });
+      continue;
+    }
+    // A store's `_global` is only its proof of being a store Nebula made: a
+    // folder Nebula can't write (a read-only link or volume) must not stop the
+    // app from starting. The backend then treats that store as unproven.
+    try {
+      mkdir(dir, { recursive: true });
+    } catch {
+      // left unproven; nothing else depends on it
+    }
   }
   return dirs;
 }

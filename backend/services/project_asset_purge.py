@@ -82,11 +82,16 @@ Otherwise, once the disk is back, the re-home would move the boards the
 purge never saw to Global. A store Nebula makes itself proves itself from
 the start: whatever creates a store folder (the desktop app's data folder,
 desktop/paths.mjs) creates its ``_global`` with it, and saving anything
-into a store makes a real folder in it. Only a folder that already existed
-empty, with no ``_global`` (an old install that never saved a character or
-a style, a mount point), waits; its ids stay listed, which costs nothing:
-the store is skipped up front, never scanned for them, and one line is
-logged per start.
+into a store makes a real folder in it. Only a folder that is empty with
+no ``_global`` (an old ~/.nebula install that never saved a character or a
+style, a mount point outside the desktop app's folder) waits; its ids stay
+listed, which costs nothing: the store is skipped up front, never scanned
+for them, and one line is logged per start. The desktop app makes
+``_global`` in its own stores at every launch, so an empty desktop store
+(even a disk mounted there and out) counts as proven: the purge then finds
+nothing to delete and clears the ids, and once that disk is back the device
+check marks the store unpaired, so nothing on it moves to Global; its
+orphans are simply never cleaned, as they never could be before.
 
 An unpaired store is left alone: the id stays on the list (the re-home
 keeps skipping it, so nothing is hidden or moved: the project's files stay

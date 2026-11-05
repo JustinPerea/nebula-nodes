@@ -32,3 +32,8 @@ Gates the start-up re-home with the purge's pairing rule and closes the four LOW
 - NIT: the inode comparison could never fire (`home == expected` by then) and is removed with its test; the device check stays. `_ident` and the docstrings say it catches a store mounted on its folder and can't catch a same-filesystem bind mount. Round 1's note above that says the stat of the parent "is kept as a cheap second check" is out of date.
 - Not touched: LOW-1 (the desktop migration's copied boards going to Global) belongs to the deferred desktop pass; NIT-2 (a case mismatch reads as unpaired) fails safe.
 - Mutation check (round 2): no link guard, unproven store scanned, pairing per id, the old guessing warning, and the desktop `_global` creation each fail a named test (desktop: 5 failures in `path-migration.test.mjs`, 1 in the Python pin).
+
+## After round 2 (coordinator)
+- The re-home never writes into a linked destination either. A linked `_global` or project folder in a paired store is skipped with "not moved: its destination folder is a link", so a copy's old board can't land in the real store (round 2 check, probes p6 and p7).
+- The desktop app's `_global` marker is best-effort. A store folder Nebula can't write, such as a read-only link or volume, no longer stops the launch; that store stays unproven.
+- The purge docstring now says what the desktop app does. Its launch makes `_global` in its own stores, so an empty desktop store counts as proven. The device check still keeps a remounted disk's boards where they are.
