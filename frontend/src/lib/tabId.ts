@@ -243,3 +243,10 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     void page.pageShow(Boolean((event as PageTransitionEvent).persisted));
   });
 }
+
+/** The socket's form of the same claim (``?tab=1``): a browser can't set a socket's headers. It
+ * only tells the backend this is a tab, not an agent, for what a shared Update shows (PR #204
+ * round 4); it never makes the socket the person's (that is the hello's token). */
+export function withTabClaim(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}tab=1`;
+}

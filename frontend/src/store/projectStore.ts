@@ -35,8 +35,9 @@ import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, subscribeBackendConnection, waitUntilOnline } from '../lib/backendConnection';
 import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
-  failureMessage, failureUnder, isNoAnswer, nodeNameList, oneLine, shortReason,
+  failureMessage, failureUnder, isNoAnswer, nodeNameList, notConnectedBecause, oneLine, shortReason,
 } from '../lib/errorCopy';
+import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { WORLD_LABS_NEEDS_CHECK, deleteRefusalText } from '../lib/worldLabsWaiting';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { OpenHold, ReopenHold, ReopenHoldPlace } from '../lib/reopenHold';
@@ -44,7 +45,7 @@ import { useCinemaUploadStore } from './cinemaUploadStore';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
   agentClosedLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast, filedCopyLine, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
-  RESTORE_COPY_FALLBACK_KEPT,
+  keptStorageFullLine, RESTORE_COPY_FALLBACK_KEPT,
 } from '../components/projects/restoreCopyCore';
 import type { CanvasLimitContext } from '../components/projects/catalogRestoreCopy';
 import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
@@ -132,6 +133,12 @@ export interface CopyNotice {
  * this tab's edits; the whole line stays), 'reloadNebula' ([Reload Nebula]
  * after an update) or 'none' (no button; the whole line). */
 export type ProjectRetryOffer = 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed';
+
+/** PR #204 round 11: Try again redoes a person-only action ("Delete forever", "Empty":
+ * require_person), so it locks on a tab that isn't connected as the person. */
+export function projectRetryPersonOnly(state: { errorRetry: ProjectRetry | null }): boolean {
+  return state.errorRetry?.action === 'purge' || state.errorRetry?.action === 'emptyTrash';
+}
 
 export function projectRetryOffer(state: { error: string | null; errorRetry: ProjectRetry | null }): ProjectRetryOffer {
   if (!state.error || !state.errorRetry) return 'none';
@@ -694,6 +701,11 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
 function isProjectLimitRefusal(error: unknown): boolean {
   return error instanceof RequestFailedError && error.status === 413 && error.storageLimit === 'projects';
 }
+/** The storage cap (the catalog may not grow): the person can make room, so a
+ * kept save it refused keeps the kept edits too (GM r23 on PR #199, 3). */
+function isStorageCapRefusal(error: unknown): boolean {
+  return error instanceof RequestFailedError && error.status === 413 && error.storageLimit === 'storage';
+}
 function refusedForGood(error: unknown): boolean {
   return error instanceof WorldLabsHold || (error instanceof RequestFailedError && !canTryAgain(error.status)
     && error.code !== PERSON_REQUIRED_CODE);
@@ -729,13 +741,37 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
  * refused for good (then no Try again). The line is GM's mapping (error copy
  * round 3e): a written failure keeps its heading and reason, anything else
  * reads the action's heading over GM's general line, never its own message. */
-function showError(error: unknown, retry: ProjectRetry | null = null): void {
+function showError(error: unknown, retry: ProjectRetry | null = null, written?: string): void {
   // Refused while offline (round 15): nothing was sent and nothing is said;
   // the banner pulsed.
   if (isOfflineRefusal(error)) return;
-  const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
+  // `written`: a line the caller worded (GM r6's "because" form for what retries on the promote).
+  const line = written ?? failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
+  // GM, #204 r3: refused only because this tab isn't connected as the person
+  // (a cover pin, Delete for good): the line and its Try again go on the promote.
+  clearLineOnPromote(error, () => useProjectStore.getState().error, line, // clears-on-promote: project.error
+    () => useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null }));
+}
+/** GM r7 (2): a load screen whose load was refused only because this tab isn't
+ * connected as the person says so in the "because" form, shows no Try again
+ * (the promote is the way on, not a click), and loads again on the promote,
+ * as Try again's 'load' does. Anything else returns false and the caller's own
+ * line (with its Try again) stays. `extra` is the rest of the caller's state. */
+function showNotConnectedLoad(error: unknown, what: 'load your work' | 'save your unsaved edits' | 'switch projects',
+  extra: Partial<ProjectState> = {}): boolean {
+  if (!isPersonRefusal(error)) return false;
+  const line = notConnectedBecause(what);
+  useProjectStore.setState({ ...extra, error: line, errorDetails: detailsFor(line, error), errorRetry: null });
+  retryOnPromote(error, 'project.load', () => { // clears-on-promote: project.load-retry
+    // Only while the screen still hasn't loaded: a load that got on by another
+    // way (a Try again elsewhere, a switch) isn't run twice. Review 5 NIT-3: by
+    // the screen's state, not its line, which another refusal may have replaced.
+    if (useProjectStore.getState().initialized) return;
+    void useProjectStore.getState().retry();
+  });
+  return true;
 }
 /** What counts as unsaved work when the tab stops for a params version: run
  * records that never ran are left out, and so is node run state (queued,
@@ -1201,7 +1237,9 @@ async function saveKeptEdits(): Promise<void> {
     // Over the project limit: the person can make room and save again, so
     // the kept edits stay on the canvas with the over-limit line (not held
     // and dropped from kept mode as a refusal for good).
-    if (refusedForGood(error) && !isOfflineRefusal(error) && !isProjectLimitRefusal(error)) {
+    // The storage cap likewise (GM r23, 3): kept edits are the only copy, so a
+    // refusal the person can fix never drops them.
+    if (refusedForGood(error) && !isOfflineRefusal(error) && !isProjectLimitRefusal(error) && !isStorageCapRefusal(error)) {
       stopKeepingEdits();
       const recovery = pendingRecoveryOf(kept.sourceId, snapshot);
       recovery.projectName = kept.sourceName;
@@ -1211,8 +1249,15 @@ async function saveKeptEdits(): Promise<void> {
     }
     const current = useProjectStore.getState().keptEdits;
     if (current) {
-      useProjectStore.setState({ keptEdits: { ...current, saving: false,
-        error: isOfflineRefusal(error) ? null : failureUnder(error, "Nebula couldn’t save your edits.") } });
+      const line = isOfflineRefusal(error) ? null
+        : isStorageCapRefusal(error) ? keptStorageFullLine(useProjectStore.getState().trash.length > 0)
+        : failureUnder(error, "Nebula couldn’t save your edits.");
+      useProjectStore.setState({ keptEdits: { ...current, saving: false, error: line } });
+      // GM, #204 r3: a refusal only because this tab isn't connected as the person goes on the promote.
+      if (line) {
+        clearLineOnPromote(error, () => useProjectStore.getState().keptEdits?.error, line, // clears-on-promote: project.kept-save
+          () => { const now = useProjectStore.getState().keptEdits; if (now) useProjectStore.setState({ keptEdits: { ...now, error: null } }); });
+      }
     }
     return;
   }
@@ -1297,6 +1342,7 @@ export function resetProjectStoreForTests(): void {
   dismissedHeldNotes.clear();
   loggedRestores.clear();
   followingSwitch = null;
+  heldFollow?.stop(); heldFollow = null;
   initializing = null;
   saveQueue = Promise.resolve();
   cancelPendingSaves();
@@ -1529,6 +1575,9 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
       paramsVersionChange = null;
       // Refused for good: the held edits' screen says it (holdRefusedEdits).
       if (error instanceof EditsRefused) return;
+      // GM r7 (2): refused only because this tab isn't connected as the person. The verb fits
+      // what this screen was doing: saving the unsaved edits as a recovered copy.
+      if (showNotConnectedLoad(error, 'save your unsaved edits')) return;
       // Try again sends the same recovered copy again (initialize does it first).
       const line = sentences(
         `Nebula was updated while this ${TAB} was open, and your unsaved edits haven’t been saved yet.`,
@@ -1889,16 +1938,30 @@ export function reopenHoldNow(): { id: string; line: string } | null {
  * forms are `heldReopenLine`, in the World Labs notice's box (GM r33, 6) or by
  * Run History (GM r32, 2). */
 let shownReopen: { id: string; line: string; place: ReopenHoldPlace; stop: () => void } | null = null;
-function sayReopenHeld(id: string, project: string, hold: ReopenHold): Promise<void> | void {
+/** What a press that couldn't say its line gets back: the chunk's failure. */
+type ReopenSaid = { lines: unknown } | void;
+function sayReopenHeld(id: string, project: string, hold: ReopenHold): Promise<ReopenSaid> | ReopenSaid {
   if (holdLines) return sayReopenHeldNow(id, project, hold);
   // The table of lines isn't here yet: nothing is said until it is, and only
   // if this project is still the one open then, with the hold as it is then
-  // (one that ended meanwhile says nothing). If it can't load, nothing.
+  // (one that ended meanwhile says nothing). If it can't load, the press
+  // still answers: the caller shows the open's failure (reopenLinesFailed).
   return loadReopenHoldLines().then(() => {
     if (useProjectStore.getState().activeProject?.id !== id) return;
     const now = reopenHold(id, true);
     if (now) sayReopenHeldNow(id, project, now);
-  }, () => {});
+  }, (lines: unknown) => ({ lines }));
+}
+/** GM r23 on PR #199, 1: a press always answers. The table of lines couldn't
+ * load, so the press says what failed, under the heading the entry code
+ * shares for an open ("Nebula couldn’t open the project."), with a real Try
+ * again: it loads the chunk again, then reopens. While the canvas is kept,
+ * the kept line stays as it is (the full kept sentence; the error never
+ * replaces it and never suggests a reload). */
+function reopenLinesFailed(id: string, lines: unknown): void {
+  if (isCanvasKept() || isOfflineRefusal(lines)) return;
+  useProjectStore.setState({ screen: 'home' });
+  showError(lines, { action: 'open', id }, failureUnder(lines, RETRY_HEADINGS.openFollowed));
 }
 function sayReopenHeldNow(id: string, project: string, hold: ReopenHold): void {
   shownReopen?.stop();
@@ -2091,8 +2154,10 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
         if (!carried && !hold) await refreshOpenHold();
         if (carried || !hold) hold = reopenHold(retry.id, true);
       }
-      if (hold) await sayReopenHeld(retry.id, project, hold);
-      else if (refused) {
+      if (hold) {
+        const said = await sayReopenHeld(retry.id, project, hold);
+        if (said) reopenLinesFailed(retry.id, said.lines);
+      } else if (refused) {
         // Nothing holds it now (the run ended in between, or another tab's
         // reopen moved the revision): one more try, quietly; a second
         // refusal with nothing holding says nothing, and the tab follows
@@ -2537,6 +2602,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   // What this tab last saved or loaded for the project it is leaving.
   const lastSavedThere = lastSaved;
   let keptCopy = false;
+  let savingCopy = false;
   let copy: { id: string; name: string } | null = null;
   let deletesKept: string[] = [];
   let deletesHeld: string[] = [];
@@ -2576,7 +2642,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
           handoffFailed = true;
           pendingRecovery = pendingRecoveryOf(context.id, snapshot);
           lastRecoveredCopy = null;
+          savingCopy = true;
           await whenSent(() => recoverPendingWork());
+          savingCopy = false;
           keptCopy = true;
           copy = lastRecoveredCopy;
         }
@@ -2642,6 +2710,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
+    // GM r7 (2): refused only because this tab isn't connected as the person.
+    // GM r9 (2): a refused recovered copy says what it was doing, as the other load screens do.
+    if (showNotConnectedLoad(error, savingCopy ? 'save your unsaved edits' : 'switch projects', { screen: 'home', initialized: false, dirty: Boolean(pendingRecovery) })) return;
     const newest = latest();
     // Try again loads what is open now (initialize), as the line says.
     // Nebula's own reopen lands on Projects with the line that ends at the
@@ -2764,7 +2835,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       console.error('[nebula] project copy download', error);
       // GM's heading (2026-10-25), the button's own words; past the string
       // cap the error carries "It's too big to download in a browser."
-      showNotice(failureMessage(error, "Couldn't download a copy."));
+      showNotice(failureMessage(error, "Couldn't download a copy."), 'error', error);
     }
   },
   dismissSwitchNotice: () => set({ switchNotice: null }),
@@ -2796,10 +2867,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     if (initializing) return initializing;
     set({ loading: true, error: null, errorRetry: null });
     initializing = (async () => {
+      // GM r9 (2): the verb fits what was refused: saving the recovered edits, or the load.
+      let saving = true;
       try {
         // A stale tab cannot write to its former active project. Persist its
         // unsaved authoring as an inactive recovered copy before replacement.
         await recoverPendingWork();
+        saving = false;
         await loadWorkspace();
       } catch (error) {
         // Refused for good: the held edits' screen says it (holdRefusedEdits).
@@ -2816,6 +2890,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // reload does: the general line says "reload", which drops them.
         // A full disk is read from the answer (RequestFailedError.storageFull,
         // the backend's storage refusal), never from its words (round 3f).
+        // GM r7 (2): refused only because this tab isn't connected as the person.
+        if (showNotConnectedLoad(error, saving ? 'save your unsaved edits' : 'load your work')) return;
         const copy = failureCopy(error, { heading: LOAD_HEADING });
         const general = copy.reason === REFUSED_FALLBACK_COPY;
         const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
@@ -2862,7 +2938,10 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       set({ screen: 'workspace', error: null, errorRetry: null });
       // Focus goes to the canvas it returns to (review 19 item 6).
       focusCanvasSoon();
-      if (hold) await sayReopenHeld(id, state.activeProject?.name ?? '', hold);
+      if (hold) {
+        const said = await sayReopenHeld(id, state.activeProject?.name ?? '', hold);
+        if (said) reopenLinesFailed(id, said.lines);
+      }
       return;
     }
     const inPlace = state.initialized && !state.busy && id === state.activeProject?.id;
@@ -3129,9 +3208,22 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // notice's "See what's large" goes with the panel (review).
         if (wasPaused) resumePending = true;
         const notice = get().sizeNotice;
-        set({ dirty: true, saveStatus: 'error', saveError: failureMessage(error, "Couldn't save the project."),
+        // GM r6: it retries on the promote, so a "not connected" refusal says the "because" form.
+        const saveLine = isPersonRefusal(error) ? notConnectedBecause('save the project') : failureMessage(error, "Couldn't save the project.");
+        set({ dirty: true, saveStatus: 'error', saveError: saveLine,
           ...(state.savePaused ? { savePaused: null, sizePanelOpen: false, ...(notice?.action ? { sizeNotice: null } : {}) } : {}) });
-        showError(error, { action: 'save' });
+        // PR #204 round 4 (review 2 MEDIUM): a save the gate refused for this tab only (a held tab
+        // switching a provider or Krea billing, main._refuse_agent_billing_change): its reason goes
+        // on the promote; "Save failed · Retry" stays, and its Retry works then.
+        clearLineOnPromote(error, () => get().saveError, saveLine, () => set({ saveError: null })); // clears-on-promote: project.save
+        // GM, #204 r5 item 1: and the save itself goes again on the promote, silently, through
+        // the one retry mechanism: the header reads its normal "Saving…" while it does, and a
+        // retry that fails keeps "Save failed · Retry" with its new reason.
+        retryOnPromote(error, `project.save:${context.id}`, () => { // clears-on-promote: project.save-retry
+          const now = get();
+          if (now.activeProject?.id === context.id && now.saveStatus === 'error') void now.retrySave();
+        });
+        showError(error, { action: 'save' }, saveLine);
         throw error;
       } finally { inFlight = null; }
     });
@@ -3333,6 +3425,44 @@ type GraphSyncEvent = Extract<Parameters<Parameters<typeof wsClient.subscribeFir
  * restore this tab hasn't seen yet: the sync the backend sends with it is
  * the main path; review 11 of PR #199, HIGH-1).
  */
+/** Whether the person is typing in a field of a Studio window (Cinema, the
+ * editors, the Character and Moodboard studios, Create, the Commons): a
+ * focused text field while the view isn't the canvas. */
+export function typingInStudioField(): boolean {
+  if (typeof document === 'undefined' || useUIStore.getState().viewMode === 'canvas') return false;
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el instanceof HTMLTextAreaElement) return true;
+  if (el instanceof HTMLInputElement) {
+    return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color', 'image'].includes(el.type);
+  }
+  return false;
+}
+/** The syncs that came while a Studio field held focus (GM r23, 4), oldest
+ * first, replayed when it lets go; null when none waits. The first carries
+ * the project switch's notice, so every one is kept, not only the latest. */
+let heldFollow: { events: GraphSyncEvent[]; stop: () => void } | null = null;
+function holdFollowWhileTyping(event: GraphSyncEvent): boolean {
+  if (heldFollow) { heldFollow.events.push(event); return true; }
+  if (!typingInStudioField()) return false;
+  const release = () => {
+    // Focus is moving: asked again once it has settled (a blur into another
+    // field of the Studio keeps the wait; so does a focusout inside it).
+    setTimeout(() => {
+      const held = heldFollow;
+      if (!held || typingInStudioField()) return;
+      held.stop();
+      heldFollow = null;
+      for (const next of held.events) workspaceSync(next);
+    }, 0);
+  };
+  document.addEventListener('focusout', release, true);
+  // A field that goes away with its view loses focus without a focusout.
+  const stopView = useUIStore.subscribe(release);
+  heldFollow = { events: [event], stop: () => { document.removeEventListener('focusout', release, true); stopView(); } };
+  return true;
+}
+
 function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
   const restoreNow = (event as unknown as { catalogRestore?: unknown }).catalogRestore;
   const restoreId = typeof restoreNow === 'string' ? restoreNow : null;
@@ -3406,6 +3536,9 @@ function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
   // An agent or script opened or made a project, or the person reopened this
   // one in another tab: follow it (with a way back after an agent's).
   if (!synthetic && switchedAwayFrom(event.projectSwitch, context)) {
+    // GM r23 on PR #199, 4: a Studio field the person is typing in finishes
+    // first; the follow waits until the field loses focus (below).
+    if (holdFollowWhileTyping(event)) return;
     // Round 19: graph writes stop now; an undo on its way is taken back
     // first, so the snapshot is what the person sees. The handoff carries
     // every value typed that Nebula may not have, even when the autosave
@@ -3477,6 +3610,14 @@ function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
     ? 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.'
     : 'The active project changed in another window. Reload projects to continue.', undefined, snapshot);
 }
+// GM r108 D1: a "Back to “X”" toast whose way back is now the open project
+// has nothing left to offer, however the person got there (its Back, Open
+// on an Update, Projects, an agent opening it): it clears at once.
+useProjectStore.subscribe((state, previous) => {
+  const id = state.activeProject?.id;
+  if (!id || id === previous.activeProject?.id) return;
+  if (state.switchNotice?.previousProjectId === id) useProjectStore.setState({ switchNotice: null });
+});
 
 /** One coordinator stays mounted across Home, Canvas and all studios. */
 export function subscribeProjectAutosave(): () => void {

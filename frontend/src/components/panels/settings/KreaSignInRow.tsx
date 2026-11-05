@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { getKreaPlans, startKreaTrial, isKreaAuthorizationUrl, type KreaConnectionMode, type KreaConnectionState, type KreaPlans } from '../../../lib/kreaConnection';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
@@ -8,6 +8,10 @@ import { KREA_ROW, type RowTone } from './rowHelpers';
 import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
+import { PersonLockLine, type PersonLock } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 
 const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTone }> = {
   disconnected: { label: 'Not signed in', tone: 'idle' },
@@ -23,6 +27,8 @@ const number = new Intl.NumberFormat('en-US');
 /** Krea's plans, loaded on request. Links open Krea's own pricing or checkout
  * pages in the browser; nothing here charges or changes the subscription. */
 function KreaPlans() {
+  // PR #204 round 10 (GM r15): the trial is the person's alone (krea_connector person_only).
+  const trialLock = usePersonLock('start a trial');
   const [plans, setPlans] = useState<KreaPlans | null>(null);
   const [trialUrl, setTrialUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +38,12 @@ function KreaPlans() {
     setBusy(true);
     setError(null);
     try { await action(); }
-    catch (value) { setError(failureMessage(value, "Couldn't load the Krea plans.")); }
+    catch (value) {
+      const line = failureMessage(value, "Couldn't load the Krea plans.");
+      setError(line);
+      // The trial and the plans are person-only (krea_connector person_only): gone on the promote (#204 r4).
+      clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.plans
+    }
     finally { setBusy(false); }
   }
 
@@ -41,7 +52,7 @@ function KreaPlans() {
       <>
         <button type="button" className="settings__button settings__button--ghost" disabled={busy}
           onClick={() => void run(async () => setPlans(await getKreaPlans()))}>{busy ? 'Loading plans…' : 'Show plans'}</button>
-        {error && <p className="settings-row__error" role="alert">{error}</p>}
+        {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       </>
     );
   }
@@ -61,17 +72,18 @@ function KreaPlans() {
       <div className="settings-row__buttons">
         {plans.manageUrl && <a className="settings__button settings__button--ghost" href={plans.manageUrl} target="_blank" rel="noopener noreferrer">Manage plan ↗</a>}
         {plans.trialAvailable && !trialUrl && <button type="button" className="settings__button settings__button--ghost" disabled={busy}
-          onClick={() => void run(async () => setTrialUrl(await startKreaTrial()))}>Start a free Pro trial</button>}
+          {...trialLock.control()} onClick={trialLock.guard(() => run(async () => setTrialUrl(await startKreaTrial())))}>Start a free Pro trial</button>}
         {trialUrl && <a className="settings__button" href={trialUrl} target="_blank" rel="noopener noreferrer">Open trial checkout ↗</a>}
       </div>
+      {plans.trialAvailable && !trialUrl && <PersonLockLine lock={trialLock} place="control" />}
       {trialUrl && <p className="settings-hint">Krea asks for a card on its checkout page. The trial converts to Pro unless you cancel.</p>}
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
     </div>
   );
 }
 
 /** Which connection new Krea model nodes start with. Existing nodes keep theirs. */
-function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
+function KreaDefault({ mode, lock }: { mode: KreaConnectionMode; lock: PersonLock }) {
   const pending = useSettingsDraftStore((s) => !!s.pending.kreaConnectionMode);
   const justSaved = useSettingsDraftStore((s) => s.justSaved === 'kreaConnectionMode');
   const error = useSettingsDraftStore((s) => s.errors.kreaConnectionMode);
@@ -80,26 +92,29 @@ function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
       <label className="settings-hint" htmlFor="settings-krea-default">New Krea nodes use</label>
       <div className="settings-krea-default__control">
         <select id="settings-krea-default" className="settings__select" aria-label="Default Krea connection for new nodes"
-          value={mode} disabled={pending}
-          onChange={(event) => void saveField('kreaConnectionMode', event.target.value === 'mcp' ? 'mcp' : 'api-token')}>
+          value={mode} disabled={pending} {...lock.control()}
+          onChange={lock.guard((event: ChangeEvent<HTMLSelectElement>) => saveField('kreaConnectionMode', event.target.value === 'mcp' ? 'mcp' : 'api-token'))}>
           <option value="api-token">API token · API balance</option>
           <option value="mcp">Krea sign-in · workspace compute</option>
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       <p className="settings-hint">Nodes you already placed keep their connection.</p>
     </div>
   );
 }
 
-export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: KreaConnectionMode }) {
+export function KreaSignInRow({ krea, mode, lock }: { krea: KreaController; mode: KreaConnectionMode; lock: PersonLock }) {
   const open = useSettingsDraftStore((s) => s.openRow?.id === KREA_ROW);
   const { connection, busy, error, launchError } = krea;
   const status = connection?.status;
   const signedIn = status === 'connected';
   const started = !!status && status !== 'disconnected';
   const trigger = useRef<HTMLButtonElement>(null);
+  // PR #204 round 10 (GM r15, r17 item 1): sign-in, check, disconnect and the default for new
+  // nodes are the person's alone. Round 11 (GM r18 a): they lock with the providers' one lock
+  // (ProvidersTab), whose line sits under the group's heading.
   const setOpen = (on: boolean) => useSettingsDraftStore.setState({ openRow: on ? { id: KREA_ROW, mode: 'manage' } : null });
   const authUrl = connection?.authorizationUrl && isKreaAuthorizationUrl(connection.authorizationUrl)
     ? connection.authorizationUrl : null;
@@ -115,7 +130,8 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
       <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden="true" focusable="false" />
     </button>
   ) : (
-    <button ref={trigger} type="button" className="settings__button" aria-label="Sign in to Krea" disabled={busy} onClick={krea.signIn}>
+    <button ref={trigger} type="button" className="settings__button" aria-label="Sign in to Krea" disabled={busy}
+      {...lock.control()} onClick={lock.guard(krea.signIn)}>
       {busy ? 'Opening…' : 'Sign in'}
     </button>
   );
@@ -137,11 +153,11 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
           <div id="settings-row-krea" className="settings-row__manage">
             {started && (
               <div className="settings-row__buttons">
-                <button type="button" className="settings__button" disabled={busy} onClick={krea.signIn}>
+                <button type="button" className="settings__button" disabled={busy} {...lock.control()} onClick={lock.guard(krea.signIn)}>
                   {busy ? 'Working…' : status === 'connecting' ? 'Restart sign-in' : 'Reconnect'}
                 </button>
-                <button type="button" className="settings__button settings__button--ghost" disabled={busy} onClick={krea.check}>Check connection</button>
-                <button type="button" className="settings__button settings__button--ghost settings__button--danger" disabled={busy} onClick={krea.disconnect}>Disconnect</button>
+                <button type="button" className="settings__button settings__button--ghost" disabled={busy} {...lock.control()} onClick={lock.guard(krea.check)}>Check connection</button>
+                <button type="button" className="settings__button settings__button--ghost settings__button--danger" disabled={busy} {...lock.control()} onClick={lock.guard(krea.disconnect)}>Disconnect</button>
               </div>
             )}
             {status === 'connecting' && <p className="settings-hint">Finish signing in in your browser, then come back. If no page opened, use Open Krea sign-in.</p>}
@@ -153,8 +169,8 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
                 if (!result.ok) krea.setError("Couldn't open Krea sign-in in your browser.");
               }).catch(() => krea.setError("Couldn't open Krea sign-in in your browser."));
             }}>Open Krea sign-in ↗</a>}
-            {problem && <p className="settings-row__error" role="alert">{problem}</p>}
-            {(started || mode === 'mcp') && <KreaDefault mode={mode} />}
+            {problem && <p className="settings-row__error" role="alert"><LineText text={problem} /></p>}
+            {(started || mode === 'mcp') && <KreaDefault mode={mode} lock={lock} />}
             {signedIn && <KreaPlans />}
             {started && <p className="settings-hint">To change workspaces, disconnect and sign in again.</p>}
           </div>

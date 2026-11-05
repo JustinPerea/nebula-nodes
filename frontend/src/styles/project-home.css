@@ -115,9 +115,27 @@ body.app-slava-restraint .project-home__trash-toggle svg { width: 15px; height: 
 body.app-slava-restraint .project-home__trash-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
 body.app-slava-restraint .project-home__trash-note { margin: 8px 0 14px 4px; color: var(--sr-ink-meta); font-size: 12px; line-height: 1.5; }
 body.app-slava-restraint .project-home__trash-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-body.app-slava-restraint .project-home__trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 16px; padding: 10px 10px 10px 14px; border: 1px solid var(--sr-edge); border-radius: var(--sr-radius-control); background: var(--sr-canvas-elevated); }
+body.app-slava-restraint .project-home__trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 16px; padding: 10px 10px 10px 14px; border: 1px solid var(--sr-edge); border-radius: var(--sr-radius-control); background: var(--sr-canvas-elevated); }
 body.app-slava-restraint .project-home__trash-name { min-width: 0; overflow: hidden; color: var(--sr-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-body.app-slava-restraint .project-home__trash-meta { grid-row: 2; color: var(--sr-ink-meta); font-size: 11px; }
+/* The name stays on one line (ellipsis) and the date line never wraps. */
+body.app-slava-restraint .project-home__trash-meta { grid-row: 2; min-width: 0; margin-top: 2px; overflow: hidden; color: var(--sr-ink-meta); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+/* Delete forever's confirm: its own full-width row under the name, the date
+   line and Restore. It opens on the layout spring (a sampled spring, as
+   panels.css's) and closes back on Cancel; with no row gap, a closed row
+   takes no room. */
+body.app-slava-restraint .project-home__trash-confirm {
+  --project-home-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  grid-row: 3; grid-column: 1 / -1; height: auto; overflow: clip; overflow-clip-margin: 4px; interpolate-size: allow-keywords;
+  transition: height var(--project-home-layout-spring);
+}
+@starting-style { body.app-slava-restraint .project-home__trash-confirm { height: 0; } }
+body.app-slava-restraint .project-home__trash-confirm[data-open='false'] { height: 0; }
+body.app-slava-restraint .project-home__confirm.project-home__trash-confirm-body { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 8px 12px; padding-top: 10px; }
+/* The line, then "This can’t be undone.", wrapping as needed; Cancel and
+   Delete forever right-aligned after it, or on their own line when the text
+   needs the width. */
+body.app-slava-restraint .project-home__trash-confirm-text { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--sr-ink-light); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__trash-confirm-buttons { display: flex; flex: none; gap: 6px; margin-left: auto; }
 body.app-slava-restraint .project-home__trash-actions { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 body.app-slava-restraint .project-home__trash-actions button,
 body.app-slava-restraint .project-home__trash-empty,
@@ -133,8 +151,10 @@ body.app-slava-restraint .project-home__confirm button:hover:not(:disabled):not(
 body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
 /* GM r13: the trigger that arms a Delete forever or an Empty turns red on hover. */
-body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
-body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled):not([aria-disabled="true"]) { color: var(--sr-danger-ink-hover, #ff9a91); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled):not([aria-disabled="true"]),
+body.app-slava-restraint .project-home__trash-row button.project-home__trigger--danger:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled):not([aria-disabled="true"]),
+body.app-slava-restraint .project-home__trash-row button.project-home__trigger--danger:active:not(:disabled):not([aria-disabled="true"]) { color: var(--sr-danger-ink-hover, #ff9a91); }
 /* GM r8 (fix round 6 of PR #200): the red fill with near-black ink, never the orange. */
 body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger-fill, #ff887d); background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); font-weight: 600; }
 body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }
@@ -235,6 +255,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__rename-form button { width: 44px; min-height: 44px; }
   body.app-slava-restraint .project-home__trash-row { grid-template-columns: minmax(0, 1fr); }
   body.app-slava-restraint .project-home__trash-actions { grid-row: auto; grid-column: 1; justify-content: flex-start; margin-top: 8px; }
+  body.app-slava-restraint .project-home__trash-confirm { grid-row: auto; }
   body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close, body.app-slava-restraint .project-home__notice-restore, body.app-slava-restraint .project-home__restore-action { min-height: 44px; }
   body.app-slava-restraint .project-home__notice-close { width: 44px; height: 44px; }
   body.app-slava-restraint .project-home__toast-close { width: 44px; }
@@ -250,7 +271,8 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__card,
   body.app-slava-restraint .project-home__preview-open,
   body.app-slava-restraint .project-home__trash-toggle svg,
-  body.app-slava-restraint .project-home__trash-actions button { transition: none; }
+  body.app-slava-restraint .project-home__trash-actions button,
+  body.app-slava-restraint .project-home__trash-confirm { transition: none; }
   body.app-slava-restraint .project-home__toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
@@ -259,3 +281,6 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
 /* Review 13 of PR #199 (MEDIUM-1): every notice on the home sits in one
    area for the stack's focus rule; the area adds no box of its own. */
 .project-home__notice-area { display: contents; }
+/* PR #204 round 11: Try again's person lock line (a "Delete forever" or "Empty" to redo) closes the row. */
+body.app-slava-restraint .project-home__error:has(.person-lock-line) { flex-wrap: wrap; }
+body.app-slava-restraint .project-home__error > .person-lock-line { flex-basis: 100%; margin: 0; }

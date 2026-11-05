@@ -69,7 +69,7 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "cli_graph", graph)
     monkeypatch.setattr(main_module, "project_store", store)
 
-    async def ignore(_data):
+    async def ignore(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)

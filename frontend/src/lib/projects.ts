@@ -1,4 +1,5 @@
 import type { Edge, Node, Viewport } from '@xyflow/react';
+import type { GoesWith } from './projectPurgeCopy';
 import type { NodeData } from '../types';
 import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
@@ -48,7 +49,11 @@ export interface ProjectSnapshot {
   createDraft?: CreateDraft | null;
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
-export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
+export interface TrashedProject extends ProjectSummary {
+  deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string };
+  /** What deleting it for good also deletes: its moodboards', characters' and styles' names (lib/projectPurgeCopy.ts). */
+  goesWith?: GoesWith;
+}
 /** Nebula found its project list (catalog.json) damaged and restored it
  * (backend project_store _restore). Listed until the person closes the
  * Projects home notice; the path fields are for the Agent log and agents. */
@@ -164,16 +169,16 @@ export interface ProjectDeletion {
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,
     options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;
-      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; hold?: unknown } = {}) {
+      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; hold?: unknown; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull,
       storageLimit: options.storageLimit, code: options.code, overSaveLimit: options.overSaveLimit,
-      sizeBytes: options.sizeBytes, hold: options.hold });
+      sizeBytes: options.sizeBytes, hold: options.hold, sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'ProjectRequestError';
   }
 }
 const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
   { heading: error.heading, detail: error.detail, storageFull: error.storageFull, storageLimit: error.storageLimit,
-    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, hold: error.hold });
+    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, hold: error.hold, sentAt: error.sentAt });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;

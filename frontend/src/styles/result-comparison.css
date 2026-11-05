@@ -10,13 +10,15 @@ body.app-slava-restraint .result-comparison {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  /* Above the notice band (hooks/useNoticeClearance). */
+  padding-bottom: max(20px, var(--notice-clearance, 20px));
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.72);
 }
 
 body.app-slava-restraint .result-comparison__panel {
   width: min(1120px, 100%);
-  max-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - 20px - max(20px, var(--notice-clearance, 20px)));
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -143,9 +145,10 @@ body.app-slava-restraint .result-comparison :is(button, summary, video):focus-vi
 @media (max-width: 700px), (max-height: 440px) {
   body.app-slava-restraint .result-comparison {
     padding: 12px;
+    padding-bottom: max(12px, var(--notice-clearance, 12px));
   }
   body.app-slava-restraint .result-comparison__panel {
-    max-height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 12px - max(12px, var(--notice-clearance, 12px)));
   }
   body.app-slava-restraint .result-comparison__header,
   body.app-slava-restraint .result-comparison__results {

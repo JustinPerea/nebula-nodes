@@ -6,7 +6,7 @@ import math
 import os
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from services.cinema_scene_spec import (
@@ -261,11 +261,15 @@ class CLIGraph:
         self._maybe_persist()
         return edge
 
-    def update_params(self, node_id: str, params: dict[str, Any]) -> None:
-        """Merge *params* into the node's existing params dict."""
+    def update_params(self, node_id: str, params: dict[str, Any], drop: Iterable[str] = ()) -> None:
+        """Merge *params* into the node's existing params dict, then remove
+        the keys in *drop* (a preview that no longer matches its file,
+        services/file_param_preview.py)."""
         if node_id not in self.nodes:
             raise ValueError(f"Node {node_id} not found")
         self.nodes[node_id]["params"].update(params)
+        for key in drop:
+            self.nodes[node_id]["params"].pop(key, None)
         self._maybe_persist()
 
     def set_params(self, node_id: str, params: dict[str, Any]) -> None:

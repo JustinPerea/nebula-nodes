@@ -1,11 +1,14 @@
 import { useGraphStore } from '../../store/graphStore';
+import { NoticeMoreInline } from '../NoticeMoreInline';
 import { NOTICE_HOLD_MS } from '../../lib/canvasNoticeHold';
 import { isForeignEdit } from '../../lib/canvasUndo';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { OpenCopyButton } from './OpenCopyButton';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { useKeptCanvas } from '../../lib/keptCanvas';
+import { LineText } from '../LineText';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -38,7 +41,10 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
   const stored = useGraphStore((state) => state.undoNotice);
   // Off the canvas, an agent edit's Undo stays on the canvas; the person's
   // own "Deleted the node." (Create Studio's result delete) keeps its Undo.
-  const notice = messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry)) ? null : stored;
+  // PR #204 round 14 (GM r23 3): offline comes first. A not-connected line (a refused save says
+  // why in the because form) waits while Nebula is offline; any other notice shows.
+  const lineShown = useOfflineFirstBecause(stored?.text ?? null);
+  const notice = (messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry))) || lineShown === null ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);
   // While the canvas is kept in this tab (GM r18 on PR #199), the button
   // acts on the kept tab's own step only; a notice for a step of the history
@@ -61,7 +67,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
     return stack[stack.length - 1] === entry;
   });
 
-  const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss);
+  const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss, 'notice');
   // Round 23 (review 22, L-3): Undo and Redo edit the canvas (the store
   // refuses both while following), so they take the canvas lock. Dismiss and
   // Open copy only look.
@@ -87,7 +93,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       {...holdHandlers} {...leave.props}
     >
       {shown.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
-      <span className="canvas-undo-notice__text">{noticeText(shown.text, shown.mono)}</span>
+      <LineText className="canvas-undo-notice__text" text={shown.text}>{noticeText(shown.text, shown.mono)}</LineText>
       {(actionable || keptOffer) && (
         <button type="button" className="canvas-undo-notice__action" onClick={act}
           {...lock.act({ kept: 'live', disabled: !actionable, title: actionable ? undefined
@@ -96,6 +102,8 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
           {shown.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>
       )}
+      {/* GM r8: the fold's count rides in this row, after Undo. */}
+      {actionable && <NoticeMoreInline />}
       {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×

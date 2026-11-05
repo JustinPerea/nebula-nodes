@@ -35,7 +35,7 @@ import pytest
 from execution import route_clients
 from execution.maker_routes import translate_params
 from services import node_route
-from tests.test_flux3_nodes import CATALOG, CLIP, P, REF, REGISTRY, defaults, hosts_for
+from tests.test_flux3_nodes import AUDIO, CATALOG, CLIP, P, REF, REGISTRY, defaults, hosts_for
 from tests.test_route_clients import (  # noqa: F401  (quick is an autouse fixture)
     KEYS, SCHEMAS, node, ports, quick, registry_handler, validate,
 )
@@ -79,7 +79,7 @@ def _sample(param: dict[str, Any]) -> Any:
 
 
 def _port_value(port: dict[str, Any]) -> Any:
-    value = {"Image": REF, "Video": CLIP, "Text": P}.get(port["dataType"])
+    value = {"Image": REF, "Video": CLIP, "Audio": AUDIO, "Text": P}.get(port["dataType"])
     return [value] if port.get("multiple") and port["dataType"] != "Text" else value
 
 

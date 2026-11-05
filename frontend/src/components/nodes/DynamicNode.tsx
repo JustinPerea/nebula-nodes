@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Repeat2, SlidersHorizontal } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -23,6 +23,7 @@ import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import { useCardSelection } from '../../hooks/useCardSelection';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
+import { useCardWidthSpring, useNodeRemeasure } from '../../lib/cardWidthSpring';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
@@ -35,6 +36,9 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const batchPreview = useBatchPreview(id, nodeData);
+  // GM r107: the card's width springs when its own content widens it.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useCardWidthSpring(cardRef, useNodeRemeasure(id));
   const previewOutputs = batchPreview.outputs;
   const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const selectNode = useUIStore((s) => s.selectNode);
@@ -156,7 +160,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       {actionSlot && createPortal(renderNodeActions('toolbar'), actionSlot)}
 
       {/* Card — visible content surface, only target of skin background/border. */}
-      <div className="model-node__card" data-node-inspector-anchor={id}>
+      <div className="model-node__card" data-node-inspector-anchor={id} ref={cardRef}>
       <div className="model-node__header">
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />

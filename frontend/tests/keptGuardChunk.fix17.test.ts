@@ -77,6 +77,6 @@ describe('the kept guard stays in the entry chunk', () => {
 
   it('runs from npm run build, after the budget', () => {
     const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8')) as { scripts: Record<string, string> };
-    expect(pkg.scripts.build).toMatch(/node scripts\/check-build-budget\.mjs && node scripts\/check-kept-guard-chunk\.mjs/);
+    expect(pkg.scripts.build).toMatch(/node scripts\/check-build-budget\.mjs && (?:node scripts\/check-dev-only-code\.mjs && )?node scripts\/check-kept-guard-chunk\.mjs/);
   });
 });

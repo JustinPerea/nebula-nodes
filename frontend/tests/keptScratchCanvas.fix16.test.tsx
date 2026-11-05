@@ -12,16 +12,17 @@
  *   copy retries and never leaves a blank notice).
  */
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}),
   disconnect: vi.fn(), send: vi.fn(), setViewing: vi.fn(), notePersonAct: vi.fn(), setKeptEdits: vi.fn() } }));
 
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { NoticeRegion } from '../src/components/NoticeRegion';
-import { InNoticeRegion } from '../src/components/InNoticeRegion';
 import { KeptEditsNotice } from '../src/components/projects/KeptEditsNotice';
+import { InNoticeRegion } from '../src/components/InNoticeRegion';
 import { DISCARD_EDITS, KEEP_THEM } from '../src/components/projects/KeptDiscardConfirm';
 import { ProjectSwitchToast } from '../src/components/projects/ProjectSwitchToast';
 import { keepCanvasLocally, releaseKeptCanvas, useGraphStore } from '../src/store/graphStore';
@@ -32,6 +33,9 @@ import { setFollowingSwitch } from '../src/lib/canvasFollow';
 import { primeRestoreCopyForTests, restoreCopyNow, setRestoreCopyImportForTests, useRestoreCopyState,
   type RestoreCopy } from '../src/components/projects/restoreCopyLoader';
 import { RESTORE_COPY_FALLBACK } from '../src/components/projects/restoreCopyCore';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const KEPT = { sourceId: 'alpha', sourceName: 'Alpha', lead: null, saving: false, error: null };
 const initialProject = useProjectStore.getState();
@@ -60,8 +64,8 @@ describe('GM r22 (3): the Discard confirm is modal, with the page behind it iner
   function renderApp() {
     return render(<>
       <div data-testid="app"><button type="button">Canvas control</button></div>
+      {/* The region's own notices (RegionNotices) hold the kept notice since the merge with main's loader. */}
       <NoticeRegion screen="canvas" />
-      <InNoticeRegion slot="kept-edits"><KeptEditsNotice /></InNoticeRegion>
       <InNoticeRegion slot="project-switch"><div><button type="button">Other notice</button></div></InNoticeRegion>
     </>);
   }

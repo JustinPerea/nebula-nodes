@@ -541,14 +541,16 @@ def test_a_verified_hello_gets_the_places_and_an_unverified_socket_never_does(ap
     with client.websocket_connect("/ws") as ws:
         frames(ws, 3)
         ws.send_text(json.dumps({"type": "hello", "personToken": PERSON["X-Nebula-Person"]}))
-        # The hello's frames end with the person's pins, then the places. A
-        # graph write after the pins broadcasts, so the next read always
-        # ends: the places when Nebula sends them, else that broadcast.
-        for _ in range(20):
-            if json.loads(ws.receive_text()).get("type") == "canvasPins":
+        # The hello's frames: the places come before the person's pins, and
+        # the pins and the cursor replay stay the last syncs (fix 24, after the merge).
+        got = []
+        for _ in range(30):
+            got.append(json.loads(ws.receive_text()))
+            if got[-1].get("type") == "agentPresenceReplay":
                 break
-        _add_text(client, "after")
-        assert json.loads(ws.receive_text()) == {"type": "providerRecoveryPlaces", "places": [
+        types = [frame.get("type") for frame in got]
+        assert types.index("providerRecoveryPlaces") < types.index("canvasPins") < types.index("agentPresenceReplay")
+        assert got[types.index("providerRecoveryPlaces")] == {"type": "providerRecoveryPlaces", "places": [
             {"runId": "wl-run-alpha", "nodeId": "n1", "projectId": alpha, "nodeType": None}]}
 
 
@@ -683,3 +685,23 @@ def test_a_handoff_delete_the_guard_allows_still_goes(app, recoveries):
     assert "deletesHeld" not in answer.json()
     with store.transaction() as catalog:
         assert new not in {node["id"] for node in catalog["projects"][delta]["snapshot"]["nodes"]}
+
+
+@pytest.mark.parametrize("how", ["delete", "clear", "delete_many_exact"])
+def test_a_removed_record_forgets_its_stamp_so_a_new_one_under_the_same_key_starts_unstamped(tmp_path, how):
+    # fix 24: pins the behaviour. Mutants that skip the stamp pop in delete/clear/rollback
+    # (J6/J7/J8) are equivalent: every call reloads from disk and _persist writes only
+    # stamps whose record exists, so a stale in-memory stamp never survives to be read.
+    store = ProviderRecoveryStore(tmp_path / "provider-recoveries.json")
+    _set(store, "run-1", project="alpha", node_type=EXPORT)
+    assert store.stamp_of("run-1", "n1")["projectId"] == "alpha"
+    if how == "delete":
+        assert store.delete(run_id="run-1", node_id="n1", resume_operation_id="op-1", existing_world_id=None)
+    elif how == "clear":
+        store.clear()
+    else:
+        store.delete_many_exact([{"runId": "run-1", "nodeId": "n1",
+                                  "resumeOperationId": "op-1", "existingWorldId": None}])
+    assert store.stamp_of("run-1", "n1") is None
+    _set(store, "run-1")
+    assert store.stamp_of("run-1", "n1") is None

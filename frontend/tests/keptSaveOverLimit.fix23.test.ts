@@ -196,13 +196,58 @@ describe('a kept save refused for the project limit (round 23, RD LOW-2)', () =>
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha-rec');
   });
 
-  it.each([
-    ['the storage cap', { detail: 'Project storage limit reached', limit: 'storage' }],
-    ['a request too large', { detail: 'Request too large' }],
-  ])('a 413 that isn’t the project limit (%s) still leaves kept mode for the held edits, as before', async (_name, body) => {
+  const STORAGE_FULL = 'Nebula couldn’t save your edits as a project because Nebula’s project list is full. ';
+  const storageAnswer = () => new Response(JSON.stringify({ detail: 'Project storage limit reached', limit: 'storage' }),
+    { status: 413, headers: { 'Content-Type': 'application/json' } });
+
+  it('GM r23, 3: a kept save refused for the storage cap keeps kept mode and says the project list is full, with the size advice', async () => {
+    keepWithEdits();
+    vi.mocked(projects.recoverProject).mockRejectedValue(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
+    await useProjectStore.getState().saveKeptEdits();
+    const state = useProjectStore.getState();
+    expect(isCanvasKept()).toBe(true);
+    expect(state.keptEdits).toMatchObject({ saving: false });
+    // No Recently deleted items in the listing: the advice that says to empty it too.
+    expect(state.keptEdits?.error).toBe(`${STORAGE_FULL}Delete a project, then remove it from Recently deleted too, and Nebula will save it.`);
+    expect(state.unsavedEdits).toBeNull();
+    expect(state.screen).toBe('workspace');
+    expect(useGraphStore.getState().keptUndo.length).toBeGreaterThan(0);
+    expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('alpha typed and more');
+  });
+
+  it('GM r23, 3: with items in Recently deleted the advice says to delete one there', async () => {
+    keepWithEdits();
+    useProjectStore.setState({ trash: [{ ...summary('old'), deletedAt: '2026-10-01T00:00:00Z', purgeAt: '2026-10-31T00:00:00Z' }] as never });
+    vi.mocked(projects.recoverProject).mockRejectedValue(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
+    await useProjectStore.getState().saveKeptEdits();
+    expect(useProjectStore.getState().keptEdits?.error)
+      .toBe(`${STORAGE_FULL}Permanently delete a project in Recently deleted and Nebula will save it.`);
+    expect(isCanvasKept()).toBe(true);
+  });
+
+  it('GM r23, 3: both limit refusals keep kept mode, each with its own line, and a save passes after room is made', async () => {
+    keepWithEdits();
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
+    await useProjectStore.getState().saveKeptEdits();
+    expect(isCanvasKept()).toBe(true);
+    expect(useProjectStore.getState().keptEdits?.error).toContain('project list is full');
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', limitAnswer()));
+    await useProjectStore.getState().saveKeptEdits();
+    expect(isCanvasKept()).toBe(true);
+    expect(useProjectStore.getState().keptEdits?.error).toContain(OVER_LIMIT);
+    expect(useProjectStore.getState().keptEdits?.error).not.toContain('project list is full');
+    vi.mocked(projects.recoverProject).mockResolvedValue(project('alpha-rec', 'Glass campaign (recovered)'));
+    vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('alpha'), summary('alpha-rec')] }));
+    vi.mocked(projects.openProject).mockResolvedValueOnce({ project: project('alpha-rec', 'Glass campaign (recovered)'),
+      workspaceRevision: 'rev-copy', paramsVersion: GRAPH_PARAMS_VERSION, canvasRevision: '1' } as never);
+    await useProjectStore.getState().saveKeptEdits();
+    expect(isCanvasKept()).toBe(false);
+  });
+
+  it('a request too large (no store limit named) still leaves kept mode for the held edits, as before', async () => {
     keepWithEdits();
     vi.mocked(projects.recoverProject).mockRejectedValue(await requestError('Nebula couldn’t save your edits.',
-      new Response(JSON.stringify(body), { status: 413, headers: { 'Content-Type': 'application/json' } })));
+      new Response(JSON.stringify({ detail: 'Request too large' }), { status: 413, headers: { 'Content-Type': 'application/json' } })));
     await useProjectStore.getState().saveKeptEdits();
     expect(useProjectStore.getState().unsavedEdits).not.toBeNull();
     expect(useProjectStore.getState().keptEdits).toBeNull();

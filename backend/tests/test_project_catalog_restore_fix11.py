@@ -166,7 +166,7 @@ def test_high1_a_runtime_restore_sends_a_graphsync_with_its_id(app, monkeypatch)
 def test_high1_tell_catalog_restore_broadcasts_on_a_running_loop(monkeypatch):
     sent: list[dict] = []
 
-    async def capture(message):
+    async def capture(message, **_kwargs):
         sent.append(message)
 
     async def changed(change, *args, **kwargs):

@@ -125,11 +125,22 @@ export function SelectionToolbar() {
     const camera = typeof MutationObserver === 'function' ? new MutationObserver(again) : null;
     const viewport = flow?.querySelector('.react-flow__viewport');
     if (viewport) camera?.observe(viewport, { attributes: true, attributeFilter: ['style', 'transform'] });
+    // React Flow marks a node `selected` a render after the store says so, so the first
+    // placement from no selection can run before any node is marked (the toolbar then
+    // stays over a node near the top until something else moves it). A node gaining or
+    // losing the mark places it again, and watches the node's size.
+    const marks = typeof MutationObserver === 'function' ? new MutationObserver(() => {
+      for (const node of flow?.querySelectorAll('.react-flow__node.selected') ?? []) sizes?.observe(node);
+      again();
+    }) : null;
+    const nodesLayer = flow?.querySelector('.react-flow__nodes');
+    if (nodesLayer) marks?.observe(nodesLayer, { attributes: true, attributeFilter: ['class'], subtree: true });
     return () => {
       window.removeEventListener('resize', again);
       window.removeEventListener(TOP_STACK_EVENT, again);
       sizes?.disconnect();
       camera?.disconnect();
+      marks?.disconnect();
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
   }, [hasSelection, nodes]);

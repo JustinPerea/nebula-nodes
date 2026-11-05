@@ -3,7 +3,10 @@ import type { Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData, PortValue } from '../src/types';
 import * as api from '../src/lib/api';
 import { RUN_HISTORY_STORAGE_KEY, type RunRecord } from '../src/lib/runHistory';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 

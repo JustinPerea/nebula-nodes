@@ -19,7 +19,7 @@
  * own line, in its own slot right above the canvas notice, with no Undo or
  * Redo of its own, so the store's rule for offers never touches it.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -63,6 +63,10 @@ import { NOTICE_SLOTS } from '../src/lib/noticeSlots';
 import { noticeHoldMs } from '../src/lib/canvasNoticeHold';
 import * as deleteNotice from '../src/lib/deleteNotice';
 import { NoticeRegion } from '../src/components/NoticeRegion';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const SLOW = 20_000;
@@ -79,6 +83,8 @@ function sync(nodes: Node<NodeData>[], edges: Edge[], extra: Record<string, unkn
     edges: structuredClone(edges), empty: nodes.length === 0, ...extra } as unknown as ExecutionEvent;
   for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
 }
+// delete-landed-wait: off, the fake answers each DELETE at once, with no timer, so
+// settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
 const notice = () => useGraphStore.getState().undoNotice;
 /** The plain line a late count shows on (null while none shows). */

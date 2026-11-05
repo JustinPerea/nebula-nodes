@@ -64,7 +64,7 @@ vi.mock('../src/lib/projects', async (original) => ({
 }));
 
 import { resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
-import { useGraphStore } from '../src/store/graphStore';
+import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { setProjectContext } from '../src/lib/projectContext';
@@ -150,6 +150,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   unsubscribe?.(); unsubscribe = null;
   resetProjectStoreForTests();
+  resetDeletedSceneEditsForTests();
   await new Promise((resolve) => setTimeout(resolve, 0));
   setProjectContext(null);
 });

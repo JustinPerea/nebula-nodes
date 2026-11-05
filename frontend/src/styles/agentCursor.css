@@ -1,11 +1,17 @@
 /* Agent cursors: drawn in flow coordinates inside React Flow's viewport and
    counter-scaled (1/zoom) by AgentCursorLayer so they stay a constant size.
-   Position comes from a spring in JS; CSS only handles fades and the ripple. */
+   Position, lean and opacity come from springs in JS (lib/agentCursorPlanner.ts);
+   CSS only runs the pills, the wire's fade and the expression (halo, press,
+   ring, shake, caret), every one on a sampled spring: the --agent-cursor-*
+   curves are set on the layer by AgentCursorLayer from lib/springs.ts and
+   lib/agentCursorExpression.ts. */
 
 .agent-cursor-layer {
   /* The bubble's fade out (GM - Design, round 19): the repo's k 500, c 36
      spring sampled as a linear() easing (provider-switcher.css,
-     workspace-rail.css). 320ms is AGENT_SAY_FADE_MS in agentPresenceStore.ts. */
+     workspace-rail.css). 320ms is AGENT_SAY_FADE_MS in agentPresenceStore.ts.
+     The pill's way in, the name's show and hide and the say pill's move into
+     the name's slot run on the same curve. */
   --agent-cursor-say-fade: 320ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
   position: absolute;
   inset: 0;
@@ -22,11 +28,11 @@
   overflow: visible;
 }
 
+/* The drag's wire: a solid curve like the canvas's own edges (spec §2 drag). */
 .agent-cursor__wire {
   stroke-linecap: round;
-  stroke-dasharray: 6 5;
   opacity: 0;
-  transition: opacity 180ms ease-out;
+  transition: opacity var(--agent-cursor-soft);
 }
 
 .agent-cursor {
@@ -34,31 +40,250 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
-  will-change: transform;
+  /* will-change is set from JS only while a cursor flies (AgentCursorLayer):
+     at rest it sits on whole device pixels, off its own layer, so the pill
+     and its edge draw crisp (GM - Design, PR #211 r10 item 1). */
   opacity: 0;
-  transition: opacity 160ms ease-out;
 }
 
-.agent-cursor[data-placed='true'] {
-  opacity: 1;
+/* Three layers inside the cursor layer's own stacking context (its
+   z-index, so all of it stays above nodes and edges), GM - Design, #219
+   r106: the wires at the bottom (0), then every resting or gliding cursor
+   (1 and up), then any flying cursor (r103, 11 and up). Between columns
+   the DOM's order decides, as at rest. */
+.agent-cursor__wire-layer {
+  z-index: 0;
 }
 
-.agent-cursor--idle[data-placed='true'] {
-  opacity: 0.45;
-  transition-duration: 600ms;
+.agent-cursor {
+  z-index: 1;
+}
+
+/* A column member gliding past or under the member above it (a crossing:
+   CursorField.hold), and while any member of a column glides, the whole
+   column (CursorField.syncOrder): drawn in column order, the head on top,
+   so a gliding cursor never draws under a member it passes, however far
+   down the column, and labels never interleave (r75.2, r85, r95). The
+   depth is how many members sit above its slot (set from JS, at most 8),
+   so the DOM's order never decides it inside the column. The band is over
+   every unmarked cursor and every wire: an ordered column never drops
+   under another column's cursors or a wire (r106).
+   Known limit, accepted (GM - Design, #219 r111): a gliding column is
+   raised over other columns' resting cursors, never lowered. CSS z-index
+   alone can't keep the exact at-rest order between columns whose DOM
+   orders interleave (a member over a neighbour over another member is a
+   cycle). Columns don't overlap at rest, so nothing visible changes. Don't
+   "fix" it with a negative z-index: that put columns under the wires
+   (r106). */
+.agent-cursor:is([data-crossing='true'], [data-column-order='true']) {
+  z-index: calc(10 - var(--agent-cursor-crossing-depth, 0));
+}
+
+/* A flight draws over every other cursor, every column member and every
+   wire until it has landed and its column's glide is at rest (r103): it
+   never falls under a member it passes. Of two flights that overlap, the
+   later-started one is on top: its rank is the order its flight started
+   in (set from JS, CursorField.syncOrder). */
+.agent-cursor[data-aloft='true'] {
+  z-index: calc(11 + var(--agent-cursor-aloft, 0));
+}
+
+/* A leaving cursor whose name a live cursor now shows (a number taken over)
+   hides its pill at once, for the rest of its exit: one name never shows
+   twice (PR #211 reviews 4 and 5). */
+.agent-cursor[data-taken='true'] .agent-cursor__label {
+  visibility: hidden;
 }
 
 .agent-cursor__pointer {
   display: block;
   overflow: visible;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+  /* The lean turns the arrow about its tip, never the pills. No drop
+     shadow: the halo under the arrow takes its place (spec §1). */
+  transform-origin: 1.5px 1.5px;
 }
 
-.agent-cursor__pointer path {
+.agent-cursor__arrow {
   fill: var(--agent-color);
   stroke: #fff;
   stroke-width: 1.4;
   stroke-linejoin: round;
+}
+
+/* ── Expression (GM - Design's cursor spec §1-§2, Phase 2) ─────────────────
+   Every number comes from lib/agentCursorTuning.ts through custom
+   properties the layer sets (AgentCursorLayer cursorSpringVars). The halo is
+   a blurred copy of the arrow (an SVG filter); what it does says what the
+   agent is doing. data-expr is the state showing, data-gesture a gesture
+   playing, data-still reduced motion's still frames. */
+
+.agent-cursor__halo {
+  fill: var(--agent-color);
+  opacity: var(--agent-cursor-halo-opacity);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* look: the halo dims; a bright arc sweeps once around (the gesture). */
+.agent-cursor[data-expr='look'] .agent-cursor__halo {
+  opacity: var(--agent-cursor-look-dim);
+}
+
+.agent-cursor__sweep,
+.agent-cursor__orbit {
+  fill: none;
+  stroke: var(--agent-color);
+  stroke-linecap: round;
+  transform-origin: 8px 11px;
+}
+
+.agent-cursor__sweep {
+  stroke-width: var(--agent-cursor-sweep-stroke);
+  opacity: var(--agent-cursor-sweep-opacity);
+  animation: agent-cursor-turn var(--agent-cursor-sweep) both;
+}
+
+/* think: the halo breathes while held, a spring each way: its opacity, its
+   scale about the arrow's centre (the halo's fill-box centre) and its blur
+   (GM r58). The blur is a CSS blur() on think's halo alone, in place of the
+   shared SVG filter, so the danger flash and every other halo keep 3 px. */
+.agent-cursor[data-expr='think'] .agent-cursor__halo {
+  filter: blur(var(--agent-cursor-breath-trough-blur));
+  animation: agent-cursor-breathe var(--agent-cursor-breath) infinite alternate;
+}
+
+/* run: the halo becomes a thin arc orbiting the arrow for one turn. */
+.agent-cursor[data-expr='run'] .agent-cursor__halo,
+.agent-cursor[data-expr='propose'] .agent-cursor__halo,
+.agent-cursor[data-expr='wait'] .agent-cursor__halo {
+  visibility: hidden;
+}
+
+.agent-cursor__orbit {
+  stroke-width: var(--agent-cursor-orbit-stroke);
+  animation: agent-cursor-turn var(--agent-cursor-orbit) both;
+}
+
+/* propose and wait: the halo turns dashed; the mark slot shows its glyph. */
+.agent-cursor__dashed {
+  fill: none;
+  stroke: var(--agent-color);
+  stroke-width: var(--agent-cursor-dashed-stroke);
+  stroke-dasharray: var(--agent-cursor-dashed-dash);
+  stroke-linejoin: round;
+  opacity: var(--agent-cursor-dashed-opacity);
+}
+
+.agent-cursor__mark {
+  position: absolute;
+  /* Right of the arrow, level with its tip, 2 px clear of the arrow, the
+     dashed halo and the pills (GM r56 item C). */
+  left: var(--agent-cursor-mark-left);
+  top: var(--agent-cursor-mark-top);
+  width: var(--agent-cursor-mark-box);
+  height: var(--agent-cursor-mark-box);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* propose: the ghost card's outline (ProposalLayer's dashed card) with a
+   check inside: it waits for the person's OK. The outline alone read as an
+   empty box at 1440 (GM r56 item C). */
+.agent-cursor__mark--propose {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--agent-color);
+  border-radius: 3px;
+  background: rgb(26 26 28 / 0.85);
+  color: var(--agent-color);
+}
+
+/* wait: the pin's badge (PinLayer's look), at mark size. */
+.agent-cursor__mark--wait {
+  box-sizing: border-box;
+  border: 1px solid rgb(255 255 255 / 0.85);
+  border-radius: 50%;
+  background: var(--agent-color);
+  color: var(--agent-ink, #0b0b0c);
+}
+
+/* error: one sideways shake, and the halo flashes danger once. The spec
+   names --sr-danger, but in Slava that bare alias is the orange accent;
+   the danger red is --sr-danger-ink (the destructive-colour ratchet, GM r11). */
+.agent-cursor__shake {
+  animation: agent-cursor-shake var(--agent-cursor-shake) both;
+}
+
+.agent-cursor__danger {
+  fill: var(--sr-danger-ink, #ff887d);
+  opacity: 0;
+  animation: agent-cursor-flash var(--agent-cursor-flash) both;
+}
+
+/* click (and a drag's arrival): the arrow presses and springs back, and a
+   ring blooms from the tip, on one spring. */
+.agent-cursor__press {
+  transform-origin: 1.5px 1.5px;
+  animation: agent-cursor-press var(--agent-cursor-press) both;
+}
+
+.agent-cursor__ring {
+  fill: none;
+  stroke: var(--agent-color);
+  animation: agent-cursor-bloom var(--agent-cursor-ring) both;
+}
+
+/* Still frames (reduced motion, spec §3): no sweep, breath, shake or ring. */
+.agent-cursor[data-still='true'][data-expr='error'] .agent-cursor__danger {
+  opacity: var(--agent-cursor-halo-opacity);
+}
+
+/* type: a caret at the end of the field's text, or an underline under a
+   param row's value, both in flow coordinates beside the cursor. With
+   neither on screen, the caret sits at the end of the say pill. */
+.agent-cursor__field-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.agent-cursor__field-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  background: var(--agent-color);
+}
+
+.agent-cursor__field-mark[data-blink='true'],
+.agent-cursor__tip-caret[data-blink='true'],
+.agent-cursor__say-caret[data-blink='true'] {
+  animation: agent-cursor-blink var(--agent-cursor-blink) infinite;
+}
+
+.agent-cursor__say-caret {
+  display: inline-block;
+  width: var(--agent-cursor-caret-width);
+  height: 11px;
+  margin-left: 1px;
+  /* Into the pill's padding, so the pill keeps its measured width. */
+  margin-right: calc(-1px - var(--agent-cursor-caret-width));
+  vertical-align: -1px;
+  background: var(--agent-color);
+}
+
+/* type with nothing else to show it: the caret on the cursor itself, right of the tip.
+   3 px clear of the arrow's outline at rest (GM): the arrow's right-most point is x 14.7 and
+   its stroke is 1.4 wide, so the outline ends at 15.4 and the caret starts at 18.4. The
+   cursor isn't scaled with the canvas, so these are screen px at every zoom
+   (tests/agentCursorTipCaretGap.test.ts checks it against AGENT_CURSOR_ARROW_PATH). */
+.agent-cursor__tip-caret {
+  position: absolute;
+  left: 18.4px;
+  top: 3px;
+  width: var(--agent-cursor-caret-width);
+  height: 12px;
+  background: var(--agent-color);
 }
 
 .agent-cursor__label {
@@ -71,18 +296,44 @@
   gap: 4px;
   white-space: nowrap;
   font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  transition: transform var(--agent-cursor-say-fade);
+}
+
+/* With two or more cursors the name always shows, moving too, so the say pill
+   under it never jumps. A lone cursor hides its name while it moves, and
+   shows it on hover and on a first sighting (GM's agent cursor spec, §4, and
+   PR #211 r2). With it hidden, the say pill moves up into its slot: the
+   name's 20px and the 4px gap. */
+.agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__label {
+  transform: translateY(-24px);
+}
+
+.agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__name {
+  opacity: 0;
 }
 
 .agent-cursor__name {
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--agent-color);
-  color: #0b0b0c;
+  /* Picked from the fill's luminance (lib/agentCursorLook.ts inkFor), at least 4.5:1. */
+  color: var(--agent-ink, #0b0b0c);
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
   letter-spacing: 0.01em;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: opacity var(--agent-cursor-say-fade);
+}
+
+/* GM - Design, PR #211 r9 item 4: a name pill whose fill is under 3:1
+   against the canvas (lib/agentCursorLook.ts pillEdge) gets a 1px edge,
+   white at 0.4, outside the pill so it sits on the canvas: about 3.7:1 on
+   Slava's #000. The classic skin's #111 is lighter, so it also takes the
+   edge for the fills that clear 3:1 on #000 only. */
+.agent-cursor[data-edge='both'] .agent-cursor__name,
+body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor__name {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.4), 0 1px 3px rgb(0 0 0 / 0.35);
 }
 
 .agent-cursor__say {
@@ -105,7 +356,7 @@
   /* GM round 21: a 1px hairline, white at about 12%, so the pill's edge
      shows against a dark node fill. Inset, so the pill keeps its height. */
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 1px 3px rgb(0 0 0 / 0.35);
-  animation: agent-cursor-say-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: agent-cursor-say-in var(--agent-cursor-say-fade);
   transform-origin: 0 0;
 }
 
@@ -113,26 +364,137 @@
   animation: agent-cursor-say-out var(--agent-cursor-say-fade) both;
 }
 
-.agent-cursor__ripple {
-  position: absolute;
-  left: -14px;
-  top: -14px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid var(--agent-color);
+/* A say pill just shown waits, hidden, while the cursors below glide out of
+   its way, then fades in: its animation starts when the attribute goes (GM -
+   Design, PR #211 review 6, item 3). With no room on either side after
+   600ms it stays off the canvas ('log': the Agent log shows it) until the
+   room clears (r17 item 2). */
+.agent-cursor[data-say-wait] .agent-cursor__say {
+  animation: none;
   opacity: 0;
-  animation: agent-cursor-ripple 520ms cubic-bezier(0.2, 0.7, 0.3, 1) 1;
 }
 
-@keyframes agent-cursor-ripple {
+/* Another column in the way on the right: the say pill sits on its own row
+   to the left of the arrow, its right edge 4px left of the tip (1.5px in
+   the arrow's box, the label 15px in): GM - Design, PR #211 r17 item 2. */
+.agent-cursor[data-say-side='left'] .agent-cursor__say {
+  position: absolute;
+  top: 24px;
+  right: calc(100% + 17.5px);
+  transform-origin: 100% 0;
+}
+
+/* A full column's third slot (r17 item 1): one neutral arrow with a count
+   pill ("2 more"); the cursors folded into it fade out at its spot (their
+   opacity comes from the layer's spring). Hover lists their names. */
+.agent-cursor[data-collapsed='true'] .agent-cursor__label {
+  visibility: hidden;
+}
+
+.agent-cursor__list {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 10px;
+  background: #18181b;
+  color: #ececee;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.agent-cursor[data-count][data-hover='true'] .agent-cursor__list {
+  display: flex;
+}
+
+/* A leaving cursor's pills keep their layout and fade only with the tip, on
+   the opacity spring set from JS: no pill runs a curve of its own (GM -
+   Design, PR #211 review 5, item 4). A say pill's own fade in or out stops
+   where it is. */
+.agent-cursor[data-leaving='true'] .agent-cursor__label,
+.agent-cursor[data-leaving='true'] .agent-cursor__name {
+  transition: none;
+}
+
+.agent-cursor[data-leaving='true'] .agent-cursor__say {
+  animation-play-state: paused;
+}
+
+@keyframes agent-cursor-turn {
   from {
-    opacity: 0.9;
-    transform: scale(0.3);
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes agent-cursor-breathe {
+  from {
+    transform: scale(1);
+    opacity: var(--agent-cursor-breath-trough-opacity);
+    filter: blur(var(--agent-cursor-breath-trough-blur));
+  }
+  to {
+    transform: scale(var(--agent-cursor-breath-scale));
+    opacity: var(--agent-cursor-breath-peak-opacity);
+    filter: blur(var(--agent-cursor-breath-peak-blur));
+  }
+}
+
+/* An impulse curve: 0 → the peak → back to 0, so `to` is the peak. */
+@keyframes agent-cursor-shake {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--agent-cursor-shake-px));
+  }
+}
+
+@keyframes agent-cursor-press {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(var(--agent-cursor-press-scale));
+  }
+}
+
+@keyframes agent-cursor-flash {
+  from {
+    opacity: var(--agent-cursor-flash-opacity);
   }
   to {
     opacity: 0;
-    transform: scale(1.4);
+  }
+}
+
+@keyframes agent-cursor-bloom {
+  from {
+    r: var(--agent-cursor-ring-from);
+    stroke-width: var(--agent-cursor-ring-stroke-from);
+    opacity: var(--agent-cursor-ring-opacity);
+  }
+  to {
+    r: var(--agent-cursor-ring-to);
+    stroke-width: var(--agent-cursor-ring-stroke-to);
+    opacity: 0;
+  }
+}
+
+/* The caret's blink holds each half (the curve doesn't change a held value). */
+@keyframes agent-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
   }
 }
 
@@ -159,12 +521,29 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-cursor,
-  .agent-cursor__wire {
+  .agent-cursor__wire,
+  .agent-cursor__label,
+  .agent-cursor__name {
     transition: none;
   }
   .agent-cursor__say,
-  .agent-cursor__say--leaving {
+  .agent-cursor__say--leaving,
+  .agent-cursor__sweep,
+  .agent-cursor[data-expr='think'] .agent-cursor__halo,
+  .agent-cursor__orbit,
+  .agent-cursor__shake,
+  .agent-cursor__danger,
+  .agent-cursor__press,
+  .agent-cursor__ring,
+  .agent-cursor__field-mark[data-blink='true'],
+  .agent-cursor__tip-caret[data-blink='true'],
+  .agent-cursor__say-caret[data-blink='true'] {
     animation: none;
+  }
+  /* think's still frame: the breath's peak (GM r58), so it differs from rest. */
+  .agent-cursor[data-expr='think'] .agent-cursor__halo {
+    transform: scale(var(--agent-cursor-breath-scale));
+    opacity: var(--agent-cursor-breath-peak-opacity);
+    filter: blur(var(--agent-cursor-breath-peak-blur));
   }
 }

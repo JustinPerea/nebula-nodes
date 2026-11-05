@@ -7,6 +7,7 @@ import { useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { useCappedPopover } from '../lib/noticeWaiting';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -30,6 +31,8 @@ interface MenuItem {
 
 export function ContextMenu() {
   const { visible, position, nodeId, flowPosition } = useUIStore((s) => s.contextMenu);
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  useCappedPopover(visible);
   const composeNote = useCanvasPinsStore((s) => s.compose);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const executeNode = useGraphStore((s) => s.executeNode);

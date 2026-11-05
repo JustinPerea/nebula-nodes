@@ -62,7 +62,7 @@ def canvas(tmp_path, monkeypatch, person):
     output_root = tmp_path / "output"
     output_root.mkdir()
 
-    async def capture(_data):
+    async def capture(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module, "OUTPUT_ROOT", output_root)

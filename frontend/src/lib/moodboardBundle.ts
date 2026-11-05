@@ -240,6 +240,8 @@ export function moodboardStatus(bundle: MoodboardBundleView): string[] {
   if (pinned > 0) status.push(`${plural(pinned, 'pinned color')} ${pinned === 1 ? 'clashes' : 'clash'}`);
   if (bundle.clashChecked && bundle.clashMode === 'keep-all') status.push('Clash check is off');
   if (bundle.avoid.length > 0) status.push(`Avoids ${plural(bundle.avoid.length, 'thing')}`);
-  if (bundle.warnings.length > 0) status.push(bundle.warnings[0]);
+  // Every warning, the run's own first (it re-analyzed the board: handlers/moodboard.py
+  // puts that ahead of the per-image lines), so neither hides the other.
+  status.push(...bundle.warnings);
   return status;
 }

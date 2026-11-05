@@ -2,6 +2,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { OpenCopyButton } from './OpenCopyButton';
 import { useLeave } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
 
 const isShownMessage = (id: number) => useGraphStore.getState().messageNotice?.id === id;
 
@@ -17,7 +18,7 @@ const isShownMessage = (id: number) => useGraphStore.getState().messageNotice?.i
 export function CanvasMessageNotice() {
   const notice = useGraphStore((state) => state.messageNotice);
   const dismiss = useGraphStore((state) => state.dismissMessageNotice);
-  const holdHandlers = useNoticeHold(notice, isShownMessage, dismiss);
+  const holdHandlers = useNoticeHold(notice, isShownMessage, dismiss, 'message');
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(notice);
   if (!leave.shown) return null;
@@ -30,7 +31,7 @@ export function CanvasMessageNotice() {
       aria-live={shown.tone === 'error' ? 'assertive' : 'polite'}
       {...holdHandlers} {...leave.props}
     >
-      <span className="canvas-undo-notice__text">{shown.text}</span>
+      <LineText className="canvas-undo-notice__text" text={shown.text} />
       {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×

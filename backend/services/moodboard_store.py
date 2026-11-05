@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import threading
+import time
 from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -81,6 +82,11 @@ LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layou
 COVER_REFUSED = ("coverImageId names no image on this board: use an image's id "
                  "(GET /api/moodboards/{id} lists them), or null for no cover")
 
+# The side folders that keep a file per board id beside the boards (``.notes``:
+# Updates, services/agent_notes.py). Deleting a board for good removes its file
+# in each (``purge``, services/project_asset_purge.py).
+BOARD_SIDE_FOLDERS = (".notes",)
+
 # One lock per board: a write reads the file, changes it and writes it back
 # as one step, whichever thread it runs on.
 _LOCKS: dict[str, threading.RLock] = {}
@@ -112,7 +118,17 @@ def _read_for_write(path: Path, moodboard_id: str) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise KeyError(f"Moodboard {moodboard_id} not found") from None
-    return _migrated(json.loads(text), layout_board=True)
+    return _without_read_only(_migrated(json.loads(text), layout_board=True))
+
+
+def _without_read_only(board: dict[str, Any]) -> dict[str, Any]:
+    """``board`` without what reads add and a file never holds: the saved
+    analysis's ``outdated`` (moodboard_analysis.with_alpha_outdated), worked
+    out again on each read, so a later write never keeps a stale one."""
+    analysis = board.get("analysis")
+    if isinstance(analysis, dict) and "outdated" in analysis:
+        return {**board, "analysis": {k: v for k, v in analysis.items() if k != "outdated"}}
+    return board
 
 
 def _check_base_version(moodboard: dict[str, Any], base_version: Any) -> None:
@@ -185,7 +201,8 @@ def board_scopes(root: Path) -> list[Path]:
     """The folders under the moodboard root that hold boards: each scope
     (``_global`` and every project's) and the trash (``.trash``), whose
     boards a restore brings back. Other dot folders are side files kept
-    beside the boards (``.notes``: Updates, services/agent_notes.py; later
+    beside the boards (``.notes``: Updates, services/agent_notes.py;
+    ``.creates``: the request ids of creates, ``_CREATES_DIR``; later
     ``.history`` and ``.runs``), never boards, so the start-up scans
     (``migrate_store``, ``save_colour_checks``) never rewrite them."""
     from services.asset_trash import TRASH_DIR
@@ -196,6 +213,205 @@ def board_scopes(root: Path) -> list[Path]:
                   if path.is_dir() and (not is_trash_folder(path) or path.name == TRASH_DIR))
 
 
+# A create may carry the client's request id (``requestId``): Moodboard
+# Studio makes one per unsaved board, and an agent may send its own. Sent
+# again (the answer to the first send was lost on the way back), the same
+# id returns the board that send made instead of a second one. Each id is a
+# small file in this side folder, ``.creates/<requestId>.json``:
+#
+#     {"id": <board id>, "attempt": <the Studio's attempt number, or null>,
+#      "version": <the board's version when made>, "projectId": <the
+#      request's projectId, or null>, "state": "pending" | "made",
+#      "at": <unix seconds>}
+#
+# so it holds across a restart; the scans skip dot folders, so it is never
+# read as a scope (board_scopes, _find_moodboard_file, summaries, the trash,
+# the project rehome and the Commons import all leave ``.creates`` alone).
+#
+# Write order (a crash or an OSError at any point never leaves a board
+# without its record):
+#   1. pick the board id;
+#   2. write the record, "pending", naming that id;
+#   3. write the board;
+#   4. rewrite the record as "made".
+# A failure at 2 makes nothing. A failure at 3 leaves a pending record that
+# names no board: it is removed at once when it can be, and otherwise
+# ignored by the next lookup, which goes ahead and overwrites it. A failure
+# at 4 leaves a pending record naming a live board, which a lookup treats as
+# made (and finalizes). So on lookup: a record (pending or made) whose board
+# is live is the repeat; a record whose board is gone (deleted, purged,
+# never written) is ignored, and the create goes ahead.
+#
+# A record is kept for CREATE_RECORD_DAYS (7) days: a lost-answer resend
+# comes seconds or minutes later, never days, so an older record is
+# ignored on lookup and removed by prune_create_records (at startup, and at
+# most once a day on a create). Purging a board removes the records that
+# name it.
+_CREATES_DIR = ".creates"
+REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+ATTEMPT_MAX = 1_000_000
+CREATE_RECORD_DAYS = 7
+CREATE_RECORD_TTL = CREATE_RECORD_DAYS * 24 * 60 * 60
+# How often a create prunes old records (seconds); startup always does.
+_PRUNE_EVERY = 24 * 60 * 60
+_last_prune = 0.0
+# One lock for creates that carry a request id: the check and the write are
+# one step, so two sends of one id racing each other still make one board.
+_CREATES_LOCK = threading.Lock()
+
+
+class RequestIdOtherScope(Exception):
+    """The request id already made a live board in another scope (another
+    project, or Global). The route answers 409 ``request_id_scope``; that
+    board is never returned."""
+
+
+class RequestBoardUnreadable(Exception):
+    """The board a request id made is on disk but can't be read. The route
+    answers 500 with plain words, never the parser's text."""
+
+
+REQUEST_ID_OTHER_SCOPE = ("This request id already made a board in another project (or in Global). "
+                          "Use a new request id for this board.")
+REQUEST_BOARD_UNREADABLE = "Nebula couldn't read the board this request id made. Use a new request id."
+
+
+def _validate_request_id(request_id: Any) -> str:
+    if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):
+        raise ValueError("requestId must be 8 to 128 letters, digits, '-' or '_'")
+    return request_id
+
+
+def _validate_attempt(attempt: Any) -> int | None:
+    if attempt is None:
+        return None
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= ATTEMPT_MAX:
+        raise ValueError(f"attempt must be a whole number from 1 to {ATTEMPT_MAX}")
+    return attempt
+
+
+def _record_path(root: Path, request_id: str) -> Path:
+    return root / _CREATES_DIR / f"{request_id}.json"
+
+
+def _read_record(path: Path, now: float) -> dict[str, Any] | None:
+    """The record at ``path`` when it is well formed and younger than
+    CREATE_RECORD_TTL, else None (missing, unreadable, malformed, expired)."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    board_id, at = record.get("id"), record.get("at")
+    if not isinstance(board_id, str) or not _MOODBOARD_ID_RE.fullmatch(board_id):
+        return None
+    if not isinstance(at, (int, float)) or now - at > CREATE_RECORD_TTL:
+        return None
+    project_id = record.get("projectId")
+    if project_id is not None and not isinstance(project_id, str):
+        return None
+    return record
+
+
+def _created_for(root: Path, request_id: str, project_id: str | None,
+                 now: float) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """(the live board an earlier create with ``request_id`` made, laid
+    out; its record), or None when there is no such create or its board is
+    gone. Raises RequestIdOtherScope when that board was made for another
+    scope, RequestBoardUnreadable when its file can't be read."""
+    path = _record_path(root, request_id)
+    record = _read_record(path, now)
+    if record is None:
+        return None
+    board_path = _find_moodboard_file(root, record["id"])
+    if board_path is None:
+        return None
+    if (record.get("projectId") or None) != (project_id or None):
+        raise RequestIdOtherScope(request_id)
+    try:
+        board = json.loads(board_path.read_text(encoding="utf-8"))
+        if not isinstance(board, dict):
+            raise ValueError("not a board")
+        board = _migrated(board, layout_board=True)
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        logging.getLogger(__name__).warning("Moodboard %s (request id %s) can't be read: %s",
+                                            record["id"], request_id, exc)
+        raise RequestBoardUnreadable(request_id) from None
+    if record.get("state") != "made":
+        # Step 4 never ran (a crash or a failed write): the board is live, so
+        # the create was made. Finalize the record; a failure here only
+        # leaves it pending, which reads the same.
+        _finalize_record(path, record)
+    return board, record
+
+
+def _write_record(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, record)
+
+
+def _finalize_record(path: Path, record: dict[str, Any]) -> None:
+    try:
+        _write_record(path, {**record, "state": "made"})
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Create record %s left pending: %s", path.name, exc)
+
+
+def _records_naming(root: Path, board_id: str) -> list[Path]:
+    folder = root / _CREATES_DIR
+    if not folder.is_dir():
+        return []
+    found = []
+    for path in folder.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(record, dict) and record.get("id") == board_id:
+            found.append(path)
+    return found
+
+
+def forget_create_records(board_id: str, root: Path | None = None) -> int:
+    """Remove the request-id records that name ``board_id`` (its purge)."""
+    root = root or _moodboard_root()
+    removed = 0
+    with _CREATES_LOCK:
+        for path in _records_naming(root, board_id):
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def prune_create_records(root: Path | None = None, *, now: float | None = None) -> int:
+    """Remove request-id records older than CREATE_RECORD_DAYS days, and
+    ones that can't be read (a lookup ignores both anyway). Returns how
+    many went. Runs at startup and, at most once a day, on a create."""
+    with _CREATES_LOCK:
+        return _prune_records(root or _moodboard_root(), time.time() if now is None else now)
+
+
+def _prune_records(root: Path, now: float) -> int:
+    global _last_prune
+    _last_prune = now
+    folder = root / _CREATES_DIR
+    if not folder.is_dir():
+        return 0
+    removed = 0
+    for path in folder.iterdir():
+        try:
+            if path.suffix == ".json" and _read_record(path, now) is None:
+                path.unlink()
+                removed += 1
+            elif path.suffix == ".tmp" and path.stat().st_mtime < now - 60 * 60:
+                path.unlink()  # a write that never finished
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -204,6 +420,43 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
+
+
+def _urls_in(value: Any) -> set[str]:
+    """Every ``url`` string, and each string of a ``urls`` list, anywhere in
+    ``value`` (images, or edit ops: moodboard_edits' ``add`` takes both)."""
+    found: set[str] = set()
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get("url"), str) and item["url"].strip():
+                found.add(item["url"].strip())
+            if isinstance(item.get("urls"), list):
+                found.update(u.strip() for u in item["urls"] if isinstance(u, str) and u.strip())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+    return found
+
+
+def _warm_new_files(path: Path | None, sent: Any) -> None:
+    """Read the transparency of the files ``sent`` adds to the board at
+    ``path`` before its lock is taken, so the write under the lock only
+    stats them (moodboard_analysis.warm_alpha_facts): a slow decode never
+    holds the board. Best effort: the write reads what this misses."""
+    from services.moodboard_analysis import image_alpha_facts
+
+    held: set[str] = set()
+    if path is not None:
+        try:
+            board = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            board = {}
+        images = board.get("images") if isinstance(board, dict) else None
+        held = {str(img.get("url") or "").strip() for img in images or [] if isinstance(img, dict)}
+    for url in sorted(_urls_in(sent) - held):
+        image_alpha_facts(url)
 
 
 def _weight(raw: Any, default: float = 1.0) -> float:
@@ -229,6 +482,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
     A new image takes the ``placements`` it asks for (checked; ``placedBy``
     is ``by``), else Nebula places it after the last-added card. ``board``
     gives the frames and the saved analysis (for aspect ratios)."""
+    from services.moodboard_analysis import ALPHA_KEYS, stamp_transparency
     from services.stored_image_refs import StoredImageError, board_image_problem
 
     board = board or {}
@@ -245,6 +499,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
 
     normalized: list[dict[str, Any]] = []
     asked: dict[int, Any] = {}  # index -> the placements a new image asked for
+    arrived: list[int] = []  # indexes of images whose file is new to the board
     for index, raw in enumerate(images or []):
         if not isinstance(raw, dict):
             raise ValueError(f"images[{index}] must be an object")
@@ -261,8 +516,15 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         refused = None if url in held else board_image_problem(url, f"images[{index}].url")
         if refused:
             raise StoredImageError(refused)
+        kept = dict(before or {})
+        if kept.get("url") != url:
+            # A new file: its transparency (and the stat it was read at) is
+            # read below and stored.
+            for key in ALPHA_KEYS:
+                kept.pop(key, None)
+            arrived.append(len(normalized))
         image: dict[str, Any] = {
-            **(before or {}),
+            **kept,
             "id": str(merged.get("id") or uuid4().hex[:12]),
             "url": url,
             "weight": _weight(merged.get("weight", 1.0)),
@@ -298,6 +560,13 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
             # No weight sent: the image weighs what its largest card shows.
             image["weight"] = max(p["weight"] for p in made)
         image["placements"] = made
+
+    # Whether each new image's file has transparency, read once here and
+    # stored with the file's stat, so reads don't decode it while the file
+    # stays as it is (moodboard_analysis.HAS_TRANSPARENCY, ALPHA_STAMP).
+    # The writes decode them before the board lock (_warm_new_files), so
+    # here it is a stat per file.
+    stamp_transparency([normalized[i] for i in arrived])
 
     unplaced = [i for i, image in enumerate(normalized) if "placements" not in image]
     if unplaced:
@@ -423,8 +692,9 @@ def _brief():
 
 def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
-    the startup migration hasn't written them yet), its layout fields and its
-    saved summary counting only the images that steer.
+    the startup migration hasn't written them yet), its layout fields, its
+    saved summary counting only the images that steer, and ``outdated`` on an
+    analysis made before alpha counted when the board has transparent images.
     ``layout_board``: also lay it out in memory (an old board gets the grid;
     services/moodboard_layout.ensure_layout). Nothing is written here."""
     board = _with_cover(_with_layout_fields(_with_image_defaults(board)))
@@ -440,6 +710,13 @@ def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str,
         board = with_steering_count(board)
     except Exception:  # an odd old analysis still opens, as it was saved
         logging.getLogger(__name__).exception("Moodboard %s: summary not recounted", board.get("id"))
+    try:
+        # An analysis from before alpha counted, of a board with transparent
+        # images, says it's out of date (moodboard_analysis.with_alpha_outdated).
+        from services.moodboard_analysis import with_alpha_outdated
+        board = with_alpha_outdated(board)
+    except Exception:  # an odd old analysis still opens, as it was saved
+        logging.getLogger(__name__).exception("Moodboard %s: alpha staleness not checked", board.get("id"))
     if layout_board:
         try:
             board = layout.ensure_layout(board)
@@ -647,7 +924,8 @@ def _normalize_analysis(analysis: dict[str, Any] | None) -> dict[str, Any] | Non
         return None
     if not isinstance(analysis, dict):
         raise ValueError("analysis must be an object")
-    return dict(analysis)
+    # ``outdated`` is worked out on read, never saved (_without_read_only).
+    return {k: v for k, v in analysis.items() if k != "outdated"}
 
 
 class MoodboardStore:
@@ -671,13 +949,125 @@ class MoodboardStore:
         sendNotes: bool | None = None,
         coverImageId: str | None = None,
         by: str = "agent",
+        requestId: str | None = None,
         **extra: Any,
     ) -> dict[str, Any]:
         """A new board. Its images are laid out from the start (the cards
         they ask for, else placed by Nebula), so it is saved with
         ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
         any hand-written brief. ``coverImageId`` names one of ``images`` by
-        id (the board opens on it); left out, it opens on #1."""
+        id (the board opens on it); left out, it opens on #1. ``requestId``
+        (optional) makes the create safe to send again: see
+        ``create_once``."""
+        return self.create_once(
+            name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+            briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, requestId, **extra,
+        )[0]
+
+    def create_once(self, *args: Any, **kwargs: Any) -> tuple[dict[str, Any], bool]:
+        """``create``, saying whether it made a board: (board, True) when it
+        did; (board, False) when ``requestId`` was sent before and that
+        board is still live, which is returned as it is now (same id, same
+        version) and nothing is written. Without ``requestId`` every call
+        makes a board, as before. Takes ``create_or_repeat``'s arguments."""
+        board, earlier = self.create_or_repeat(*args, **kwargs)
+        return board, earlier is None
+
+    def create_or_repeat(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None = None,
+        notes: str = "",
+        mode: str = "look",
+        strength: float = 0.7,
+        analysis: dict[str, Any] | None = None,
+        projectId: str | None = None,
+        direction: str = "",
+        avoid: list[str] | None = None,
+        pinnedColors: dict[str, Any] | None = None,
+        briefOverride: dict[str, Any] | None = None,
+        clashMode: str | None = None,
+        colorChoices: dict[str, Any] | None = None,
+        sendNotes: bool | None = None,
+        coverImageId: str | None = None,
+        by: str = "agent",
+        requestId: str | None = None,
+        attempt: int | None = None,
+        **extra: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """``create`` with an optional request id: (board, None) when it
+        made the board; (board, record) when ``requestId`` already made a
+        live board in this scope, returned as it is now, with the record
+        (``attempt``: the attempt that made it, ``version``: its version
+        then). ``attempt`` (1 to ATTEMPT_MAX, only with ``requestId``) is
+        the Studio's count of its sends of one create; agents leave it out.
+
+        Raises ValueError for a malformed ``requestId`` or ``attempt``,
+        RequestIdOtherScope when the id made a live board in another scope
+        (another project, or Global), RequestBoardUnreadable when the board
+        it made can't be read. The write order is above ``_CREATES_DIR``."""
+        if requestId is None:
+            if attempt is not None:
+                raise ValueError("attempt is only taken with a requestId")
+            return self._create(
+                name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, **extra,
+            ), None
+        request_id = _validate_request_id(requestId)
+        attempt = _validate_attempt(attempt)
+        root = _moodboard_root()
+        with _CREATES_LOCK:
+            now = time.time()
+            earlier = _created_for(root, request_id, projectId, now)
+            if earlier is not None:
+                return earlier
+            if now - _last_prune > _PRUNE_EVERY:
+                _prune_records(root, now)
+            # 1. the board id; 2. the record, pending; 3. the board; 4. made.
+            moodboard_id = uuid4().hex[:12]
+            path = _record_path(root, request_id)
+            record = {"id": moodboard_id, "attempt": attempt, "version": 1, "projectId": projectId or None,
+                      "state": "pending", "at": now}
+            _write_record(path, record)
+            try:
+                moodboard = self._create(
+                    name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                    briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by,
+                    new_id=moodboard_id, **extra,
+                )
+            except BaseException:
+                # No board was written (it is written last, in one replace):
+                # the pending record names nothing, so it goes.
+                if _find_moodboard_file(root, moodboard_id) is None:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass  # ignored by the next lookup, which overwrites it
+                raise
+            _finalize_record(path, {**record, "version": moodboard.get("version", 1)})
+        return moodboard, None
+
+    def _create(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None,
+        notes: str,
+        mode: str,
+        strength: float,
+        analysis: dict[str, Any] | None,
+        projectId: str | None,
+        direction: str,
+        avoid: list[str] | None,
+        pinnedColors: dict[str, Any] | None,
+        briefOverride: dict[str, Any] | None,
+        clashMode: str | None,
+        colorChoices: dict[str, Any] | None,
+        sendNotes: bool | None,
+        coverImageId: str | None,
+        by: str,
+        new_id: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
         brief = _brief()
         _guard_send_notes(False, sendNotes, by)
         name = str(name or "").strip()
@@ -695,8 +1085,9 @@ class MoodboardStore:
             raise TypeError(f"create() got unexpected keyword arguments: {', '.join(sorted(extra))}")
         if by not in OVERRIDE_AUTHORS:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
-        moodboard_id = uuid4().hex[:12]
+        moodboard_id = new_id or uuid4().hex[:12]
         now = _now_iso()
+        _warm_new_files(None, images)
         normalized_images = _normalize_images(images, by=by)
         from services.stored_image_refs import check_board_analysis
         check_board_analysis(analysis)
@@ -834,6 +1225,8 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        if "images" in fields:
+            _warm_new_files(path, fields["images"])
         with _board_lock(moodboard_id):
             return self._update(path, by=by, base_version=base_version, fields=fields)
 
@@ -873,6 +1266,7 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        _warm_new_files(path, ops)
         with _board_lock(moodboard_id):
             moodboard = _read_for_write(path, moodboard_id)
             _check_base_version(moodboard, base_version)
@@ -911,7 +1305,7 @@ class MoodboardStore:
             return self._keep_brief_override(path, by=by)
 
     def _keep_brief_override(self, path: Path, *, by: str) -> dict[str, Any]:
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
+        moodboard = _read_for_write(path, path.stem)
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
@@ -935,36 +1329,40 @@ class MoodboardStore:
         this id is already in the target folder."""
         from services.asset_project_rehome import GLOBAL_DIR, move_asset
 
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        target = projectId or None
-        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
-        # Two live copies (a re-home that skipped a collision leaves one in an
-        # old folder): which one is "the" asset isn't ours to guess.
-        copies = sorted(sub.name for sub in root.iterdir()
-                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
-        if len(copies) > 1:
-            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
-        # The file moves as saved (move_asset changes only projectId), so an
-        # old board stays unlaid-out on disk; the board returned is laid out
-        # in memory, as get() reads it.
-        before = _migrated(json.loads(path.read_text(encoding="utf-8")))
-        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
-            return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
-        moved_to = move_asset("moodboard", root, path, target)
-        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):  # a purge of its project holds it too
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            target = projectId or None
+            _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+            # Two live copies (a re-home that skipped a collision leaves one in an
+            # old folder): which one is "the" asset isn't ours to guess.
+            copies = sorted(sub.name for sub in root.iterdir()
+                            if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
+            if len(copies) > 1:
+                raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+            # The file moves as saved (move_asset changes only projectId), so an
+            # old board stays unlaid-out on disk; the board returned is laid out
+            # in memory, as get() reads it.
+            before = _migrated(json.loads(path.read_text(encoding="utf-8")))
+            if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+                return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
+            moved_to = move_asset("moodboard", root, path, target)
+            return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
 
     def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
         """Move the board to Recently deleted (services/asset_trash.py) and
         return the trash record. ``deleted_by`` is who asked, as
         services/canvas_events.actor_record gives it."""
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
 
     # -- Recently deleted --------------------------------------------------
 
@@ -981,15 +1379,22 @@ class MoodboardStore:
     def restore(self, moodboard_id: str) -> dict[str, Any]:
         """Bring a trashed board back with the same id and contents."""
         _validate_moodboard_id(moodboard_id)
-        return asset_trash.restore(_moodboard_root(), moodboard_id)
+        with _board_lock(moodboard_id):
+            return asset_trash.restore(_moodboard_root(), moodboard_id)
 
     def purge(self, moodboard_id: str) -> None:
         """Delete a trashed board for good. Only the person may (main.py)."""
         _validate_moodboard_id(moodboard_id)
-        asset_trash.purge(_moodboard_root(), moodboard_id)
-        # Its Updates go with it (services/agent_notes.py); Recently deleted
-        # kept them, since a restore brings the same id back.
-        (_moodboard_root() / ".notes" / f"{moodboard_id}.json").unlink(missing_ok=True)
+        with _board_lock(moodboard_id):
+            asset_trash.purge(_moodboard_root(), moodboard_id)
+            # Its Updates go with it (services/agent_notes.py); Recently deleted
+            # kept them, since a restore brings the same id back.
+            for folder in BOARD_SIDE_FOLDERS:
+                (_moodboard_root() / folder / f"{moodboard_id}.json").unlink(missing_ok=True)
+        # So do the request ids that made it: a resend after a purge makes
+        # a new board (as it would anyway: the record names no live board).
+        # Outside the board lock, so the creates lock is never taken under it.
+        forget_create_records(moodboard_id)
 
 
 def migrate_brief_fields() -> dict[str, Any]:
@@ -1001,6 +1406,62 @@ def migrate_brief_fields() -> dict[str, Any]:
     """
     root = _moodboard_root()
     return _brief().migrate_store(root, root.parent / "moodboard-backups")
+
+
+def stamp_transparency_once() -> dict[str, Any]:
+    """Store ``hasTransparency`` and ``hasClearPixels``, with the stat of the
+    file they were read from (``alphaFileStat``), on the images of boards
+    whose analysis was made before alpha counted
+    (moodboard_analysis.ALPHA_VERSION) and that lack them or whose file has
+    changed since, so a read can tell whether those colours are out of date
+    without decoding an image. On any board, an entry stored with the facts
+    but no stamp (round 3 dev builds), or with the older ``[mtime_ns, size]``
+    stamp (rounds 4-5), is read again once and stamped. Run at
+    startup, off the event loop. The files are decoded before the board
+    lock is taken; under it the board is read again and only the entries
+    still needing it get them. It only writes those keys on image entries
+    (no backup: the board is otherwise unchanged, and its version stays); an
+    unknown file is left as it is. Running it again reads nothing it has
+    read (one stat per image)."""
+    from services.asset_trash import RECORD_SUFFIX
+    from services.moodboard_analysis import ALPHA_VERSION, lacks_alpha_stamp, stamp_transparency, warm_alpha_facts
+
+    def pre_alpha(board: Any) -> bool:
+        analysis = board.get("analysis") if isinstance(board, dict) else None
+        if not isinstance(analysis, dict):
+            return False
+        try:
+            return int(analysis.get("version") or 1) < ALPHA_VERSION
+        except (TypeError, ValueError):
+            return False
+
+    def due(board: Any) -> bool:
+        images = board.get("images") if isinstance(board, dict) else None
+        return pre_alpha(board) or any(lacks_alpha_stamp(img) for img in images or [])
+
+    report: dict[str, Any] = {"saved": [], "skipped": []}
+    root = _moodboard_root()
+    for scope in board_scopes(root):
+        for path in sorted(scope.glob("*.json")):
+            if path.name.endswith(RECORD_SUFFIX) or path.name.endswith(".json.tmp"):
+                continue
+            try:
+                board = json.loads(path.read_text(encoding="utf-8"))
+                if not due(board):
+                    continue
+                warm_alpha_facts(board.get("images"))  # the decodes, outside the lock
+                with _board_lock(path.stem):
+                    board = json.loads(path.read_text(encoding="utf-8"))
+                    if not due(board) or not stamp_transparency(board.get("images")):
+                        continue
+                    _write_json(path, board)
+            except (OSError, json.JSONDecodeError) as exc:
+                report["skipped"].append({"file": str(path), "reason": f"{type(exc).__name__}: {exc}"})
+                continue
+            report["saved"].append(str(path))
+    if report["saved"]:
+        logging.getLogger(__name__).info("Moodboard transparency: stored on %d board(s)", len(report["saved"]))
+    return report
 
 
 def save_colour_checks() -> dict[str, Any]:

@@ -3,7 +3,8 @@
  * held reopen's table of lines (lib/reopenHoldLines) is its own chunk. It
  * loads when a hold first arrives, not when the store is imported; nothing
  * says a line before it is here; a chunk that fails to load says nothing
- * (never a wrong line) and the next hold tries again; and a line waiting on
+ * (never a wrong line) and the press answers with the open's heading and a
+ * real Try again (round 24, GM r23 1); and a line waiting on
  * the chunk is said only if its project is still the one open, and only
  * while its hold still holds.
  *
@@ -12,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
+import { REFUSED_FALLBACK_COPY } from '../src/lib/errorCopy';
 import { createElement } from 'react';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
@@ -191,8 +193,9 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
   });
 });
 
-describe('a lines chunk that fails to load', () => {
-  it('says nothing (no wrong line, nothing thrown); the next hold loads again and its line shows', async () => {
+describe('a lines chunk that fails to load (GM r23, 1: a press always answers)', () => {
+  const HEADING = 'Nebula couldn’t open the project.';
+  const failFirstLoad = async () => {
     const first = gate();
     chunk.gate = first.wait;
     await boot();
@@ -200,21 +203,79 @@ describe('a lines chunk that fails to load', () => {
     const pressed = reopenAlpha();
     await settle();
     first.fail(new Error('Failed to fetch dynamically imported module'));
-    await expect(pressed).resolves.toBeUndefined();
+    await pressed;
     await settle();
+  };
+
+  it('the press answers with the shared open heading on Projects, never a wrong line or a reload', async () => {
+    await failFirstLoad();
+    const state = store.useProjectStore.getState();
+    expect(state.screen).toBe('home');
+    expect(state.error?.startsWith(HEADING)).toBe(true);
+    // GM's general line under the heading (the chunk's failure is no request's); only the kept form never says reload.
+    expect(state.error).toBe(`${HEADING} ${REFUSED_FALLBACK_COPY}`);
+    expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
     expect(said()).toEqual([]);
-    expect(store.reopenHoldNow()).toBeNull();
     expect(chunk.loads).toBe(1);
-    // The press's own line is not said later: a new read or press is what tries again.
+  });
+
+  it('Try again loads the chunk again, then reopens: the line shows and the error is gone', async () => {
+    await failFirstLoad();
+    chunk.gate = null;
+    await store.useProjectStore.getState().retry();
+    await settle();
+    expect(chunk.loads).toBe(2);
+    const state = store.useProjectStore.getState();
+    expect(state.error).toBeNull();
+    expect(state.errorRetry).toBeNull();
+    expect(state.screen).toBe('workspace');
+    expect(state.heldReopenLine?.line).toBe(UNCERTAIN);
+  });
+
+  it('Try again can fail again and answers the same way', async () => {
+    await failFirstLoad();
+    const second = gate();
+    chunk.gate = second.wait;
+    const retried = store.useProjectStore.getState().retry();
+    await settle();
+    second.fail(new Error('Failed to fetch dynamically imported module'));
+    await retried;
+    await settle();
+    const state = store.useProjectStore.getState();
+    expect(state.screen).toBe('home');
+    expect(state.error?.startsWith(HEADING)).toBe(true);
+    expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
+  });
+
+  it('while the canvas is kept the kept sentence stays: no error line, no Try again, never a reload', async () => {
+    const first = gate();
+    chunk.gate = first.wait;
+    await boot();
+    holdAlpha();
+    const { setCanvasKept } = await import('../src/lib/keptCanvas');
+    // The press is on its way when the edits become kept (the restore, an agent's write).
+    store.useProjectStore.setState({ screen: 'home' });
+    const pressed = store.useProjectStore.getState().open('alpha');
+    await settle();
+    setCanvasKept(true);
+    first.fail(new Error('Failed to fetch dynamically imported module'));
+    await pressed;
+    await settle();
+    const state = store.useProjectStore.getState();
+    expect(state.error).toBeNull();
+    expect(state.errorRetry).toBeNull();
+    expect(state.screen).not.toBe('home');
+    setCanvasKept(false);
+  });
+
+  it('a read of the hold (the card) after a failed chunk tries again, as before', async () => {
+    await failFirstLoad();
     chunk.gate = null;
     expect(store.reopenHoldNow()).toBeNull();
     await settle();
     expect(chunk.loads).toBe(2);
     await store.loadReopenHoldLines();
     expect(store.reopenHoldNow()?.line).toBe(UNCERTAIN);
-    expect(said()).toEqual([]);
-    await reopenAlpha();
-    expect(store.useProjectStore.getState().heldReopenLine?.line).toBe(UNCERTAIN);
   });
 });
 

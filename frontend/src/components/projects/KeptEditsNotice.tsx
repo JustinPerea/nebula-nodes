@@ -4,6 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/keptCanvas';
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
 import { RUN_LOCK_REASON } from '../../lib/cinemaScene';
+import { LineText } from '../LineText';
 import { SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
 import './KeptEditsNotice.css';
@@ -68,7 +69,7 @@ export function KeptEditsNotice() {
       <span key={pulses} className="canvas-undo-notice__text">
         {keptEditsLine(kept)}
         {update && <span className="kept-edits-notice__error" data-kept-update="">{update}</span>}
-        {kept.error && <span className="kept-edits-notice__error" role="alert">{kept.error}</span>}
+        {kept.error && <span className="kept-edits-notice__error" role="alert"><LineText text={kept.error} /></span>}
       </span>
       <button type="button" className="canvas-undo-notice__action" {...saveHeld} aria-busy={kept.saving || undefined}
         data-kept-save="" onClick={() => void useProjectStore.getState().saveKeptEdits()}>{SAVE_AS_A_PROJECT}</button>

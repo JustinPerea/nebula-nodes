@@ -18,7 +18,8 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
-import { onPersonPromoted, personGateHeld } from '../lib/personSession';
+import { onPersonPromoted, personUnconfirmed } from '../lib/personSession';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 import { refuseEditWhileKept } from '../lib/keptCanvas';
 
@@ -56,6 +57,9 @@ export interface DeferredRun {
 
 interface CanvasProposalsState {
   proposals: Record<string, ProposalEntry>;
+  /** The canvas has been sent its proposals (proposalSync): before that, one
+   *  not here is unknown, not settled. */
+  synced: boolean;
   /** Where the person dragged ghosts, per proposal and ref. Sent with Accept. */
   drag: Record<string, Record<string, Point>>;
   pending: Record<string, 'accept' | 'reject'>;
@@ -86,6 +90,11 @@ function nextDeferred(state: Pick<CanvasProposalsState, 'deferredQueue'>): Pick<
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Proposals this tab closed on their expiry (pruneExpired), ahead of the
+ * backend's sweep, by id and expiry: a re-send or a sync of one (the same
+ * expiry) never brings its card back. */
+const expiredHere = new Set<string>();
+const expiryKey = (view: Pick<ProposalView, 'id' | 'expiresAt'>) => `${view.id}@${view.expiresAt}`;
 
 function finitePoint(value: unknown): value is Point {
   const point = value as Point | null;
@@ -115,12 +124,13 @@ function cleanValues(values: unknown): ProposalPersonValues | undefined {
   return values as unknown as ProposalPersonValues;
 }
 
-/** Review 17 LOW-1 (fix round 20): proposals whose error is the person gate's
- * refusal (403 person_required). The server promoting the tab clears them. */
-const personRefused = new Set<string>();
-const notePersonRefusal = (id: string, error: unknown) => {
-  if (error instanceof ProposalRequestError && error.code === PERSON_REQUIRED_CODE) personRefused.add(id);
-  else personRefused.delete(id);
+/** Review 17 LOW-1 (fix round 20), through the one mechanism since GM's
+ * #204 round 3 rule: a proposal's error that is the person gate's refusal
+ * (403 person_required) clears when the server promotes the tab, while it is
+ * still that proposal's error. */
+const clearRefusalOnPromote = (id: string, error: unknown, message: string) => {
+  clearLineOnPromote(error, () => useCanvasProposalsStore.getState().errors[id], message, // clears-on-promote: canvas-proposals.refusal
+    () => useCanvasProposalsStore.setState((state) => ({ errors: without(state.errors, id) })));
 };
 
 function without<T>(record: Record<string, T>, id: string): Record<string, T> {
@@ -154,12 +164,13 @@ async function runNodes(nodeIds: string[], approvalId: string | null): Promise<v
       await graph.executeCluster(withAncestors(nodeIds, graph.edges), options);
     }
   } finally {
-    if (approvalId) await releaseApproval(approvalId);
+    if (approvalId) await releaseOrHold(approvalId);
   }
 }
 
 export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) => ({
   proposals: {},
+  synced: false,
   drag: {},
   pending: {},
   errors: {},
@@ -172,7 +183,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     const proposals: Record<string, ProposalEntry> = {};
     for (const raw of Array.isArray(list) ? list : []) {
       const view = clean(raw);
-      if (view && view.status === 'open' && typeof raw.acceptKey === 'string') {
+      if (view && view.status === 'open' && typeof raw.acceptKey === 'string' && !expiredHere.has(expiryKey(view))) {
         const { acceptKey } = raw;
         const values = cleanValues(raw.personValues);
         delete (view as Partial<ProposalView & { acceptKey: string; personValues: unknown }>).acceptKey;
@@ -182,6 +193,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     }
     set((state) => ({
       proposals,
+      synced: true,
       drag: Object.fromEntries(Object.entries(state.drag).filter(([id]) => id in proposals)),
       focusedId: state.focusedId && state.focusedId in proposals ? state.focusedId : null,
     }));
@@ -190,6 +202,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   open: (raw, acceptKey, values) => {
     const view = clean(raw);
     if (!view || typeof acceptKey !== 'string' || !acceptKey) return;
+    // Review 3 NIT-2: a re-send (a rename's) never brings back a card this
+    // tab already closed on its expiry, before the backend's sweep.
+    if (expiredHere.has(expiryKey(view))) return;
     cancelExit(view.id);
     set((state) => ({
       proposals: { ...state.proposals, [view.id]: { view, acceptKey, values: cleanValues(values) } },
@@ -215,12 +230,15 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   clear: () => {
     for (const id of exitTimers.keys()) cancelExit(id);
-    set({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null });
+    set({ proposals: {}, synced: false, drag: {}, pending: {}, errors: {}, focusedId: null });
   },
 
   pruneExpired: (now = Date.now()) => {
     for (const entry of Object.values(get().proposals)) {
-      if (!entry.closing && entry.view.expiresAt <= now) get().close({ proposalId: entry.view.id, status: 'expired' });
+      if (!entry.closing && entry.view.expiresAt <= now) {
+        expiredHere.add(expiryKey(entry.view));
+        get().close({ proposalId: entry.view.id, status: 'expired' });
+      }
     }
   },
 
@@ -242,6 +260,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // Kept in this tab after a restore (GM r15 on PR #199): only typing.
     if (refuseEditWhileKept()) return;
     if (refuseEditWhileOffline()) return;
+    // Review 5 LOW-5 (round 7): a decision waits while this tab isn't connected as the person,
+    // whatever button asked (the bar's lock is the same state): nothing is sent or marked.
+    if (personUnconfirmed()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes
     // arrive, taken before the backend's graphSync can bring them.
@@ -252,7 +273,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const result = await acceptProposal(id, entry.acceptKey, get().drag[id] ?? {});
       accepted = true;
       synced.stop();
-      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
+      const unwired = entry.view.removedEdges ?? [];
+      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen,
+        ...(unwired.length > 0 ? { unwired } : {}) });
       // Its nodes are on the canvas: an undo pressed meanwhile acts now, not after the run below.
       useGraphStore.getState().endUndoStep(undoStep);
       get().close({ proposalId: id, status: 'accepted' });
@@ -261,12 +284,12 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
       const undone = result.runNodeIds.some((nodeId) => !onCanvas.has(nodeId));
       if (result.runNodeIds.length > 0 && undone) {
-        if (result.approvalId) await releaseApproval(result.approvalId);
+        if (result.approvalId) await releaseOrHold(result.approvalId);
       } else if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
         // Its whole run waits on agents' placeholders, so the button said
         // "Accept" (GM - Design, round 5): no run, no Run history entry, no
         // held run, and the approval goes back (review 5, L1).
-        if (result.approvalId) await releaseApproval(result.approvalId);
+        if (result.approvalId) await releaseOrHold(result.approvalId);
       } else if (result.runNodeIds.length > 0) {
         // A run waiting for its inputs counts as running (review 15, M-B).
         if (useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) {
@@ -290,8 +313,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
-      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
+      clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.accept
     } finally {
       // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
       useGraphStore.getState().endUndoStep(undoStep);
@@ -306,6 +329,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // Offline is read-only (round 15 of PR #114): nothing is sent or marked;
     // the banner pulses.
     if (refuseEditWhileOffline()) return;
+    if (personUnconfirmed()) return; // review 5 LOW-5, as accept
     set((state) => ({ pending: { ...state.pending, [id]: 'reject' }, errors: without(state.errors, id) }));
     try {
       await rejectProposal(id, entry.acceptKey, reason);
@@ -314,8 +338,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can reject this. Reload the page.'
         : failureMessage(error, "Couldn't reject the proposal.");
-      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
+      clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.reject
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));
     }
@@ -331,7 +355,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // A node deleted since Accept makes this a different run; the backend
     // refuses it as changed, and the person can run what is left by hand.
     if (nodeIds.length > 0) await runNodes(nodeIds, deferred.approvalId);
-    else if (deferred.approvalId) await releaseApproval(deferred.approvalId);
+    else if (deferred.approvalId) await releaseOrHold(deferred.approvalId);
   },
 
   dismissDeferred: () => {
@@ -342,7 +366,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // person, Dismiss hides the notice here only; the release (person-only,
     // DELETE /api/canvas/approvals/{id}, which only frees the nodes it locked)
     // goes once the server promotes the tab.
-    if (personGateHeld()) holdRelease(deferred.approvalId);
+    // Round 13 (review 10 NIT-3): not confirmed as the person (held, or before the socket's
+    // first answer), the same check as accept and reject.
+    if (personUnconfirmed()) holdRelease(deferred.approvalId);
     else void releaseApproval(deferred.approvalId);
   },
 }));
@@ -370,19 +396,8 @@ wsClient.subscribe((event) => {
     // Every held run goes, and every approval it held goes back (review 16, L-2).
     const { deferredRun, deferredQueue } = useCanvasProposalsStore.getState();
     useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] });
-    for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseApproval(held.approvalId);
+    for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseOrHold(held.approvalId);
   }
-});
-
-// Review 17 LOW-1 (fix round 20): once the server promotes this tab, an
-// Accept or Reject refused for not being connected as the person no longer
-// says so; Accept and Reject are live again (ProposalBar reads the hold).
-onPersonPromoted(() => {
-  if (!personRefused.size) return;
-  const errors = { ...useCanvasProposalsStore.getState().errors };
-  for (const id of personRefused) delete errors[id];
-  personRefused.clear();
-  useCanvasProposalsStore.setState({ errors });
 });
 
 // GM r33 item 2: the approvals dismissed while the gate held, released once
@@ -423,6 +438,14 @@ const releasesHeld = new Set<string>(readHeldReleases());
 function holdRelease(approvalId: string): void {
   releasesHeld.add(approvalId);
   writeHeldReleases(releasesHeld);
+}
+
+/** PR #204 round 11: a held run's release (DELETE /api/canvas/approvals/{id}: require_person)
+ * after its run, or in place of one when its nodes were deleted, waits for the promote on a tab
+ * that isn't connected as the person, as Dismiss's does: sent now, the gate refuses it. */
+async function releaseOrHold(approvalId: string): Promise<void> {
+  if (personUnconfirmed()) holdRelease(approvalId);
+  else await releaseApproval(approvalId);
 }
 
 onPersonPromoted(() => {

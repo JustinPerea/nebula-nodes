@@ -160,8 +160,8 @@ def initialize(*, stdin=None, stdout=None, timeout: float = 5.0, backend_origin:
         try:
             session.set(_read_line(stdin, timeout).strip())
         except (OSError, ValueError, EOFError, TimeoutError, RuntimeError):
-            log.warning("Person session unavailable: missing or invalid startup pipe; "
-                        "person-only actions are refused this launch")
+            log.warning("Nebula couldn’t start the person session because the startup pipe is missing or "
+                        "invalid. Person-only actions are refused until Nebula restarts.")
         return
     if _provided is not None:
         session.set(_provided)
@@ -172,7 +172,7 @@ def initialize(*, stdin=None, stdout=None, timeout: float = 5.0, backend_origin:
     stdout = sys.stdout if stdout is None else stdout
     if not stdout.isatty():
         log.info("Person link unavailable: no terminal. Start the backend with "
-                 "backend/devserver.py (--open) to connect the canvas as you.")
+                 "backend/devserver.py --open to connect the canvas as you.")
         return
     if backend_origin is None:
         from services.krea_agent_mcp import resolve_nebula_url

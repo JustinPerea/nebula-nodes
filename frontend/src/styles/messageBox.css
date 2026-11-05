@@ -1,0 +1,752 @@
+/*
+ * The Message box in the Agent log (GM - Design r50, r55, r61): the
+ * collapsed bar's preview and composer, and the expanded thread with the
+ * composer at its foot. The log's height follows its content here, growing
+ * to at most half the viewport, until the person drags its handle (r61
+ * answer 1); then their height (inline, data-sized) wins until a
+ * double-click. AgentLog writes the height it has with no give to
+ * --agent-log-h for the docked chat above it. #216's rules hold: folded for
+ * the proposal card it is its header's height, and it is bounded by the
+ * shown height only while a give is in force (layouts.css). Motion: the
+ * layout spring (--agent-log-spring) only; reduced motion jumps.
+ */
+
+.agent-log.agent-log--messaging {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  max-height: 50vh;
+  resize: none;
+  interpolate-size: allow-keywords;
+  transition: height 420ms var(--agent-log-spring);
+}
+
+/* Collapsed by the person, it is its header, the preview and the composer
+   (r50), whatever height the person gave it open; folded for the card it
+   stays its header's height (layouts.css, #216 review 3 MEDIUM-1). */
+.agent-log.agent-log--messaging:not(.agent-log--open):not([data-card-collapsed]) {
+  height: auto !important;
+}
+
+/* Folded for the card, what the header covers is out of reach too: no tab
+   stop on a composer the person can't see. */
+.agent-log.agent-log--messaging[data-card-collapsed] > :not(.agent-log__drag-row) {
+  visibility: hidden;
+}
+
+/* Following its content, open: no shorter than the open log's token, unless
+   a give takes it lower (#216 r6), and no taller than half the viewport;
+   while a give is in force, the shown height bounds it. */
+.agent-log.agent-log--messaging.agent-log--open:not([data-sized]) {
+  min-height: min(var(--agent-h-open), var(--agent-log-shown-h, var(--agent-h-open)));
+}
+
+.agent-log.agent-log--messaging.agent-log--open[data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-floating] {
+  max-height: min(50vh, max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 100000)));
+  transition: --agent-log-give 420ms var(--agent-log-spring), height 420ms var(--agent-log-spring);
+}
+
+/* The person's height wins over the content's (r61 answer 1): up to the
+   viewport less the top chrome (AgentLog clamps it), bounded by the shown
+   height only while a give is in force. A drag counts from the press, so
+   the first drag already tracks the pointer past half the viewport (#225
+   review 3 live LOW-1). */
+.agent-log.agent-log--messaging.agent-log--open[data-sized][data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-sized][data-floating],
+.agent-log.agent-log--messaging.agent-log--open[data-resizing][data-docked],
+.agent-log.agent-log--messaging.agent-log--open[data-resizing][data-floating] {
+  max-height: max(var(--agent-log-shown-h), calc(100vh - var(--agent-log-top-chrome, 0px) - var(--agent-log-give) * 100000));
+}
+
+.agent-log.agent-log--messaging.agent-log--open[data-sized]:not([data-docked]):not([data-floating]),
+.agent-log.agent-log--messaging.agent-log--open[data-resizing]:not([data-docked]):not([data-floating]) {
+  max-height: calc(100vh - var(--agent-log-top-chrome, 0px));
+}
+
+/* While the hand moves the handle, the box follows it with no spring. */
+.agent-log.agent-log--messaging[data-resizing] {
+  transition: none;
+}
+
+/* -- the resize handle (r61 answer 1) ---------------------------------------- */
+
+.agent-log__resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.agent-log__resize[data-edge='top'] {
+  top: 0;
+}
+
+.agent-log__resize[data-edge='bottom'] {
+  bottom: 0;
+}
+
+.agent-log__resize-grip {
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  transition: background-color 220ms var(--agent-log-spring);
+}
+
+.agent-log__resize:hover .agent-log__resize-grip,
+.agent-log[data-resizing] .agent-log__resize-grip {
+  background: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.agent-log__resize:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: -2px;
+}
+
+.agent-log--messaging .agent-log__drag-row {
+  flex: 0 0 auto;
+}
+
+.agent-log--messaging .agent-log__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* -- the collapsed preview ------------------------------------------------ */
+
+.message-box__preview {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--sr-edge, rgba(255, 255, 255, 0.06));
+  font-size: var(--sr-type-body, 12px);
+  line-height: var(--sr-line-body, 1.45);
+}
+
+.message-box__preview-name {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--msg-name, var(--sr-ink, #eee));
+}
+
+.message-box__preview-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+}
+
+.message-box__badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--sr-accent, #ff5a1f);
+  color: var(--sr-on-accent, #0a0a0b);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-box__dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--msg-dot, var(--sr-ink-light, #999));
+}
+
+/* -- the thread ------------------------------------------------------------ */
+
+.message-box__thread-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.message-box__thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* The thread keeps its own bottom (MessageThread's observer): the
+     browser's scroll anchoring would move it on a reflow (live-ux L2). */
+  overflow-anchor: none;
+}
+
+.message-box__rows {
+  margin: 0;
+  padding: 4px 0 0;
+  list-style: none;
+}
+
+.message-box__item {
+  margin-bottom: 12px;
+}
+
+.message-box__item:last-child {
+  margin-bottom: 4px;
+}
+
+/* GM r108 D2: Open on a reply's Update focuses the reply's row. Its ring is
+   drawn inside the row (a negative offset as wide as the ring), so the
+   thread's scroll area never clips it and it never reaches the header; the
+   scroll margin keeps it clear of the scroll fade when it is brought in. */
+.message-box__item {
+  scroll-margin-block: var(--scroll-fade-size, 12px);
+}
+
+.message-box__item[data-focus-target]:focus {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Room between the ring and the row's words, only while it is the focus
+   target: the padding is given back by the margins, so nothing moves. */
+.message-box__item[data-focus-target] {
+  padding: 4px 6px;
+  margin: -4px -6px 8px;
+}
+
+.message-box__item[data-focus-target]:last-child {
+  margin-bottom: 0;
+}
+
+.message-box__row--enter {
+  animation: message-box-row-in 420ms var(--agent-log-spring) both;
+}
+
+@keyframes message-box-row-in {
+  from { transform: translateY(8px); }
+  to { transform: none; }
+}
+
+.message-box__who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: var(--sr-type-label, 11px);
+  font-weight: 600;
+  color: var(--msg-name, var(--sr-ink-light, rgba(255, 255, 255, 0.55)));
+}
+
+.message-box__text {
+  margin: 0;
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  font-size: var(--sr-type-control, 13px);
+  line-height: var(--sr-line-body, 1.45);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-box__row--ref .message-box__show {
+  margin-top: 6px;
+}
+
+.message-box__card {
+  padding: 10px 12px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+}
+
+.message-box__question + .message-box__question {
+  margin-top: 10px;
+}
+
+.message-box__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* r61 answer 4: an answered question's quiet line. */
+.message-box__answered {
+  margin: 8px 0 0;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-size: var(--sr-type-label, 11px);
+  line-height: var(--sr-line-body, 1.45);
+}
+
+/* GM r70: "You answered “…”." on one line; the words are cut, and the
+   ellipsis sits inside the curly quotes (the closing quote and the full
+   stop always show). GM r73: the cut is at a word (MessageBox's
+   useWordCut, the chip's cut too); the ellipsis below only catches one
+   word too long for the line. */
+.message-box__answered--typed {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.message-box__answered-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* GM r117: a status line swapped for another moves the row's height on the
+   layout spring, as the box's own height does; reduced motion jumps. The
+   gap above the line is padding (inside the measured height), not margin. */
+.message-box__status-wrap {
+  overflow: hidden;
+  transition: height 420ms var(--agent-log-spring);
+}
+
+.message-box__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  font-size: var(--sr-type-label, 11px);
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.message-box__breath {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--msg-dot, var(--sr-ink-light, #999));
+  animation: message-box-breathe 1400ms var(--agent-log-spring) infinite alternate;
+}
+
+@keyframes message-box-breathe {
+  from { transform: scale(0.7); opacity: 0.55; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.message-box__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.message-box__fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+  font: inherit;
+  font-size: var(--sr-type-label, 11px);
+  cursor: pointer;
+}
+
+.message-box__fold-icon {
+  flex: 0 0 auto;
+  transition: transform 220ms var(--agent-log-spring);
+}
+
+/* r61 A, GM r70: the run's status leads its fold ("› Claude is working ·
+   …") in the same bordered chip the settled "› 2 actions" is: only the
+   words and the breathing dot (in the session's shade) change, so the row
+   doesn't move when the reply lands. No rule here may tell the two apart. */
+.message-box__fold .message-box__breath {
+  flex: 0 0 auto;
+  margin: 0 2px;
+}
+
+/* GM r89.5: the chip's words are cut at a word (MessageBox's useWordCut, the
+   shared cut); the ellipsis and any closers ("on “Hero…”") sit after the
+   measured words, so they always show. */
+.message-box__fold-text {
+  display: inline-flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.message-box__fold-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-box__fold[aria-expanded='true'] .message-box__fold-icon {
+  transform: rotate(90deg);
+}
+
+.message-box__action-list {
+  align-self: stretch;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message-box__pill {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  height: 24px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--sr-ink-bold, #fff);
+  color: var(--sr-on-accent, #0a0a0b);
+  font: inherit;
+  font-size: var(--sr-type-label, 11px);
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateX(-50%);
+  animation: message-box-pill-in 420ms var(--agent-log-spring) both;
+}
+
+@keyframes message-box-pill-in {
+  from { transform: translate(-50%, 8px); }
+  to { transform: translateX(-50%); }
+}
+
+/* -- shared small controls --------------------------------------------- */
+
+.message-box__show,
+.message-box__option,
+.message-box__send {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 7px;
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  font: inherit;
+  font-size: var(--sr-type-body, 12px);
+  cursor: pointer;
+  transition: transform 220ms var(--agent-log-spring);
+}
+
+.message-box__show:active,
+.message-box__option:active,
+.message-box__send:active {
+  transform: scale(0.97);
+}
+
+.message-box__option[aria-pressed='true'] {
+  border-color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+  background: var(--sr-ink-bold, #fff);
+  color: var(--sr-on-accent, #0a0a0b);
+}
+
+.message-box__send {
+  flex: 0 0 auto;
+  border-color: transparent;
+  background: var(--sr-ink-bold, #fff);
+  color: var(--sr-on-accent, #0a0a0b);
+  font-weight: 600;
+}
+
+/* Their disabled look is the shared one (styles/disabled-buttons.css). */
+
+.message-box__show:focus-visible,
+.message-box__option:focus-visible,
+.message-box__send:focus-visible,
+.message-box__fold:focus-visible,
+.message-box__pill:focus-visible,
+.message-box__context-remove:focus-visible,
+.message-box__recipient-chip:focus-visible,
+.message-box__menu-item:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: 1px;
+}
+
+/* -- the composer -------------------------------------------------------- */
+
+.message-box__composer {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--sr-edge, rgba(255, 255, 255, 0.06));
+}
+
+.message-box__context {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  margin-bottom: 6px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+  font-size: var(--sr-type-label, 11px);
+}
+
+.message-box__context-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Answering “<the question>”": the question is cut to the chip's one line
+   at a word (GM r73, MessageBox's useWordCut), and its closing quote stays. */
+.message-box__context--answering .message-box__context-label {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.message-box__context-quote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-box__context-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.message-box__field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 5px 5px 5px 10px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+}
+
+.message-box__field-row:focus-within {
+  border-color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.message-box__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Five lines, then it scrolls (r50). */
+  max-height: calc(5 * 1.45 * 13px + 8px);
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  font: inherit;
+  font-size: var(--sr-type-control, 13px);
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
+}
+
+.message-box__field::placeholder {
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+}
+
+.message-box__field-row[data-locked] .message-box__field {
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+}
+
+/* r61 B: locked, the composer looks locked: its chrome (the border and the
+   placeholder, and the "/" key) dims as the locked opener's does, at the
+   disabled opacity; the lock line under it stays at full strength, and the
+   field stays focusable (aria-disabled, described by the line). The border
+   is drawn on a layer of its own so only it dims. */
+.message-box__field-row {
+  position: relative;
+}
+
+.message-box__field-row[data-locked] {
+  border-color: transparent;
+}
+
+.message-box__field-row[data-locked]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: inherit;
+  opacity: var(--sr-disabled-opacity);
+  pointer-events: none;
+}
+
+.message-box__field-row[data-locked] .message-box__field::placeholder,
+.message-box__field-row[data-locked] .message-box__key {
+  opacity: var(--sr-disabled-opacity);
+}
+
+/* The field clears its own outline: the row it sits in draws the token
+   ring while it has keyboard focus (the house focus rule). */
+.message-box__field-row:has(.message-box__field:focus-visible) {
+  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline-offset: 1px;
+}
+
+.message-box__key {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 2px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 5px;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-family: var(--sr-mono, monospace);
+  font-size: var(--sr-type-label, 11px);
+}
+
+.message-box__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+  font-size: var(--sr-type-body, 12px);
+  line-height: var(--sr-line-body, 1.45);
+  /* GM r70: the field's describedby lines never end on one word ("here."). */
+  text-wrap: pretty;
+}
+
+.message-box__line--failed {
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+}
+
+.message-box__copied {
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-size: var(--sr-type-label, 11px);
+}
+
+.message-box__counter {
+  display: block;
+  text-wrap: pretty;
+  margin-top: 4px;
+  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  font-family: var(--sr-mono, monospace);
+  font-size: var(--sr-type-meta, 10px);
+  text-align: right;
+}
+
+.message-box__announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.message-box__recipient {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.message-box__recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--msg-name, var(--sr-ink, #eee));
+  font: inherit;
+  font-size: var(--sr-type-label, 11px);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.message-box__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--sr-glass-strong, rgba(36, 36, 40, 0.96));
+  animation: message-box-row-in 420ms var(--agent-log-spring) both;
+}
+
+.message-box__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--msg-name, var(--sr-ink, #eee));
+  font: inherit;
+  font-size: var(--sr-type-body, 12px);
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-box__menu-item[aria-checked='true'],
+.message-box__menu-item:hover {
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-log.agent-log--messaging,
+  .agent-log.agent-log--messaging.agent-log--open[data-docked],
+  .agent-log.agent-log--messaging.agent-log--open[data-floating],
+  .agent-log__resize-grip,
+  .message-box__status-wrap,
+  .message-box__fold-icon,
+  .message-box__show,
+  .message-box__option,
+  .message-box__send {
+    transition: none;
+  }
+
+  .message-box__row--enter,
+  .message-box__pill,
+  .message-box__menu,
+  .message-box__breath {
+    animation: none;
+  }
+}
+
+/* GM r70: the header's meta names the latest agent by its cursor label
+   ("Claude", "Claude · 2") in its own case; the telemetry's state words
+   ("standby", "streaming") stay lowercase (slava-restraint.css). */
+.agent-log__telemetry .agent-log__status--name {
+  text-transform: none;
+}

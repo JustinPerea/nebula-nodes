@@ -87,6 +87,39 @@ def _reasons(ref: str, definition: str = SEEDVR, port: str = "image", source: st
     return sizes, reasons
 
 
+def _wav(path: Path, seconds: float = 1.0) -> Path:
+    import wave
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(8000)
+        out.writeframes(b"\x00\x00" * int(8000 * seconds))
+    return path
+
+
+# (kind, file suffix, definition, port, input node): the same rules for every kind a price can be read from.
+KINDS = [
+    pytest.param("Image", ".png", SEEDVR, "image", "image-input", id="image"),
+    pytest.param("Video", ".mp4", SEEDVR_VIDEO, "video", "video-input", id="video"),
+    pytest.param("Audio", ".wav", "omnihuman-2", "audio", "audio-input", id="audio"),
+]
+
+
+def _media(path: Path, kind: str) -> Path:
+    """A real file of the kind where one can be made here; a clip needs ffmpeg."""
+    if kind == "Image":
+        return _png(path, 100, 100)
+    if kind == "Audio":
+        return _wav(path)
+    if shutil.which("ffmpeg"):
+        return _clip(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\x00" * 64)
+    return path
+
+
 # -- Finding 1: only the output folder and inline images are measured ----------
 
 def test_a_file_outside_the_output_folder_is_outside(tmp_path):
@@ -106,14 +139,15 @@ def test_a_stored_file_is_still_measured_by_path_served_ref_and_loopback_url():
     assert _reasons(ref) == ({"up": {"width": 640, "height": 480}}, {})
 
 
-def test_a_symlink_in_the_store_pointing_outside_is_outside(tmp_path):
-    outside = _png(tmp_path / "elsewhere.png", 100, 100)
-    link = _store("link.png")
+@pytest.mark.parametrize(("kind", "suffix", "definition", "port", "source"), KINDS)
+def test_a_symlink_in_the_store_pointing_outside_is_outside(tmp_path, kind, suffix, definition, port, source):
+    outside = _media(tmp_path / f"elsewhere{suffix}", kind)
+    link = _store(f"link{suffix}")
     link.unlink(missing_ok=True)
     link.symlink_to(outside)
-    assert input_sizes.measure(str(link), "Image") is None
-    assert input_sizes.measure("/api/outputs/size-security/link.png", "Image") is None
-    assert _reasons(str(link))[1] == {"up": input_sizes.OUTSIDE}
+    assert input_sizes.measure(str(link), kind) is None
+    assert input_sizes.measure(f"/api/outputs/size-security/link{suffix}", kind) is None
+    assert _reasons(str(link), definition, port, source)[1] == {"up": input_sizes.OUTSIDE}
 
 
 def test_a_symlinked_folder_in_the_store_pointing_outside_is_outside(tmp_path):
@@ -127,13 +161,14 @@ def test_a_symlinked_folder_in_the_store_pointing_outside_is_outside(tmp_path):
     assert _reasons(str(link / "x.png"))[1] == {"up": input_sizes.OUTSIDE}
 
 
-def test_a_path_with_dot_dot_is_outside_even_when_it_lands_in_the_store():
-    _png(_store("dots.png"), 100, 100)
+@pytest.mark.parametrize(("kind", "suffix", "definition", "port", "source"), KINDS)
+def test_a_path_with_dot_dot_is_outside_even_when_it_lands_in_the_store(kind, suffix, definition, port, source):
+    _media(_store(f"dots{suffix}"), kind)
     _store("sub", "keep")  # makes size-security/sub
-    sneaky = str(_store("sub") / ".." / "dots.png")
+    sneaky = str(_store("sub") / ".." / f"dots{suffix}")
     assert ".." in sneaky
-    assert input_sizes.measure(sneaky, "Image") is None
-    assert _reasons(sneaky)[1] == {"up": input_sizes.OUTSIDE}
+    assert input_sizes.measure(sneaky, kind) is None
+    assert _reasons(sneaky, definition, port, source)[1] == {"up": input_sizes.OUTSIDE}
 
 
 def test_a_data_uri_is_still_measured():

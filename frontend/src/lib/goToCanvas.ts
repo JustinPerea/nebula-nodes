@@ -40,7 +40,7 @@ export async function openWorkspace(): Promise<void> {
   const id = projects.activeProject?.id;
   if (!id) throw writtenLine('Open a project first: Updates are kept with a project.');
   await projects.open(id);
-  if (useProjectStore.getState().screen !== 'workspace') throw writtenLine("The project didn't open. Try again.");
+  if (useProjectStore.getState().screen !== 'workspace') throw writtenLine('The project didn’t open. Try again.');
 }
 
 /** Whether the canvas is the screen showing now. */

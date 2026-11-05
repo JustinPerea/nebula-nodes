@@ -40,6 +40,23 @@ export function agentClosedLine(agent: string | null | undefined, action: 'clear
   return `${who} made its changes on a copy of ${quoted(name)}. ${quoted(name)} is kept as it was.`;
 }
 
+/** GM r5, the size cap's advice by whether Recently deleted has items. In the
+ * entry chunk: the kept save's refusal for the storage cap says it too
+ * (GM r23 on PR #199, 3), and the restore notices' lines share it. */
+export function sizeCapAdvice(trashHasItems: boolean): string {
+  return trashHasItems
+    ? 'Permanently delete a project in Recently deleted and Nebula will save it.'
+    : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
+}
+
+/** GM r23 on PR #199, 3: the kept save the storage cap refused. The edits
+ * stay kept (they are the only copy), and this line says why, with the size
+ * advice, as the project limit's refusal keeps them with its own line. The
+ * heading is the one GM approved in r23, 2 (it matches the button). */
+export function keptStorageFullLine(trashHasItems: boolean): string {
+  return `Nebula couldn’t save your edits as a project because Nebula’s project list is full. ${sizeCapAdvice(trashHasItems)}`;
+}
+
 /** The button the notice shows when something is in Recently deleted. */
 export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/backend';
+import { BANNER_SHOWN_ATTR, NOTICE_TOP_LINE_ATTR } from '../lib/bottomBar';
 import {
   noteBackendBootId, noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeHealthProbeRequests,
 } from '../lib/backendConnection';
@@ -13,6 +14,8 @@ export const BACKEND_PROBE_INTERVAL_MS = 3_000;
  * Round 13 read "Nebula is offline. Reconnecting…"; GM keeps "Reconnecting…"
  * for a day when edits really queue, which they don't. */
 export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it reconnects.';
+/** The offline row's id: a control locked while offline names it as its describedby (the Message box's composer). */
+export const OFFLINE_LINE_ID = 'nebula-offline-line';
 
 /**
  * The offline banner (GM, round 14): role=status, so it is announced once
@@ -94,12 +97,24 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
     return inStack ? sayTopStackChanged : undefined;
   }, [inStack]);
 
-  if (!offline || placement === 'studio') return null;
+  // The banner is part of the top line the proposal card stays under (GM -
+  // Design, PR #216 r4 7): it marks the root while it shows, so the notice
+  // region places its stack again (lib/bottomBar.ts noticeTopLimit).
+  const shown = offline && placement !== 'studio';
+  useEffect(() => {
+    if (!shown) return undefined;
+    document.documentElement.setAttribute(BANNER_SHOWN_ATTR, '');
+    return () => document.documentElement.removeAttribute(BANNER_SHOWN_ATTR);
+  }, [shown]);
+
+  if (!shown) return null;
 
   return (
     <div
       ref={banner}
+      id={OFFLINE_LINE_ID}
       className="backend-connection backend-connection--offline"
+      {...{ [NOTICE_TOP_LINE_ATTR]: '' }}
       data-placement={placement}
       data-top-stack={placement === 'workspace' ? '' : undefined}
       role="status"

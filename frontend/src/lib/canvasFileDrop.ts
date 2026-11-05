@@ -21,14 +21,14 @@ import { refuseEditWhileKept } from './keptCanvas';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 import { refuseEditWhileOffline } from './backendConnection';
+import { quoted } from './quoted';
 
 export const DROP_TYPES_LINE = 'Nebula takes images, video, audio, PDFs and text files.';
 
 /** Names a mixed-reason drop notice lists before "and {k} more." */
 export const DROP_NOTICE_MAX_NAMES = 2;
 
-/** A file name the way the canvas's labels quote one. */
-export const quoted = (name: string) => `“${name}”`;
+export { quoted };
 
 /** The fan-out grid: DROP_GRID_COLUMNS across, DROP_GRID_STEP_X apart (wider
  * than an input card's 240px). Rows stack by card height: an image or clip

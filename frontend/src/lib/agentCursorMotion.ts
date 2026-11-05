@@ -3,11 +3,13 @@ import type { NodeData } from '../types';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
- * Spring motion for agent cursors, integrated per animation frame.
+ * The shared agent-motion spring, integrated per animation frame: pins,
+ * proposal ghosts, the camera and the offline spring-back run on it. The
+ * cursor itself travels on its own springs (agentCursorPlanner.ts).
  *
  * Tuned under critical damping (ζ ≈ 0.69). Measured at 60 fps over a 300 px
  * move: about 6 px of overshoot and at rest in under half a second, so a
- * cursor arrives with a small, readable settle instead of an ease-out slide.
+ * pin or ghost arrives with a small, readable settle instead of an ease-out slide.
  */
 export interface SpringConfig {
   stiffness: number;
@@ -16,8 +18,6 @@ export interface SpringConfig {
 }
 
 export const AGENT_CURSOR_SPRING: SpringConfig = { stiffness: 300, damping: 24, mass: 1 };
-/** Pulling a wire is a touch slower so the gesture reads as deliberate. */
-export const AGENT_DRAG_SPRING: SpringConfig = { stiffness: 120, damping: 20, mass: 1 };
 
 export interface Point {
   x: number;
@@ -71,7 +71,32 @@ export function resolveAnchor(
     const handle = [...(bounds?.target ?? []), ...(bounds?.source ?? [])].find((h) => h.id === anchor.handle);
     if (handle) return { x: x + handle.x + handle.width / 2, y: y + handle.y + handle.height / 2 };
   }
-  // Into the card's header, where a person would click to pick the node. The
-  // node box starts at the small category label above the card, hence 44px.
+  return nodeHeaderPoint(x, y, width, height);
+}
+
+/** The point a cursor counts as for its target chain (agentCursorLook
+ *  targetChains): where it is drawn (resolveAnchor), except that a handle
+ *  counts as its node's header point, as the backend counts it
+ *  (agent_presence._target_point: the backend doesn't know where ports
+ *  sit). One formula on both sides, so a cursor on a port can't put the tab
+ *  and the backend on different points (GM - Design, #219 r62). Null if its
+ *  node isn't drawn. */
+export function chainPoint(
+  anchor: AgentCursorAnchor,
+  nodeLookup: Map<string, InternalNode<Node<NodeData>>>,
+): Point | null {
+  if (!('nodeId' in anchor) || !anchor.handle) return resolveAnchor(anchor, nodeLookup);
+  const node = nodeLookup.get(anchor.nodeId);
+  if (!node) return null;
+  const { x, y } = node.internals.positionAbsolute;
+  return nodeHeaderPoint(x, y, node.measured?.width ?? 0, node.measured?.height ?? 0);
+}
+
+/** Where a cursor aimed at a node (no handle) points: into the card's
+ *  header, where a person would click to pick the node. The node box starts
+ *  at the small category label above the card, hence 44px. The backend
+ *  counts the same point for its target chain (agent_presence._header_point;
+ *  the shared fixture backend/tests/fixtures/cursor_chains.json). */
+export function nodeHeaderPoint(x: number, y: number, width: number, height: number): Point {
   return { x: x + width / 2, y: y + Math.min(44, height / 2) };
 }

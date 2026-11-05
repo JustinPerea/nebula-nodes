@@ -56,7 +56,7 @@ export function GraphFileActions() {
         projects.initialized ? projects.activeProject?.name : undefined);
     } catch (error) {
       console.error('Graph save failed:', error);
-      showNotice(failureMessage(error, "Couldn't save the graph."));
+      showNotice(failureMessage(error, "Couldn't save the graph."), 'error', error);
     } finally {
       actionInFlight.current = false;
     }
@@ -167,7 +167,7 @@ export function GraphFileActions() {
     } catch (error) {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
-      showNotice(failureMessage(error, LOAD_GRAPH));
+      showNotice(failureMessage(error, LOAD_GRAPH), 'error', error);
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
       // Not replaced: the writes that waited go to the canvas still there.
@@ -212,7 +212,7 @@ export function GraphFileActions() {
       if (!loading && !after.unsavedEdits && !after.error) showNotice(failureMessage(null, LOAD_GRAPH));
     } catch (error) {
       console.error('Graph load failed:', error);
-      showNotice(failureMessage(error, LOAD_GRAPH));
+      showNotice(failureMessage(error, LOAD_GRAPH), 'error', error);
     } finally {
       actionInFlight.current = false;
     }

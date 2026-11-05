@@ -28,13 +28,15 @@ import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
-import { FailureNotice, failureMessage } from '../../lib/errorCopy';
+import { CLUSTER_NOT_ADDED, FailureNotice, GENERATE_HEADING, failureMessage, generateRefusedCopy, notConnectedBecause } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
+import { isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
+import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
-// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."
-const GENERATE_HEADING = "Couldn't start the generation.";
+// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."; GM r12 (2), #204 round 9:
+// every Generate line opens "Nebula couldn’t start the generation." (lib/errorCopy's GENERATE_HEADING).
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -99,12 +101,10 @@ export function CreateView() {
       ? { ...node, data: { ...node.data, state: 'queued' as const } }
       : node);
   }, [allNodes, activeCreateRuns]);
-  const [generationError, setGenerationError] = useState<string | null>(null);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
   const [ask, promptElement] = usePrompt();
   const [savingStyle, setSavingStyle] = useState(false);
-  const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
   const [styleNote, setStyleNote] = useState<string | null>(null);
   const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
   const focusDraft = useRef(false);
@@ -161,19 +161,55 @@ export function CreateView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // GM, #204 r6: a refusal sentence doesn't belong in the toolbar row; Save
+  // style's lines show in the app's notice region, with the other save lines.
+  const styleLine = (line: string, error?: unknown) => useGraphStore.getState().notify(line, 'error', { error });
+  // GM r8 (3), #204 r7: Generate's lines too. A new Generate, a new draft or a reuse takes
+  // back the run line it showed (as the toolbar span cleared then), and only that line.
+  const runLineShown = useRef<string | null>(null);
+  const runLine = (line: string, error?: unknown) => { runLineShown.current = line; styleLine(line, error); };
+  const clearRunLine = () => {
+    const line = runLineShown.current;
+    if (line === null) return;
+    runLineShown.current = null;
+    useGraphStore.setState((state) => ({
+      ...(state.messageNotice?.text === line ? { messageNotice: null } : {}),
+      ...(state.undoNotice?.text === line && !state.undoNotice.offer ? { undoNotice: null } : {}),
+    }));
+  };
+
+  /** Send one Style. GM r6 (1): refused only because this tab isn't connected
+   * as the person, it says so in the "because" form and sends the same Style
+   * again on the promote (the person shouldn't redo a save Nebula already
+   * has), for the project it was made in only. */
+  const saveStyle = async (body: Parameters<typeof createPreset>[0]): Promise<void> => {
+    const projectId = currentProject()?.id ?? null;
+    try {
+      await createPreset(body);
+      if (styleName.current === body.name) styleName.current = null;
+      if (mounted.current) setPresetReloadKey((k) => k + 1);
+    } catch (err) {
+      if (!isPersonRefusal(err)) { styleLine(failureMessage(err, "Couldn't save the style."), err); return; }
+      styleLine(notConnectedBecause('save the style'), err);
+      retryOnPromote(err, `create.style:${projectId}:${body.name}`, () => { // clears-on-promote: create.style-retry
+        if ((currentProject()?.id ?? null) !== projectId) return;
+        void saveStyle(body);
+      });
+    }
+  };
+
   const handleSaveCurrentStyle = async () => {
     if (!modelDef || styleSavePending.current) return;
     if (uploads.length > 0) {
-      setStyleSaveError('Finish attaching references or remove them before saving this style.');
+      styleLine('Finish attaching references or remove them before saving this style.');
       return;
     }
     // A Style holds only Nebula's own images; the backend refuses others too.
     if (refs.some((ref) => storedImageView(ref.filePath).outside)) {
-      setStyleSaveError('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
+      styleLine('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
       return;
     }
     styleSavePending.current = true;
-    setStyleSaveError(null);
     try {
       const name = (await ask('Name this style:', styleName.current ?? (prompt.slice(0, 40) || modelDef.displayName)))?.trim();
       if (!name || !mounted.current) return;
@@ -199,11 +235,7 @@ export function CreateView() {
       }
       // The draft is current: loadDrafts and the backend upgrade saved drafts,
       // presets are upgraded when read, and "Reuse settings" upgrades its run.
-      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail, paramsVersion: GRAPH_PARAMS_VERSION });
-      styleName.current = null;
-      if (mounted.current) setPresetReloadKey((k) => k + 1);
-    } catch (err) {
-      if (mounted.current) setStyleSaveError(failureMessage(err, "Couldn't save the style."));
+      await saveStyle({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail, paramsVersion: GRAPH_PARAMS_VERSION });
     } finally {
       styleSavePending.current = false;
       if (mounted.current) setSavingStyle(false);
@@ -218,15 +250,15 @@ export function CreateView() {
     if (!sessionId) return;
     clearCreateReferenceUploads(sessionId);
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
-    setGenerationError(null);
-    setStyleSaveError(null);
     setStyleNote(null);
+    clearRunLine();
     setReusedDraft(null);
   };
 
   const handleReuseSettings = (context: ResultContext) => {
+    clearRunLine();
     if (!sessionId || !context.reusableDraft) {
-      setGenerationError(context.reuseUnavailableReason ?? 'This recipe cannot be copied into Create. Open it on Canvas.');
+      runLine(context.reuseUnavailableReason ?? 'This recipe cannot be copied into Create. Open it on Canvas.');
       return;
     }
     const current = useCreateDraftStore.getState().drafts[sessionId];
@@ -239,8 +271,6 @@ export function CreateView() {
     focusDraft.current = true;
     useCreateDraftStore.getState().resetDraft(sessionId, structuredClone(context.reusableDraft));
     setReusedDraft({ previous, fingerprint: JSON.stringify(useCreateDraftStore.getState().drafts[sessionId]), removedAttachments: current.uploads.length > 0 });
-    setGenerationError(null);
-    setStyleSaveError(null);
   };
 
   const handleUndoReuse = () => {
@@ -253,17 +283,18 @@ export function CreateView() {
 
   const handleGenerate = async () => {
     if (!sessionId) return;
+    clearRunLine();
     const currentDraft = useCreateDraftStore.getState().drafts[sessionId];
     const currentModel = currentDraft?.modelId ? NODE_DEFINITIONS[currentDraft.modelId] : null;
     if (!currentDraft || !currentModel) return;
     if (currentDraft.uploads.length > 0) {
-      setGenerationError('Finish attaching references or remove them before generating.');
+      runLine('Finish attaching references or remove them before generating.');
       return;
     }
     // Selection and saved styles can prefill models outside the Create picker.
     // Check admission before reserving a job or authoring an incomplete recipe.
     if (!isCreateModel(currentModel)) {
-      setGenerationError('This model needs Canvas input controls. Choose another model or return to Canvas.');
+      runLine('This model needs Canvas input controls. Choose another model or return to Canvas.');
       return;
     }
     const store = useGraphStore.getState();
@@ -273,8 +304,8 @@ export function CreateView() {
     const genId = uuidv4();
     if (!store.reserveCreateGeneration(genId)) return;
     const ts = Date.now();
-    setGenerationError(null);
     const layoutY = Math.max(80, ...store.nodes.filter((node) => node.data._createOrigin).map((node) => node.position.y + 320));
+    let clusterAdded = false;
     try {
       const { modelNodeIds, allNodeIds } = await store.authorGenerationCluster({
         definitionId: currentModel.id,
@@ -289,8 +320,9 @@ export function CreateView() {
       const lifecycle = useGraphStore.getState();
       if (!lifecycle.createLaunchingIds.includes(genId) || lifecycle.createCancelledLaunchIds.includes(genId)) return;
       if (modelNodeIds.length === 0 || allNodeIds.length === 0) {
-        throw new FailureNotice(GENERATE_HEADING, "Its nodes weren't added to the canvas. Try again.");
+        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} Try again.`);
       }
+      clusterAdded = true;
       // The shared execution store consumes the reservation atomically when it
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
@@ -298,7 +330,11 @@ export function CreateView() {
       // Offline is read-only (round 15 of PR #114): a refused Generate says nothing.
       if (isOfflineRefusal(error)) return;
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        setGenerationError(failureMessage(error, GENERATE_HEADING));
+        // GM r8 (3), #204 r7: in the app's notice region, never the toolbar row. A cluster or
+        // start refused only for this tab goes on the promote (notify registers it by the
+        // refusal's own stamp: review 3 MEDIUM-1, #204 r5).
+        // GM r10 (3): refused only for this tab, GM's own line (Generate is one-shot).
+        runLine(isPersonRefusal(error) ? generateRefusedCopy(clusterAdded) : failureMessage(error, GENERATE_HEADING), error);
       }
     } finally {
       store.releaseCreateGeneration(genId);
@@ -345,9 +381,7 @@ export function CreateView() {
       <WorkspaceHeader title="Creator Studio" onBack={exitCreateView} className="create-view__topbar"
         navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
-        {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {styleNote && <span className="create-view__style-note" role="status">{styleNote}</span>}
-        {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
         {createLaunchingIds.map((genId) => {
           const cancelling = createCancelledLaunchIds.includes(genId);

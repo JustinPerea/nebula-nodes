@@ -4,6 +4,7 @@ import type { ViewableMedia } from '../../lib/createGallery';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
+import { useNoticeClearance } from '../../hooks/useNoticeClearance';
 
 export interface LightboxProps {
   items: ViewableMedia[];
@@ -23,6 +24,8 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
   const current = items[safeIndex];
   const visible = Boolean(current);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Review 6 MEDIUM-3: the media and its counter stop above the notice band.
+  const clearance = useNoticeClearance();
   usePanelFocus(visible, panelRef, onClose, { initialFocus: '.lightbox__close', trap: true });
   useEffect(() => {
     // A boundary navigation button may disappear after moving to the first
@@ -64,7 +67,7 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
 
   return (
     <ModalPortal>
-    <div ref={panelRef} className="lightbox" role="dialog" aria-modal="true" aria-label="Result preview" tabIndex={-1} onClick={onClose}>
+    <div ref={panelRef} className="lightbox" style={clearance} role="dialog" aria-modal="true" aria-label="Result preview" tabIndex={-1} onClick={onClose}>
       <button type="button" className="lightbox__close" onClick={(event) => { event.stopPropagation(); onClose(); }} aria-label="Close (Esc)">
         <X size={22} strokeWidth={1.75} />
       </button>

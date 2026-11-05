@@ -286,3 +286,15 @@ describe("GM's review: Needs-you lines, the action's own time, the chip's count"
     expect(needsYouCount(input())).toBe(0);
   });
 });
+
+describe('PR #204 round 4: a held ask locks its row only in a held tab', () => {
+  const ask = { agent: CODEX, kind: 'proposal' as const, id: 'pa_9', target: 'project' as const, targetId: 'p1',
+    createdAt: NOW - 60_000, count: 1 };
+  it('held: the row is locked with its reason; connected: the same row opens', () => {
+    const [heldRow] = buildRosterRows(input({ held: [ask], tabHeld: true }));
+    expect(heldRow.locked).toBe('You can review this when this tab is connected as you.');
+    const [liveRow] = buildRosterRows(input({ held: [ask], tabHeld: false }));
+    expect(liveRow.name).toBe(heldRow.name);
+    expect(liveRow.locked).toBeNull();
+  });
+});

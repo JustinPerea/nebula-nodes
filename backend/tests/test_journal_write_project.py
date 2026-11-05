@@ -561,12 +561,12 @@ def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, mon
     main.canvas_proposals.get(p3).expires_at = now + 0.4
     real = main._reopen_update
 
-    async def slow_reopen_update(ref, proposal_id):
+    async def slow_reopen_update(ref, proposal_id, *args, **kwargs):
         # p2's Update write is slow (disk I/O under load): p1's timer, armed
         # in the undo, fires while the undo is still inside its link.
         if proposal_id == p2:
             await asyncio.sleep(1.5)
-        return await real(ref, proposal_id)
+        return await real(ref, proposal_id, *args, **kwargs)
 
     monkeypatch.setattr(main, "_reopen_update", slow_reopen_update)
 

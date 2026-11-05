@@ -293,6 +293,22 @@ def test_agent_resolves_a_pin_and_its_cursor_moves_there(api):
     assert "resolved by Claude Code" in format_pin(body)
 
 
+def test_an_agents_pin_answer_reaches_its_own_sessions_feed_only(api):
+    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # ends that pin's span; Nebula keeps the session beside the journal so
+    # only that same session's ownReplies feed shows it.
+    client, graph, _journal, *_ = api
+    node = graph.add_node("text-input", {})
+    pin = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node}).json()["pin"]
+    shell = {**AGENT, "X-Nebula-Agent-Session": "cc-session-a"}
+    assert client.post(f"/api/canvas/pins/{pin['id']}/resolve", headers=shell, json={"reply": "done"}).status_code == 200
+    mine = client.get("/api/canvas/events?after=0&ownReplies=1&kinds=pin.resolved", headers=shell).json()["events"]
+    assert [e["data"]["pinId"] for e in mine] == [pin["id"]] and "cc-session-a" not in str(mine)
+    sibling = {**AGENT, "X-Nebula-Agent-Session": "cc-session-b"}
+    assert client.get("/api/canvas/events?after=0&ownReplies=1&kinds=pin.resolved", headers=sibling).json()[
+        "events"] == []
+
+
 def test_deleting_a_node_detaches_its_pins_where_it_stood(api):
     client, graph, journal, sent, *_ = api
     node = graph.add_node("text-input", {}, position={"x": 300, "y": 40})
@@ -367,6 +383,29 @@ def test_websocket_sends_pins_after_graph_sync(api):
         assert ws.receive_json()["type"] == "graphSync"
         message = ws.receive_json()
     assert message["type"] == "canvasPins" and message["pins"][0]["text"] == "hello"
+
+
+def test_a_canvas_closed_mid_handshake_is_no_longer_counted_as_open(api, monkeypatch):
+    """The socket leaves the manager on every exit, not only on a clean
+    WebSocketDisconnect. The tab here closes while the handler is still between
+    its opening sends, so the handler is cancelled; it used to stay counted and
+    canvas_open() told agents a canvas was open (CI flake of 2026-11-02)."""
+    import anyio
+
+    import main as main_module
+
+    client, *_ = api
+
+    async def still_settling() -> None:
+        await anyio.sleep_forever()
+
+    monkeypatch.setattr(main_module, "_settle_proposal_updates", still_settling)
+    with client.websocket_connect("/ws", headers=PERSON) as ws:
+        assert ws.receive_json()["type"] == "graphSync"
+        assert ws.receive_json()["type"] == "canvasPins"
+        assert main_module.manager.canvas_open()
+    assert main_module.manager.active_connections == []
+    assert not main_module.manager.canvas_open()
 
 
 def test_only_a_person_hello_makes_a_browser_socket(api, monkeypatch):
@@ -684,7 +723,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     capture = main_module.manager.broadcast_raw
 
     async def pin_mid_switch(data, **kw):
-        await capture(data)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
             added["at"] = store.read()["activeProjectId"]
             # The pin route itself, as a request landing at this await would run it.
@@ -727,7 +766,7 @@ def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, 
         first_id = first.json()["pin"]["id"]
 
     async def switch_and_pin(data, **kw):
-        await capture(data)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
         if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
             done["pin"] = None
             # The person opens the other project while this route awaits its

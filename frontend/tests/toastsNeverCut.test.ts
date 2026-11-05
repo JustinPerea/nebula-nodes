@@ -26,10 +26,21 @@ describe('no toast cuts a sentence', () => {
     expect(rules.some((rule) => /project-home__toast-text/.test(rule.selector))).toBe(true);
   });
 
+  // GM r76 on main's notice region (merged into PR #199 at round 24): the one
+  // place a notice's text is cut with "…" is an Undo notice kept to one line
+  // where its full height would leave the proposal card short of Accept and
+  // Reject (lib/noticeStackPlace.ts `clip`); its full text stays in its
+  // aria-label. Nothing else is.
+  const GM_R76_CLIPPED_UNDO = [
+    'styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,\n'
+      + '.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text',
+  ];
+
   it('no toast or notice text is cut with an ellipsis or kept to one line', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
-      .map((rule) => `${rule.file}: ${rule.selector}`);
+      .map((rule) => `${rule.file}: ${rule.selector}`)
+      .filter((rule) => !GM_R76_CLIPPED_UNDO.includes(rule));
     expect(cut).toEqual([]);
   });
 });

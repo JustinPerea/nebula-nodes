@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 import type { LabelingWork, SaveResult } from '../src/components/commons/commonsLeave';
 
 /**
@@ -30,7 +31,7 @@ vi.mock('../src/lib/commonsApi', () => ({
   commonsEvaluationApi: { get: vi.fn() },
   filtersToRequest: () => ({ query: '', filters: {} }),
 }));
-vi.mock('../src/lib/commonsCapability', () => ({ fetchCommonsEnabled: capability.enabled }));
+vi.mock('../src/lib/commonsCapability', () => ({ fetchCommonsCapability: async () => ((await capability.enabled()) ? 'on' : 'unknown') }));
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => null }));
@@ -101,6 +102,8 @@ const home = () => screen.getByRole('button', { name: /^Back to projects|^Saving
 const popover = () => screen.getByRole('alertdialog');
 const popoverButtons = () => within(popover()).getAllByRole('button').map((button) => button.textContent);
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   history.replaceState(null, '', '/#commons');
   useUIStore.setState(initialUI, true);
@@ -269,7 +272,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Labels changed in another window. Reload before saving.');
     expect(popover()).not.toHaveTextContent("Your labels aren't saved.");
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
@@ -287,7 +290,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Commons request failed (503)');
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Save and leave' })).toHaveFocus());
@@ -368,7 +371,7 @@ describe('a save already in progress', () => {
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(home());
     await act(async () => { panels.inFlight!({ ok: false, reason: 'Disk is read-only.', retry: true }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Disk is read-only.');
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     expect(popover().dataset.anchor).toBe('home');
@@ -385,7 +388,7 @@ describe('a save already in progress that hits a conflict', () => {
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(back());
     await act(async () => { panels.inFlight!({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Stay' })).toHaveFocus());
   });

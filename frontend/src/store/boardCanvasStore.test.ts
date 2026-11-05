@@ -40,7 +40,7 @@ describe('selection and camera, per board', () => {
     const store = useBoardCanvasStore.getState();
     store.setSelection('a', ['c1', 'c2']);
     store.setSelection('b', ['c9']);
-    store.setViewport('a', { x: 1, y: 2, zoom: 0.5 });
+    store.setViewport('a', { x: 1, y: 2, zoom: 0.5 }, false);
     expect(useBoardCanvasStore.getState().selection).toMatchObject({ a: ['c1', 'c2'], b: ['c9'] });
     expect(useBoardCanvasStore.getState().viewports.a).toEqual({ x: 1, y: 2, zoom: 0.5 });
     expect(useBoardCanvasStore.getState().viewports.b).toBeUndefined();

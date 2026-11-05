@@ -109,6 +109,44 @@ describe('a reference whose analysis failed', () => {
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
   });
 
+  it('says a too-transparent reference in the muted colour, as no error (GM r5 on #208)', async () => {
+    asset.mockResolvedValue(failed('transparent'));
+    render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+    const line = await screen.findByText('This image is too transparent to analyze.');
+    expect(line.className).toBe('commons-notice commons-notice--muted');
+    expect(document.querySelector('.commons-notice--error')).toBeNull();
+    expect(screen.queryByText("Couldn't analyze this reference.")).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  // GM r6 on #208, items 2 and 3: nothing broke, so the badge is the neutral,
+  // muted one saying "Not analyzed" (not a red "failed"), and there is no
+  // Re-analyze (it can't change a property of the image).
+  it('a too-transparent reference wears the muted "Not analyzed" badge and has no Re-analyze', async () => {
+    asset.mockResolvedValue(failed('transparent'));
+    render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+    await screen.findByText('This image is too transparent to analyze.');
+    const badge = document.querySelector('.commons-detail__bar .commons-badge')!;
+    expect(badge.className).toBe('commons-badge commons-badge--not-analyzed');
+    expect(badge.textContent).toBe('Not analyzed');
+    expect(document.querySelector('.commons-badge--analysis_failed')).toBeNull();
+    expect(screen.queryByText(/failed/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Re-analyze' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete and purge' })).toBeTruthy();
+  });
+
+  it.each(['unavailable', 'other', null])('any other failure (kind %s) keeps the failed badge and Re-analyze', async (kind) => {
+    asset.mockResolvedValue(failed(kind));
+    render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+    const button = await screen.findByRole('button', { name: 'Re-analyze' });
+    const badge = document.querySelector('.commons-detail__bar .commons-badge')!;
+    expect(badge.className).toBe('commons-badge commons-badge--analysis_failed');
+    expect(badge.textContent).toBe('failed');
+    reanalyze.mockResolvedValue({ queued: true });
+    fireEvent.click(button);
+    await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
+  });
+
   it('with no last_error there is no Details toggle', async () => {
     const base = failed('other');
     asset.mockResolvedValue({ ...base, asset: { ...base.asset, last_error: null } });

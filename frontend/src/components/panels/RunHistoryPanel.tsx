@@ -99,7 +99,7 @@ export function RunHistoryPanel() {
     } catch (error) {
       // Round 3b: a request's line or the store's written one; any other
       // error says GM's general line, never its own message.
-      showNotice(failureMessage(error, FORGET_RECOVERY_HEADING));
+      showNotice(failureMessage(error, FORGET_RECOVERY_HEADING), 'error', error);
     } finally {
       setClearingRecovery(null);
     }

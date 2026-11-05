@@ -28,6 +28,26 @@ import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings
  */
 
 const SRC = join(__dirname, '../src');
+/** Each source file is read once per run (CI-flake fix of 2026-11-02): G
+ * resolved ~39,000 relative imports, each a fresh stat and read, and the
+ * caches below keyed on the whole text, hashing ~3 GB of strings; under load
+ * G took over 190 s. One read gives one string per file, so every cache
+ * below finds it by identity. */
+const sourceCache = new Map<string, string>();
+const readSource = (path: string): string => {
+  let source = sourceCache.get(path);
+  if (source === undefined) { source = readFileSync(path, 'utf8'); sourceCache.set(path, source); }
+  return source;
+};
+/** A cache keyed by file, then by the very source string (never a
+ * concatenation of the two, which copies and rehashes the whole text). */
+function bySource<T>(cache: Map<string, Map<string, T>>, file: string, source: string, make: () => T): T {
+  let forFile = cache.get(file);
+  if (!forFile) { forFile = new Map(); cache.set(file, forFile); }
+  let value = forFile.get(source);
+  if (value === undefined) { value = make(); forFile.set(source, value); }
+  return value;
+}
 const walk = (dir: string, match: RegExp): string[] => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
   return statSync(path).isDirectory() ? walk(path, match) : match.test(name) && !/\.test\./.test(name) ? [path] : [];
@@ -39,15 +59,10 @@ const walk = (dir: string, match: RegExp): string[] => readdirSync(dir).flatMap(
  * old regex, and `title="Don't"` hid the rest of its line); identifiers in
  * every form count, and so does bracket access by a string
  * (`s['executeGraph']`). */
-const parsed = new Map<string, ts.SourceFile>();
+const parsed = new Map<string, Map<string, ts.SourceFile>>();
 function parse(source: string, file = 'x.tsx'): ts.SourceFile {
-  const key = `${file}\u0000${source}`;
-  let root = parsed.get(key);
-  if (!root) {
-    root = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.TSX);
-    parsed.set(key, root);
-  }
-  return root;
+  return bySource(parsed, file, source, () => ts.createSourceFile(
+    file, source, ts.ScriptTarget.Latest, true, file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.TSX));
 }
 const named = new WeakMap<ts.Node, string[]>();
 function identifiers(node: ts.Node): string[] {
@@ -157,10 +172,9 @@ interface Scope {
   reexports: Map<string, { specifier: string; imported: string }[]>;
 }
 
-const scopes = new Map<string, Scope>();
+const scopes = new Map<string, Map<string, Scope>>();
 function scopeOf(source: string, file: string): Scope {
-  const key = `${file}\u0000${source}`;
-  const cached = scopes.get(key);
+  const cached = scopes.get(file)?.get(source);
   if (cached) return cached;
   const root = parse(source, file);
   const locals = new Map<string, ts.Node[]>();
@@ -213,7 +227,7 @@ function scopeOf(source: string, file: string): Scope {
   };
   collect(root);
   const scope = { root, file, locals, imports, defaultExport, reexports };
-  scopes.set(key, scope);
+  bySource(scopes, file, source, () => scope);
   return scope;
 }
 
@@ -398,9 +412,15 @@ function visibleLocals(id: ts.Identifier, scope: Scope): ts.Node[] | undefined {
  * them, so a name a parent hands down is a parameter's (boundByParam). */
 function localsAt(id: ts.Node, scope: Scope): ts.Node[] | undefined {
   if (!ts.isIdentifier(id) || !isReference(id)) return ts.isIdentifier(id) ? scope.locals.get(id.text) : undefined;
+  // Once per identifier: a node belongs to one parsed file, so to one scope,
+  // and G asks the same names again for every handler that reaches them.
+  if (visibleMemo.has(id)) return visibleMemo.get(id);
   const visible = visibleLocals(id, scope);
-  return visible && visible.length > 0 ? visible : undefined;
+  const found = visible && visible.length > 0 ? visible : undefined;
+  visibleMemo.set(id, found);
+  return found;
 }
+const visibleMemo = new WeakMap<ts.Node, ts.Node[] | undefined>();
 
 const bindingNames = (name: ts.BindingName): string[] => ts.isIdentifier(name) ? [name.text]
   : name.elements.flatMap((element) => ts.isOmittedExpression(element) ? [] : bindingNames(element.name));
@@ -1102,15 +1122,20 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
   return found;
 }
 
-/** A relative import of a source file, for G's one level into imported functions. */
+/** A relative import of a source file, for G's one level into imported
+ * functions. Resolved once per import and the file read once (readSource). */
+const resolved = new Map<string, { file: string; source: string } | null>();
 const resolveSource: Resolve = (specifier, fromFile) => {
   const base = join(SRC, fromFile, '..', specifier);
+  if (resolved.has(base)) return resolved.get(base)!;
+  let found: { file: string; source: string } | null = null;
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
     try {
-      if (statSync(candidate).isFile()) return { file: relative(SRC, candidate), source: readFileSync(candidate, 'utf8') };
+      if (statSync(candidate).isFile()) { found = { file: relative(SRC, candidate), source: readSource(candidate) }; break; }
     } catch { /* not this one */ }
   }
-  return null;
+  resolved.set(base, found);
+  return found;
 };
 
 /** Controls the check above finds that are covered another way (the
@@ -1168,12 +1193,14 @@ const allowed = (line: string) => {
   return hits.split(', ').every((hit) => CONTROL_ALLOWLIST[`${file}: ${hit}`]);
 };
 
-// Parsing every source file is slow under load: a generous limit (300 s
-// since the merge with PR #198: more files, and G alone took 110 s at a load
-// average of 50; the full suite at 68 passed 120 s).
+// Parsing every source file is slow under load: a generous limit (120 s; G
+// alone once took 110 s at a load average of 50). Each file is read, parsed
+// and scoped once per run (readSource, bySource, resolveSource, localsAt's
+// memo; CI-flake fix of 2026-11-02 halved G), so make the scan cheaper
+// before raising this.
 describe('L-4: every file that reaches a gated action reads the canvas lock', { timeout: 120_000 }, () => {
   const files = walk(SRC, /\.tsx?$/).filter((path) => !path.endsWith('store/graphStore.ts'))
-    .map((path) => ({ path, file: relative(SRC, path), source: readFileSync(path, 'utf8') }));
+    .map((path) => ({ path, file: relative(SRC, path), source: readSource(path) }));
   const stores = storeNames(files);
   STORE_NAMES = stores;
   const reachesStore = (source: string, file: string) => identifiers(parse(source, file)).some((name) => stores.has(name));
@@ -2129,12 +2156,12 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
   // Fix round 4 of PR #200 (review 4 LOW-3, GM round 5 answer 1): a locked
   // colour swatch keeps its hue, dims to 0.45 with the disabled edge, and
   // never changes on hover; a variation (the image is the button) greys.
-  it('LOW-3: locked colour swatches dim to 0.45 with the grey edge and keep their hue; variations stay greyscale', () => {
+  it('LOW-3: locked colour swatches dim to 0.45 (the Inspector chip stays full, GM r20 on #208) with the grey edge and keep their hue; variations stay greyscale', () => {
     const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
     for (const name of Object.keys(NO_LABEL).filter((key) => NO_LABEL[key].swatch)) {
       const rule = shared.find(({ selector }) => new RegExp(`\\.${name}(?![\\w-])`).test(selector) && /:disabled/.test(selector) && /:hover/.test(selector));
       expect(rule, `${name}: one rule, its hover included`).toBeDefined();
-      expect(rule!.body).toMatch(/opacity:\s*0\.45\s*!important/);
+      expect(rule!.body).toMatch(NO_LABEL[name].fullColour ? /opacity:\s*1\s*!important/ : /opacity:\s*0\.45\s*!important/);
       expect(rule!.body).toMatch(/border-color:\s*var\(--sr-disabled-edge/);
       expect(rule!.body).toMatch(/filter:\s*none\s*!important/);
       expect(rule!.body).not.toMatch(/grayscale/);
@@ -2239,7 +2266,7 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
  * same disabled). Each is checked for a disabled look of its own below
  * (noLabelLooks): an image dims (opacity at most the shared grey's 0.55,
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
-const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; edgeKept?: boolean }> = {
+const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; fullColour?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
   'remotion-properties-panel__anchor-button': { image: false, selected: /\.remotion-properties-panel__anchor-button\[data-active='true'\]/ },
   // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
@@ -2248,7 +2275,9 @@ const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch
   // Fix round 4 (review 4 LOW-3; GM round 5 answer 1): colour swatches keep
   // their hue (the colour is the content), dimmed, no selected state.
   'cinema-shared-controls__swatch': { image: false, selected: null, swatch: true },
-  'inspector__palette-color': { image: false, selected: null, swatch: true },
+  // GM r20 on #208: the Inspector palette's chip is the content, always at
+  // its full colour; only its edge greys.
+  'inspector__palette-color': { image: false, selected: null, swatch: true, fullColour: true },
 };
 /** "Clearly dimmer" (GM r1 answer 2), fix round 3 of PR #200 (review 3
  * N-5), set by GM in round 5 (answer 2): the red Delete "clearly above the
@@ -2386,7 +2415,8 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(kindAt('components/panels/MaskPainterModal.tsx', /^Clear$/)).toEqual(['red']);
     expect(kindAt('components/panels/ChatPanel.tsx', /^Remove image$/)).toEqual(['neutral']);
     expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Remove accent/)).toEqual(['neutral']);
-    expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
+    // The row's trigger and confirm, and Empty's confirm with one project (GM r102).
+    expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red', 'red']);
     expect(kindAt('components/asset-trash/AssetTrash.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
   });
 

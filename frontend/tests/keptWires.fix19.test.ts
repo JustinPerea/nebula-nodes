@@ -127,6 +127,7 @@ describe('GM r28, 2: the person’s own selection isn’t in the in-app activity
     expect(files.length).toBeGreaterThan(100);
     expect(files.filter((file) => /selection\.changed|canvas\/events/.test(readFileSync(file, 'utf8')))).toEqual([]);
     const log = readFileSync(resolve(root, 'store/agentLogStore.ts'), 'utf8');
-    expect(log).toMatch(/if \(event\.type !== 'agentPresence'\) return;/);
+    // Main's form since the merge: it lists agentPresence and the replay's lines, and nothing else.
+    expect(log).toMatch(/if \(event\.type === 'agentPresence'\) listAgentAction\(event\);\s*else if \(event\.type === 'agentPresenceReplay'\)/);
   });
 });

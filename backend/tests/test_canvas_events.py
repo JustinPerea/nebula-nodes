@@ -15,6 +15,7 @@ from services.agent_presence import AgentPresence
 from services.canvas_events import (
     MAX_EVENT_BYTES,
     MAX_WAITERS,
+    OWN_REPLY_KIND,
     CanvasEventJournal,
     TooManyWaiters,
     actor_for_headers,
@@ -250,7 +251,7 @@ def api(monkeypatch, person):
     journal = CanvasEventJournal()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)
@@ -432,6 +433,81 @@ def test_events_endpoint_validates_and_filters_own_events(api):
     assert [e["seq"] for e in mine_skipped["events"]] == [2] and mine_skipped["cursor"] == 2
     with_self = client.get("/api/canvas/events?after=0&self=1", headers=AGENT).json()
     assert [e["seq"] for e in with_self["events"]] == [1, 2]
+
+
+def _with_reply_kind(monkeypatch):
+    # thread.replied is PR C's (#225) kind; this branch only filters on it.
+    import services.canvas_events as module
+    monkeypatch.setattr(module, "EVENT_KINDS", frozenset(module.EVENT_KINDS) | {OWN_REPLY_KIND})
+
+
+def test_own_replies_opt_in_keeps_only_the_callers_own_thread_replied(api, monkeypatch):
+    # A channel listener's own reply, by any route, must reach its feed (it
+    # ends the deliberate span: Justin, 2026-11-04); its own edits stay out.
+    _with_reply_kind(monkeypatch)
+    client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+    other = {"kind": "agent", "id": "ext:codex", "name": "Codex"}
+    journal.publish("node.added", actor=mine)
+    journal.publish("thread.replied", actor=mine, data={"replyId": "pt_1"})
+    journal.publish("thread.replied", actor=other, data={"replyId": "pt_2"})
+    journal.publish("node.added", actor=PERSON)
+    plain = client.get("/api/canvas/events?after=0", headers=AGENT).json()
+    assert [e["seq"] for e in plain["events"]] == [3, 4]
+    opted = client.get("/api/canvas/events?after=0&ownReplies=1", headers=AGENT).json()
+    assert [e["seq"] for e in opted["events"]] == [2, 3, 4]
+    off = client.get("/api/canvas/events?after=0&ownReplies=0", headers=AGENT).json()
+    assert [e["seq"] for e in off["events"]] == [3, 4]
+    assert client.get("/api/canvas/events?ownReplies=maybe").status_code == 422
+
+
+def test_own_replies_wakes_a_waiting_poll(api, monkeypatch):
+    _with_reply_kind(monkeypatch)
+    _client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+
+    async def run():
+        waiting = asyncio.ensure_future(journal.wait(after=0, wait=5, exclude_actor_id="ext:claude-code",
+                                                     keep_own=frozenset({OWN_REPLY_KIND})))
+        await asyncio.sleep(0.05)
+        journal.publish("node.added", actor=mine)
+        journal.publish(OWN_REPLY_KIND, actor=mine, data={"replyId": "pt_1"})
+        return await asyncio.wait_for(waiting, 2)
+
+    result = asyncio.run(run())
+    assert [(e["seq"], e["kind"]) for e in result["events"]] == [(2, "thread.replied")]
+
+
+def test_own_pin_answers_reach_only_the_same_sessions_feed(api):
+    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # ends its pin's span; a sibling session under the same token never sees
+    # it as its own. The session is kept beside the journal, never in an event.
+    client, _graph, journal, _ = api
+    mine = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_1"}, session="sess-a")
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_2"}, session="sess-b")
+    journal.publish("pin.resolved", actor=mine, data={"pinId": "pin_3"})
+    journal.publish("node.added", actor=mine, session="sess-a")  # only OWN_SESSION_KINDS are kept
+    assert set(journal._sessions) == {1, 2}
+    a = client.get("/api/canvas/events?after=0&ownReplies=1",
+                   headers={**AGENT, "X-Nebula-Agent-Session": "sess-a"}).json()
+    assert [e["data"]["pinId"] for e in a["events"]] == ["pin_1"]
+    assert "sess-a" not in str(a) and "session" not in a["events"][0]
+    b = client.get("/api/canvas/events?after=0&ownReplies=1",
+                   headers={**AGENT, "X-Nebula-Agent-Session": "sess-b"}).json()
+    assert [e["data"]["pinId"] for e in b["events"]] == ["pin_2"]
+    plain = client.get("/api/canvas/events?after=0", headers={**AGENT, "X-Nebula-Agent-Session": "sess-a"}).json()
+    assert plain["events"] == []
+    none = client.get("/api/canvas/events?after=0&ownReplies=1", headers=AGENT).json()
+    assert none["events"] == []
+
+
+def test_the_side_sessions_are_pruned_with_the_events():
+    journal = CanvasEventJournal(max_events=3)
+    actor = {"kind": "agent", "id": "ext:a", "name": "A"}
+    for n in range(6):
+        journal.publish("pin.resolved", actor=actor, data={"pinId": f"p{n}"}, session="s")
+    assert len(journal._sessions) <= 4 and min(journal._sessions) >= journal.oldest - 1
 
 
 def test_events_endpoint_times_out(api):

@@ -29,8 +29,11 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 import { CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const HEADING = "Couldn't run the node.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node

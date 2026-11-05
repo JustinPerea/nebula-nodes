@@ -22,7 +22,7 @@ export const RESTORE_NAMED_MAX = 3;
 // restore notice shows (restoreCopyLoader; review 13 of PR #199, LOW-1).
 export { SAVE_AS_A_PROJECT, editsRecoveredToast, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, agentClosedLine,
   OPEN_RECENTLY_DELETED, DEFAULT_PROJECT_LIMIT } from './restoreCopyCore';
-import { agentClosedLine, DEFAULT_PROJECT_LIMIT, quoted } from './restoreCopyCore';
+import { agentClosedLine, DEFAULT_PROJECT_LIMIT, quoted, sizeCapAdvice } from './restoreCopyCore';
 
 const OPENING = "Nebula’s project list was damaged, so it restored the last good copy";
 const REBUILT = "Nebula’s project list was damaged and there was no good copy, so it recovered every project it could still read.";
@@ -199,13 +199,6 @@ function deleteToSaveMany(context: CanvasLimitContext): string {
   return deletes === 1 ? 'Delete a project and Nebula will save them.' : `Delete ${deletes} projects and Nebula will save them.`;
 }
 
-
-/** GM r5, the size cap's advice by whether Recently deleted has items. */
-function sizeCapAdvice(trashHasItems: boolean): string {
-  return trashHasItems
-    ? 'Permanently delete a project in Recently deleted and Nebula will save it.'
-    : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
-}
 
 /** GM r6: what every limit and waiting line says of the canvas. Never that
  * it "stays open": the Projects home can't show a canvas that isn't a

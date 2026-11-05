@@ -1,0 +1,367 @@
+/**
+ * PR #204 round 15, GM r24 b: a list's empty state says it was read and held nothing, so it shows
+ * only when its read answered. A failed load shows its failure line and nothing else in that list;
+ * a real search with no results keeps "No matches. Drop images or videos here, or use Add."; a
+ * tab that isn't connected as you shows neither (the page line says why).
+ * The lists: the references grid (All and Inbox), the Add to menu's "No collections", and
+ * Settings' linked folders and vocabulary candidates.
+ * Round 17 (review 13 MEDIUM-1, GM r27 1): Agent review and Blind labeling too. After a failed load
+ * each shows only its eyebrow, its heading and the failure line: no "0 / 15 reviewed", no "Prepare
+ * the reference set in Blind labeling first.", no held-out set form. A read that answered "no batch"
+ * shows the setup state.
+ */
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null }));
+vi.mock('../src/lib/backend', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/backend')>(), apiFetch: transport.fetch }));
+vi.mock('../src/lib/personSession', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/lib/personSession')>(),
+  personToken: async () => transport.token,
+}));
+vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
+vi.mock('../src/components/commons/CommonsEvaluation', () => ({ CommonsEvaluation: () => null }));
+vi.mock('../src/components/commons/CommonsReview', () => ({ CommonsReview: () => null }));
+vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
+
+const { CommonsView } = await import('../src/components/commons/CommonsView');
+const { CommonsSettings } = await import('../src/components/commons/CommonsSettings');
+// The view's tests above stub the two panes; these take the real ones.
+const { CommonsReview } = await vi.importActual<typeof import('../src/components/commons/CommonsReview')>('../src/components/commons/CommonsReview');
+const { CommonsEvaluation } = await vi.importActual<typeof import('../src/components/commons/CommonsEvaluation')>('../src/components/commons/CommonsEvaluation');
+const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
+const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
+const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
+const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+
+const NO_MATCHES = 'No matches. Drop images or videos here, or use Add.';
+const INBOX_EMPTY = 'Nothing waiting in the inbox. Items agents add land here for you to accept.';
+const NO_FOLDERS = 'No folders linked. Linked folders are read, never written.';
+const NO_TERMS = 'No new terms proposed yet.';
+const TOKEN = 'a'.repeat(43);
+type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates' | 'review' | 'evaluation';
+const fails: Partial<Record<Load, number>> = {};
+/** Round 18c: the backend runs without the Commons (every route answers 404 "Commons is disabled"). */
+const commonsOff = { on: false };
+/** A load the test holds until it lets it answer. */
+const held: Partial<Record<Load, Promise<void>>> = {};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+async function answer(path: string): Promise<Response> {
+  const load = (['status', 'collections', 'search', 'folders', 'settings', 'candidates', 'review', 'evaluation'] as const).find((name) => path.endsWith(`/${name}`));
+  if (load && held[load]) await held[load];
+  if (commonsOff.on) return json({ detail: 'Commons is disabled' }, 404);
+  if (load && fails[load]) return json({ detail: 'no' }, fails[load]);
+  if (load === 'status') return json({ worker: { running: false, state: 'idle' }, queue: {}, meter: { calls: 0, cap: 100, resets_at: '2026-11-02T00:00:00Z' } });
+  if (load === 'collections') return json([]);
+  if (load === 'search') return json({ results: [] });
+  if (load === 'folders' || load === 'candidates') return json([]);
+  if (load === 'review' || load === 'evaluation') return json(null);
+  return json({});
+}
+
+const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+const text = () => document.body.textContent ?? '';
+const noCollectionsOption = () => screen.queryByRole('option', { name: 'No collections' });
+const commonsLines = () => [...document.querySelectorAll('[data-commons-line]')].map((line) => line.textContent ?? '');
+/** Every text the page showed while the test ran, not only at the end. */
+let seen = '';
+let watcher: MutationObserver | null = null;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  resetPersonSessionForTests();
+  resetCommonsSessionForTests();
+  resetLinesForTests();
+  resetBackendConnectionForTests();
+  window.sessionStorage.clear();
+  for (const key of Object.keys(fails)) delete fails[key as Load];
+  for (const key of Object.keys(held)) delete held[key as Load];
+  commonsOff.on = false;
+  transport.token = TOKEN;
+  transport.fetch.mockReset();
+  transport.fetch.mockImplementation(async (path: string) => answer(path));
+  seen = '';
+  watcher = new MutationObserver(() => { seen += `\n${text()}`; });
+  watcher.observe(document.body, { subtree: true, childList: true, characterData: true });
+});
+afterEach(() => {
+  watcher?.disconnect();
+  cleanup();
+  act(() => notePersonPromoted());
+  act(() => resetBackendConnectionForTests());
+  vi.useRealTimers();
+});
+
+describe('the references grid (GM r24 b)', () => {
+  it('a failed search: only its failure line, never "No matches"', async () => {
+    fails.search = 503; // round 18c: a 500 is "hit an error" (GM r30 3)
+    render(<CommonsView />);
+    await tick(1000);
+    expect(commonsLines()).toEqual(['Nebula couldn’t load the references because the server didn’t respond. Try again.']);
+    expect(seen).not.toContain(NO_MATCHES);
+    expect(document.querySelector('.commons-empty')).toBeNull();
+  });
+
+  it('a real search with no results: "No matches…"', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    expect(commonsLines()).toEqual([]);
+    expect(screen.getByText(NO_MATCHES)).toBeTruthy();
+  });
+
+  it('the Inbox: its empty state only after its search answered', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    fails.search = 500;
+    fireEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await tick(1000);
+    expect(seen).not.toContain(INBOX_EMPTY);
+    expect(screen.queryByText(NO_MATCHES)).toBeNull();
+    delete fails.search;
+    fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+    await tick(1000);
+    fireEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await tick(1000);
+    expect(screen.getByText(INBOX_EMPTY)).toBeTruthy();
+  });
+
+  it('a search that answered, then a refresh that failed: the empty state goes with it', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    expect(screen.getByText(NO_MATCHES)).toBeTruthy();
+    fails.search = 500;
+    fireEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await tick(1000);
+    fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+    await tick(1000);
+    expect(screen.queryByText(NO_MATCHES)).toBeNull();
+    expect(commonsLines()[0]).toMatch(/references/);
+  });
+
+  it('offline after a failed search, and back online before it reads again: still no empty state', async () => {
+    fails.search = 500;
+    render(<CommonsView />);
+    await tick(1000);
+    act(() => noteBackendConnection('offline'));
+    await tick(300);
+    expect(screen.queryByText(NO_MATCHES)).toBeNull();
+    delete fails.search;
+    let release: () => void = () => {};
+    held.search = new Promise<void>((resolve) => { release = resolve; });
+    act(() => noteBackendConnection('online'));
+    await tick(1000);
+    expect(screen.queryByText(NO_MATCHES)).toBeNull();
+    release();
+    await tick(100);
+    expect(screen.getByText(NO_MATCHES)).toBeTruthy();
+  });
+});
+
+describe('the Add to menu\'s collections (GM r24 b)', () => {
+  it('a failed load: no "No collections"', async () => {
+    fails.collections = 503;
+    render(<CommonsView />);
+    await tick(1000);
+    // GM r24 c's shape for the collections.
+    expect(commonsLines()).toEqual(['Nebula couldn’t load the collections because the server didn’t respond. Try again.']);
+    expect(noCollectionsOption()).toBeNull();
+  });
+  // Round 18d (GM r32 2): a failed re-read keeps the last good list, "No collections" included.
+  it('read, then a later read failed (back online): "No collections" stays, beside the line', async () => {
+    // A failed search, so the reconnect reads the page's loads again (useOfflineHiddenNotice).
+    fails.search = 500;
+    render(<CommonsView />);
+    await tick(1000);
+    expect(noCollectionsOption()).not.toBeNull();
+    act(() => noteBackendConnection('offline'));
+    await tick(300);
+    fails.collections = 500;
+    act(() => noteBackendConnection('online'));
+    await tick(1000);
+    expect(commonsLines().join(' ')).toMatch(/collections|load Commons/);
+    expect(noCollectionsOption()).not.toBeNull();
+  });
+  it('none, read: "No collections"', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    expect(noCollectionsOption()).not.toBeNull();
+  });
+});
+
+describe('a tab that isn\'t connected as you (GM r24 b)', () => {
+  it('neither an empty state nor a load\'s own line: the page line only', async () => {
+    transport.token = null;
+    act(() => reportPersonRequired());
+    render(<CommonsView />);
+    await tick(1000);
+    expect(commonsLines()).toHaveLength(1);
+    expect(commonsLines()[0]).toMatch(/^Nebula couldn’t load Commons because this tab isn’t connected as you\./);
+    expect(seen).not.toContain(NO_MATCHES);
+    // PR #204 round 18 (GM r28 3): the Add to select isn't left empty, in the one disabled look
+    // (the person lock's). Round 18d (GM r31 2): it says "Not loaded", with the reason.
+    const select = screen.getByRole('combobox', { name: ADD_TO_NAME }) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Not loaded']);
+    expect(select).toHaveAttribute('aria-label', 'Add to, not loaded. It works once this tab is connected as you.');
+    expect(screen.getByRole('button', { name: ADD_NAME })).toHaveAttribute('aria-label', 'Add, not loaded. It works once this tab is connected as you.');
+    expect(noCollectionsOption()).toBeNull();
+    expect(select).toHaveAttribute('data-person-lock', 'add references');
+    expect(select).toHaveAttribute('aria-disabled', 'true');
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it('the header keeps the status\'s place, held empty (GM r28 3)', async () => {
+    transport.token = TOKEN;
+    act(() => notePersonPromoted());
+    render(<CommonsView />);
+    await tick(1000);
+    const connected = document.querySelector('.commons-status')!;
+    expect(connected.textContent).toContain('Stopped');
+    expect(connected.hasAttribute('data-status-held')).toBe(false);
+    act(() => reportPersonRequired());
+    await tick(1000);
+    const held = document.querySelector('.commons-status')!;
+    expect(held.hasAttribute('data-status-held')).toBe(true);
+    expect(held.getAttribute('aria-hidden')).toBe('true');
+    // The same words and control as the default status, so it takes the same room; no button.
+    expect(held.textContent).toBe('StoppedStart');
+    expect(held.querySelector('button')).toBeNull();
+    expect(held.classList.contains('commons-status--stopped')).toBe(true);
+  });
+});
+
+describe('Settings\' lists (GM r24 b)', () => {
+  const settings = () => render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
+  it('a failed load: neither "No folders linked" nor "No new terms"', async () => {
+    fails.folders = 503;
+    settings();
+    await tick(1000);
+    // GM r25: the pane's own words, whichever of its reads failed.
+    expect(text()).toContain('Nebula couldn’t load Commons settings because the server didn’t respond. Try again.');
+    expect(seen).not.toContain(NO_FOLDERS);
+    expect(seen).not.toContain(NO_TERMS);
+  });
+  it('before the read answers: neither; read and empty: both', async () => {
+    let release: () => void = () => {};
+    held.folders = new Promise<void>((resolve) => { release = resolve; });
+    settings();
+    await tick(1000);
+    expect(seen).not.toContain(NO_FOLDERS);
+    expect(seen).not.toContain(NO_TERMS);
+    release();
+    await tick(100);
+    expect(screen.getByText(NO_FOLDERS)).toBeTruthy();
+    expect(screen.getByText(NO_TERMS)).toBeTruthy();
+  });
+});
+
+describe('Agent review and Blind labeling (review 13 MEDIUM-1, GM r27 1)', () => {
+  const REVIEW_LINE = 'Nebula couldn’t load Agent review because the server didn’t respond. Try again.';
+  const LABELING_LINE = 'Nebula couldn’t load Blind labeling because the server didn’t respond. Try again.';
+  const PREPARE_FIRST = 'Prepare the reference set in Blind labeling first.';
+  const COUNTS = /\d+ \/ \d+ reviewed|grades ready/;
+  const SETUP = 'Prepare the held-out set';
+  /** What the pane shows besides its heading block and its line. */
+  const rest = (section: Element) => [...section.children].filter((child) => !child.matches('header') && !child.hasAttribute('data-line-box') && !child.querySelector('[data-commons-line]') && !child.matches('[data-commons-line]'));
+
+  it('Agent review, a failed load: the eyebrow, the heading and the line, nothing else', async () => {
+    fails.review = 503;
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(text()).toContain(REVIEW_LINE);
+    expect(screen.getByRole('heading', { name: /Agent review/ })).toBeTruthy();
+    expect(text()).toContain('Does this read right?');
+    expect(seen).not.toContain(PREPARE_FIRST);
+    expect(seen).not.toMatch(COUNTS);
+    expect(seen).not.toContain('Download review record');
+    expect(document.querySelector('.review-progress')).toBeNull();
+    expect(rest(document.querySelector('section.commons-review')!)).toEqual([]);
+  });
+  it('Agent review, answered with no batch: the setup state and the counts', async () => {
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(screen.getByText(PREPARE_FIRST)).toBeTruthy();
+    expect(text()).toContain('0 / 15 reviewed');
+    expect(seen).not.toContain(REVIEW_LINE);
+  });
+  it('Agent review, failed and then the next poll answers: the setup state comes then', async () => {
+    fails.review = 503;
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(seen).not.toContain(PREPARE_FIRST);
+    delete fails.review;
+    await tick(5000);
+    expect(screen.getByText(PREPARE_FIRST)).toBeTruthy();
+    expect(text()).not.toContain(REVIEW_LINE);
+  });
+  it('Blind labeling, a failed load: the eyebrow, the heading and the line, no setup form', async () => {
+    fails.evaluation = 503;
+    render(<CommonsEvaluation />);
+    await tick(1000);
+    expect(text()).toContain(LABELING_LINE);
+    expect(screen.getByRole('heading', { name: /Blind labeling/ })).toBeTruthy();
+    expect(text()).toContain('A fresh pair of eyes.');
+    expect(seen).not.toContain(SETUP);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Prepare 15 held-out references/ })).toBeNull();
+    expect(rest(document.querySelector('section.commons-evaluation')!)).toEqual([]);
+  });
+  it('Blind labeling, answered with no batch: the setup form', async () => {
+    render(<CommonsEvaluation />);
+    await tick(1000);
+    expect(screen.getByText(SETUP)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Prepare 15 held-out references/ })).toBeTruthy();
+    expect(seen).not.toContain(LABELING_LINE);
+  });
+});
+
+describe('Add to and Add while the collections haven\'t loaded (round 18c, GM r30 2)', () => {
+  const TABS = ['All', 'Inbox', 'Agent review', 'Blind labeling', 'Settings'];
+  const select = () => document.querySelector<HTMLSelectElement>('.commons-field--inline select')!;
+  const add = () => document.querySelector<HTMLButtonElement>('.commons-add > button')!;
+  const disabledNotLoaded = (where: string) => {
+    expect(select().getAttribute('aria-disabled'), where).toBe('true');
+    expect(select().getAttribute('aria-label'), where).toBe('Add to, not loaded. It works again once the collections load.');
+    expect([...select().options].map((o) => o.textContent), where).toEqual(['Not loaded']);
+    expect(add().getAttribute('aria-disabled'), where).toBe('true');
+    expect(add().getAttribute('aria-label'), where).toBe('Add, not loaded. It works again once the collections load.');
+    fireEvent.click(add());
+    expect(screen.queryByRole('menu'), where).toBeNull();
+    expect(text(), where).not.toContain('Pick or create a collection first.');
+  };
+  for (const [how, set] of [['failed (503)', () => { fails.collections = 503; }], ['failed (500)', () => { fails.collections = 500; }],
+    ['pending', () => { held.collections = new Promise(() => {}); }]] as const) {
+    it(`${how}: both disabled on every tab, "Not loaded"`, async () => {
+      set();
+      render(<CommonsView />);
+      await tick(1000);
+      for (const tab of TABS) {
+        fireEvent.click(screen.getByRole('tab', { name: tab }));
+        await tick(300);
+        disabledNotLoaded(`${how}, ${tab}`);
+      }
+    });
+  }
+  it('loaded with none: "No collections" in the disabled grey, the select live (New collection…), Add live', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    expect(select().hasAttribute('data-no-choice')).toBe(true);
+    expect(select().getAttribute('aria-disabled')).toBeNull();
+    expect([...select().options].map((o) => o.textContent)).toEqual(['No collections', 'New collection…']);
+    expect(add().getAttribute('aria-disabled')).toBeNull();
+  });
+});
+
+describe('the Commons turned off (round 18c, GM r30 wording batch; round 18d, GM r31 layout M)', () => {
+  it('one page line in place of every tab\'s content: "Commons is turned off for this Nebula.", and no sections to pick', async () => {
+    commonsOff.on = true;
+    render(<CommonsView />);
+    await tick(2000);
+    expect(commonsLines()).toEqual(['Commons is turned off for this Nebula.']);
+    expect(document.querySelector('.commons-main, .commons-filters, .commons-panel-slot, .commons-settings')).toBeNull();
+    // Round 18d (GM r31 layout M, GM r32 1): no tabs, Add to, Add, status, Start or Stop.
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(document.querySelector('.commons-tabs, .commons-field--inline, .commons-add, .commons-status')).toBeNull();
+    expect(seen).not.toContain('Commons is disabled');
+  });
+});

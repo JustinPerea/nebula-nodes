@@ -53,7 +53,7 @@ def api(tmp_path, monkeypatch, person):
         store.commit(catalog)
     guard = ProviderStartGuard(tmp_path / "paid-starts.json")
 
-    async def capture(_data):
+    async def capture(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

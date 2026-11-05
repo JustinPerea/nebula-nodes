@@ -19,6 +19,11 @@
      item's height and the band read it, so floating panels stop exactly one
      notice and its gap above the bar (lib/bottomBar.ts). */
   --notice-h: 46px;
+  /* GM r13 (2), PR #204 round 9: "The band reserves the tallest single notice
+     (three lines)." A notice wraps to at most three lines at its 560 px cap;
+     the band holds that one, so the one notice a capped popover lets show
+     (lib/noticeWaiting) never lands on the popover's content. */
+  --notice-tallest-h: 66px;
   /* Every row's widest (GM - Design, round 3: "keep notices to one line in
      the copy. Cap their width at 560 px, and let a rare second line overlap a
      panel's edge while it shows. Don't grow the band."). Each item's own
@@ -40,32 +45,53 @@
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
   position: fixed;
-  left: var(--page-gutter, 16px);
+  /* The left tool rail takes its room as the log does on the right (GM -
+     Design, PR #216 r2 bug 3): WorkspaceRail's footprint plus the gap
+     (workspace-rail.css --notice-left-clearance), the gutter otherwise. */
   /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
      Agent log on the right edge takes its width out of the region
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
-     covers it; the stack centres in what is left. */
-  right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
-  bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+     covers it. PR #204 round 18 (GM r28 2): so does any open side panel
+     that reaches the notices' line (lib/noticeSides.ts writes
+     --notice-left-clearance and --notice-right-clearance on the region,
+     over the rail's own), and the stack is centred above the bar (the
+     window's centre), not in what is left: each side takes the larger of
+     the two clearances, so the region stays centred and narrows. Only when
+     that would leave less than --notice-centred-min-w does it give up the
+     centre, as little as it must: the side with the smaller clearance comes
+     back toward its own. */
+  --notice-centred-min-w: 420px;
+  --notice-l: max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px));
+  --notice-r: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px), var(--notice-right-clearance, 0px));
+  left: max(var(--notice-l), min(var(--notice-r), calc(100vw - var(--notice-r) - var(--notice-centred-min-w))));
+  right: max(var(--notice-r), min(var(--notice-l), calc(100vw - var(--notice-l) - var(--notice-centred-min-w))));
+  /* Beside a floating log in the card's column with 400 px there (GM r9),
+     NoticeRegion sets both sides inline so it stops short of the log
+     (lib/noticeStackPlace.ts `inset`). */
+  /* Its bottom edge's height above the window's bottom, once, for the
+     proposal card's own placement too (canvasProposals.css). */
+  --notice-region-bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  bottom: var(--notice-region-bottom);
   z-index: var(--sr-layer-notice, 20010);
   display: flex;
   justify-content: center;
   pointer-events: none;
   /* Follows the bar when it grows (its Canvas actions panel opens) on the
      undo notice's spring. */
-  transition: bottom 420ms var(--agent-log-spring);
+  transition: bottom 420ms var(--agent-log-spring), left 420ms var(--agent-log-spring), right 420ms var(--agent-log-spring);
 }
 
 /* The reserved band (GM, round 2: "Floating panels stop above a reserved
    notice band, whether or not a notice is showing. The band is the region's
-   height for one notice plus its gap"). Never drawn, never clicked: floating
+   height for one notice plus its gap"; GM r13 2 of PR #204: the tallest single
+   notice, three lines). Never drawn, never clicked: floating
    panels measure it (lib/bottomBar.ts floatingBottomLimit). */
 .notice-region__band {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(var(--notice-h) + var(--notice-gap));
+  height: calc(var(--notice-tallest-h) + var(--notice-gap));
   visibility: hidden;
   pointer-events: none;
 }
@@ -77,7 +103,124 @@
   gap: var(--notice-gap);
   min-width: 0;
   max-width: 100%;
+  /* Lifted as one over a docked Agent log's top edge, never the region (its
+     band stays on the bar's line for the floating panels): NoticeRegion
+     writes it (lib/noticeStackPlace.ts; GM - Design, PR #216 r3). */
+  margin-bottom: var(--notice-stack-lift, 0px);
   pointer-events: none;
+  transition: margin-bottom 420ms var(--notice-spring);
+}
+
+/* A layout switch (the stack going above the log or back, the log docking,
+   moving or being dragged) lands in its frame with no spring; the spring
+   stays for changes inside the stack, a notice coming or going (review 2
+   MEDIUM-1, GM - Design PR #216 r4). NoticeRegion marks the region for two
+   frames (lib/noticeStackPlace.ts JUMP_ATTR). */
+.notice-region[data-notice-jump] .notice-region__stack {
+  transition: none;
+}
+
+/* The give-way steps (GM - Design, PR #216 r5; lib/noticeStackPlace.ts).
+   Step 2: with no room under the card for its note and plan line, the
+   notices move above it, the newest nearest it: the card goes to the
+   stack's end, on its line. Then, no room above for them all, the older
+   ones fold into one row ("2 more notices") over the newest; then every
+   notice without an Undo folds into it ("4 notices", GM r7). A folded notice
+   stays mounted (its timers and hold go on) but takes no room, no clicks and
+   no focus. A move between steps glides from where each row was (Web
+   Animations, on the stack's spring), never a jump; reduced motion lands
+   it at once. */
+.notice-region:is([data-notice-mode='above'], [data-notice-mode='folded'], [data-notice-mode='pill']) .notice-region__slot > [data-notice-shrinks] {
+  order: 1;
+}
+
+.notice-region .notice-region__slot > [data-notice-folded] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The folded notices' one row: one 32 px line, the neutral notice's
+   surface, at the top of the stack; a click (or Enter, Space) unfolds them
+   above the newest and folds them again. */
+.notice-region__more {
+  display: none;
+  box-sizing: border-box;
+  height: 32px;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--notice-neutral-edge);
+  border-radius: var(--sr-radius-pill, 999px);
+  background: var(--notice-neutral-fill);
+  color: var(--notice-neutral-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.notice-region[data-notice-more-shown] .notice-region__more {
+  display: inline-flex;
+}
+
+/* The region's polite line (lib/noticeSay.ts): heard, never seen. */
+.notice-region__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+
+/* GM r69 Q1: the card capped under its own header and footer (a short
+   window, the offline banner over it): it never covers the banner, so it
+   scrolls as a whole, its footer (Accept, Reject) pinned at its foot on
+   the card's own surface (lib/noticeStackPlace.ts TIGHT_ATTR). */
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] > * {
+  flex-shrink: 0;
+}
+
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] > [data-notice-shrink-foot] {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--notice-tight-foot-fill, var(--notice-neutral-fill));
+}
+
+/* GM r69 Q4: with no card, the notices the person expanded fit on neither
+   side of a floating log: the stack caps to the side with more room and
+   scrolls, its top row (Show less) and at least one notice in view. */
+.notice-region[data-notice-stack-capped] .notice-region__stack {
+  justify-content: flex-start;
+  max-height: var(--notice-stack-cap);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  pointer-events: auto;
+}
+
+.notice-region[data-notice-stack-capped] .notice-region__stack > *,
+.notice-region[data-notice-stack-capped] .notice-region__slot > * {
+  flex-shrink: 0;
+}
+
+/* Under 400 px of room beside a docked Agent log, the whole stack sits above
+   the log at the region's full width (the card up to 600 px), card on top,
+   notices under it, never a sliver beside it (GM - Design, PR #216 r3). The
+   log never moves; at short heights its body gives way (GM r6). */
+.notice-region[data-above-log='true'] {
+  /* Only the log's clearance goes; an open side panel's (PR #204 round 18) stays. */
+  --notice-r: max(var(--page-gutter, 16px), var(--notice-right-clearance, 0px));
 }
 
 /* A slot per kind of item, in one order (lib/noticeSlots.ts). It draws no box
@@ -197,7 +340,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notice-region {
+  .notice-region,
+  .notice-region__stack {
     transition: none;
   }
 }
@@ -210,4 +354,11 @@
    the page (--notice-under-modal, set from the dialog's own scrim). */
 .notice-region [data-under-modal] {
   filter: brightness(var(--notice-under-modal, 0.55));
+}
+
+/* GM r13 (2), PR #204 round 9: while a capped popover is open, only the newest
+   item shows; the others wait (NoticeRegion marks them) and come back when it
+   goes or the popover closes. */
+.notice-region__slot > [data-notice-waiting] {
+  display: none !important;
 }

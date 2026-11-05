@@ -51,7 +51,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple
 from uuid import uuid4
 
-from services import catalog_recovery, project_cover
+from services import catalog_recovery, project_asset_purge, project_cover
 from services.saved_graph_upgrades import PARAMS_VERSION, catalog_params_behind, upgrade_catalog
 
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
@@ -371,13 +371,18 @@ def restore_from_trash(catalog: dict[str, Any], project_id: str) -> dict[str, An
 
 
 def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) -> bool:
-    """Drop trash older than TRASH_RETENTION. Returns whether anything went."""
+    """Drop trash older than TRASH_RETENTION. Returns whether anything went.
+
+    Their moodboards, characters and styles go too: the ids are noted in
+    the same catalog (project_asset_purge.note_purged), and the caller,
+    once it has committed, deletes them (main._purge_noted_assets)."""
     moment = at or datetime.now(timezone.utc)
     trash = catalog.get("trash") or {}
     expired = [project_id for project_id, entry in trash.items()
                if datetime.fromisoformat(entry["deletedAt"]) + TRASH_RETENTION <= moment]
     for project_id in expired:
         del trash[project_id]
+    project_asset_purge.note_purged(catalog, expired)
     return bool(expired)
 
 

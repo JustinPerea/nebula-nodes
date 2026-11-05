@@ -29,7 +29,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,6 +43,21 @@ from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrad
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _GLOBAL_DIR = "_global"
+
+# One lock per Style id: an update, a delete to Recently deleted, a restore
+# and a purge each hold it, as a purge of its project does
+# (services/project_asset_purge.py), so none of them acts on a file another
+# has moved or deleted in between.
+_LOCKS: dict[str, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _preset_lock(preset_id: str):
+    with _LOCKS_GUARD:
+        lock = _LOCKS.setdefault(preset_id, threading.RLock())
+    with lock:
+        yield
 
 
 def _root() -> Path:
@@ -210,10 +227,20 @@ class PresetStore:
         ``base_version`` (the ``version`` the caller read) makes it a checked
         write: VersionConflict when the Style is at another version. A
         ``modelId`` of "" clears the model (a style-only Style)."""
+        if not _ID_RE.fullmatch(str(preset_id)):
+            raise KeyError(preset_id)
+        with _preset_lock(preset_id):
+            return self._update(preset_id, params_version, base_version, fields)
+
+    def _update(self, preset_id: str, params_version: int, base_version: int | None,
+                fields: dict[str, Any]) -> dict[str, Any]:
         path = _find_file(preset_id)
         if not path:
             raise KeyError(preset_id)
-        preset = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            preset = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:  # moved to Recently deleted after it was found
+            raise KeyError(preset_id) from None
         if base_version is not None and int(preset.get("version", 1)) != base_version:
             raise VersionConflict(_upgraded(_as_current(preset)))
         stored = stored_version(preset.get("paramsVersion"))
@@ -238,10 +265,13 @@ class PresetStore:
         """Move a Style to Recently deleted and return the trash record.
         ``deleted_by`` is who asked (services/canvas_events.actor_record).
         KeyError when there is no live Style with that id."""
-        path = _find_file(preset_id)
-        if not path:
+        if not _ID_RE.fullmatch(str(preset_id)):
             raise KeyError(preset_id)
-        return asset_trash.move_to_trash(_root(), path, kind="style", deleted_by=deleted_by)
+        with _preset_lock(preset_id):
+            path = _find_file(preset_id)
+            if not path:
+                raise KeyError(preset_id)
+            return asset_trash.move_to_trash(_root(), path, kind="style", deleted_by=deleted_by)
 
     # -- Recently deleted (services/asset_trash.py) --
 
@@ -257,7 +287,8 @@ class PresetStore:
     def restore(self, preset_id: str) -> dict[str, Any]:
         """Bring a trashed Style back with the same id and contents, and return
         it as reads give it."""
-        asset_trash.restore(_root(), asset_trash.validate_id(preset_id))
+        with _preset_lock(asset_trash.validate_id(preset_id)):
+            asset_trash.restore(_root(), preset_id)
         restored = self.get(preset_id)
         if restored is None:  # moved back, then gone again before the read
             raise KeyError(preset_id)
@@ -265,7 +296,8 @@ class PresetStore:
 
     def purge(self, preset_id: str) -> None:
         """Delete a trashed Style for good. Only the person may (main.py)."""
-        asset_trash.purge(_root(), asset_trash.validate_id(preset_id))
+        with _preset_lock(asset_trash.validate_id(preset_id)):
+            asset_trash.purge(_root(), preset_id)
 
 
 preset_store = PresetStore()

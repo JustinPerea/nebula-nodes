@@ -12,6 +12,7 @@
 // - Review 17 LOW-1: the server promoting the tab clears a person-gate
 //   refusal's toast (add and delete); it never turns into the full line.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lockLine } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError, personRequiredCopy } from '../src/lib/errorCopy';
 
@@ -172,7 +173,7 @@ describe('GM r30 item 3: Send note waits for a note', () => {
     expect(send().disabled).toBe(true);
     // The gate's reason comes first while the banner shows.
     act(() => session.reportPersonRequired());
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
   });
 });
 

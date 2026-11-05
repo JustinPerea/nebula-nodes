@@ -16,6 +16,13 @@ from tests.conftest import stored_image_urls
 OLD = "nebula_nodes"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_start(monkeypatch):
+    """Each test is a fresh start: the once-per-start log lines are due again."""
+    monkeypatch.setattr(rehome, "_UNPAIRED_LOGGED", set())
+    monkeypatch.setattr("services.project_asset_purge._OTHER_CATALOG_LOGGED", set())
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
@@ -28,9 +35,9 @@ def env(tmp_path, monkeypatch):
         boards = tmp_path / "moodboards"
         characters = tmp_path / "characters"
         presets = tmp_path / "presets"
-        roots = [AssetRoot("moodboard", tmp_path / "moodboards", True),
-                 AssetRoot("character", tmp_path / "characters", True),
-                 AssetRoot("preset", tmp_path / "presets", False)]
+        roots = [AssetRoot("moodboard", tmp_path / "moodboards", True, explicit=True),
+                 AssetRoot("character", tmp_path / "characters", True, explicit=True),
+                 AssetRoot("preset", tmp_path / "presets", False, explicit=True)]
 
         def projects(self, *specs, active=None, trashed=()):
             """Make canvas projects: each spec is (name, [board ids], [character ids])."""

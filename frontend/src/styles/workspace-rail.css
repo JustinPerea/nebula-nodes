@@ -19,6 +19,12 @@
   --workspace-dock-spring: 420ms linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
 }
 
+/* While the rail is on screen, the notice region starts right of it, one
+   notice gap clear (noticeRegion.css; GM - Design, PR #216 r2 bug 3). */
+:root:has(.workspace-rail) {
+  --notice-left-clearance: calc(var(--workspace-rail-left) + var(--workspace-rail-width) + 8px);
+}
+
 /* The nav is the open rail's footprint, laid out at full size and never
    transformed past its centering, so drawers, pinned inspectors and canvas fit
    measure a stable box. It takes no pointer events itself; the visible shell

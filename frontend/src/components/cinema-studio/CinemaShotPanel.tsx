@@ -13,6 +13,7 @@ import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -271,7 +272,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 : motionHandoff?.status === 'error' ? 'Retry connection' : 'Send to motion'}
           </button>
           {motionHandoff?.status === 'error' ? (
-            <p className="cinema-shot-panel__motion-feedback" role="alert">{motionHandoff.error}</p>
+            <p className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>
           ) : (
             <p className="cinema-shot-panel__motion-feedback" role={motionHandoff ? 'status' : undefined}>
               {motionHandoff?.status === 'ready' ? 'Video node connected. Open it to set the prompt and generate.'
@@ -333,8 +334,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                   <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
                     {/* GM's WRAP rule: with Retry shown, the reason drops its own "try again". */}
                     {upload.status === 'uploading' ? 'Uploading…'
-                      : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
-                        : upload.error ?? "Couldn't upload this image."}
+                      : upload.canRetry ? <LineText text={shortLine(upload.error ?? "Couldn't upload this image.")} />
+                        : <LineText text={upload.error ?? "Couldn't upload this image."} />}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {upload.status === 'error' && upload.canRetry && (
