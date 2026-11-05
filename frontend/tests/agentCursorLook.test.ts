@@ -42,7 +42,7 @@ import {
   sameChain,
   type StackSpot,
 } from '../src/lib/agentCursorLook';
-import { nodeHeaderPoint } from '../src/lib/agentCursorMotion';
+import { chainPoint, nodeHeaderPoint, resolveAnchor } from '../src/lib/agentCursorMotion';
 
 /** GM - Design's agent cursor spec, §1 (the name's ink) and §4 (names, say, several agents). */
 
@@ -64,19 +64,21 @@ const BUILT_IN = [CLAUDE, CODEX, ...PALETTE];
  *   (insertOrder), the top one on its own target, each next exactly at
  *   max(the one above + its real step, its own target) (review 1, LOW-3:
  *   "at its target" and "a step under it" differ);
- * - so none is above its own target or more than 2 steps + 32 px below it,
- *   measured from the real tips and steps;
+ * - so none is above its own target or more than 2 steps + 32 px below it
+ *   (32 canvas units: 32 * zoom screen px, r62), measured from the real tips
+ *   and steps;
  * - the count sits exactly one step under the last full cursor.
  * Returns the worst offset below a target (screen px) for the fuzz stats.
  */
 type Listed = { key: string; target: { x: number; y: number }; since: number; say?: boolean; nameW?: number };
 
 /** The column order GM r24 sets: each, in arrival order, goes in just
- *  before the first placed member aimed more than 16 screen px below it. */
-function insertOrder(members: readonly Listed[], zoom: number): Listed[] {
+ *  before the first placed member aimed more than 16 canvas units below it
+ *  (canvas units at any zoom, like the target chain: r62). */
+function insertOrder(members: readonly Listed[]): Listed[] {
   const order: Listed[] = [];
   for (const m of members) {
-    const at = order.findIndex((o) => (o.target.y - m.target.y) * zoom > AGENT_CURSOR_STACK.radiusPx + 1e-9);
+    const at = order.findIndex((o) => o.target.y - m.target.y > AGENT_CURSOR_STACK.radiusPx + 1e-9);
     if (at === -1) order.push(m);
     else order.splice(at, 0, m);
   }
@@ -100,7 +102,7 @@ function expectColumnsCapped(list: readonly Listed[], laid: Map<string, StackSpo
     const x = members[0].target.x;
     const folds = members.length > AGENT_CURSOR_COLUMN_DRAWN;
     const full = folds ? members.slice(0, AGENT_CURSOR_COLUMN_DRAWN - 1) : members;
-    const order = insertOrder(full, zoom);
+    const order = insertOrder(full);
     let prevTip: number | null = null;
     let prev: Listed | null = null;
     let stepsAbove = 0;
@@ -116,7 +118,8 @@ function expectColumnsCapped(list: readonly Listed[], laid: Map<string, StackSpo
       expect(Math.abs(tip - expected)).toBeLessThanOrEqual(1e-6);
       expect(tip).toBeGreaterThanOrEqual(own - 1e-6);
       const below = tip - own;
-      expect(below).toBeLessThanOrEqual(stepsAbove + 2 * AGENT_CURSOR_STACK.radiusPx + 1e-6);
+      // The insert's 16 is canvas units: 16 * zoom screen px (r62).
+      expect(below).toBeLessThanOrEqual(stepsAbove + 2 * AGENT_CURSOR_STACK.radiusPx * zoom + 1e-6);
       fuzzStats.cursors += 1;
       if (below < 1e-6) fuzzStats.atTarget += 1;
       fuzzStats.worstBelowPx = Math.max(fuzzStats.worstBelowPx, below);
@@ -853,7 +856,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
       expectColumnsJustified(list, laid, 1);
       for (const members of columns.values()) {
         const full = (members.length > AGENT_CURSOR_COLUMN_DRAWN ? members.slice(0, 2) : members);
-        if (insertOrder(full, 1).some((m, k) => m.key !== full[k].key)) inserted += 1;
+        if (insertOrder(full).some((m, k) => m.key !== full[k].key)) inserted += 1;
       }
     }
     if (process.env.CURSOR_FUZZ_STATS) {
@@ -1189,18 +1192,58 @@ describe('the name pill edge (GM - Design, PR #211 r9 item 4)', () => {
 });
 
 describe('the target chain (GM - Design, #219 r24 Q2, r47 Q1)', () => {
-  it('runs the shared fixture the backend runs too, with the same chains', () => {
-    type T = { x: number; y: number } | { node: { x: number; y: number; width: number; height: number } };
+  it('runs the shared fixture the backend runs too, with the same chains, each target through chainPoint', () => {
+    type Box = { x: number; y: number; width: number; height: number };
+    type T = { x: number; y: number } | { node: Box; handle?: string; port?: Box };
     const fixture = JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/fixtures/cursor_chains.json'), 'utf8')) as {
-      cases: { name: string; targets: Record<string, T>; chains: Record<string, string[]> }[];
+      cases: { name: string; zoom?: number; targets: Record<string, T>; chains: Record<string, string[]> }[];
     };
-    expect(fixture.cases.length).toBeGreaterThanOrEqual(8);
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(11);
+    let ports = 0;
+    const zooms = new Set<number>();
     for (const c of fixture.cases) {
-      const points = new Map(Object.entries(c.targets).map(([k, t]) => [k,
-        'node' in t ? nodeHeaderPoint(t.node.x, t.node.y, t.node.width, t.node.height) : { x: t.x, y: t.y }]));
+      zooms.add(c.zoom ?? 1);
+      // Each node target as React Flow holds it, its port in handleBounds.
+      const lookup = new Map(Object.entries(c.targets).filter(([, t]) => 'node' in t).map(([k, t]) => {
+        const { node, handle, port } = t as { node: Box; handle?: string; port?: Box };
+        return [`node-${k}`, {
+          id: `node-${k}`, measured: { width: node.width, height: node.height },
+          internals: { positionAbsolute: { x: node.x, y: node.y },
+            handleBounds: { source: handle && port ? [{ id: handle, ...port }] : [], target: [] } },
+        }];
+      })) as unknown as Parameters<typeof chainPoint>[1];
+      const anchors = Object.entries(c.targets).map(([k, t]) => [k,
+        'node' in t ? { nodeId: `node-${k}`, ...(t.handle ? { handle: t.handle } : {}) } : { x: t.x, y: t.y }] as const);
+      const points = new Map(anchors.map(([k, a]) => [k, chainPoint(a, lookup)!]));
+      for (const [k, a] of anchors) {
+        const t = c.targets[k];
+        if ('node' in t && t.handle && t.port) {
+          ports += 1;
+          // Drawn on the port; counted at the node's header middle.
+          expect(resolveAnchor(a, lookup)).toEqual({ x: t.node.x + t.port.x + t.port.width / 2, y: t.node.y + t.port.y + t.port.height / 2 });
+          expect(points.get(k)).toEqual(nodeHeaderPoint(t.node.x, t.node.y, t.node.width, t.node.height));
+        }
+      }
       const chains = Object.fromEntries([...targetChains(points)].map(([k, v]) => [k, [...v].sort()]));
       expect(chains, c.name).toEqual(c.chains);
+      if (c.zoom !== undefined) {
+        // The column insert compares in the chain's canvas units at this
+        // zoom (r62): laid out in key order as arrival, two cursors of one
+        // column keep arrival order when they share a chain, and the later
+        // goes above when it aims more than 16 canvas units higher.
+        const keys = Object.keys(c.targets).sort();
+        const laid = deStackLayout(keys.map((k, i) => ({ key: k, target: points.get(k)!, since: i + 1 })), c.zoom);
+        for (const [i, a] of keys.entries()) {
+          for (const b of keys.slice(i + 1)) {
+            if (laid.get(a)!.column !== laid.get(b)!.column) continue;
+            const higher = points.get(a)!.y - points.get(b)!.y > AGENT_CURSOR_STACK.radiusPx;
+            expect(laid.get(b)!.at.y < laid.get(a)!.at.y, `${c.name}: ${b} above ${a}`).toBe(higher);
+          }
+        }
+      }
     }
+    expect(ports).toBeGreaterThanOrEqual(1);
+    expect([...zooms].sort()).toEqual([0.5, 1, 2]);
   });
 
   it('tells chains apart by who is in them', () => {

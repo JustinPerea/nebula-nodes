@@ -186,3 +186,8 @@ GM signed off round 2's design, with one tune to think. Built on bf178acd.
   - a CSS blur on every halo.
 - `npm run build`: the budget passed at an entry of 447,816 bytes raw (unchanged), and the dev-only check passed.
 - The `?cursorStates=1` driver still plays think. Its sequence wasn't touched.
+
+## Merged main (2026-11-05)
+
+- `AgentCursorLayer.tsx`, imports: kept this PR's expression, says, field and tuning imports and added main's `chainPoint` (#219 r62). Main's `AgentCursorAction` import is dropped: its only use, the ripple set, is replaced by the halo states in this PR.
+- `AgentCursorLayer.tsx`, the placer registration: kept this PR's wire drawing (`drawWire`, spring-trailed end, `updateWire(start, arrivedNow, dt)`) and added main's `field.markers.set(cursor.key, paintMarks)` registration beside `field.placers`, so main's draw order (aloft, crossing, column order) still repaints this cursor.

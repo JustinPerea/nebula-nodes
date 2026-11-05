@@ -46,6 +46,48 @@
   opacity: 0;
 }
 
+/* Three layers inside the cursor layer's own stacking context (its
+   z-index, so all of it stays above nodes and edges), GM - Design, #219
+   r106: the wires at the bottom (0), then every resting or gliding cursor
+   (1 and up), then any flying cursor (r103, 11 and up). Between columns
+   the DOM's order decides, as at rest. */
+.agent-cursor__wire-layer {
+  z-index: 0;
+}
+
+.agent-cursor {
+  z-index: 1;
+}
+
+/* A column member gliding past or under the member above it (a crossing:
+   CursorField.hold), and while any member of a column glides, the whole
+   column (CursorField.syncOrder): drawn in column order, the head on top,
+   so a gliding cursor never draws under a member it passes, however far
+   down the column, and labels never interleave (r75.2, r85, r95). The
+   depth is how many members sit above its slot (set from JS, at most 8),
+   so the DOM's order never decides it inside the column. The band is over
+   every unmarked cursor and every wire: an ordered column never drops
+   under another column's cursors or a wire (r106).
+   Known limit, accepted (GM - Design, #219 r111): a gliding column is
+   raised over other columns' resting cursors, never lowered. CSS z-index
+   alone can't keep the exact at-rest order between columns whose DOM
+   orders interleave (a member over a neighbour over another member is a
+   cycle). Columns don't overlap at rest, so nothing visible changes. Don't
+   "fix" it with a negative z-index: that put columns under the wires
+   (r106). */
+.agent-cursor:is([data-crossing='true'], [data-column-order='true']) {
+  z-index: calc(10 - var(--agent-cursor-crossing-depth, 0));
+}
+
+/* A flight draws over every other cursor, every column member and every
+   wire until it has landed and its column's glide is at rest (r103): it
+   never falls under a member it passes. Of two flights that overlap, the
+   later-started one is on top: its rank is the order its flight started
+   in (set from JS, CursorField.syncOrder). */
+.agent-cursor[data-aloft='true'] {
+  z-index: calc(11 + var(--agent-cursor-aloft, 0));
+}
+
 /* A leaving cursor whose name a live cursor now shows (a number taken over)
    hides its pill at once, for the rest of its exit: one name never shows
    twice (PR #211 reviews 4 and 5). */

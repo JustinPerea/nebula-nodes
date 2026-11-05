@@ -25,6 +25,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { SceneStopLines } = await import('../src/components/canvas/SceneStopLines');
 const { HELD_LOOK_DELAY_MS } = await import('../src/hooks/useHeldLook');

@@ -184,14 +184,35 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   display: none;
 }
 
-/* GM r16 on #208: when a new palette changes the swatch count, the floating
-   Inspector grows or shrinks on the layout spring (a sampled spring, as
-   asset-move.css's), not in one jump. Only then (review 7 M2): the popover
-   carries data-palette-resizing while a swatch-count change settles
-   (NodeInspectorPopover.tsx), and otherwise moves with its node at once on
-   a pan, zoom, drag or resize. */
-.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+/* GM r68: the floating Inspector grows to fit its content, and when that
+   height changes (an upload landing, "No preview" collapsing, a section
+   opening) it grows or shrinks on the layout spring (a sampled spring, as
+   asset-move.css's; GM r16 on #208), anchored at the top: once it has opened,
+   its top holds and only its height moves, so a row under the pointer stays
+   put (r72). Its top moves on the same spring only when it is placed again
+   without the node moving: its content settling while it opens, a window
+   resize letting go of a held top, or the card growing under it (r82). Only
+   then (review 7 M2): the popover carries data-content-resizing while the
+   change settles (NodeInspectorPopover.tsx), and otherwise moves with its
+   node at once on a pan, zoom or drag. GM r104: its left edge rides the
+   same spring, so the edge facing a card that widens in place (an Image
+   Input's preview landing, the panel on its right) follows the card's edge
+   with the height, as one motion; on the left the card's left edge doesn't
+   move, so neither does the panel's. */
+.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned) {
   --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring),
+    left var(--inspector-layout-spring);
+}
+
+/* GM r107: while the card's own width springs (lib/cardWidthSpring.ts, the
+   same spring), the panel follows the card's edge frame by frame
+   (NodeInspectorPopover.tsx), so its left rides no spring of its own: one
+   on top would lag the card and open the gap or close it. Its height and
+   top stay on the spring (GM r114: a window resize in the middle of the
+   card's spring re-places the panel, and that re-place takes the spring;
+   only the left, which tracks the card, is exempt). */
+.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned) {
   transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
 }
 
@@ -199,12 +220,13 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
    mid-spring, NodeInspectorPopover.tsx), no property is transitioned, so a
    running spring is cancelled and the panel is at its end layout at once
    (a 0s duration alone would let it run on to the same end value). */
-.node-inspector-popover:not([data-palette-resizing]) {
+.node-inspector-popover:not([data-content-resizing]) {
   transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+  .node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned),
+  .node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned) {
     transition: none;
   }
 }
@@ -280,6 +302,13 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
   padding: 10px;
   overscroll-behavior: contain;
   scroll-padding-bottom: var(--scroll-fade-size);
+}
+
+/* What the body holds, measured for the panel's content-fit height (GM r68,
+   NodeInspectorPopover.tsx): a flow root, so its sections' margins stay
+   inside its own height. */
+.node-inspector-popover__content {
+  display: flow-root;
 }
 
 .node-inspector-popover .inspector__actions {
@@ -597,9 +626,13 @@ body:not(.app-slava-restraint) .inspector__file-button {
   display: none;
 }
 
+/* width/height on the <img> (its stored _previewSize, lib/previewSize.ts) give
+   it its aspect ratio before it decodes; height: auto keeps that ratio at the
+   full width instead of the attribute's pixel height. */
 .inspector__file-preview {
   display: block;
   width: 100%;
+  height: auto;
   margin-top: 6px;
 }
 

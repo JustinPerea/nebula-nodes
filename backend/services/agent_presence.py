@@ -39,7 +39,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Collection, Iterator, Mapping
 
 from services import node_route, universal_ports
 from services.cursor_actions import ACTIONS, SESSION_RE as _SESSION_RE, refusal as action_refusal
@@ -649,7 +649,8 @@ class AgentPresence:
         height = float(seen.get("height") or 0.0)
         return _header_point(box["x"], box["y"], width, height)
 
-    def carry_nodes(self, positions: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, Any]]:
+    def carry_nodes(self, positions: Mapping[str, Mapping[str, Any]] | None,
+                    placed: Collection[str] | None = None) -> list[dict[str, Any]]:
         """Every graph sync (main._carry_cursors, whatever moved the nodes:
         a drag, an arrange, an agent's move or apply, an undo or redo)
         passes the node positions it sent. A session cursor whose node moved
@@ -661,15 +662,26 @@ class AgentPresence:
         The cursors one move makes arrive keep their order among themselves.
         ``None`` (the graph replaced or cleared) forgets the positions: node
         ids restart, and nothing is carried. Returns the person-only arrival
-        updates (``[{agentId, key, ordinal, since}]``) for the person's tabs."""
+        updates (``[{agentId, key, ordinal, since}]``) for the person's tabs.
+
+        ``placed`` (when given) names the nodes with a stored position. A node
+        without one is drawn where main._display_positions computes it, and
+        that spot shifts when a sibling gets a position or is deleted; an open
+        canvas keeps such a node where it drew it (only a sync's ``moved``
+        moves it), so it keeps the box it had here too: no false carry
+        (#219 review 2, LOW-3). Its first stored position is its first move."""
         previous = self._boxes
         if positions is None:
             self._boxes = None
             return []
         current: dict[str, dict[str, float]] = {}
         for node_id, position in positions.items():
+            node_id = str(node_id)
+            if placed is not None and node_id not in placed and previous and node_id in previous:
+                current[node_id] = previous[node_id]  # unplaced: nothing moved it
+                continue
             try:
-                current[str(node_id)] = {"x": float(position["x"]), "y": float(position["y"])}
+                current[node_id] = {"x": float(position["x"]), "y": float(position["y"])}
             except (KeyError, TypeError, ValueError):
                 continue
         self._boxes = current

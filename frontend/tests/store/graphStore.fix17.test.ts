@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 17 (review 15, GM r26), on round 12's keyed backend in
@@ -26,11 +27,24 @@ const deliver = (event: Record<string, unknown>) => { for (const handler of tran
 const socketSends = (event: Record<string, unknown>) => { if (wsq.hold) wsq.queue.push(JSON.parse(JSON.stringify(event))); else deliver(event); };
 
 const fetchMock = vi.fn();
-globalThis.fetch = fetchMock as unknown as typeof fetch;
+/** Requests the fake backend hasn't answered yet, so a test can end once its
+ * last step has been answered instead of in the next test (the Redo test). */
+let unanswered = 0;
+globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+  unanswered += 1;
+  try {
+    return await (fetchMock as unknown as typeof fetch)(...args);
+  } finally {
+    unanswered -= 1;
+  }
+}) as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -381,11 +395,12 @@ describe('GM r26 answer 2: the asked-again prompt is the only line for the scene
 
   it('the person’s own delete and Undo: "Restored the node." with [Redo] gives way to the prompt; Redo still works by the keyboard', async () => {
     const h = backend(S3);
-    withRestore(h);
+    const restores = withRestore(h);
     await clashOnS1(h);
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(clashes16().n1?.line).toBe(CLASH16), { timeout: 3000, interval: 5 });
     await sleep(60);
@@ -393,6 +408,17 @@ describe('GM r26 answer 2: the asked-again prompt is the only line for the scene
     expect(useGraphStore.getState().redoStack.length).toBeGreaterThan(0);
     useGraphStore.getState().redo();
     await vi.waitFor(() => expect(gone()).toBe(true), { timeout: 3000, interval: 5 });
+    // The card goes at the press, before the Redo's restore is even sent:
+    // the test ends once Nebula has had it and answered (and the store has
+    // taken the answer, one macrotask on), or the hold on n1 runs into the
+    // next test and keeps its n1 off the canvas. The next test passed only on
+    // the scene edits this Redo kept aside, until afterEach reset them
+    // (fix/ci-flakes-rename-fix16).
+    await vi.waitFor(() => {
+      expect(restores.at(-1)?.remove).toContain('n1');
+      expect(unanswered).toBe(0);
+    }, { timeout: 3000, interval: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it('a line about another node stays beside the prompt', async () => {

@@ -2,12 +2,15 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import * as api from '../src/lib/api';
 import { serializeGraph, deserializeGraph } from '../src/lib/graphFile';
 import { getCreateModels } from '../src/lib/createModels';
 import { useIsValidConnection } from '../src/hooks/useIsValidConnection';
 import { loadRunHistory, persistRunHistory } from '../src/lib/runHistory';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const flow = vi.hoisted(() => ({ nodes: [] as unknown[], edges: [] as unknown[] }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));

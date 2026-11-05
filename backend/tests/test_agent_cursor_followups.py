@@ -373,7 +373,9 @@ def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(
     assert reply.json()["summary"] == "moved 1"
     (person,) = [json.loads(t) for t in _presence_frames(api.person_socket)]
     (agent,) = [json.loads(t) for t in _presence_frames(api.listener)]
-    assert person["say"] == "Moved 1 node" and "log" not in person
+    # The Agent log keeps the line naming the node (#225, GM r83.1); the
+    # bubble has the person's words.
+    assert person["say"] == "Moved 1 node" and person["log"] == "Moved “Text Input”"
     assert agent["say"] == "moved 1"
     (replayed,) = api.main.agent_presence.replay()
     assert replayed["say"] == "Moved 1 node"
@@ -381,18 +383,169 @@ def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(
 
 def test_the_shared_chain_fixture_backend_side():
     """GM r47: one chain definition. The same cases run through the tab's
-    targetChains (frontend/tests/agentCursorLook.test.ts)."""
+    chainPoint and targetChains (frontend/tests/agentCursorLook.test.ts).
+    Each target goes through the backend's own _target_point, with the
+    nodes' sizes from a view report at the case's zoom: a port counts as its
+    node's header middle (r62), and the zoom changes no chain."""
     from pathlib import Path
 
-    from services.agent_presence import _header_point, _target_chains
+    from services.agent_presence import _target_chains
 
     cases = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["cases"]
-    assert len(cases) >= 8
+    assert len(cases) >= 11
+    assert any("handle" in t for c in cases for t in c["targets"].values())
+    assert {c.get("zoom", 1) for c in cases} >= {0.5, 1, 2}
     for case in cases:
-        points = {}
+        presence = AgentPresence(Clock())
+        boxes, seen, targets = {}, [], {}
         for key, target in case["targets"].items():
             node = target.get("node")
-            points[key] = (_header_point(node["x"], node["y"], node["width"], node["height"]) if node
-                           else (float(target["x"]), float(target["y"])))
+            if node is None:
+                targets[key] = {"x": target["x"], "y": target["y"]}
+                continue
+            node_id = f"node-{key}"
+            boxes[node_id] = {"x": float(node["x"]), "y": float(node["y"])}
+            seen.append({"id": node_id, "x": node["x"], "y": node["y"], "width": node["width"], "height": node["height"]})
+            targets[key] = {"nodeId": node_id, **({"handle": target["handle"]} if "handle" in target else {})}
+        presence.report_view({"viewport": {"x": 0, "y": 0, "zoom": case.get("zoom", 1)}, "nodes": seen})
+        points = {key: presence._target_point(target, boxes) for key, target in targets.items()}
         chains = {key: sorted(chain) for key, chain in _target_chains(points).items()}
         assert chains == case["chains"], case["name"]
+
+
+def test_the_shared_carry_traces_backend_side():
+    """GM r75.3: the drop's arrival on the traces the tab runs too
+    (frontend/tests/agentCursorLayer.test.tsx). a, arrived first, rides n2;
+    h, arrived second, points at a port on n1. Dropped at each point of the
+    path, a arrives (its chain changes) exactly from ``arrivalFrom`` on: never
+    onto h's drawn tip, which counts at n1's header (r62), and onto the header
+    once within ARRIVAL_RADIUS of it. h never arrives (n1 didn't move). With no
+    arrival a keeps its place: plain arrival order, which is what the tab
+    lays out for a drawn overlap during the drag too."""
+    from pathlib import Path
+
+    traces = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["traces"]
+    assert {t["zoom"] for t in traces} == {0.1, 0.25, 0.5, 1, 2}
+    # r85: a left input near the header (y 62) at 0.25, 0.5 and 1.
+    assert sorted(t["zoom"] for t in traces if t["h"]["port"]["x"] < 0 and t["h"]["port"]["y"] == 62) == [0.25] * 3 + [0.5] * 3 + [1] * 3
+    assert sum(t["arrivalFrom"] is None for t in traces) >= 9
+    assert sum(t["arrivalFrom"] is not None for t in traces) >= 3
+    for trace in traces:
+        h_node, carry, path = trace["h"]["node"], trace["carry"], trace["path"]
+        arrived_at = []
+        for i, (x, y) in enumerate(path):
+            clock = Clock()
+            presence = AgentPresence(clock)
+            presence.report_view({"viewport": {"x": 0, "y": 0, "zoom": trace["zoom"]}, "nodes": [
+                {"id": "n1", "x": h_node["x"], "y": h_node["y"], "width": h_node["width"], "height": h_node["height"]},
+                {"id": "n2", "x": path[0][0], "y": path[0][1], "width": carry["width"], "height": carry["height"]},
+            ]})
+            assert presence.carry_nodes(_boxes(n1=(h_node["x"], h_node["y"]), n2=tuple(path[0]))) == []
+            a = _form(presence, "a", {"nodeId": "n2"})
+            clock.now += 1
+            h = _form(presence, "h", {"nodeId": "n1", "handle": trace["h"]["handle"]})
+            clock.now += 1
+            updates = presence.carry_nodes(_boxes(n1=(h_node["x"], h_node["y"]), n2=(x, y)))
+            keys = {u["key"] for u in updates}
+            assert h["session"]["key"] not in keys, trace["name"]
+            if a["session"]["key"] in keys:
+                arrived_at.append(i)
+        expected = [] if trace["arrivalFrom"] is None else list(range(trace["arrivalFrom"], len(path)))
+        assert arrived_at == expected, trace["name"]
+
+
+# -- #219 review 2 (round 3c) ----------------------------------------------------
+
+def test_an_expired_cursor_joins_no_chain():
+    """Review 2, LOW-2 B5: a cursor past PRESENCE_TTL_SECONDS is gone from
+    every tab, so a carry onto where it was is no arrival, even before any
+    new event clears its slot."""
+    from services.agent_presence import PRESENCE_TTL_SECONDS
+
+    clock = Clock()
+    presence = AgentPresence(clock)
+    presence.carry_nodes(_boxes(n1=(0, 0)))
+    _form(presence, "q", {"x": 300.0, "y": 0.0})
+    clock.now += 100
+    _form(presence, "a", {"nodeId": "n1"})
+    # q's last event is now past the TTL, a's isn't; no event since.
+    clock.now += PRESENCE_TTL_SECONDS - 90
+    # 10 units off q's old point: q expired, so a's chain is still empty.
+    assert presence.carry_nodes(_boxes(n1=(290, 0))) == []
+    # A live q there links (the same move, the control).
+    assert presence.carry_nodes(_boxes(n1=(0, 0))) == []  # back out of its reach
+    _form(presence, "q", {"x": 300.0, "y": 0.0})
+    clock.now += 1
+    (update,) = presence.carry_nodes(_boxes(n1=(290, 0)))
+    assert update["key"] == next(c["session"]["key"] for c in presence.replay() if c["target"] == {"nodeId": "n1"})
+
+
+def test_a_node_with_no_stored_position_keeps_its_box_when_its_siblings_shift_it():
+    """Review 2, LOW-3: main._display_positions puts a node with no stored
+    position right of the others, so its computed spot shifts when a sibling
+    gets a position or is deleted. An open canvas doesn't move it for that,
+    so the carry doesn't either: no false arrival. Its first stored position
+    is a move like any other."""
+    clock = Clock()
+    presence = AgentPresence(clock)
+    # B and C unplaced, at 300 and 600 (y 100).
+    presence.carry_nodes(_boxes(n0=(0, 900), B=(300, 100), C=(600, 100)), placed={"n0"})
+    _form(presence, "c", {"nodeId": "C"})
+    clock.now += 1
+    _form(presence, "q", {"x": 355.0, "y": 100.0})  # 5 from where C would be computed next
+    clock.now += 1
+    # B placed at (50, 500): C's computed spot is now 350. Not a move.
+    assert presence.carry_nodes(_boxes(n0=(0, 900), B=(50, 500), C=(350, 100)), placed={"n0", "B"}) == []
+    # B deleted: still not a move.
+    assert presence.carry_nodes(_boxes(n0=(0, 900), C=(300, 100)), placed={"n0"}) == []
+    # C's first stored position, next to q: a move into q's chain.
+    (update,) = presence.carry_nodes(_boxes(n0=(0, 900), C=(350, 100)), placed={"n0", "C"})
+    assert update["ordinal"] == 1
+    # Without `placed` (every position stored, the old call), a box moves as given.
+    assert presence.carry_nodes(_boxes(n0=(0, 900), C=(600, 100))) != []
+
+
+def test_a_sibling_placed_by_the_layout_route_moves_no_unplaced_node(sockets):
+    """LOW-3 through main: the person's first drag of agent-made node B
+    stores its position; agent-made C, never placed, is computed 250 units
+    left now, next to q. No arrival: the canvas never moved C."""
+    api = sockets
+    n0 = api.graph.add_node("text-input", {"value": "hi"})
+    b = api.graph.add_node("text-input", {"value": "hi"})
+    c = api.graph.add_node("text-input", {"value": "hi"})
+    assert api.client.put("/api/graph/layout", headers=PERSON,
+                          json={"positions": {n0: {"x": 0, "y": 900}}}).status_code == 200
+    shown = api.main._display_positions(list(api.main.cli_graph.nodes.values()))
+    assert shown[c] == {"x": 600.0, "y": 100.0}
+    for lane, target in (("lane-c", {"nodeId": c}), ("lane-q", {"x": 355.0, "y": 100.0})):
+        api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": lane},
+                        json={"target": target, "action": "look"})
+        api.presence_clock.now += 1
+    api.person_socket.sent.clear()
+    assert api.client.put("/api/graph/layout", headers=PERSON,
+                          json={"positions": {b: {"x": 50, "y": 500}}}).status_code == 200
+    assert api.main._display_positions(list(api.main.cli_graph.nodes.values()))[c] == {"x": 350.0, "y": 100.0}
+    assert all(json.loads(t)["type"] != "agentPresenceArrival" for t in api.person_socket.sent)
+
+
+def test_a_person_say_takes_the_log_out_of_the_person_form_only(sockets):
+    """Review 2, LOW-2 B7: with ``person_say``, the person's tabs show it as
+    the bubble; agents read ``say`` and ``log`` as before. The person's form
+    keeps a ``log`` that says something else (the nodes an edit named, #225
+    GM r83.1) and drops one that would repeat the bubble."""
+    import asyncio
+
+    from services.agent_presence import request_headers_scope
+
+    api = sockets
+    node = api.graph.add_node("text-input", {"value": "hi"})
+    with request_headers_scope(CLAUDE):
+        asyncio.run(api.main._show_agent({"nodeId": node}, say="moved 1", log="Moved the prompt",
+                                         person_say="Moved 1 node"))
+        asyncio.run(api.main._show_agent({"nodeId": node}, say="moved 1", log="Moved 1 node",
+                                         person_say="Moved 1 node"))
+    kept, same = [json.loads(t) for t in _presence_frames(api.person_socket)]
+    agent = json.loads(_presence_frames(api.listener)[0])
+    assert kept["say"] == "Moved 1 node" and kept["log"] == "Moved the prompt"
+    assert same["say"] == "Moved 1 node" and "log" not in same
+    assert agent["say"] == "moved 1" and agent["log"] == "Moved the prompt"

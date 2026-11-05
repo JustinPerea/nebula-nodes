@@ -104,6 +104,9 @@ export interface OwnAdd {
    * nodes as Accept added them. Undo removes one only while nobody edited it
    * since; one an agent changed is kept, as the agent left it. */
   accepted?: Record<string, Node<NodeData>>;
+  /** The wires Accept removed (a model change's dropped connections, PR
+   * #216 r3): Undo puts each back while both its ends are still there. */
+  unwired?: Edge[];
 }
 
 export interface OwnParamChange {
@@ -154,13 +157,14 @@ export function isSliceStep(entry: unknown): entry is ForeignEdit | OwnAdd {
 }
 
 export function ownAddStep(nodeIds: Iterable<string>, params: OwnParamChange[] = [],
-  accepted?: Node<NodeData>[]): OwnAdd {
+  accepted?: Node<NodeData>[], unwired: Edge[] = []): OwnAdd {
   const ids = [...new Set(nodeIds)];
   return {
     kind: 'own-add',
     nodeIds: ids,
     ...(params.length > 0 ? { params } : {}),
     ...(accepted ? { accepted: Object.fromEntries(accepted.map((node) => [node.id, keep(node)])) } : {}),
+    ...(unwired.length > 0 ? { unwired: unwired.map((edge) => ({ ...edge, selected: false })) } : {}),
     before: { nodes: Object.fromEntries(ids.map((id) => [id, null])), edges: {} },
     after: { nodes: {}, edges: {} },
   };
@@ -201,6 +205,16 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
     if (!owned.has(edge.source) && !owned.has(edge.target)) continue;
     step.before.edges[edgeKey(edge)] = null;
     step.after.edges[edgeKey(edge)] = { ...edge, selected: false };
+  }
+  // The wires Accept removed come back while both ends are still on the
+  // canvas and nobody drew the same wire since (PR #216 r3).
+  const present = new Set(nodes.map((node) => node.id));
+  const drawn = new Set(edges.map((edge) => edgeKey(edge)));
+  for (const edge of step.unwired ?? []) {
+    const key = edgeKey(edge);
+    if (!present.has(edge.source) || !present.has(edge.target) || drawn.has(key)) continue;
+    step.before.edges[key] = edge;
+    step.after.edges[key] = null;
   }
   // Param keys it changed on a node it didn't add: the node as it is now,
   // with only what the step changed put back (a key that wasn't set is unset

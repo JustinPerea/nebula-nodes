@@ -31,12 +31,15 @@ const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { usePricingStore } from '../src/store/pricingStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import * as api from '../src/lib/api';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const PRICING = JSON.parse(readFileSync(resolve(__dirname, '../../backend/data/model_pricing.json'), 'utf8'));
 const codex = { agent: { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true }, at: 1 };

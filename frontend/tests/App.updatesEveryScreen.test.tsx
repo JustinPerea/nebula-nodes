@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ViewMode } from '../src/store/uiStore';
 
@@ -54,11 +54,15 @@ vi.mock('../src/components/video-editor/RemotionEditorView', async () => ({ Remo
 vi.mock('../src/components/editor/EditorView', async () => ({ EditorView: await studio('Video editor')() }));
 vi.mock('../src/components/commons/CommonsView', async () => ({ CommonsView: await studio('Commons')() }));
 import App from '../src/App';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { usePricingStore } from '../src/store/pricingStore';
 import { useAgentNotesStore } from '../src/store/agentNotesStore';
+
+// App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const note = {
   id: 'an_1', author: { kind: 'agent', id: 'claude', name: 'Claude Code', color: '#E8825A' }, source: 'agent',

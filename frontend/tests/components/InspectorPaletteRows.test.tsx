@@ -9,9 +9,8 @@ import type { NodeData } from '../../src/types';
  * GM r12 on #208 (round 8, 7b): "the inspector shows exactly 3 palette rows;
  * the 4th swatch onwards and the Add / Extract from reference row are hidden
  * with no sign of more." The palette list shows every swatch with no scroll
- * of its own, the Add / Extract row comes right after the last swatch, and
- * the floating Inspector takes the whole body's height up to the room there
- * is; only then does its body scroll, as one.
+ * of its own and the Add / Extract row comes right after the last swatch.
+ * The floating Inspector grows to fit any body, the palette's too (GM r68).
  */
 
 vi.mock('../../src/lib/backend', async (original) => ({
@@ -20,7 +19,7 @@ vi.mock('../../src/lib/backend', async (original) => ({
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 
 import { Inspector } from '../../src/components/panels/Inspector';
-import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
+import { CONTENT_RESIZE_MS, NodeInspectorPopover, OPEN_STABLE_FRAMES } from '../../src/components/panels/NodeInspectorPopover';
 import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 
@@ -78,23 +77,22 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
   });
 });
 
-describe('the floating Inspector takes the whole palette before its body scrolls (GM r12, 7b)', () => {
-  // jsdom has no layout: the body's viewport is the panel less its header
-  // and foot (CHROME); its content is as tall as the test says.
+// The floating Inspector's height (it took the whole palette before its body
+// scrolled, GM r12) is now the same content-fit rule for every body (GM r68:
+// "Drop ... the palette exception"): NodeInspectorContentFit.test.tsx. Here,
+// with the real Inspector (review 1 LOW-4 on #226): its palette sits in the
+// box the popover measures, and swatches added on the real control change
+// the height the popover gives it.
+describe('the floating Inspector with the real Inspector and a palette (review 1 LOW-4)', () => {
+  // jsdom has no layout: the panel's header and foot are CHROME; the content
+  // box is as tall as the real rows rendered in it (ROW each, past a BASE).
   const CHROME = 115;
-  let contentHeight = 0;
-  let animated: number | null = null;
+  const BASE = 180;
+  const ROW = 34;
   let callbacks: Map<number, FrameRequestCallback>;
   let nextRaf = 0;
   const placed: HTMLElement[] = [];
 
-  function place(attrs: Record<string, string>, at: () => DOMRect) {
-    const element = document.createElement('div');
-    for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, value);
-    element.getBoundingClientRect = at;
-    document.body.append(element);
-    placed.push(element);
-  }
   function frames(n: number) {
     for (let i = 0; i < n; i++) {
       act(() => {
@@ -104,23 +102,9 @@ describe('the floating Inspector takes the whole palette before its body scrolls
       });
     }
   }
-  const bounds = () => {
-    const { style } = document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
-    return { top: parseFloat(style.top), height: parseFloat(style.height) };
-  };
-  function open(height: number) {
-    vi.stubGlobal('innerWidth', 1440);
-    vi.stubGlobal('innerHeight', height);
-    fireEvent(window, new Event('resize'));
-    place({ 'data-top-bar': '' }, () => new DOMRect(400, 24, 600, 40));
-    const anchor = document.createElement('div');
-    anchor.dataset.nodeInspectorAnchor = 'n1';
-    anchor.getBoundingClientRect = () => new DOMRect(500, 200, 300, 200);
-    document.body.append(anchor);
-    placed.push(anchor);
-    render(<NodeInspectorPopover />);
-    frames(3);
-  }
+  const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
+  const bounds = () => ({ top: parseFloat(popover().style.top), height: parseFloat(popover().style.height) });
+  const rowsIn = (box: Element) => box.querySelectorAll('.inspector__palette-row').length;
 
   beforeEach(() => {
     callbacks = new Map();
@@ -129,24 +113,27 @@ describe('the floating Inspector takes the whole palette before its body scrolls
       return nextRaf;
     });
     vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
-    animated = null;
-    // The panel's height on screen: its given height, or where the layout
-    // spring has it (``animated``).
-    const onScreen = (popover: HTMLElement | null) => {
-      const h = parseFloat(popover?.style.height ?? '');
-      return animated ?? (Number.isFinite(h) ? h : 0);
+    vi.stubGlobal('innerWidth', 1440);
+    vi.stubGlobal('innerHeight', 1400);
+    fireEvent(window, new Event('resize'));
+    const onScreen = (el: HTMLElement | null) => {
+      const h = parseFloat(el?.style.height ?? '');
+      return Number.isFinite(h) ? h : 0;
     };
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains('node-inspector-popover') ? onScreen(this) : 0;
+      if (this.classList.contains('node-inspector-popover')) return onScreen(this);
+      if (this.classList.contains('node-inspector-popover__content')) return BASE + ROW * rowsIn(this);
+      return 0;
     });
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains('node-inspector-popover__body')) return 0;
       return Math.max(0, onScreen(this.closest<HTMLElement>('.node-inspector-popover')) - CHROME);
     });
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      if (!this.classList.contains('node-inspector-popover__body')) return 0;
-      return Math.max(contentHeight, this.clientHeight);
-    });
+    const anchor = document.createElement('div');
+    anchor.dataset.nodeInspectorAnchor = 'n1';
+    anchor.getBoundingClientRect = () => new DOMRect(500, 200, 300, 200);
+    document.body.append(anchor);
+    placed.push(anchor);
     useGraphStore.setState({ nodes: [colorNode(hexes(8))], edges: [], undoNotice: null });
     useUIStore.getState().setInspectorPinned(false);
     useUIStore.getState().selectNode('n1');
@@ -154,142 +141,38 @@ describe('the floating Inspector takes the whole palette before its body scrolls
   });
   afterEach(() => {
     placed.splice(0).forEach((el) => el.remove());
+    vi.useRealTimers();
   });
 
-  it('grows past 300 px to show the whole body when it holds a palette', () => {
-    // Eight swatches, the Add row and the rest: 420 px of body.
-    contentHeight = 420;
-    open(900);
-    expect(bounds().height).toBe(420 + CHROME);
-    const body = document.querySelector<HTMLElement>('.node-inspector-popover__body')!;
-    expect(body.scrollHeight - body.clientHeight).toBe(0);
+  it('puts the real palette in the box it measures, and takes its whole body', () => {
+    render(<NodeInspectorPopover />);
+    frames(1);
+    const content = popover().querySelector('.node-inspector-popover__body > .node-inspector-popover__content')!;
+    expect(content).not.toBeNull();
+    expect(content.querySelector('.inspector__palette-list')).not.toBeNull();
+    expect(rowsIn(content)).toBe(8);
+    expect(bounds().height).toBe(BASE + ROW * 8 + CHROME);
   });
 
-  it('stops at the room there is, and then the body scrolls as one', () => {
-    contentHeight = 2000;
-    open(700);
-    const { top, height } = bounds();
-    expect(height).toBeGreaterThan(300);
-    expect(top + height).toBeLessThanOrEqual(700);
-    const body = document.querySelector<HTMLElement>('.node-inspector-popover__body')!;
-    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-  });
-
-  it('grows to its body on the layout spring, never past it (round 8b)', () => {
-    contentHeight = 420;
-    open(1400);
-    expect(bounds().height).toBe(420 + CHROME);
-    // A palette with more swatches lands: the spring starts from the old height.
-    contentHeight = 600;
-    animated = 420 + CHROME;
-    frames(4);
-    expect(bounds().height).toBe(600 + CHROME);
-    // Mid-way, and past it (the spring's overshoot): the target holds.
-    for (const at of [480, 560, 600 + CHROME + 9, 600 + CHROME]) {
-      animated = at;
-      frames(3);
-      expect(bounds().height).toBe(600 + CHROME);
-    }
-  });
-
-  it('springs only while a swatch-count change settles, never on a move (review 7 M2)', () => {
+  it('grows on the spring, its top held, when swatches are added on the real control', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      contentHeight = 420;
-      open(1400);
-      const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-      // The node moves (a pan, a drag): the panel follows at once.
-      const anchor = document.querySelector<HTMLElement>('[data-node-inspector-anchor="n1"]')!;
-      anchor.getBoundingClientRect = () => new DOMRect(500, 320, 300, 200);
-      frames(2);
-      expect(bounds().top).not.toBe(192);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-      // Two more swatches land: the spring runs with the height they bring.
-      contentHeight = 500;
-      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10) } }));
-      frames(1);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
-      expect(bounds().height).toBe(500 + CHROME);
-      act(() => { vi.advanceTimersByTime(399); });
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
-      act(() => { vi.advanceTimersByTime(1); });
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-      // The same count again (new colours, same swatches): no spring.
-      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10).reverse() } }));
-      frames(2);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('a pan or drag that starts mid-spring ends it at once, then the panel tracks 1:1 (GM r22 Q5)', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      contentHeight = 420;
-      open(1400);
-      const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
-      contentHeight = 500;
-      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10) } }));
-      frames(1);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
-      const given = bounds();
-      // 100 ms into the spring the node moves: the spring ends (no
-      // transition, so the panel is at its end layout), in the same frame.
-      act(() => { vi.advanceTimersByTime(100); });
-      const anchor = document.querySelector<HTMLElement>('[data-node-inspector-anchor="n1"]')!;
-      anchor.getBoundingClientRect = () => new DOMRect(500, 260, 300, 200);
-      frames(1);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-      expect(bounds().height).toBe(given.height);
-      const moved = bounds().top;
-      expect(moved).toBe(given.top + 60);
-      // Then it tracks the node, 1:1, with no spring.
-      anchor.getBoundingClientRect = () => new DOMRect(500, 300, 300, 200);
-      frames(1);
-      expect(bounds().top).toBe(moved + 40);
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-      // The old timer going off later changes nothing.
-      act(() => { vi.advanceTimersByTime(400); });
-      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('keeps 300 px and the spare-line rule for a body with no palette', () => {
-    useGraphStore.setState({ nodes: [{ ...colorNode([]), data: { ...colorNode([]).data, definitionId: 'text-input', label: 'Text Input', params: {} } }] });
-    contentHeight = 420;
-    open(900);
-    expect(bounds().height).toBe(300);
-  });
-});
-
-describe("the layout spring's CSS (review 7 L4)", () => {
-  const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  const reduced = [...css.matchAll(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)].map((m) => m[1]).join('\n');
-  const outside = css.replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
-  const rules = (text: string) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
-
-  it('springs the floating popover only while data-palette-resizing is on, never the docked one', () => {
-    const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.body));
-    expect(moving).toHaveLength(1);
-    expect(moving[0].selector).toBe('.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned)');
-    expect(moving[0].body).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\)/);
-    expect(moving[0].body).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);
-  });
-
-  it('cancels a running spring once the attribute goes, so a pan or drag starts from the end layout (GM r22 Q5)', () => {
-    const rigid = rules(outside).filter((r) => r.selector === '.node-inspector-popover:not([data-palette-resizing])');
-    expect(rigid).toHaveLength(1);
-    expect(rigid[0].body).toMatch(/transition:\s*none/);
-  });
-
-  it('turns it off for reduced motion', () => {
-    const off = rules(reduced).filter((r) => r.selector === '.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned)');
-    expect(off).toHaveLength(1);
-    expect(off[0].body).toMatch(/transition:\s*none/);
+    render(<NodeInspectorPopover />);
+    frames(1 + OPEN_STABLE_FRAMES);
+    const before = bounds();
+    expect(popover().hasAttribute('data-content-resizing')).toBe(false);
+    // Add, on the real Inspector's palette row.
+    const add = [...popover().querySelectorAll<HTMLButtonElement>('.inspector__palette-actions button')]
+      .find((button) => button.textContent === 'Add')!;
+    expect(add).toBeDefined();
+    act(() => { add.click(); });
+    frames(1);
+    const count = (useGraphStore.getState().nodes[0].data.params.palette as string[]).length;
+    expect(count).toBe(9);
+    expect(rowsIn(popover())).toBe(9);
+    expect(bounds()).toEqual({ top: before.top, height: before.height + ROW });
+    expect(popover().hasAttribute('data-content-resizing')).toBe(true);
+    act(() => { vi.advanceTimersByTime(CONTENT_RESIZE_MS); });
+    expect(popover().hasAttribute('data-content-resizing')).toBe(false);
   });
 });
 

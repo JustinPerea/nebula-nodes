@@ -516,7 +516,7 @@ describe('"See all actions →" from any screen', () => {
 // used to close the list first, so the reason went to a list that was gone
 // (and showed up, unexplained, the next time it opened).
 describe('a step away that can\'t go through says why', () => {
-  const NOT_OPENED = "The project didn't open. Try again.";
+  const NOT_OPENED = 'The project didn’t open. Try again.';
   function alertText() {
     return within(screen.getByRole('dialog', { name: 'Updates' })).getByRole('alert').textContent;
   }
@@ -543,7 +543,7 @@ describe('a step away that can\'t go through says why', () => {
     await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     // Past the wait for the log's header (goToCanvas.whenReady, 3 s).
     await new Promise((resolve) => setTimeout(resolve, 3300));
-    expect(alertText()).toBe("The Agent log didn't open. Try again.");
+    expect(alertText()).toBe('The Agent log didn’t open. Try again.');
     expect(useUIStore.getState().agentLogOpen).toBe(false);
   }, 10000);
 

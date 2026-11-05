@@ -22,6 +22,8 @@ import './store/agentNotesStore';
 // Questions agents asked (store/agentQuestionsStore.ts): the form is deferred
 // with the corner; the store keeps every set and its key from hello on.
 import './store/agentQuestionsStore';
+// The Message box's thread and listeners (r50): fed from load, as the log's store.
+import './store/personThreadStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';

@@ -61,7 +61,7 @@ vi.mock('../src/lib/projects', async (original) => ({
 }));
 
 import { resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { setProjectContext } from '../src/lib/projectContext';
@@ -72,6 +72,9 @@ import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { resetCanvasFollowForTests } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { useAgentLogStore } from '../src/store/agentLogStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const initial = useProjectStore.getState();
 

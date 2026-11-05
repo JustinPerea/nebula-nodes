@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { TrashedItem } from '../../lib/trash';
 
 const trash = vi.hoisted(() => ({
@@ -58,6 +58,69 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByText('Old board')).toBeTruthy();
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
+  it('opens when asked from outside (a Studio line\'s Restore, round 6j), but not for a request made before it mounted', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 3 }} />);
+    const toggle = await screen.findByRole('button', { name: /Recently deleted/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 4 }} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+    // Closed by the person, it stays closed until the next request.
+    fireEvent.click(toggle);
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 4 }} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 5 }} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('a request focuses the first asked-for board\'s Restore, the ring only from the keyboard (round 6k, GM r19 3)', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b2', name: 'Harbor' })]);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    await screen.findByRole('button', { name: /Recently deleted/ });
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 1, focus: ['gone', 'b2', 'b1'], keyboard: true }} />);
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Restore Harbor'));
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: true });
+    // Moved on by the person, neither a re-render nor the list reading itself again pulls focus back.
+    (document.activeElement as HTMLElement).blur();
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 1, focus: ['gone', 'b2', 'b1'], keyboard: true }} />);
+    const reads = trash.fetchTrash.mock.calls.length;
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b2', name: 'Harbor' }), board({ id: 'b3', name: 'Sea' })]);
+    act(() => { ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b3' })); });
+    await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBeGreaterThan(reads));
+    await screen.findByText('Sea');
+    expect(document.activeElement).toBe(document.body);
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 2, focus: ['b1'], keyboard: false }} />);
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Restore Rivers'));
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: false });
+    // None of them listed here: focus stays.
+    (document.activeElement as HTMLElement).blur();
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 3, focus: ['elsewhere'] }} />);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(document.activeElement).toBe(document.body);    focus.mockRestore();
+  });
+
+  it('a request that switches scope focuses once that scope\'s list is in, not the old one', async () => {
+    trash.fetchTrash.mockImplementation(async ({ scope }: { scope: string }) => (scope === 'project'
+      ? [board({ id: 'b1', name: 'Rivers', projectId: 'p1' })] : [board({ id: 'b9', name: 'Old' })]));
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    await screen.findByRole('button', { name: /Recently deleted/ });
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="project" openRequest={{ n: 1, focus: ['b1'], keyboard: true }} />);
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Restore Rivers'));
+  });
+
+  it('opened from a Studio line, Empty deletes only the boards it lists (GM r19 4)', async () => {
+    const listed = [board({ id: 'b1', name: 'Rivers' }), board({ id: 'b2', name: 'Harbor' })];
+    trash.fetchTrash.mockResolvedValue(listed);
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    await screen.findByRole('button', { name: /Recently deleted/ });
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={{ n: 1, focus: ['b1'] }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Empty' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    await waitFor(() => expect(trash.emptyTrash).toHaveBeenCalledWith({ kind: 'moodboard', scope: 'global' }, listed));
   });
 
   it('stays hidden while nothing is in the trash', async () => {
@@ -129,6 +192,21 @@ describe('RecentlyDeletedAssets', () => {
     expect((await screen.findByRole('alert')).textContent).toContain("Couldn't delete the board for good. Only the person can do this from the Nebula canvas.");
   });
 
+  it('keeps a refusal after the list reads itself again (round 6k: the reload used to wipe it at once)', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    const calls = trash.fetchTrash.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBeGreaterThan(calls));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    // The next action starts clean.
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   it('keeps Styles too, in their own words, and restores one as kind "style"', async () => {
     trash.fetchTrash.mockResolvedValue([board({ kind: 'style', id: 's1', name: 'Neon noir' })]);
     render(<RecentlyDeletedAssets kind="style" scope="global" />);
@@ -158,6 +236,82 @@ describe('RecentlyDeletedAssets', () => {
       { kind: 'character', scope: 'project', projectId: 'p1' },
       [expect.objectContaining({ id: 'b1' }), expect.objectContaining({ id: 'b2' })],
     ));
+  });
+});
+
+// Round 6l: what a Studio's kept edits put at stake (GM r21 Q2), and the review 10 fixes.
+describe('RecentlyDeletedAssets, round 6l', () => {
+  const lostToo = (items: readonly TrashedItem[]) => {
+    const kept = items.filter((item) => item.id === 'b1' || item.id === 'b2').map((item) => `“${item.name}”`);
+    return kept.length ? { text: `Your unsaved ${kept.length === 1 ? 'change' : 'changes'} to ${kept.join(' and ')} will be lost too.`, title: kept.join(' and ') } : null;
+  };
+
+  it('Delete forever: the confirm adds what it loses too; once done, it reports the id', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b9', name: 'Other' })]);
+    const onPurged = vi.fn();
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" atStake={lostToo} onPurged={onPurged} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' })[0]);
+    const group = screen.getByRole('group', { name: 'This can’t be undone. Your unsaved change to “Rivers” will be lost too.' });
+    expect(group.querySelector('.asset-trash__confirm-prompt')?.getAttribute('title')).toBe('“Rivers”');
+    fireEvent.click(within(group).getByRole('button', { name: 'Delete forever' }));
+    await waitFor(() => expect(onPurged).toHaveBeenCalledWith(['b1']));
+    // Another row with nothing at stake: the confirm as before.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' })[1]);
+    expect(screen.getByRole('group', { name: 'This can’t be undone.' })).toBeTruthy();
+  });
+
+  it('Empty: the confirm names what it loses; a refused one reports nothing', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b2', name: 'Harbor' }), board({ id: 'b9', name: 'Other' })]);
+    trash.emptyTrash.mockRejectedValueOnce(new RequestFailedError("Couldn't empty Recently deleted.", 500, { detail: 'boom' }));
+    const onPurged = vi.fn();
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" atStake={lostToo} onPurged={onPurged} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    expect(screen.getByRole('group', { name: 'Delete all 3 moodboards for good? Your unsaved changes to “Rivers” and “Harbor” will be lost too.' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    await screen.findByRole('alert');
+    expect(onPurged).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    await waitFor(() => expect(onPurged).toHaveBeenCalledWith(['b1', 'b2', 'b9']));
+  });
+
+  it('starts open when asked to (a Studio\'s several-board Restore, review 10 NIT-3)', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" defaultOpen />);
+    expect((await screen.findByRole('button', { name: /Recently deleted/ })).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+  });
+
+  it('a refusal goes with a scope or project switch (review 10 NIT-2)', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await screen.findByRole('alert');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="project" />);
+    await screen.findByRole('button', { name: /Recently deleted/ });
+    expect(screen.queryByRole('alert')).toBeNull();
+    // A project switch too.
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore Warm editorial' }));
+    await screen.findByRole('alert');
+    act(() => { publishOpenProject({ id: 'p2', name: 'Other project' }); });
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('an action\'s refusal shows over a later failed load (V16)', async () => {
+    trash.fetchTrash.mockResolvedValueOnce([board()]).mockRejectedValue(new RequestFailedError("Couldn't load Recently deleted.", 500, { detail: 'x' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2));
+    await new Promise((done) => setTimeout(done, 30));
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).not.toContain('load');
   });
 });
 

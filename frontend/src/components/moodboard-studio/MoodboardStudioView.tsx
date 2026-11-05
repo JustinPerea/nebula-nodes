@@ -1,33 +1,47 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
+import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import {
   analyzeMoodboard,
   createMoodboard,
   editMoodboard,
+  type MoodboardCreated,
   fetchMoodboard,
   fetchMoodboards,
   keepMoodboardBriefOverride,
   lookupStoredAsset,
-  SAVE_BOARD,
   updateMoodboard,
 } from '../../lib/api';
-import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
-import { failureCopy, failureMessage } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
+import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { agentActorLabel } from '../../lib/agentActorLabel';
+import { placeholderLabel } from './boardPlaceholder';
+import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine,
+  changedAfterRemoveLine, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectGoneLine, projectRestoreFailedLine,
+  projectRestoreFailure, projectRestoredLine, changeNotSavedLine,
+  type KeptImage, type ProjectRestoreFailure } from './boardSaveLine';
+import { dropKeptEdit, imageState, keepUnsavedDrafts, keptEditBoards, keptEditsWaiting, noteKeptChange, noteKeptProject, opTarget,
+  rememberKeptOpMeta, replayKeptFields, takeKeptEdit, valueOfOp, valueOnBoard, type KeptEdit, type KeptOpMeta } from './unsavedDrafts';
+import { restoreTrashed, type TrashedItem } from '../../lib/trash';
+import { listProjects, restoreProject } from '../../lib/projects';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
-import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { assetStudioDraftKey, emptyAssetStudioEntry, resolveAssetStudioDraftKey, useAssetStudioDraftStore, type AssetStudioDraftEntry } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
 import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
-import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors } from '../../types';
+import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors,
+  MoodboardPlacement } from '../../types';
 import { BriefFields, BriefPanel, type ColorChoice } from './MoodboardBrief';
 import { AnalysisOutdated, BoardSwatches, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
@@ -44,14 +58,20 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
   fieldChanges, type BoardFieldKey, type MoodboardEditResult, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
-import { dropLayout, provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
+import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
+import { outsideForChip, placeTiles, respot, spotFree, type SeenArea } from '../../lib/boardPlacement';
+import type { NodeRect } from '../../lib/nodePlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
-import { BoardCanvas, type BoardMove } from './BoardCanvas';
+import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { useHoldBottom } from './useHoldBottom';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
+import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages, reloadLostLine } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
+import { addHeld, addsInFlight, boardImages, clearPending, recordPending, takeReloadLost, boardStanding, changeHeld, claimFiles, clearOpenBoard, createsWaited, heldOn, nextHolderId,
+  dropWaitingSend, isOpenBoard, keepWaitingSend, openBoardFor, releaseFilled, releaseHeld, setOpenBoard, takeWaitingSend, trackBoard, untrackBoard, useBoardAddStore,
+  type BoardRef, type OpenBoard } from './boardAdds';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
@@ -59,6 +79,9 @@ import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+
+/** A filled placeholder goes after this long even when no board ran its fade. */
+const FILL_FALLBACK_MS = 3000;
 
 interface MoodboardDraft {
   name: string;
@@ -156,7 +179,9 @@ function draftOnBoard(draft: MoodboardDraft, board: Moodboard, sent?: ReadonlySe
   // A field the PUT sent is the person's since only if the draft moved off
   // what was sent: an edit made while the save was out, even one back to the
   // value last read, must not read as untouched and take the sent value.
-  const since = asSent && draft.base ? { ...draft, base: { ...draft.base, ...asSent } } : draft;
+  // An unsaved draft has no base: what it sent is its base (round 6g), so a
+  // field the board changed since and the draft didn't takes the board's.
+  const since = asSent ? { ...draft, base: { ...(draft.base ?? {}), ...asSent } } : draft;
   return rebaseDraft(since, board, { ...boardFieldsOf(board), ...asSent }, sent);
 }
 
@@ -169,14 +194,843 @@ function coverAfter(cover: string | null, ops: MoodboardOp[], images: MoodboardI
   return next !== null && !images.some((image) => image.id === next) ? null : next;
 }
 
+/** Whether two rects share any area (touching edges don't). */
+function overlaps(a: NodeRect, b: NodeRect): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
 /** A draft's board fields with the name as it is sent (trimmed). */
 function trimmedName<D extends Partial<Record<BoardFieldKey, unknown>>>(fields: D): D {
   return typeof fields.name === 'string' ? { ...fields, name: fields.name.trim() } : fields;
 }
 
-/** A new board's first save: everything but the checked-edit bookkeeping. */
-function createBody(draft: MoodboardDraft) {
-  const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim(), images: provisionalForCreate(draft.images) };
+/** Resolves once the draft at `key` has no save out. */
+function whenNotSaving(key: string): Promise<void> {
+  return new Promise((done) => {
+    let stop: (() => void) | null = null;
+    const check = () => {
+      const store = useAssetStudioDraftStore.getState();
+      if (store.entries[resolveAssetStudioDraftKey(store, key)]?.pendingSaveId) return false;
+      stop?.();
+      done();
+      return true;
+    };
+    if (!check()) stop = useAssetStudioDraftStore.subscribe(() => { check(); });
+  });
+}
+
+/**
+ * A board not saved yet, saved where the person isn't (GM r8 answers 1 and
+ * 2): its add landed while they were away, or New is about to open a fresh
+ * draft over it. It is created as the open Studio's first save creates it
+ * (under its name, or the default one if it has none), so it shows in the
+ * rail, and its draft moves to the saved key. Returns the board's id, or
+ * null if the save failed (its line is on that board's draft).
+ */
+async function saveAway(key: string, away: 'background' | 'resend' | null = null): Promise<string | null> {
+  await whenNotSaving(key);
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (!entry) return null;
+  if (entry.savedId) return entry.savedId;
+  const named = entry.draft as MoodboardDraft;
+  if (!named.name.trim()) store.patch(at, { draft: { ...named, name: emptyDraft().name } });
+  const attempt = store.beginSave(at);
+  if (!attempt) return null;
+  const sending = attempt.entry.draft as MoodboardDraft;
+  try {
+    const sent = new Set(sending.pendingOps ?? []);
+    const { requestId, attempt: tried } = createAttemptFor(at, sending);
+    const result = await createMoodboard(createBody(sending, requestId, tried));
+    const now = useAssetStudioDraftStore.getState().entries[at];
+    if (now) {
+      const draft = withBriefFields(now.draft as MoodboardDraft);
+      if (result.repeated) {
+        const repeat = repeatOnBoard(at, draft, result);
+        store.patch(at, { draft: repeat.draft, thumbnail: result.thumbnail, notice: keptFromBoardLine(repeat.kept, result) });
+      } else store.patch(at, { draft: draftOnBoard(draft, result, sent, asSentOf(sending)), thumbnail: result.thumbnail });
+    }
+    createsWaited.delete(at);
+    if (store.finishSave(at, attempt.id, attempt.revision, result.id, result.thumbnail)) {
+      if (result.repeated) markLeftToSend(at);
+      const savedKey = assetStudioDraftKey('moodboard', result.projectId ? 'project' : 'global', result.id, result.projectId);
+      handOverDraft(at, savedKey);
+      void sendQueued(savedKey, result.id);
+    }
+    return result.id;
+  } catch (err) {
+    if (await notSentYet(err, away === 'resend' ? 'resend' : away ? 'background' : 'first') || (!away && await createWaits(at, err))) {
+      // Not sent: nothing shows (GM r11 4). New stays on the board; an add
+      // that saved a board the person had left sends it again on reconnect,
+      // unless the person is back on it (its autosave sends it then).
+      if (useAssetStudioDraftStore.getState().entries[at]?.pendingSaveId === attempt.id) {
+        store.patch(at, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+      }
+      if (away) void waitUntilOnline().then(() => { if (!isOpenBoard(at)) void saveAway(at, 'resend'); });
+      return null;
+    }
+    // Nothing is lost: the draft keeps it and Retry sends it again (GM r14).
+    if (isCreateIdRefusal(err)) store.patch(at, { createRequestId: null });
+    failBoardSave(at, attempt.id, err);
+    return null;
+  }
+}
+
+// An unsaved board's draft lives through a reload of this tab (round 6g, GM r15 3).
+keepUnsavedDrafts();
+
+/** The view each Board add was made in, and its card's size (a rebase
+ *  sizes a queued add's card without its aspect), for a replay that has to move it. */
+const addViews = new WeakMap<MoodboardOp, { view: NodeRect | null; seen?: SeenArea | null; band: boolean; size: [number, number] }>();
+
+/**
+ * After a 409 the draft is rebased onto the board as the server has it now,
+ * its queued ops replayed. A queued add whose spot a concurrent write took
+ * (another tab's add, an agent's) moves to the nearest free spot: exactly a
+ * held spot's rule when the board changes under it, with the band's up-nudge
+ * (GM r11 3; lib/boardPlacement `respot`). The op moves in place, so its Undo
+ * step and the send that owns it still know it. `draft` is the rebased
+ * draft; returns the adds that moved (any, and the caller rebases again).
+ */
+function freeQueuedAdds(draft: MoodboardDraft, key: string): Array<Extract<MoodboardOp, { op: 'add' }>> {
+  const adds = (draft.pendingOps ?? []).filter((op): op is Extract<MoodboardOp, { op: 'add' }> =>
+    op.op === 'add' && Boolean(op.at) && op.images.length === 1 && Boolean(op.images[0].id));
+  if (adds.length === 0) return [];
+  const queued = new Set(adds.map((op) => op.images[0].id));
+  const rectOf = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
+  // The board's tiles, the person's cards with their queued moves, and the
+  // spots adds still uploading hold; each add is counted once it has its spot.
+  const taken = [...draft.images.filter((image) => !queued.has(image.id)).flatMap((image) => (image.placements ?? []).map(rectOf)),
+    ...heldOn(useBoardAddStore.getState().held, key).filter((holder) => !holder.listOnly && !holder.filled)];
+  const moved: Array<Extract<MoodboardOp, { op: 'add' }>> = [];
+  for (const op of adds) {
+    const seen = addViews.get(op);
+    const card = draft.images.find((image) => image.id === op.images[0].id)?.placements?.[0];
+    const [width, height] = seen?.size ?? (card ? [card.w, card.h] : [0, 0]);
+    if (!width || !height) continue;
+    const rect = { x: op.at!.x, y: op.at!.y, width, height };
+    if (!spotFree(rect, taken)) {
+      const spot = respot(rect, taken, seen?.view ?? null, seen?.band);
+      op.at = spot;
+      Object.assign(rect, spot);
+      moved.push(op);
+    }
+    taken.push(rect);
+  }
+  return moved;
+}
+
+/**
+ * Whether a send that failed with `err` isn't sent yet, so it waits for
+ * Nebula instead of failing (GM r11 4). A write refused while offline is
+ * not sent. A background write that got no answer (review 8, MEDIUM-2: the
+ * network or the backend went while it was out) is the same when a health
+ * probe then finds Nebula offline: a real loss of the backend shows first as
+ * the failed request, not as the banner. A resend on reconnect that gets no
+ * answer is a failure: it says why. `first` is a save the person is looking
+ * at (New's own create): it fails as before.
+ */
+async function notSentYet(err: unknown, send: 'first' | 'background' | 'resend'): Promise<boolean> {
+  if (isOfflineRefusal(err)) return true;
+  if (send !== 'background' || !isBackendUnreachable(err)) return false;
+  return probeOffline();
+}
+
+/** Whether the create of the unsaved board at `key`, cut off by `err`, waits for Nebula instead of failing. */
+async function createWaits(key: string, err: unknown): Promise<boolean> {
+  if (createsWaited.has(key) || !isBackendUnreachable(err) || !await probeOffline()) {
+    createsWaited.delete(key);
+    return false;
+  }
+  createsWaited.add(key);
+  return true;
+}
+
+/**
+ * What a background send owns (review 8, MEDIUM-1): the ops and board fields
+ * the draft held when it began, the fields with the values it sends. A
+ * resend on reconnect owns what the refused send owned, passed in, never the
+ * draft as it is by then: what the person did meanwhile, on a board open in
+ * the Studio, is that board's own steps, which its autosave sends with each
+ * step's Undo.
+ */
+interface SendOwns {
+  ops: ReadonlySet<MoodboardOp>;
+  fields: Partial<Record<BoardFieldKey, unknown>>;
+}
+
+function ownsOf(draft: MoodboardDraft): SendOwns {
+  const drafted = draft as Partial<Record<BoardFieldKey, unknown>>;
+  return { ops: new Set(draft.pendingOps ?? []),
+    fields: Object.fromEntries(Object.keys(unsentFields(draft)).map((field) => [field, drafted[field as BoardFieldKey]])) };
+}
+
+/**
+ * A background send Nebula refused while offline (GM r11 4): it isn't sent
+ * yet, so it is no failure. Nothing shows (the banner says Nebula is
+ * offline); the save is let go with the draft still to send. What the send
+ * owned (still unsent) is kept for a reload of this tab, and sent again once
+ * on reconnect, as its own send.
+ */
+function waitToResend(key: string, savedId: string, attemptId: string, owns: SendOwns) {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (entry?.pendingSaveId !== attemptId) return;
+  store.patch(at, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+  const draft = entry.draft as MoodboardDraft;
+  const pending = new Set(draft.pendingOps ?? []);
+  const left: SendOwns = { ops: new Set([...owns.ops].filter((op) => pending.has(op))), fields: owns.fields };
+  keepWaitingSend(savedId, [...left.ops], unsentOf(draft, left.fields));
+  void waitUntilOnline().then(() => sendQueued(key, savedId, left));
+}
+
+/** The board fields the draft changed that aren't on the server yet. */
+function unsentFields(draft: MoodboardDraft): Record<string, unknown> {
+  return unsentOf(draft, draft);
+}
+
+/** Of `fields`, those that differ from what the draft last read (its base), as they are sent. */
+function unsentOf(draft: MoodboardDraft, fields: Partial<Record<BoardFieldKey, unknown>>): Record<string, unknown> {
+  const changed: Record<string, unknown> = draft.base ? fieldChanges(trimmedName(draft.base), trimmedName(fields)) : {};
+  delete changed.images;
+  return changed;
+}
+
+/**
+ * A kept edit replayed on `board` as the server has it now (round 6i, GM
+ * r17): its board fields by the 6g rule (replayKeptFields: a field the board
+ * changed since goes to the later edit, and `kept` names those the board
+ * won), its queued ops on the board's images. An add whose image the board
+ * holds already went (a save that landed before the reload); a remove keeps
+ * only the images still there; rebaseDraft drops an op on an image that's gone.
+ */
+/** A board a kept edit was for, deleted before the edit could replay (round 6j), named by its saved name; `deletedAt`
+ *  orders the line's names as Recently deleted lists them, newest first (round 6l, GM r20 B). */
+interface GoneBoard { id: string; name: string; scope: AssetScope; deletedAt?: string }
+/** A board a kept edit was for whose project is in Recently deleted (round 6l, GM r21 Q8), with the project's name
+ *  as Recently deleted lists it (round 6m: a Restore project's confirmation and failure lines name it). */
+interface ProjectGoneBoard { id: string; name: string; projectId: string; projectName: string }
+/** A project's red line (round 6m, GM r53 Q1; round 6p, GM r90.1): 'restore', its Restore project found it deleted for
+ *  good ("Nebula couldn’t restore …"); 'keep', a look-up found it deleted for good somewhere else ("…couldn’t keep …"). */
+interface PurgedProject { projectId: string; name: string; boards: ProjectGoneBoard[]; kind: 'restore' | 'keep' }
+/** A restore whose confirmation waits on its boards' replayed saves (`boards`): a project's (`project`, its name) or,
+ *  with `project` null, boards restored somewhere else (`names`, round 6p, GM r90.4). `stayed`: changedAfterRemoveLine's sentence. */
+interface PendingConfirm { project: string | null; names: string[]; boards: Array<{ id: string; name: string }>; at: string | null; stayed: string }
+/** A Restore's confirmation, in its slot, shown while board `at` is open. */
+interface RestoredLine { slot: string; text: string; title: string; at: string | null }
+/** A replayed kept edit whose save failed on a board the person isn't on (#210 round 6t, GM r113 2): its own line,
+ *  under its slot's confirmation while board `at` is open, naming the board; `retry`: Try again can work. `confirm` is
+ *  what its slot waited on, to confirm again once a Try again saves it. */
+interface AwaySaveFailure { slot: string; id: string; name: string; at: string | null; text: string; title: string; retry: boolean;
+  confirm: PendingConfirm }
+
+/** The sentence a confirmation gains for images kept removes left on their boards (GM r90.5): by number when they're
+ *  on one board, else counted; by the agent's name when one agent changed them all. */
+function stayedLine(replays: ReadonlyArray<{ stayed: number[]; stayedBy: string | null } | null>): string {
+  const withStays = replays.filter((replay): replay is { stayed: number[]; stayedBy: string | null } => Boolean(replay?.stayed.length));
+  if (!withStays.length) return '';
+  const by = withStays.map((replay) => replay.stayedBy);
+  return changedAfterRemoveLine(withStays.flatMap((replay) => replay.stayed), by.every((name) => name && name === by[0]) ? by[0] : null,
+    withStays.length > 1);
+}
+
+/** How long a restore this tab started counts as its own (its answer may never come): a re-check leaves it alone till then. */
+const RESTORE_HELD_MS = 30_000;
+/** The not-found line for a board id that loads nothing (hidden while the red deleted-board line names it, GM r21 Q4). */
+const NOT_FOUND_LINE = 'Moodboard not found. Add images to save a new one.';
+/** A board a Restore is bringing back: its name as the line and the list showed it, and whether its kept edit sent anything. */
+interface RestoringBoard { id: string; name: string; sent: boolean }
+
+/** The line's boards in Recently deleted's order: deleted last first (as the backend lists the trash). */
+function newestFirst<T extends { deletedAt?: string }>(boards: T[]): T[] {
+  return [...boards].sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+}
+
+/** What a kept edit's replay left out, for its lines: the board fields the board won (the cover among them), the
+ *  images whose changes it kept (GM r21 Q1), and whether an Undo was dropped. */
+interface KeptReplay { draft: MoodboardDraft; kept: string[]; images: KeptImage[]; undoDropped: boolean;
+  /** Images a kept remove left on the board because they changed after it (round 6p, GM r90.5), by their number on
+   *  the board after the replay, and who changed them (an agent's own name; null when not one known agent). */
+  stayed: KeptImage[]; stayedBy: string | null }
+
+/**
+ * A kept edit replayed on `board` as the server has it now (round 6i, GM
+ * r17): its board fields by the 6g rule (replayKeptFields: a field the board
+ * changed since goes to the later edit, and `kept` names those the board
+ * won), its queued ops on the board's images. An add whose image the board
+ * holds already went (a save that landed before the reload); a remove keeps
+ * only the images still there; rebaseDraft drops an op on an image that's gone.
+ *
+ * Round 6l (review 10 MEDIUM-1, GM r21 Q1): an image change follows the same
+ * rule by its own time and from-value (KeptOpMeta): the board still holding
+ * what the change found takes it; a board that changed it since keeps its
+ * own unless the change came later, and the image is named in the "Kept …"
+ * line. One already on the board as the change has it is left alone. A kept
+ * Undo replays only on the board version it was made against; otherwise it
+ * is dropped, and its own line says so.
+ */
+function replayKeptEdit(board: Moodboard, kept: KeptEdit): KeptReplay {
+  const fields = boardFieldsOf(board);
+  const updatedAt = Date.parse(board.updatedAt ?? '') || 0;
+  const replay = replayKeptFields(kept, fields, updatedAt);
+  const has = new Set(board.images.flatMap((image) => [image.id, image.url]));
+  const wonImages = new Set<string>();
+  const stayedIds = new Set<string>();
+  let coverWon = false;
+  let undoDropped = false;
+  const ops = kept.ops.flatMap((op, index): Array<[MoodboardOp, KeptOpMeta | null]> => {
+    const meta = kept.opMeta?.[index] ?? null;
+    if (op.op === 'add') return op.images.some((image) => has.has(image.url) || (image.id && has.has(image.id))) ? [] : [[op, meta]];
+    if (op.op === 'remove') {
+      // Round 6p (GM r90.5): the later-edit rule. An image the board changed after the remove (its state then, kept
+      // in the op's meta, differs now, and the board changed later) stays, and the confirmation says so.
+      const was = meta && typeof meta.from === 'object' && meta.from !== null ? meta.from as Record<string, unknown> : null;
+      const images = op.images.filter((id) => {
+        if (!has.has(id)) return false;
+        const now = board.images.find((image) => image.id === id);
+        if (!was || !now || !(id in was) || sameValue(imageState(now), was[id]) || (meta?.at ?? kept.at) > updatedAt) return true;
+        stayedIds.add(id);
+        return false;
+      });
+      return images.length ? [[{ ...op, images }, meta]] : [];
+    }
+    if (op.op === 'restore') {
+      if (meta?.version !== undefined && meta.version === board.version) return [[op, meta]];
+      undoDropped = true;
+      return [];
+    }
+    if (!opTarget(op)) return [[op, meta]];
+    const now = valueOnBoard(op, board);
+    // An image or card that's gone: rebaseDraft drops the op (the board removed it).
+    if (now === undefined) return [[op, meta]];
+    if (sameValue(now, valueOfOp(op))) return [];
+    if ((meta && 'from' in meta && sameValue(now, meta.from)) || (meta?.at ?? kept.at) > updatedAt) return [[op, meta]];
+    if (op.op === 'cover') coverWon = true;
+    else if (op.op === 'place') {
+      const owner = board.images.find((image) => image.placements?.some((card) => card.id === op.placement));
+      if (owner) wonImages.add(owner.id);
+    } else wonImages.add(op.image);
+    return [];
+  });
+  ops.forEach(([op, meta]) => rememberKeptOpMeta(op, meta));
+  const draft = rebaseDraft({ ...moodboardToDraft(board), ...replay.fields, pendingOps: ops.map(([op]) => op) }, board, fields);
+  // Named in board order, by the label the board shows every image ("Reference #3"), never its private note (GM r53),
+  // and by its number once the replay is on the board (review 11 LOW-3: a kept remove of an earlier image renumbers it).
+  const numbered = (ids: ReadonlySet<string>) => draft.images.flatMap((image, index): KeptImage[] => (ids.has(image.id) ? [{ n: index + 1 }] : []));
+  const by = [...stayedIds].map((id) => kept.changedBy?.[id]);
+  const stayedBy = by.length && by.every((name) => name && name === by[0]) ? by[0]! : null;
+  return { draft, kept: [...replay.kept, ...(coverWon ? ['cover'] : [])], images: numbered(wonImages), undoDropped,
+    stayed: numbered(stayedIds), stayedBy };
+}
+
+/** A draft's board by its saved name (the name the rail and Recently deleted show), else the draft's own. */
+function savedNameOf(draft: MoodboardDraft | undefined): string {
+  const base = typeof draft?.base?.name === 'string' ? draft.base.name.trim() : '';
+  return base || (draft?.name ?? '').trim();
+}
+
+/** A row of the rail to focus once it's listed (a single Restore's board, GM r21 Q7): the ring only from the keyboard. */
+interface RailFocusRequest { n: number; id: string; keyboard: boolean }
+
+/**
+ * Where focus goes when a Studio line it is in goes (its ×, GM r21 Q7): the
+ * next control in the notices after it, else the screen's <main> (the
+ * fallback noticeLeave uses, where the canvas isn't there), with no ring.
+ * The ring shows only for a press from the keyboard.
+ */
+function focusAfterLine(line: HTMLElement, keyboard: boolean, project: string | null = null) {
+  const root = line.closest('.moodboard-studio-view') ?? document;
+  // A Restore project takes every line of its project (review 11 MEDIUM-1): none of their controls is next.
+  const going = (control: HTMLElement) => line.contains(control)
+    || (project !== null && Boolean(control.closest(`[data-gone="project"][data-project="${CSS.escape(project)}"]`)));
+  const next = [...root.querySelectorAll<HTMLElement>('.moodboard-studio__notice button:not(:disabled)')]
+    .find((control) => !going(control) && Boolean(line.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING));
+  if (next) {
+    next.focus({ preventScroll: true, focusVisible: keyboard } as FocusOptions);
+    return;
+  }
+  focusMain(line.closest<HTMLElement>('main'));
+}
+
+/**
+ * A failure on a notice line, or nothing at all when it says nothing (#210 round 6t, review 12 live MEDIUM-1, GM r113 1):
+ * a write refused while offline says nothing (the banner is the reason), so no line, and never an empty alert. Every
+ * failure the Studio shows goes through here (tests/moodboardNoticeText.test.ts holds the ratchet).
+ */
+function FailureLine({ failure, className, retry = false, alert = false, neutral = false }: {
+  failure: FailureCopy | string | null | undefined; className?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
+  if (!failure || !failureText(failure, retry)) return null;
+  return (
+    <div className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
+      <FailureLines failure={failure} retry={retry} />
+    </div>
+  );
+}
+
+/** The noticeLeave fallback: the screen's <main>, with no ring (a line that left the page names no next control). */
+function focusMain(main: HTMLElement | null) {
+  if (!main) return;
+  if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+  main.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+}
+
+/**
+ * A status line's text, put in a frame after the line mounts (review 10
+ * NIT-4, round 6l): a live region announces text added to it, and not
+ * reliably text it was inserted with.
+ */
+function LiveText({ text }: { text: string }) {
+  const [shown, setShown] = useState('');
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(text));
+    return () => cancelAnimationFrame(frame);
+  }, [text]);
+  return <>{shown}</>;
+}
+
+/** The red line's boards are gone for good: their kept edits are dropped once it has shown (review 10 LOW-1), never
+ *  before; in a hidden tab, once the tab is shown (round 6p, GM r90.1: its first render on a visible surface). */
+function DropOnShow({ boards }: { boards: readonly { id: string }[] }) {
+  const ids = boards.map((board) => board.id).join('\n');
+  useEffect(() => {
+    const drop = () => { for (const id of ids.split('\n')) if (id) dropKeptEdit(id); };
+    if (document.visibilityState !== 'hidden') {
+      drop();
+      return undefined;
+    }
+    const shown = () => {
+      if (document.visibilityState === 'hidden') return;
+      document.removeEventListener('visibilitychange', shown);
+      drop();
+    };
+    document.addEventListener('visibilitychange', shown);
+    return () => document.removeEventListener('visibilitychange', shown);
+  }, [ids]);
+  return null;
+}
+
+/** The "Kept …" line for a replay (null: the board kept nothing of its own). `stayed`: an image a kept remove left on
+ *  the board is named there too (a board's own load; a Restore's confirmation says it in its own words, GM r90.5). */
+function keptLineOf(replay: KeptReplay, board: Moodboard, stayed = false) {
+  const images = stayed ? [...replay.images, ...replay.stayed].sort((a, b) => a.n - b.n) : replay.images;
+  return keptFromBoardLine(replay.kept, board, images);
+}
+
+/** The draft at `key` still holds ops or board fields the server hasn't (a
+ *  save that ended left them): it is dirty again, so they are sent. */
+function markLeftToSend(key: string) {
+  const store = useAssetStudioDraftStore.getState();
+  const entry = store.entries[resolveAssetStudioDraftKey(store, key)];
+  const draft = entry?.draft as MoodboardDraft | undefined;
+  if (entry && !entry.dirty && draft && ((draft.pendingOps ?? []).length || Object.keys(unsentFields(draft)).length)) {
+    store.patch(key, { dirty: true, saveState: 'draft' });
+  }
+}
+
+/**
+ * The id every create of the unsaved board at `key` carries (round 6e): made
+ * at its first create and kept on its draft entry, so a create sent again
+ * after its answer was lost (New's save that got no answer, then Retry; an
+ * add's save sent again on reconnect) returns the board the first one made
+ * instead of a second board. A new draft gets a new one.
+ */
+function createRequestIdFor(key: string): string | undefined {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const made = store.entries[at]?.createRequestId;
+  if (made) return made;
+  // The server refused this draft's id (round 6g): its creates go without one.
+  if (made === null) return undefined;
+  const id = crypto.randomUUID();
+  store.patch(at, { createRequestId: id });
+  return id;
+}
+
+/** The board fields of `draft` as a create sends them (the analysis aside). */
+function asSentOf(draft: MoodboardDraft): Partial<Record<BoardFieldKey, unknown>> {
+  const drafted = draft as Partial<Record<BoardFieldKey, unknown>>;
+  return Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
+    .map((field) => [field, drafted[field]]));
+}
+
+/** Attempts kept per unsaved draft: a repeat names one of the last few. */
+const ATTEMPTS_KEPT = 10;
+
+/**
+ * The next create of the unsaved board at `key` (round 6g, GM r15 1): its
+ * request id and attempt number, with what this attempt sends (its queued
+ * ops and fields) kept on the entry, so a repeat whose board this attempt
+ * made rebases on exactly what it sent.
+ */
+function createAttemptFor(key: string, draft: MoodboardDraft): { requestId: string | undefined; attempt: number } {
+  const requestId = createRequestIdFor(key);
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const attempts = store.entries[at]?.createAttempts ?? [];
+  const attempt = (attempts[attempts.length - 1]?.n ?? 0) + 1;
+  store.patch(at, { createAttempts: [...attempts, { n: attempt, sent: [...(draft.pendingOps ?? [])], asSent: asSentOf(draft) }]
+    .slice(-ATTEMPTS_KEPT) });
+  return { requestId, attempt };
+}
+
+/** A name as the server keeps it (trimmed), to tell a real change from its cleaning. */
+const keptForm = (field: string, value: unknown) => (field === 'name' && typeof value === 'string' ? value.trim() : value);
+
+/**
+ * `draft` on the board a repeated create answered (round 6g, GM r15 1): the
+ * board as it is now, with what the attempt that made it sent counted as on
+ * it, so the board's own later changes (a rename on the rail, a removed
+ * image, an agent's edit) win and only the draft's edits made after that
+ * attempt replay. A field both changed goes to the later edit (the draft's
+ * edit time against the board's updatedAt); `kept` names each field where
+ * the board's won over a draft edit. No record of that attempt (an older
+ * Nebula): everything replays, as before.
+ */
+function repeatOnBoard(key: string, draft: MoodboardDraft, board: MoodboardCreated): { draft: MoodboardDraft; kept: BoardFieldKey[] } {
+  const store = useAssetStudioDraftStore.getState();
+  const entry = store.entries[resolveAssetStudioDraftKey(store, key)];
+  const attempts = entry?.createAttempts ?? [];
+  const made = attempts.find((it) => it.n === board.madeAttempt);
+  if (!made) return { draft: draftOnBoard(draft, board), kept: [] };
+  const asSent = made.asSent as Partial<Record<BoardFieldKey, unknown>>;
+  const kept: BoardFieldKey[] = [];
+  let mine = draft;
+  // The board changed since it was made (its version moved on): a field it
+  // holds differently from what was sent is the board's change.
+  if (board.madeVersion === undefined || board.version > board.madeVersion) {
+    const theirs = boardFieldsOf(board);
+    const boardAt = Date.parse(board.updatedAt ?? '') || 0;
+    for (const field of Object.keys(asSent) as BoardFieldKey[]) {
+      const drafted = (mine as Partial<Record<BoardFieldKey, unknown>>)[field];
+      if (sameValue(drafted, asSent[field]) || sameValue(keptForm(field, theirs[field]), keptForm(field, asSent[field]))) continue;
+      if ((entry?.fieldEditedAt?.[field] ?? 0) > boardAt) continue;
+      mine = { ...mine, [field]: asSent[field] };
+      kept.push(field);
+    }
+  }
+  // What was sent is the base; the board's own values are the new one, but
+  // where the board kept what was sent (bar its cleaning: a trimmed name),
+  // what was sent stands in, as after any save (draftOnBoard).
+  const fields = boardFieldsOf(board);
+  for (const field of Object.keys(asSent) as BoardFieldKey[]) {
+    if (sameValue(keptForm(field, fields[field]), keptForm(field, asSent[field]))) fields[field] = asSent[field];
+  }
+  return { draft: rebaseDraft({ ...mine, base: { ...(mine.base ?? {}), ...asSent } }, board, fields, new Set(made.sent as MoodboardOp[])), kept };
+}
+
+/** A fresh draft at `key` (New, a deleted or forgotten board): the Board view keeps nothing of the last one's camera,
+ *  flag or selection for it (#210 round 6t), so a New board opens fitted. */
+function resetBoardDraft(key: string, draft: MoodboardDraft) {
+  useAssetStudioDraftStore.getState().reset(key, draft);
+  useBoardCanvasStore.getState().forgetBoard(key);
+}
+
+/**
+ * The unsaved draft at `key`, now the board `destination` (round 6g, review
+ * 9 R9-B): moved there, or, when that board is open in the Studio already
+ * (opened from the rail), folded into its draft, which keeps its epoch and
+ * Undo; what this one still has to send goes on top and is sent.
+ */
+function handOverDraft(key: string, destination: string) {
+  // The Board view's camera and its flag go with the draft (#210 round 6t): a new board's first save doesn't refit it,
+  // and the next New board doesn't open at this one's camera.
+  useBoardCanvasStore.getState().moveBoard(resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key), destination);
+  useAssetStudioDraftStore.getState().handOver(key, destination, (into: AssetStudioDraftEntry, from: AssetStudioDraftEntry) => {
+    const left = from.draft as MoodboardDraft;
+    const open = into.draft as MoodboardDraft;
+    const ops = left.pendingOps ?? [];
+    const fields = unsentFields(left);
+    const more = ops.length > 0 || Object.keys(fields).length > 0;
+    if (!more) return { notice: from.notice ?? into.notice ?? null };
+    return { draft: { ...open, ...fields, images: applyOps(open.images, ops), pendingOps: [...(open.pendingOps ?? []), ...ops] },
+      dirty: true, revision: into.revision + 1, saveState: into.pendingSaveId ? 'saving' : 'draft',
+      notice: from.notice ?? into.notice ?? null };
+  });
+}
+
+/**
+ * What a new board's draft took while saveAway's create was out (an add
+ * that landed on the open board meanwhile), sent as the open Studio's save
+ * sends it (review 6, MEDIUM-1). saveAway's board is one the person may not
+ * be on any more (New opened a fresh draft over it), so no Studio's autosave
+ * sends it: the image ops go as one checked edit on the version the create
+ * answered (a conflict reads the board and replays), then any board field
+ * changed meanwhile goes on a PUT. The draft is clean once the server holds
+ * it all; a failure is that board's line, with Retry.
+ *
+ * `resend` is a resend on reconnect, with what the refused send owned
+ * (SendOwns): it never takes what the draft gained since (review 8, MEDIUM-1).
+ */
+async function sendQueued(key: string, savedId: string, resend: SendOwns | null = null): Promise<void> {
+  const store = useAssetStudioDraftStore.getState();
+  const entryNow = () => {
+    const state = useAssetStudioDraftStore.getState();
+    const entry = state.entries[resolveAssetStudioDraftKey(state, key)];
+    return entry?.savedId === savedId ? entry : undefined;
+  };
+  if (!entryNow()?.dirty) return;
+  const attempt = store.beginSave(key);
+  if (!attempt) return;
+  const moveOn = (board: Moodboard, sent?: ReadonlySet<MoodboardOp>, asSent?: Partial<Record<BoardFieldKey, unknown>>) => {
+    const now = entryNow();
+    if (now) store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), board, sent, asSent), thumbnail: board.thumbnail });
+  };
+  // What this send is for: the ops and fields the draft held when it began
+  // (a resend: what the refused send held). A change made after that (on the
+  // board, open in the Studio now) is its own step, which the Studio's
+  // autosave sends with that step's Undo.
+  const owns = resend ?? ownsOf(attempt.entry.draft as MoodboardDraft);
+  try {
+    let thumbnail = attempt.entry.thumbnail;
+    for (let tries = 0; ; tries += 1) {
+      const draft = entryNow()?.draft as MoodboardDraft | undefined;
+      if (!draft) return;
+      try {
+        let version = draft.version;
+        const ops = (draft.pendingOps ?? []).filter((op) => owns.ops.has(op));
+        if (ops.length) {
+          const edited = await editMoodboard(savedId, sendableBatch(ops), version);
+          moveOn(edited.board, new Set(ops));
+          version = edited.board.version;
+          thumbnail = edited.board.thumbnail;
+        }
+        const after = entryNow()?.draft as MoodboardDraft | undefined;
+        const fields = after ? unsentOf(after, owns.fields) : {};
+        if (after && Object.keys(fields).length) {
+          const saved = await updateMoodboard(savedId, {
+            ...(fields as Parameters<typeof updateMoodboard>[1]),
+            ...(after.projectId ? { projectId: after.projectId } : {}),
+            ...(version === undefined ? {} : { baseVersion: version }) });
+          moveOn(saved, undefined, Object.fromEntries(Object.keys(fields).filter((field) => field !== 'analysis')
+            .map((field) => [field, owns.fields[field as BoardFieldKey]])));
+          thumbnail = saved.thumbnail;
+        }
+        break;
+      } catch (err) {
+        if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
+        moveOn(err.board);
+        const rebased = entryNow()?.draft as MoodboardDraft | undefined;
+        if (rebased && freeQueuedAdds(rebased, key).length) moveOn(err.board);
+      }
+    }
+    // Another change landed while this send was out, or (a resend) before
+    // it: the draft holds it still. On a board open in the Studio, its
+    // autosave sends it (once this save is off the entry), one batch per
+    // step with each step's Undo (GM r11 1: a board New just saved keeps
+    // Undo like any saved board). On a board no Studio has open, it goes the
+    // same way as this one.
+    if (store.finishSave(key, attempt.id, attempt.revision, savedId, thumbnail)) {
+      dropWaitingSend(savedId);
+      markLeftToSend(key);
+      if (entryNow()?.dirty && !isOpenBoard(key)) void sendQueued(key, savedId);
+    }
+  } catch (err) {
+    if (await notSentYet(err, resend ? 'resend' : 'background')) waitToResend(key, savedId, attempt.id, owns);
+    // Sent again on reconnect and failed: the board says why (GM r11 4).
+    else failBoardSave(key, attempt.id, err);
+  }
+}
+
+/** True when the unsaved draft at `key` holds something of the person's:
+ *  images, or an add still on its way (GM r8 answer 1: it counts as content). */
+function unsavedWithContent(key: string): boolean {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (!entry || entry.savedId || at !== key) return false;
+  return (entry.draft as MoodboardDraft).images.length > 0 || addsInFlight(key);
+}
+
+/** Before New (or a delete) opens a fresh draft at the unsaved key `key`:
+ *  an unsaved board with content is saved first, so New never drops a paste
+ *  (GM r8 answer 1). `kept` is false if that save failed: keep the draft.
+ *  `savedId` is the board it saved, if it saved one. */
+async function keepUnsaved(key: string): Promise<{ kept: boolean; savedId: string | null }> {
+  if (!unsavedWithContent(key)) return { kept: true, savedId: null };
+  const savedId = await saveAway(key);
+  return { kept: savedId !== null, savedId };
+}
+
+/** A failed write of an add to a board the person isn't on (review 5, LOW-4). */
+class AwayWriteFailed extends Error {
+  readonly failure: unknown;
+  constructor(failure: unknown) { super('away write failed'); this.failure = failure; }
+}
+
+/**
+ * An add whose person left its board while it uploaded (GM on review 4: it's
+ * their paste, so it isn't dropped). It lands on that board, never the one
+ * open now, written through the draft store:
+ * - a saved board: the add goes to the server as an edit of that board (no
+ *   base version, so it lands on the board as it is now, at the spot it
+ *   held). Its draft takes the board once no save of it is out, if it
+ *   holds nothing unsent; otherwise the send or the next open reads it
+ *   (review 5, LOW-3);
+ * - a board not saved yet: the add goes in its draft, and the board is saved
+ *   now, so it shows in the rail (GM r8 answer 2);
+ * - a board deleted meanwhile (its edit answers 404), or an unsaved draft
+ *   discarded: the add is cancelled, silently (GM r8 answer 1).
+ * There's no undo step: the board's undo history went when the person left it.
+ * Resolves to whether it landed; a failed write throws AwayWriteFailed.
+ */
+async function landAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>): Promise<boolean> {
+  for (;;) {
+    const standing = boardStanding(board);
+    if (standing === 'gone') return false;
+    const store = useAssetStudioDraftStore.getState();
+    if (standing === 'draft' && !board.savedId) {
+      // Its first save is out: once it lands, the board has an id.
+      if (store.entries[board.key]?.pendingSaveId) {
+        await whenNotSaving(board.key);
+        continue;
+      }
+      store.edit(board.key, (draft) => {
+        const current = draft as MoodboardDraft;
+        const images = applyOps(current.images, ops, { aspects });
+        return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+          pendingOps: queueOps(current.pendingOps, ops) };
+      });
+      if (await saveAway(board.key, 'background') === null) throw new AwayWriteFailed(null);
+      return true;
+    }
+    const savedId = board.savedId!;
+    let edited: Awaited<ReturnType<typeof editMoodboard>>;
+    try {
+      edited = await editMoodboard(savedId, sendableBatch(ops));
+    } catch (err) {
+      // Deleted meanwhile (in the trash, or gone): cancelled.
+      if ((err as { status?: unknown }).status === 404) return false;
+      throw new AwayWriteFailed(err);
+    }
+    // The board's draft takes it if it is behind it. A save of the board out
+    // now is waited out first: one that reached the server after the add
+    // holds it already (a newer version). Edits not sent yet wait for their
+    // own send, which rebases them on the board as it is; a draft not loaded
+    // reads the board when it loads; a kept draft reads it again when the
+    // board next opens (follow).
+    await whenNotSaving(board.key);
+    const key = resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), board.key);
+    const now = useAssetStudioDraftStore.getState().entries[key];
+    if (now?.loaded && now.savedId === savedId && !now.dirty && !now.pendingSaveId
+      && ((now.draft as MoodboardDraft).version ?? 0) < edited.board.version) {
+      store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), edited.board), thumbnail: edited.board.thumbnail });
+    }
+    return true;
+  }
+}
+
+/** A board save failed: its line (boardSaveLine, GM r16) and what the
+ *  header offers for it, a Retry or (the line says Reload) none. */
+function failBoardSave(key: string, id: string, err: unknown) {
+  const store = useAssetStudioDraftStore.getState();
+  const line = boardSaveLine(err, savedNameAt(key));
+  store.failSave(key, id, line.failure, { retry: line.retry });
+  markGone(key, err);
+}
+
+/** The saved name of the board whose draft is at `key` (the name the rail and Recently deleted show), else its draft's. */
+function savedNameAt(key: string): string {
+  const state = useAssetStudioDraftStore.getState();
+  return savedNameOf(state.entries[resolveAssetStudioDraftKey(state, key)]?.draft as MoodboardDraft | undefined);
+}
+
+/** A save that found its board deleted (GM r21 Q3): the entry says so, and when it was deleted, so the Studio shows the
+ *  deleted-board line (with Restore while it's in Recently deleted) in place of a save line. */
+function markGone(key: string, err: unknown) {
+  const kind = boardGoneKind(err);
+  if (!kind) return;
+  const trashed = (err as { detail?: { trashed?: { deletedAt?: unknown } } }).detail?.trashed;
+  useAssetStudioDraftStore.getState().patch(key, { saveGone: {
+    kind, ...(typeof trashed?.deletedAt === 'string' ? { deletedAt: trashed.deletedAt } : {}) } });
+}
+
+/**
+ * A kept edit replayed on its board without opening it (round 6l, GM r21
+ * Q8: after its project is restored in place, the person staying where they
+ * are): the board's draft takes the replay, under the key it has in its
+ * project, and is sent like any board no Studio has open. Its "Kept …" line
+ * waits on that draft for the board's next open; a failed send says why
+ * there, and the draft keeps the edit (in session storage too). Null when
+ * nothing was replayed: the board is gone, or a draft of it here holds
+ * edits of its own (then the kept edit stays, for the board's next load).
+ * `sends`: the replay left something to send (round 6m, GM r53 Q1: the
+ * confirmation says "Your change is saved." only then).
+ */
+async function replayAway(id: string): Promise<{ sends: boolean; stayed: number[]; stayedBy: string | null } | null> {
+  const found = await fetchMoodboard(id).catch(() => null);
+  if (!found) return null;
+  const key = assetStudioDraftKey('moodboard', found.projectId ? 'project' : 'global', found.id, found.projectId);
+  const store = useAssetStudioDraftStore.getState();
+  const held = store.entries[resolveAssetStudioDraftKey(store, key)];
+  if (held?.loaded && (held.dirty || held.pendingSaveId)) return null;
+  const kept = takeKeptEdit(found.id);
+  if (!kept) return null;
+  takeWaitingSend(found.id);
+  const replay = replayKeptEdit(found, kept);
+  store.ensure(key, emptyAssetStudioEntry(replay.draft));
+  store.patch(key, { draft: replay.draft, savedId: found.id, thumbnail: found.thumbnail ?? '', loaded: true, dirty: false,
+    saveState: 'saved', saveError: null, loadError: null, fieldEditedAt: kept.fieldEditedAt ?? {}, notice: keptLineOf(replay, found) });
+  markLeftToSend(key);
+  const sends = Boolean(useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)]?.dirty);
+  void sendQueued(key, found.id);
+  return { sends, stayed: replay.stayed.map((image) => image.n), stayedBy: replay.stayedBy };
+}
+
+/** A failed away write keeps the image (review 5, LOW-4): its add waits in
+ *  that board's draft, which the next save sends, and the board says why. */
+function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>, err: unknown, names: readonly string[]) {
+  const store = useAssetStudioDraftStore.getState();
+  const key = resolveAssetStudioDraftKey(store, board.key);
+  const entry = store.entries[key];
+  if (!entry || !(entry.epoch === board.epoch || (board.savedId && entry.savedId === board.savedId))) return;
+  const savedId = board.savedId;
+  const failed = () => {
+    const line = boardSaveLine(err, savedNameAt(key));
+    store.patch(key, { saveState: 'error', saveError: line.failure, retry: line.retry });
+    markGone(key, err);
+  };
+  if (entry.loaded && savedId) {
+    store.edit(key, (draft) => {
+      const current = draft as MoodboardDraft;
+      const images = applyOps(current.images, ops, { aspects });
+      return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+        pendingOps: queueOps(current.pendingOps, ops) };
+    });
+    void notSentYet(err, 'background').then((waits) => {
+      const now = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+      const draft = now?.savedId === savedId ? now.draft as MoodboardDraft : undefined;
+      const unsent = (draft?.pendingOps ?? []).filter((op) => ops.includes(op));
+      // Sent meanwhile (the board's own save took it): nothing to say.
+      if (unsent.length === 0) return;
+      // Not sent while offline (GM r11 4; review 8, MEDIUM-2): nothing shows;
+      // kept for a reload of this tab, and sent again once on reconnect, as
+      // its own send: just this add, never what the person did on the board
+      // meanwhile (review 8, MEDIUM-1).
+      if (waits) {
+        keepWaitingSend(savedId, unsent, {});
+        void waitUntilOnline().then(() => sendQueued(key, savedId, { ops: new Set(unsent), fields: {} }));
+      } else if (err !== null) failed();
+    });
+    return;
+  }
+  if (err === null || isOfflineRefusal(err)) return;
+  // A saved board whose draft isn't loaded never took the add (review 9
+  // NIT-2): it is lost, so not the neutral "nothing is lost" line; GM r16's
+  // red line naming its files, with no Retry (nothing is left to send). The
+  // board itself saved fine, so its chip stays as it is ("Saved"): the red
+  // line carries the loss (GM r17).
+  if (savedId) store.patch(key, { saveError: lostAddLine(names), retry: null });
+  // An unsaved board's draft holds the add (landAway): its line.
+  else failed();
+}
+
+/** A new board's first save: everything but the checked-edit bookkeeping,
+ *  with the board's create id (createRequestIdFor) when it is a create. */
+function createBody(draft: MoodboardDraft, requestId?: string, attempt?: number) {
+  const body: MoodboardDraft & { requestId?: string; attempt?: number } = { ...withBriefFields(draft), name: draft.name.trim(),
+    images: provisionalForCreate(draft.images), ...(requestId ? { requestId, ...(attempt ? { attempt } : {}) } : {}) };
   delete body.base;
   delete body.version;
   delete body.pendingOps;
@@ -250,15 +1104,34 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft: storedDraft, savedId, saveState, saveError, retry, retryStep, loadError, loaded,
+  const { draft: storedDraft, savedId, saveState, saveError, retry, retryStep, loadError, loaded, notice, saveGone,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   // The steps undo and redo would take next: a failed undo's Retry runs only
   // while its step is still that one (round 3; else it is hidden).
   const nextUndoId = useBoardUndoStore((state) => state.history(key, epoch).done.at(-1)?.id ?? null);
   const nextRedoId = useBoardUndoStore((state) => state.history(key, epoch).undone.at(-1)?.id ?? null);
-  const draft = withBriefFields(storedDraft);
+  // One object per stored draft: the autosave waits 600 ms from the draft's
+  // last change, and a new object on every render would restart that wait on
+  // any re-render (a held spot, an upload row), so a save could wait forever.
+  const draft = useMemo(() => withBriefFields(storedDraft), [storedDraft]);
   const loading = !loaded;
-  const [uploading, setUploading] = useState(false);
+  // Tiles the last add placed outside the view: the board's edge chip (GM, #210).
+  const [outsideTiles, setOutsideTiles] = useState<OutsideTiles | null>(null);
+  const outsideSeq = useRef(0);
+  const dismissOutside = useCallback(() => setOutsideTiles(null), []);
+  // Placeholder tiles (GM r4 answer 1): each added file's spot (or, added
+  // from the List, its row), held from the moment it is placed until its
+  // upload fills it (or fails and it goes). Kept per board outside the Studio
+  // (boardAdds.ts), so an add outlives leaving the board and still lands on it.
+  const heldAll = useBoardAddStore((state) => state.held);
+  const aliases = useAssetStudioDraftStore((state) => state.aliases);
+  // Which spots are this board's reads the draft's key, epoch and saved id (a fresh draft at the same key holds none).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- aliases, epoch and savedId change which board this is
+  const placeholders = useMemo(() => heldOn(heldAll, key), [heldAll, key, aliases, epoch, savedId]);
+  // The List shows each file still uploading as its own row (GM): a filled one is its image's row already.
+  const listUploads = useMemo(() => placeholders.filter((holder) => !holder.filled), [placeholders]);
+  /** Filled placeholders whose image has faded in (or ran out of time): gone. */
+  const dropFilled = useCallback((ids: string[]) => { releaseFilled(ids); }, []);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
   // The saved override comes with it, so Studio can say who wrote it.
@@ -289,15 +1162,70 @@ export function MoodboardStudioView() {
   // (per board draft), and this tab's undo steps for the board.
   const view = useBoardCanvasStore((state) => state.view);
   const setView = useBoardCanvasStore((state) => state.setView);
+  // The chip goes on a board switch and on any view switch (GM r4 answer 8):
+  // back on the Board it would point at what List already showed.
+  useEffect(() => { setOutsideTiles(null); }, [key, view]);
+  // The chip points only at tiles still on the board (review 8, LOW-1): an
+  // Undo or a remove of its add takes its tile out of it, and the chip goes
+  // with the last one. A tile counts while a card or a held spot covers it.
+  useEffect(() => {
+    if (!outsideTiles) return;
+    const covers = [...draft.images.flatMap((image) => (image.placements ?? []).map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h }))),
+      ...placeholders.filter((holder) => !holder.listOnly)];
+    const standing = outsideTiles.rects.filter((rect) => covers.some((cover) => overlaps(rect, cover)));
+    if (standing.length === outsideTiles.rects.length) return;
+    setOutsideTiles((current) => (current !== outsideTiles ? current : standing.length ? { ...current, rects: standing } : null));
+  }, [outsideTiles, draft.images, placeholders]);
   const selection = useBoardSelection(key);
   const selectedIds = view === 'board' ? selectedImageIds(draft.images, selection) : [];
-  const [toast, setToast] = useState<(BoardToast & { key: string }) | null>(null);
+  // `undoOf`: a removal's toast, whose Undo takes back that step.
+  type StudioToast = BoardToast & { key: string; undoOf?: string };
+  const [toast, setToast] = useState<StudioToast | null>(null);
+  // The toast up now, for lines decided after an await (an undo's answer).
+  const toastNow = useRef<StudioToast | null>(null);
   const toastSeq = useRef(0);
-  const showToast = useCallback((next: Omit<BoardToast, 'id'>) => {
+  const showToast = useCallback((next: Omit<BoardToast, 'id'> & { undoOf?: string }) => {
     toastSeq.current += 1;
-    setToast({ ...next, id: toastSeq.current, key });
+    toastNow.current = { ...next, id: toastSeq.current, key };
+    setToast(toastNow.current);
   }, [key]);
-  const dismissToast = useCallback(() => setToast(null), []);
+  const dismissToast = useCallback(() => { toastNow.current = null; setToast(null); }, []);
+  // An info line (no action: the reload line, "Undid…") says something about
+  // the board it was on, once: leaving that board ends it, so a quick return
+  // doesn't show (or read) it again (review 7, NIT-1).
+  useEffect(() => {
+    if (toastNow.current && toastNow.current.key !== key && !toastNow.current.action) dismissToast();
+  }, [key, dismissToast]);
+  // A polite announcement with no line on screen: the live region is
+  // emptied, then given its words, so the same words twice are read twice.
+  const [spoken, setSpoken] = useState('');
+  const announce = (text: string) => {
+    setSpoken('');
+    window.requestAnimationFrame(() => setSpoken(text));
+  };
+  const liveToast = () => (toastNow.current && toastNow.current.key === key ? toastNow.current : null);
+  // An info line (a paste's nothing-to-add or links line) never replaces a
+  // toast with an action (GM, #210 review answer 1): it shows only when no
+  // Undo or Redo is up, isn't queued, and is announced politely either way.
+  const showInfoLine = (text: string) => {
+    if (liveToast()?.action) {
+      announce(text);
+      return;
+    }
+    showToast({ text });
+  };
+  // "Undid…" is an info line too (GM r4 answer 5): it never replaces a live
+  // "Removed · Undo" toast, unless the step just undone is that toast's own
+  // (its Undo button, or Cmd+Z taking that removal back), whose offer is used up.
+  const showUndone = (next: Omit<BoardToast, 'id'>, stepId: string) => {
+    const up = liveToast();
+    if (up?.undoOf && up.undoOf !== stepId) {
+      announce(next.text);
+      return;
+    }
+    showToast(next);
+  };
+  const spokenLine = <span className="moodboard-board__sr-only" role="status" aria-live="polite">{spoken}</span>;
   // Undo steps are this board's, in this tab, at this epoch: a board switch,
   // a new epoch or leaving the Studio clears them (plan section 5.4).
   // Board field steps (Q83, fieldSteps.ts) go with them.
@@ -311,9 +1239,12 @@ export function MoodboardStudioView() {
   // A drag, a drop or a removal goes at once, not 600 ms later.
   const urgent = useRef(false);
 
-  useEffect(() => {
-    setUploading(false);
-  }, [key, epoch]);
+  // The boards a Restore is bringing back (GM r19 2, 3; round 6l, GM r20 A): each named as the line and the list
+  // showed it, and whether its kept edit had anything left to send once its load replayed it (GM r21 Q6). Once each
+  // is loaded (so back, its kept edit replayed) and saved, one confirmation names them, on the board open then.
+  const [restoring, setRestoring] = useState<RestoringBoard[] | null>(null);
+  // The board whose kept Undo its load dropped (GM r21 Q1): its own line, until another board opens.
+  const [undoDropped, setUndoDropped] = useState<string | null>(null);
 
   // A load-failure notice ("Moodboard not found…") is hidden while Nebula is
   // offline, and the board is checked again on reconnect (GM, PR #198 r2): a
@@ -330,7 +1261,14 @@ export function MoodboardStudioView() {
     let cancelled = false;
     const current = () => !cancelled && isCurrent()
       && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
-    patch({ loadError: null, saveError: null });
+    // An add lost while the board wasn't loaded (keepFailedAway) says so on
+    // this load, the first time the person sees the board since: its red
+    // line stays through it (round 6h; the load used to clear it unseen).
+    const lostAdd = () => {
+      const failure = useAssetStudioDraftStore.getState().entries[key]?.saveError;
+      return isLostAddLine(failure) ? failure : null;
+    };
+    patch({ loadError: null, saveError: lostAdd() });
     if (isDraftId || !moodboardEditorId) {
       initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
     } else {
@@ -344,9 +1282,11 @@ export function MoodboardStudioView() {
           // In Recently deleted? Say so; the list in the rail restores it.
           void lookupStoredAsset('moodboard', moodboardEditorId!).catch(() => null).then((stored) => {
             if (!current()) return;
+            // In Recently deleted with a kept edit: the kept edit's line says it, with its Restore (GM r19), so not this one too.
+            const kept = keptEditsWaiting().some((it) => it.board === moodboardEditorId);
             initialize(fresh, null, '', stored?.status === 'trashed'
-              ? 'This board is in Recently deleted. Restore it from the list on the left.'
-              : 'Moodboard not found. Add images to save a new one.');
+              ? (kept ? null : 'This board is in Recently deleted. Restore it from the list on the left.')
+              : NOT_FOUND_LINE);
           });
           return;
         }
@@ -357,7 +1297,24 @@ export function MoodboardStudioView() {
         }
         setRailScope(scope);
         rememberBrief(found);
-        initialize(moodboardToDraft(found), found.id, found.thumbnail);
+        const lost = lostAdd();
+        // A kept edit an earlier page load of this tab left (round 6i, GM
+        // r17): replayed on the board as it is now, and sent. It replaces any
+        // send that waited for Nebula then, which it holds too.
+        const kept = takeKeptEdit(found.id);
+        if (kept) takeWaitingSend(found.id);
+        const replay = kept ? replayKeptEdit(found, kept) : null;
+        initialize(replay?.draft ?? moodboardToDraft(found), found.id, found.thumbnail);
+        if (lost) patch({ saveError: lost, retry: null });
+        if (kept && replay) {
+          patch({ fieldEditedAt: kept.fieldEditedAt ?? {}, notice: keptLineOf(replay, found, true) });
+          markLeftToSend(key);
+          // A dropped Undo says so on its own line (GM r21 Q1); a Restore's confirmation says whether anything was
+          // left to send (GM r21 Q6: nothing was, so no "saved").
+          if (replay.undoDropped) setUndoDropped(found.id);
+          const sends = Boolean(useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)]?.dirty);
+          setRestoring((batch) => batch && batch.map((board) => (board.id === found.id ? { ...board, sent: sends } : board)));
+        }
       }).catch((err) => {
         if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
       });
@@ -468,6 +1425,22 @@ export function MoodboardStudioView() {
     if (loaded && savedId) void follow();
   }, [key, loaded, savedId, follow]);
 
+  /** Adds a 409 replay moved (freeQueuedAdds) with less than half of them
+   *  now in the view they were made in get the edge chip, as a moved held
+   *  spot does (review 8, NIT-3; GM r11 3: the held spot's rule; GM r13). */
+  const chipMovedAdds = useCallback((moved: ReadonlyArray<Extract<MoodboardOp, { op: 'add' }>>) => {
+    if (!isCurrent()) return;
+    const outside = moved.flatMap((op) => {
+      const seen = addViews.get(op);
+      if (!seen?.view || !op.at) return [];
+      const rect = { x: op.at.x, y: op.at.y, width: seen.size[0], height: seen.size[1] };
+      return outsideForChip(rect, seen.seen ?? seen.view) ? [{ rect, thumb: op.images[0]?.url ?? null }] : [];
+    });
+    if (outside.length === 0) return;
+    outsideSeq.current += 1;
+    setOutsideTiles({ id: outsideSeq.current, rects: outside.map((it) => it.rect), thumb: outside[0].thumb });
+  }, [isCurrent]);
+
   const persist = useCallback(async () => {
     if (!isCurrent() || !await verifyProject() || !isCurrent()) return null;
     const store = useAssetStudioDraftStore.getState();
@@ -480,12 +1453,26 @@ export function MoodboardStudioView() {
     try {
       const savedId = attempt.entry.savedId;
       let result: Moodboard | null = null;
+      let repeated = false;
       if (!savedId) {
         const sent = new Set(currentDraft.pendingOps ?? []);
-        result = await createMoodboard(createBody(currentDraft));
-        const drafted = currentDraft as Partial<Record<BoardFieldKey, unknown>>;
-        moveDraft(result, sent, Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
-          .map((field) => [field, drafted[field]])));
+        const { requestId, attempt: tried } = createAttemptFor(key, currentDraft);
+        const made = await createMoodboard(createBody(currentDraft, requestId, tried));
+        // A repeat (round 6g): the board is the earlier send's, as it is now,
+        // rebased on the attempt that made it; what came after replays and
+        // goes next.
+        if (made.repeated) {
+          repeated = true;
+          const current = draftNow();
+          if (current) {
+            const repeat = repeatOnBoard(key, current, made);
+            store.patch(key, { draft: repeat.draft, thumbnail: made.thumbnail, notice: keptFromBoardLine(repeat.kept, made) });
+          }
+          rememberBrief(made);
+        } else {
+          moveDraft(made, sent, asSentOf(currentDraft));
+        }
+        result = made;
       } else {
         // Image edits go as checked edits, then the board fields the person
         // changed go on a PUT; both with the version last read. Someone else
@@ -540,29 +1527,53 @@ export function MoodboardStudioView() {
           } catch (err) {
             if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
             moveDraft(err.board);
+            const rebased = draftNow();
+            const moved = rebased ? freeQueuedAdds(rebased, key) : [];
+            if (moved.length) {
+              moveDraft(err.board);
+              chipMovedAdds(moved);
+            }
           }
         }
       }
       const thumbnail = result?.thumbnail ?? attempt.entry.thumbnail;
       const id = result?.id ?? savedId!;
+      createsWaited.delete(key);
       forgetUnsentSteps();
       if (!store.finishSave(key, attempt.id, attempt.revision, id, thumbnail)) return null;
+      if (repeated) markLeftToSend(key);
       if (!savedId && result) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
         const selectedAtCompletion = isCurrent();
-        store.copyTo(key, assetStudioDraftKey('moodboard', createdScope, result.id, result.projectId));
+        handOverDraft(key, assetStudioDraftKey('moodboard', createdScope, result.id, result.projectId));
         if (selectedAtCompletion) {
           setRailScope(createdScope);
           enterMoodboardEditor(result.id, createdScope);
         }
       }
       if (announced.current > (draftNow()?.version ?? 0)) void follow();
+      dropWaitingSend(id);
       return id;
     } catch (err) {
-      store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+      // Refused while offline: not sent, so no failure (GM r11 4: never an
+      // empty error box). It waits; the autosave sends it on reconnect.
+      // A new board's create cut off with Nebula then offline waits the same
+      // way, and goes once on reconnect (round 6g, GM r15 4).
+      if (isOfflineRefusal(err) || (!attempt.entry.savedId && await createWaits(key, err))) {
+        if (useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId === attempt.id) {
+          store.patch(key, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+        }
+        return null;
+      }
+      // Nothing is lost: the edit stays in the draft and Retry sends it again,
+      // a saved board's own save as a new board's create, so both say r12's
+      // neutral line (GM r14; round 6g, brief 7a).
+      if (!attempt.entry.savedId && isCreateIdRefusal(err)) store.patch(key, { createRequestId: null });
+      failBoardSave(key, attempt.id, err);
       return null;
     }
-  }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps]);
+  }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps, chipMovedAdds,
+    rememberBrief]);
 
   /** Text sends 600 ms after the last key, or when it loses focus. */
   const sendNow = () => {
@@ -570,11 +1581,14 @@ export function MoodboardStudioView() {
     if (entry?.dirty && !entry.pendingSaveId && canSave) void persist();
   };
 
+  // Not while Nebula is offline: a write would be refused. Back online, what
+  // waited goes.
+  const offline = useBackendOffline();
   useEffect(() => {
-    if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
+    if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error' || offline) return;
     const timer = window.setTimeout(() => { void persist(); }, urgent.current ? 0 : 600);
     return () => window.clearTimeout(timer);
-  }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist]);
+  }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist, offline]);
 
   /** Undo steps belong to a saved board: a new board's first save has no undo. */
   const canRecord = Boolean(savedId) && !isDraftId;
@@ -633,13 +1647,6 @@ export function MoodboardStudioView() {
   };
   const numberOf = (images: MoodboardImage[], id: string) => images.findIndex((image) => image.id === id) + 1;
 
-  const addImageUrls = (urls: string[]) => {
-    if (urls.length === 0 || !isCurrent()) return;
-    const add: MoodboardOp = { op: 'add', images: urls.map(createDraftImage).map(({ id, url }) => ({ id, url })) };
-    const count = (draftNow()?.images ?? draft.images).length;
-    commitOps([add], urls.length === 1 ? `Added #${count + 1}` : `Added ${urls.length} references`);
-  };
-
   const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -648,41 +1655,250 @@ export function MoodboardStudioView() {
       .then((data: { url: string }) => data.url);
   }));
 
-  const handleFiles = (files: FileList | File[] | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    uploadFiles(Array.from(files))
-      .then((urls) => addImageUrls(urls.filter(Boolean)))
-      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
-      .finally(() => { if (isCurrent()) setUploading(false); });
+  // The open board takes an add as its own step (its undo), whichever add
+  // started it: one on this visit, or one started before the person left and
+  // came back (boardAdds.ts).
+  const landHere = useRef<OpenBoard['commit']>(() => false);
+  useLayoutEffect(() => {
+    // Taken only if the ops were applied (review 5, M17): a Studio still
+    // drawn but no longer current (left mid-render, its project changing)
+    // takes nothing, so the add lands through the draft store instead of
+    // being lost. Applied, not "an undo step recorded": an unsaved board
+    // records none, and its add mustn't also go the away path (review 6,
+    // MEDIUM-1).
+    landHere.current = (ops, label, aspects, now) => {
+      if (ops.length === 0 || !isCurrent()) return false;
+      commitOps(ops, label, { now, aspects });
+      return true;
+    };
+  });
+  useLayoutEffect(() => {
+    if (!loaded) return undefined;
+    const board: OpenBoard = { key, commit: (ops, label, aspects, now) => landHere.current(ops, label, aspects, now) };
+    setOpenBoard(board);
+    return () => clearOpenBoard(board);
+  }, [loaded, key]);
+
+  /** Files added to the board: pasted, dropped or picked with Add images, in
+   *  Board or List. On the Board they are sized from their aspect and placed
+   *  by lib/boardPlacement (one helper for all three, GM's #210 rulings):
+   *  never on top of a tile, in view when there's room, else just outside it
+   *  with the edge chip, in the view the person had when they added them (GM
+   *  r4 answer 1). A placeholder tile holds each spot at once while the
+   *  upload runs, and the upload fills it where it sits, as one step sent at
+   *  once. From the List (`target` null) each file is an uploading row, and
+   *  the images go at the end of the board, as Add Images always put them.
+   *  A failed upload takes its placeholders (and their chip) away.
+   *
+   *  The add belongs to its board, not to the view (GM on review 4): if the
+   *  person leaves the board while it uploads (another board, or out of the
+   *  Studio), it still lands on that board, placed as if they had stayed,
+   *  and written through the draft store, never to the board open now. */
+  const addFiles = (files: File[], target: BoardTarget | null, board: BoardRef = trackBoard(key)): Promise<void> => {
+    if (files.length === 0) return Promise.resolve();
+    // Still this Studio on the add's board (the chip and the toast are this view's).
+    const here = () => isCurrent() && openBoardFor(board) !== null;
+    // Each new add replaces the last one's chip.
+    if (target) setOutsideTiles(null);
+    const uploads = uploadFiles(files);
+    // Read once the spots are held; until then a refusal waits here.
+    uploads.catch(() => {});
+    let held: BoardPlaceholder[] = [];
+    let all: BoardPlaceholder[] = [];
+    let chip: number | null = null;
+    const release = () => {
+      releaseHeld(held.map((holder) => holder.id));
+      held = [];
+    };
+    const rectOf = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
+    return Promise.all(files.map((file) => readImageAspect(file)))
+      .then(async (aspects) => {
+        const sizes = aspects.map((aspect) => sizeFor(1, aspect));
+        let outside: number[] = [];
+        if (target) {
+          // The board's tiles and the spots earlier adds still hold.
+          const occupied = [...boardImages(board.key).flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, board.key).filter((holder) => !holder.listOnly)];
+          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, seen: target.seen, aim: target.aim, band: target.band });
+          outside = placed.outside;
+          held = placed.spots.map((spot, index) => ({ id: nextHolderId(), ...spot, width: sizes[index][0], height: sizes[index][1],
+            source: { kind: 'file' as const, name: files[index].name }, board }));
+        } else {
+          held = files.map((file) => ({ id: nextHolderId(), x: 0, y: 0, width: 0, height: 0, listOnly: true,
+            source: { kind: 'file' as const, name: file.name }, board }));
+        }
+        const holders = held;
+        all = holders;
+        addHeld(holders);
+        // A reload from here on loses these: the board's next open says so
+        // (GM r8 answer 5), once it has an id (review 6, LOW-3).
+        recordPending(board, holders.map((holder, index) => ({ id: holder.id, name: files[index].name })));
+        if (outside.length > 0 && here()) {
+          outsideSeq.current += 1;
+          chip = outsideSeq.current;
+          setOutsideTiles({ id: chip, thumb: null,
+            rects: outside.map((index) => ({ x: holders[index].x, y: holders[index].y, width: holders[index].width, height: holders[index].height })) });
+        }
+        let urls: string[];
+        try {
+          urls = await uploads;
+        } catch (err) {
+          // The chip pointed at spots that are gone now.
+          const gone = chip;
+          if (gone !== null) setOutsideTiles((current) => (current?.id === gone ? null : current));
+          release();
+          throw err;
+        }
+        const batch = new Set(holders.map((holder) => holder.id));
+        // A file the server gave no image for holds nothing from here on.
+        const live = holders.map((_, index) => Boolean(urls[index]));
+        // The board as it is now. A saved board that isn't open is read from
+        // the server: its draft is as the person left it, and someone may
+        // have added to it since (review 5, LOW-5).
+        let images = boardImages(board.key);
+        if (target && !openBoardFor(board) && boardStanding(board) !== 'gone' && board.savedId) {
+          const fresh = await fetchMoodboard(board.savedId).catch(() => null);
+          if (fresh) images = fresh.images;
+        }
+        // The board may have changed under a held spot meanwhile (an Undo, an
+        // agent's add, a drag): a spot now on a tile moves to the nearest free
+        // one, in the view the person had (review 3, LOW-2; GM: move). The
+        // batch's spots still free keep theirs and are counted first, so a
+        // moved one never pushes a sibling off a spot the board left alone
+        // (review 4, LOW-2).
+        const moved = new Map<string, { x: number; y: number }>();
+        if (target) {
+          const taken = [...images.flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, board.key).filter((holder) => !batch.has(holder.id) && !holder.listOnly)];
+          const rect = (holder: BoardPlaceholder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height });
+          const blocked = holders.filter((holder, index) => live[index] && !spotFree(rect(holder), taken));
+          for (const holder of holders) if (live[holders.indexOf(holder)] && !blocked.includes(holder)) taken.push(rect(holder));
+          for (const holder of blocked) {
+            const spot = respot(rect(holder), taken, target.view, target.band);
+            moved.set(holder.id, spot);
+            taken.push({ ...rect(holder), ...spot });
+          }
+        }
+        const spotOf = (holder: BoardPlaceholder) => moved.get(holder.id) ?? { x: holder.x, y: holder.y };
+        // The new images' ids, made here so the fill can be keyed by them (review 4, MEDIUM-1).
+        const placed = holders.flatMap((holder, index) => (live[index]
+          ? [{ holder, url: urls[index], aspect: aspects[index], imageId: createDraftImage(urls[index]).id, at: spotOf(holder) }] : []));
+        // A spot with no image goes now.
+        held = holders.filter((_, index) => !live[index]);
+        release();
+        held = placed.map((item) => item.holder);
+        if (placed.length === 0) return;
+        const ops: MoodboardOp[] = target
+          ? placed.map((item) => ({ op: 'add', images: [{ id: item.imageId, url: item.url }], at: item.at }))
+          : [{ op: 'add', images: placed.map((item) => ({ id: item.imageId, url: item.url })) }];
+        if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, seen: target.seen, band: Boolean(target.band),
+          size: [placed[index].holder.width, placed[index].holder.height] }));
+        const count = images.length;
+        const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
+        // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
+        const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
+        // Each uploaded image takes its spot: its placeholder stays under it
+        // while it fades in (the board drops it then, `dropFilled`).
+        const fills = new Map(placed.map((item) => [item.holder.id, item] as const));
+        const fill = (away: boolean) => changeHeld(fills.keys(), (holder) => {
+          const item = fills.get(holder.id)!;
+          return { ...holder, ...item.at, filled: { imageId: item.imageId, url: item.url }, away };
+        });
+        const open = openBoardFor(board);
+        if (open && target) {
+          fill(false);
+          // If no board is drawn to run the fade (List meanwhile), it goes anyway.
+          window.setTimeout(() => releaseFilled([...fills.keys()]), FILL_FALLBACK_MS);
+        }
+        // A Board add is sent at once; a List add waits for the List's usual save.
+        if (open?.commit(ops, label, aspectsOf, Boolean(target))) {
+          // Rows (List) and spots that won't fade go now; filled spots wait for their fade.
+          if (!target) release(); else held = [];
+          if (target && here()) followMovedSpots(chip, holders, live, spotOf, target, urls);
+          return;
+        }
+        // Not open here any more: it lands on its own board (GM on review 4).
+        if (!target) release();
+        try {
+          if (!await landAway(board, ops, aspectsOf)) return;
+        } catch (err) {
+          if (!(err instanceof AwayWriteFailed)) throw err;
+          keepFailedAway(board, ops, aspectsOf, err.failure, placed.map((item) => placeholderLabel(item.holder.source)));
+          return;
+        }
+        // Landed: its spots wait, filled, for the person to come back to the
+        // board, where the images fade in with the chip if outside the view
+        // (GM r8, review 5 LOW-3). If they're on it again already, now.
+        if (target) {
+          fill(true);
+          held = [];
+        }
+      })
+      .catch((err: unknown) => {
+        // Refused while offline (a drop or paste on a paused board): nothing
+        // was sent, the banner pulsed, and no empty line shows (GM r12 2).
+        if (isOfflineRefusal(err)) return;
+        const line = failureCopy(err, { heading: "Couldn't upload the image." });
+        // On the board the add was made on, wherever the person is now.
+        if (here()) patch({ saveError: line });
+        else if (boardStanding(board) !== 'gone') {
+          const store = useAssetStudioDraftStore.getState();
+          store.patch(resolveAssetStudioDraftKey(store, board.key), { saveError: line });
+        }
+      })
+      .finally(() => {
+        release();
+        clearPending(all.map((holder) => holder.id));
+        untrackBoard(board);
+      });
   };
+
+  /** The chip after a held spot moved (review 4, LOW-3): it points at where
+   *  the tiles are now. A moved spot with less than half of it in the
+   *  paste-time view joins it (a new chip if there was none; GM r13); one
+   *  that came into view leaves it. Its thumbnail is the first outside tile's
+   *  image, now that it has landed (review 9 NIT-1: a moved spot's chip had none). */
+  const followMovedSpots = (chip: number | null, holders: BoardPlaceholder[], live: boolean[],
+    spotOf: (holder: BoardPlaceholder) => { x: number; y: number }, target: BoardTarget, urls: ReadonlyArray<string | undefined>) => {
+    const view = target.view;
+    if (!view) return;
+    let firstThumb: string | null = null;
+    const rects = holders.flatMap((holder, index) => {
+      if (!live[index]) return [];
+      const rect = { ...spotOf(holder), width: holder.width, height: holder.height };
+      // An aimed tile counts as outside only when wholly out of view (GM r4
+      // answers 3 and 4), or reaching into the toolbar band (lib/boardPlacement);
+      // any tile only while less than half of it is in view (GM r13).
+      const bottom = view.y + view.height;
+      const aimedOut = !(target.aim && index === 0)
+        || rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= bottom || rect.y + rect.height <= view.y
+        || Boolean(target.band && rect.y + rect.height > bottom);
+      if (!aimedOut || !outsideForChip(rect, target.seen ?? view)) return [];
+      firstThumb ??= urls[index] ?? null;
+      return [rect];
+    });
+    if (chip !== null) {
+      setOutsideTiles((current) => (current?.id !== chip ? current
+        : rects.length ? { ...current, rects, thumb: current.thumb ?? firstThumb } : null));
+    } else if (rects.length) {
+      outsideSeq.current += 1;
+      setOutsideTiles({ id: outsideSeq.current, rects, thumb: firstThumb });
+    }
+  };
+
+  const handleFiles = (files: FileList | File[] | null): Promise<void> => addFilesOnce(Array.from(files ?? []), null);
 
   const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
-    handleFiles(files);
+    void handleFiles(files);
   };
 
-  /** Files dropped on the Board view: each lands where it was dropped (the
-   *  first centred at the pointer, the rest in a row beside it), sized from
-   *  its aspect, as one step sent at once. */
-  const dropFiles = (files: File[], at: { x: number; y: number }) => {
-    if (files.length === 0 || !isCurrent()) return;
-    setUploading(true);
-    Promise.all([uploadFiles(files), Promise.all(files.map((file) => readImageAspect(file)))])
-      .then(([urls, aspects]) => {
-        if (!isCurrent()) return;
-        const placed = urls.map((url, index) => ({ url, aspect: aspects[index] })).filter((item) => item.url);
-        if (placed.length === 0) return;
-        const spots = dropLayout(at, placed.map((item) => sizeFor(1, item.aspect)));
-        const ops: MoodboardOp[] = placed.map((item, index) => ({
-          op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: spots[index] }));
-        const count = (draftNow()?.images ?? []).length;
-        commitOps(ops, placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`, {
-          now: true, aspects: Object.fromEntries(placed.map((item) => [item.url, item.aspect])) });
-      })
-      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
-      .finally(() => { if (isCurrent()) setUploading(false); });
+  /** Files dropped, added or pasted on the Board view (BoardCanvas's `onDropFiles`). */
+  const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
+    // The chip goes at once, as on a paste (each new add replaces it).
+    setOutsideTiles(null);
+    return addFilesOnce(files, target);
   };
 
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
@@ -715,7 +1931,7 @@ export function MoodboardStudioView() {
     const images = draftNow()?.images ?? draft.images;
     const label = ids.length === 1 ? `Removed #${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
     const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
-    if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } } });
+    if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } }, undoOf: stepId });
   };
   const removeImage = (id: string) => removeImages([id]);
 
@@ -793,7 +2009,7 @@ export function MoodboardStudioView() {
         });
         fieldSteps.release(top.id);
         undoStore.forget(key, top.id);
-        showToast({ text: `Undid: ${top.label}` });
+        showUndone({ text: `Undid: ${top.label}` }, top.id);
         return;
       }
     }
@@ -820,8 +2036,10 @@ export function MoodboardStudioView() {
       else undoStore.reapplied(key, step.id, next);
       store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
       if (!isCurrent()) return;
-      showToast({ text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
-        action: direction === 'undo' && next.length ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
+      const line = { text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
+        action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
+      if (direction === 'undo') showUndone(line, step.id);
+      else showToast(line);
     } catch (err) {
       undoStore.restoreTaken(key, step, from);
       // The step names its own action (the edit request's heading is the
@@ -863,6 +2081,147 @@ export function MoodboardStudioView() {
     const onKey = (event: KeyboardEvent) => keyHandler.current(event);
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // Cmd+V (Justin decided, 2026-10-31): the clipboard's images join the
+  // board as a drop's do, through the same upload, checks and one undo
+  // step. Board view: the shared placement from the pointer, else the middle
+  // of the view (lib/boardPlacement). List view: at the end, in clipboard
+  // order. A paste meant for a text field (Direction, Avoid, a colour, a
+  // note) or a dialog stays the field's. Bound only while the Studio is
+  // mounted, so no other screen gets it. A paste another listener already
+  // handled (defaultPrevented) is left alone. Nothing in the Studio refuses
+  // a paste for a tab following an agent's switch, as nothing refuses a
+  // drop there (hooks/useFollowingReadOnly is the canvas's only).
+  const pasteTarget = useRef<(() => BoardTarget) | null>(null);
+  const pasteHandler = useRef<(event: ClipboardEvent) => void>(() => {});
+  // One physical press is one paste (GM, #210 review answer 2): the paste
+  // events of a held Cmd/Ctrl+V's repeats are ignored. Only a repeat keydown
+  // of the paste key sets it; any other keydown, the window losing focus or
+  // the page being hidden clears it (a keyup that went elsewhere must not
+  // swallow a later Edit > Paste, review 2 L1). Edit > Paste (no keydown)
+  // and separate presses always add.
+  const heldPaste = useRef(false);
+  // The backstop if the shell's key events aren't reliable: files still
+  // being added to this board from an earlier add, by size, type and bytes
+  // hash. An identical file meanwhile is ignored, silently on screen with a
+  // polite announcement (GM r4 answer 7); a different one goes, and so does
+  // the same image on another board (GM r8 answer 3). Kept per board in
+  // boardAdds.ts, so it holds across a board switch and the Studio closing.
+  const addFilesOnce = (files: File[], target: BoardTarget | null) => {
+    const board = trackBoard(key);
+    return claimFiles(board, () => Promise.all(files.map(fileSignature))).then(async ({ free, release }) => {
+      const fresh = files.filter((_, index) => free[index]);
+      if (fresh.length < files.length) announce(ALREADY_BEING_ADDED);
+      try {
+        if (fresh.length > 0) await addFiles(fresh, target, board);
+      } finally {
+        release();
+        if (fresh.length === 0) untrackBoard(board);
+      }
+    });
+  };
+  // Back on a board an add landed on while the person was away (GM r8,
+  // review 5 LOW-3): the new images fade in over their spots as any arrival
+  // does, with the edge chip for those outside the view. No new line. (A
+  // kept draft reads its board again on each open, so a landing its draft
+  // couldn't take shows then.)
+  const awayHere = useMemo(() => placeholders.filter((holder) => holder.away), [placeholders]);
+  useEffect(() => {
+    if (!loaded || awayHere.length === 0) return undefined;
+    const ids = awayHere.map((holder) => holder.id);
+    changeHeld(ids, (holder) => ({ ...holder, away: false }));
+    // The List has no fade: they go. On the Board, the fade drops them, or this does if it can't run.
+    if (view !== 'board') {
+      releaseFilled(ids);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => releaseFilled(ids), FILL_FALLBACK_MS);
+    let frame = 0;
+    let tries = 0;
+    const chipFor = () => {
+      frame = 0;
+      const shown = pasteTarget.current?.();
+      const shownView = shown?.seen ?? shown?.view ?? null;
+      if (!shownView) {
+        if (tries++ < 60) frame = window.requestAnimationFrame(chipFor);
+        return;
+      }
+      const rects = awayHere.map((holder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height }))
+        .filter((rect) => outsideForChip(rect, shownView));
+      if (rects.length === 0) return;
+      outsideSeq.current += 1;
+      setOutsideTiles({ id: outsideSeq.current, rects, thumb: awayHere[0].filled?.url ?? null });
+    };
+    chipFor();
+    return () => { window.clearTimeout(timer); if (frame) window.cancelAnimationFrame(frame); };
+  }, [loaded, awayHere, view]);
+  // Adds a reload lost on their way here (GM r8 answer 5): said once, on this board's next open.
+  useEffect(() => {
+    if (!loaded || !savedId) return;
+    // A send that waited for Nebula when this tab reloaded (GM r11 4): back
+    // in the draft, which sends it. An add the board holds already went.
+    const waiting = takeWaitingSend(savedId);
+    if (waiting) {
+      useAssetStudioDraftStore.getState().edit(key, (stored) => {
+        const current = stored as MoodboardDraft;
+        const has = new Set(current.images.flatMap((image) => [image.id, image.url]));
+        const ops = waiting.ops.filter((op) => op.op !== 'add' || !op.images.some((image) => has.has(image.url) || (image.id && has.has(image.id))));
+        const images = applyOps(current.images, ops);
+        return { ...current, ...(waiting.fields as Partial<MoodboardDraft>), images,
+          coverImageId: coverAfter(current.coverImageId ?? null, ops, images), pendingOps: queueOps(current.pendingOps, ops) };
+      });
+    }
+    const lost = takeReloadLost(savedId);
+    if (lost.length) showInfoLine(reloadLostLine(lost));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open of the board
+  }, [loaded, savedId]);
+  useLayoutEffect(() => {
+    pasteHandler.current = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || loading || !isCurrent() || !isStudioPasteTarget(event.target)) return;
+      if (heldPaste.current) {
+        event.preventDefault();
+        return;
+      }
+      const { files, links } = readClipboardImages(event.clipboardData);
+      // The next paste replaces the last one's chip, whatever it holds.
+      setOutsideTiles(null);
+      if (files.length > 0) {
+        event.preventDefault();
+        void addFilesOnce(files, view === 'board' ? pasteTarget.current?.() ?? null : null);
+        return;
+      }
+      event.preventDefault();
+      // Only links: Nebula fetches none for a board yet (decision D6; pasted
+      // links come in their own PR), so it says so and adds nothing (GM, #210 item 2).
+      showInfoLine(links.length > 0 ? LINKS_NOT_ADDED : NOTHING_TO_PASTE);
+    };
+  });
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => pasteHandler.current(event);
+    // By the key or its place (KeyV), so a non-Latin layout counts too.
+    const isV = (event: KeyboardEvent) => event.key.toLowerCase() === 'v' || event.code === 'KeyV';
+    const isPasteKey = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && !event.altKey && isV(event);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.repeat) heldPaste.current = false;
+      else if (isPasteKey(event)) heldPaste.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (isV(event) || event.key === 'Meta' || event.key === 'Control') heldPaste.current = false;
+    };
+    const release = () => { heldPaste.current = false; };
+    document.addEventListener('paste', onPaste);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', release);
+    document.addEventListener('visibilitychange', release);
+    return () => {
+      document.removeEventListener('paste', onPaste);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', release);
+      document.removeEventListener('visibilitychange', release);
+    };
   }, []);
 
   /** The image the board opens on, or null for #1: a pick, not a reorder,
@@ -960,11 +2319,525 @@ export function MoodboardStudioView() {
     if (!draft.analysis) void runAnalyze();
   };
 
+  /** Where the person is in the Studio now (null: not in it). */
+  const routeNow = () => {
+    const ui = useUIStore.getState();
+    return mounted.current && ui.viewMode === 'moodboard-editor' ? { id: ui.moodboardEditorId, scope: ui.moodboardEditorScope } : null;
+  };
+  /** True while the person is still where they were at `route`, or on the
+   *  board `savedId` that a draft open there was just saved as (the Studio
+   *  follows a first save). New and a delete await a save; if the person
+   *  picked another board or left meanwhile, they aren't pulled back
+   *  (review 6, NIT-5). */
+  const stillOn = (route: ReturnType<typeof routeNow>, savedId: string | null) => {
+    const now = routeNow();
+    return route !== null && now !== null && now.scope === route.scope
+      && (now.id === route.id || (savedId !== null && now.id === savedId));
+  };
   const deleting = useAssetDelete('moodboard');
+
+  // Kept edits whose boards were deleted before they could replay (round 6j,
+  // GM r18): looked up when the Studio opens, again after a board changes or
+  // a delete, and whenever Recently deleted or the project list changes (an
+  // action in the rail's list, another tab, an agent: round 6l, review 10
+  // live MEDIUM-1). One in Recently deleted gets the neutral line with
+  // Restore; one whose project is in Recently deleted gets its own line with
+  // "Restore project" (GM r21 Q8); one gone for good gets the red line, and
+  // its edit is dropped once that line has shown (nothing could replay it).
+  const [goneEdits, setGoneEdits] = useState<{ trashed: GoneBoard[]; purged: GoneBoard[]; project: ProjectGoneBoard[] }>(
+    { trashed: [], purged: [], project: [] });
+  // The lines as last rendered: a re-check that finds a board or project they named back (an agent's or another tab's
+  // restore) replays its kept edit at once (round 6p, GM r90.4).
+  const goneShown = useRef(goneEdits);
+  goneShown.current = goneEdits;
+  // The red line goes by its × or when another board opens (GM r19 1); so does a dropped Undo's line.
+  const [purgedOn, setPurgedOn] = useState(moodboardEditorId);
+  if (purgedOn !== moodboardEditorId) {
+    setPurgedOn(moodboardEditorId);
+    if (goneEdits.purged.length) setGoneEdits({ ...goneEdits, purged: [] });
+    if (undoDropped) setUndoDropped(null);
+  }
+  // The open board's own save found it deleted (GM r21 Q3): its draft holds the edit. In Recently deleted, it joins
+  // the line with Restore at once, the same line a reload shows, and the header's Retry hides (it can never work).
+  const heldGone = saveState === 'error' && savedId && !isDraftId ? saveGone ?? null : null;
+  const heldTrashed: GoneBoard | null = heldGone?.kind === 'trashed' && savedId
+    ? { id: savedId, name: savedNameOf(draft), scope: moodboardEditorScope,
+      ...(heldGone.deletedAt ? { deletedAt: heldGone.deletedAt } : {}) }
+    : null;
+  const trashedShown = newestFirst([...goneEdits.trashed.filter((board) => board.id !== heldTrashed?.id), ...(heldTrashed ? [heldTrashed] : [])]);
+  const [restoreError, setRestoreError] = useState<FailureCopy | null>(null);
+  const [trashRequest, setTrashRequest] = useState<(TrashOpenRequest & { scope: AssetScope }) | null>(null);
+  // After a single Restore, focus goes to the restored board's row in the rail (GM r21 Q7), the ring only from the keyboard.
+  const [railFocus, setRailFocus] = useState<RailFocusRequest | null>(null);
+  // Bumped by a Restore here, so the rail lists the board again (GM r21 Q5: it shows there even when it didn't open).
+  const [restores, setRestores] = useState(0);
+  // Restore confirmations (round 6k, GM r19 2; r20 A; r71), each in its own slot: 'boards' for a board Restore, one
+  // per project for Restore project (review 11 live NIT-1: a second project's confirmation never replaces the first's).
+  const [restoredLines, setRestoredLines] = useState<RestoredLine[]>([]);
+  const confirmRestored = (slot: string, line: { text: string; title: string }, at: string | null) => {
+    setRestoredLines((lines) => [...lines.filter((it) => it.slot !== slot).slice(-3), { slot, ...line, at }]);
+  };
+  // Restore project (round 6m, GM r53 Q1), and a project or board restored somewhere else (round 6p, GM r90.4): what
+  // waits on its boards' replayed edits (`boards`), confirmed in its slot once they're saved, by the project's name and
+  // the saved boards' (round 6n, GM r71). Keyed by slot (review 11 LOW-1, live NIT-1): a second press, or a second
+  // project, adds to its own. A neutral failure per project, kept with its line (Try again); and the red line for a
+  // project deleted for good, with its boards, until its ×.
+  const [confirming, setConfirming] = useState<Record<string, PendingConfirm>>({});
+  // Replayed saves that failed on boards the person isn't on, each under its slot's confirmation (GM r113 2).
+  const [awayFailures, setAwayFailures] = useState<AwaySaveFailure[]>([]);
+  // The board names each slot's confirmation has said are saved, so a Try again's confirmation still names them.
+  const slotSaved = useRef(new Map<string, string[]>());
+  // A Try again out on an away board's line, and how it was pressed: once the line goes, focus moves on (never body).
+  const awayPress = useRef<{ id: string; keyboard: boolean } | null>(null);
+  const [projectFailures, setProjectFailures] = useState<Record<string, Exclude<ProjectRestoreFailure, 'purged'>>>({});
+  const [projectsPurged, setProjectsPurged] = useState<PurgedProject[]>([]);
+  const [dismissFocus, setDismissFocus] = useState<{ projectId: string; keyboard: boolean } | null>(null);
+  // Read only while a Restore waits on its boards' saves, or a failed replayed save's line shows.
+  const draftEntries = useAssetStudioDraftStore((state) => (restoring || Object.keys(confirming).length || awayFailures.length
+    ? state.entries : null));
+  // A failed replayed save that landed some other way (the board's own Retry, its autosave on opening it): its line goes.
+  if (draftEntries && awayFailures.length) {
+    const settled = awayFailures.filter((failure) => !Object.values(draftEntries).some((entry) => entry.savedId === failure.id
+      && entry.loaded && entry.dirty));
+    if (settled.length) setAwayFailures((shown) => shown.filter((failure) => !settled.includes(failure)));
+  }
+  if (draftEntries && Object.keys(confirming).length) {
+    const entryOf = (id: string) => Object.values(draftEntries).find((entry) => entry.savedId === id && entry.loaded);
+    // A replayed save that failed (GM r113 2): not sent again on its own, so the slot doesn't wait on it.
+    const failed = (id: string) => {
+      const entry = entryOf(id);
+      return Boolean(entry && entry.dirty && !entry.pendingSaveId && entry.saveState === 'error' && entry.saveError);
+    };
+    // Dirty until its save lands, as for a board's Restore; a draft no longer here isn't counted as saved.
+    const done = Object.entries(confirming).filter(([, pending]) => !pending.boards.some((board) => entryOf(board.id)?.dirty && !failed(board.id)));
+    if (done.length) {
+      setConfirming((now) => Object.fromEntries(Object.entries(now).filter(([slot]) => !done.some(([finished]) => finished === slot))));
+      const lines: AwaySaveFailure[] = [];
+      const cleared = new Set<string>();
+      for (const [slot, pending] of done) {
+        // Saved in this slot so far (a Try again confirms again with every board saved, GM r113 2).
+        const before = slotSaved.current.get(slot) ?? [];
+        const now = pending.boards.filter((board) => entryOf(board.id) && !failed(board.id)).map((board) => board.name);
+        const saved = [...before, ...now.filter((name) => !before.includes(name))];
+        slotSaved.current.set(slot, saved);
+        confirmRestored(slot, pending.project !== null ? projectRestoredLine(pending.project, saved, pending.stayed)
+          : restoredBoardsLine(pending.names, saved.length, pending.stayed), pending.at);
+        for (const board of pending.boards) {
+          cleared.add(board.id);
+          const line = failed(board.id) ? changeNotSavedLine(entryOf(board.id)!.saveError, board.name) : null;
+          if (line) lines.push({ slot, id: board.id, name: board.name, at: pending.at, ...line, confirm: pending });
+        }
+      }
+      setAwayFailures((shown) => [...shown.filter((it) => !cleared.has(it.id)), ...lines]);
+    }
+  }
+  if (restoring && draftEntries) {
+    const saved = restoring.map((board) => Object.values(draftEntries).find((entry) => entry.savedId === board.id && entry.loaded));
+    // Dirty until its save lands (a save out leaves it dirty), so clean here is saved.
+    if (!restoring.length) setRestoring(null);
+    else if (saved.every((entry) => entry && !entry.dirty)) {
+      setRestoring(null);
+      confirmRestored('boards', restoredBoardsLine(restoring.map((board) => board.name), restoring.filter((board) => board.sent).length),
+        moodboardEditorId);
+    }
+  }
+  /** A board came back (the line's Restore, or Recently deleted's, with or without a kept edit: GM r20 A): the line
+   *  names the ones left, and the board is confirmed once loaded and saved, by the name the line and the list showed.
+   *  `sent`: its edit is in a draft here already, and the save after the restore sends it. */
+  const boardRestored = (board: { id: string; name: string }, sent = false) => {
+    setGoneEdits((gone) => ({ ...gone, trashed: gone.trashed.filter((it) => it.id !== board.id) }));
+    setRestoring((batch) => (batch?.some((it) => it.id === board.id) ? batch
+      : [...(batch ?? []), { id: board.id, name: board.name, sent }]));
+  };
+  /** Open `id`: the board open already but not loaded as it (not found, or in Recently deleted, until a
+   *  Restore) loads again, since the same route wouldn't. */
+  const openBoard = (id: string, scope: AssetScope) => {
+    const ui = useUIStore.getState();
+    if (ui.moodboardEditorId === id && ui.moodboardEditorScope === scope) {
+      const state = useAssetStudioDraftStore.getState();
+      const entry = state.entries[resolveAssetStudioDraftKey(state, key)];
+      if (isCurrent() && entry?.savedId !== id) patch({ loaded: false, loadError: null, revision: (entry?.revision ?? revision) + 1 });
+      return;
+    }
+    enterMoodboardEditor(id, scope);
+  };
+  /** The open board, deleted while its save was out, is back (GM r21 Q3): its draft still holds the edit, so the line
+   *  goes and the edit is sent; the chip says "Not saved" until then. */
+  const resumeHeld = (stillHere: boolean) => {
+    patch({ saveError: null, saveState: 'draft' });
+    if (stillHere) sendSoon();
+    else if (savedId) void sendQueued(key, savedId);
+  };
+  // Look again whenever Recently deleted or the project list changes (review 10 live MEDIUM-1 and LOW-2; no polling).
+  const [goneChecks, setGoneChecks] = useState(0);
+  const recheckGone = useCallback(() => setGoneChecks((checks) => checks + 1), []);
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'storedAssetChanged') {
+      // Who changed a board's images while a kept edit waits on it (round 6p, GM r90.5): an agent by the label its
+      // Agent log rows show (round 6q, GM r95.3: agentActorLabel).
+      if (event.kind === 'moodboard' && event.touched?.images.length) {
+        noteKeptChange(event.id, event.touched.images, agentActorLabel(event.edit?.actor));
+      }
+      if (event.kind === 'moodboard' && keptEditsWaiting().some((kept) => kept.board === event.id)) recheckGone();
+    } else if ((event.type === 'projectsChanged' || event.type === 'socketReconnected') && keptEditsWaiting().length) recheckGone();
+  }), [recheckGone]);
+  // Restores this tab started (a Restore project press, a board's Restore, Recently deleted's): a re-check leaves
+  // their boards to them, so nothing replays twice. By id, with when, so one whose answer never came stops counting.
+  const restoresHere = useRef(new Map<string, number>());
+  // Boards whose Delete forever or Empty is being confirmed by a look-up (forgetEdits): a re-check says nothing of them.
+  const forgetting = useRef(new Set<string>());
+  const restoringHere = (id: string) => (restoresHere.current.get(id) ?? 0) > Date.now() - RESTORE_HELD_MS;
+  // The replays a re-check starts, as this render has them (defined below).
+  const replaysNow = useRef<{ whenShown: (replay: () => void) => void;
+    project: (projectId: string, name: string, boards: readonly ProjectGoneBoard[]) => Promise<void>;
+    boards: (boards: readonly GoneBoard[]) => Promise<void> }>(null!);
+  // Boards and projects restored somewhere else while this tab was hidden: replayed once it's shown (GM r90.4).
+  const backWhileHidden = useRef<Array<() => void>>([]);
+  useEffect(() => {
+    const shown = () => {
+      if (document.visibilityState === 'hidden') return;
+      for (const replay of backWhileHidden.current.splice(0)) replay();
+    };
+    document.addEventListener('visibilitychange', shown);
+    return () => document.removeEventListener('visibilitychange', shown);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(keptEditsWaiting().map((kept) => lookupStoredAsset('moodboard', kept.board).then((stored) => ({ kept, stored }), () => null)))
+      .then(async (found) => {
+        // A board in a project answers 'ready' even while its project is in Recently deleted: ask which projects are.
+        const inProject = found.some((it) => it?.stored.status === 'ready' && it.stored.asset.projectId);
+        const projects = inProject ? await listProjects().catch(() => null) : null;
+        if (cancelled || !mounted.current) return;
+        const keptNow = keptEditBoards();
+        const trashed: GoneBoard[] = [];
+        const purged: GoneBoard[] = [];
+        const project: ProjectGoneBoard[] = [];
+        const projectGone: ProjectGoneBoard[] = [];
+        for (const it of found) {
+          if (!it) continue; // Nebula didn't answer: say nothing yet
+          // Its Delete forever or Empty is being confirmed (forgetEdits), or its edit went meanwhile: it says nothing.
+          if (forgetting.current.has(it.kept.board) || !keptNow.has(it.kept.board)) continue;
+          if (it.stored.status === 'trashed') {
+            const item = it.stored.trashed;
+            trashed.push({ id: it.kept.board, name: item.name || it.kept.name || '', scope: item.projectId ? 'project' : 'global',
+              deletedAt: item.deletedAt });
+          } else if (it.stored.status === 'missing') {
+            purged.push({ id: it.kept.board, name: it.kept.name ?? '', scope: 'global' });
+          } else {
+            const projectId = it.stored.asset.projectId;
+            // The project list didn't answer: say nothing yet.
+            if (!projectId || !projects) continue;
+            const listed = projects.trash?.find((entry) => entry.id === projectId) ?? projects.projects.find((entry) => entry.id === projectId);
+            const name = it.stored.asset.name || it.kept.name || '';
+            if (listed) {
+              // Its name as the lists show it now, for a red line if it's ever deleted for good (GM r90.1).
+              noteKeptProject(it.kept.board, { id: projectId, name: listed.name });
+              if (projects.trash?.some((entry) => entry.id === projectId)) project.push({ id: it.kept.board, name, projectId, projectName: listed.name });
+            } else if (it.kept.project?.id === projectId) {
+              // In neither list: deleted for good (review 11 MEDIUM-2, GM r90.1), named as this tab last saw it.
+              projectGone.push({ id: it.kept.board, name, projectId, projectName: it.kept.project.name });
+            } else {
+              // A project this tab never saw by name: the board's red line (the edit can't be kept either way).
+              purged.push({ id: it.kept.board, name, scope: 'project' });
+            }
+          }
+        }
+        // What the lines named that is back (an agent or another tab restored it; GM r90.4): replayed at once, as Restore
+        // project does, or once the tab is shown.
+        const before = goneShown.current;
+        const ready = (id: string) => found.find((it) => it?.kept.board === id && it.stored.status === 'ready');
+        const live = new Set(projects?.projects.map((entry) => entry.id) ?? []);
+        const projectsBack = new Map<string, { name: string; boards: ProjectGoneBoard[] }>();
+        for (const board of before.project) {
+          const back = ready(board.id);
+          if (!back || back.stored.status !== 'ready' || back.stored.asset.projectId !== board.projectId || !live.has(board.projectId)
+            || restoringHere(board.projectId)) continue;
+          const group = projectsBack.get(board.projectId) ?? { name: board.projectName, boards: [] };
+          group.boards.push(board);
+          projectsBack.set(board.projectId, group);
+        }
+        const boardsBack = before.trashed.filter((board) => {
+          const back = ready(board.id);
+          if (!back || back.stored.status !== 'ready' || restoringHere(board.id)) return false;
+          const projectId = back.stored.asset.projectId;
+          return !projectId || live.has(projectId);
+        });
+        const replays = replaysNow.current;
+        for (const [projectId, group] of projectsBack) replays.whenShown(() => { void replays.project(projectId, group.name, group.boards); });
+        if (boardsBack.length) replays.whenShown(() => { void replays.boards(boardsBack); });
+        // A board gone for good stays on the red line until it shows (its edit is dropped then), so a re-check
+        // before that finds it again and adds nothing.
+        setGoneEdits((gone) => ({ trashed, project,
+          purged: [...gone.purged, ...purged.filter((board) => !gone.purged.some((it) => it.id === board.id))] }));
+        if (projectGone.length) {
+          setProjectsPurged((shown) => {
+            let next = shown;
+            for (const board of projectGone) {
+              const at = next.find((it) => it.projectId === board.projectId);
+              if (at?.boards.some((it) => it.id === board.id)) continue;
+              next = at ? next.map((it) => (it === at ? { ...it, boards: [...it.boards, board] } : it))
+                : [...next, { projectId: board.projectId, name: board.projectName, boards: [board], kind: 'keep' }];
+            }
+            return next;
+          });
+        }
+        // The boards a Restore waits on lose the ones gone for good, so the rest are still confirmed (live MEDIUM-1).
+        const lost = new Set([...purged, ...projectGone].map((board) => board.id));
+        if (lost.size) setRestoring((batch) => batch && batch.filter((board) => !lost.has(board.id)));
+      });
+    return () => { cancelled = true; };
+  }, [moodboardEditorId, deleting.refreshKey, goneChecks]);
+  /** Run `replay` now in a visible tab, else once the tab is shown (GM r90.4). */
+  const replayWhenShown = (replay: () => void) => {
+    if (document.visibilityState === 'hidden') backWhileHidden.current.push(replay);
+    else replay();
+  };
+  /**
+   * A restored project's boards (Restore project here, or the project back by an agent or another tab: one code path,
+   * GM r90.4): each kept edit replays where it is, without opening the board, and the confirmation names the project
+   * and the boards once their saves land ("Restored “Coast”. Your change to “Rivers” is saved."), with the sentence
+   * for any image a kept remove left on its board (GM r90.5).
+   */
+  const replayRestoredProject = async (projectId: string, name: string, boards: readonly ProjectGoneBoard[]) => {
+    const at = routeNow()?.id ?? null;
+    const replays = await Promise.all(boards.map((it) => replayAway(it.id)));
+    if (!mounted.current) return;
+    const slot = `project:${projectId}`;
+    const sent = boards.filter((_, index) => replays[index]?.sends).map((it) => ({ id: it.id, name: it.name }));
+    // One restore of a project at a time (restoresHere), so its slot is its own.
+    setConfirming((now) => ({ ...now, [slot]: { project: name, names: [], at, stayed: stayedLine(replays), boards: sent } }));
+    recheckGone();
+  };
+  /** Boards an agent or another tab restored while their line was up (GM r90.4): replayed in place, then confirmed as a
+   *  board Restore is ("Restored “Rivers”. Your change is saved."). */
+  const replayRestoredBoards = async (boards: readonly GoneBoard[]) => {
+    const at = routeNow()?.id ?? null;
+    const replays = await Promise.all(boards.map((it) => replayAway(it.id)));
+    if (!mounted.current) return;
+    const slot = `boards:${boards.map((board) => board.id).join(',')}`;
+    setConfirming((now) => ({ ...now, [slot]: { project: null, names: boards.map((board) => board.name), at, stayed: stayedLine(replays),
+      boards: boards.filter((_, index) => replays[index]?.sends).map((it) => ({ id: it.id, name: it.name })) } }));
+    recheckGone();
+  };
+  replaysNow.current = { whenShown: replayWhenShown, project: replayRestoredProject, boards: replayRestoredBoards };
+  /** Restore: one board comes back and opens, its edit replayed by the load; for several, Recently deleted opens.
+   *  Offline (GM r113 1, as Restore project, r90.3): a press only pulses the banner, which is the reason; nothing is
+   *  sent, no line comes, and focus stays on the button. */
+  const restoreGone = async (keyboard: boolean) => {
+    if (isBackendOffline()) {
+      refuseEditWhileOffline();
+      return;
+    }
+    const trashed = trashedShown;
+    const held = heldTrashed;
+    setRestoreError(null);
+    if (trashed.length !== 1) {
+      if (!trashed[0]) return;
+      // Recently deleted opens on the first board's scope (its top row: the line names them in the list's order),
+      // its Restore focused (the ring only from the keyboard).
+      const scope = trashed[0].scope;
+      setRestoring(trashed.map((it) => ({ id: it.id, name: it.name, sent: it.id === held?.id })));
+      setTrashRequest((request) => ({ n: (request?.n ?? 0) + 1, scope, keyboard,
+        focus: trashed.filter((it) => it.scope === scope).map((it) => it.id) }));
+      return;
+    }
+    const [board] = trashed;
+    const route = routeNow();
+    restoresHere.current.set(board.id, Date.now());
+    try {
+      await restoreTrashed('moodboard', board.id);
+    } catch (err) {
+      restoresHere.current.delete(board.id);
+      // Refused before it was sent (Nebula went offline as it was pressed): the banner says so; no line (GM r113 1).
+      if (!mounted.current || isOfflineRefusal(err)) return;
+      // Deleted for good meanwhile: the line turns red (the check says so), not a failure to restore (review 10 LOW-2).
+      if ((err as { status?: unknown }).status === 404 && await lookupStoredAsset('moodboard', board.id)
+        .then((stored) => stored.status === 'missing', () => false)) {
+        if (!mounted.current) return;
+        if (board.id === held?.id) {
+          patch({ saveError: { heading: '', reason: deletedBoardsLine([board.name], 'purged').text }, retry: 'reload', saveGone: { kind: 'purged' } });
+        } else recheckGone();
+        return;
+      }
+      setRestoreError(failureCopy(err, { heading: "Couldn't restore the board." }));
+      return;
+    }
+    if (!mounted.current) return;
+    setRestores((count) => count + 1);
+    const here = stillOn(route, null);
+    if (board.id === held?.id) {
+      boardRestored(board, true);
+      resumeHeld(here);
+      if (here) setRailFocus((request) => ({ n: (request?.n ?? 0) + 1, id: board.id, keyboard }));
+      return;
+    }
+    if (!here) {
+      // They opened another board meanwhile: they stay there (GM r21 Q5). The board is back in the rail, and its
+      // edit replays when it next opens; the confirmation names it, with nothing sent yet.
+      setGoneEdits((gone) => ({ ...gone, trashed: gone.trashed.filter((it) => it.id !== board.id) }));
+      confirmRestored('boards', restoredBoardsLine([board.name], 0), routeNow()?.id ?? null);
+      return;
+    }
+    boardRestored(board);
+    setRailScope(board.scope);
+    setRailFocus((request) => ({ n: (request?.n ?? 0) + 1, id: board.id, keyboard }));
+    openBoard(board.id, board.scope);
+  };
+  // A Restore project out, by the project and how it was pressed: if a re-check takes its line while the request is
+  // out (another tab restored or purged the project), focus goes to <main>, never body (review 11 MEDIUM-1, cause B).
+  const projectPress = useRef<{ projectId: string; keyboard: boolean } | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  // The notice stack over the board (#210 round 6q, GM r95): the board keeps its cards out of the stack's band.
+  const noticesRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const press = projectPress.current;
+    if (!press || document.querySelector(`[data-gone="project"][data-project="${CSS.escape(press.projectId)}"]`)) return;
+    if (!document.activeElement || document.activeElement === document.body) focusMain(mainRef.current);
+  });
+  /** Try again on a board's failed replayed save (GM r113 2): its save is sent again where it is, and its slot waits on
+   *  it, so its confirmation names it once saved; failed again, its line says why again. Offline it pulses the banner. */
+  const retryAwaySave = (failure: AwaySaveFailure, keyboard: boolean) => {
+    if (isBackendOffline()) {
+      refuseEditWhileOffline();
+      return;
+    }
+    const state = useAssetStudioDraftStore.getState();
+    const found = Object.entries(state.entries).find(([, entry]) => entry.savedId === failure.id && entry.loaded);
+    if (!found || found[1].pendingSaveId || !found[1].dirty) return;
+    awayPress.current = { id: failure.id, keyboard };
+    setConfirming((now) => {
+      const waiting = now[failure.slot];
+      const boards = [...(waiting?.boards ?? []).filter((board) => board.id !== failure.id), { id: failure.id, name: failure.name }];
+      return { ...now, [failure.slot]: { ...(waiting ?? failure.confirm), boards } };
+    });
+    void sendQueued(found[0], failure.id);
+  };
+  // Its line went (saved) with focus on its Try again: the next notice control, or <main>, never body.
+  useLayoutEffect(() => {
+    const press = awayPress.current;
+    if (!press || document.querySelector(`[data-away-save="${CSS.escape(press.id)}"]`)) return;
+    awayPress.current = null;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const next = noticesRef.current?.querySelector<HTMLElement>('.moodboard-studio__notice button:not(:disabled)');
+    if (next) next.focus({ preventScroll: true, focusVisible: press.keyboard } as FocusOptions);
+    else focusMain(mainRef.current);
+  });
+  /** Why a Restore project's request failed (GM r53 Q1, r90.3): the connection dropped while it was out (Nebula is
+   *  offline once a probe answers), the server isn't answering, or anything else. */
+  const projectRestoreFailureOf = async (err: unknown): Promise<Exclude<ProjectRestoreFailure, 'purged'>> =>
+    (isBackendUnreachable(err) && await probeOffline() ? 'lost' : projectRestoreFailure(err));
+  /**
+   * Restore project (GM r21 Q8; round 6m, GM r53 Q1): the project comes back through its own route (who may call it
+   * unchanged), and each of its boards' kept edits replays on it where it is, without opening it (replayRestoredProject).
+   * - Offline (GM r90.3): the button is aria-disabled and a press does nothing but pulse the banner, which is the reason;
+   *   focus stays on it. A press while its request is out does nothing (review 11 LOW-1).
+   * - Restored, here or by another tab first (a 409, or a 404 with the project listed again): the line goes, focus
+   *   moves to the next notice control outside the project's line, or <main> (never body), and the confirmation names
+   *   the project and the boards once their replayed edits are saved ("Restored “Shore”. Your change to “Rivers” is
+   *   saved."; with nothing replayed, "Restored “Shore”."; round 6n, GM r71).
+   * - Deleted for good (a 404, the project in neither list): the red line with its ×, the kept edits dropped once it
+   *   has shown, focus on its ×.
+   * - Otherwise the line stays, saying why, with Try again: the connection dropped mid-request (GM r90.3), the server
+   *   isn't answering, or it refused.
+   */
+  const restoreGoneProject = async (projectId: string, projectName: string, line: HTMLElement | null, keyboard: boolean) => {
+    if (isBackendOffline()) {
+      refuseEditWhileOffline();
+      return;
+    }
+    if (restoringHere(projectId)) return;
+    // Its boards as the line named them at the press: a re-check while the request is out may take the line.
+    const boards = goneEdits.project.filter((it) => it.projectId === projectId);
+    restoresHere.current.set(projectId, Date.now());
+    projectPress.current = { projectId, keyboard };
+    try {
+      setRestoreError(null);
+      const outcome = await restoreProject(projectId).then(() => 'restored' as const, async (err: unknown) => {
+        // Refused before it was sent (Nebula went offline as it was pressed): the banner says so; nothing changes.
+        if (isOfflineRefusal(err)) return 'offline' as const;
+        const status = (err as { status?: unknown }).status;
+        if (status === 409) return 'restored' as const;
+        if (status !== 404) return projectRestoreFailureOf(err);
+        // Not in Recently deleted: restored somewhere else, or deleted for good.
+        return listProjects().then((list) => {
+          if (list.projects.some((project) => project.id === projectId)) return 'restored' as const;
+          return list.trash?.some((entry) => entry.id === projectId) ? 'refused' as const : 'purged' as const;
+        }, projectRestoreFailureOf);
+      });
+      if (projectPress.current?.projectId === projectId) projectPress.current = null;
+      if (!mounted.current || outcome === 'offline') return;
+      setProjectFailures((failures) => {
+        const next = { ...failures };
+        delete next[projectId];
+        if (outcome !== 'restored' && outcome !== 'purged') next[projectId] = outcome;
+        return next;
+      });
+      if (outcome !== 'restored' && outcome !== 'purged') return;
+      setGoneEdits((gone) => ({ ...gone, project: gone.project.filter((it) => it.projectId !== projectId) }));
+      if (outcome === 'purged') {
+        setProjectsPurged((shown) => [...shown.filter((it) => it.projectId !== projectId),
+          { projectId, name: projectName, boards, kind: 'restore' }]);
+        setDismissFocus({ projectId, keyboard });
+        return;
+      }
+      // Chosen before the lines go, outside every line of this project; a line already gone left focus on <main>.
+      // (A line a re-check already took left focus on <main>: the layout effect above.)
+      if (line?.isConnected) focusAfterLine(line, keyboard, projectId);
+      await replayRestoredProject(projectId, projectName, boards);
+    } finally {
+      if (projectPress.current?.projectId === projectId) projectPress.current = null;
+      restoresHere.current.delete(projectId);
+    }
+  };
+  // A project deleted for good: focus on its red line's × once it shows (the button pressed is gone).
+  useEffect(() => {
+    if (!dismissFocus) return;
+    const close = document.querySelector<HTMLElement>(`[data-gone="project-purged"][data-project="${CSS.escape(dismissFocus.projectId)}"] button`);
+    close?.focus({ preventScroll: true, focusVisible: dismissFocus.keyboard } as FocusOptions);
+    setDismissFocus(null);
+  }, [dismissFocus]);
+  /** Boards a Delete forever or Empty in the rail's list took (GM r21 Q2): the lines that named them clear at once
+   *  (the confirm said their changes go too), and their kept edits go with them, silently, once a look-up finds them
+   *  gone for good: Empty sends what its list showed, and a board an agent or another tab restored meanwhile wasn't
+   *  purged, so its edit stays and its line comes back if it's still deleted (review 11 LOW-5). A Restore's batch keeps
+   *  the rest. */
+  const forgetEdits = (ids: readonly string[]) => {
+    const boards = keptEditBoards();
+    const listed = ids.filter((id) => boards.has(id));
+    if (!listed.length) return;
+    const hidden = new Set(listed);
+    for (const id of listed) forgetting.current.add(id);
+    setGoneEdits((now) => ({ ...now, trashed: now.trashed.filter((it) => !hidden.has(it.id)) }));
+    setRestoring((batch) => batch && batch.filter((it) => !hidden.has(it.id)));
+    // No answer: the confirm said they'd be lost, so they are.
+    void Promise.all(listed.map((id) => lookupStoredAsset('moodboard', id).then((stored) => (stored.status === 'missing' ? id : null), () => id)))
+      .then((found) => {
+        const gone = new Set(found.filter((id): id is string => id !== null));
+        for (const id of gone) dropKeptEdit(id);
+        for (const id of listed) forgetting.current.delete(id);
+        const store = useAssetStudioDraftStore.getState();
+        const open = resolveAssetStudioDraftKey(store, key);
+        for (const [at, entry] of Object.entries(store.entries)) {
+          if (!entry.loaded || !entry.savedId || !gone.has(entry.savedId)) continue;
+          // The open board loads again (not found now); another board's draft here is forgotten.
+          if (at === open) patch({ loaded: false, loadError: null, saveError: null, revision: entry.revision + 1 });
+          else resetBoardDraft(at, emptyDraft());
+        }
+        if (gone.size < listed.length && mounted.current) recheckGone();
+      });
+  };
+  /** What a Delete forever or Empty of `items` would lose of the person's (GM r21 Q2), for its confirm. */
+  const unsavedAtStake = (items: readonly TrashedItem[]) => {
+    const boards = keptEditBoards();
+    return lostTooLine(items.filter((item) => boards.has(item.id)).map((item) => item.name));
+  };
+
   const deleteBoard = async () => {
     if (!savedId || !isCurrent()) return;
     const scope = moodboardEditorScope;
     const deletedKey = key;
+    const route = routeNow();
     // Save edits made since the last autosave first, so Undo and Restore
     // bring back what the person last saw. If that save fails, don't delete.
     if (dirty && canSave) {
@@ -974,14 +2847,18 @@ export function MoodboardStudioView() {
     const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
     if (!removed || !mounted.current) return;
     useBoardUndoStore.getState().clear(deletedKey);
-    const store = useAssetStudioDraftStore.getState();
     // Forget the session draft, so reopening it after a restore loads what was saved.
-    store.reset(deletedKey, emptyDraft());
+    resetBoardDraft(deletedKey, emptyDraft());
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
     const openProjectId = currentProject()?.id ?? null;
-    store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId),
-      scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
+    const newKey = assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId);
+    // Another unsaved board with content is saved first, as New does (GM r8 answer 1).
+    const kept = await keepUnsaved(newKey);
+    if (kept.kept) {
+      resetBoardDraft(newKey, scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
+    }
+    if (!stillOn(route, kept.savedId)) return;
     setRailScope(scope);
     enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
@@ -1029,6 +2906,10 @@ export function MoodboardStudioView() {
     || (retry === 'undo' && Boolean(retryStep) && nextUndoId === retryStep)
     || (retry === 'redo' && Boolean(retryStep) && nextRedoId === retryStep));
   const saveOwed = saveState === 'error' && dirty && retry == null;
+  // A background send that failed on reconnect (GM r12 1): nothing is lost,
+  // so its line and the chip are neutral, and the header's Retry is its one retry.
+  // The open board's save found it in Recently deleted (GM r21 Q3): still "Not saved", nothing lost, its line the deleted-board one.
+  const notSaved = saveState === 'error' && (isBoardNotSavedLine(saveError) || heldGone?.kind === 'trashed');
   const retryFailed = () => {
     if (retry === 'analyze') void runAnalyze();
     else if (retry === 'undo' && retryStep) void runUndo('undo', retryStep);
@@ -1039,8 +2920,8 @@ export function MoodboardStudioView() {
   const header = (
     <WorkspaceHeader title="Moodboard" onBack={exitMoodboardEditor} className="moodboard-studio-toolbar">
       <ViewSwitch view={view} onChange={setView} />
-      <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${saveState}`}>
-        {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Draft'}
+      <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${notSaved ? 'not-saved' : saveState}`}>
+        {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : notSaved ? 'Not saved' : saveState === 'error' ? 'Error' : 'Draft'}
       </div>
       {(canRetry || saveOwed) && (
         <button type="button" className="moodboard-studio-toolbar__button" onClick={retryFailed}>
@@ -1069,20 +2950,40 @@ export function MoodboardStudioView() {
         initialScope={shownRailScope}
         boardHome={boardHome}
         projectId={projectId}
-        refreshKey={`${deleting.refreshKey}:${moving.moves}`}
+        refreshKey={`${deleting.refreshKey}:${moving.moves}:${restores}`}
+        trashRequest={trashRequest}
+        focusRow={railFocus}
+        onFocusDone={() => setRailFocus(null)}
+        // The several-board flow keeps the list open across a remount (review 10 NIT-3) while boards are left.
+        keepTrashOpen={Boolean(restoring) && trashedShown.length > 0}
+        onTrashChanged={recheckGone}
+        atStake={unsavedAtStake}
+        onPurged={forgetEdits}
+        onRestoring={(item) => { restoresHere.current.set(item.id, Date.now()); }}
+        onRestored={(item) => {
+          const held = item.id === heldTrashed?.id;
+          boardRestored(item, held);
+          if (held) resumeHeld(true);
+        }}
         onSelect={(id, scope) => {
           setRailScope(scope);
-          enterMoodboardEditor(id, scope);
+          openBoard(id, scope);
         }}
-        onNew={(scope) => {
+        onNew={async (scope) => {
           if (!isCurrent()) return;
           const project = scope === 'project' ? currentProject() : null;
           if (scope === 'project' && !project) {
             patch({ saveError: NO_PROJECT_OPEN });
             return;
           }
-          useAssetStudioDraftStore.getState().reset(
-            assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id), emptyDraft());
+          const newKey = assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id);
+          // An unsaved board with content (an add on its way counts) is saved
+          // first: New never drops a paste (GM r8 answer 1). If that save
+          // fails, the board stays open with its line.
+          const route = routeNow();
+          const kept = await keepUnsaved(newKey);
+          if (kept.kept) resetBoardDraft(newKey, emptyDraft());
+          if (!stillOn(route, kept.savedId)) return;
           setRailScope(scope);
           enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
         }}
@@ -1095,25 +2996,139 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading Moodboard...'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
   );
 
+  // One line per project (GM r90.2), its boards in the order the look-up found them.
+  const goneProjects = goneEdits.project.reduce<Array<{ projectId: string; projectName: string; boards: ProjectGoneBoard[] }>>((groups, board) => {
+    const group = groups.find((it) => it.projectId === board.projectId);
+    if (group) group.boards.push(board);
+    else groups.push({ projectId: board.projectId, projectName: board.projectName, boards: [board] });
+    return groups;
+  }, []);
   const notices = (
     <>
-      {shownLoadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={shownLoadError} /></div>}
+      {/* While the red line names this board (gone for good), not "Moodboard not found" too (GM r21 Q4). */}
+      {shownLoadError && !(shownLoadError === NOT_FOUND_LINE && goneEdits.purged.some((board) => board.id === moodboardEditorId)) && (
+        <FailureLine className="moodboard-studio__notice moodboard-studio__notice--warn" failure={shownLoadError} />)}
       {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
-      {deleting.deleteError && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={deleting.deleteError} alert />
+      {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). A save that
+          found the board deleted says the deleted-board line instead (GM r21 Q3): with Restore below while it's in
+          Recently deleted; red when it's gone for good. */}
+      {saveError && heldGone?.kind === 'purged' && (() => {
+        const line = deletedBoardsLine([savedNameOf(draft)], 'purged');
+        return <div className="moodboard-studio__notice moodboard-studio__notice--error" data-gone="purged" role="status" title={line.title}>
+          <LiveText text={line.text} /></div>;
+      })()}
+      {saveError && !heldGone && (notSaved
+        ? <FailureLine className="moodboard-studio__notice moodboard-studio__notice--neutral" failure={saveError} neutral />
+        : <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={saveError} retry={canRetry} />)}
+      {/* A Restore's confirmation (round 6k, GM r19 2; round 6l, GM r20 A): before any "Kept …" line its replay gives. */}
+      {restoredLines.filter((line) => line.at === moodboardEditorId).map((line) => (
+        <Fragment key={line.slot}>
+          <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-restored=""
+            role="status" title={line.title}><LiveText text={line.text} /></div>
+          {/* Under it, each board whose replayed save failed (GM r113 2): its own save line, neutral (the edit waits in
+              its draft), with Try again, a real button that sends the save again. The same element while it retries. */}
+          {awayFailures.filter((failure) => failure.slot === line.slot && failure.at === moodboardEditorId).map((failure) => (
+            <div key={failure.id} className={`moodboard-studio__notice moodboard-studio__notice--neutral${failure.retry ? ' moodboard-studio__notice--action' : ''}`}
+              data-line-neutral="" data-away-save={failure.id} role="status" title={failure.title}>
+              <span><LiveText text={failure.text} /></span>
+              {failure.retry && (
+                <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+                  aria-disabled={offline || undefined} {...offlineMark(offline)}
+                  onClick={(event) => retryAwaySave(failure, event.detail === 0)}>Try again</button>
+              )}
+            </div>
+          ))}
+        </Fragment>
+      ))}
+      {/* The Studio's own neutral line about this board (round 6g: what a repeat kept from the board). */}
+      {notice && <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status"
+        title={typeof notice === 'string' ? undefined : notice.title}><LiveText text={typeof notice === 'string' ? notice : notice.text} /></div>}
+      {/* A kept Undo the board changed after (GM r21 Q1): its own line, no button. */}
+      {undoDropped && undoDropped === savedId && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-undo-dropped="" role="status">
+          <LiveText text={UNDO_DROPPED_LINE} /></div>
       )}
-      {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). */}
-      {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">
-        <FailureLines failure={saveError} retry={canRetry} /></div>}
-      {moving.error && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
-      )}
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={moving.error} alert />
+      {/* Kept edits whose boards were deleted (round 6j): the Restore line first, then the gone-for-good one. */}
+      {trashedShown.length > 0 && (() => {
+        const line = deletedBoardsLine(trashedShown.map((board) => board.name), 'trashed');
+        return (
+          <div className="moodboard-studio__notice moodboard-studio__notice--neutral moodboard-studio__notice--action" data-line-neutral=""
+            data-gone="trashed" role="status" title={line.title}>
+            <span><LiveText text={line.text} /></span>
+            {/* Offline it follows Restore project (GM r113 1, r90.3): aria-disabled, focus kept, the banner the reason. */}
+            <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+              aria-disabled={offline || undefined} {...offlineMark(offline)}
+              onClick={(event) => { void restoreGone(event.detail === 0); }}>Restore</button>
+          </div>
+        );
+      })()}
+      {/* Boards whose project is in Recently deleted (GM r21 Q8): one line per project, naming its boards (round 6p, GM
+          r90.2), restored in place. A Restore project that failed (round 6m, GM r53 Q1) says why on the line, with Try
+          again. The button stays the same element, so focus stays on it. Offline it is aria-disabled, focus kept, and a
+          press pulses the banner, which says why (GM r90.3). */}
+      {goneProjects.map((group) => {
+        const failure = projectFailures[group.projectId];
+        const line = failure ? projectRestoreFailedLine(group.projectName, failure)
+          : projectDeletedLine(group.projectName, group.boards.map((board) => board.name));
+        return (
+          <div key={group.projectId} className="moodboard-studio__notice moodboard-studio__notice--neutral moodboard-studio__notice--action"
+            data-line-neutral="" data-gone="project" data-project={group.projectId} role="status" title={line.title}>
+            <span><LiveText text={line.text} /></span>
+            <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+              aria-disabled={offline || undefined} {...offlineMark(offline)}
+              onClick={(event) => {
+                void restoreGoneProject(group.projectId, group.projectName, event.currentTarget.closest<HTMLElement>('[data-gone]'),
+                  event.detail === 0);
+              }}>{failure ? 'Try again' : 'Restore project'}</button>
+          </div>
+        );
+      })}
+      <FailureLine className="moodboard-studio__notice moodboard-studio__notice--error" failure={restoreError} alert />
+      {/* A project deleted for good while its Restore project was out (round 6m, GM r53 Q1): red, said once, its × only,
+          as the 6k red line; its boards' kept edits are dropped once it has shown. */}
+      {projectsPurged.map((project) => {
+        // Its Restore project found it deleted for good (GM r53 Q1), or a look-up did (round 6p, GM r90.1).
+        const names = project.boards.map((board) => board.name);
+        const line = project.kind === 'restore' ? projectRestoreFailedLine(project.name, 'purged', names) : projectGoneLine(project.name, names);
+        return (
+          <div key={project.projectId} className="moodboard-studio__notice moodboard-studio__notice--error moodboard-studio__notice--action"
+            data-gone="project-purged" data-project={project.projectId} role="status" title={line.title}>
+            <span><LiveText text={line.text} /></span>
+            <DropOnShow boards={project.boards} />
+            <button type="button" className="moodboard-studio__notice-close" aria-label="Dismiss"
+              onClick={(event) => {
+                const shown = event.currentTarget.closest<HTMLElement>('[data-gone]');
+                if (shown) focusAfterLine(shown, event.detail === 0);
+                setProjectsPurged((list) => list.filter((it) => it.projectId !== project.projectId));
+              }}><X aria-hidden="true" /></button>
+          </div>
+        );
+      })}
+      {goneEdits.purged.length > 0 && (() => {
+        const line = deletedBoardsLine(goneEdits.purged.map((board) => board.name), 'purged');
+        // Said once, in the status region; its edit is dropped once it has shown, so only the × (GM r19 1).
+        return (
+          <div className="moodboard-studio__notice moodboard-studio__notice--error moodboard-studio__notice--action" data-gone="purged"
+            role="status" title={line.title}>
+            <span><LiveText text={line.text} /></span>
+            <DropOnShow boards={goneEdits.purged} />
+            <button type="button" className="moodboard-studio__notice-close" aria-label="Dismiss"
+              onClick={(event) => {
+                const shown = event.currentTarget.closest<HTMLElement>('[data-gone]');
+                if (shown) focusAfterLine(shown, event.detail === 0);
+                setGoneEdits((gone) => ({ ...gone, purged: [] }));
+              }}><X aria-hidden="true" /></button>
+          </div>
+        );
+      })()}
     </>
   );
 
@@ -1263,12 +3278,13 @@ export function MoodboardStudioView() {
       <div className="moodboard-studio-view moodboard-studio-view--board">
         {header}
         {rail}
-        <main className="moodboard-studio-view__board">
+        <main ref={mainRef} className="moodboard-studio-view__board">
           {loading ? loadingBlock : (
             <>
-              <div className="moodboard-studio-view__board-notices">{notices}</div>
-              <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} />
+              <div ref={noticesRef} className="moodboard-studio-view__board-notices">{notices}</div>
+              <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles} notices={noticesRef}
+                pasteTarget={pasteTarget} placeholders={placeholders} onPlaceholdersFilled={dropFilled}
+                outside={outsideTiles} onOutsideDone={dismissOutside} offline={offline} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
           )}
@@ -1283,6 +3299,7 @@ export function MoodboardStudioView() {
           </BoardSidePanel>
         )}
         {trashToast}
+        {spokenLine}
       </div>
     );
   }
@@ -1291,7 +3308,7 @@ export function MoodboardStudioView() {
     <div className="moodboard-studio-view">
       {header}
       {rail}
-      <main className="moodboard-studio-view__main">
+      <main ref={mainRef} className="moodboard-studio-view__main">
         {loading ? loadingBlock : (
           <>
             {notices}
@@ -1314,9 +3331,9 @@ export function MoodboardStudioView() {
               {boardFields}
             </section>
 
-            <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploading={uploading}
+            <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploads={listUploads}
               onFiles={handleFiles} onDrop={handleDrop} onRemove={removeImage} onUpdate={updateImage}
-              onSetCover={setCover} onTextDone={imageTextDone} />
+              onSetCover={setCover} onTextDone={imageTextDone} offline={offline} />
 
             {briefFields}
             {analysisSection}
@@ -1326,6 +3343,7 @@ export function MoodboardStudioView() {
       </main>
       <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
       {trashToast}
+      {spokenLine}
     </div>
   );
 }
@@ -1366,6 +3384,15 @@ function MoodboardRail({
   boardHome,
   projectId,
   refreshKey,
+  trashRequest,
+  focusRow,
+  onFocusDone,
+  keepTrashOpen,
+  onTrashChanged,
+  atStake,
+  onPurged,
+  onRestored,
+  onRestoring,
   onSelect,
   onNew,
 }: {
@@ -1376,10 +3403,34 @@ function MoodboardRail({
   /** The canvas project open now (null: none), whose boards the Project tab lists. */
   projectId: string | null;
   refreshKey?: unknown;
+  /** A Studio line's Restore for several deleted boards: show this scope's Recently deleted, open (round 6j). */
+  trashRequest?: (TrashOpenRequest & { scope: AssetScope }) | null;
+  /** A row to focus once it's listed (round 6l, GM r21 Q7). */
+  focusRow?: RailFocusRequest | null;
+  /** The row took focus: the request is done (a later remount doesn't focus it again). */
+  onFocusDone?: () => void;
+  /** Recently deleted opens on mount (review 10 NIT-3: a several-board Restore keeps the list open across a remount). */
+  keepTrashOpen?: boolean;
+  /** Recently deleted changed (an action in its list, another tab, an agent). */
+  onTrashChanged?: () => void;
+  /** What a Delete forever or Empty of these boards would lose of the person's, for its confirm (GM r21 Q2). */
+  atStake?: (items: readonly TrashedItem[]) => { text: string; title: string } | null;
+  /** Boards deleted for good from this rail's Recently deleted. */
+  onPurged?: (ids: readonly string[]) => void;
+  /** A board came back from this rail's Recently deleted (before it opens). */
+  onRestored?: (item: { id: string; name: string }) => void;
+  /** A Restore in this rail's Recently deleted was pressed, before its request goes. */
+  onRestoring?: (item: { id: string }) => void;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
 }) {
   const [scope, setScope] = useState<AssetScope>(initialScope);
+  // A new request (not one made before this rail mounted) switches to its scope.
+  const [seenRequest, setSeenRequest] = useState(trashRequest?.n ?? 0);
+  if (trashRequest && trashRequest.n !== seenRequest) {
+    setSeenRequest(trashRequest.n);
+    setScope(trashRequest.scope);
+  }
   // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
   const [relistKey, setRelistKey] = useState(0);
   const relist = useCallback(() => setRelistKey((value) => value + 1), []);
@@ -1422,6 +3473,18 @@ function MoodboardRail({
   }, [scope, projectId, noProject, listKey, activeId, refreshKey, relistKey]);
   const notice = railNotice('moodboard', boardHome);
   const shown = noProject || listing.for !== listKey ? [] : listing.items;
+  // A Restore's board takes focus once its row is listed, once per request.
+  const rows = useRef<HTMLDivElement | null>(null);
+  const focused = useRef<number | null>(null);
+  const shownIds = shown.map((m) => m.id).join('\n');
+  useEffect(() => {
+    if (!focusRow || focused.current === focusRow.n || !shownIds.split('\n').includes(focusRow.id)) return;
+    focused.current = focusRow.n;
+    const row = Array.from(rows.current?.querySelectorAll<HTMLButtonElement>('button[data-board-id]') ?? [])
+      .find((it) => it.getAttribute('data-board-id') === focusRow.id);
+    row?.focus({ preventScroll: false, focusVisible: focusRow.keyboard } as FocusOptions);
+    onFocusDone?.();
+  }, [focusRow, shownIds, onFocusDone]);
   const busy = !noProject && loading;
   const failed = noProject ? null : error;
 
@@ -1449,7 +3512,7 @@ function MoodboardRail({
       </div>
       <button type="button" className="moodboard-rail__new" disabled={noProject}
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
-      <div className="moodboard-rail__list">
+      <div className="moodboard-rail__list" ref={rows}>
         {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status">{notice}</div>}
         {busy && <div className="moodboard-rail__empty">Loading...</div>}
         {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error">{failed}</div>}
@@ -1462,6 +3525,7 @@ function MoodboardRail({
           <button
             key={m.id}
             type="button"
+            data-board-id={m.id}
             className={m.id === activeId ? 'moodboard-rail__item moodboard-rail__item--active' : 'moodboard-rail__item'}
             onClick={() => onSelect(m.id, scope)}
           >
@@ -1480,7 +3544,9 @@ function MoodboardRail({
         })}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
-        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
+        onRestored={(item) => { onRestored?.(item); onSelect(item.id, scope); }} onRestoring={onRestoring}
+        onTrashChanged={() => { relist(); onTrashChanged?.(); }} openRequest={trashRequest ?? undefined}
+        defaultOpen={keepTrashOpen} atStake={atStake} onPurged={onPurged} />
     </div>
   );
 }

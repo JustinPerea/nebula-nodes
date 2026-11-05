@@ -215,3 +215,10 @@ export function roomBelow(
   }
   return limit - box.top;
 }
+
+/** GM r108 c: Open on a reply's Update keeps its visible word and says what
+ * it opens, starting with it: "Open Claude Code’s reply in “Coast”" (an
+ * unnamed project reads “Untitled”, GM r108 d). */
+export function threadOpenLabel(label: string, author: string, projectName: string | null | undefined): string {
+  return `${label} ${author}’s reply in “${(projectName ?? '').trim() || 'Untitled'}”`;
+}

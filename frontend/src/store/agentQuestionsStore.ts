@@ -9,7 +9,7 @@ import {
   type QuestionSetStatus,
   type QuestionSetView,
 } from '../lib/agentQuestions';
-import { failureMessage } from '../lib/errorCopy';
+import { RequestFailedError, failureMessage } from '../lib/errorCopy';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -24,6 +24,9 @@ import { failureMessage } from '../lib/errorCopy';
  * the socket reconnects brings the same set under a new key, and `synced`
  * keeps its draft and an open form.
  */
+
+/** The most words one answer takes (the backend's limit). */
+export const ANSWER_TEXT_MAX = 1000;
 
 export interface QuestionSetEntry {
   view: QuestionSetView;
@@ -127,7 +130,10 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       const entry = state.sets[setId];
       if (!entry) return {};
       const view: QuestionSetView = { ...entry.view, status, answers, closedAt: Date.now() };
+      // In the same update as the close: a set this tab closed was busy until
+      // it closed (the composer tells it from one closed in another tab).
       return {
+        busy: without(state.busy, setId),
         sets: { ...state.sets, [setId]: { view } },
         drafts: without(state.drafts, setId),
         errors: without(state.errors, setId),
@@ -189,7 +195,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
     setText: (setId, questionId, text) => {
       const question = get().sets[setId]?.view.questions.find((q) => q.id === questionId);
       if (!question?.allowText) return;
-      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, 1000) }));
+      editDraft(setId, questionId, (draft) => ({ ...draft, text: text.slice(0, ANSWER_TEXT_MAX) }));
     },
 
     send: async (setId) => {
@@ -201,15 +207,24 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       try {
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
+        // The set closed first (withdrawn, or answered in another tab): it is
+        // closed here too, and nothing went out (GM r79.6's race). The
+        // composer then says what happened; the row shows its outcome.
+        const already = error instanceof RequestFailedError && error.status === 409
+          ? /already (answered|dismissed|withdrawn)/.exec(String(error.detail ?? '')) : null;
+        if (already) {
+          get().closed(setId, already[1] as Exclude<QuestionSetStatus, 'open'>, null);
+          return false;
+        }
         set((state) => ({
           busy: without(state.busy, setId),
           errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't send the answers.") },
         }));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       // The socket's questionsClosed brings the server's copy; until then, ours.
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'answered', localAnswers(entry.view, inputs));
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 
@@ -226,8 +241,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         }));
         return false;
       }
-      set((state) => ({ busy: without(state.busy, setId) }));
       if (get().sets[setId]?.view.status === 'open') settle(setId, 'dismissed', null);
+      else set((state) => ({ busy: without(state.busy, setId) }));
       return true;
     },
 

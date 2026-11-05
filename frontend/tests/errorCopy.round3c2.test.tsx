@@ -28,10 +28,13 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 import { BatchNode } from '../src/components/nodes/BatchNode';
 import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCinemaMotionStore } from '../src/store/cinemaMotionStore';
 import { ConnectionLostError } from '../src/lib/errorCopy';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const HEADING = "Couldn't run the node.";
 // Round 3f (GM): "The Cinema shot panel heading: yes, "Couldn't generate the shot."".

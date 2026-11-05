@@ -334,23 +334,24 @@ class CharacterStore:
         this id is already in the target folder."""
         from services.asset_project_rehome import GLOBAL_DIR, move_asset
 
-        root = _char_root()
-        path = _find_char_file(root, char_id)
-        if path is None:
-            raise KeyError(f"Character {char_id} not found")
-        target = projectId or None
-        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
-        # Two live copies (a re-home that skipped a collision leaves one in an
-        # old folder): which one is "the" asset isn't ours to guess.
-        copies = sorted(sub.name for sub in root.iterdir()
-                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{char_id}.json").is_file())
-        if len(copies) > 1:
-            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
-        before = json.loads(path.read_text(encoding="utf-8"))
-        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
-            return before, before, False
-        moved_to = move_asset("character", root, path, target)
-        return before, json.loads(moved_to.read_text(encoding="utf-8")), True
+        with _char_lock(_validate_char_id(char_id)):  # a purge of its project holds it too
+            root = _char_root()
+            path = _find_char_file(root, char_id)
+            if path is None:
+                raise KeyError(f"Character {char_id} not found")
+            target = projectId or None
+            _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+            # Two live copies (a re-home that skipped a collision leaves one in an
+            # old folder): which one is "the" asset isn't ours to guess.
+            copies = sorted(sub.name for sub in root.iterdir()
+                            if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{char_id}.json").is_file())
+            if len(copies) > 1:
+                raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+            before = json.loads(path.read_text(encoding="utf-8"))
+            if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+                return before, before, False
+            moved_to = move_asset("character", root, path, target)
+            return before, json.loads(moved_to.read_text(encoding="utf-8")), True
 
     # ------------------------------------------------------------------
     # delete
@@ -363,11 +364,12 @@ class CharacterStore:
 
         Raises KeyError if not found.
         """
-        root = _char_root()
-        path = _find_char_file(root, char_id)
-        if path is None:
-            raise KeyError(f"Character {char_id} not found")
-        return asset_trash.move_to_trash(root, path, kind="character", deleted_by=deleted_by)
+        with _char_lock(_validate_char_id(char_id)):
+            root = _char_root()
+            path = _find_char_file(root, char_id)
+            if path is None:
+                raise KeyError(f"Character {char_id} not found")
+            return asset_trash.move_to_trash(root, path, kind="character", deleted_by=deleted_by)
 
     # ------------------------------------------------------------------
     # Recently deleted
@@ -385,10 +387,10 @@ class CharacterStore:
 
     def restore(self, char_id: str) -> dict:
         """Bring a trashed Character back with the same id and contents."""
-        _validate_char_id(char_id)
-        return asset_trash.restore(_char_root(), char_id)
+        with _char_lock(_validate_char_id(char_id)):
+            return asset_trash.restore(_char_root(), char_id)
 
     def purge(self, char_id: str) -> None:
         """Delete a trashed Character for good. Only the person may (main.py)."""
-        _validate_char_id(char_id)
-        asset_trash.purge(_char_root(), char_id)
+        with _char_lock(_validate_char_id(char_id)):
+            asset_trash.purge(_char_root(), char_id)

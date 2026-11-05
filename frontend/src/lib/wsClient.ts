@@ -10,6 +10,7 @@ import type {
 } from './runHistory';
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
+import type { ChannelListenersEvent, PersonThreadEvent } from './personThread';
 
 export type ErrorCategory =
   | 'blocked'
@@ -90,10 +91,10 @@ export interface AgentPresenceEvent {
   eventId?: string;
 }
 
-/** Person tabs only: node moves carried these session cursors past their
- *  arrival radius, so they arrive now (backend agent_presence.carry_nodes,
- *  GM - Design #211 follow-up r23 item 2). Every tab, and a reload, stack
- *  them by these. */
+/** Person tabs only: a node move changed these session cursors' target
+ *  chains (the other cursors linked to each through targets 16 canvas units
+ *  apart), so they arrive now (backend agent_presence.carry_nodes, GM -
+ *  Design #219 r24 Q2). Every tab, and a reload, stack them by these. */
 export interface AgentPresenceArrivalEvent {
   type: 'agentPresenceArrival';
   cursors: { agentId: string; key: string; ordinal: number; since: number }[];
@@ -184,7 +185,7 @@ export interface StoredAssetChangedEvent {
   version?: number;
   /** Who wrote it (`tab` only for the person's own tab: the Studio skips its
    *  own echo), what it touched, and its undo (null over 200 ops, or a PUT). */
-  edit?: { actor?: { kind?: string; name?: string } | null; tab?: string | null } | null;
+  edit?: { actor?: { kind?: string; id?: string; name?: string } | null; tab?: string | null } | null;
   touched?: { images: string[]; frames: string[]; looks: string[] } | null;
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }
@@ -248,6 +249,16 @@ export interface ProposalNotReady {
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
+export interface ProposalEdge {
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+  sourceName?: string;
+  targetName?: string;
+  targetLabel?: string;
+}
+
 export interface ProposalView {
   id: string;
   status: ProposalStatus;
@@ -272,8 +283,26 @@ export interface ProposalView {
     willRun: boolean;
     ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
   }>;
-  edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-  params: Array<{ nodeId: string; name: string; changes: Record<string, { from: unknown; to: unknown }> }>;
+  /** `sourceName`, `targetName` and `targetLabel` are the panel's words for
+   * each wire: “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3). */
+  edges: ProposalEdge[];
+  /** Wires Accept removes: a model change drops the ones its new model has
+   * no port for (backend main._stage_proposal `drops`). */
+  removedEdges?: ProposalEdge[];
+  /** Each node it touches, by id or ref, with its canvas name. */
+  names?: Record<string, string>;
+  /** The backend's one count of changes, for the card, the Update and MCP:
+   * each new node, wire, changed node and removed wire. */
+  changeCount?: number;
+  /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
+   * card's words, "Hero shot" and "Krea 2" (no id). `inputsUpdated`: the
+   * change sets the model param `key` to the model the node already has, so
+   * its inputs are read again; `name` is that model's own name (GM - Design,
+   * PR #216 r4 8: "Krea 2 · inputs updated"). Names follow renames while the
+   * proposal is open. */
+  params: Array<{ nodeId: string; name: string; title?: string; model?: string;
+    inputsUpdated?: { key: string; name: string };
+    changes: Record<string, { from: unknown; to: unknown }> }>;
   run: string[];
   cost: {
     paidRuns: number;
@@ -281,7 +310,10 @@ export interface ProposalView {
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** Each run node; `name`, `model` and `billedTo` ("your Krea plan") are
+     * the plan line's words (backend canvas_proposals.plan_line). */
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string;
+      name?: string; model?: string; billedTo?: string | null }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
@@ -294,6 +326,10 @@ export interface ProposalView {
   reason: string | null;
   idMap: Record<string, string> | null;
   runNodeIds: string[] | null;
+  /** The card's plan line under the note, by node name: "Changes and runs
+   * “Hero shot” · Krea 2 on your Krea plan · no list price" (backend
+   * canvas_proposals.plan_line; agents read the same words). */
+  plan?: string;
 }
 
 /**
@@ -406,6 +442,8 @@ export type ExecutionEvent = (
   | QuestionsOpenedEvent
   | QuestionsSyncEvent
   | QuestionsClosedEvent
+  | PersonThreadEvent
+  | ChannelListenersEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 

@@ -363,6 +363,8 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/canvas/cursor"): "an agent's cursor; no graph",
     ("POST", "/api/canvas/status"): "an agent's status line; no graph",
     ("POST", "/api/canvas/view"): "the canvas's viewport report; no graph",
+    ("POST", "/api/agent/channel"): "a channel listener's readiness beat; no graph",
+    ("DELETE", "/api/agent/channel"): "a channel listener's goodbye; no graph",
     ("POST", "/api/canvas/agent-notes"): "Updates on the project record; no graph",
     ("POST", "/api/canvas/agent-notes/read"): "Updates read state; no graph",
     ("POST", "/api/canvas/agent-notes/{note_id}/dismiss"): "Updates dismiss; no graph",
@@ -381,6 +383,10 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("DELETE", "/api/canvas/questions/{set_id}"): "an agent's questions; no graph",
     ("POST", "/api/canvas/questions/{set_id}/answer"): "the person's answers; no graph",
     ("POST", "/api/canvas/questions/{set_id}/dismiss"): "the person's answers; no graph",
+    ("POST", "/api/canvas/thread/messages"): "the person's Message box thread on the project record; no graph",
+    ("POST", "/api/agent/thread/accepted"): "a message's state in the thread; no graph",
+    ("POST", "/api/agent/thread/held"): "a message's state in the thread; no graph",
+    ("POST", "/api/canvas/thread/replies"): "an agent's reply in the thread; no graph",
     ("POST", "/api/asset-proposals"): "moodboard and cover proposals; no graph",
     ("POST", "/api/asset-proposals/{proposal_id}/accept"): "changes a moodboard or a cover; no graph",
     ("POST", "/api/asset-proposals/{proposal_id}/reject"): "closes the proposal; no graph",
@@ -885,3 +891,19 @@ async def test_L3_cinema_merges_and_recovery_params_check_the_runs_canvas(api):
         await asyncio.gather(holder, return_exceptions=True)
     assert api.graph.nodes["n1"]["params"]["scene"]["shots"][0] == {"id": "s1", "output": {"status": "AG"}}
     assert api.graph.nodes["n1"]["outputs"] == {}
+
+
+def test_allowlist_has_no_repeated_route():
+    """A dict literal silently keeps the last of two equal keys, so two
+    branches adding the same route merge without a conflict and one reason
+    is lost. Read the literal itself and refuse a repeat."""
+    import ast
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        target = node.target if isinstance(node, ast.AnnAssign) else None
+        if isinstance(target, ast.Name) and target.id == "ALLOWLIST" and isinstance(node.value, ast.Dict):
+            keys = [ast.literal_eval(k) for k in node.value.keys]
+            repeats = sorted({k for k in keys if keys.count(k) > 1})
+            assert repeats == [], f"routes listed twice in ALLOWLIST: {repeats}"
+            return
+    raise AssertionError("ALLOWLIST literal not found")

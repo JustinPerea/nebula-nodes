@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import threading
+import time
 from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -80,6 +81,11 @@ LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layou
 # The board's cover: the id of the image it opens on (``thumbnail``).
 COVER_REFUSED = ("coverImageId names no image on this board: use an image's id "
                  "(GET /api/moodboards/{id} lists them), or null for no cover")
+
+# The side folders that keep a file per board id beside the boards (``.notes``:
+# Updates, services/agent_notes.py). Deleting a board for good removes its file
+# in each (``purge``, services/project_asset_purge.py).
+BOARD_SIDE_FOLDERS = (".notes",)
 
 # One lock per board: a write reads the file, changes it and writes it back
 # as one step, whichever thread it runs on.
@@ -195,7 +201,8 @@ def board_scopes(root: Path) -> list[Path]:
     """The folders under the moodboard root that hold boards: each scope
     (``_global`` and every project's) and the trash (``.trash``), whose
     boards a restore brings back. Other dot folders are side files kept
-    beside the boards (``.notes``: Updates, services/agent_notes.py; later
+    beside the boards (``.notes``: Updates, services/agent_notes.py;
+    ``.creates``: the request ids of creates, ``_CREATES_DIR``; later
     ``.history`` and ``.runs``), never boards, so the start-up scans
     (``migrate_store``, ``save_colour_checks``) never rewrite them."""
     from services.asset_trash import TRASH_DIR
@@ -204,6 +211,205 @@ def board_scopes(root: Path) -> list[Path]:
         return []
     return sorted(path for path in root.iterdir()
                   if path.is_dir() and (not is_trash_folder(path) or path.name == TRASH_DIR))
+
+
+# A create may carry the client's request id (``requestId``): Moodboard
+# Studio makes one per unsaved board, and an agent may send its own. Sent
+# again (the answer to the first send was lost on the way back), the same
+# id returns the board that send made instead of a second one. Each id is a
+# small file in this side folder, ``.creates/<requestId>.json``:
+#
+#     {"id": <board id>, "attempt": <the Studio's attempt number, or null>,
+#      "version": <the board's version when made>, "projectId": <the
+#      request's projectId, or null>, "state": "pending" | "made",
+#      "at": <unix seconds>}
+#
+# so it holds across a restart; the scans skip dot folders, so it is never
+# read as a scope (board_scopes, _find_moodboard_file, summaries, the trash,
+# the project rehome and the Commons import all leave ``.creates`` alone).
+#
+# Write order (a crash or an OSError at any point never leaves a board
+# without its record):
+#   1. pick the board id;
+#   2. write the record, "pending", naming that id;
+#   3. write the board;
+#   4. rewrite the record as "made".
+# A failure at 2 makes nothing. A failure at 3 leaves a pending record that
+# names no board: it is removed at once when it can be, and otherwise
+# ignored by the next lookup, which goes ahead and overwrites it. A failure
+# at 4 leaves a pending record naming a live board, which a lookup treats as
+# made (and finalizes). So on lookup: a record (pending or made) whose board
+# is live is the repeat; a record whose board is gone (deleted, purged,
+# never written) is ignored, and the create goes ahead.
+#
+# A record is kept for CREATE_RECORD_DAYS (7) days: a lost-answer resend
+# comes seconds or minutes later, never days, so an older record is
+# ignored on lookup and removed by prune_create_records (at startup, and at
+# most once a day on a create). Purging a board removes the records that
+# name it.
+_CREATES_DIR = ".creates"
+REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+ATTEMPT_MAX = 1_000_000
+CREATE_RECORD_DAYS = 7
+CREATE_RECORD_TTL = CREATE_RECORD_DAYS * 24 * 60 * 60
+# How often a create prunes old records (seconds); startup always does.
+_PRUNE_EVERY = 24 * 60 * 60
+_last_prune = 0.0
+# One lock for creates that carry a request id: the check and the write are
+# one step, so two sends of one id racing each other still make one board.
+_CREATES_LOCK = threading.Lock()
+
+
+class RequestIdOtherScope(Exception):
+    """The request id already made a live board in another scope (another
+    project, or Global). The route answers 409 ``request_id_scope``; that
+    board is never returned."""
+
+
+class RequestBoardUnreadable(Exception):
+    """The board a request id made is on disk but can't be read. The route
+    answers 500 with plain words, never the parser's text."""
+
+
+REQUEST_ID_OTHER_SCOPE = ("This request id already made a board in another project (or in Global). "
+                          "Use a new request id for this board.")
+REQUEST_BOARD_UNREADABLE = "Nebula couldn't read the board this request id made. Use a new request id."
+
+
+def _validate_request_id(request_id: Any) -> str:
+    if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):
+        raise ValueError("requestId must be 8 to 128 letters, digits, '-' or '_'")
+    return request_id
+
+
+def _validate_attempt(attempt: Any) -> int | None:
+    if attempt is None:
+        return None
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= ATTEMPT_MAX:
+        raise ValueError(f"attempt must be a whole number from 1 to {ATTEMPT_MAX}")
+    return attempt
+
+
+def _record_path(root: Path, request_id: str) -> Path:
+    return root / _CREATES_DIR / f"{request_id}.json"
+
+
+def _read_record(path: Path, now: float) -> dict[str, Any] | None:
+    """The record at ``path`` when it is well formed and younger than
+    CREATE_RECORD_TTL, else None (missing, unreadable, malformed, expired)."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    board_id, at = record.get("id"), record.get("at")
+    if not isinstance(board_id, str) or not _MOODBOARD_ID_RE.fullmatch(board_id):
+        return None
+    if not isinstance(at, (int, float)) or now - at > CREATE_RECORD_TTL:
+        return None
+    project_id = record.get("projectId")
+    if project_id is not None and not isinstance(project_id, str):
+        return None
+    return record
+
+
+def _created_for(root: Path, request_id: str, project_id: str | None,
+                 now: float) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """(the live board an earlier create with ``request_id`` made, laid
+    out; its record), or None when there is no such create or its board is
+    gone. Raises RequestIdOtherScope when that board was made for another
+    scope, RequestBoardUnreadable when its file can't be read."""
+    path = _record_path(root, request_id)
+    record = _read_record(path, now)
+    if record is None:
+        return None
+    board_path = _find_moodboard_file(root, record["id"])
+    if board_path is None:
+        return None
+    if (record.get("projectId") or None) != (project_id or None):
+        raise RequestIdOtherScope(request_id)
+    try:
+        board = json.loads(board_path.read_text(encoding="utf-8"))
+        if not isinstance(board, dict):
+            raise ValueError("not a board")
+        board = _migrated(board, layout_board=True)
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        logging.getLogger(__name__).warning("Moodboard %s (request id %s) can't be read: %s",
+                                            record["id"], request_id, exc)
+        raise RequestBoardUnreadable(request_id) from None
+    if record.get("state") != "made":
+        # Step 4 never ran (a crash or a failed write): the board is live, so
+        # the create was made. Finalize the record; a failure here only
+        # leaves it pending, which reads the same.
+        _finalize_record(path, record)
+    return board, record
+
+
+def _write_record(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, record)
+
+
+def _finalize_record(path: Path, record: dict[str, Any]) -> None:
+    try:
+        _write_record(path, {**record, "state": "made"})
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Create record %s left pending: %s", path.name, exc)
+
+
+def _records_naming(root: Path, board_id: str) -> list[Path]:
+    folder = root / _CREATES_DIR
+    if not folder.is_dir():
+        return []
+    found = []
+    for path in folder.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(record, dict) and record.get("id") == board_id:
+            found.append(path)
+    return found
+
+
+def forget_create_records(board_id: str, root: Path | None = None) -> int:
+    """Remove the request-id records that name ``board_id`` (its purge)."""
+    root = root or _moodboard_root()
+    removed = 0
+    with _CREATES_LOCK:
+        for path in _records_naming(root, board_id):
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def prune_create_records(root: Path | None = None, *, now: float | None = None) -> int:
+    """Remove request-id records older than CREATE_RECORD_DAYS days, and
+    ones that can't be read (a lookup ignores both anyway). Returns how
+    many went. Runs at startup and, at most once a day, on a create."""
+    with _CREATES_LOCK:
+        return _prune_records(root or _moodboard_root(), time.time() if now is None else now)
+
+
+def _prune_records(root: Path, now: float) -> int:
+    global _last_prune
+    _last_prune = now
+    folder = root / _CREATES_DIR
+    if not folder.is_dir():
+        return 0
+    removed = 0
+    for path in folder.iterdir():
+        try:
+            if path.suffix == ".json" and _read_record(path, now) is None:
+                path.unlink()
+                removed += 1
+            elif path.suffix == ".tmp" and path.stat().st_mtime < now - 60 * 60:
+                path.unlink()  # a write that never finished
+                removed += 1
+        except OSError:
+            continue
+    return removed
 
 
 def _now_iso() -> str:
@@ -743,13 +949,125 @@ class MoodboardStore:
         sendNotes: bool | None = None,
         coverImageId: str | None = None,
         by: str = "agent",
+        requestId: str | None = None,
         **extra: Any,
     ) -> dict[str, Any]:
         """A new board. Its images are laid out from the start (the cards
         they ask for, else placed by Nebula), so it is saved with
         ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
         any hand-written brief. ``coverImageId`` names one of ``images`` by
-        id (the board opens on it); left out, it opens on #1."""
+        id (the board opens on it); left out, it opens on #1. ``requestId``
+        (optional) makes the create safe to send again: see
+        ``create_once``."""
+        return self.create_once(
+            name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+            briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, requestId, **extra,
+        )[0]
+
+    def create_once(self, *args: Any, **kwargs: Any) -> tuple[dict[str, Any], bool]:
+        """``create``, saying whether it made a board: (board, True) when it
+        did; (board, False) when ``requestId`` was sent before and that
+        board is still live, which is returned as it is now (same id, same
+        version) and nothing is written. Without ``requestId`` every call
+        makes a board, as before. Takes ``create_or_repeat``'s arguments."""
+        board, earlier = self.create_or_repeat(*args, **kwargs)
+        return board, earlier is None
+
+    def create_or_repeat(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None = None,
+        notes: str = "",
+        mode: str = "look",
+        strength: float = 0.7,
+        analysis: dict[str, Any] | None = None,
+        projectId: str | None = None,
+        direction: str = "",
+        avoid: list[str] | None = None,
+        pinnedColors: dict[str, Any] | None = None,
+        briefOverride: dict[str, Any] | None = None,
+        clashMode: str | None = None,
+        colorChoices: dict[str, Any] | None = None,
+        sendNotes: bool | None = None,
+        coverImageId: str | None = None,
+        by: str = "agent",
+        requestId: str | None = None,
+        attempt: int | None = None,
+        **extra: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """``create`` with an optional request id: (board, None) when it
+        made the board; (board, record) when ``requestId`` already made a
+        live board in this scope, returned as it is now, with the record
+        (``attempt``: the attempt that made it, ``version``: its version
+        then). ``attempt`` (1 to ATTEMPT_MAX, only with ``requestId``) is
+        the Studio's count of its sends of one create; agents leave it out.
+
+        Raises ValueError for a malformed ``requestId`` or ``attempt``,
+        RequestIdOtherScope when the id made a live board in another scope
+        (another project, or Global), RequestBoardUnreadable when the board
+        it made can't be read. The write order is above ``_CREATES_DIR``."""
+        if requestId is None:
+            if attempt is not None:
+                raise ValueError("attempt is only taken with a requestId")
+            return self._create(
+                name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, **extra,
+            ), None
+        request_id = _validate_request_id(requestId)
+        attempt = _validate_attempt(attempt)
+        root = _moodboard_root()
+        with _CREATES_LOCK:
+            now = time.time()
+            earlier = _created_for(root, request_id, projectId, now)
+            if earlier is not None:
+                return earlier
+            if now - _last_prune > _PRUNE_EVERY:
+                _prune_records(root, now)
+            # 1. the board id; 2. the record, pending; 3. the board; 4. made.
+            moodboard_id = uuid4().hex[:12]
+            path = _record_path(root, request_id)
+            record = {"id": moodboard_id, "attempt": attempt, "version": 1, "projectId": projectId or None,
+                      "state": "pending", "at": now}
+            _write_record(path, record)
+            try:
+                moodboard = self._create(
+                    name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                    briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by,
+                    new_id=moodboard_id, **extra,
+                )
+            except BaseException:
+                # No board was written (it is written last, in one replace):
+                # the pending record names nothing, so it goes.
+                if _find_moodboard_file(root, moodboard_id) is None:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass  # ignored by the next lookup, which overwrites it
+                raise
+            _finalize_record(path, {**record, "version": moodboard.get("version", 1)})
+        return moodboard, None
+
+    def _create(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None,
+        notes: str,
+        mode: str,
+        strength: float,
+        analysis: dict[str, Any] | None,
+        projectId: str | None,
+        direction: str,
+        avoid: list[str] | None,
+        pinnedColors: dict[str, Any] | None,
+        briefOverride: dict[str, Any] | None,
+        clashMode: str | None,
+        colorChoices: dict[str, Any] | None,
+        sendNotes: bool | None,
+        coverImageId: str | None,
+        by: str,
+        new_id: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
         brief = _brief()
         _guard_send_notes(False, sendNotes, by)
         name = str(name or "").strip()
@@ -767,7 +1085,7 @@ class MoodboardStore:
             raise TypeError(f"create() got unexpected keyword arguments: {', '.join(sorted(extra))}")
         if by not in OVERRIDE_AUTHORS:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
-        moodboard_id = uuid4().hex[:12]
+        moodboard_id = new_id or uuid4().hex[:12]
         now = _now_iso()
         _warm_new_files(None, images)
         normalized_images = _normalize_images(images, by=by)
@@ -1011,36 +1329,40 @@ class MoodboardStore:
         this id is already in the target folder."""
         from services.asset_project_rehome import GLOBAL_DIR, move_asset
 
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        target = projectId or None
-        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
-        # Two live copies (a re-home that skipped a collision leaves one in an
-        # old folder): which one is "the" asset isn't ours to guess.
-        copies = sorted(sub.name for sub in root.iterdir()
-                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
-        if len(copies) > 1:
-            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
-        # The file moves as saved (move_asset changes only projectId), so an
-        # old board stays unlaid-out on disk; the board returned is laid out
-        # in memory, as get() reads it.
-        before = _migrated(json.loads(path.read_text(encoding="utf-8")))
-        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
-            return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
-        moved_to = move_asset("moodboard", root, path, target)
-        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):  # a purge of its project holds it too
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            target = projectId or None
+            _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+            # Two live copies (a re-home that skipped a collision leaves one in an
+            # old folder): which one is "the" asset isn't ours to guess.
+            copies = sorted(sub.name for sub in root.iterdir()
+                            if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
+            if len(copies) > 1:
+                raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+            # The file moves as saved (move_asset changes only projectId), so an
+            # old board stays unlaid-out on disk; the board returned is laid out
+            # in memory, as get() reads it.
+            before = _migrated(json.loads(path.read_text(encoding="utf-8")))
+            if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+                return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
+            moved_to = move_asset("moodboard", root, path, target)
+            return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
 
     def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
         """Move the board to Recently deleted (services/asset_trash.py) and
         return the trash record. ``deleted_by`` is who asked, as
         services/canvas_events.actor_record gives it."""
-        root = _moodboard_root()
-        path = _find_moodboard_file(root, moodboard_id)
-        if path is None:
-            raise KeyError(f"Moodboard {moodboard_id} not found")
-        return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
+        _validate_moodboard_id(moodboard_id)
+        with _board_lock(moodboard_id):
+            root = _moodboard_root()
+            path = _find_moodboard_file(root, moodboard_id)
+            if path is None:
+                raise KeyError(f"Moodboard {moodboard_id} not found")
+            return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
 
     # -- Recently deleted --------------------------------------------------
 
@@ -1057,15 +1379,22 @@ class MoodboardStore:
     def restore(self, moodboard_id: str) -> dict[str, Any]:
         """Bring a trashed board back with the same id and contents."""
         _validate_moodboard_id(moodboard_id)
-        return asset_trash.restore(_moodboard_root(), moodboard_id)
+        with _board_lock(moodboard_id):
+            return asset_trash.restore(_moodboard_root(), moodboard_id)
 
     def purge(self, moodboard_id: str) -> None:
         """Delete a trashed board for good. Only the person may (main.py)."""
         _validate_moodboard_id(moodboard_id)
-        asset_trash.purge(_moodboard_root(), moodboard_id)
-        # Its Updates go with it (services/agent_notes.py); Recently deleted
-        # kept them, since a restore brings the same id back.
-        (_moodboard_root() / ".notes" / f"{moodboard_id}.json").unlink(missing_ok=True)
+        with _board_lock(moodboard_id):
+            asset_trash.purge(_moodboard_root(), moodboard_id)
+            # Its Updates go with it (services/agent_notes.py); Recently deleted
+            # kept them, since a restore brings the same id back.
+            for folder in BOARD_SIDE_FOLDERS:
+                (_moodboard_root() / folder / f"{moodboard_id}.json").unlink(missing_ok=True)
+        # So do the request ids that made it: a resend after a purge makes
+        # a new board (as it would anyway: the record names no live board).
+        # Outside the board lock, so the creates lock is never taken under it.
+        forget_create_records(moodboard_id)
 
 
 def migrate_brief_fields() -> dict[str, Any]:

@@ -96,12 +96,16 @@
   pointer-events: none;
 }
 
+/* A line can sit over cards, so its surface is solid (#210 round 6s, GM
+   r105 3): the panel tint laid over the canvas colour, the colour it has over
+   the empty canvas. The Slava skin's lines lay their own tint the same way
+   (moodboard-studio.css; tests/moodboardNoticeSurface.test.ts). */
 .moodboard-studio-view__board-notices > * {
   pointer-events: auto;
   padding: 6px 10px;
   border: 1px solid var(--mb-board-edge-strong);
   border-radius: 4px;
-  background: var(--mb-board-panel);
+  background: linear-gradient(var(--mb-board-panel), var(--mb-board-panel)), var(--mb-board-bg);
   font-size: 12px;
 }
 
@@ -118,6 +122,17 @@
   position: absolute;
   inset: 0;
   background: var(--mb-board-bg);
+}
+
+/* Focus can rest on the board itself (the edge chip hands it there when no
+   tile can take it, GM #210 r4 answer 6): the token ring, inside its edge. */
+.moodboard-board:focus {
+  outline: none;
+}
+
+.moodboard-board:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: -2px;
 }
 
 .moodboard-board__underlay {
@@ -148,6 +163,75 @@
   outline: none;
 }
 
+/* A spot held for a file still uploading (GM, #210 r4 answer 1; r5): the
+   tile's own size, a faint fill, a dashed edge that stays one screen pixel at
+   any zoom, and the file's name in the corner at 12 screen px. BoardCanvas
+   sets --mb-board-zoom. It takes focus like a card. */
+.moodboard-board__flow .react-flow__node-placeholder {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.moodboard-board__flow .react-flow__node-placeholder:focus,
+.moodboard-board__flow .react-flow__node-placeholder:focus-visible {
+  outline: none;
+}
+
+.moodboard-board__placeholder {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* The edge: an SVG stroke whose width (and dashes) divide by the zoom, so
+   it is one screen pixel at any zoom, inset half a stroke so it sits inside
+   the tile's box. Not a CSS border: Chrome snaps a border's width to whole
+   pixels before the zoom scales it. Not vector-effect: non-scaling-stroke:
+   Chrome undoes only the transforms inside the SVG, not the board's CSS
+   scale() above it (measured live, r4). */
+.moodboard-board__placeholder-edge {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.moodboard-board__placeholder-stroke {
+  x: calc(0.5px / var(--mb-board-zoom, 1));
+  y: calc(0.5px / var(--mb-board-zoom, 1));
+  width: calc(100% - 1px / var(--mb-board-zoom, 1));
+  height: calc(100% - 1px / var(--mb-board-zoom, 1));
+  rx: 4px;
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: calc(1px / var(--mb-board-zoom, 1));
+  stroke-dasharray: calc(4px / var(--mb-board-zoom, 1)) calc(3px / var(--mb-board-zoom, 1));
+}
+
+.moodboard-board__placeholder-label {
+  position: absolute;
+  top: calc(8px / var(--mb-board-zoom, 1));
+  left: calc(8px / var(--mb-board-zoom, 1));
+  max-width: calc(100% - 16px / var(--mb-board-zoom, 1));
+  overflow: hidden;
+  font-size: calc(12px / var(--mb-board-zoom, 1));
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.react-flow__node-placeholder:focus-visible .moodboard-board__placeholder {
+  box-shadow: 0 0 0 2px var(--mb-board-select), 0 0 0 5px rgba(255, 255, 255, 0.18);
+}
+
 .moodboard-card {
   position: relative;
   width: 100%;
@@ -159,6 +243,14 @@
   /* A ring, no blurred shadow: 300 blurred shadows are slow to paint. */
   box-shadow: 0 0 0 1px var(--mb-board-edge-strong);
   cursor: grab;
+}
+
+/* A card filling its placeholder starts unseen; BoardCanvas drives its
+   opacity on the board's spring each frame (GM r5), so no transition here.
+   Keyed by the new image's id, so an older tile showing the same file is
+   never hidden (review 4, MEDIUM-1). */
+.moodboard-card[data-fill-id] {
+  opacity: 0;
 }
 
 .react-flow__node-card.dragging .moodboard-card {
@@ -239,11 +331,6 @@
   outline-offset: 1px;
 }
 
-.moodboard-board__control--busy {
-  opacity: 0.45;
-  cursor: default;
-}
-
 .moodboard-board__file {
   position: absolute;
   inset: 0;
@@ -255,6 +342,17 @@
 
 .moodboard-board__file:disabled {
   cursor: default;
+}
+
+/* Add images while Nebula is offline (GM r12 2): paused, as the List view's Add Images is. */
+.moodboard-board__control--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.moodboard-board__control--disabled:hover,
+.moodboard-board__control--disabled:focus-within {
+  background: none;
 }
 
 .moodboard-board__empty {
@@ -599,5 +697,96 @@ html body .moodboard-board-panel .moodboard-def__row {
   /* Opacity only (GM r9 answer 2). */
   .moodboard-board-toast {
     animation: notice-fade-in 180ms ease-out both;
+  }
+}
+
+/* Tiles added outside the view (GM - Design, #210 answer 1): a chip on the
+   view's edge nearest the first tile, its arrow pointing at it. It enters by
+   sliding 8 px in from that edge on the board's spring (no fade); with
+   reduced motion it simply appears. OutsideChip sets its place along the edge. */
+.moodboard-board__outside-chip {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 6px;
+  background: var(--mb-board-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: var(--mb-board-ink);
+  font: inherit;
+  font-family: var(--mb-board-font);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: 420ms var(--mb-board-spring) both;
+}
+
+.moodboard-board__outside-chip:hover,
+.moodboard-board__outside-chip:focus-visible {
+  border-color: var(--mb-board-select);
+}
+
+/* OutsideChip sets the chip's centre (left, top): centred on the view's edge
+   nearest the tile, clear of the tile (GM r13), its foot above the toolbar and
+   the notice band (lib/bottomBar.ts floatingBottomLimit). */
+.moodboard-board__outside-chip--right,
+.moodboard-board__outside-chip--left,
+.moodboard-board__outside-chip--top,
+.moodboard-board__outside-chip--bottom {
+  transform: translate(-50%, -50%);
+}
+
+.moodboard-board__outside-chip--right { animation-name: mb-outside-in-right; }
+.moodboard-board__outside-chip--left { animation-name: mb-outside-in-left; }
+.moodboard-board__outside-chip--top { animation-name: mb-outside-in-top; }
+.moodboard-board__outside-chip--bottom { animation-name: mb-outside-in-bottom; }
+
+/* The arrow before the words (the tile is to the chip's left): the wider
+   padding goes to that side. */
+.moodboard-board__outside-chip--arrow-first {
+  padding: 4px 4px 4px 10px;
+}
+
+.moodboard-board__outside-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* One arrow (→) turned to point at the tile's centre from the chip's
+   (OutsideChip sets --outside-turn). */
+.moodboard-board__outside-arrow {
+  display: inline-block;
+  font-size: 14px;
+  transform: rotate(var(--outside-turn, 0deg));
+}
+
+.moodboard-board__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes mb-outside-in-right { from { transform: translate(calc(-50% + 8px), -50%); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-left { from { transform: translate(calc(-50% - 8px), -50%); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-top { from { transform: translate(-50%, calc(-50% - 8px)); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-bottom { from { transform: translate(-50%, calc(-50% + 8px)); } to { transform: translate(-50%, -50%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .moodboard-board__outside-chip {
+    animation: none;
   }
 }
