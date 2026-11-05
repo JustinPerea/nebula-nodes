@@ -57,7 +57,7 @@ const CALLERS: Record<string, Entry> = {
   'lib/settingsWrites.ts#saveRunCostConfirm': { lock: 'change this', in: [`${SETTINGS}PreferencesTab.tsx`] },
   'components/create-studio/CreateComposer.tsx#handleEnhance': { lock: 'enhance prompts', in: ['components/create-studio/CreateComposer.tsx'] },
   'store/graphStore.ts#configureOpenRouterModel': { lock: 'change the model', in: ['components/panels/Inspector.tsx'] },
-  'store/graphStore.ts#fetchReplicateSchemaAndConfigure': { lock: 'change the model', in: ['components/panels/Inspector.tsx'] },
+  'store/graphStore.ts#fetchReplicateSchemaAndConfigure': { lock: 'fetch the schema', in: ['components/panels/Inspector.tsx'] },
   'store/graphStore.ts#pushNodeParams': { not: 'sends PUT /api/graph/node/{id} (gated only by the canvas checks); the tracer reads the shared path' },
   'components/panels/Inspector.tsx#renderUniversalModelControl': { lock: 'save favorites', in: ['components/panels/Inspector.tsx'] },
   [`${SETTINGS}useKreaConnection.ts#disconnect`]: { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },

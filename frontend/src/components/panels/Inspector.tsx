@@ -125,6 +125,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // /api/settings, both the person's alone. The pickers lock as one group with one line; the
   // star has its own.
   const modelLock = usePersonLock('change the model');
+  // Replicate's Fetch Schema has its own line (GM, 2026-11-05): the Model ID field stays
+  // editable like any param, so only the fetch is the person's.
+  const schemaLock = usePersonLock('fetch the schema');
   const favoriteLock = usePersonLock('save favorites');
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const visible = embedded ? selectedNodeId !== null : panelVisible;
@@ -1290,9 +1293,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
             disabled={schemaLoading || !activeNodeData.params.model_id || readOnly}
-            {...lock.mark} {...modelLock.control()}
+            {...lock.mark} {...schemaLock.control()}
             onClick={async () => {
-              if (modelLock.locked) return;
+              if (schemaLock.locked) return;
               const modelId = String(activeNodeData.params.model_id ?? '');
               if (!modelId.includes('/')) return;
               const [owner, name] = modelId.split('/', 2);
@@ -1314,7 +1317,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
           </button>
         )}
-        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={modelLock} place="control" />}
+        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={schemaLock} place="control" />}
       </div>
     );
   }

@@ -323,3 +323,33 @@ describe('the Inspector: "change the model" and "save favorites"', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/^Nebula couldn’t save the favorite because this tab isn’t connected as you\./);
   });
 });
+
+describe('the Inspector: Replicate\'s Fetch Schema has its own line (GM 2026-11-05)', () => {
+  it('locks only the fetch, says "fetch the schema", and leaves Model ID editable', async () => {
+    const fetchSchema = vi.fn();
+    useGraphStore.setState({
+      fetchReplicateSchemaAndConfigure: fetchSchema,
+      nodes: [{ id: 'r1', type: 'model', position: { x: 0, y: 0 },
+        data: { label: 'Replicate', definitionId: 'replicate-universal', params: { model_id: 'acme/refiner' }, state: 'idle', outputs: {} } }] as Node<NodeData>[],
+      edges: [],
+    } as never);
+    useUIStore.getState().selectNode('r1');
+    render(<Inspector embedded />);
+    await flush();
+    await hold();
+    const fetchButton = screen.getByRole('button', { name: /Fetch Schema/ });
+    expectLocked(fetchButton, line('fetch the schema'));
+    expect(shownLines(line('change the model'))).toHaveLength(0);
+    const modelId = screen.getByDisplayValue('acme/refiner');
+    expect(modelId.hasAttribute('disabled')).toBe(false);
+    expect(modelId.getAttribute('aria-disabled')).not.toBe('true');
+    fireEvent.click(fetchButton);
+    expect(fetchSchema).not.toHaveBeenCalled();
+    promote();
+    expect(shownLines(line('fetch the schema'))).toHaveLength(0);
+    expectUnlocked(fetchButton);
+    fireEvent.click(fetchButton);
+    await flush();
+    expect(fetchSchema).toHaveBeenCalledWith('r1', 'acme', 'refiner');
+  });
+});
