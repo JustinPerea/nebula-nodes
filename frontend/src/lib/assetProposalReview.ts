@@ -18,7 +18,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   const kind = op.target as AssetProposalKind;
   const targetId = typeof op.targetId === 'string' ? op.targetId : '';
   if (!targetId || (kind !== 'project' && kind !== 'moodboard' && kind !== 'commons')) {
-    throw writtenLine("This update's proposal can't be opened from here.");
+    throw writtenLine('This update’s proposal can’t be opened from here.');
   }
   // Every Review but a Commons ask leaves the screen it starts on: not while
   // the Commons holds unsaved labels unless the person chose to leave (the

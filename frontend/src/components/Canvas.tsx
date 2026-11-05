@@ -40,6 +40,7 @@ import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } fr
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
+import { NodeRemeasureContext, useFlowNodeRemeasure } from '../lib/cardWidthSpring';
 import { isCanvasShortcutTarget, isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { visibleFlowRect } from '../lib/visibleFlowRect';
@@ -490,6 +491,8 @@ export function Canvas() {
     return { nodes: doomed, edges: wiresDeletedWith(doomed.map((node) => node.id), edges) };
   }, []);
   const flowStore = useStoreApi();
+  // A card springing its width has React Flow measure its node at once (lib/cardWidthSpring.ts, GM r107).
+  const remeasureNode = useFlowNodeRemeasure();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
@@ -793,69 +796,73 @@ export function Canvas() {
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={renderedEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={handleConnect}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
-        isValidConnection={isValidConnection}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneClick={onPaneClick}
-        onPaneContextMenu={onPaneContextMenu}
-        fitView={fitFirstNodes}
-        defaultViewport={initialCanvasState.viewport ?? undefined}
-        onInit={onViewportInitialized}
-        onMoveStart={cameraMoveStarted}
-        onMove={onViewportMove}
-        fitViewOptions={{ padding: computeCanvasFitPadding() }}
-        minZoom={0.1}
-        maxZoom={4}
-        defaultEdgeOptions={{ type: 'typed-edge' }}
-        proOptions={{ hideAttribution: true }}
-        // The Delete key is the canvas's own (onKeyDown): React Flow's never
-        // asked whether a modal dialog is open (review 8, M-1).
-        deleteKeyCode={null}
-        onBeforeDelete={onBeforeDelete}
-        {...CANVAS_INTERACTION_PROPS}
-        nodesDraggable={!readOnly}
-        nodesConnectable={!readOnly}
-        onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
-      >
-        <Background
-          variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
-          gap={isSlavaSkin ? 16 : 32}
-          size={isSlavaSkin ? 1.2 : 1}
-          color={isSlavaSkin ? 'var(--sr-canvas-dot-color)' : 'rgba(255, 255, 255, 0.04)'}
-          className={isSlavaSkin ? 'slava-canvas-background' : undefined}
-          patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
-        />
-        <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
-        <CanvasFocusController />
-        {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
-            floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
-            panel, the toolbar's layout box: the toolbar's entry animation
-            transforms it, and a measured line would ease down with it. With
-            nothing selected the panel is empty, 0 px wide but still one
-            toolbar tall (canvas.css), so an open Inspector holds its place
-            (GM, round 3: "A panel shouldn't move unless someone moves it"). */}
-        <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
-          <SelectionToolbar />
-        </Panel>
-        <CanvasNavigation />
-        <CanvasViewReporter />
-        <ArrangeController />
-        <AgentNodeMarks />
-        <AgentCursorLayer />
-        <AgentNoteOutlines />
-        <PinLayer />
-        <ProposalLayer />
-        <ProposalBar />
-      </ReactFlow>
+      <NodeRemeasureContext.Provider value={remeasureNode}>
+        <ReactFlow
+          nodes={nodes}
+          edges={renderedEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={handleConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodeContextMenu={onNodeContextMenu}
+          onPaneClick={onPaneClick}
+          onPaneContextMenu={onPaneContextMenu}
+          fitView={fitFirstNodes}
+          defaultViewport={initialCanvasState.viewport ?? undefined}
+          onInit={onViewportInitialized}
+          onMoveStart={cameraMoveStarted}
+          onMove={onViewportMove}
+          fitViewOptions={{ padding: computeCanvasFitPadding() }}
+          minZoom={0.1}
+          maxZoom={4}
+          defaultEdgeOptions={{ type: 'typed-edge' }}
+          proOptions={{ hideAttribution: true }}
+          // The Delete key is the canvas's own (onKeyDown): React Flow's never
+          // asked whether a modal dialog is open (review 8, M-1).
+          deleteKeyCode={null}
+          onBeforeDelete={onBeforeDelete}
+          {...CANVAS_INTERACTION_PROPS}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
+        >
+          <Background
+            variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+            gap={isSlavaSkin ? 16 : 32}
+            size={isSlavaSkin ? 1.2 : 1}
+            color={isSlavaSkin ? 'var(--sr-canvas-dot-color)' : 'rgba(255, 255, 255, 0.04)'}
+            className={isSlavaSkin ? 'slava-canvas-background' : undefined}
+            patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
+          />
+          <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
+          <CanvasFocusController />
+          {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
+              floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
+              panel, the toolbar's layout box: the toolbar's entry animation
+              transforms it, and a measured line would ease down with it. With
+              nothing selected the panel is empty, 0 px wide but still one
+              toolbar tall (canvas.css), so an open Inspector holds its place
+              (GM, round 3: "A panel shouldn't move unless someone moves it").
+              data-toolbar-slot: the Agent log's ceiling counts the slot only
+              where it overlaps the slot's reserved width (GM r70). */}
+          <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="" data-toolbar-slot="">
+            <SelectionToolbar />
+          </Panel>
+          <CanvasNavigation />
+          <CanvasViewReporter />
+          <ArrangeController />
+          <AgentNodeMarks />
+          <AgentCursorLayer />
+          <AgentNoteOutlines />
+          <PinLayer />
+          <ProposalLayer />
+          <ProposalBar />
+        </ReactFlow>
+      </NodeRemeasureContext.Provider>
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
           <CrabMarkAnimated

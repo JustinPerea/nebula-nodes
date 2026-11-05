@@ -114,7 +114,7 @@ All 52 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 
 ### fal as a route on the FLUX 3, Krea 3 and FLUX.2 nodes (2026-10-15)
 
-`flux-3-image`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3` and `flux-2-pro` (FLUX.2, `apiProvider: "bfl"` since PR 4) are route-table nodes: one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`), where fal is one route (the only one on Klein Base). They run through the `fal` route client in `backend/execution/route_clients.py`, not a `sync_runner.py` wrapper. Endpoints and what fal takes on each: the "fal as a route" section of `.agents/skills/fal/SKILL.md`, and the `bfl` and `krea` skills.
+`flux-3-image`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3` and `flux-2-pro` (FLUX.2, `apiProvider: "bfl"` since PR 4) are route-table nodes: one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`), where fal is one route (the only one on Klein Base). They run through the `fal` route client in `backend/execution/route_clients.py`, not a `sync_runner.py` wrapper. Endpoints and what fal takes on each: the "fal as a route" section of `.agents/skills/fal/SKILL.md`, and the `bfl` and `krea` skills. The talking-head nodes (`omnihuman-1-5`, `omnihuman-2`, `kling-ai-avatar-v2`; image + audio in, video out) are route-table nodes too, with fal and Replicate routes.
 
 ## Param reference
 

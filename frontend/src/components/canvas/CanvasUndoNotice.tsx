@@ -1,4 +1,5 @@
 import { useGraphStore } from '../../store/graphStore';
+import { NoticeMoreInline } from '../NoticeMoreInline';
 import { NOTICE_HOLD_MS } from '../../lib/canvasNoticeHold';
 import { isForeignEdit } from '../../lib/canvasUndo';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
@@ -76,6 +77,8 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
           {shown.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>
       )}
+      {/* GM r8: the fold's count rides in this row, after Undo. */}
+      {actionable && <NoticeMoreInline />}
       {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×

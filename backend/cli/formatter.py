@@ -410,7 +410,7 @@ def format_selection(selection: dict[str, Any]) -> str:
 
 
 def _price(value: Any) -> str:
-    if value in ("free", "by input size"):
+    if value in ("free", "by input size", "by audio length"):
         return str(value)
     if isinstance(value, (list, tuple)) and len(value) == 2:
         low, high = float(value[0]), float(value[1])
@@ -931,6 +931,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
         if created:
             lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
         return "\n".join(lines)
+    if view.get("plan"):
+        # The card's own line under the note, word for word (node names, the
+        # model and who pays, the run chip's price).
+        lines.append(f"  card     {view['plan']}")
     for node in view.get("nodes") or []:
         cost = (node.get("cost") or {}).get("label") or "?"
         pos = node.get("position") or {}
@@ -944,6 +948,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     for change in view.get("params") or []:
         keys = ", ".join((change.get("changes") or {}).keys())
         lines.append(f"  sets     {change.get('nodeId')}: {keys}")
+    for edge in view.get("removedEdges") or []:
+        # Wires its model change drops: the new model has no port for them.
+        lines.append(f"  removes  {edge.get('source')}.{edge.get('sourceHandle')} → "
+                     f"{edge.get('target')}.{edge.get('targetHandle')}")
     run = view.get("run") or []
     if run:
         lines.append(f"  runs     {', '.join(run)} — {_cost_line(view.get('cost') or {})}")

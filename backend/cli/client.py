@@ -313,6 +313,21 @@ class NebulaClient:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("POST", "/api/canvas/status", json=body, headers=headers)
 
+    def reply_to_person(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """POST a reply in the person's Message box ({text, nodeId?}; MCP reply_to_person)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/canvas/thread/replies", json=body, headers=headers)
+
+    def get_thread(self, limit: int = 20, agent_name: str | None = None) -> dict[str, Any]:
+        """Your part of the Message box's thread (MCP read_thread)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("GET", "/api/canvas/thread", params={"limit": limit}, headers=headers)
+
+    def get_channel(self, agent_name: str | None = None) -> dict[str, Any]:
+        """Your channel listeners as Nebula sees them (MCP channel_status)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("GET", "/api/canvas/channel", headers=headers)
+
     def get_agents(self) -> dict[str, Any]:
         """The roster: the agents around in the open project (MCP list_agents)."""
         return self._request("GET", "/api/canvas/agents")

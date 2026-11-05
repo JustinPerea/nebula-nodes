@@ -227,3 +227,10 @@ and its name, in both orders.
   (`measurePopoverFrame`, `:144-149`). Pinned, it starts at 440 px
   (`PINNED_MAX_HEIGHT`, `:29`). This PR doesn't touch that file or those
   rules.
+
+## Merged main (2026-11-05)
+
+- `backend/main.py`, imports: kept both sides (`follow_file_params`, `upload_names` from this PR; `preview_size` from main's #226).
+- `backend/main.py`, agent apply path (`update_params`): this PR's `_follow_file_params` (preview and name follow a file param) now runs first, then main's `_preview_follows_file` (an Image Input's `_previewSize` follows the file), as the CLI param route already did after the auto-merge.
+- `Inspector.tsx`, imports: kept this PR's file-name/upload-notice imports plus main's `previewSize`/`previewSizeAttributes`; `inputFileName` was unused here (this PR's `fileParamName` replaced its one use) and is dropped.
+- `Inspector.tsx`, the file input's onChange: kept this PR's `uploadIntoParam` (edits made during the upload survive). Main's inline upload code is gone with it; its `_previewSize` behaviour moved into `uploadIntoParam` (the upload's `previewSize` is stored, a file without one drops the last file's via a new `drop` argument on `writeParamsNow`), and main's inline `<img>` is `FilePreviewFrame`, which now takes the stored size for the `<img>` width/height.

@@ -1,0 +1,1463 @@
+{
+ "about": "A run chip's label (frontend/src/lib/pricing.ts formatChipEstimate) and its backend twin, services/money.chip_label, which the proposal's plan line uses so agents read the price words the person reads on the card. Both sides test against this table. A null `high` stands for a high end that isn't a number.",
+ "chip": [
+  {
+   "low": 0,
+   "high": 0,
+   "open": false,
+   "text": "~$0"
+  },
+  {
+   "low": 0,
+   "high": 0,
+   "open": true,
+   "text": "$0 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.004,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0,
+   "high": 0.004,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.005,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0,
+   "high": 0.005,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.0099,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0,
+   "high": 0.0099,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.01,
+   "open": false,
+   "text": "Up to $0.01"
+  },
+  {
+   "low": 0,
+   "high": 0.01,
+   "open": true,
+   "text": "Up to $0.01 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.015,
+   "open": false,
+   "text": "Up to $0.02"
+  },
+  {
+   "low": 0,
+   "high": 0.015,
+   "open": true,
+   "text": "Up to $0.02 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.03,
+   "open": false,
+   "text": "Up to $0.03"
+  },
+  {
+   "low": 0,
+   "high": 0.03,
+   "open": true,
+   "text": "Up to $0.03 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.0995,
+   "open": false,
+   "text": "Up to $0.10"
+  },
+  {
+   "low": 0,
+   "high": 0.0995,
+   "open": true,
+   "text": "Up to $0.10 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.43,
+   "open": false,
+   "text": "Up to $0.43"
+  },
+  {
+   "low": 0,
+   "high": 0.43,
+   "open": true,
+   "text": "Up to $0.43 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 0.995,
+   "open": false,
+   "text": "Up to $1.00"
+  },
+  {
+   "low": 0,
+   "high": 0.995,
+   "open": true,
+   "text": "Up to $1.00 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 9.994,
+   "open": false,
+   "text": "Up to $9.99"
+  },
+  {
+   "low": 0,
+   "high": 9.994,
+   "open": true,
+   "text": "Up to $9.99 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 9.996,
+   "open": false,
+   "text": "Up to $10"
+  },
+  {
+   "low": 0,
+   "high": 9.996,
+   "open": true,
+   "text": "Up to $10 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 12.5,
+   "open": false,
+   "text": "Up to $13"
+  },
+  {
+   "low": 0,
+   "high": 12.5,
+   "open": true,
+   "text": "Up to $13 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 1234.5,
+   "open": false,
+   "text": "Up to $1,235"
+  },
+  {
+   "low": 0,
+   "high": 1234.5,
+   "open": true,
+   "text": "Up to $1,235 + unpriced"
+  },
+  {
+   "low": 0,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.004,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.004,
+   "high": 0.004,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.005,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.004,
+   "high": 0.005,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.0099,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.004,
+   "high": 0.0099,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.01,
+   "open": false,
+   "text": "Up to $0.01"
+  },
+  {
+   "low": 0.004,
+   "high": 0.01,
+   "open": true,
+   "text": "Up to $0.01 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.015,
+   "open": false,
+   "text": "Up to $0.02"
+  },
+  {
+   "low": 0.004,
+   "high": 0.015,
+   "open": true,
+   "text": "Up to $0.02 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.03,
+   "open": false,
+   "text": "Up to $0.03"
+  },
+  {
+   "low": 0.004,
+   "high": 0.03,
+   "open": true,
+   "text": "Up to $0.03 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.0995,
+   "open": false,
+   "text": "Up to $0.10"
+  },
+  {
+   "low": 0.004,
+   "high": 0.0995,
+   "open": true,
+   "text": "Up to $0.10 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.43,
+   "open": false,
+   "text": "Up to $0.43"
+  },
+  {
+   "low": 0.004,
+   "high": 0.43,
+   "open": true,
+   "text": "Up to $0.43 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 0.995,
+   "open": false,
+   "text": "Up to $1.00"
+  },
+  {
+   "low": 0.004,
+   "high": 0.995,
+   "open": true,
+   "text": "Up to $1.00 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 9.994,
+   "open": false,
+   "text": "Up to $9.99"
+  },
+  {
+   "low": 0.004,
+   "high": 9.994,
+   "open": true,
+   "text": "Up to $9.99 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 9.996,
+   "open": false,
+   "text": "Up to $10"
+  },
+  {
+   "low": 0.004,
+   "high": 9.996,
+   "open": true,
+   "text": "Up to $10 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 12.5,
+   "open": false,
+   "text": "Up to $13"
+  },
+  {
+   "low": 0.004,
+   "high": 12.5,
+   "open": true,
+   "text": "Up to $13 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 1234.5,
+   "open": false,
+   "text": "Up to $1,235"
+  },
+  {
+   "low": 0.004,
+   "high": 1234.5,
+   "open": true,
+   "text": "Up to $1,235 + unpriced"
+  },
+  {
+   "low": 0.004,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.004,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.005,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.005,
+   "high": 0.005,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.0099,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.005,
+   "high": 0.0099,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.01,
+   "open": false,
+   "text": "Up to $0.01"
+  },
+  {
+   "low": 0.005,
+   "high": 0.01,
+   "open": true,
+   "text": "Up to $0.01 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.015,
+   "open": false,
+   "text": "Up to $0.02"
+  },
+  {
+   "low": 0.005,
+   "high": 0.015,
+   "open": true,
+   "text": "Up to $0.02 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.03,
+   "open": false,
+   "text": "Up to $0.03"
+  },
+  {
+   "low": 0.005,
+   "high": 0.03,
+   "open": true,
+   "text": "Up to $0.03 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.0995,
+   "open": false,
+   "text": "Up to $0.10"
+  },
+  {
+   "low": 0.005,
+   "high": 0.0995,
+   "open": true,
+   "text": "Up to $0.10 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.43,
+   "open": false,
+   "text": "Up to $0.43"
+  },
+  {
+   "low": 0.005,
+   "high": 0.43,
+   "open": true,
+   "text": "Up to $0.43 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 0.995,
+   "open": false,
+   "text": "Up to $1.00"
+  },
+  {
+   "low": 0.005,
+   "high": 0.995,
+   "open": true,
+   "text": "Up to $1.00 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 9.994,
+   "open": false,
+   "text": "Up to $9.99"
+  },
+  {
+   "low": 0.005,
+   "high": 9.994,
+   "open": true,
+   "text": "Up to $9.99 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 9.996,
+   "open": false,
+   "text": "Up to $10"
+  },
+  {
+   "low": 0.005,
+   "high": 9.996,
+   "open": true,
+   "text": "Up to $10 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 12.5,
+   "open": false,
+   "text": "Up to $13"
+  },
+  {
+   "low": 0.005,
+   "high": 12.5,
+   "open": true,
+   "text": "Up to $13 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 1234.5,
+   "open": false,
+   "text": "Up to $1,235"
+  },
+  {
+   "low": 0.005,
+   "high": 1234.5,
+   "open": true,
+   "text": "Up to $1,235 + unpriced"
+  },
+  {
+   "low": 0.005,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.005,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.0099,
+   "open": false,
+   "text": "<$0.01"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.0099,
+   "open": true,
+   "text": "<$0.01 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.01,
+   "open": false,
+   "text": "Up to $0.01"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.01,
+   "open": true,
+   "text": "Up to $0.01 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.015,
+   "open": false,
+   "text": "Up to $0.02"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.015,
+   "open": true,
+   "text": "Up to $0.02 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.03,
+   "open": false,
+   "text": "Up to $0.03"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.03,
+   "open": true,
+   "text": "Up to $0.03 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.0995,
+   "open": false,
+   "text": "Up to $0.10"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.0995,
+   "open": true,
+   "text": "Up to $0.10 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.43,
+   "open": false,
+   "text": "Up to $0.43"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.43,
+   "open": true,
+   "text": "Up to $0.43 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.995,
+   "open": false,
+   "text": "Up to $1.00"
+  },
+  {
+   "low": 0.0099,
+   "high": 0.995,
+   "open": true,
+   "text": "Up to $1.00 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 9.994,
+   "open": false,
+   "text": "Up to $9.99"
+  },
+  {
+   "low": 0.0099,
+   "high": 9.994,
+   "open": true,
+   "text": "Up to $9.99 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 9.996,
+   "open": false,
+   "text": "Up to $10"
+  },
+  {
+   "low": 0.0099,
+   "high": 9.996,
+   "open": true,
+   "text": "Up to $10 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 12.5,
+   "open": false,
+   "text": "Up to $13"
+  },
+  {
+   "low": 0.0099,
+   "high": 12.5,
+   "open": true,
+   "text": "Up to $13 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 1234.5,
+   "open": false,
+   "text": "Up to $1,235"
+  },
+  {
+   "low": 0.0099,
+   "high": 1234.5,
+   "open": true,
+   "text": "Up to $1,235 + unpriced"
+  },
+  {
+   "low": 0.0099,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.0099,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.01,
+   "open": false,
+   "text": "~$0.01"
+  },
+  {
+   "low": 0.01,
+   "high": 0.01,
+   "open": true,
+   "text": "$0.01 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.015,
+   "open": false,
+   "text": "$0.01–0.02"
+  },
+  {
+   "low": 0.01,
+   "high": 0.015,
+   "open": true,
+   "text": "$0.01–0.02 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.03,
+   "open": false,
+   "text": "$0.01–0.03"
+  },
+  {
+   "low": 0.01,
+   "high": 0.03,
+   "open": true,
+   "text": "$0.01–0.03 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.0995,
+   "open": false,
+   "text": "$0.01–0.10"
+  },
+  {
+   "low": 0.01,
+   "high": 0.0995,
+   "open": true,
+   "text": "$0.01–0.10 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.43,
+   "open": false,
+   "text": "$0.01–0.43"
+  },
+  {
+   "low": 0.01,
+   "high": 0.43,
+   "open": true,
+   "text": "$0.01–0.43 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 0.995,
+   "open": false,
+   "text": "$0.01–1.00"
+  },
+  {
+   "low": 0.01,
+   "high": 0.995,
+   "open": true,
+   "text": "$0.01–1.00 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 9.994,
+   "open": false,
+   "text": "$0.01–9.99"
+  },
+  {
+   "low": 0.01,
+   "high": 9.994,
+   "open": true,
+   "text": "$0.01–9.99 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 9.996,
+   "open": false,
+   "text": "$0.01–10.00"
+  },
+  {
+   "low": 0.01,
+   "high": 9.996,
+   "open": true,
+   "text": "$0.01–10.00 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 12.5,
+   "open": false,
+   "text": "$0.01–12.50"
+  },
+  {
+   "low": 0.01,
+   "high": 12.5,
+   "open": true,
+   "text": "$0.01–12.50 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 1234.5,
+   "open": false,
+   "text": "$0.01–1,234.50"
+  },
+  {
+   "low": 0.01,
+   "high": 1234.5,
+   "open": true,
+   "text": "$0.01–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.01,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.01,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 0.015,
+   "open": false,
+   "text": "~$0.02"
+  },
+  {
+   "low": 0.015,
+   "high": 0.015,
+   "open": true,
+   "text": "$0.02 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 0.03,
+   "open": false,
+   "text": "$0.02–0.03"
+  },
+  {
+   "low": 0.015,
+   "high": 0.03,
+   "open": true,
+   "text": "$0.02–0.03 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 0.0995,
+   "open": false,
+   "text": "$0.02–0.10"
+  },
+  {
+   "low": 0.015,
+   "high": 0.0995,
+   "open": true,
+   "text": "$0.02–0.10 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 0.43,
+   "open": false,
+   "text": "$0.02–0.43"
+  },
+  {
+   "low": 0.015,
+   "high": 0.43,
+   "open": true,
+   "text": "$0.02–0.43 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 0.995,
+   "open": false,
+   "text": "$0.02–1.00"
+  },
+  {
+   "low": 0.015,
+   "high": 0.995,
+   "open": true,
+   "text": "$0.02–1.00 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 9.994,
+   "open": false,
+   "text": "$0.02–9.99"
+  },
+  {
+   "low": 0.015,
+   "high": 9.994,
+   "open": true,
+   "text": "$0.02–9.99 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 9.996,
+   "open": false,
+   "text": "$0.02–10.00"
+  },
+  {
+   "low": 0.015,
+   "high": 9.996,
+   "open": true,
+   "text": "$0.02–10.00 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 12.5,
+   "open": false,
+   "text": "$0.02–12.50"
+  },
+  {
+   "low": 0.015,
+   "high": 12.5,
+   "open": true,
+   "text": "$0.02–12.50 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 1234.5,
+   "open": false,
+   "text": "$0.02–1,234.50"
+  },
+  {
+   "low": 0.015,
+   "high": 1234.5,
+   "open": true,
+   "text": "$0.02–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.015,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.015,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 0.03,
+   "open": false,
+   "text": "~$0.03"
+  },
+  {
+   "low": 0.03,
+   "high": 0.03,
+   "open": true,
+   "text": "$0.03 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 0.0995,
+   "open": false,
+   "text": "$0.03–0.10"
+  },
+  {
+   "low": 0.03,
+   "high": 0.0995,
+   "open": true,
+   "text": "$0.03–0.10 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 0.43,
+   "open": false,
+   "text": "$0.03–0.43"
+  },
+  {
+   "low": 0.03,
+   "high": 0.43,
+   "open": true,
+   "text": "$0.03–0.43 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 0.995,
+   "open": false,
+   "text": "$0.03–1.00"
+  },
+  {
+   "low": 0.03,
+   "high": 0.995,
+   "open": true,
+   "text": "$0.03–1.00 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 9.994,
+   "open": false,
+   "text": "$0.03–9.99"
+  },
+  {
+   "low": 0.03,
+   "high": 9.994,
+   "open": true,
+   "text": "$0.03–9.99 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 9.996,
+   "open": false,
+   "text": "$0.03–10.00"
+  },
+  {
+   "low": 0.03,
+   "high": 9.996,
+   "open": true,
+   "text": "$0.03–10.00 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 12.5,
+   "open": false,
+   "text": "$0.03–12.50"
+  },
+  {
+   "low": 0.03,
+   "high": 12.5,
+   "open": true,
+   "text": "$0.03–12.50 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 1234.5,
+   "open": false,
+   "text": "$0.03–1,234.50"
+  },
+  {
+   "low": 0.03,
+   "high": 1234.5,
+   "open": true,
+   "text": "$0.03–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.03,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.03,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.0995,
+   "open": false,
+   "text": "~$0.10"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.0995,
+   "open": true,
+   "text": "$0.10 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.43,
+   "open": false,
+   "text": "$0.10–0.43"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.43,
+   "open": true,
+   "text": "$0.10–0.43 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.995,
+   "open": false,
+   "text": "$0.10–1.00"
+  },
+  {
+   "low": 0.0995,
+   "high": 0.995,
+   "open": true,
+   "text": "$0.10–1.00 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 9.994,
+   "open": false,
+   "text": "$0.10–9.99"
+  },
+  {
+   "low": 0.0995,
+   "high": 9.994,
+   "open": true,
+   "text": "$0.10–9.99 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 9.996,
+   "open": false,
+   "text": "$0.10–10.00"
+  },
+  {
+   "low": 0.0995,
+   "high": 9.996,
+   "open": true,
+   "text": "$0.10–10.00 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 12.5,
+   "open": false,
+   "text": "$0.10–12.50"
+  },
+  {
+   "low": 0.0995,
+   "high": 12.5,
+   "open": true,
+   "text": "$0.10–12.50 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 1234.5,
+   "open": false,
+   "text": "$0.10–1,234.50"
+  },
+  {
+   "low": 0.0995,
+   "high": 1234.5,
+   "open": true,
+   "text": "$0.10–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.0995,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.0995,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 0.43,
+   "open": false,
+   "text": "~$0.43"
+  },
+  {
+   "low": 0.43,
+   "high": 0.43,
+   "open": true,
+   "text": "$0.43 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 0.995,
+   "open": false,
+   "text": "$0.43–1.00"
+  },
+  {
+   "low": 0.43,
+   "high": 0.995,
+   "open": true,
+   "text": "$0.43–1.00 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 9.994,
+   "open": false,
+   "text": "$0.43–9.99"
+  },
+  {
+   "low": 0.43,
+   "high": 9.994,
+   "open": true,
+   "text": "$0.43–9.99 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 9.996,
+   "open": false,
+   "text": "$0.43–10.00"
+  },
+  {
+   "low": 0.43,
+   "high": 9.996,
+   "open": true,
+   "text": "$0.43–10.00 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 12.5,
+   "open": false,
+   "text": "$0.43–12.50"
+  },
+  {
+   "low": 0.43,
+   "high": 12.5,
+   "open": true,
+   "text": "$0.43–12.50 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 1234.5,
+   "open": false,
+   "text": "$0.43–1,234.50"
+  },
+  {
+   "low": 0.43,
+   "high": 1234.5,
+   "open": true,
+   "text": "$0.43–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.43,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 0.995,
+   "open": false,
+   "text": "~$1.00"
+  },
+  {
+   "low": 0.995,
+   "high": 0.995,
+   "open": true,
+   "text": "$1.00 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 9.994,
+   "open": false,
+   "text": "$1.00–9.99"
+  },
+  {
+   "low": 0.995,
+   "high": 9.994,
+   "open": true,
+   "text": "$1.00–9.99 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 9.996,
+   "open": false,
+   "text": "$1.00–10.00"
+  },
+  {
+   "low": 0.995,
+   "high": 9.996,
+   "open": true,
+   "text": "$1.00–10.00 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 12.5,
+   "open": false,
+   "text": "$1.00–12.50"
+  },
+  {
+   "low": 0.995,
+   "high": 12.5,
+   "open": true,
+   "text": "$1.00–12.50 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 1234.5,
+   "open": false,
+   "text": "$1.00–1,234.50"
+  },
+  {
+   "low": 0.995,
+   "high": 1234.5,
+   "open": true,
+   "text": "$1.00–1,234.50 + unpriced"
+  },
+  {
+   "low": 0.995,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 0.995,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 9.994,
+   "high": 9.994,
+   "open": false,
+   "text": "~$9.99"
+  },
+  {
+   "low": 9.994,
+   "high": 9.994,
+   "open": true,
+   "text": "$9.99 + unpriced"
+  },
+  {
+   "low": 9.994,
+   "high": 9.996,
+   "open": false,
+   "text": "$9.99–10.00"
+  },
+  {
+   "low": 9.994,
+   "high": 9.996,
+   "open": true,
+   "text": "$9.99–10.00 + unpriced"
+  },
+  {
+   "low": 9.994,
+   "high": 12.5,
+   "open": false,
+   "text": "$9.99–12.50"
+  },
+  {
+   "low": 9.994,
+   "high": 12.5,
+   "open": true,
+   "text": "$9.99–12.50 + unpriced"
+  },
+  {
+   "low": 9.994,
+   "high": 1234.5,
+   "open": false,
+   "text": "$9.99–1,234.50"
+  },
+  {
+   "low": 9.994,
+   "high": 1234.5,
+   "open": true,
+   "text": "$9.99–1,234.50 + unpriced"
+  },
+  {
+   "low": 9.994,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 9.994,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 9.996,
+   "high": 9.996,
+   "open": false,
+   "text": "~$10"
+  },
+  {
+   "low": 9.996,
+   "high": 9.996,
+   "open": true,
+   "text": "$10 + unpriced"
+  },
+  {
+   "low": 9.996,
+   "high": 12.5,
+   "open": false,
+   "text": "$10–13"
+  },
+  {
+   "low": 9.996,
+   "high": 12.5,
+   "open": true,
+   "text": "$10–13 + unpriced"
+  },
+  {
+   "low": 9.996,
+   "high": 1234.5,
+   "open": false,
+   "text": "$10–1,235"
+  },
+  {
+   "low": 9.996,
+   "high": 1234.5,
+   "open": true,
+   "text": "$10–1,235 + unpriced"
+  },
+  {
+   "low": 9.996,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 9.996,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 12.5,
+   "high": 12.5,
+   "open": false,
+   "text": "~$13"
+  },
+  {
+   "low": 12.5,
+   "high": 12.5,
+   "open": true,
+   "text": "$13 + unpriced"
+  },
+  {
+   "low": 12.5,
+   "high": 1234.5,
+   "open": false,
+   "text": "$13–1,235"
+  },
+  {
+   "low": 12.5,
+   "high": 1234.5,
+   "open": true,
+   "text": "$13–1,235 + unpriced"
+  },
+  {
+   "low": 12.5,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 12.5,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 1234.5,
+   "high": 1234.5,
+   "open": false,
+   "text": "~$1,235"
+  },
+  {
+   "low": 1234.5,
+   "high": 1234.5,
+   "open": true,
+   "text": "$1,235 + unpriced"
+  },
+  {
+   "low": 1234.5,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 1234.5,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 20000000000000,
+   "high": 20000000000000,
+   "open": false,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "low": 20000000000000,
+   "high": 20000000000000,
+   "open": true,
+   "text": ">$10,000,000,000,000 + unpriced"
+  },
+  {
+   "low": 0.43,
+   "high": -1,
+   "open": false,
+   "text": "~$0.43"
+  },
+  {
+   "low": 0.05,
+   "high": null,
+   "open": false,
+   "text": "$0.05 + unpriced"
+  },
+  {
+   "low": 0.2,
+   "high": null,
+   "open": false,
+   "text": "$0.20 + unpriced"
+  }
+ ]
+}

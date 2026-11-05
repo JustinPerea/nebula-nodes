@@ -47,6 +47,7 @@ import { fileNameParam, fileParamName, middleTruncate, shownFileName, storedName
 import { rememberUploadName, useUploadNames } from '../../lib/uploadNames';
 import { fileDropNoteStale, watchFileDropNotes } from './fileDropNotes';
 import { NO_PREVIEW, uploadingLabel, uploadProjectChangedLine } from '../../lib/uploadNotice';
+import { previewSize } from '../../lib/previewSize';
 import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
@@ -469,10 +470,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // agent, stays (review 7 M1). `key` is the param the person edited; the
   // node's own definition and provider snap run as on any edit. One store
   // update, so one undo step. A node that is gone gets nothing.
-  function writeParamsNow(nodeId: string, key: string, patch: Record<string, unknown>) {
+  function writeParamsNow(nodeId: string, key: string, patch: Record<string, unknown>, drop: readonly string[] = []) {
     const current = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.params;
     if (!current) return;
     const next = { ...current, ...patch };
+    for (const dropped of drop) delete next[dropped];
     const snap = definition ? snapParamDefaults(definition, current, next) : { params: next };
     writeEdit(snap.params, key, nodeId);
   }
@@ -515,12 +517,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
     // GM, error-copy round 2: "Couldn't upload {filename}." then the
     // reason, in the canvas notice (as a canvas drop says it).
     const heading = `Couldn't upload ${quoted(shownFileName(file.name))}.`;
-    type Uploaded = { ok: true; filePath: string; url: string } | { ok: false; error: unknown };
+    type Uploaded = { ok: true; filePath: string; url: string; previewSize?: unknown } | { ok: false; error: unknown };
     startPaletteExtract<Uploaded>(
       runKey,
       () => apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
-        .then((r) => r.json() as Promise<{ filePath: string; url: string }>)
-        .then((data): Uploaded => ({ ok: true, filePath: data.filePath, url: data.url }),
+        .then((r) => r.json() as Promise<{ filePath: string; url: string; previewSize?: unknown }>)
+        .then((data): Uploaded => ({ ok: true, filePath: data.filePath, url: data.url, previewSize: data.previewSize }),
           (error: unknown): Uploaded => ({ ok: false, error })),
       (uploaded) => {
         uploadNames.delete(runKey);
@@ -547,9 +549,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
         // filePath's card names the file (lib/fileName.ts), as
         // /api/uploads keeps it for a node it creates.
         const kept = paramKey === 'filePath' ? fileNameParam(uploaded.filePath, file.name) : null;
+        // The image's size as shown (backend services/preview_size.py), so the
+        // preview has its height before it decodes (#226, GM r82); a file
+        // without one drops the last file's (merged from main, 2026-11-05).
+        const size = previewSize(uploaded.previewSize);
         writeParamsNow(nodeId, paramKey, {
-          [paramKey]: uploaded.filePath, _previewUrl: backendAssetUrlSync(uploaded.url), ...(kept ? { _fileName: kept } : {}),
-        });
+          [paramKey]: uploaded.filePath, _previewUrl: backendAssetUrlSync(uploaded.url),
+          ...(size ? { _previewSize: size } : {}), ...(kept ? { _fileName: kept } : {}),
+        }, size ? [] : ['_previewSize']);
         return '';
       },
     );
@@ -1177,7 +1184,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             // GM r46 Q2: neutral, nothing failed (the run reads the file).
             <span className="inspector__file-no-preview">{NO_PREVIEW}</span>
           )}
-          {showsPreview && <FilePreviewFrame src={previewUrl} />}
+          {showsPreview && <FilePreviewFrame src={previewUrl} size={activeNodeData.params._previewSize} />}
           <span className="inspector__palette-status" role="status" aria-live="polite">{dropNote || ''}</span>
         </div>
       );

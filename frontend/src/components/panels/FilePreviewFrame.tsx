@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { previewSizeAttributes } from '../../lib/previewSize';
 
 /**
  * The image under a file param's control (GM r46 Q2 on #222). With no
@@ -8,7 +9,7 @@ import { useState } from 'react';
  * glide shows it closing, not a blank. A frame that never had an image is
  * not drawn at all.
  */
-export function FilePreviewFrame({ src }: { src: string | null }) {
+export function FilePreviewFrame({ src, size }: { src: string | null; size?: unknown }) {
   const [last, setLast] = useState(src);
   if (src && src !== last) setLast(src);
   if (!src && !last) return null;
@@ -20,6 +21,8 @@ export function FilePreviewFrame({ src }: { src: string | null }) {
           alt={src ? 'Preview' : ''}
           aria-hidden={src ? undefined : true}
           className="inspector__file-preview"
+          // Its aspect ratio before it decodes (#226, GM r82).
+          {...previewSizeAttributes(size)}
         />
       </div>
     </div>

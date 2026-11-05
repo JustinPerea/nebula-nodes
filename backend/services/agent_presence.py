@@ -39,7 +39,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Collection, Iterator, Mapping
 
 from services import node_route, universal_ports
 from services.cursor_actions import ACTIONS, SESSION_RE as _SESSION_RE, refusal as action_refusal
@@ -328,22 +328,67 @@ class _SessionSlot:
     # The latest person form sent for it: what a person tab that connects
     # later is shown (replay), so every tab draws the same live cursors.
     event: dict[str, Any] | None = None
-    # When its cursor came to where it is (clock seconds): the backend's
-    # arrival order, which every tab stacks by, before and after a reload
-    # (GM - Design, PR #211 r21). A move to the same node, or within
-    # ARRIVAL_RADIUS of a point, keeps it.
-    since: float = 0.0
+    # When its cursor came to where it is (ms, AgentPresence._arrival): the
+    # backend's arrival order, which every tab stacks by, before and after a
+    # reload (GM - Design, PR #211 r21). A move to the same node, or within
+    # ARRIVAL_RADIUS of the point it arrived at (`anchor`), keeps it.
+    since: int = 0
+    # Where it arrived (its target then): the spot later moves are measured
+    # from, so a run of small moves can't keep the arrival over any
+    # distance (#211 review 9, LOW-1).
+    anchor: dict[str, Any] | None = None
 
 
 # A cursor's new target within this many flow px of its last point keeps its
 # arrival (_SessionSlot.since): the tab's stack radius at zoom 1
-# (AGENT_CURSOR_STACK.radiusPx), so a nudge never sends it to the back.
+# (AGENT_CURSOR_STACK.radiusPx), so a nudge never sends it to the back. It
+# is also the link of the target chain (carry_nodes), in canvas units at
+# zoom 1. The chain decides arrival only: which cursors join one column is
+# the tab's, in screen px, with arrow and label overlaps (GM - Design, #219
+# r24 Q2).
 ARRIVAL_RADIUS = 16.0
+
+# Where a tab points at a node with no handle (agentCursorMotion.resolveAnchor):
+# its middle across, this far down into the header, or half its height.
+NODE_POINT_DOWN = 44.0
+
+
+def _header_point(x: float, y: float, width: float, height: float) -> tuple[float, float]:
+    """Where a cursor aimed at a node (no handle) points, as the tab draws it
+    (agentCursorMotion.nodeHeaderPoint): across its middle, NODE_POINT_DOWN
+    into its header, or half its height. The shared fixture
+    tests/fixtures/cursor_chains.json holds both to it."""
+    return x + width / 2, y + min(NODE_POINT_DOWN, height / 2)
+
+
+def _target_chains(points: Mapping[str, tuple[float, float]]) -> dict[str, frozenset[str]]:
+    """Each cursor's target chain: the other cursors linked to it through
+    targets ARRIVAL_RADIUS apart or less, one link after another."""
+    keys = list(points)
+    parent = {key: key for key in keys}
+
+    def find(key: str) -> str:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for i, a in enumerate(keys):
+        ax, ay = points[a]
+        for b in keys[i + 1:]:
+            bx, by = points[b]
+            if math.hypot(ax - bx, ay - by) <= ARRIVAL_RADIUS + 1e-9:
+                parent[find(a)] = find(b)
+    groups: dict[str, set[str]] = {}
+    for key in keys:
+        groups.setdefault(find(key), set()).add(key)
+    return {key: frozenset(groups[find(key)] - {key}) for key in keys}
 
 
 def _same_spot(before: dict[str, Any] | None, after: dict[str, Any]) -> bool:
-    """Whether ``after`` keeps a cursor where ``before`` put it, for its
-    arrival order: the same node, or two points ARRIVAL_RADIUS apart or less."""
+    """Whether ``after`` keeps a cursor at ``before``, the spot it arrived
+    at, for its arrival order: the same node, or two points ARRIVAL_RADIUS
+    apart or less."""
     if before is None:
         return False
     if "nodeId" in before or "nodeId" in after:
@@ -382,6 +427,18 @@ class AgentPresence:
         # agent id -> raw session ('' for none) -> its live slot, oldest first.
         # The one source of every session's number: tabs show it as given.
         self._slots: OrderedDict[str, OrderedDict[str, _SessionSlot]] = OrderedDict()
+        # The last arrival handed out (ms): each new one is later, so no two
+        # sessions share one and a clock stepped back never puts a new
+        # arrival ahead of the old ones (#211 review 9, LOW-2, NIT-3).
+        self._last_arrival = 0
+        # Each person form's id (``eventId``): the Agent log lists an action
+        # once by it, a live event and its replay alike, and never drops a
+        # real repeat (review 9, LOW-5). Per boot, so a restart can't reuse one.
+        self._boot = secrets.token_hex(4)
+        self._event_seq = 0
+        # Every node's box as the last graph sync had it (carry_nodes): what
+        # the next one's moves are measured from.
+        self._boxes: dict[str, dict[str, float]] | None = None
 
     # -- cursors --------------------------------------------------------
     def point(
@@ -561,6 +618,104 @@ class AgentPresence:
         """(key, number) of an agent's live sessions, oldest first (tests, diagnostics)."""
         return [(slot.key, slot.ordinal) for slot in (self._slots.get(agent_id) or {}).values()]
 
+    def _arrival(self, now: float) -> int:
+        """A new arrival time (ms): the wall clock, kept comparable with the
+        events' own ``at`` (a tab falls back to it for a cursor with no
+        arrival), but always after the last one handed out."""
+        self._last_arrival = max(int(now * 1000), self._last_arrival + 1)
+        return self._last_arrival
+
+    def _event_id(self) -> str:
+        self._event_seq += 1
+        return f"{self._boot}-{self._event_seq}"
+
+    def _target_point(self, target: Mapping[str, Any], boxes: Mapping[str, Mapping[str, float]]) -> tuple[float, float] | None:
+        """A cursor target as a point in canvas units, where a tab draws it
+        (agentCursorMotion.resolveAnchor): a point as it is; a node at its
+        header's middle, sized from the browser's last view report (none
+        reported: its corner). A handle counts as its node's point: the
+        backend doesn't know where ports sit, and the cursors on one node
+        move together anyway."""
+        node_id = target.get("nodeId")
+        if node_id is None:
+            try:
+                return float(target["x"]), float(target["y"])
+            except (KeyError, TypeError, ValueError):
+                return None
+        box = boxes.get(node_id)
+        if box is None:
+            return None
+        seen = ((self._view or {}).get("nodes") or {}).get(node_id) or {}
+        width = float(seen.get("width") or 0.0)
+        height = float(seen.get("height") or 0.0)
+        return _header_point(box["x"], box["y"], width, height)
+
+    def carry_nodes(self, positions: Mapping[str, Mapping[str, Any]] | None,
+                    placed: Collection[str] | None = None) -> list[dict[str, Any]]:
+        """Every graph sync (main._carry_cursors, whatever moved the nodes:
+        a drag, an arrange, an agent's move or apply, an undo or redo)
+        passes the node positions it sent. A session cursor whose node moved
+        arrives now only when the move changed its target chain: the other
+        cursors linked to it through targets ARRIVAL_RADIUS apart, from
+        targets alone, in canvas units at zoom 1 (GM - Design, #219 r24 Q2).
+        A node moving with all its cursors keeps their places, however far.
+        The backend holds every input, so every tab and a reload agree.
+        The cursors one move makes arrive keep their order among themselves.
+        ``None`` (the graph replaced or cleared) forgets the positions: node
+        ids restart, and nothing is carried. Returns the person-only arrival
+        updates (``[{agentId, key, ordinal, since}]``) for the person's tabs.
+
+        ``placed`` (when given) names the nodes with a stored position. A node
+        without one is drawn where main._display_positions computes it, and
+        that spot shifts when a sibling gets a position or is deleted; an open
+        canvas keeps such a node where it drew it (only a sync's ``moved``
+        moves it), so it keeps the box it had here too: no false carry
+        (#219 review 2, LOW-3). Its first stored position is its first move."""
+        previous = self._boxes
+        if positions is None:
+            self._boxes = None
+            return []
+        current: dict[str, dict[str, float]] = {}
+        for node_id, position in positions.items():
+            node_id = str(node_id)
+            if placed is not None and node_id not in placed and previous and node_id in previous:
+                current[node_id] = previous[node_id]  # unplaced: nothing moved it
+                continue
+            try:
+                current[node_id] = {"x": float(position["x"]), "y": float(position["y"])}
+            except (KeyError, TypeError, ValueError):
+                continue
+        self._boxes = current
+        if not previous:
+            return []
+        moved = {node_id for node_id, box in current.items()
+                 if node_id in previous and (previous[node_id]["x"], previous[node_id]["y"]) != (box["x"], box["y"])}
+        if not moved:
+            return []
+        now = self._clock()
+        live = [(agent_id, slot) for agent_id, slots in self._slots.items() for slot in slots.values()
+                if slot.target is not None and now - slot.last_t <= PRESENCE_TTL_SECONDS]
+        if not any((slot.target or {}).get("nodeId") in moved for _, slot in live):
+            return []
+        before: dict[str, tuple[float, float]] = {}
+        after: dict[str, tuple[float, float]] = {}
+        for _, slot in live:
+            was = self._target_point(slot.target, {**current, **previous})
+            now_at = self._target_point(slot.target, current)
+            if was is not None and now_at is not None:
+                before[slot.key] = was
+                after[slot.key] = now_at
+        chains_before = _target_chains(before)
+        chains_after = _target_chains(after)
+        updates = [(slot.since, agent_id, slot) for agent_id, slot in live
+                   if slot.target.get("nodeId") in moved and slot.key in before
+                   and chains_before[slot.key] != chains_after[slot.key]]
+        out: list[dict[str, Any]] = []
+        for _, agent_id, slot in sorted(updates, key=lambda u: (u[0], u[1], u[2].key)):
+            slot.since = self._arrival(now)
+            out.append({"agentId": agent_id, "key": slot.key, "ordinal": slot.ordinal, "since": slot.since})
+        return out
+
     def person_form(
         self,
         event: dict[str, Any],
@@ -592,7 +747,9 @@ class AgentPresence:
         back (review 4, NIT-1).
         """
         if "target" not in event:
-            return event  # the Agent log only: no cursor, no session
+            # The Agent log only: no cursor, no session. Its id is for the
+            # person's tabs; agents read the event as it was.
+            return {**event, "eventId": self._event_id()}
         raw = session if session is not None and _valid_session(session) else ""
         now = self._clock()
         if live_only:
@@ -611,11 +768,13 @@ class AgentPresence:
             elif raw or len(self._slots.get(identity.id) or {}) > 1:
                 # A session's first words: not on another session's cursor.
                 person["target"] = self._view_middle()[0]
-        if not _same_spot(slot.target, person["target"]):
-            slot.since = now
+        if not _same_spot(slot.anchor, person["target"]):
+            slot.since = self._arrival(now)
+            slot.anchor = dict(person["target"])
         slot.target = dict(person["target"])
         person["session"] = {"key": slot.key, "ordinal": slot.ordinal}
-        person["since"] = int(slot.since * 1000)
+        person["since"] = slot.since
+        person["eventId"] = self._event_id()
         slot.event = person
         return person
 
@@ -640,7 +799,7 @@ class AgentPresence:
                 cursor = {key: value for key, value in slot.event.items() if key != "from"}
                 cursor["target"] = dict(slot.target)
                 cursor["session"] = {"key": slot.key, "ordinal": slot.ordinal}
-                cursor["since"] = int(slot.since * 1000)
+                cursor["since"] = slot.since
                 if isinstance(cursor.get("did"), dict):
                     did = cursor["did"]
                     cursor["did"] = {**did, "secondsAgo": round(float(did.get("secondsAgo") or 0) + age, 1)}
@@ -683,6 +842,9 @@ class AgentPresence:
                         del slots[raw]  # it leaves, as the agent's cursor does: its number is free
                     else:
                         slot.target = dict(fallback)
+                        # Where the node was is where it is now: its arrival stays.
+                        if (slot.anchor or {}).get("nodeId") == node_id:
+                            slot.anchor = dict(fallback)
 
     def forget_graph(self) -> None:
         """Drop node anchors after the whole graph is cleared or replaced.
@@ -690,6 +852,7 @@ class AgentPresence:
         Node ids restart per graph, so an old anchor like `n2` would land on an
         unrelated node in the next project. Coordinate-only cursors survive.
         """
+        self._boxes = None  # node positions too: carry_nodes measures from none
         for key, value in list(self._agents.items()):
             origin = value.get("from")
             if isinstance(origin, dict) and "nodeId" in origin:

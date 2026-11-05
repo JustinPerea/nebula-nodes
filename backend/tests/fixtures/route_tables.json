@@ -4204,6 +4204,52 @@
     "min_confidence"
    ]
   },
+  "kling-ai-avatar-v2": {
+   "routes": [
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": []
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "mode"
+   ],
+   "routeParams": {
+    "fal": [
+     {
+      "key": "mode",
+      "options": [
+       "std",
+       "pro"
+      ]
+     }
+    ],
+    "replicate": [
+     {
+      "key": "mode",
+      "options": [
+       "std",
+       "pro"
+      ]
+     }
+    ]
+   }
+  },
   "kling-motion": {
    "routes": [
     {
@@ -12239,6 +12285,79 @@
     "temperature",
     "max_tokens"
    ]
+  },
+  "omnihuman-1-5": {
+   "routes": [
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": [
+      "resolution"
+     ]
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "paramKeys": [
+      "seed"
+     ]
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "fast_mode",
+    "resolution",
+    "seed"
+   ],
+   "routeParams": {
+    "fal": [
+     {
+      "key": "fast_mode"
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "1080p",
+       "720p"
+      ]
+     }
+    ],
+    "replicate": [
+     {
+      "key": "fast_mode"
+     },
+     {
+      "key": "seed"
+     }
+    ]
+   }
+  },
+  "omnihuman-2": {
+   "routes": [
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider"
+   ],
+   "routeParams": {
+    "fal": []
+   }
   },
   "openai-stt": {
    "routes": [

@@ -78,6 +78,8 @@ function sync(nodes: Node<NodeData>[], edges: Edge[], extra: Record<string, unkn
     edges: structuredClone(edges), empty: nodes.length === 0, ...extra } as unknown as ExecutionEvent;
   for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
 }
+// delete-landed-wait: off, the fake answers each DELETE at once (or holds it until the test lets it go), so
+// settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
 const restores = () => net.calls.filter((call) => call.path === '/api/graph/restore')
   .map((call) => call.body as { action: string; nodes: Array<{ id: string }>; remove: string[]; removals?: unknown[] });

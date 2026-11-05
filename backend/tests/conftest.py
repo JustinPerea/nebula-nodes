@@ -535,7 +535,10 @@ def person_only_frame(data: object) -> bool:
     if not isinstance(data, Mapping):
         return False
     kind = data.get("type")
-    return kind == "agentPresenceReplay" or (kind == "agentPresence" and "session" in data)
+    # Also the carried cursors' new arrivals (#211 follow-up, r23 item 2) and
+    # a person form's event id, which a log-only line carries with no session.
+    return kind in ("agentPresenceReplay", "agentPresenceArrival") or (
+        kind == "agentPresence" and ("session" in data or "eventId" in data))
 
 
 def _record(line: str) -> None:
