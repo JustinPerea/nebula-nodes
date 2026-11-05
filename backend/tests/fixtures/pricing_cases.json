@@ -3299,7 +3299,7 @@
       "name": "Krea 2 Turbo (Krea) doesn't count U+FEFF as whitespace (Python's strip() keeps it)",
       "nodeId": "krea-image-krea-krea-2-medium-turbo",
       "params": {
-        "image_style_references": "\ufeff"
+        "image_style_references": "﻿"
       },
       "apiKeys": {
         "KREA_API_TOKEN": "set"
@@ -3674,6 +3674,20 @@
         "high": 1.1,
         "awaitingInput": false
       }
+    }
+  ],
+  "sizeNoteCases": [
+    {
+      "name": "an Audio port says the audio's length",
+      "nodeId": "omnihuman-2",
+      "route": "fal",
+      "note": "$0.105 per second of audio, rounded up to a whole second. The video runs as long as the audio. Priced from your audio’s length when you run it"
+    },
+    {
+      "name": "an Image port says the image's size",
+      "nodeId": "seedvr2-upscale",
+      "route": null,
+      "note": "$0.001 per megapixel of the larger of input and output, rounded up to a whole megapixel; priced from your image's size when you run it"
     }
   ]
 }

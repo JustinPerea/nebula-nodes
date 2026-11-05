@@ -3941,7 +3941,7 @@ No settings.
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Fast mode | `fast_mode` | bool | false | — | always |
-| Resolution | `resolution` | enum | 1080p | `1080p` 1080p (audio up to 30 s), `720p` 720p (audio up to 60 s) | always |
+| Resolution | `resolution` | enum | 1080p | `1080p` 1080p, audio up to 30 s, `720p` 720p, audio up to 60 s | always |
 
 **Replicate (`replicate`) settings**
 

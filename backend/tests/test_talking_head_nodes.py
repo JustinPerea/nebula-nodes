@@ -275,11 +275,23 @@ def test_the_estimate_is_the_vendors_per_second_price_times_the_audio_length(nod
                                        provider, ["image", "audio"], None) is None
 
 
+SIZE_NOTE_CASES = json.loads((Path(__file__).parent / "fixtures" / "pricing_cases.json").read_text())["sizeNoteCases"]
+
+
+@pytest.mark.parametrize("case", SIZE_NOTE_CASES, ids=[c["name"] for c in SIZE_NOTE_CASES])
+def test_the_size_note_matches_the_cases_the_frontend_runs(case):
+    """pricing.test.ts runs the same cases (pricing_cases.json sizeNoteCases), so the person's
+    Inspector line and the agent's describe_node line can't drift."""
+    entry = PRICING["nodes"][case["nodeId"]]
+    entry = entry["routes"][case["route"]] if case["route"] else entry
+    assert model_pricing.size_note(entry, REGISTRY[case["nodeId"]]) == case["note"]
+
+
 def test_the_size_note_says_the_price_comes_from_the_audio_length():
     entry = PRICING["nodes"]["omnihuman-2"]["routes"]["fal"]
     note = model_pricing.size_note(entry, REGISTRY["omnihuman-2"])
-    assert note == ("$0.105 per second of the audio track (the output video runs as long as the audio), rounded up to "
-                    "a whole second; priced from your audio's length when you run it")
+    assert note == ("$0.105 per second of audio, rounded up to a whole second. The video runs as long as the audio. "
+                    "Priced from your audio\u2019s length when you run it")
 
 
 # -- measuring the audio ---------------------------------------------------------------
@@ -384,6 +396,160 @@ def test_the_spend_gate_says_what_to_do_about_audio_it_cant_measure(reason, must
         assert phrase not in text, (reason, phrase, text)
 
 
+def test_the_spend_refusal_words_each_node_by_its_own_port_in_a_mixed_graph():
+    """An audio node and a video node refused for the same reason each get their
+    own wording, whichever comes first (the audio wording once leaked onto the
+    nodes after it, and one sentence served both)."""
+    for order in (["a", "v"], ["v", "a"]):
+        sentences = agent_spend._awaiting_reasons(
+            order, {"a": input_sizes.REMOTE, "v": input_sizes.REMOTE}, {"a": "OmniHuman 2.0", "v": "SeedVR Video Upscale"},
+            {"a": "omnihuman-2", "v": "seedvr-video-upscale"}, PRICING, REGISTRY)
+        assert len(sentences) == 2, sentences
+        audio = next(text for text in sentences if "OmniHuman 2.0" in text)
+        video = next(text for text in sentences if "SeedVR Video Upscale" in text)
+        assert "length of its audio" in audio and "Audio Input" in audio and "Image Input" not in audio
+        assert "size of its input" in video and "Image Input or Video Input" in video
+        assert "audio" not in video.lower() and "OmniHuman" not in video and "SeedVR" not in audio
+
+
+def test_the_spend_refusal_for_an_image_node_after_an_audio_node_keeps_the_image_wording():
+    sentences = agent_spend._awaiting_reasons(
+        ["a", "s"], {"a": input_sizes.REMOTE, "s": input_sizes.OUTSIDE}, {"a": "OmniHuman 2.0", "s": "SeedVR2 Upscale"},
+        {"a": "omnihuman-2", "s": "seedvr2-upscale"}, PRICING, REGISTRY)
+    image = next(text for text in sentences if "SeedVR2 Upscale" in text)
+    assert "Audio Input" not in image and "Image Input or Video Input" in image
+
+
+# -- the missing-input refusals, on both routes (GM r118) ----------------------------------
+
+def _person(exc: BaseException) -> str:
+    from execution.person_line import person_line
+
+    return person_line(exc) or ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_id", ["fal", "replicate"])
+@pytest.mark.parametrize("node_id, name", [("omnihuman-1-5", "OmniHuman 1.5"), ("kling-ai-avatar-v2", "Kling AI Avatar v2")])
+@pytest.mark.parametrize("wired, what", [({"audio": AUDIO}, "an image"), ({"image": REF}, "an audio track")])
+async def test_a_missing_image_or_audio_stops_before_any_request_in_the_same_words_on_both_routes(
+        monkeypatch, route_id, node_id, name, wired, what):
+    hosts = hosts_for(monkeypatch, "fal" if route_id == "fal" else "replicate", True)
+    saved = {**defaults(REGISTRY[node_id]), "_provider": route_id}
+    with pytest.raises(ValueError) as caught:
+        await registry_handler(node_id)(node(node_id, **saved), av_ports(**wired), dict(KEYS))
+    assert _person(caught.value) == (
+        f"Nebula couldn\u2019t run \u201c{name}\u201d because it needs {what}. Connect one, then run it again.")
+    assert f"needs {what}" in str(caught.value)
+    assert not hosts.requests
+
+
+def test_fal_refuses_a_missing_image_or_audio_for_all_four_endpoints():
+    for endpoint in ("fal-ai/bytedance/omnihuman/v1.5", "fal-ai/bytedance/omnihuman/v2",
+                     "fal-ai/kling-video/ai-avatar/v2/standard", "fal-ai/kling-video/ai-avatar/v2/pro"):
+        for wired, what in (({"audio": AUDIO}, "an image"), ({"image": REF}, "an audio track"), ({}, "an image")):
+            with pytest.raises(ValueError, match=f"needs {what}") as caught:
+                route_clients.fal_fields(endpoint, {}, av_ports(**wired), "OmniHuman 2.0")
+            assert _person(caught.value).startswith("Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because it needs")
+
+
+# -- local media to fal as a data URI: a size cap before it is read ----------------------------
+
+def _stored_blob(name: str, size: int) -> Path:
+    path = _stored(name)
+    with path.open("wb") as out:
+        out.truncate(size)
+    return path
+
+
+def test_a_local_file_over_the_cap_is_refused_before_it_is_read(monkeypatch):
+    big = _stored_blob("big.wav", 16 * 1024 * 1024)
+
+    def never_read(self, *args, **kwargs):
+        raise AssertionError("the file was read into memory")
+
+    monkeypatch.setattr(Path, "read_bytes", never_read)
+    # OmniHuman 2.0 publishes 15 MB for audio on fal's page.
+    with pytest.raises(ValueError, match="takes audio up to 15 MB, and this file is 16 MB") as caught:
+        route_clients.fal_fields("fal-ai/bytedance/omnihuman/v2", {}, av_ports(image=REF, audio=str(big)), "OmniHuman 2.0")
+    assert _person(caught.value) == (
+        "Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because its audio file is too large at 16 MB, and fal "
+        "takes up to 15 MB. Use a smaller file, then run it again.")
+    assert ":" not in _person(caught.value)
+    # No published limit: the fixed cap.
+    bigger = _stored_blob("bigger.wav", 21 * 1024 * 1024)
+    with pytest.raises(ValueError, match="up to 20 MB"):
+        route_clients.fal_fields("fal-ai/kling-video/ai-avatar/v2/pro", {}, av_ports(image=REF, audio=str(bigger)),
+                                 "Kling AI Avatar v2")
+
+
+def test_a_local_file_under_the_cap_still_goes_as_a_data_uri():
+    small = _stored_blob("small.wav", 1024)
+    fields = route_clients.fal_fields("fal-ai/bytedance/omnihuman/v2", {}, av_ports(image=REF, audio=str(small)))
+    assert fields["audio_url"].startswith("data:audio/") and fields["image_url"] == REF
+
+
+# -- OmniHuman 2.0's 4 second minimum ----------------------------------------------------------
+# fal's page says "Duration between 4 and 300 seconds" and bills "Duration of audio input/video
+# output", and nothing of padding a shorter clip, so a shorter clip is refused, not priced.
+
+@needs_ffmpeg
+@pytest.mark.asyncio
+async def test_audio_under_four_seconds_is_refused_before_the_request_and_four_is_not(monkeypatch):
+    hosts = hosts_for(monkeypatch, "fal", True)
+    saved = {**defaults(REGISTRY["omnihuman-2"]), "_provider": "fal"}
+    short = _stored("short.wav")
+    _ffmpeg("-f", "lavfi", "-i", "sine=duration=2", str(short))
+    with pytest.raises(ValueError) as caught:
+        await registry_handler("omnihuman-2")(node("omnihuman-2", **saved), av_ports(image=REF, audio=str(short)), dict(KEYS))
+    assert "needs audio of at least 4 s" in str(caught.value)
+    assert _person(caught.value) == ("Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because it needs audio of at "
+                                     "least 4 s. Use a longer audio track, then run it again.")
+    assert not hosts.requests
+
+
+@pytest.mark.asyncio
+async def test_audio_that_cant_be_measured_is_left_to_fal_and_other_endpoints_have_no_minimum(monkeypatch):
+    hosts = hosts_for(monkeypatch, "fal", True)
+    # A remote URL is never measured here: no refusal of ours (fal checks it).
+    await route_clients.refuse_short_audio("fal-ai/bytedance/omnihuman/v2", av_ports(audio=AUDIO), "OmniHuman 2.0")
+    await route_clients.refuse_short_audio("fal-ai/bytedance/omnihuman/v1.5", av_ports(audio=AUDIO), "OmniHuman 1.5")
+    assert not hosts.requests
+
+
+# -- a WAV whose header understates its length ---------------------------------------------------
+
+def _wav_bytes(seconds: float, *, declared: float | None = None, trailing: bytes = b"", rate: int = 16000) -> bytes:
+    import struct
+
+    frames = int(rate * seconds)
+    data = b"\x01\x00" * frames
+    declared_bytes = len(data) if declared is None else int(rate * declared) * 2
+    fmt = struct.pack("<HHIIHH", 1, 1, rate, rate * 2, 2, 16)
+    body = b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + struct.pack("<I", declared_bytes) + data + trailing
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
+@needs_ffmpeg
+def test_a_wav_whose_data_chunk_understates_its_bytes_is_left_unmeasured():
+    honest = _stored("honest.wav")
+    honest.write_bytes(_wav_bytes(10))
+    assert input_sizes.measure(str(honest), "Audio")["seconds"] == pytest.approx(10, abs=0.1)
+    lied = _stored("lied.wav")
+    lied.write_bytes(_wav_bytes(10, declared=1))
+    assert input_sizes.measure(str(lied), "Audio") is None
+
+
+@needs_ffmpeg
+def test_a_wav_with_a_metadata_chunk_after_the_data_is_still_measured():
+    import struct
+
+    path = _stored("tagged.wav")
+    tag = b"LIST" + struct.pack("<I", 4000) + b"x" * 4000
+    path.write_bytes(_wav_bytes(10, trailing=tag))
+    assert input_sizes.measure(str(path), "Audio")["seconds"] == pytest.approx(10, abs=0.1)
+
+
 # -- agents and the CLI ------------------------------------------------------------------
 
 @pytest.fixture
@@ -409,7 +575,7 @@ def test_mcp_find_nodes_and_describe_node_show_the_nodes_ports_routes_and_prices
     assert all(r["keySet"] for r in body["routes"]) and not any(r.get("maker") for r in body["routes"])
     assert body["providerChoice"] == {"param": "_provider", "value": "auto", "resolved": "fal"}
     # The price is per second of the audio, known once the audio is.
-    assert "audio's length" in json.dumps(body["price"]) or body["price"].get("sizing")
+    assert "Priced from your audio\u2019s length when you run it" in json.dumps(body["price"], ensure_ascii=False)
 
 
 def test_nebula_nodes_info_and_apply_work_for_the_nodes(agent_keys):

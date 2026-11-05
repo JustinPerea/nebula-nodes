@@ -169,7 +169,9 @@ export function sizingPorts(entry: PriceEntry | undefined): string[] {
 export function sizeNote(entry: PriceEntry | undefined, definition: Partial<ModelNodeDefinition>): string | null {
   if (!awaitsInput(entry)) return null;
   const port = definition.inputPorts?.find((candidate) => candidate.id === entry!.sizing!.port);
-  return `${entry!.sizing!.say.trim()}; priced from your ${port?.dataType === 'Video' ? 'video' : 'image'}'s size when you run it`;
+  const say = entry!.sizing!.say.trim();
+  if (port?.dataType === 'Audio') return `${say.endsWith('.') ? say : `${say}.`} Priced from your audio\u2019s length when you run it`;
+  return `${say}; priced from your ${port?.dataType === 'Video' ? 'video' : 'image'}'s size when you run it`;
 }
 
 /** The SIZED_VARIABLES an entry reads, from its input's size, or null when

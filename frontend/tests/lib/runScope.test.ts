@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
-  cinemaSceneBase, describeRunScope, runChipLabel, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
+  cinemaSceneBase, describeRunScope, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
   summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
@@ -454,6 +454,28 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const text = describeRunScope(summary);
     expect(text).toContain('Priced when its input is known: Upscale');
     expect(text).toContain("Nebula can't read the size of its input (a file on another host is never downloaded to price it): Upscale");
+  });
+
+  it('words an audio-priced node\u2019s reasons by the audio\u2019s length (GM r118)', () => {
+    const voice = (params: Record<string, unknown>): Node<NodeData> => ({
+      id: 'voice', position: { x: 0, y: 0 }, data: { definitionId: 'audio-input', label: 'Voice', params } as unknown as NodeData,
+    });
+    const head: Node<NodeData> = {
+      id: 'head', position: { x: 0, y: 0 },
+      data: { definitionId: 'omnihuman-2', label: 'Talker', params: {} } as unknown as NodeData,
+    };
+    const edges: Edge[] = [
+      ...wire,
+      { id: 'a', source: 'voice', sourceHandle: 'audio', target: 'head', targetHandle: 'audio' },
+    ];
+    // Something priced beside it, so the chip has a tooltip to read.
+    const priced = (sizes: Record<string, null>, filePath: string) => runChipTitle(summarizeRunScope(
+      [voice({ filePath }), head, upload({ filePath: '/out/a.png' }), seedvr], edges, { kind: 'graph' },
+      { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 }, ...sizes } }));
+    expect(priced({}, '/out/voice.mp3')).toContain('is priced from its input, because its audio doesn’t exist yet. Run the node that makes it, then run this one.');
+    const unreadable = priced({ 'https://x.example/v.mp3': null }, 'https://x.example/v.mp3');
+    expect(unreadable).toContain('is priced by its input size, because Nebula couldn’t read the audio’s length.');
+    expect(unreadable).not.toContain('which Nebula couldn’t read');
   });
 
   it('never measures an upload with no file yet', () => {

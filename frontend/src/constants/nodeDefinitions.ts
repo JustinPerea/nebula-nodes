@@ -14407,7 +14407,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'omnihuman-1-5': {
     id: 'omnihuman-1-5',
     displayName: 'OmniHuman 1.5',
-    description: "ByteDance’s OmniHuman 1.5: a still portrait plus an audio track becomes a talking video, with an optional prompt for the scene, movement and camera. The audio must stay under 30 s (1080p) or 60 s (720p) on fal.ai, and under 35 s on Replicate. Runs on fal.ai or Replicate.",
+    description: "Turns a portrait and an audio track into a talking video. Audio can run up to 30 s at 1080p or 60 s at 720p on fal, and up to 35 s on Replicate.",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/omnihuman/v1.5',
@@ -14459,8 +14459,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             required: false,
             default: '1080p',
             options: [
-              { label: '1080p (audio up to 30 s)', value: '1080p' },
-              { label: '720p (audio up to 60 s)', value: '720p' },
+              { label: '1080p, audio up to 30 s', value: '1080p' },
+              { label: '720p, audio up to 60 s', value: '720p' },
             ],
           },
         ],
@@ -14478,7 +14478,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'omnihuman-2': {
     id: 'omnihuman-2',
     displayName: 'OmniHuman 2.0',
-    description: "ByteDance’s OmniHuman 2.0: a still portrait plus an audio track (WAV or MP3, 4 to 300 s) becomes a talking video, with an optional prompt for the scene, movement and camera. On fal.ai only for now.",
+    description: "Turns a portrait and an audio track into a talking video. It takes WAV or MP3 audio from 4 to 300 s, and runs on fal only for now.",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/omnihuman/v2',
@@ -14515,7 +14515,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'kling-ai-avatar-v2': {
     id: 'kling-ai-avatar-v2',
     displayName: 'Kling AI Avatar v2',
-    description: "Kling’s AI Avatar v2: a still portrait (a person, animal, cartoon or stylized character) plus an audio track becomes a talking video as long as the audio, with an optional prompt for actions, emotion and camera. Standard or Pro. Runs on fal.ai or Replicate; Replicate takes MP3, WAV, M4A or AAC up to 5 MB and a JPG or PNG up to 10 MB.",
+    description: "Turns a portrait and an audio track into a talking video. On Replicate, audio can be up to 5 MB and images up to 10 MB.",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/kling-video/ai-avatar/v2/standard',

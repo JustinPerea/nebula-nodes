@@ -627,8 +627,11 @@ def size_note(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) ->
     port = next((p for p in definition.get("inputPorts") or []
                  if isinstance(p, Mapping) and p.get("id") == sizing.get("port")), {})
     kind = {"video": "video", "audio": "audio"}.get(str(port.get("dataType") or "").lower(), "image")
-    measure = "length" if kind == "audio" else "size"
-    return f"{str(sizing.get('say') or '').strip()}; priced from your {kind}'s {measure} when you run it"
+    say = str(sizing.get("say") or "").strip()
+    if kind == "audio":
+        # GM r118: its own sentence, with the curly apostrophe.
+        return f"{say if say.endswith('.') else say + '.'} Priced from your audio\u2019s length when you run it"
+    return f"{say}; priced from your {kind}'s size when you run it"
 
 
 def estimate_node(

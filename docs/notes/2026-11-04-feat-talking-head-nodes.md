@@ -44,3 +44,20 @@ Both need new credential fields and a new handler, and neither can be verified w
 ## Needs a paid live check (not made)
 
 fal (OmniHuman 1.5, 2.0, Kling std/pro) and Replicate (OmniHuman 1.5, Kling avatar): request shapes are checked against each vendor's schema, not against a live run. Real local audio as a fal data URI (size limits on a long clip) and Replicate's upload are the least certain parts. Replicate OmniHuman 1.5's 35 s audio limit versus fal's 30 s is as published.
+
+## Round 2
+
+Review findings, fixed:
+
+- **Node count pins.** `test_round19_node_names.py` and `test_video_qc_nodes.py` pinned 308 nodes; both now say 311 with a comment naming the three talking heads. Neither can derive the count: each pins the whole catalog on purpose.
+- **Price table test.** `pricing.test.ts` lists the five new runtime-priced route labels. The second expectation (`awaitsInput`) holds.
+- **Spend refusal wording.** `_awaiting_reasons` kept one `upload` variable for the whole loop and keyed groups by reason alone, so the audio wording leaked onto later nodes. Groups are now keyed by (reason, port type) and each group computes its own wording. Two mixed-graph tests (audio and video in one refusal, in both orders; an image node after an audio node).
+- **Size note parity.** The frontend `sizeNote` says "audio's length" like the backend. A shared `sizeNoteCases` list in `pricing_cases.json` is run by both sides.
+- **fal missing inputs.** `fal_fields` refuses a missing image or audio for the four talking-head endpoints before any request, in the same words as the Replicate route.
+- **Local media to fal.** A local image or audio over the cap is refused before it is read. OmniHuman 2.0 publishes its limits on fal's page (read 2026-11-04): image "Max size: 30 MB", audio "Max size: 15 MB". The other three endpoints publish none, so they get a fixed 20 MB cap.
+- **OmniHuman 2.0's 4 s minimum.** fal's page says the audio is "Duration between 4 and 300 seconds" and the output field `duration` is "Duration of audio input/video output as used for billing". It says nothing about padding or billing a shorter clip. So audio under 4 s is refused before the request (when its length is known) and is not priced at 4 s. The 300 s upper limit is left to fal. Audio whose length can't be measured here goes to fal.
+- **WAV header.** For a PCM WAV, the bytes after the header over the byte rate are compared with the measured length. Chunks that legitimately follow the data (LIST, id3) are walked and allowed; a file that holds more audio than its `data` chunk declares is left unmeasured (the unreadable path). Audio is listed in `input_sizes.py`'s known limits.
+- **Security suite.** The symlink and `..` tests run for Image, Video and Audio.
+- **Agent docs.** One sentence on audio-length pricing in `skills/nebula/SKILL.md` (the only mirror of it), `docs/MCP-SETUP.md` (both pricing paragraphs) and `docs/MODEL-PRICING.md`.
+
+GM's r118 copy ruling, built verbatim: Resolution options without parentheses, the three descriptions, the price lines ("per second of audio, rounded up to a whole second. The video runs as long as the audio."), the size note for an Audio port ("Priced from your audio’s length when you run it", backend and frontend), the because-form missing-input refusals on both routes with the node's own name, the moodboard note, and audio-specific AWAITING and SIZE_UNREADABLE tooltip lines (`AWAITING_AUDIO`, `AUDIO_UNREADABLE`, chosen in `runScope.reasonSentences` by the sized port's data type). The spend refusals for agents are unchanged, pending GM.

@@ -80,7 +80,8 @@ The server exposes these tools for building and running (see
   or `"by input size"` with a `priceNote` for a node priced from its input
   file (SeedVR2 Upscale: "$0.001 per megapixel of the larger of input and
   output, rounded up to a whole megapixel; priced from your image's size when
-  you run it"). `ready_only=false` also lists nodes that can't run here, with what's
+  you run it"; a talking-head node says "priced from your audio's length" and is priced per second of its Audio Input's file).
+  `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
@@ -3097,7 +3098,8 @@ which has no list price; Jev mode is priced per request) and a node whose priced
 canvas are never limited.
 
 Some prices depend on the input file (SeedVR2 Upscale and Video Upscale,
-FLUX Video Upscale and Edit [fast]: `sizing` in
+FLUX Video Upscale and Edit [fast], and the talking-head nodes, which are priced
+per second from the length of an Audio Input's file: `sizing` in
 [MODEL-PRICING](MODEL-PRICING.md#what-counts)). The check measures the file
 the run will send: an Image Input or Video Input's file, `nebula quick`'s
 file, or (in a proposal) an upstream output that already exists. The limit

@@ -70,6 +70,16 @@ export const SIZE_UNREADABLE: Line = (names, several) => (several
   ? `${names} are priced by their input sizes, which Nebula couldn’t read.`
   : `${names} is priced by its input size, which Nebula couldn’t read.`);
 
+/** The same two reasons for a node priced from its audio's length (GM r118):
+ * the audio doesn't exist yet, or Nebula couldn't read its length. The
+ * prefix of each is the line above's. */
+export const AWAITING_AUDIO: Line = (names, several) => (several
+  ? `${names} are priced from their inputs, because their audio doesn’t exist yet. Run the nodes that make it, then run these.`
+  : `${names} is priced from its input, because its audio doesn’t exist yet. Run the node that makes it, then run this one.`);
+export const AUDIO_UNREADABLE: Line = (names, several) => (several
+  ? `${names} are priced by their input sizes, because Nebula couldn’t read the audio’s length.`
+  : `${names} is priced by its input size, because Nebula couldn’t read the audio’s length.`);
+
 /** A cost a priced node's estimate leaves out (its price entry's `plus`),
  * by name (GM r8): "“X” may cost more for its input images, which the
  * estimate leaves out." The table's values today are "input images",

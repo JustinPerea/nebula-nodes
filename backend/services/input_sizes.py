@@ -41,6 +41,12 @@ in-band H.264/HEVC SPS, a VP9 resize) is visible only to a decoder, so such
 a clip is measured at its header size. An image with more than one frame
 or size (GIF, APNG, animated WebP, multi-page TIFF, ICO/ICNS, MPO) is left
 unmeasured: which frame a provider takes isn't known.
+Audio is measured the same way (one audio stream, its packets); a PCM WAV
+whose ``data`` chunk understates the bytes the file holds (a rewritten header,
+which ffprobe and every other demuxer then honour) is left unmeasured
+(``_wav_understates``). Known limit: for every other audio format the length
+is what the demuxer delivers, so a container whose own length field a provider
+reads differently from ffprobe is measured at ffprobe's.
 
 All of it reads files and may run ffprobe for many seconds, so it runs in a
 worker thread (``measure_run``, asyncio.to_thread); called on the event
@@ -310,7 +316,63 @@ def _probe_audio(path: Path) -> dict[str, Any] | None:
     if scanned is None:
         return None
     seconds = max(_number(stream.get("duration")), _number((header.get("format") or {}).get("duration")), scanned[1])
-    return {"seconds": seconds} if seconds > 0 else None
+    if seconds <= 0 or _wav_understates(path, seconds):
+        return None
+    return {"seconds": seconds}
+
+
+def _wav_understates(path: Path, seconds: float) -> bool:
+    """True when a PCM WAV holds more audio than its header says: the bytes
+    after the header, over the byte rate, exceed ``seconds`` by more than the
+    chunks that legitimately follow the data (a LIST or id3 chunk) and a frame
+    of rounding. A demuxer that stops at the declared ``data`` size would
+    bill less than a provider that reads on, so the file stays unmeasured.
+    Anything that isn't a well-formed PCM WAV is left to the demuxer's length."""
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(12)
+            if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+                return False
+            size = os.fstat(handle.fileno()).st_size
+            byte_rate = block_align = 0
+            pcm = False
+            data_at = data_size = None
+            while data_at is None:
+                chunk = handle.read(8)
+                if len(chunk) < 8:
+                    return False
+                name, length = chunk[:4], int.from_bytes(chunk[4:], "little")
+                if name == b"fmt " and length >= 16:
+                    fmt = handle.read(length)
+                    tag = int.from_bytes(fmt[0:2], "little")
+                    sub = int.from_bytes(fmt[24:26], "little") if tag == 0xFFFE and len(fmt) >= 26 else tag
+                    pcm = tag in (1, 0xFFFE) and sub == 1
+                    byte_rate = int.from_bytes(fmt[8:12], "little")
+                    block_align = int.from_bytes(fmt[12:14], "little")
+                    handle.seek(length & 1, 1)
+                elif name == b"data":
+                    data_at, data_size = handle.tell(), length
+                else:
+                    handle.seek(length + (length & 1), 1)
+            if not pcm or byte_rate <= 0:
+                return False
+            trailing = 0
+            handle.seek(data_at + data_size + (data_size & 1))
+            while True:
+                chunk = handle.read(8)
+                if len(chunk) < 8:
+                    break
+                length = int.from_bytes(chunk[4:], "little")
+                if handle.tell() + length > size:
+                    trailing = 0
+                    break
+                trailing += 8 + length + (length & 1)
+                handle.seek(length + (length & 1), 1)
+    except (OSError, ValueError):
+        return False
+    from_file = (size - data_at) / byte_rate
+    allowed = trailing / byte_rate + (max(block_align, 1) + 1) / byte_rate
+    return from_file - seconds > allowed
 
 
 def _image_size(source: Any) -> dict[str, Any] | None:

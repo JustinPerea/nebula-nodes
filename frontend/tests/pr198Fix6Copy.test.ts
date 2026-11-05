@@ -52,6 +52,14 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
     expect(two(unpriced.SIZE_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, which Nebula couldn’t read.');
   });
 
+  it('GM r118: an audio-priced node has its own wording for both reasons', () => {
+    expect(one(unpriced.AWAITING_AUDIO))
+      .toBe('“X” is priced from its input, because its audio doesn’t exist yet. Run the node that makes it, then run this one.');
+    expect(one(unpriced.AUDIO_UNREADABLE)).toBe('“X” is priced by its input size, because Nebula couldn’t read the audio’s length.');
+    expect(two(unpriced.AWAITING_AUDIO)).toContain('“A” and “B” are priced from their inputs, because their audio doesn’t exist yet.');
+    expect(two(unpriced.AUDIO_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, because Nebula couldn’t read the audio’s length.');
+  });
+
   it('each cost the estimate leaves out, by name', () => {
     expect(one(unpriced.LEFT_OUT['input images'])).toBe('“X” may cost more for its input images, which the estimate leaves out.');
     expect(one(unpriced.LEFT_OUT['thinking tokens'])).toBe('“X” may cost more for the model’s thinking, which the estimate leaves out.');

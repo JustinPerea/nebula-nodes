@@ -511,10 +511,10 @@
     "excluded": {
       "flux-video-edit": "Edits an existing clip: the board doesn't direct an edit of footage (plan section 5.7.11 E).",
       "identity-edit": "Edits a person's identity in an existing image from a Character, not a description (plan section 5.7.11 E).",
-      "kling-ai-avatar-v2": "Animates the portrait you wire in to match an audio track: the image is the identity and the audio drives the motion, so a board has nothing to direct (plan section 5.7.11 E).",
+      "kling-ai-avatar-v2": "Animates the portrait you connect to match an audio track. The image sets who it is and the audio drives the motion, so a moodboard has nothing to direct.",
       "krea-audio-elevenlabs-tts": "Speech: reads its text aloud, nothing a board can direct (plan section 5.7.11 E).",
-      "omnihuman-1-5": "Animates the portrait you wire in to match an audio track: the image is the identity and the audio drives the motion, so a board has nothing to direct (plan section 5.7.11 E).",
-      "omnihuman-2": "Animates the portrait you wire in to match an audio track: the image is the identity and the audio drives the motion, so a board has nothing to direct (plan section 5.7.11 E).",
+      "omnihuman-1-5": "Animates the portrait you connect to match an audio track. The image sets who it is and the audio drives the motion, so a moodboard has nothing to direct.",
+      "omnihuman-2": "Animates the portrait you connect to match an audio track. The image sets who it is and the audio drives the motion, so a moodboard has nothing to direct.",
       "openai-stt": "Transcription: its prompt is a spelling hint for the audio, not a description (plan section 5.7.11 E).",
       "openai-translate": "Translation: its prompt guides the transcript's wording, not a description (plan section 5.7.11 E)."
     },

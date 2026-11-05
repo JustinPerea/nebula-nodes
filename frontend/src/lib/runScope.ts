@@ -12,7 +12,7 @@ import {
 } from './pricing';
 import { cleanPending, pendingIncludedLine, runSkips, skipSummaryOf, type PendingSkipSummary } from './pendingNodes';
 import {
-  AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
+  AUDIO_UNREADABLE, AWAITING_AUDIO, AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
   SIZE_UNREADABLE,
 } from './unpricedCopy';
 
@@ -28,7 +28,8 @@ import {
  * - `sizeUnreadable`: priced from its input's size, which can't be read;
  * - `leftOut`: priced, with a cost its price entry's `plus` names. */
 export type UnpricedReason =
-  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'noPrice' | 'cantRun' }
+  | { kind: 'awaitingInput' | 'sizeUnreadable'; audio?: boolean }
   | { kind: 'missingKey'; key: string | null }
   | { kind: 'leftOut'; plus: string };
 
@@ -434,7 +435,10 @@ export function summarizeRunScope(
         cost.awaitingInput.push(name);
         ids.awaitingInput.push(node.id);
         if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
-        because(name, { kind: size === null ? 'sizeUnreadable' : 'awaitingInput' });
+        // A price read from an audio file's length has its own wording (GM r118).
+        const sizedPort = sizingPorts(entryForRoute(entry, priceKey))[0];
+        const audio = definition.inputPorts?.find((port) => port.id === sizedPort)?.dataType === 'Audio';
+        because(name, { kind: size === null ? 'sizeUnreadable' : 'awaitingInput', ...(audio ? { audio: true } : {}) });
       } else if (keyUnset && envKeyNames(definition).length) {
         because(name, { kind: 'missingKey', key: keyPhrase(envKeyNames(definition)) });
       } else {
@@ -513,8 +517,10 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
         break;
       case 'noPrice': id = 'noPrice'; line = NO_LISTED_PRICE; break;
       case 'cantRun': id = 'cantRun'; line = ROUTE_CANT_RUN; break;
-      case 'awaitingInput': id = 'awaitingInput'; line = AWAITING_INPUT; break;
-      case 'sizeUnreadable': id = 'sizeUnreadable'; line = SIZE_UNREADABLE; break;
+      case 'awaitingInput':
+        id = reason.audio ? 'awaitingAudio' : 'awaitingInput'; line = reason.audio ? AWAITING_AUDIO : AWAITING_INPUT; break;
+      case 'sizeUnreadable':
+        id = reason.audio ? 'audioUnreadable' : 'sizeUnreadable'; line = reason.audio ? AUDIO_UNREADABLE : SIZE_UNREADABLE; break;
     }
     const group = groups.get(id) ?? { line, names: [] };
     group.names.push(name);

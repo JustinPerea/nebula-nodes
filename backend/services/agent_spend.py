@@ -663,24 +663,32 @@ def _awaiting_reasons(
     upload's limits instead."""
     from services import input_sizes
 
-    groups: dict[str, list[str]] = {}
+    def port_of(node_id: str) -> tuple[str, str]:
+        definition_id = definition_of.get(node_id, "")
+        port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(definition_id)))), "image")
+        port_type = next((str(spec.get("dataType") or "") for spec in ((definitions or {}).get(definition_id) or {})
+                          .get("inputPorts") or [] if isinstance(spec, Mapping) and spec.get("id") == port), "")
+        return port, port_type
+
+    # One sentence per reason and measured port type: an audio node and a
+    # video node refused for the same reason each get their own wording.
+    groups: dict[tuple[str, str], list[str]] = {}
     for node_id in awaiting:
-        groups.setdefault(why.get(node_id) or input_sizes.PENDING, []).append(node_id)
-    upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
-              "Image Input or Video Input holding the copy on the canvas; connect that to the node and run it")
+        key = (why.get(node_id) or input_sizes.PENDING, port_of(node_id)[1])
+        groups.setdefault(key, []).append(node_id)
+    base_upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
+                   "Image Input or Video Input holding the copy on the canvas; connect that to the node and run it")
     audio_upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
                     "Audio Input holding the copy on the canvas; connect that to the node and run it")
     sentences = []
-    for reason, ids in groups.items():
+    for (reason, port_type), ids in groups.items():
         first = definition_of.get(ids[0], "")
-        port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(first)))), "image")
-        port_type = next((str(spec.get("dataType") or "") for spec in ((definitions or {}).get(first) or {})
-                          .get("inputPorts") or [] if isinstance(spec, Mapping) and spec.get("id") == port), "")
+        port, _ = port_of(ids[0])
         image_port = port_type not in ("Video", "Audio")
         audio_port = port_type == "Audio"
         names = f"Nebula prices {_names(ids, labels)} from the length of its audio" if audio_port else (
             f"Nebula prices {_names(ids, labels)} from the size of its input")
-        upload = audio_upload if audio_port else upload
+        upload = audio_upload if audio_port else base_upload
         if reason == input_sizes.REMOTE:
             quick = (f", or run `nebula quick {first} --input {port}=<local file path>`" if image_port else "")
             sentences.append(
