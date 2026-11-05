@@ -74,8 +74,8 @@ export const SIZE_UNREADABLE: Line = (names, several) => (several
  * doesn't exist yet, or Nebula couldn't read its length. Such a node is never
  * priced from a size, so neither line says "priced from" or "priced by". */
 export const AWAITING_AUDIO: Line = (names, several) => (several
-  ? `${names} aren’t priced yet because their audio doesn’t exist yet. Run the nodes that make it, then run these.`
-  : `${names} isn’t priced yet because its audio doesn’t exist yet. Run the node that makes it, then run this one.`);
+  ? `${names} aren’t priced yet because their audio hasn’t been made. Run the nodes that make it, then run these.`
+  : `${names} isn’t priced yet because its audio hasn’t been made. Run the node that makes it, then run this one.`);
 export const AUDIO_UNREADABLE: Line = (names, several) => (several
   ? `${names} aren’t priced because Nebula couldn’t read the length of their audio.`
   : `${names} isn’t priced because Nebula couldn’t read its audio’s length.`);

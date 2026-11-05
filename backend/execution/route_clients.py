@@ -482,12 +482,33 @@ def _megabytes(size: int) -> str:
     return f"{size / (1024 * 1024):.1f}".removesuffix(".0")
 
 
+def _data_uri_bytes(value: Any) -> int:
+    """The decoded size of a base64 data: URI (0 for anything else), from its
+    length alone, so a large one is refused before it is decoded."""
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return 0
+    head, _, body = value.partition(",")
+    return len(body) * 3 // 4 if head.endswith(";base64") else len(body)
+
+
+def _split_data_uri(value: str) -> tuple[bytes, str] | None:
+    """(bytes, mime) of a base64 data: URI; None when it isn't one or can't be decoded."""
+    head, sep, body = value.partition(",")
+    if not sep or not head.startswith("data:") or not head.endswith(";base64"):
+        return None
+    try:
+        data = base64.b64decode(body, validate=True)
+    except ValueError:
+        return None
+    return data, (head[len("data:"):-len(";base64")].split(";")[0] or "application/octet-stream")
+
+
 def refuse_too_large(where: str, endpoint: str, port: str, values: list[Any]) -> None:
     """Stop before reading a local file over the route's limit into memory."""
     limit = FAL_MEDIA_MAX_BYTES.get((endpoint, port), FAL_DATA_URI_MAX_BYTES)
     for value in values:
         path = local_media_path(value)
-        size = path.stat().st_size if path is not None else 0
+        size = path.stat().st_size if path is not None else _data_uri_bytes(value)
         if size > limit:
             what = "audio" if port == "audio" else port.replace("_", " ")
             node = _person(where).rpartition(" on ")[0] or _person(where)
@@ -546,6 +567,8 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
             refuse_too_large(where, shape, port, values)
         as_field = media_url
         if upload and shape in _FAL_AUDIO_DRIVEN:
+            # a local file stays a path (media_url keeps a data: URI as it is); upload_local_media
+            # sends both to fal's storage
             as_field = lambda v: str(v) if local_media_path(v) is not None else media_url(v)  # noqa: E731
         fields[field] = [as_field(v) for v in values] if many else as_field(one_value(inputs, port, where))
     # The talking heads need both media; fal would answer a missing one with a
@@ -576,46 +599,59 @@ FAL_UPLOAD_TIMEOUT = 300.0
 
 
 async def upload_local_media(fields: dict[str, Any], api_key: str, where: Where) -> dict[str, Any]:
-    """``fields`` with each local file path (see ``fal_fields(upload=True)``) replaced by
-    the https URL of that file uploaded to fal's storage. A file is uploaded once."""
+    """``fields`` with each local file path or base64 data: URI (see
+    ``fal_fields(upload=True)``) replaced by the https URL of that file uploaded
+    to fal's storage. Every input is checked before anything is uploaded, and a
+    file is uploaded once."""
     from execution.missing_credential import MissingCredentialError
 
-    uploaded: dict[str, str] = {}
-    out = dict(fields)
+    sources: dict[str, tuple[Path | bytes, str, str, str]] = {}  # value -> (source, file name, mime, what)
     for field, value in fields.items():
-        if not isinstance(value, str) or field not in ("image_url", "audio_url"):
+        if not isinstance(value, str) or field not in ("image_url", "audio_url") or value in sources:
             continue
+        what = "audio" if field == "audio_url" else "image"
         path = local_media_path(value)
-        if path is None:
-            continue
-        if not api_key:
-            raise MissingCredentialError("FAL_KEY is required")
-        if str(path) not in uploaded:
-            uploaded[str(path)] = await _upload_to_fal(path, api_key, where, "audio" if field == "audio_url" else "image")
-        out[field] = uploaded[str(path)]
-    return out
+        if path is not None:
+            sources[value] = (path, path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream", what)
+        elif value.startswith("data:"):
+            inline = _split_data_uri(value)
+            if inline is None:
+                node = _person(where).rpartition(" on ")[0] or _person(where)
+                named = "this node" if node == "This node" else f"\u201c{node}\u201d"
+                raise with_person_line(
+                    ValueError(f"{where} got an {what} data: URI that isn't base64"),
+                    f"Nebula couldn\u2019t run {named} because its {what} file couldn\u2019t be read. "
+                    "Connect it again, then run it again.")
+            data, mime = inline
+            sources[value] = (data, f"{what}{mimetypes.guess_extension(mime) or ''}", mime, what)
+    if sources and not api_key:
+        raise MissingCredentialError("FAL_KEY is required")
+    uploaded = {value: await _upload_to_fal(source, name, mime, api_key, where, what)
+                for value, (source, name, mime, what) in sources.items()}
+    return {field: uploaded.get(value, value) if field in ("image_url", "audio_url") and isinstance(value, str)
+            else value for field, value in fields.items()}
 
 
-async def _upload_to_fal(path: Path, api_key: str, where: Where, what: str) -> str:
+async def _upload_to_fal(source: Path | bytes, file_name: str, mime: str, api_key: str, where: Where,
+                         what: str) -> str:
     import asyncio
 
     import httpx
 
     node = _person(where).rpartition(" on ")[0] or _person(where)
     named = "this node" if node == "This node" else f"\u201c{node}\u201d"
-    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     cannot = f"{where} could not upload its {what} file to fal.ai's storage"
     try:
-        data = await asyncio.to_thread(path.read_bytes)
+        data = source if isinstance(source, bytes) else await asyncio.to_thread(source.read_bytes)
         headers = {"Authorization": f"Key {api_key}", "Accept": "application/json", "Content-Type": "application/json"}
         async with httpx.AsyncClient(timeout=FAL_UPLOAD_TIMEOUT) as client:
             start = await client.post(f"{FAL_REST_URL}/storage/upload/initiate?storage_type=gcs", headers=headers,
-                                      json={"file_name": path.name, "content_type": mime})
+                                      json={"file_name": file_name, "content_type": mime})
             if start.status_code not in (200, 201):
                 raise with_person_line(
                     with_api_status(RuntimeError(f"{cannot}: HTTP {start.status_code}"), start.status_code),
                     f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. "
-                    "Check your fal.ai API key, then run it again.")
+                    "Check your fal.ai API key in Settings, then run it again.")
             try:
                 info = start.json()
             except ValueError:
@@ -628,16 +664,17 @@ async def _upload_to_fal(path: Path, api_key: str, where: Where, what: str) -> s
                     RuntimeError(f"{cannot}: no upload_url or file_url in the answer"),
                     f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. Run it again.")
             put = await client.put(upload_url, content=data, headers={"Content-Type": mime})
-            if put.status_code >= 400:
+            # 2xx only: httpx doesn't follow redirects, so a 3xx means nothing was stored
+            if not 200 <= put.status_code < 300:
                 raise with_person_line(
                     # no API status: a presigned storage upload, not fal's API with the person's key
                     RuntimeError(f"{cannot}: HTTP {put.status_code} on the upload"),
                     f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. Run it again.")
             return file_url
-    except (httpx.TransportError, OSError) as exc:
+    except (httpx.HTTPError, OSError) as exc:
         raise with_person_line(
             RuntimeError(f"{cannot}: the connection failed"),
-            f"Nebula couldn\u2019t run {named} because it couldn\u2019t reach fal.ai to upload its {what} file. "
+            f"Nebula couldn\u2019t run {named} because fal.ai couldn\u2019t be reached to upload its {what} file. "
             "Check your connection, then run it again.") from exc
 
 

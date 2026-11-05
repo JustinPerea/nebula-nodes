@@ -16,6 +16,7 @@ sources are in model_pricing.json and the notes file):
 """
 from __future__ import annotations
 
+import base64
 import asyncio
 import json
 import re
@@ -555,6 +556,40 @@ async def test_fal_uploads_local_media_and_sends_the_https_url(monkeypatch, loca
 
 
 @pytest.mark.asyncio
+async def test_a_data_uri_input_is_uploaded_too_never_sent_inline(monkeypatch):
+    """A pasted image or a data: URI from upstream gets the same 422 from fal as a local file would."""
+    voice = b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x01" * 64
+    wired = {"image": "data:image/png;base64," + base64.b64encode(PNG).decode(),
+             "audio": "data:audio/mpeg;base64," + base64.b64encode(voice).decode()}
+    hosts, _ = await run_fal_local(monkeypatch, "omnihuman-2", wired)
+    body = hosts.json("POST", re.escape(FAL + "fal-ai/bytedance/omnihuman/v2"))
+    assert "data:" not in json.dumps(body)
+    assert body["image_url"].startswith("https://") and body["audio_url"].startswith("https://")
+    assert [json.loads(r.content)["content_type"] for r in hosts.sent("POST", FAL_INIT)] == ["image/png", "audio/mpeg"]
+    assert [r.content for r in hosts.sent("PUT", FAL_PUT)] == [PNG, voice]
+
+
+@pytest.mark.asyncio
+async def test_a_data_uri_that_isnt_base64_or_is_too_large_stops_before_any_upload(monkeypatch, local_media):
+    image, _voice = local_media
+    hosts = hosts_for(monkeypatch, "fal", True)
+    fal_storage(hosts)
+    saved = {**defaults(REGISTRY["omnihuman-2"]), "_provider": "fal"}
+    run = registry_handler("omnihuman-2")
+    with pytest.raises(ValueError) as caught:
+        await run(node("omnihuman-2", **saved), av_ports(image=image, audio="data:audio/mpeg,not-base64"), dict(KEYS))
+    assert _person(caught.value) == (
+        "Nebula couldn\u2019t run \u201cOmniHuman 2.0\u201d because its audio file couldn\u2019t be read. "
+        "Connect it again, then run it again.")
+    big = "data:audio/mpeg;base64," + "A" * (16 * 1024 * 1024 * 4 // 3 + 4)  # 16 MB decoded, over fal's 15 MB
+    with pytest.raises(ValueError) as caught:
+        await run(node("omnihuman-2", **saved), av_ports(image=image, audio=big), dict(KEYS))
+    assert "its audio file is too large at 16 MB, and fal.ai takes up to 15 MB" in _person(caught.value)
+    assert not hosts.sent("PUT", FAL_PUT)
+    assert not hosts.sent("POST", re.escape(FAL + "fal-ai/bytedance/omnihuman/v2"))
+
+
+@pytest.mark.asyncio
 async def test_a_url_input_is_not_uploaded(monkeypatch):
     hosts, _ = await run_fal_local(monkeypatch, "omnihuman-2", {"image": REF, "audio": AUDIO})
     assert not hosts.sent("POST", FAL_INIT) and not hosts.sent("PUT", FAL_PUT)
@@ -563,11 +598,12 @@ async def test_a_url_input_is_not_uploaded(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure, person", [
-    ("init-401", "fal.ai wouldn\u2019t store its image file. Check your fal.ai API key, then run it again."),
+    ("init-401", "fal.ai wouldn\u2019t store its image file. Check your fal.ai API key in Settings, then run it again."),
     ("init-no-url", "fal.ai wouldn\u2019t store its image file. Run it again."),
     ("init-http-upload-url", "fal.ai wouldn\u2019t store its image file. Run it again."),
     ("put-500", "fal.ai wouldn\u2019t store its image file. Run it again."),
-    ("unreachable", "it couldn\u2019t reach fal.ai to upload its image file. Check your connection, then run it again."),
+    ("put-307", "fal.ai wouldn\u2019t store its image file. Run it again."),
+    ("unreachable", "fal.ai couldn\u2019t be reached to upload its image file. Check your connection, then run it again."),
 ])
 async def test_a_failed_upload_stops_the_run_with_a_clear_line_and_no_job(monkeypatch, local_media, failure, person):
     image, voice = local_media
@@ -581,6 +617,8 @@ async def test_a_failed_upload_stops_the_run_with_a_clear_line_and_no_job(monkey
               "init-http-upload-url": {"init": httpx.Response(200, json={
                   "upload_url": "http://storage.example/put", "file_url": "https://v3.fal.media/files/x.png"})},
               "put-500": {"put": httpx.Response(500)},
+              # httpx doesn't follow redirects: a 3xx stored nothing, so the file_url would 404 at fal
+              "put-307": {"put": httpx.Response(307, headers={"location": "https://elsewhere.example/"})},
               "unreachable": {"init": unreachable}}[failure]
     hosts = hosts_for(monkeypatch, "fal", True)
     fal_storage(hosts, **kwargs)

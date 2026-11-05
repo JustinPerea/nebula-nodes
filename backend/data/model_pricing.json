@@ -3034,7 +3034,7 @@
             "roundUp": [
               "(source seconds)"
             ],
-            "say": "$0.0562 (Standard) or $0.115 (Pro) per second of audio plus one second, rounded up to a whole second. The video runs a little longer than the audio.",
+            "say": "$0.0562 (Standard) or $0.115 (Pro) per second of video, which runs a little longer than the audio.",
             "addSeconds": 1
           }
         },
@@ -3076,7 +3076,7 @@
             "roundUp": [
               "(source seconds)"
             ],
-            "say": "$0.056 (Standard) or $0.11 (Pro) per second of audio plus one second, rounded up to a whole second. The video runs a little longer than the audio.",
+            "say": "$0.056 (Standard) or $0.11 (Pro) per second of video, which runs a little longer than the audio.",
             "addSeconds": 1
           }
         }

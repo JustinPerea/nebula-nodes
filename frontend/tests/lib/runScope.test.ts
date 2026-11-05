@@ -472,7 +472,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const priced = (sizes: Record<string, null>, filePath: string) => runChipTitle(summarizeRunScope(
       [voice({ filePath }), head, upload({ filePath: '/out/a.png' }), seedvr], edges, { kind: 'graph' },
       { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 }, ...sizes } }));
-    expect(priced({}, '/out/voice.mp3')).toContain('isn’t priced yet because its audio doesn’t exist yet. Run the node that makes it, then run this one.');
+    expect(priced({}, '/out/voice.mp3')).toContain('isn’t priced yet because its audio hasn’t been made. Run the node that makes it, then run this one.');
     const unreadable = priced({ 'https://x.example/v.mp3': null }, 'https://x.example/v.mp3');
     expect(unreadable).toContain('“Talker” isn’t priced because Nebula couldn’t read its audio’s length.');
     expect(unreadable).not.toContain('which Nebula couldn’t read');

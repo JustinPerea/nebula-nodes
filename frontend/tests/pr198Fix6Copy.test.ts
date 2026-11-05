@@ -54,10 +54,10 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
 
   it('GM r118: an audio-priced node has its own wording for both reasons', () => {
     expect(one(unpriced.AWAITING_AUDIO))
-      .toBe('“X” isn’t priced yet because its audio doesn’t exist yet. Run the node that makes it, then run this one.');
+      .toBe('“X” isn’t priced yet because its audio hasn’t been made. Run the node that makes it, then run this one.');
     expect(one(unpriced.AUDIO_UNREADABLE)).toBe('“X” isn’t priced because Nebula couldn’t read its audio’s length.');
     expect(two(unpriced.AWAITING_AUDIO))
-      .toBe('“A” and “B” aren’t priced yet because their audio doesn’t exist yet. Run the nodes that make it, then run these.');
+      .toBe('“A” and “B” aren’t priced yet because their audio hasn’t been made. Run the nodes that make it, then run these.');
     expect(two(unpriced.AUDIO_UNREADABLE)).toBe('“A” and “B” aren’t priced because Nebula couldn’t read the length of their audio.');
   });
 
