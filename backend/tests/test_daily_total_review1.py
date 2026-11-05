@@ -30,8 +30,15 @@ CODEX = {"X-Nebula-Agent": "Codex"}
 # GM - Design, 2026-10-31, verbatim (amounts filled in).
 SLOTS_FULL = ("This would pass the $5 daily total, and you already have 3 open proposals. Wait until the person "
               "accepts or rejects one, then propose it again.")
-SLOTS_FULL_LOG = ("couldn’t run “Fourth” because it would pass the $5 daily total and its 3 proposal slots "
+# GM - Design, PR #212 r2, item 2: the log's source column names the agent, so the
+# sentence reads whole without it.
+SLOTS_FULL_LOG = ("Couldn’t run “Fourth” because it would pass the $5 daily total and all 3 proposal slots "
                   "are full.")
+# Item 3, cap of 12 (Nebula's total), verbatim.
+TOTAL_FULL = ("This would pass the $5 daily total, and Nebula already has 12 open proposals. Wait until the "
+              "person accepts or rejects one, then propose it again.")
+TOTAL_FULL_LOG = ("Couldn’t run “Writer” because it would pass the $5 daily total and Nebula already has "
+                  "12 open proposals.")
 
 
 def _over(api, used: float = 4.8) -> None:
@@ -185,7 +192,7 @@ def test_a_run_only_proposal_of_a_waiting_run_is_that_proposal(api):
 def test_full_proposal_slots_get_one_line_and_a_neutral_log_line(api, monkeypatch):
     said: list[dict] = []
 
-    async def capture_raw(data):
+    async def capture_raw(data, others=None):
         said.append(data)
 
     monkeypatch.setattr(api.main.manager, "broadcast_raw", capture_raw)
@@ -207,6 +214,49 @@ def test_full_proposal_slots_get_one_line_and_a_neutral_log_line(api, monkeypatc
     assert len(log) == 1 and log[0]["log"] == SLOTS_FULL_LOG and log[0]["tone"] == "muted"
     assert log[0]["agent"]["name"] == "Claude Code" and "target" not in log[0]
     api.main.execute_graph.assert_not_awaited()
+
+
+def test_nebulas_cap_of_twelve_open_proposals_gets_gms_lines(api, monkeypatch):
+    said: list[dict] = []
+
+    async def capture_raw(data, others=None):
+        said.append(data)
+
+    monkeypatch.setattr(api.main.manager, "broadcast_raw", capture_raw)
+    price(3.0)
+    nodes = [_node(api, f"Node {index}") for index in range(12)]
+    writer = _node(api, "Writer")
+    _over(api)
+    for index, node_id in enumerate(nodes):
+        assert _run(api, node_id, {"X-Nebula-Agent": f"Agent {index // 3}"}).status_code == 202
+    assert len(api.main.canvas_proposals.open_list()) == 12
+    said.clear()
+    refused = _run(api, writer, {"X-Nebula-Agent": "Agent 4"})
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["detail"] == TOTAL_FULL
+    assert "Propose it instead" not in refused.text and "couldn't send it" not in refused.text
+    assert len(api.main.canvas_proposals.open_list()) == 12
+    log = [m for m in said if m.get("type") == "agentPresence" and m.get("log")]
+    assert len(log) == 1 and log[0]["log"] == TOTAL_FULL_LOG and log[0]["tone"] == "muted"
+    assert log[0]["agent"]["name"] == "Agent 4"
+    api.main.execute_graph.assert_not_awaited()
+
+
+def test_the_unpriced_only_wait_words_the_full_slots_without_would_pass(api, monkeypatch):
+    wait = agent_spend.DailyWait(5.0, 0.0, 0.0, also=agent_spend.ALSO_UNPRICED, unpriced=("n1",),
+                                 names={"n1": "Sketch"}, over=False)
+    cannot = "“Sketch” has no list price, so Nebula can’t count it toward the $5 daily total"
+    assert wait.slots_full_line(3) == (cannot + ", and you already have 3 open proposals. Wait until the person "
+                                       "accepts or rejects one, then propose it again.")
+    assert wait.total_full_line(12) == (cannot + ", and Nebula already has 12 open proposals. Wait until the "
+                                        "person accepts or rejects one, then propose it again.")
+    assert wait.slots_full_log(["Sketch"], 3) == ("Couldn’t run “Sketch” because it has no list price and all 3 "
+                                                  "proposal slots are full.")
+    assert wait.total_full_log(["Writer", "Sketch"], 12) == (
+        "Couldn’t run “Writer” and “Sketch” because “Sketch” has no list price and Nebula already has "
+        "12 open proposals.")
+    assert wait.nameless_line() == cannot + ". Name yourself with NEBULA_AGENT_NAME or --as to send it as a proposal."
+    assert wait.refusal("ASK.") == f"Needs the person's approval: {cannot}. ASK."
 
 
 # -- the other kinds of caller, and runs off the canvas -----------------------------------
@@ -255,7 +305,7 @@ def test_a_moodboard_read_over_the_total_is_refused_in_its_words(tmp_path, monke
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
 
-    async def ignore(data):
+    async def ignore(data, others=None):
         return None
 
     monkeypatch.setattr(main.manager, "broadcast_raw", ignore)
@@ -396,3 +446,94 @@ def test_the_in_app_chat_prompt_says_a_waiting_run_was_already_proposed():
     assert ("A run past the person's daily total comes back 'waiting' with a proposalId: Nebula already sent it "
             "to them as a proposal, so don't propose it again; wait for their decision with get_proposal.") in text
     assert "A run answered 'waiting' was already sent as a proposal" in text
+
+
+# -- Justin's Q165: the total alone makes an unpriced node ask ---------------------------
+
+SKETCH_BAR = "“Writer” has no list price, so Nebula can’t count it toward the $5 daily total."
+SKETCH_UPDATE = "Claude Code wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."
+
+
+def _unpriced() -> None:
+    from tests.test_daily_total import PRICES
+
+    PRICES["nodes"] = {}  # the paid node has no list price
+
+
+def test_an_unpriced_node_waits_with_room_left_and_no_other_limit(api):
+    _unpriced()
+    writer = _node(api, "Writer")
+    response = _run(api, writer, CLAUDE)
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["status"] == "waiting" and body["alsoNeeds"] == agent_spend.ALSO_UNPRICED
+    assert body["message"] == (f"{SKETCH_BAR} Proposing it for the person’s OK. Sent as proposal "
+                               f"{body['proposalId']}. Check it with nebula proposals.")
+    assert body["dailyTotal"]["usedUsd"] == 0.0 and body["dailyTotal"]["leftUsd"] == 5.0
+    proposal = api.main.canvas_proposals.get(body["proposalId"])
+    assert proposal.spec.note == SKETCH_BAR == proposal.wait["barLine"]  # the bar's line
+    assert proposal.wait["over"] is False
+    from services.canvas_proposals import update_text
+
+    assert update_text(proposal) == SKETCH_UPDATE
+    api.main.execute_graph.assert_not_awaited()
+    # The MCP wording of the same line.
+    assert agent_spend.for_mcp(body["message"], body["proposalId"]).endswith(f'Check it with get_proposal("{body["proposalId"]}").')
+
+
+def test_an_unpriced_node_waits_with_the_per_run_limit_off_too(api):
+    _unpriced()
+    assert api.client.put("/api/settings", json={"runCostConfirmUsd": None}, headers=PERSON).status_code == 200
+    writer = _node(api, "Writer")
+    assert _run(api, writer, CLAUDE).status_code == 202
+
+
+def test_the_unpriced_line_gives_way_to_the_existing_one_when_the_priced_part_passes(api):
+    price(3.0)
+    writer = _node(api, "Writer")
+    _over(api)
+    api.client.put("/api/settings", json={"runCostConfirmUsd": None}, headers=PERSON)
+    # Priced and over the total: the existing line (no unpriced node in this run).
+    body = _run(api, writer, CLAUDE).json()
+    assert api.main.canvas_proposals.get(body["proposalId"]).wait["over"] is True
+
+
+def test_with_the_total_off_an_unpriced_node_runs_as_before(api):
+    _unpriced()
+    saved = api.client.put("/api/settings", json={"runCostConfirmUsd": None,
+                                                  "agentSpend": {"dailyTotalUsd": None, "models": {}}},
+                           headers=PERSON)
+    assert saved.status_code == 200, saved.text
+    writer = _node(api, "Writer")
+    assert _run(api, writer, CLAUDE).status_code == 200
+    api.main.execute_graph.assert_awaited_once()
+    assert api.main.canvas_proposals.open_list() == []
+
+
+def test_the_persons_own_run_of_an_unpriced_node_is_never_limited(api):
+    _unpriced()
+    writer = _node(api, "Writer")
+    assert _run(api, writer, PERSON).status_code == 200
+    api.main.execute_graph.assert_awaited_once()
+    assert api.main.canvas_proposals.open_list() == []
+
+
+def test_a_caller_with_no_name_gets_the_unpriced_line_and_no_proposal(api):
+    _unpriced()
+    writer = _node(api, "Writer")
+    response = api.client.post("/api/graph/run", json={"targetNodeId": writer})
+    assert response.status_code == 403
+    assert response.json()["detail"].startswith(SKETCH_BAR) and "Name yourself" in response.json()["detail"]
+    assert api.main.canvas_proposals.open_list() == []
+
+
+def test_the_propose_hint_names_only_the_callers_surface():
+    cli = agent_spend.propose_hint(["n1", "n2"])
+    assert cli == ('Propose it instead: `nebula propose --note "<why>" --run n1 --run n2`. '
+                   "The person accepts on the canvas, and the canvas runs it.")
+    assert "propose_change" not in cli and "MCP" not in cli
+    mcp = agent_spend.propose_hint_for_mcp(f"Needs the person's approval: no price. {cli}")
+    assert mcp == ("Needs the person's approval: no price. Propose it instead with propose_change. "
+                   "The person accepts on the canvas, and the canvas runs it.")
+    assert "nebula" not in mcp
+    assert agent_spend.propose_hint_for_mcp("No hint here.") == "No hint here."

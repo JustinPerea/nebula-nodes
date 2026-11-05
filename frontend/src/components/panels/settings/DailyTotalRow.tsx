@@ -4,6 +4,7 @@ import {
   parseDailyAmount,
 } from '../../../lib/dailyTotal';
 import type { AgentSpendLimits } from '../../../store/settingsDraftStore';
+import type { LockProps } from '../../PersonLock';
 
 /** The select's value for "Other amount…", which swaps it for the field. */
 const OTHER = 'other';
@@ -18,12 +19,14 @@ const NONE = 'none';
  * saved keeps the field open with a line saying why. The usage line and the
  * meter read `spentUsd`, the last 24 hours.
  */
-export function DailyTotalRow({ limits, spentUsd, disabled, onChange }: {
+export function DailyTotalRow({ limits, spentUsd, disabled, onChange, lock }: {
   limits: AgentSpendLimits;
   /** What everything that isn't the person spent in the last 24 hours; null while it loads. */
   spentUsd: number | null;
   disabled: boolean;
   onChange: (next: AgentSpendLimits) => void;
+  /** The section's person lock (#204): the select reads as disabled, described by the one line, until this tab is the person's. */
+  lock?: (describedBy?: string) => LockProps;
 }) {
   const limit = dailyLimit(limits.dailyTotalUsd);
   const [editing, setEditing] = useState(false);
@@ -137,6 +140,7 @@ export function DailyTotalRow({ limits, spentUsd, disabled, onChange }: {
       ) : (
         <select ref={select} id="settings-agent-daily" className="settings__select settings__select--compact"
           aria-describedby="settings-agent-daily-help" value={current} disabled={disabled}
+          {...lock?.('settings-agent-daily-help')}
           onChange={(event) => {
             const { value } = event.target;
             if (value === OTHER) { open(); return; }

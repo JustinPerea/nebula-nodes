@@ -1,0 +1,83 @@
+/* A run the daily total holds (GM - Design, PR #212 round 2): the waiting state
+   lives in the node card's header, so a node never changes size and never
+   covers a neighbour (components/nodes/NodeWaitSwap.tsx).
+
+   - The header row takes the proposal's accent (--agent-color) as a tint.
+   - On the right, "Waiting for your OK" (or "... · 2") replaces the model
+     chip: both sit in one grid cell and crossfade on the opacity spring
+     (SOFT, lib/springs.ts; never stock easing; at once under reduced motion).
+   - The title truncates first; the label never does.
+   - The reason is not drawn: the bar and the Updates card show it. The header
+     has it as its accessible description (.node-wait-swap__reason, visually
+     hidden). */
+body.app-slava-restraint .model-node__header[data-waiting='true'] {
+  background-color: color-mix(in srgb, var(--agent-color) 16%, transparent);
+}
+
+body.app-slava-restraint .model-node__header {
+  transition: background-color var(--spring-soft-ms, 0ms) var(--spring-soft, linear);
+}
+
+.node-wait-swap {
+  display: inline-grid;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-items: end;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.node-wait-swap > * {
+  grid-area: 1 / 1;
+}
+
+.node-wait-swap__rest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sr-node-header-gap, 6px);
+  opacity: 1;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+}
+
+.node-wait-swap[data-waiting='true'] .node-wait-swap__rest {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.node-wait-swap__label {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+  pointer-events: none;
+}
+
+.node-wait-swap[data-on='true'] .node-wait-swap__label {
+  opacity: 1;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+body.app-slava-restraint .node-wait-swap__label {
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-label);
+  font-weight: 600;
+  line-height: var(--sr-line-compact);
+}
+
+.node-wait-swap__reason {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node__header,
+  .node-wait-swap__rest,
+  .node-wait-swap__label,
+  .node-wait-swap[data-on='true'] .node-wait-swap__label {
+    transition: none;
+  }
+}

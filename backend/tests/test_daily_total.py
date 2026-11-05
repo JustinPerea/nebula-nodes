@@ -33,7 +33,6 @@ CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 BAR_LEFT = "This would pass the $5 daily total, which has $0.20 left."
 BAR_USED_UP = "This would pass the $5 daily total, which is used up."
 BAR_AND_PER_RUN = "This would pass the $5 daily total and costs more than $1 per run."
-CARD = "This run would pass the $5 daily total."
 UPDATE = "Claude Code wants to run “Writer” and “Editor”. " + BAR_LEFT
 AGENTS = ("Waiting for the person’s OK: this run (about $0.40) would pass their $5 daily total for "
           "everything that isn’t them ($4.80 used in the last 24 hours). Sent as proposal p_1234abcd. "
@@ -138,7 +137,6 @@ def test_a_run_that_fits_goes_ahead_and_one_that_passes_waits():
     waiting = _decide(0.4, 4.8)
     assert waiting.wait is not None and waiting.wait.left == pytest.approx(0.2)
     assert waiting.wait.bar_line() == BAR_LEFT
-    assert waiting.wait.card_line() == CARD
     assert waiting.wait.agent_line("p_1234abcd") == AGENTS
     assert _decide(0.4, 5.2).wait.bar_line() == BAR_USED_UP
     assert _decide(0.4, 4.8, settings={"runCostConfirmUsd": None, "agentSpend": {"dailyTotalUsd": None}}).refusal is None
@@ -158,11 +156,88 @@ def test_the_combined_reason_puts_the_total_first():
     assert unpriced.wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
 
 
-def test_the_total_alone_never_makes_an_unpriced_node_ask():
-    """The guard's other rows stay as they were: with no other limit, an
-    unpriced node runs (it can't be counted), as it did before the total."""
-    decision = _decide(0.4, 0.0, items=[{"id": "n2", "definitionId": "unpriced", "params": {}}])
-    assert decision.refusal is None
+# GM - Design, PR #212 r2, item 4, verbatim (Justin's Q165).
+SKETCH_BAR = "“Mystery” has no list price, so Nebula can’t count it toward the $5 daily total."
+SKETCH_UPDATE = "It has no list price, so Nebula can’t count it toward the $5 daily total."
+SKETCH_AGENT = SKETCH_BAR + " Proposing it for the person’s OK."
+UNPRICED_ONLY = [{"id": "n2", "definitionId": "unpriced", "params": {}}]
+
+
+def test_the_total_alone_makes_an_unpriced_node_ask_even_with_room():
+    """Justin's Q165 (a): with the daily total on, a node with no list price
+    always waits for the person's OK, with no per-run limit and room left."""
+    decision = _decide(0.4, 0.0, items=UNPRICED_ONLY)
+    wait = decision.wait
+    assert wait is not None and wait.over is False and wait.also == agent_spend.ALSO_UNPRICED
+    assert decision.refusal is not None
+    assert wait.bar_line() == SKETCH_BAR
+    assert wait.update_line(["Mystery"]) == SKETCH_UPDATE
+    assert wait.agent_line("p_1234abcd") == (SKETCH_AGENT + " Sent as proposal p_1234abcd. Check it with nebula proposals.")
+    # Nothing in the room, the used amount or the "would pass" line is claimed.
+    assert "would pass" not in wait.bar_line() and wait.as_dict()["over"] is False
+
+
+def test_several_unpriced_nodes_are_named_and_counted_in_the_plural():
+    items = UNPRICED_ONLY + [{"id": "n3", "definitionId": "unpriced", "params": {}}]
+    wait = _decide(0.4, 0.0, items=items).wait
+    wait.names = {"n2": "Mystery", "n3": "Other"}
+    assert wait.bar_line() == "“Mystery” and “Other” have no list price, so Nebula can’t count them toward the $5 daily total."
+    assert wait.update_line(["Mystery", "Other"]) == "They have no list price, so Nebula can’t count them toward the $5 daily total."
+
+
+def test_the_update_names_the_node_when_the_run_holds_others_too():
+    wait = _decide(0.4, 0.0, items=UNPRICED_ONLY).wait
+    assert wait.update_line(["Writer", "Mystery"]) == SKETCH_BAR
+
+
+def test_the_existing_line_stays_when_the_priced_part_already_passes_the_total():
+    items = [{"id": "n1", "definitionId": "paid", "params": {}}] + UNPRICED_ONLY
+    wait = _decide(4.0, 2.0, items=items).wait
+    assert wait.over is True and wait.also == agent_spend.ALSO_UNPRICED
+    assert wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
+    assert wait.update_line(["Paid Model", "Mystery"]) == wait.bar_line()
+
+
+def test_the_existing_line_stays_with_the_per_run_limit_off_too():
+    """Q165: the total alone makes `unpriced` its other reason, so the existing line holds with no per-run limit."""
+    items = [{"id": "n1", "definitionId": "paid", "params": {}}] + UNPRICED_ONLY
+    wait = _decide(4.0, 2.0, items=items, settings={"runCostConfirmUsd": None}).wait
+    assert wait.over is True and wait.also == agent_spend.ALSO_UNPRICED
+    assert wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
+
+
+def test_with_the_total_off_an_unpriced_node_is_as_before():
+    """Total off, no other limit: it runs (it can't be counted). With the
+    per-run limit set it is refused as it always was, in the old words."""
+    off = {"runCostConfirmUsd": None, "agentSpend": {"dailyTotalUsd": None}}
+    assert _decide(0.4, 0.0, items=UNPRICED_ONLY, settings=off).refusal is None
+    limited = _decide(0.4, 0.0, items=UNPRICED_ONLY,
+                      settings={"runCostConfirmUsd": 1, "agentSpend": {"dailyTotalUsd": None}})
+    assert limited.wait is None and "no list price for" in limited.refusal
+
+
+def test_a_size_priced_node_still_awaiting_its_input_keeps_its_own_refusal_with_the_total_on():
+    """Q165 is for a node with no list price. One priced by its input's size,
+    whose size isn't known yet, is refused in its own words (it says what to
+    do), not made a proposal that could never be priced."""
+    from services import model_pricing
+    from services.node_registry import NodeRegistry
+
+    settings = {"runCostConfirmUsd": None, "apiKeys": {"FAL_KEY": "set"}}
+    caps = agent_spend.caps_from_settings(settings)
+    budgets = agent_spend.session_budgets("outside:shared", agent_spend.Spent(), caps,
+                                          outside_spent=agent_spend.Spent(), daily_spent=agent_spend.Spent(0.0))
+    decision = agent_spend.decide(
+        [{"id": "up", "definitionId": "seedvr2-upscale", "params": {}}], [("gen", "up", "image")],
+        settings=settings, pricing=model_pricing.load_pricing(), definitions=NodeRegistry().get_all(),
+        budgets=budgets, how_to_ask="ASK.", sizes=None)
+    assert decision.wait is None
+    assert decision.refusal is not None and "size of its input" in decision.refusal
+
+
+def test_a_run_with_no_unpriced_node_and_room_still_goes_ahead():
+    assert _decide(0.4, 0.0).refusal is None
+    assert _decide(0.4, 0.0, items=[{"id": "n1", "definitionId": "paid", "params": {}}]).wait is None
 
 
 def test_a_run_off_the_canvas_is_refused_in_the_same_words():
@@ -311,10 +386,10 @@ def test_a_run_that_would_pass_the_total_becomes_a_proposal_and_accept_runs_it(a
     assert api.main.agent_spend_ledger.spent_daily().total == pytest.approx(4.8)  # nothing counted
     proposal = api.main.canvas_proposals.get(body["proposalId"])
     assert proposal.spec.run == (writer,) and proposal.spec.note == BAR_LEFT
-    assert proposal.wait["cardLine"] == CARD and proposal.wait["nodeIds"] == [writer]
+    assert "cardLine" not in proposal.wait and proposal.wait["nodeIds"] == [writer]
     assert update_text(proposal) == f"Claude Code wants to run “Writer”. {BAR_LEFT}"
     view = api.client.get(f"/api/canvas/proposals/{proposal.id}", headers=CLAUDE).json()
-    assert view["proposal"]["wait"]["barLine"] == BAR_LEFT and view["proposal"]["wait"]["cardLine"] == CARD
+    assert view["proposal"]["wait"]["barLine"] == BAR_LEFT and "cardLine" not in view["proposal"]["wait"]
     # Asking again for the same nodes points at the same proposal.
     again = api.client.post("/api/graph/run", json={"targetNodeId": writer}, headers=CLAUDE)
     assert again.status_code == 202 and again.json()["proposalId"] == body["proposalId"]

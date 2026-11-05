@@ -156,7 +156,7 @@ export function AgentSpendSection() {
       </p>
       <div className="settings-list">
         <DailyTotalRow limits={limits} spentUsd={outside.view ? outside.view.daily?.spentUsd ?? 0 : null}
-          disabled={pending} onChange={save} />
+          disabled={pending} onChange={save} lock={lock.control} />
         <div className="settings-pref">
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-session">Per chat session</label>

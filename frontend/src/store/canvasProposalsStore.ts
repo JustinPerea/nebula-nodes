@@ -65,9 +65,6 @@ interface CanvasProposalsState {
   pending: Record<string, 'accept' | 'reject'>;
   errors: Record<string, string>;
   focusedId: string | null;
-  /** The proposal the decision bar shows now (it sets this), so a waiting
-   * node's card can point at the bar's line only while it is on screen. */
-  shownId: string | null;
   /** The held run the notice shows (the oldest), and those waiting behind it
    * in the order they were accepted (review 16, L-2): each runs once. */
   deferredRun: DeferredRun | null;
@@ -78,7 +75,6 @@ interface CanvasProposalsState {
   clear: () => void;
   pruneExpired: (now?: number) => void;
   focus: (id: string | null) => void;
-  setShown: (id: string | null) => void;
   moveGhost: (id: string, ref: string, position: Point) => void;
   accept: (id: string) => Promise<void>;
   reject: (id: string, reason?: string) => Promise<void>;
@@ -124,7 +120,7 @@ function clean(view: ProposalView): ProposalView | null {
 
 /** A daily-total hold, only when its lines and nodes are readable. */
 function cleanWait(wait: unknown): ProposalWait | undefined {
-  if (!isRecord(wait) || typeof wait.barLine !== 'string' || typeof wait.cardLine !== 'string') return undefined;
+  if (!isRecord(wait) || typeof wait.barLine !== 'string') return undefined;
   const ids = Array.isArray(wait.nodeIds) ? wait.nodeIds.filter((id): id is string => typeof id === 'string') : [];
   const names = Array.isArray(wait.names) ? wait.names.filter((name): name is string => typeof name === 'string') : [];
   return { ...(wait as unknown as ProposalWait), nodeIds: ids, names };
@@ -190,7 +186,6 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   pending: {},
   errors: {},
   focusedId: null,
-  shownId: null,
   deferredRun: null,
   deferredQueue: [],
 
@@ -259,7 +254,6 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   },
 
   focus: (id) => set({ focusedId: id }),
-  setShown: (id) => { if (get().shownId !== id) set({ shownId: id }); },
 
   moveGhost: (id, ref, position) => {
     if (!get().proposals[id] || !finitePoint(position)) return;

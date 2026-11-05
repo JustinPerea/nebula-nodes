@@ -155,3 +155,49 @@ For GM (items 1-6 of round 1 were answered in the round 2 brief and are built):
 
 For Justin:
 1. **Unpriced nodes.** Should the total alone make a node with no list price ask? Today it doesn't (no other USD limit set means unpriced nodes run). Turning that on would change rows that don't pass the total, so I left it off.
+
+## Round 3 (2026-11-05)
+
+### Merge of origin/main (GM item 6)
+
+`git merge origin/main` (about 325 commits) gave 7 conflicted files. Each kept main's behaviour and this PR's additions. The merge commit also carries this round's edits to those 7 files and the deletion of the three band files (I could not split them out of the conflicted files safely), so the merge commit alone does not build; the commit after it does.
+
+| File | Resolution |
+|---|---|
+| `backend/main.py` | Kept `proposal.wait = wait` and main's `proposal.wires`/`removed_edges`. `_show_agent(...)` takes main's signature (`proposal_id=`) with this PR's wait say. `_open_canvas_proposal` gets `headers = current_request_headers()` (main's `presence_session(headers)` needs it). |
+| `backend/services/canvas_proposals.py` | Kept the `wait` field with main's `wires`, `removed_edges` and `presence_session`. `update_text` has the wait branch plus main's `change_count(spec, removed=...)`. |
+| `frontend/src/components/canvas/ProposalBar.tsx` | Took main's redesigned bar and re-applied this PR's wait line. |
+| `frontend/src/components/panels/AgentLog.tsx` | Took main's `<AgentLogEntryRow>`; the muted class moved into `AgentLogEntryRow.tsx`. |
+| `frontend/src/components/panels/settings/AgentSpendSection.tsx` | Kept `DailyTotalRow`, main's `lock(...)` on the select (#204) and this PR's `settings__select--fits`. |
+| `frontend/src/lib/canvasProposals.ts` | Kept main's `decisionLine` and this PR's wait helpers. `PROPOSAL_GATE_COPY` is gone upstream, so it is not re-added. |
+| `frontend/src/lib/wsClient.ts` | The proposal view has both `wait` and main's `plan`. |
+
+Merge-time test fixes: `dailyTotal.test.tsx` (button is "Accept and run"; the lock is `aria-disabled` plus a description), backend `broadcast_raw` stand-ins take `others=None` (main's conftest now requires it), `clearsOnPromote.ratchet.test.ts` lists `_propose_waiting_run: ['graph.run-start', 'graph.refusal']`.
+
+### Decisions
+
+- **GM 1.** The waiting state is in the card header (`NodeWaitSwap.tsx`, `lib/nodeWait.ts`, `lib/nodeWaitHeader.ts`, `styles/node-wait.css`). The model chip and the label sit in one grid cell and crossfade on the SOFT opacity spring, so the node never changes size; the title truncates before the label does. The band component, its helper and its CSS are deleted. Only ModelNode and DynamicNode have a header state; other card types (cinema, etc.) have none.
+- **Q165.** With the total on, `usd_limited` includes it, so a node with no list price waits even with the per-run limit off and room left. Nodes priced by an input's size that can't be measured yet (`awaitingInput`) keep their own refusal: a proposal for them could never be priced. With the total off nothing changes. The person's own runs are never limited (`_require_spend_approval` returns early for them).
+- **Unpriced-only wording.** GM 4 gives the bar, Updates and agent lines. The nameless-caller, slots-full and refusal variants for an unpriced-only wait are my adaptation of GM's wording (no "would pass the total" when it wouldn't).
+- **Agent line.** Keeps the standard trailer ("Sent as proposal ... Check it with ...").
+- **GM 8.** The cursor's default say for a held run is dropped while the header shows the state (`sayFor(cursor, lookup, headerWaits)`); an agent's own say still shows; the dashed halo and mark stay.
+- **MCP and CLI in step.** `propose_hint` is CLI-only; `propose_hint_for_mcp` and `_worded_for_this_surface` rewrite it to "Propose it instead with propose_change." for MCP. Docstrings, `docs/MCP-SETUP.md`, `skills/nebula/SKILL.md` and `nebula spend --help` say the Q165 rule.
+- **`cardLine` removed** from the proposal API (the band was its only reader). New `over` flag on the wait.
+- **Agent log rows** have `aria-label="{agent}: {message}"` so a line that omits the name still reads whole (all rows, not only these).
+- **Left as is.** "published price" in PreferencesTab.tsx (outside #212, GM 10).
+- **Fixtures.** Tests that relied on unpriced nodes running under default settings now set `dailyTotalUsd: None`.
+
+### Mutants (each applied, tests run, file restored byte for byte, hashes compared)
+
+- Backend Q165 and wording, 15 of 15 killed. The first run left one alive (a node awaiting its input counted as unlisted); `test_a_size_priced_node_still_awaiting_its_input_keeps_its_own_refusal_with_the_total_on` kills it.
+- Frontend header, GM 8, Settings copy and log row, 15 of 15 killed. The first run left "Settings copy back to 'published price'" alive; `Settings.test.tsx` now asserts the sentence.
+
+### Shots and flags (isolated backend 8791, Vite 5791; canary lines only in the blocked logs; 0 requests blocked during shots)
+
+Shots wait until the springs rest (the bar, cards, cursors, the header and its label hold the same rect and opacity for 6 samples, about 1.2 s). Files are in `scratchpad/daily/shots4/` (1440 and 1000 each); no two are identical (md5 `uniq -d` empty).
+
+- **Size.** One waiting proposal: Writer is 207.5 x 171.2 before and after at 1440 (156.1 x 128.8 at 1000); the header 205.4 x 34.2 both ways. With "· 2" the node grows in width, 207.5 to 217.3 at 1440 and 156.1 to 163.4 at 1000, because the longer label is wider than the chip it replaces and the node is content-sized. Height never changes. Flag for GM: either the count text fits the chip's width, or a second waiting agent is allowed to widen the node by about 10 px.
+- **Cursor on the label.** A cursor's rest point is the card's header middle (`nodeHeaderPoint`, shared with the backend), which is where the label sits; the arrow and mark draw over part of "Waiting for your OK" in `header-neighbour`, `header-count2` and `two-cursors`. Not changed here (the point is shared with the backend's target chains). Flag for GM.
+- **GM 7.** Two cursors on Writer: pills do not overlap (Claude Code 719,151 to 802.6,171; Codex 719,193 to 767.8,213 at 1440; no overlap at 1000). Main already stacks them; shown in `two-cursors-1440/1000`.
+- **Missed by the tests, found by pr_tests.** The daily total select was not under the person lock (#204): `presenceRound10.locks` failed until `DailyTotalRow` took the section's `lock`.
+- **Bundle.** `npm run build` budget line: 504,602 bytes raw (limit 512,000), after the merge; main alone was about 444 KB on 2026-10-31.

@@ -3166,7 +3166,13 @@ The person decides what agents may spend, in **Settings > Preferences**:
   not-connected line); a caller whose 3 proposal slots are full ("This would
   pass the $5 daily total, and you already have 3 open proposals. Wait until
   the person accepts or rejects one, then propose it again.", and the
-  person's Agent log says so); and an `/api/execute` or `/api/execute-node`
+  person's Agent log says "Couldn’t run “Writer” because it would pass the
+  $5 daily total and all 3 proposal slots are full."); Nebula itself at its
+  12 open proposals ("This would pass the $5 daily total, and Nebula already
+  has 12 open proposals. Wait until the person accepts or rejects one, then
+  propose it again.", and the log says "Couldn’t run “Writer” because it
+  would pass the $5 daily total and Nebula already has 12 open proposals.");
+  and an `/api/execute` or `/api/execute-node`
   request whose nodes aren't the canvas's, since the proposal would run the
   canvas's. "No
   limit" is the person's explicit choice; unset (or unreadable) is $5, and
@@ -3175,6 +3181,20 @@ The person decides what agents may spend, in **Settings > Preferences**:
   the daily total existed counts toward it from the start, over its last 24
   hours.
   The person's own runs never count toward it and never wait for it.
+  While the total is on, a node with no list price always waits for the
+  person's OK too, even with room left and no per-run limit, since Nebula
+  can't count it toward the total (Justin's Q165). The run is sent as a
+  proposal the same way, `alsoNeeds` is `unpriced`, and the lines say so:
+  the message is "“Sketch” has no list price, so Nebula can’t count it
+  toward the $5 daily total. Proposing it for the person’s OK. Sent as
+  proposal <id>. Check it with nebula proposals.", the bar says "“Sketch”
+  has no list price, so Nebula can’t count it toward the $5 daily total.",
+  and the Update says "Claude Code wants to run “Sketch”. It has no list
+  price, so Nebula can’t count it toward the $5 daily total." When the
+  priced part of the run already passes the total, the line above stays
+  ("This would pass the $5 daily total, and “Sketch” has no list price.").
+  With the total off ("No limit"), an unpriced node is as before: it runs
+  unless another limit is set, and then it is refused.
 - **Ask before costly runs** (default $1): the canvas asks the person before
   a run that could cost this much, and an agent run at or over it is refused.
   Off means no per-run limit.
@@ -3191,8 +3211,10 @@ The person decides what agents may spend, in **Settings > Preferences**:
 - **Connect your agent**: a token per outside agent app, with its own optional
   daily limit (see "Connect your agent" below).
 
-Any limit also makes an agent ask before running a node with no list price,
-since Nebula can't check it. That includes a Video QC node in vision-llm mode (it calls a vision model,
+Any limit, and the daily total on its own (while it is on), also makes an
+agent ask before running a node with no list price, since Nebula can't check
+it. A refusal that says "Propose it instead" names only your surface's call:
+`propose_change` over MCP, `nebula propose` in the CLI. That includes a Video QC node in vision-llm mode (it calls a vision model,
 which has no list price; Jev mode is priced per request) and a node whose priced setting arrives by connection (Krea Kling 3.0's
 `multi_prompt` port), or is set to something the price list doesn't cover
 (multi-shot Kling). Free nodes always pass. The person's own runs from the

@@ -166,7 +166,7 @@ interface SayInfo {
 }
 
 /** The cursor's line for this event: its own say, or its action's default (r54). */
-function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined): SayInfo {
+function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined, headerWaits = false): SayInfo {
   const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
   const handle = 'nodeId' in cursor.target ? cursor.target.handle : undefined;
   const field = cursor.action === 'type' && nodeId ? findTypeField(nodeId, handle) : null;
@@ -184,6 +184,10 @@ function sayFor(cursor: AgentCursor, lookup: NodeLabels | undefined): SayInfo {
     field: field ? (field.kind === 'param' ? { kind: 'param', label: field.label } : { kind: 'text' }) : null,
     cause: cursor.action === 'error' ? errorCause(cursor.did, nodeId, cursor.receivedAt) : null,
   };
+  // The node's header already says "Waiting for your OK" (a run the daily
+  // total holds): the default line would repeat it, so it is dropped; the
+  // dashed halo and the mark stay (GM - Design, PR #212 round 2, item 8).
+  if (headerWaits && cursor.action === 'propose') return { text: '', isDefault: true, field };
   return { text: defaultSay(cursor.action, context), isDefault: true, field };
 }
 
@@ -1243,9 +1247,14 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   // default line (GM - Design r54, lib/agentCursorSays), worked out once per
   // event from the canvas as it is then. A default is display only: the
   // accessible name and the Agent log keep the agent's own words.
-  const sayInfo = useMemo(() => sayFor(cursor, store.getState().nodeLookup as unknown as NodeLabels),
+  const targetNode = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const headerWaits = useCanvasProposalsStore((state) => {
+    const entry = cursor.proposalId ? state.proposals[cursor.proposalId] : undefined;
+    return Boolean(entry && !entry.closing && targetNode && entry.view.wait?.nodeIds.includes(targetNode));
+  });
+  const sayInfo = useMemo(() => sayFor(cursor, store.getState().nodeLookup as unknown as NodeLabels, headerWaits),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
-    [cursor.seq, cursor.say, cursor.action]);
+    [cursor.seq, cursor.say, cursor.action, headerWaits]);
   const say = sayInfo.text;
   // How long it shows before its exit (r54): max(3 s, 60 ms × characters),
   // capped at 8 s; a default tied to a held state (think, propose, wait)

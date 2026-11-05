@@ -5860,6 +5860,55 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
     expect(sayText()).toBe('Waiting for your OK');
   });
 
+  // GM - Design, PR #212 round 2, item 8: while the node's header says "Waiting for
+  // your OK" (a run the daily total holds), the cursor's default line would repeat it.
+  const heldRun = (id: string, nodeIds: string[], extra: Record<string, unknown> = {}) => {
+    const entry = proposal(id);
+    (entry.view as unknown as Record<string, unknown>).wait = { nodeIds, barLine: 'x', names: [], ...extra };
+    return entry;
+  };
+
+  it('drops the default "Waiting for your OK" while the target node\'s header shows it; the halo and mark stay', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(heldRun('p1', ['n2']));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    expect(sayText()).toBeNull();
+    expect(expr()).toBe('propose');
+    expect(document.querySelector('.agent-cursor__mark')).not.toBeNull();
+  });
+
+  it('shows the default again once the header no longer does (the proposal closes before the cursor goes)', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(heldRun('p1', ['n2']));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    expect(sayText()).toBeNull();
+    // Held on a different node than the cursor targets: the header there isn't the cursor's node.
+    cleanup();
+    holdProposals(heldRun('p1', ['n1']));
+    render(<AgentCursorLayer />);
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    expect(sayText()).toBe('Waiting for your OK');
+  });
+
+  it('still shows an agent\'s own say on a held run', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(heldRun('p1', ['n2']));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' }, say: 'Running the final render' }));
+    flush();
+    expect(sayText()).toBe('Running the final render');
+  });
+
+  it('keeps the default for an ordinary proposal, which has no header state', () => {
+    render(<AgentCursorLayer />);
+    holdProposals(proposal('p1'));
+    send(event({ action: 'propose', proposalId: 'p1', target: { nodeId: 'n2' } }));
+    flush();
+    expect(sayText()).toBe('Waiting for your OK');
+  });
+
   it.each([
     ['accepting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'accepted' })],
     ['rejecting it', () => useCanvasProposalsStore.getState().close({ proposalId: 'p1', status: 'rejected' })],

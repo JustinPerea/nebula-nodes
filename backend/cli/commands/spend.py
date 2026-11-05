@@ -65,6 +65,8 @@ def run(client: NebulaClient) -> None:
             parts.append(f"{_usd(cap['sessionUsd'])} {'per session' if budget == 'chat' else 'per 24 hours'}, "
                          f"{_usd(model_used)} used")
         print(f"  {model}: {', '.join(parts)}")
-    print("\nAmounts are upper estimates at list prices. Nodes without a published price always need")
-    print("a proposal. Over a limit: `nebula propose --run <node>` and the person decides. A run that")
-    print("would pass the daily total is sent as a proposal for you and waits for the person's OK.")
+    print("\nAmounts are upper estimates at list prices. Nodes without a list price always need the")
+    print("person's OK, since Nebula can't count them toward the daily total: with the total on, a run")
+    print("of one is sent as a proposal for you and waits. Over another limit: `nebula propose --run")
+    print("<node>` and the person decides. A run that would pass the daily total is sent as a proposal")
+    print("for you and waits for the person's OK.")

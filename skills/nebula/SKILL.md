@@ -274,7 +274,10 @@ never start it again.
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
 One that would pass their daily total (everything that isn't them shares it
-over the last 24 hours, $5 unless they picked another) isn't refused:
+over the last 24 hours, $5 unless they picked another), or has a node with
+no list price while that total is on (Nebula can't count it toward the
+total: "“Sketch” has no list price, so Nebula can’t count it toward the $5
+daily total. Proposing it for the person’s OK."), isn't refused:
 Nebula sends it as a proposal for you, and `nebula run` prints "Waiting for
 the person’s OK: … Sent as proposal <id>. Check it with nebula proposals."
 and the numbers ("Daily total $5: $4.80 used in the last 24 hours,
@@ -286,7 +289,7 @@ estimate) and, when it also needs their OK for another reason, `alsoNeeds`
 message ends `Check it with get_proposal("<id>").` Nothing ran; tell the
 person, check it with `nebula proposals`, and don't propose it again: it was
 already sent. Without `NEBULA_AGENT_NAME` (or `--as`) it is refused instead,
-and so is a run when your 3 proposal slots are full. `nebula spend` and
+and so is a run when your 3 proposal slots are full, or Nebula's 12 are. `nebula spend` and
 `nebula context` show the total, what's used and what's left.
 Only the person changes it.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001

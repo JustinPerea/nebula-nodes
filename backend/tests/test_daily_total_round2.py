@@ -136,10 +136,10 @@ def test_the_bar_names_the_canvas_node_with_no_list_price(api):
     assert proposal.wait["barLine"] == proposal.spec.note
 
 
-def test_the_cursor_says_the_default_on_arrival_and_the_reason_stays_on_the_bar(api, monkeypatch):
+def test_a_held_runs_cursor_has_no_say_of_its_own_and_the_reason_stays_on_the_bar(api, monkeypatch):
     said: list[dict] = []
 
-    async def capture_raw(data):
+    async def capture_raw(data, others=None):
         said.append(data)
 
     monkeypatch.setattr(api.main.manager, "broadcast_raw", capture_raw)
@@ -148,17 +148,20 @@ def test_the_cursor_says_the_default_on_arrival_and_the_reason_stays_on_the_bar(
     api.main.agent_spend_ledger.record("outside:shared", "Agents", {PAID: 4.8})
     response = api.client.post("/api/graph/run", json={"targetNodeId": writer}, headers=CLAUDE)
     assert response.status_code == 202, response.text
-    says = [event.get("say") for event in said if isinstance(event, dict) and event.get("say")]
-    assert "Waiting for your OK" in says
-    assert not any("daily total" in say for say in says)
     proposal = api.main.canvas_proposals.get(response.json()["proposalId"])
+    # The held run's cursor carries no say of its own: the tab draws its default
+    # ("Waiting for your OK") until the node's header says it (GM - Design, PR #212 r2, item 8),
+    # and the reason is never the cursor's.
+    held = [event for event in said if isinstance(event, dict) and event.get("proposalId") == proposal.id]
+    assert len(held) == 1 and held[0].get("say", "") == "" and held[0].get("action") == "propose"
+    assert not any("daily total" in (event.get("say") or "") for event in said if isinstance(event, dict))
     assert proposal.spec.note == "This would pass the $5 daily total, which has $0.20 left."
 
 
 def test_an_ordinary_proposal_still_says_its_note(api, monkeypatch):
     said: list[dict] = []
 
-    async def capture_raw(data):
+    async def capture_raw(data, others=None):
         said.append(data)
 
     monkeypatch.setattr(api.main.manager, "broadcast_raw", capture_raw)

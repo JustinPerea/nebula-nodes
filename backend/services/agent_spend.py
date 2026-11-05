@@ -784,6 +784,10 @@ class DailyWait:
     plan_runs_limit: int | None = None
     unpriced: tuple[str, ...] = ()
     names: dict[str, str] = field(default_factory=dict)
+    # False when the run itself fits under the total and waits only because a
+    # node has no list price, which Nebula can't count toward it (Justin's
+    # Q165): every line then says that, never "would pass".
+    over: bool = True
 
     @property
     def left(self) -> float:
@@ -792,6 +796,8 @@ class DailyWait:
     def bar_line(self) -> str:
         """The proposal bar's line (and the Updates card's second sentence)."""
         total = f"the {limit_usd(self.limit)} daily total"
+        if not self.over:
+            return self._cannot_count()
         if self.also == ALSO_PER_RUN and self.per_run_limit is not None:
             return f"This would pass {total} and costs more than {limit_usd(self.per_run_limit)} per run."
         if self.also == ALSO_MODEL_PER_RUN and self.per_run_limit is not None and self.model:
@@ -813,9 +819,31 @@ class DailyWait:
             return f"This would pass {total}, which is used up."
         return f"This would pass {total}, which has {money.usd_spent(self.left)} left."
 
-    def card_line(self) -> str:
-        """The line on each waiting node's card."""
-        return f"This run would pass the {limit_usd(self.limit)} daily total."
+    def _unpriced_names(self) -> list[str]:
+        return [self.names.get(node_id) or node_id for node_id in self.unpriced]
+
+    def _cannot_count(self) -> str:
+        """GM - Design (PR #212 r2, item 4), verbatim: the line when only a node
+        with no list price makes the run wait. "“Sketch” has no list price, so
+        Nebula can\u2019t count it toward the $5 daily total." (several: "have
+        no list price" and "them")."""
+        names = self._unpriced_names() or ["A node"]
+        one = len(names) == 1
+        return (f"{node_name_list(names) if self.unpriced else names[0]} {'has' if one else 'have'} no list price, "
+                f"so Nebula can\u2019t count {'it' if one else 'them'} toward the {limit_usd(self.limit)} daily total.")
+
+    def update_line(self, run_names: list[str]) -> str:
+        """The Updates card's second sentence. Beside the bar's line except
+        when only the unpriced nodes make the run wait: "It has no list
+        price, so Nebula can\u2019t count it toward the $5 daily total." (GM
+        item 4). When the run holds other nodes too, the nodes are named
+        (the bar's line), since "It" would be unclear."""
+        names = self._unpriced_names()
+        if self.over or not names or sorted(names) != sorted(run_names):
+            return self.bar_line()
+        one = len(names) == 1
+        return (f"{'It has' if one else 'They have'} no list price, so Nebula can\u2019t count "
+                f"{'it' if one else 'them'} toward the {limit_usd(self.limit)} daily total.")
 
     def _agents(self) -> str:
         return (f"this run (about {money.usd_amount(self.run)}) would pass their {limit_usd(self.limit)} daily "
@@ -824,32 +852,66 @@ class DailyWait:
     def agent_line(self, proposal_id: str) -> str:
         """What an agent reads (run results, the CLI, HTTP), in GM's words.
         MCP's run_nodes words the last sentence for its reader (for_mcp)."""
+        if not self.over:
+            return (f"{self._cannot_count()} Proposing {'it' if len(self.unpriced) < 2 else 'them'} for the "
+                    f"person\u2019s OK. Sent as proposal {proposal_id}. {CHECK_CLI}")
         return (f"Waiting for the person\u2019s OK: {self._agents()}. Sent as proposal {proposal_id}. "
                 f"{CHECK_CLI}")
+
+    def _reason(self) -> str:
+        """Why the run waits, as the lines that give no node name say it."""
+        return f"This would pass the {limit_usd(self.limit)} daily total" if self.over else self._cannot_count()[:-1]
 
     def nameless_line(self) -> str:
         """A caller that didn't name itself (a script, curl) over the total:
         refused, since only a caller with a name gets a proposal (GM - Design,
         2026-10-31). A tab not opened from the link reads its own lock line."""
+        if not self.over:
+            return f"{self._cannot_count()} Name yourself with NEBULA_AGENT_NAME or --as to send it as a proposal."
         return (f"This would pass the {limit_usd(self.limit)} daily total. Name yourself with "
                 "NEBULA_AGENT_NAME or --as to send it as a proposal.")
 
     def slots_full_line(self, open_count: int) -> str:
         """The agent's line when its proposal slots are full (GM - Design, 2026-10-31)."""
-        return (f"This would pass the {limit_usd(self.limit)} daily total, and you already have {open_count} "
+        return (f"{self._reason()}, and you already have {open_count} "
                 "open proposals. Wait until the person accepts or rejects one, then propose it again.")
 
+    def total_full_line(self, open_count: int) -> str:
+        """The agent's line when Nebula's open proposals are at the cap (GM -
+        Design, PR #212 r2, item 3), verbatim: "This would pass the $5 daily
+        total, and Nebula already has 12 open proposals. Wait until the person
+        accepts or rejects one, then propose it again."""
+        return (f"{self._reason()}, and Nebula already has {open_count} "
+                "open proposals. Wait until the person accepts or rejects one, then propose it again.")
+
+    def _log_reason(self, names: list[str]) -> str:
+        if self.over:
+            return f"it would pass the {limit_usd(self.limit)} daily total"
+        mine = self._unpriced_names()
+        if not mine or sorted(mine) == sorted(names):
+            return "it has no list price"
+        return f"{node_name_list(mine)} {'has' if len(mine) == 1 else 'have'} no list price"
+
     def slots_full_log(self, names: list[str], open_count: int) -> str:
-        """The person's Agent log line for it, after the agent's name (GM:
-        "Claude Code couldn’t run “Writer” because …"); the log shows the
-        name in its own column."""
-        return (f"couldn\u2019t run {node_name_list(names)} because it would pass the {limit_usd(self.limit)} "
-                f"daily total and its {open_count} proposal slots are full.")
+        """The person's Agent log line for it. The log's source column names the
+        agent, so the sentence reads whole without it (GM - Design, PR #212 r2,
+        item 2)."""
+        return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and all "
+                f"{open_count} proposal slots are full.")
+
+    def total_full_log(self, names: list[str], open_count: int) -> str:
+        """The person's Agent log line when Nebula's open proposals are at the
+        cap (GM item 3), verbatim: "Couldn\u2019t run \u201cWriter\u201d because it would pass
+        the $5 daily total and Nebula already has 12 open proposals."""
+        return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and Nebula "
+                f"already has {open_count} open proposals.")
 
     def refusal(self, how_to_ask: str) -> str:
         """For a run Nebula can't make a proposal of (a run off the canvas,
         such as `nebula quick` or a moodboard read): refused as the other
         limits refuse, in the same words."""
+        if not self.over:
+            return f"Needs the person's approval: {self._cannot_count()} {how_to_ask}"
         return f"Needs the person's approval: {self._agents()}. {how_to_ask}"
 
     def as_dict(self) -> dict[str, Any]:
@@ -857,7 +919,7 @@ class DailyWait:
         return {"limitUsd": self.limit, "usedUsd": round(self.used, 6), "leftUsd": self.left,
                 "runUsd": round(self.run, 6), "also": self.also, "alsoLimitUsd": self.per_run_limit,
                 "alsoModel": self.model, "alsoFor": self.owner, "alsoPlanRuns": self.plan_runs_limit,
-                "barLine": self.bar_line(), "cardLine": self.card_line()}
+                "over": self.over, "barLine": self.bar_line()}
 
 
 @dataclass
@@ -1173,23 +1235,34 @@ def decide(
 
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
-    # The daily total isn't one of these: it changes only the runs that
-    # would pass it (below), never what an unpriced node needs.
+    # The daily total is a USD limit (Justin's Q165, 2026-10-31): with it on,
+    # a node with no list price always waits for the person's OK, since
+    # Nebula can't count it toward the total, even with no other limit set.
     finer = [budget for budget in budgets if not budget.daily]
+    daily_on = any(budget.daily and budget.usd is not None for budget in budgets)
     usd_limited = (threshold is not None
+                   or daily_on
                    or any(budget.usd is not None for budget in finer)
                    or any(v is not None for limits in model_caps.values() for v in limits.values()))
 
     # The daily total, first: a run that would pass it waits for the
-    # person's OK as a proposal, whatever else it would need. Its other
+    # person's OK as a proposal, whatever else it would need; so does one that
+    # fits but has a node with no list price (``over`` False). Its other
     # reason, if it has one, is the one the checks below would give first.
     run_total = sum(by_model.values())
     for budget in budgets:
-        if not (budget.daily and budget.usd is not None and run_total > 0
-                and budget.spent.total + run_total > budget.usd):
+        if not (budget.daily and budget.usd is not None):
+            continue
+        over = run_total > 0 and budget.spent.total + run_total > budget.usd
+        # A node with no list price asks, with room or not. One priced by an
+        # input's size that can't be measured yet keeps its own refusal below
+        # (it says why), as it did.
+        awaiting = set(estimate.get("awaitingInput") or [])
+        unlisted = [node_id for node_id in estimate["unpriced"] if node_id not in awaiting]
+        if not over and not unlisted:
             continue
         wait = DailyWait(budget.usd, budget.spent.total, run_total,
-                         names={str(node_id): label for node_id, label in labels.items()})
+                         names={str(node_id): label for node_id, label in labels.items()}, over=over)
         _first_other_reason(wait, usd_limited=usd_limited, estimate=estimate, by_model=by_model,
                             model_caps=model_caps, threshold=threshold, finer=finer, run_total=run_total,
                             plan_charge=plan_charge, definitions=definitions)
@@ -1249,10 +1322,27 @@ def decide(
     return decision(None)
 
 
+_PROPOSE_TAIL = "The person accepts on the canvas, and the canvas runs it."
+_PROPOSE_CLI = "Propose it instead: `nebula propose --note \"<why>\" {targets}`. "
+_PROPOSE_MCP = "Propose it instead with propose_change. "
+
+
 def propose_hint(run_ids: list[str]) -> str:
-    """The sentence pointing an agent at a proposal for these canvas nodes."""
+    """The sentence pointing an agent at a proposal for these canvas nodes, in
+    the CLI's words (the backend can't tell which surface asked). MCP's tools
+    reword it for their reader (propose_hint_for_mcp): each surface names only
+    its own call (GM - Design, PR #212 r2, item 3)."""
     targets = " ".join(f"--run {node_id}" for node_id in run_ids[:6]) or "--run <node>"
-    return (
-        f"Propose it instead: `nebula propose --note \"<why>\" {targets}` "
-        "(MCP: propose_change). The person accepts on the canvas, and the canvas runs it."
-    )
+    return _PROPOSE_CLI.format(targets=targets) + _PROPOSE_TAIL
+
+
+def propose_hint_for_mcp(message: str) -> str:
+    """A refusal that carries propose_hint, in MCP's words: propose_change,
+    with no `nebula` command. Everything else in it stays as it was."""
+    start = message.find("Propose it instead: `nebula propose ")
+    if start < 0:
+        return message
+    end = message.find("`. ", start)
+    if end < 0:
+        return message
+    return message[:start] + _PROPOSE_MCP + message[end + 3:]

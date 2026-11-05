@@ -822,7 +822,9 @@ describe('Settings — preferences', () => {
     fireEvent.change(select, { target: { value: 'off' } });
     expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ runCostConfirmUsd: null }));
-    expect(screen.getByText(/There is no per-run limit/)).toBeInTheDocument();
+    // GM - Design (PR #212 r2, item 5): "list price", and no "There is no per-run limit" (the bar cites per-run limits).
+    expect(screen.queryByText(/There is no per-run limit/)).toBeNull();
+    expect(document.body.textContent).toContain('before running any node without a list price. Your own runs aren\u2019t limited.');
     useUIStore.getState().setRunCostConfirmUsd(1);
   });
 

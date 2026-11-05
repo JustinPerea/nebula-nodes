@@ -180,6 +180,11 @@ class _NebulaMCP(FastMCP):
         except ToolError as exc:
             if _never_reached_in(exc) and OFFLINE_NOTE not in str(exc):
                 raise ToolError(f"{exc} {OFFLINE_NOTE}") from exc
+            # A spend refusal's "propose it instead" names this surface's call
+            # only (propose_change), not the CLI's.
+            worded = _agent_spend.propose_hint_for_mcp(str(exc))
+            if worded != str(exc):
+                raise ToolError(worded) from exc
             raise
 
 
@@ -381,10 +386,23 @@ def _agent_headers(ctx: Context | None) -> dict[str, str]:
     return {"X-Nebula-Agent": _cursor_name(ctx), **_session_headers()}
 
 
+def _worded_for_this_surface(exc: NebulaAPIError) -> NebulaAPIError:
+    """A refusal that points at a proposal ("Propose it instead: `nebula
+    propose ...`"), with the call this surface has: propose_change (GM -
+    Design, PR #212 round 2). Anything else is returned as it came."""
+    worded = _agent_spend.propose_hint_for_mcp(exc.detail)
+    if worded == exc.detail:
+        return exc
+    return NebulaAPIError(worded, status=exc.status, kind=exc.kind, headers=exc.headers, payload=exc.payload)
+
+
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
     """A request as this agent. Errors carry Nebula's own detail, which says what to do next."""
     headers = _agent_headers(ctx)
-    payload = _api().request(method, path, headers=headers, timeout=timeout, **kwargs)
+    try:
+        payload = _api().request(method, path, headers=headers, timeout=timeout, **kwargs)
+    except NebulaAPIError as exc:
+        raise _worded_for_this_surface(exc) from exc.__cause__
     if not isinstance(payload, dict):
         raise RuntimeError("Nebula canvas endpoint returned an invalid response")
     return payload
@@ -1840,7 +1858,8 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     over one, or a node has no list price, it is refused with what to do:
     usually send the same nodes as propose_change with `run`. One that would
     pass the person's daily total (everything that isn't them shares it, over
-    the last 24 hours) isn't refused: Nebula sends it as a proposal and
+    the last 24 hours), or has a node with no list price while that total is
+    on (Nebula can't count it toward the total), isn't refused: Nebula sends it as a proposal and
     answers status "waiting" with `proposalId`, `message` (say it to the
     person as it is), `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd: the
     total, used, left and this run's estimate) and, when it also needs their
@@ -1972,7 +1991,8 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     over the last 24 hours (agent chats, agents outside Nebula, scripts, tabs
     not opened from the link): `limitUsd` ($5 until the person picks another,
     null for no limit), `usedUsd` and `leftUsd`, exact. A run that would pass
-    it waits for their OK as a proposal. Only the person changes it."""
+    it, or has a node with no list price while it is on, waits for their OK
+    as a proposal. Only the person changes it."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

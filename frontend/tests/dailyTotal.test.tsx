@@ -5,7 +5,7 @@ import type { ProposalView, ProposalWait } from '../src/lib/wsClient';
 /**
  * The daily total (Justin decided, 2026-10-31; GM - Design's design,
  * verbatim): the Settings row, the proposal bar's line, the waiting node's
- * status and line (its band, NodeWaitBand), and the bar's lock while the
+ * status (its header, NodeWaitSwap; tests/nodeWaitHeader.test.tsx), and the bar's lock while the
  * tab isn't connected as the person.
  */
 
@@ -33,17 +33,14 @@ const {
 } = await import('../src/lib/dailyTotal');
 const { DailyTotalRow } = await import('../src/components/panels/settings/DailyTotalRow');
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
-const { NodeWaitBand } = await import('../src/components/nodes/NodeWaitBand');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 const { readAgentSpend } = await import('../src/store/settingsDraftStore');
-const { PROPOSAL_GATE_COPY, WAITING_FOR_OK, waitLineId } = await import('../src/lib/canvasProposals');
 const { notePersonPromoted, reportPersonRequired } = await import('../src/lib/personSession');
 
 // GM - Design, 2026-10-31, verbatim.
 const DESCRIPTION = 'Agent chats, agents outside Nebula, scripts and tabs not opened from your link all count '
   + 'toward it. Your own runs don’t.';
 const BAR = 'This would pass the $5 daily total, which has $0.20 left.';
-const CARD = 'This run would pass the $5 daily total.';
 
 describe('the lines', () => {
   it('reads usage as GM wrote it', () => {
@@ -182,7 +179,7 @@ describe('Settings: the Daily total row', () => {
 describe('a run the daily total holds', () => {
   const wait: ProposalWait = {
     limitUsd: 5, usedUsd: 4.8, leftUsd: 0.2, runUsd: 0.4, also: null, alsoLimitUsd: null, alsoModel: null, alsoFor: null, alsoPlanRuns: null,
-    barLine: BAR, cardLine: CARD, nodeIds: ['n3'], names: ['Writer'],
+    barLine: BAR, nodeIds: ['n3'], names: ['Writer'],
   };
   const view = (): ProposalView => ({
     id: 'p_wait', status: 'open', agent: { id: 'ext:claude-code', name: 'Claude Code', color: '#E8825A', verified: false },
@@ -196,7 +193,7 @@ describe('a run the daily total holds', () => {
     flow.state.nodeLookup = new Map([['n3', {
       id: 'n3', measured: { width: 240, height: 160 }, internals: { positionAbsolute: { x: 100, y: 200 } },
     }]]);
-    useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, shownId: null,
+    useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null,
       deferredRun: null });
     useCanvasProposalsStore.getState().open(view(), 'key-a');
   });
@@ -210,27 +207,16 @@ describe('a run the daily total holds', () => {
     const { container } = render(<ProposalBar />);
     const line = container.querySelector('.proposal-bar__note')!;
     expect(line.textContent).toBe(BAR);
-    expect(line.id).toBe(waitLineId('p_wait'));
-    expect(screen.getByRole('button', { name: /^Accept & run/ })).toBeTruthy();
-  });
-
-  it('shows "Waiting for your OK" and the line on each waiting node, pointing at the bar while it shows', () => {
-    const band = render(<NodeWaitBand nodeId="n3" />);
-    const tag = band.container.querySelector<HTMLElement>('.node-wait-band__tag')!;
-    expect(band.container.querySelector('.node-wait-band__status')!.textContent).toBe(WAITING_FOR_OK);
-    expect(WAITING_FOR_OK).toBe('Waiting for your OK');
-    expect(band.container.querySelector('.node-wait-band__line')!.textContent).toBe(CARD);
-    expect(tag.getAttribute('aria-describedby')).toBeNull();
-    render(<ProposalBar />);
-    expect(tag.getAttribute('aria-describedby')).toBe(waitLineId('p_wait'));
-    expect(document.getElementById(waitLineId('p_wait'))!.textContent).toBe(BAR);
+    expect(screen.getByRole('button', { name: /^Accept and run/ })).toBeTruthy();
   });
 
   it('keeps the not-connected lock on a tab not opened from the link', () => {
     act(() => reportPersonRequired());
     render(<ProposalBar />);
-    const accept = screen.getByRole('button', { name: /^Accept & run/ });
-    expect(accept.getAttribute('title')).toBe(PROPOSAL_GATE_COPY.accept);
-    expect((accept as HTMLButtonElement).disabled || accept.getAttribute('aria-disabled') === 'true').toBe(true);
+    // Main's card words the lock (PersonLockLine) in place of the old title.
+    const accept = screen.getByRole('button', { name: /^Accept and run/ });
+    expect(accept.getAttribute('aria-disabled')).toBe('true');
+    expect(document.getElementById(accept.getAttribute('aria-describedby')!)!.textContent)
+      .toContain('when this tab is connected as you');
   });
 });
