@@ -144,3 +144,15 @@ def test_follow_file_params_unit():
         {"filePath": "/x/c.png"}, ["_previewUrl", "_fileName"])
     assert follow_file_params(definition, before, {"strength": 0.2}, url) == ({"strength": 0.2}, [])
     assert follow_file_params(None, before, {"filePath": "/out/b.png"}, url) == ({"filePath": "/out/b.png"}, [])
+
+
+def test_follow_file_params_leaves_the_preview_of_inputs_that_draw_none():
+    """Merged from main (#226 review 4, NIT-2): audio, video and document inputs
+    draw no image, and a `_previewUrl` there would feed a mask source's fallback."""
+    from services.file_param_preview import follow_file_params
+
+    definition = {"params": [{"key": "filePath", "type": "file"}]}
+    url = {"/out/b.mp3": "/api/outputs/b.mp3"}.get
+    before = {"filePath": "/out/a.mp3", "_fileName": {"file": "a.mp3", "name": "A.mp3"}}
+    assert follow_file_params(definition, before, {"filePath": "/out/b.mp3"}, url, previews=False) == (
+        {"filePath": "/out/b.mp3"}, ["_fileName"])

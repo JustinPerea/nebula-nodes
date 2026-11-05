@@ -89,7 +89,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
-from services.file_param_preview import follow_file_params
+from services.file_param_preview import NO_PREVIEW_DEFINITIONS, follow_file_params
 from services import upload_names
 from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
@@ -2310,7 +2310,8 @@ def _file_preview_url(value: Any) -> str | None:
 def _follow_file_params(definition_id: str, before: Mapping[str, Any],
                         update: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """services/file_param_preview.follow_file_params for this node's definition."""
-    return follow_file_params(node_registry.get(definition_id), before, update, _file_preview_url)
+    return follow_file_params(node_registry.get(definition_id), before, update, _file_preview_url,
+                              previews=definition_id not in NO_PREVIEW_DEFINITIONS)
 
 
 def _output_file_time(url: str) -> float | None:

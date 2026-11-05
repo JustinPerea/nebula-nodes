@@ -26,6 +26,12 @@ from services.node_route import all_param_definitions
 
 PREVIEW_PARAM = "_previewUrl"
 
+# Inputs whose Inspector draws no image under the file control (video, audio
+# and document files): a `_previewUrl` written for them would only be read
+# by a mask source's fallback (#226 review 4, NIT-2), so their preview is
+# left as the write sent it. The name still follows.
+NO_PREVIEW_DEFINITIONS = frozenset({"video-input", "audio-input", "document-input"})
+
 
 def file_param_keys(definition: Mapping[str, Any] | None) -> list[str]:
     """The keys of a definition's ``file`` params, in declared order."""
@@ -35,7 +41,8 @@ def file_param_keys(definition: Mapping[str, Any] | None) -> list[str]:
 
 
 def follow_file_params(definition: Mapping[str, Any] | None, before: Mapping[str, Any], update: Mapping[str, Any],
-                       preview_url: Callable[[Any], str | None]) -> tuple[dict[str, Any], list[str]]:
+                       preview_url: Callable[[Any], str | None],
+                       previews: bool = True) -> tuple[dict[str, Any], list[str]]:
     """``update`` with the preview (and name) following a changed file param,
     and the keys to drop from the node's params after it is merged."""
     out = dict(update)
@@ -43,7 +50,7 @@ def follow_file_params(definition: Mapping[str, Any] | None, before: Mapping[str
     if not changed:
         return out, []
     drop: list[str] = []
-    if PREVIEW_PARAM not in update:
+    if previews and PREVIEW_PARAM not in update:
         url = preview_url(update[changed[-1]])
         if url:
             out[PREVIEW_PARAM] = url
