@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
-import type { AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
+import type { AgentAnchorNames, AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
 import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
@@ -28,6 +28,9 @@ export interface AgentCursor {
   color: string;
   verified: boolean;
   target: AgentCursorAnchor;
+  /** What a surface target is called (the board, the image's number, the
+   *  control), for the cursor's line: absent for a canvas target. */
+  anchorNames?: AgentAnchorNames;
   from?: AgentCursorAnchor;
   /** Normalised: an action this tab doesn't know is 'move'. */
   action: AgentCursorAction;
@@ -124,6 +127,18 @@ function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
 
 const ANCHOR_ITEM = /^[A-Za-z0-9_.-]{1,64}(\/[A-Za-z0-9_.-]{1,64})?$/;
 
+/** The names beside a surface anchor: a board name, an image number, a control label. */
+function cleanAnchorNames(raw: unknown, target: AgentCursorAnchor): AgentAnchorNames | undefined {
+  if (!('surface' in target) || !raw || typeof raw !== 'object') return undefined;
+  const names = raw as Record<string, unknown>;
+  if (typeof names.board !== 'string' || !names.board) return undefined;
+  return {
+    board: names.board,
+    ...(typeof names.image === 'number' && Number.isFinite(names.image) ? { image: names.image } : {}),
+    ...(typeof names.part === 'string' && names.part ? { part: names.part } : {}),
+  };
+}
+
 function isAnchor(value: unknown): value is AgentCursorAnchor {
   if (!value || typeof value !== 'object') return false;
   const anchor = value as Record<string, unknown>;
@@ -192,6 +207,7 @@ function withEvent(
     color: SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR,
     verified: Boolean(agent.verified),
     target,
+    anchorNames: cleanAnchorNames(event.anchorNames, target),
     from: !replayed && isAnchor(event.from) ? event.from : undefined,
     action: cursorAction(event.action),
     say: typeof event.say === 'string' ? event.say : '',

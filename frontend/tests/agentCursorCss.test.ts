@@ -33,7 +33,7 @@ describe('agentCursor.css runs on springs only', () => {
 
   it('the springs it names are defined: say-fade here, soft and ring by the layer', () => {
     expect(css).toMatch(/--agent-cursor-say-fade:\s*\d+ms linear\(0,/);
-    const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    const layer = readFileSync(resolve(__dirname, '../src/lib/agentCursorSpringVars.ts'), 'utf8');
     for (const name of new Set([...main.matchAll(/var\((--agent-cursor-[a-z-]+)\)/g)].map((m) => m[1]))) {
       if (name === '--agent-cursor-say-fade') continue;
       expect(layer, name).toContain(`'${name}'`);

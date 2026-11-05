@@ -130,3 +130,21 @@ export const AGENT_CURSOR_SAY_HOLD = { minMs: 3000, perCharMs: 60, maxMs: 8000 }
  *  agent's last action (its `did`) only when that action was on the same node
  *  within this long; else the cause is unknown ("Couldn’t do that"). */
 export const AGENT_CURSOR_ERROR_CAUSE_MS = 60_000;
+
+// ── Item outlines (design section 5, GM - Design PR #233 r3) ───────────────
+
+/** Section 5: "The item an agent is changing gets a 1.5 px agent-colour
+ *  outline for as long as the change is held. Two agents on one item show two
+ *  outlines nested 2 px apart. From 3 on, the outermost one carries a '+N'
+ *  chip." GM 3: it shows for `type` (solid) and `propose` (dashed, as the
+ *  dashed halo). Build: at least `minHoldMs` (the section 2 held-state floor),
+ *  at most `maxRings` drawn, the corner radius, and the dash. */
+export const AGENT_CURSOR_OUTLINE = {
+  strokePx: 1.5,
+  stepPx: 2,
+  maxRings: 2,
+  minHoldMs: 400,
+  radiusPx: 6,
+  dashPx: 4,
+  gapPx: 3,
+} as const;

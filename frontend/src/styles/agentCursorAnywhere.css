@@ -1,0 +1,67 @@
+/* The screen layer (Phase 3, "Anywhere"): agent cursors on the surfaces beside
+   the canvas. Separate from agentCursor.css, whose ratchet
+   (tests/agentCursorCss.test.ts) forbids pointer-events: auto and
+   position: fixed there; nothing here takes a pointer event either. The
+   cursors themselves are agentCursor.css's (the same view). */
+
+.agent-screen-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* GM - Design 5: above the docks (--sr-layer-workspace-overlay, 55: Chat,
+     Settings, the Updates corner), below modals (--sr-layer-modal, 60) and
+     the notice region (--sr-layer-notice). */
+  z-index: calc(var(--sr-layer-modal, 60) - 1);
+}
+
+.agent-cursor-layer--screen {
+  /* Inside the fixed box's own stacking context: only its draw order matters. */
+  z-index: 2;
+}
+
+.agent-item-outlines {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* The item an agent is typing in (solid) or proposing on (dashed, as the dashed
+   halo): 1.5 px in the agent colour, the geometry set from JS. */
+.agent-item-outline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--agent-color);
+  border-radius: 6px;
+  pointer-events: none;
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
+.agent-item-outline[data-kind="dashed"] {
+  border-style: dashed;
+}
+
+.agent-item-outline__more {
+  position: absolute;
+  right: -1.5px;
+  top: -20px;
+  padding: 0 6px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--agent-color);
+  font: 600 11px/16px var(--sr-font-sans, system-ui, sans-serif);
+  white-space: nowrap;
+}
+
+@keyframes agent-item-outline-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-item-outline {
+    animation: none;
+  }
+}

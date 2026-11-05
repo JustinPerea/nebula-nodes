@@ -143,6 +143,14 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
+// The screen layer (Phase 3, "Anywhere"): the cursors on every surface beside
+// the canvas. Mounted once at the app root; it draws nothing until a cursor
+// has a target on one, so it is in no first paint.
+export const DeferredAgentScreenLayer = lazyWithPreload(
+  () => import('../components/agent-cursor/AgentScreenLayer'),
+  (module) => module.AgentScreenLayer,
+);
+
 // Agents on the nodes (Q125 item 3): the mark above a node an agent is on
 // and the placeholder outline. It reads the roster when it mounts, so it
 // draws nothing before its chunk and misses nothing.
@@ -188,6 +196,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
+  DeferredAgentScreenLayer.preload,
   DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
   graphFileModule.preload,
@@ -275,6 +284,11 @@ export const DEFERRED_MODULES: readonly string[] = [
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
+  // The cursors' shared view and field, and the screen layer (Phase 3).
+  'components/agent-cursor/AgentCursorField.tsx',
+  'components/agent-cursor/AgentScreenLayer.tsx',
+  'lib/agentCursorSpringVars.ts',
+  'lib/agentCursorOutlines.ts',
   // The agent cursor's motion and look, only in the cursor layer's chunk.
   'lib/agentCursorPlanner.ts',
   'lib/agentCursorLook.ts',
