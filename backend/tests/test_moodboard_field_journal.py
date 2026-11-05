@@ -85,7 +85,7 @@ def test_the_persons_direction_edit_is_one_event_naming_the_field_and_not_its_te
     event = events[0]
     assert event["actor"] == {"kind": "person"}
     assert event["data"] == {"boardId": BOARD_ID, "boardName": "Placed", "scope": "global", "fields": ["direction"]}
-    assert event["summary"] == "changed Direction on board Placed"
+    assert event["summary"] == "changed “Direction” on “Placed”"
     _assert_no_values(journal)
 
 
@@ -119,7 +119,7 @@ def test_the_boards_notes_are_a_field_not_an_image_note(client, root, journal, p
     _put(client, PERSON, notes=NOTES)
     events = _board_events(journal)
     assert [(event["kind"], event["data"].get("fields")) for event in events] == [("board.fields", ["notes"])]
-    assert events[0]["summary"] == "changed the board's notes on board Placed"
+    assert events[0]["summary"] == "changed “Board notes” on “Placed”"
     _assert_no_values(journal)
 
 
@@ -151,7 +151,7 @@ def test_mcp_moodboard_update_and_its_undo_each_journal_one_fields_event(app, ro
     assert len(_board_events(journal)) == 1 and len(events) == 1
     assert events[0]["actor"]["kind"] == "agent" and events[0]["actor"]["name"] == "Claude Code"
     assert events[0]["data"]["fields"] == ["direction", "avoid", "pinnedColors"]
-    assert events[0]["summary"] == "changed Direction, the Avoid list and the pinned colours on board Placed"
+    assert events[0]["summary"] == "changed “Direction”, “Avoid” and “Pinned colors” on “Placed”"
 
     # The undo (a restore of the fields slice, through /edits).
     mcp_server.moodboard_update(BOARD_ID, **updated["previous"])
@@ -248,7 +248,7 @@ def test_the_put_route_called_in_process_as_the_person_journals_too(root, journa
     events = _board_events(journal)
     assert [(event["kind"], event["data"]["fields"], event["actor"]["kind"]) for event in events] == [
         ("board.fields", ["sendNotes"], "person")]
-    assert events[0]["summary"] == "changed Send notes to generators on board Placed"
+    assert events[0]["summary"] == "changed “Send notes” on “Placed”"
 
 
 # -- waiters wake at once ------------------------------------------------------------
@@ -316,7 +316,7 @@ def test_nebula_watch_prints_the_field_change_with_who_did_it(client, root, jour
     _put(client, PERSON, direction=DIRECTION, avoid=[AVOID])
     [event] = _board_events(journal)
     line = format_event(event)
-    assert line.endswith("Person  changed Direction and the Avoid list on board Placed")
+    assert line.endswith("Person  changed “Direction” and “Avoid” on “Placed”")
 
 
 # -- the Agent log ---------------------------------------------------------------------
@@ -327,7 +327,7 @@ def test_an_agents_field_change_is_the_journals_line_in_the_agent_log(client, ro
     [event] = _board_events(journal)
     said = [message["say"] for message in sent if message.get("type") == "agentPresence"]
     assert said == [event["summary"][0].upper() + event["summary"][1:]]
-    assert said == ["Changed Direction and the Avoid list on board Placed"]
+    assert said == ["Changed “Direction” and “Avoid” on “Placed”"]
 
 
 def test_a_private_note_label_never_reaches_a_fields_event(client, root, journal, person):

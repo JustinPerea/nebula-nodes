@@ -1270,19 +1270,45 @@ KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "no
 MAX_BOARD_NAME_CHARS = 60
 
 
+def quoted(name: str) -> str:
+    """A name inside a sentence, in curly quotes: “Dusk”. The one place a
+    board, a project or a field is quoted, so a line never says "board Dusk"."""
+    return f"\u201c{name}\u201d"
+
+
 def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] | None) -> str:
-    """"board Dusk": how a board is named in the journal's summaries and in
-    the Agent log's lines (services/moodboard_actions), so the two never name
-    one board two ways. The first of ``board`` and ``fallbacks`` with a name
-    (a deleted board's record, the board before a rename), else its id."""
+    """“Dusk”: how a board is named in the journal's summaries and in the
+    Agent log's and the cursor's lines (services/moodboard_actions), so the
+    three never name one board two ways. The first of ``board`` and
+    ``fallbacks`` with a name (a deleted board's record, the board before a
+    rename), else its id."""
     boards = [item for item in (board, *fallbacks) if item]
     name = next((str(item["name"]) for item in boards if item.get("name")), None)
     if name is None:
         name = next((str(item["id"]) for item in boards if item.get("id")), "Untitled board")
     name = " ".join(name.split())
     if len(name) > MAX_BOARD_NAME_CHARS:
-        name = name[: MAX_BOARD_NAME_CHARS - 1].rstrip() + "…"
-    return f"board {name}"
+        name = name[: MAX_BOARD_NAME_CHARS - 1].rstrip() + "\u2026"
+    return quoted(name)
+
+
+def image_words(numbers: list[int], limit: int = 6) -> str:
+    """Images in a sentence: "image 3", "images 1 and 2", "images 1, 2 and 3".
+    ("#3" is for badges and chips, never a sentence.) Past ``limit``: "images
+    1, 2, 3, 4, 5, 6 and 4 more"."""
+    if not numbers:
+        return "an image"
+    if len(numbers) == 1:
+        return f"image {numbers[0]}"
+    shown = [str(n) for n in numbers[:limit]]
+    if len(numbers) > limit:
+        return f"images {', '.join(shown)} and {len(numbers) - limit} more"
+    return "images " + listed_words(shown)
+
+
+def image_count_words(n: int) -> str:
+    """"1 image", "3 images"."""
+    return f"{n} image{'' if n == 1 else 's'}"
 
 
 def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
@@ -1304,48 +1330,60 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
 
     refs = [{"number": number(image_id), "id": image_id} for image_id in named]
     kind = kinds[0]
-    # A cover picked with another change is said on its own ("made #2 the
+    # A cover picked with another change is said on its own ("made image 2 the
     # cover"), so its image isn't listed as part of that change.
     others = {image_id for k in kinds if k != "cover" for image_id in changes["kinds"][k]}
-    listed = _listed([f"#{ref['number']}" for ref in refs
-                      if ref["number"] and (kind == "cover" or ref["id"] in others)])
+    shown = [ref["number"] for ref in refs if ref["number"] and (kind == "cover" or ref["id"] in others)]
     where = board_where(after, before)
-    if kind == "added":
-        summary = f"added {listed} to {where}"
-    elif kind == "removed":
-        summary = f"removed {listed} from {where}"
+
+    def pictures(ids: list[str]) -> str:
+        return image_words([n for n in (number(i) for i in ids) if n])
+
+    if kind in ("added", "removed"):
+        # "added image 3 to “Dusk”", "added 3 images to “Dusk”".
+        what = image_words(shown) if len(shown) == 1 else image_count_words(len(shown) or len(refs))
+        summary = f"added {what} to {where}" if kind == "added" else f"removed {what} from {where}"
     elif kind == "frame":
         summary = f"changed the frames on {where}"
     elif kind == "grouped":
-        summary = f"changed the looks {listed} is in on {where}"
+        summary = f"changed the looks {image_words(shown)} {'is' if len(shown) == 1 else 'are'} in on {where}"
     elif kind == "setAside":
         ids = changes["kinds"]["setAside"]
         states = {bool((new.get(image_id) or (0, {}))[1].get("excluded")) for image_id in ids}
-        verb = "set aside" if states == {True} else "used again" if states == {False} else "switched Set aside on"
-        summary = f"{verb} {_listed([f'#{number(i)}' for i in ids])} on {where}"
+        verb = ("set aside" if states == {True} else "used again" if states == {False}
+                else f"switched {quoted('Set aside')} for")
+        summary = f"{verb} {pictures(ids)} on {where}"
     elif kind == "resized":
-        summary = f"resized {listed} on {where}"
+        summary = f"resized {image_words(shown)} on {where}"
     elif kind == "cover":
         summary = cover_words(after, where)
     elif kind == "noted":
         noted = changes["kinds"]["noted"]
         if all(image_id in changes["private"] for image_id in noted):
-            summary = f"private note changed on {_listed([f'#{number(i)}' for i in noted])} on {where}"
+            summary = f"private note changed on {pictures(noted)} on {where}"
         else:
-            summary = f"changed the notes on {_listed([f'#{number(i)}' for i in noted])} on {where}"
+            summary = f"changed the notes on {pictures(noted)} on {where}"
     else:
-        summary = f"moved {listed} on {where}"
+        summary = f"moved {image_words(shown)} on {where}"
     if changes["private"] and "private note changed" not in summary:
         summary += " (private note changed)"
     return {"kind": f"board.{kind}", "kinds": [f"board.{k}" for k in kinds], "refs": refs[:50],
             "summary": summary}
 
 
+# A board field as a sentence quotes it (Studio's own control labels, curly):
+# one list for the journal and the Agent log, so a field is never named two
+# ways. Send notes is short here: GM - Design's line is "turned off “Send notes”".
+SENTENCE_LABELS = {
+    "name": "Name", "notes": "Board notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "avoid": "Avoid", "pinnedColors": "Pinned colors", "clashMode": "Clash mode", "colorChoices": "Color choices",
+    "sendNotes": "Send notes", "coverImageId": "Cover", "briefOverride": "Your brief",
+}
+
+
 def field_label(key: str) -> str:
-    """A board field as a sentence names it mid-line: "Direction", "the
-    Avoid list", "Send notes to generators" (FIELD_LABELS, lower-cased "The")."""
-    label = FIELD_LABELS.get(key, key)
-    return "the " + label[4:] if label.startswith("The ") else label
+    """A board field as a sentence names it: a quoted label, "“Direction”"."""
+    return quoted(SENTENCE_LABELS.get(key, key))
 
 
 def listed_words(words: list[str]) -> str:
@@ -1383,22 +1421,17 @@ def journal_entries(changes: dict[str, Any], before: dict[str, Any], after: dict
 
 
 def cover_words(after: dict[str, Any], where: str = "") -> str:
-    """A cover change in the journal's words: "made #3 the cover of board
-    Dusk", "set the cover of board Dusk back to #1" (no cover chosen now).
+    """A cover change in the journal's words: "made image 3 the cover of
+    “Dusk”", "set the cover of “Dusk” back to image 1" (no cover chosen now).
     Without ``where``, the short form the Agent log adds to another change:
-    "made #3 the cover", "the cover is #1 again"."""
+    "made image 3 the cover", "the cover is image 1 again"."""
     chosen = field_value(after, "coverImageId")
     index = _images_by_id(after).get(str(chosen), (None, None))[0] if chosen else None
     if index is not None:
-        return f"made #{index + 1} the cover of {where}" if where else f"made #{index + 1} the cover"
+        return f"made image {index + 1} the cover of {where}" if where else f"made image {index + 1} the cover"
     if not where:
-        return "the cover is #1 again" if after.get("images") else "the board has no cover now"
-    return f"set the cover of {where} back to #1" if after.get("images") else f"cleared the cover of {where}"
-
-
-def _listed(items: list[str], limit: int = 6) -> str:
-    shown = ", ".join(items[:limit])
-    return shown + (f" and {len(items) - limit} more" if len(items) > limit else "")
+        return "the cover is image 1 again" if after.get("images") else "the board has no cover now"
+    return f"set the cover of {where} back to image 1" if after.get("images") else f"cleared the cover of {where}"
 
 
 # -- one batch --------------------------------------------------------------------
@@ -1469,5 +1502,5 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
 
 __all__ = ["EditError", "EditResult", "FIELD_KEYS", "JOURNAL_FIELDS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT",
            "apply_edits", "board_where", "clean_say", "cover_words", "diff", "field_label", "field_value",
-           "fields_entry", "fields_slice", "holds_private_note", "journal_entries", "journal_entry", "listed_words",
-           "parse_ops", "steering"]
+           "fields_entry", "fields_slice", "holds_private_note", "image_count_words", "image_words",
+           "journal_entries", "journal_entry", "listed_words", "parse_ops", "quoted", "steering", "SENTENCE_LABELS"]

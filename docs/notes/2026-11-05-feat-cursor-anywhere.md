@@ -78,3 +78,14 @@ Slice 3 entry bytes were measured while slice 4 had begun editing `deferredChunk
 - Ratchet: `tests/agentCursorNoOpen.test.ts` scans the chunk's source for scroll, pan, fit, open and focus/click calls (`PRESS_HANDLERS` is empty until slice 9's chip).
 
 Mutations, all caught by a named test: outlines nest 0 px (`two agents on one item nest 2 px apart…`, `outline rings … two agents nest 2 px apart`); a surface cursor on the canvas layer (`a cursor on a moodboard is the screen layer's…`); a cursor with no last spot at 0,0 (`is not drawn while nothing resolves, and not at 0,0` and six more); the layer calls `scrollIntoView` (`calls no scroll method through a flight…`, and the `agentCursorNoOpen` scan).
+
+## Slice 3b: one set of words for Moodboard actions
+
+GM - Design's ruling on #233 wording, built in the shared helpers so the Agent log, the cursor's say and the journal stay one source (`services/moodboard_edits.py`: `quoted`, `board_where`, `image_words`, `image_count_words`, `SENTENCE_LABELS`, `field_label`, `cover_words`, `journal_entry`; `services/moodboard_actions.py`: `describe_*`).
+
+- Board and project are curly names; an image is "image 3" in a sentence; clauses join with "and"; fields are quoted labels; undo is "Undid a change to “Dusk”" (the undo line no longer repeats what was undone). "Kept the brief for". Several images added or removed are a count ("Added 3 images to ..."); other kinds list numbers ("images 1 and 2").
+- Journal: it is a memory-only ring buffer (`canvas_events`), so no entry outlives the words that wrote it. Nothing stored in the old form, nothing to migrate or re-render at read time. The summary stays lower-case (the actor leads it) and is the same phrase the say capitalises.
+- Field labels: `SENTENCE_LABELS` (curly, the Studio's control names). Flag for GM: Send notes is “Send notes” as GM's line has it, while the Studio's own label is "Send notes to generators". `FIELD_LABELS` (refusals and skip messages) is unchanged.
+- No board line has a separate `log` (the Agent log shows the say), so there is no log variant to give a period; says have none.
+- Not touched: the r90 Studio notices (copy PR), edit refusals' straight apostrophes (other copy), `test_mcp_channel.py`'s journal fixtures (inputs, not produced).
+- Mutations: `board_where` returning "board “Dusk”" fails 18 tests; a "; " joiner fails `test_describe_change_is_the_journal_summary...` and the `[fields and send notes]` table row.

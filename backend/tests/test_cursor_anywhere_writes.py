@@ -93,7 +93,7 @@ def test_create_is_the_board_click(api):
     event = _cursor(sent)
     assert _where(event) == (board["id"], None, "click")
     assert event["target"]["surface"] == "moodboard" and event["anchorNames"] == {"board": "Desert light"}
-    assert event["say"] == "Made board Desert light with 3 images"
+    assert event["say"] == "Made “Desert light” with 3 images"
 
 
 def test_move_and_restore_are_the_board_click(api):
@@ -105,7 +105,7 @@ def test_move_and_restore_are_the_board_click(api):
     assert client.delete(f"/api/moodboards/{board['id']}").status_code == 200
     assert client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=LANE_A).status_code == 200
     assert _where(_cursor(sent)) == (board["id"], None, "click")
-    assert _cursor(sent)["say"] == "Restored board Desert light"
+    assert _cursor(sent)["say"] == "Restored “Desert light”"
 
 
 def test_adding_one_image_is_that_image_and_several_are_the_board(api):
@@ -212,13 +212,13 @@ def test_analyze_looks_at_the_colors_and_keeping_the_brief_clicks_the_direction(
     board = _create(client)
     assert client.post(f"/api/moodboards/{board['id']}/analyze", headers=LANE_A).status_code == 200
     assert _where(_cursor(sent)) == (board["id"], "colors", "look")
-    assert _cursor(sent)["say"] == "Analyzed board Desert light"
+    assert _cursor(sent)["say"] == "Analyzed “Desert light”"
     # The agent keeps a hand-written brief of its own.
     _put(client, board["id"], LANE_A, briefOverride={"text": "My own brief."})
     kept = client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=LANE_A)
     assert kept.status_code == 200, kept.text
     assert _where(_cursor(sent)) == (board["id"], "direction", "click")
-    assert _cursor(sent)["say"] == "Kept the brief on board Desert light"
+    assert _cursor(sent)["say"] == "Kept the brief for “Desert light”"
 
 
 def test_delete_sends_no_cursor_and_every_cursor_on_the_board_leaves(api):
@@ -232,7 +232,7 @@ def test_delete_sends_no_cursor_and_every_cursor_on_the_board_leaves(api):
     sent.clear()
     assert client.delete(f"/api/moodboards/{board['id']}", headers=LANE_A).status_code == 200
     event = _cursor(sent)
-    assert "target" not in event and event["say"] == "Deleted board Desert light"  # the Agent log only
+    assert "target" not in event and event["say"] == "Deleted “Desert light”"  # the Agent log only
     assert [cursor["target"]["itemId"] for cursor in presence.replay()] == [other["id"]]
     # The numbers on the board are free again: the next new session takes the lowest.
     again = client.post("/api/canvas/cursor", headers={**AGENT, "X-Nebula-Agent-Session": "lane-d"},
@@ -270,6 +270,6 @@ def test_the_agent_log_line_is_still_the_writes_own_words(api):
     client, sent, _, _ = api
     board = _create(client)
     _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.5}], LANE_A)
-    assert _cursor(sent)["say"] == "Resized #1 on board Desert light"
+    assert _cursor(sent)["say"] == "Resized image 1 on “Desert light”"
     _edit(client, board["id"], [{"op": "weight", "image": 2, "value": 0.5}], LANE_A, say="Eased the blue")
     assert _cursor(sent)["say"] == "Eased the blue"

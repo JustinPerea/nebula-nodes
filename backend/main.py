@@ -21196,7 +21196,7 @@ async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, s
     """One Agent log line for an agent's board write (an edit batch or a
     PUT): the agent's own ``say`` when it sent one, else the journal's
     summary of the change (services/moodboard_actions.describe_change),
-    marked "Undo:" for a batch of ``restore`` ops. A write that changed
+    "Undid a change to “Dusk”" for a batch of ``restore`` ops. A write that changed
     nothing, and the person's own writes, send nothing."""
     if not changes.get("slices") or identify_agent(current_request_headers()) is None:
         return
@@ -21322,7 +21322,7 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
-    await _say_agent_action(moodboard_actions.describe_write("kept the brief on", moodboard),
+    await _say_agent_action(moodboard_actions.describe_write("kept the brief for", moodboard),
                             **_board_point(moodboard, None, "direction", action="click"))
     return _moodboard_out(moodboard)
 
@@ -21681,7 +21681,7 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
     await _broadcast_stored_asset(kind, after, moved=True)
     if kind == "moodboard":
-        await _say_agent_action(moodboard_actions.describe_write("moved", after, f"to {names['to']}"),
+        await _say_agent_action(moodboard_actions.describe_move(after, names["to"]),
                                 **_board_point(after, action="click"))
     return result
 

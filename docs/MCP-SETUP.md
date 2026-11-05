@@ -775,8 +775,8 @@ three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot
 four "Changed 4 settings on “Hero shot”"); several nodes are named without
 their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
 nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
-(your edit batch's `say`, else the journal's words: "Set aside #1 on board
-Dusk"; "Analyzed board Dusk"), and so is a run of the
+(your edit batch's `say`, else the journal's words: "Set aside image 1 on
+“Dusk”"; "Analyzed “Dusk”"), and so is a run of the
 whole canvas ("Running 4 nodes"). A run of the whole canvas has no one place
 and moves no cursor; a moodboard write moves yours to the board, image or
 control it touched (below). The log is in the browser's memory only: the last
