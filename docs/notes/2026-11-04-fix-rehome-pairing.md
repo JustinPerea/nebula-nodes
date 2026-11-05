@@ -34,6 +34,8 @@ Gates the start-up re-home with the purge's pairing rule and closes the four LOW
 - Mutation check (round 2): no link guard, unproven store scanned, pairing per id, the old guessing warning, and the desktop `_global` creation each fail a named test (desktop: 5 failures in `path-migration.test.mjs`, 1 in the Python pin).
 
 ## After round 2 (coordinator)
-- The re-home never writes into a linked destination either. A linked `_global` or project folder in a paired store is skipped with "not moved: its destination folder is a link", so a copy's old board can't land in the real store (round 2 check, probes p6 and p7).
+- The re-home never writes into a linked destination either. A linked `_global` or project folder in a paired store is skipped with "not moved: its destination is a link", so a copy's old board can't land in the real store (round 2 check, probes p6 and p7).
 - The desktop app's `_global` marker is best-effort. A store folder Nebula can't write, such as a read-only link or volume, no longer stops the launch; that store stays unproven.
 - The purge docstring now says what the desktop app does. Its launch makes `_global` in its own stores, so an empty desktop store counts as proven. The device check still keeps a remounted disk's boards where they are.
+- A root whose `<kind>-backups` folder is a link is left alone, logged once. Otherwise its backups and the run log would be written through the link (round 3 check, LOW-1).
+- A destination file that is itself a link is never moved onto. Otherwise a link already holding the moved content would read as "finished", and the copy's own board would be dropped, leaving only a link into another store (round 3 check, LOW-2).

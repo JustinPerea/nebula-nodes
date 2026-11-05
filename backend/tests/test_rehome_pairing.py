@@ -627,3 +627,42 @@ def test_a_copys_rehome_never_writes_into_a_linked_project_folder(tmp_path):
     report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
     assert _snapshot(real_root) == before
     assert report["moved"] == 0 and (root / OLD / "c-old.json").is_file()
+
+
+# #230 round 3 check: no backup or log through a linked backups folder (Q3), and
+# no move onto a destination file that is a link into another store (Q2).
+
+def test_a_linked_backups_folder_leaves_the_root_alone(tmp_path):
+    real = tmp_path / "real" / ".nebula"
+    (real / "moodboard-backups").mkdir(parents=True)
+    copy = tmp_path / "copy" / ".nebula"
+    root = copy / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    (copy / "moodboard-backups").symlink_to(real / "moodboard-backups", target_is_directory=True)
+    _asset(root, OLD, "c-old")
+    store = _catalog(copy, LIVE)
+    report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
+    assert report["moved"] == 0 and (root / OLD / "c-old.json").is_file()
+    assert list((real / "moodboard-backups").iterdir()) == []
+
+
+def test_a_destination_file_that_is_a_link_is_never_moved_onto(tmp_path):
+    real_root = tmp_path / "real" / ".nebula" / "moodboards"
+    (real_root / "_global").mkdir(parents=True)
+    copy = tmp_path / "copy" / ".nebula"
+    root = copy / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    _asset(root, OLD, "c-old")
+    real_file = real_root / "_global" / "c-old.json"
+    # The link's target already holds exactly what the move would write, so the
+    # move would read it as "finished" and drop the copy's own file.
+    import json as _json
+    moved = rehome._rehomed("moodboard", _json.loads((root / OLD / "c-old.json").read_text()), None)
+    real_file.write_text(_json.dumps(moved))
+    (root / "_global" / "c-old.json").symlink_to(real_file)
+    store = _catalog(copy, LIVE)
+    before = _snapshot(real_root)
+    report = _rehome(store, copy, roots=[AssetRoot("moodboard", root, True)])
+    assert report["moved"] == 0
+    assert (root / OLD / "c-old.json").is_file()  # the copy's own board is kept, not swapped for the link
+    assert _snapshot(real_root) == before
