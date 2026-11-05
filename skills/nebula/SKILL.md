@@ -79,7 +79,9 @@ with `nebula apply` (shorter params, removals), asking the person before
 deleting their work. Run history is theirs to clear.
 Recently deleted: `nebula trash list` (`--kind`; `nebula trash list --scope
 global` or `--project current` narrows boards, characters and Styles) and
-`nebula trash restore [kind] <id>`.
+`nebula trash restore [kind] <id>`. A project deleted for good (by the
+person, or after its 30 days) takes its moodboards, characters and styles
+with it.
 
 A mistyped command or option gets "Did you mean ...?" with that command's
 usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula
@@ -241,7 +243,15 @@ command for the catalogs yet.
 
 Changing the model of a node with connections on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
-is refused: `--unwire` them in the same apply. Without the provider's key the
+is refused: `--unwire` them in the same apply. A `nebula propose` of the same
+change isn't refused when Nebula knows the new model's ports: accepting drops
+those connections, and the proposal lists them (`removes` lines,
+`removedEdges`). If it can't read the new model's ports, or the change clears
+the model, the proposal is refused the same way. Setting the model a node
+already has reads its ports again: the card shows "<model> · inputs updated"
+(`params[].inputsUpdated`) and lists any connection that drops. A proposal's
+node names follow the person's renames while it is open (`plan`, `names`,
+`params[].title`, the names in `removedEdges`); your `note` stays as you wrote it. Without the provider's key the
 node keeps its basic ports, and a connection to any other port is refused with the
 reason (only the person can add a key).
 
@@ -268,7 +278,11 @@ per megapixel of the larger of input and output, rounded up; `nebula info`
 says so on its PRICE line). Nebula measures the file the run will send, but
 only a file in Nebula's own output folder (or an inline image): a file
 anywhere else could change between the check and the run, so a run from it
-is refused. Add your file first:
+is refused. The talking-head nodes (OmniHuman, Kling AI Avatar) are priced from the
+length of the audio in their `audio` port, at a per-second rate, so the audio has to be
+an Audio Input holding a file in Nebula's folder (`nebula upload voice.wav`). If Nebula can't read the
+length of that audio, the node has no price at all (never a price from the file's size), so a run under
+spending limits is refused. Add your file first:
 
 ```bash
 nebula upload clip.mp4     # copies it into Nebula; prints the Video Input it made (MCP: upload_file)
@@ -345,8 +359,13 @@ person's own graph. Its flags: `--note` (required), `--add`, `--param`,
 the ghost shows the name and accepting applies it), `--run`, `--file`,
 `--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
 `--unwire` or `--arrange`, or a rename of a node already on the canvas
-(use `nebula rename`). The person accepts or rejects it on the canvas; you
-can't accept it. Each proposal also posts an Update the person sees on
+(use `nebula rename`). A `--set` of a node's model that leaves its
+connections on ports the new model doesn't have isn't refused: accepting
+removes them, as the canvas's model picker does, and the output lists each
+on a `removes` line. The person accepts or rejects it on the canvas; you
+can't accept it. Its output's `card` line is what the person reads under
+your note, word for word (what changes and runs by node name, the model and
+who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on
 every screen ("Codex proposes 3 changes on the canvas", with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
@@ -485,6 +504,7 @@ connect `+mb:moodboard` to a generator's `moodboard` input to style it.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard new "Dusk" ./refs --request-id dusk-board-0001   # safe to run again; use a new id for each board
 nebula moodboard show "Nature + tech"          # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png ./more-refs
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5
@@ -512,6 +532,16 @@ nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
 
+- `--request-id <id>` (MCP `request_id`) makes `new` safe to run again
+  after a lost answer: the same id gives back the board it first made, as
+  it is now, instead of a second board, even after Nebula restarts. Use a
+  new id for each board. A reused id returns the board it first made
+  whatever the name, images and settings say: `new` then prints `Board
+  “X” was already made by an earlier call with this request id.` (MCP
+  `moodboard_create`: `repeated: true` and that line in `note`), and the
+  image count isn't checked against this run's sources. An id already used
+  for a board in another project (or in Global) is refused (409,
+  `request_id_scope`): pick a new one. Ids are kept for 7 days.
 - Before connecting a board to a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
   card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
@@ -850,7 +880,43 @@ nebula point --say "Reading your board"   # no target: said where your cursor is
 nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
+nebula reply "Done. Warmed the palette on the hero shot." --node n4   # answer in the Message box
+nebula thread                  # the Message box thread: the person's messages and agents' replies
+nebula channel                 # your channel listeners as Nebula sees them (MCP channel_status)
 ```
+
+**The Message box.** The person can message a Claude Code session that
+listens through the Nebula channel (`nebula mcp connect claude-code
+--channel`) from the composer in the canvas's Agent log. Such a message
+arrives as a channel push with `wake="message"`. Answer it in the thread,
+not only in your terminal: the person reads the thread, not your terminal.
+Reply with the `reply_to_person` tool or with `nebula reply "<text>"` from
+your session's shell; under your token both are the same reply. Answer
+every message push with a reply and every pin push with `resolve_pin` (or
+`nebula pin resolve`): each answer ends that push's protection from gated
+pushes, and only your own session's answers count. Replying
+takes a token from Settings › Connect your agent, the same as listening;
+the launch command `nebula mcp connect claude-code --channel` prints sets
+NEBULA_APP_TOKEN_FILE and a fresh NEBULA_AGENT_SESSION for the session, and
+`nebula` reads both, so your shell is the same agent and the same session
+as your tools: your reply answers your own message and flies your own
+cursor. Each reply answers your oldest unanswered message (or answer)
+push; if it was sent in another project, the reply goes to that
+project's thread and the person gets an Update to open it, and `--node`
+is ignored there. A reply that answers nothing goes to the open
+project's thread. With no project open, Nebula refuses the reply:
+"Nebula couldn’t post this reply because no project is open. Open one
+with open_project, then reply again." Open the project the person's
+message came from (`nebula projects` lists them), never an unrelated
+one just to post a reply: opening a project switches the person's
+canvas.
+`--node` flies your cursor to
+the node the answer is about and shows its first sentence there. `nebula
+thread` reads the thread; every connected agent can read it, as pins (a
+question's text only its asker). Replies are paced: 5 in a row, then one
+every 2 s; past that Nebula refuses and says when you can reply again, so
+put everything in one reply. `nebula channel` says whether Nebula counts
+your session as listening.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

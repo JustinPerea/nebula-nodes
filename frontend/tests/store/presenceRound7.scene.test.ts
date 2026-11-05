@@ -66,7 +66,7 @@ beforeEach(async () => {
     messageNotice: null, lateNotice: null, isImportingGraph: false, runHistory: [], providerRecoveries: [], providerStartAmbiguities: [],
     uncertainWorldLabsRunId: null, notify: (text: string) => { said.push(text); } } as never);
 });
-afterEach(() => { store.setSceneQuietRetryForTests(null); store.setSceneTryTimeoutForTests(null); });
+afterEach(() => { store.setSceneQuietRetryForTests(null); store.setSceneTryTimeoutForTests(null); store.resetDeletedSceneEditsForTests(); });
 
 type SceneState = { label: string; shots: Shot[]; rev: number; deleted: boolean; fail: number;
   refuse: { status: number; body: Record<string, unknown> }[] };

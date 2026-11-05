@@ -40,8 +40,9 @@ describe('round 7: the real backend', () => {
     const snapshot = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as GatedRoute[];
     const routes = gatedRoutes();
     // 67 since round 8: WS /ws/chat, whose refusals send the "person_required" code (LOW-5).
-    expect(routes.length).toBe(67);
-    expect(snapshot.length).toBe(67);
+    // 70 with main's Message box: GET /api/canvas/channel, GET /api/canvas/thread, POST /api/canvas/thread/messages.
+    expect(routes.length).toBe(70);
+    expect(snapshot.length).toBe(70);
     expect(sortKeys(routes)).toEqual(sortKeys(snapshot));
   });
 

@@ -27,6 +27,8 @@ export interface AgentNotesAdapter {
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
+  /** An action button's accessible name, when its visible word alone doesn't say enough (GM r108 c). */
+  actionLabel?: (note: AgentNote, action: AgentNoteAction) => string | undefined;
   /** A board image's number now (the Studio's board), to draw `#n` in the text. */
   numberFor?: (ref: string) => number | null;
   /** Whether hovering an entry or a card outlines its refs (the canvas's
@@ -115,7 +117,7 @@ export function RunOutcomeIcon({ run }: { run: AgentNoteRun | null | undefined }
  * A corner button that reads "Saving…" while the Commons' save in progress
  * holds the leave it asked for (commons-leave, LeaveBusyContext).
  */
-export function BusyButton({ className, onClick, children, op, lock }: {
+export function BusyButton({ className, onClick, children, op, lock, label }: {
   className: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
@@ -124,13 +126,15 @@ export function BusyButton({ className, onClick, children, op, lock }: {
   /** Why it can't act yet (heldLock useNoteLock, components/PersonLock): aria-disabled, still
    * focusable, pointing at the line under the buttons; no tooltip (PR #204 round 10). */
   lock?: PersonLock | null;
+  /** An accessible name that starts with the visible word (WCAG 2.5.3). */
+  label?: string;
 }) {
   const [element, setElement] = useState<HTMLButtonElement | null>(null);
   const busy = useContext(LeaveBusyContext) === element && element !== null;
   const locked = Boolean(lock?.locked);
   return (
     <button ref={setElement} type="button" className={locked ? `${className} agent-notes-btn--held` : className}
-      aria-busy={busy || undefined} data-op={op} {...lock?.control()} onClick={onClick}>
+      aria-busy={busy || undefined} data-op={op} {...lock?.control()} aria-label={busy ? undefined : label} onClick={onClick}>
       {busy ? 'Saving…' : children}
     </button>
   );
@@ -168,6 +172,8 @@ export function NoteButtons({
   if (controls.buttons.length === 0 && !controls.state) return null;
   const holds = controls.buttons.some((button) => button.kind === 'action' && HELD_OPS.has(button.action.op.kind));
   const offLocked = (button: NoteButton) => offLock.locked && button.kind === 'action' && reviewsCommons(button.action);
+  const ariaLabel = (button: NoteButton) =>
+    (button.kind === 'action' ? adapter.actionLabel?.(note, button.action) : undefined);
   return (
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
@@ -177,6 +183,7 @@ export function NoteButtons({
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
           op={button.kind === 'action' ? button.action.op.kind : undefined}
           lock={offLocked(button) ? offLock : button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? lock : null}
+          label={ariaLabel(button)}
           onClick={(event) => {
             event.stopPropagation();
             if (button.kind === 'show') onShow(event.currentTarget);

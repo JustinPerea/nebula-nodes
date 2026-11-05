@@ -48,7 +48,16 @@ _DIR_FD = (hasattr(os, "O_DIRECTORY") and _NOFOLLOW != 0
 
 
 class TokenFileError(ValueError):
-    """The token file is missing, unreadable, too open or malformed."""
+    """The token file is missing, unreadable, too open or malformed.
+
+    ``str()`` is the short reason the MCP server logs. ``clause`` is the same
+    reason as a clause that follows the variable's name in a person-readable
+    because-line ("NEBULA_APP_TOKEN_FILE points to a file that doesn’t
+    exist"), for the CLI (nebula_api.app_token_from_file)."""
+
+    def __init__(self, message: str, clause: str = "points to a file Nebula can’t use") -> None:
+        super().__init__(message)
+        self.clause = clause
 
 
 def root(state_dir: Path) -> Path:
@@ -184,31 +193,38 @@ def read(path: str | os.PathLike[str]) -> str:
     try:
         fd = os.open(os.fspath(path), os.O_RDONLY | _NOFOLLOW)
     except OSError as exc:
-        raise TokenFileError(f"can't open the token file ({exc.strerror or exc})") from exc
+        missing = isinstance(exc, FileNotFoundError)
+        raise TokenFileError(f"can't open the token file ({exc.strerror or exc})",
+                             "points to a file that doesn’t exist" if missing
+                             else "points to a file Nebula can’t open") from exc
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
-            raise TokenFileError("the token file is not a regular file")
+            raise TokenFileError("the token file is not a regular file",
+                                 "points to something that isn’t a regular file")
         if info.st_size > MAX_FILE_BYTES:
-            raise TokenFileError("the token file is too large")
+            raise TokenFileError("the token file is too large", "points to a file too large to be a token")
         if os.name == "posix":
             if info.st_uid != os.getuid():
-                raise TokenFileError("the token file belongs to another user")
+                raise TokenFileError("the token file belongs to another user",
+                                     "points to a file that belongs to another user")
             if stat.S_IMODE(info.st_mode) & 0o077:
-                raise TokenFileError("the token file is readable by other users")
+                raise TokenFileError("the token file is readable by other users",
+                                     "points to a file other users can read")
         data = os.read(fd, MAX_FILE_BYTES + 1)
     except OSError as exc:
-        raise TokenFileError(f"can't read the token file ({exc.strerror or exc})") from exc
+        raise TokenFileError(f"can't read the token file ({exc.strerror or exc})",
+                             "points to a file Nebula can’t read") from exc
     finally:
         os.close(fd)
     if len(data) > MAX_FILE_BYTES:
-        raise TokenFileError("the token file is too large")
+        raise TokenFileError("the token file is too large", "points to a file too large to be a token")
     try:
         token = data.decode("ascii")
     except UnicodeDecodeError as exc:
-        raise TokenFileError("the token file is malformed") from exc
+        raise TokenFileError("the token file is malformed", "points to a file that doesn’t hold a token") from exc
     if not TOKEN_RE.fullmatch(token):
-        raise TokenFileError("the token file is malformed")
+        raise TokenFileError("the token file is malformed", "points to a file that doesn’t hold a token")
     return token
 
 

@@ -62,6 +62,7 @@ import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { usePersonView } from '../../hooks/useTabHeld';
+import { terminalListening, usePersonThreadStore } from '../../store/personThreadStore';
 
 type ChatAgent = ChatAgentId;
 /** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
@@ -478,6 +479,9 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 }
 
 export function ChatPanel() {
+  // r50: while a terminal session listens (the Message box's), this chat's
+  // separate Claude reads "Personal agent".
+  const panelTitle = usePersonThreadStore(terminalListening) ? 'Personal agent' : 'Chat';
   // Offline is read-only (round 15 of PR #114): Send is disabled.
   const offline = useBackendOffline();
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
@@ -1969,7 +1973,7 @@ export function ChatPanel() {
     <div
       ref={chatPanelRef}
       role="dialog"
-      aria-label="Chat"
+      aria-label={panelTitle}
       className={`chat-panel chat-panel--agent-${personal ? 'personal' : agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
       style={panelStyle}
       onMouseDown={startPanelDrag}
@@ -1992,7 +1996,7 @@ export function ChatPanel() {
       <div className="chat-panel__resize-handle chat-panel__resize-handle--br" onMouseDown={(e) => startResize(e, 'br')} title="Drag to resize" />
       <div className="chat-panel__header" title="Drag to move">
         <div>
-          <div className="chat-panel__title">Chat</div>
+          <div className="chat-panel__title">{panelTitle}</div>
           <ChatModelPicker
             agent={agent} personalAgents={personalAgents?.agents ?? []} agentsHeld={personHeld} model={providerSelection.model} effort={effort}
             catalog={activeCatalog} loading={catalogLoading} error={catalogError}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary } from './ProjectHome';
 import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { coverProposal } from '../../test/assetProposalFixtures';
@@ -117,7 +117,10 @@ describe('ProjectHome', () => {
     fireEvent.click(within(row).getAllByRole('button', { name: 'Delete forever' })[0]);
     expect(actions.onPurge).toHaveBeenCalledWith('old');
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    // One project: the same words as the row's (GM r102).
+    const emptyConfirm = screen.getByRole('group', { name: 'Delete this project for good?' });
+    expect(within(emptyConfirm).queryByRole('button', { name: 'Delete all' })).toBeNull();
+    fireEvent.click(within(emptyConfirm).getByRole('button', { name: 'Delete forever' }));
     expect(actions.onEmptyTrash).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
@@ -131,6 +134,172 @@ describe('ProjectHome', () => {
     fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByRole('listitem', { name: 'By agent' }).textContent).toContain('by Y\u043eu (agent)');
     expect(screen.getByRole('listitem', { name: 'By person' }).textContent).not.toContain(' by ');
+  });
+
+  it('says what goes with a project deleted for good: the note, Delete forever and Empty', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const empty = { moodboards: [], characters: [], styles: [] };
+    render(<ProjectHome {...props({ trash: [
+      { ...project({ id: 'a', name: 'With boards' }), ...base, goesWith: { ...empty, moodboards: ['Rivers', 'Tide'] } },
+      { ...project({ id: 'b', name: 'Bare' }), ...base, goesWith: empty },
+    ] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText(/Deleting one for good also deletes its moodboards, characters and styles\./)).toBeTruthy();
+    const withBoards = screen.getByRole('listitem', { name: 'With boards' });
+    fireEvent.click(within(withBoards).getByRole('button', { name: 'Delete forever' }));
+    const confirm = within(withBoards).getByRole('group');
+    // Between the heading and "This can’t be undone.".
+    expect(confirm.textContent).toContain('Its moodboards “Rivers” and “Tide” are deleted with it. This can’t be undone.');
+    expect(confirm.getAttribute('aria-label')).toBe('Its moodboards “Rivers” and “Tide” are deleted with it. This can’t be undone.');
+    const bare = screen.getByRole('listitem', { name: 'Bare' });
+    fireEvent.click(within(bare).getByRole('button', { name: 'Delete forever' }));
+    expect(within(bare).getByRole('group', { name: 'This can’t be undone.' }).textContent).not.toContain('deleted with it');
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    const emptyConfirm = screen.getByRole('group', { name: 'Delete all 2 projects for good? Their moodboards are deleted with them.' });
+    // Two or more: "Delete all".
+    expect(within(emptyConfirm).getByRole('button', { name: 'Delete all' })).toBeTruthy();
+    expect(within(emptyConfirm).queryByRole('button', { name: 'Delete forever' })).toBeNull();
+  });
+
+  it('Empty says nothing more when none of the projects has a moodboard, character or style', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    render(<ProjectHome {...props({ trash: [{ ...project({ id: 'b', name: 'Bare' }), ...base,
+      goesWith: { moodboards: [], characters: [], styles: [] } }] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    expect(screen.getByRole('group', { name: 'Delete this project for good?' }).textContent).not.toContain('deleted with them');
+  });
+
+  it('Empty with one project says "Its … with it."', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    render(<ProjectHome {...props({ trash: [{ ...project({ id: 'k', name: 'K two characters' }), ...base,
+      goesWith: { moodboards: [], characters: ['Mara', 'Zed'], styles: [] } }] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    const confirm = screen.getByRole('group', { name: 'Delete this project for good? Its characters are deleted with it.' });
+    // One space after the question, in the visible text too (GM r102): one text, not two spans apart.
+    expect(confirm.textContent).toContain('Delete this project for good? Its characters are deleted with it.');
+    expect(confirm.querySelectorAll('.project-home__confirm-prompt')).toHaveLength(1);
+    expect(within(confirm).getByRole('button', { name: 'Delete forever' })).toBeTruthy();
+  });
+
+  it('Delete forever confirms on its own row under the name, date and Restore, and Cancel closes it', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const long = 'N long names, the project whose boards have the longest names of all';
+    const actions = props({ trash: [{ ...project({ id: 'n', name: long }), ...base, goesWith: {
+      moodboards: ['Autumn campaign references, final picks', 'Storefront window lighting studies', 'Packaging palette explorations v3'],
+      characters: [], styles: [] } }] });
+    render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    const row = screen.getByRole('listitem', { name: long });
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete forever' }));
+    const confirm = within(row).getByRole('group');
+    // Its own row: a child of the list item, after the name, the date line and Restore.
+    const confirmRow = confirm.closest('.project-home__trash-confirm') as HTMLElement;
+    expect(confirmRow.parentElement).toBe(row);
+    expect(row.querySelector('.project-home__trash-actions')!.contains(confirm)).toBe(false);
+    expect(confirmRow.getAttribute('data-open')).toBe('true');
+    expect(Array.from(row.children).map((child) => child.className)).toEqual([
+      'project-home__trash-name', 'project-home__trash-meta', 'project-home__trash-actions', 'project-home__trash-confirm']);
+    expect(row.querySelector('.project-home__trash-name')!.textContent).toBe(long);
+    expect(row.querySelector('.project-home__trash-meta')!.textContent).toContain('Removed for good in');
+    expect(within(row).getByRole('button', { name: `Restore ${long}` })).toBeTruthy();
+    expect(confirm.textContent).toContain('Its moodboards “Autumn campaign references, final picks”, “Storefront window lighting studies” and '
+      + '“Packaging palette explorations v3” are deleted with it. This can’t be undone.');
+    expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Cancel' }));
+    // Cancel: the row closes back (still there, inert and hidden, while it shrinks), focus returns to the trigger.
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+      expect(within(row).queryByRole('group')).toBeNull();
+      expect(confirmRow.getAttribute('data-open')).toBe('false');
+      expect(confirmRow.hasAttribute('inert')).toBe(true);
+      expect(document.activeElement).toBe(within(row).getByRole('button', { name: 'Delete forever' }));
+      act(() => { vi.advanceTimersByTime(600); });
+      expect(row.querySelector('.project-home__trash-confirm')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(actions.onPurge).not.toHaveBeenCalled();
+  });
+
+  it('under reduced motion, Cancel closes the confirm row at once', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('reduce'), media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(),
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }));
+    try {
+      const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+      render(<ProjectHome {...props({ trash: [{ ...project({ id: 'r', name: 'R' }), ...base }] })} />);
+      fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+      const row = screen.getByRole('listitem', { name: 'R' });
+      fireEvent.click(within(row).getByRole('button', { name: 'Delete forever' }));
+      fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+      expect(row.querySelector('.project-home__trash-confirm')).toBeNull();
+      expect(document.activeElement).toBe(within(row).getByRole('button', { name: 'Delete forever' }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('after a purge, focus goes to the next row, then the heading, never the page', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const a = { ...project({ id: 'a', name: 'A' }), ...base };
+    const b = { ...project({ id: 'b', name: 'B' }), ...base };
+    const c = { ...project({ id: 'c', name: 'C' }), ...base };
+    const actions = props({ trash: [a, b, c] });
+    const { rerender } = render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    // The middle one: the next row's Restore.
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'B' })).getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'B' })).getByRole('button', { name: 'Delete forever' }));
+    expect(actions.onPurge).toHaveBeenCalledWith('b');
+    rerender(<ProjectHome {...actions} trash={[a, c]} />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Restore C' }));
+    // The last one: the row before it.
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'C' })).getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'C' })).getByRole('button', { name: 'Delete forever' }));
+    rerender(<ProjectHome {...actions} trash={[a]} />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Restore A' }));
+    // Empty: the section goes, so "Recent projects".
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Delete this project for good?' })).getByRole('button', { name: 'Delete forever' }));
+    rerender(<ProjectHome {...actions} trash={[]} />);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: /Recent projects/ }));
+  });
+
+  it('after Empty leaves projects trashed since, focus goes to the Recently deleted heading', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const a = { ...project({ id: 'a', name: 'A' }), ...base };
+    const later = { ...project({ id: 'l', name: 'Later' }), ...base };
+    const actions = props({ trash: [a] });
+    const { rerender } = render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Delete this project for good?' })).getByRole('button', { name: 'Delete forever' }));
+    rerender(<ProjectHome {...actions} trash={[later]} />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Recently deleted/ }));
+  });
+
+  it('a failed purge drops its focus target: a later change to the list doesn’t move focus', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const a = { ...project({ id: 'a', name: 'A' }), ...base };
+    const b = { ...project({ id: 'b', name: 'B' }), ...base };
+    const c = { ...project({ id: 'c', name: 'C' }), ...base };
+    const actions = props({ trash: [a, b, c] });
+    const { rerender } = render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    const row = () => screen.getByRole('listitem', { name: 'B' });
+    fireEvent.click(within(row()).getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(within(row()).getByRole('button', { name: 'Delete forever' }));
+    expect(actions.onPurge).toHaveBeenCalledWith('b');
+    // The request runs (busy), then fails: busy falls with B still listed.
+    rerender(<ProjectHome {...actions} busy trash={[a, b, c]} />);
+    rerender(<ProjectHome {...actions} busy={false} trash={[a, b, c]} />);
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    // Later B leaves the list (its 30 days, another tab): focus stays put.
+    rerender(<ProjectHome {...actions} trash={[a, c]} />);
+    expect(document.activeElement).toBe(document.body);
   });
 
   it('hides Recently deleted when the trash is empty', () => {

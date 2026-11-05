@@ -59,6 +59,11 @@
   --agent-notes-chip-w-compact: 74px;
   --agent-notes-chip-w: var(--agent-notes-chip-w-full);
   --agent-notes-slot-h: 32px;
+  /* The top chrome a resized Agent log stays clear of (GM r61 answer 1):
+     the Updates chip's row and 12 px under it (GM r70: "the top bar + 12
+     px", lib/bottomBar.ts CHROME_CLEARANCE). Over the selection toolbar's
+     slot the line is the slot's (AgentLog's resizeBounds). */
+  --agent-log-top-chrome: calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + 12px);
   --chat-launcher-size: 42px;
   /* A short, slightly underdamped spring, the undo notice's. */
   --agent-log-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
@@ -267,21 +272,16 @@ body.agent-log-reserved .chat-panel {
 
 /* The rest of the canvas keeps clear of the log's column too (Q38: it shows
  * with the chat closed now). The minimap (canvas.css: right 16, bottom 84)
- * sits above the log; the proposal bar and the project-switch toast, centred
- * at the foot, stay left of it: narrower first, and below 420 px of room
- * shifted left so Accept is never under the log. */
+ * sits above the log; the project-switch toast, centred at the foot, stays
+ * left of it. The proposal card keeps clear through the notice region alone
+ * (its --agent-log-clearance), or sits above the log when that leaves it
+ * under 400 px (canvasProposals.css; GM - Design, PR #216 r1: only one
+ * clearance ever applies, the double count pushed it off screen). */
 body.agent-log-reserved .canvas-navigation.react-flow__panel {
   bottom: calc(
     var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm)
     + var(--agent-log-h) + var(--stack-gap-sm)
   );
-}
-
-body.agent-log-reserved .proposal-bar {
-  --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
-  --proposal-bar-w: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
-  width: var(--proposal-bar-w);
-  translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
 }
 
 body.agent-log-reserved .project-switch-toast {
@@ -359,13 +359,27 @@ body.agent-log-reserved .project-switch-toast {
   animation: agent-log-in 420ms var(--agent-log-spring) both;
 }
 
-/* Collapsed it is one row, centred: no resize grip, no 80 px floor. */
+/* Collapsed it is one row, centred: no resize grip, no 80 px floor. It is
+   its header's height whatever height the person's native resize left
+   inline, folded for the proposal card or collapsed by the person (#216
+   review 3 MEDIUM-1): the card counts the collapse as freeing all but the
+   header, so a box that kept its height would sit under the card. */
 .agent-log:not(.agent-log--open) {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-height: 0;
+  height: var(--agent-h-closed) !important;
   resize: none;
+}
+
+/* GM r57 Q1: while the person holds it in a drag, the log rises above the
+   notice region (the proposal card), which holds still until the drop
+   (NoticeRegion); at rest the card never crosses it. GM r69 Q5: it stays
+   above from the drop until the card's glide away from it rests. */
+:root[data-agent-log-held] .agent-log,
+:root[data-agent-log-settling] .agent-log {
+  z-index: calc(var(--sr-layer-notice, 20010) + 1);
 }
 
 @keyframes agent-log-in {
@@ -573,6 +587,95 @@ body:not(.app-slava-restraint) .agent-log__chevron {
 
 .agent-log--open {
   padding-bottom: 0;
+}
+
+/* At short heights the open log's body gives way to a proposal card
+   (GM - Design, PR #216 r6-r8), docked or floating: the notice region
+   writes --agent-log-squeeze (lib/noticeStackPlace.ts), and the log's
+   height comes down by it on the layout spring, never under its floor of
+   header and 2 rows (--agent-log-floor, AgentLog), never over its own
+   height. It is held at its bottom edge, so the header and its collapse
+   control come down whole with the body's top; the body shrinks and
+   scrolls. It springs back when the card leaves.
+   GM r8: the held edge stays exactly fixed, and the spring's overshoot
+   shows only at the free top edge. So one registered length,
+   --agent-log-give, carries the spring, and the height (and a top-pinned
+   log's shift) are both read from it, clamped, in the same frame: the
+   overshoot past either end is cut by the clamp, never by the edge. */
+@property --agent-log-give {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.agent-log.agent-log--open[data-docked],
+.agent-log.agent-log--open[data-floating] {
+  --agent-log-give: var(--agent-log-squeeze, 0px);
+  --agent-log-shown-h: clamp(var(--agent-h-closed), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-give)), var(--agent-log-natural-h, 80vh));
+  display: flex;
+  flex-direction: column;
+  /* Bounded only while a give is in force, the spring back to 0 included
+     (#216 review 3 MEDIUM-2): with none, the person's native resize can
+     make it taller, up to main's 80vh, though --agent-log-natural-h is the
+     height last measured. While a give is in force the second term is
+     under the first: give x 10^7 passes 80vh for any give of 0.001 px or
+     more on a window up to 12,500 px tall (#216 review 4 NIT-3: x 10^5 let
+     the last 0.0x px of the spring through over about 1,625 px), so the
+     bound is the shown height. */
+  max-height: max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 10000000));
+  /* The resize floor of 80 px gives way only while it springs back up from
+     its header (GM r11), so the reopen starts at the header, not at 80. */
+  min-height: min(80px, var(--agent-log-shown-h));
+  transition: --agent-log-give 420ms var(--agent-log-spring);
+}
+
+.agent-log.agent-log--open[data-docked] > .agent-log__drag-row,
+.agent-log.agent-log--open[data-floating] > .agent-log__drag-row {
+  flex: none;
+}
+
+.agent-log.agent-log--open[data-docked] .agent-log__body,
+.agent-log.agent-log--open[data-floating] .agent-log__body {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+/* Collapsed for the card (step 4), it has given all but its header: when
+   the card leaves and it reopens, the give springs back from there, from
+   the held edge, on the same spring (GM r11). The squeeze never passes the
+   floor (lib/noticeStackPlace.ts caps it), so the height's lower clamp is
+   the header. */
+.agent-log[data-card-collapsed] {
+  --agent-log-give: calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
+}
+
+/* The held edge (GM r7, r8, r11) is the one away from the card: the bottom
+   with the card above the log (the root's data-agent-log-hold is "bottom",
+   or not yet written), the top with the card under a floating log. A log
+   the person pinned by the other edge is moved by exactly what its height
+   gives, read from the same value, so the held edge stays where it is.
+   Collapsed for the card, its header sits on that edge too. */
+:root:not([data-agent-log-hold="top"]) .agent-log.agent-log--open[data-floating="top"] {
+  translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-log-shown-h));
+}
+
+:root:not([data-agent-log-hold="top"]) .agent-log[data-card-collapsed][data-floating="top"] {
+  translate: 0 calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
+}
+
+:root[data-agent-log-hold="top"] .agent-log.agent-log--open[data-floating="bottom"] {
+  translate: 0 calc(var(--agent-log-shown-h) - var(--agent-log-natural-h, 0px));
+}
+
+:root[data-agent-log-hold="top"] .agent-log[data-card-collapsed][data-floating="bottom"] {
+  translate: 0 calc(var(--agent-h-closed) - var(--agent-log-natural-h, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-log.agent-log--open[data-docked],
+  .agent-log.agent-log--open[data-floating] {
+    transition: none;
+  }
 }
 
 .agent-log__body {

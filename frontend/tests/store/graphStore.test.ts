@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, vi, describe, it, expect, beforeEach } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
@@ -28,11 +28,14 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 // Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
 const alertMock = noticeSpy();
 
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 import { noticeSpy } from '../helpers/noticeSpy';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {

@@ -129,6 +129,8 @@ const SITES: Record<string, string> = {
   'pins.refusal': 'store/canvasPinsStore.ts',
   'asset-proposals.decide': 'store/assetProposalsStore.ts',
   'questions.answer': 'store/agentQuestionsStore.ts',
+  // The Message box's send: a refusal only for this tab keeps the draft and clears its line on the promote.
+  'thread.send': 'lib/personThreadCompose.ts',
   'questions.dismiss': 'store/agentQuestionsStore.ts',
   'canvas-proposals.refusal': 'store/canvasProposalsStore.ts',
   'canvas-proposals.accept': 'store/canvasProposalsStore.ts',
@@ -153,6 +155,9 @@ type Surface = string[] | { none: string };
 /** Each gated backend function: the registrations that clear its refusal's lines. */
 const GATED: Record<string, Surface> = {
   list_personal_agents: ['settings.agents-load', 'settings.agents-load-retry'],
+  send_person_message: ['thread.send'],
+  read_person_thread: NO_LINE('GET /api/canvas/thread: the tab never calls it (the box gets its rows over the socket, the personThread message); agents and the CLI read it'),
+  read_channel_listeners: NO_LINE('GET /api/canvas/channel: the tab never calls it (the channelListeners message carries the same); agents and the CLI read it'),
   create_personal_agent: ['settings.agents'],
   update_personal_agent: ['settings.agents'],
   delete_personal_agent: ['settings.agents'],
@@ -267,6 +272,8 @@ const PROMOTE_LISTENERS: Record<string, string> = {
  * are read with the helper's paths in its place, so the four agent-notes routes trace by path. */
 const COMPOSED: Record<string, string[]> = {};
 const NO_FRONTEND: Record<string, string> = {
+  'GET /api/canvas/thread': 'the CLI\'s and MCP\'s read of the thread; the tab gets its rows over the socket',
+  'GET /api/canvas/channel': 'the CLI\'s and MCP\'s read of who listens; the tab gets the listeners over the socket',
   'POST /api/graph/apply': 'an agent\'s edit (edit_canvas, `nebula apply`); no tab sends it',
   'POST /api/graph/apply/undo': 'an agent\'s undo of its own apply; no tab sends it',
   'POST /api/graph/run': 'the CLI\'s and MCP\'s run; a tab runs through /api/execute',

@@ -22,10 +22,13 @@ import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
-import { useGraphStore } from './graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from './graphStore';
 import { useUIStore } from './uiStore';
 import { subscribeProjectAutosave, switchMessage, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const saveProject = vi.mocked(api.saveProject);
 const summary = (id: string, name: string): ProjectSummary => ({
@@ -109,6 +112,45 @@ describe('following an agent’s project switch', () => {
     await useProjectStore.getState().switchBack();
     expect(api.openProject).toHaveBeenCalledWith('p1', 'r2');
     expect(useProjectStore.getState()).toMatchObject({ activeProject: { id: 'p1' }, switchNotice: null });
+  });
+
+  describe('GM r108 D1: the toast clears once its way back is the open project, by any route', () => {
+    async function followed() {
+      socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+        projectSwitch: { ...agentSwitch, created: false } } as never);
+      await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
+      vi.mocked(api.openProject).mockResolvedValueOnce({ project: saved(loop), workspaceRevision: 'r3', paramsVersion: GRAPH_PARAMS_VERSION });
+    }
+
+    it('the person opens it (Projects, or Open on an Update, which call open)', async () => {
+      await followed();
+      await useProjectStore.getState().open('p1');
+      expect(useProjectStore.getState()).toMatchObject({ activeProject: { id: 'p1' }, switchNotice: null });
+    });
+
+    it('an agent opens it again (a second switch back to it)', async () => {
+      await followed();
+      vi.mocked(api.getProject).mockResolvedValue(saved(loop));
+      vi.mocked(api.listProjects).mockResolvedValue({
+        projects: [sketches, loop], trash: [], activeProjectId: 'p1', workspaceRevision: 'r3', paramsVersion: GRAPH_PARAMS_VERSION,
+      } as never);
+      vi.mocked(fetchCLIGraph).mockResolvedValue({ nodes: [], edges: [], empty: true, workspaceRevision: 'r3' } as never);
+      socket()({ type: 'graphSync', workspaceRevision: 'r3', paramsVersion: GRAPH_PARAMS_VERSION, projectSwitch: {
+        ...agentSwitch, projectId: 'p1', projectName: 'Loop', previousProjectId: 'p2', previousProjectName: 'Agent sketches',
+        previousRevision: 'r2', created: false } } as never);
+      await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('p1'));
+      // The new toast (the agent's) names its own way back, never “Loop” again.
+      await vi.waitFor(() => expect(useProjectStore.getState().switchNotice?.previousProjectId).not.toBe('p1'));
+    });
+
+    it('any load of it (a direct store change) clears it; another project keeps it', () => {
+      useProjectStore.setState({ switchNotice: { actorName: 'Claude Code', created: false, projectName: 'Agent sketches',
+        previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: false }, activeProject: sketches });
+      useProjectStore.setState({ activeProject: summary('p3', 'Third') as never });
+      expect(useProjectStore.getState().switchNotice).not.toBeNull();
+      useProjectStore.setState({ activeProject: loop });
+      expect(useProjectStore.getState().switchNotice).toBeNull();
+    });
   });
 
   it('keeps the edit as a recovered copy when the old project refuses it', async () => {

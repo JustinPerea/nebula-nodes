@@ -31,10 +31,13 @@ import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 type AssetKind = 'moodboard' | 'character' | 'style';
 
-const NOUNS: Record<AssetKind, { one: string; many: string }> = {
-  moodboard: { one: 'board', many: 'boards' },
-  character: { one: 'character', many: 'characters' },
-  style: { one: 'style', many: 'styles' },
+/** `counted` is the noun after a number: a count of boards says "moodboards" in every person line (#210 round 6q,
+ *  GM r95.5; PR #228's word), "Delete all 4 moodboards for good?". `many` stays for the lines that don't count
+ *  ("Recently deleted boards", "Deleted boards stay here …", GM's own words). */
+const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> = {
+  moodboard: { one: 'board', many: 'boards', counted: 'moodboards' },
+  character: { one: 'character', many: 'characters', counted: 'characters' },
+  style: { one: 'style', many: 'styles', counted: 'styles' },
 };
 
 export const UNDO_VISIBLE_MS = 8000;
@@ -55,8 +58,8 @@ function deletedLine(item: TrashedItem): string {
 }
 
 /** Two-step button for the one action that can't be undone. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, lock }: {
-  label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void;
+function ConfirmInline({ label, confirmLabel, prompt, title, busy, onConfirm, lock }: {
+  label: string; confirmLabel: string; prompt: string; title?: string; busy: boolean; onConfirm: () => void;
   /** The person-only lock (components/PersonLock): it never arms while locked. */
   lock: PersonLock;
 }) {
@@ -72,7 +75,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, lock }: {
     <span className="asset-trash__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      <span className="asset-trash__confirm-prompt">{prompt}</span>
+      <span className="asset-trash__confirm-prompt" title={title}>{prompt}</span>
       <button type="button" className="asset-trash__button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="asset-trash__button asset-trash__button--danger" disabled={busy}
         {...lock.control()} onClick={() => { setArmed(false); if (!lock.locked) onConfirm(); }}>{confirmLabel}</button>
@@ -86,22 +89,53 @@ export interface RecentlyDeletedAssetsProps {
   /** Change it to list again (after a delete in the Studio). */
   refreshKey?: unknown;
   onRestored?: (item: TrashedItem) => void;
+  /** A Restore in this list was pressed, before its request goes (a Studio leaves that board to it: PR #210 round 6p). */
+  onRestoring?: (item: TrashedItem) => void;
   /** Something came into or left this list (often an agent's delete or
    * restore elsewhere), so the library above it should list again. */
   onTrashChanged?: () => void;
+  /** A new `n` opens the list (a Studio line's Restore for several boards, round 6j), and focus goes to the
+   *  Restore button of the first of `focus` it lists, with the keyboard ring only when `keyboard` (round 6k, GM r19 3). */
+  openRequest?: TrashOpenRequest;
+  /** The list starts open (a Studio's several-board Restore, kept open across a remount: round 6l, review 10 NIT-3). */
+  defaultOpen?: boolean;
+  /** What deleting these items for good would also lose (a Studio's unsaved edits, GM r21 Q2): a sentence the
+   *  confirm adds, with the full names in its title; null when nothing. */
+  atStake?: (items: readonly TrashedItem[]) => { text: string; title: string } | null;
+  /** Items deleted for good from this list (its Delete forever or Empty, once it succeeded). */
+  onPurged?: (ids: readonly string[]) => void;
 }
 
-export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged }: RecentlyDeletedAssetsProps) {
+export interface TrashOpenRequest { n: number; focus?: readonly string[]; keyboard?: boolean }
+
+export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onRestoring, onTrashChanged, openRequest, defaultOpen = false, atStake,
+  onPurged }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
   // Which tab and project `items` came from.
   const [itemsFor, setItemsFor] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
+  // A request from outside opens the list: a new one, not one made before this list mounted.
+  const [seenRequest, setSeenRequest] = useState(openRequest?.n);
+  const [focusWanted, setFocusWanted] = useState<TrashOpenRequest | null>(null);
+  if (openRequest?.n !== seenRequest) {
+    setSeenRequest(openRequest?.n);
+    if (openRequest?.n) {
+      setOpen(true);
+      setFocusWanted(openRequest);
+    }
+  }
+  const focusDone = useRef<TrashOpenRequest | null>(null);
+  const list = useRef<HTMLUListElement | null>(null);
   // PR #204 round 10 (GM r15, r17 items 1 and 3): deleting for good is the person's alone (DELETE
   // /api/trash/{kind}/{id}, POST /api/trash/empty: require_person). Empty and every Delete
   // forever lock as one group with one line under the heading.
   const purgeLock = usePersonLock('delete items for good');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A failed load's line, and a failed Restore or delete's own (round 6k: the list read again after an
+  // action, as it always is, clears only a load's line, so an action's refusal stays until the next action).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
+  const error = actError ?? loadError;
   const [reload, setReload] = useState(0);
   const noun = NOUNS[kind];
   // A project's Recently deleted is the open canvas project's (lib/currentProject).
@@ -109,6 +143,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
   const projectId = scope === 'project' ? openProjectId : null;
   const noProject = scope === 'project' && !projectId;
   const where = `${scope}:${projectId ?? ''}`;
+  // A refusal is about the list it came from: another tab or project's list doesn't show it (review 10 NIT-2).
+  const [actErrorFor, setActErrorFor] = useState(where);
+  if (actErrorFor !== where) {
+    setActErrorFor(where);
+    if (actError) setActError(null);
+  }
 
   // The ids last listed for this scope, to tell when the list changed.
   const listed = useRef<{ where: string; ids: string } | null>(null);
@@ -123,7 +163,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
         if (cancelled) return;
         setItems(list);
         setItemsFor(where);
-        setError(null);
+        setLoadError(null);
         const ids = list.map((item) => item.id).join(',');
         const before = listed.current;
         listed.current = { where, ids };
@@ -132,7 +172,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       .catch((err) => {
         if (cancelled) return;
         setItemsFor(where);
-        setError(failureMessage(err, "Couldn't load Recently deleted."));
+        setLoadError(failureMessage(err, "Couldn't load Recently deleted."));
       });
     return () => { cancelled = true; };
   }, [kind, scope, projectId, noProject, where, refreshKey, reload]);
@@ -144,17 +184,28 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
     }
   }), [kind]);
 
+  // Once this scope's list is up: the first asked-for board's Restore takes focus (none listed: nothing moves).
+  useEffect(() => {
+    if (!focusWanted || focusDone.current === focusWanted || !open || itemsFor !== where) return;
+    focusDone.current = focusWanted;
+    const listed = new Set(items.map((item) => item.id));
+    const first = focusWanted.focus?.find((id) => listed.has(id));
+    const button = first ? Array.from(list.current?.querySelectorAll<HTMLButtonElement>('button[data-restore-id]') ?? [])
+      .find((it) => it.getAttribute('data-restore-id') === first) : undefined;
+    button?.focus({ focusVisible: Boolean(focusWanted.keyboard) } as FocusOptions);
+  }, [focusWanted, open, items, itemsFor, where]);
+
   const act = useCallback(async (work: () => Promise<void>, after?: () => void) => {
     setBusy(true);
-    setError(null);
+    setActError(null);
     try {
       await work();
       after?.();
     } catch (err) {
       // A request's own line; never another error's message (round 3b).
       const line = failureMessage(err, '');
-      setError(line);
-      clearSetterOnPromote(err, setError, line, null); // clears-on-promote: trash (GM, #204 r3)
+      setActError(line);
+      clearSetterOnPromote(err, setActError, line, null); // clears-on-promote: trash (GM, #204 r3)
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -171,18 +222,21 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
           <ChevronRight aria-hidden="true" />Recently deleted
           <span className="asset-trash__count" aria-hidden="true">{items.length}</span>
         </button>
-        {open && items.length > 0 && (
-          <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} lock={purgeLock}
-            prompt={items.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${items.length} ${noun.many} for good?`}
-            onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
-        )}
+        {open && items.length > 0 && (() => {
+          const shown = items;
+          const lost = atStake?.(shown) ?? null;
+          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${shown.length} ${noun.counted} for good?`;
+          return <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} lock={purgeLock} prompt={lost ? `${ask} ${lost.text}` : ask} title={lost?.title}
+            onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, shown),
+              () => onPurged?.(shown.map((item) => item.id)))} />;
+        })()}
       </div>
       {open && <PersonLockLine lock={purgeLock} place="control" />}
       {error && <p className="asset-trash__error" role="alert"><LineText text={error} /></p>}
       {open && (
         <>
           <p className="asset-trash__note">Deleted {noun.many} stay here until you delete them for good.</p>
-          <ul className="asset-trash__list">
+          <ul className="asset-trash__list" ref={list}>
             {items.map((item) => (
               <li key={item.id} className="asset-trash__row" aria-label={item.name || 'Untitled'}>
                 <span className="asset-trash__thumb">
@@ -194,13 +248,17 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                   {storedImageView(item.thumbnail).outside && <OutsideImageNote />}
                 </span>
                 <span className="asset-trash__actions">
-                  <button type="button" className="asset-trash__button" disabled={busy}
+                  <button type="button" className="asset-trash__button" disabled={busy} data-restore-id={item.id}
                     aria-label={`Restore ${item.name || 'Untitled'}`}
-                    onClick={() => void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item))}>
+                    onClick={() => { onRestoring?.(item); void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item)); }}>
                     <RotateCcw aria-hidden="true" />Restore
                   </button>
-                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone."
-                    busy={busy} lock={purgeLock} onConfirm={() => void act(() => purgeTrashed(kind, item.id))} />
+                  {(() => {
+                    const lost = atStake?.([item]) ?? null;
+                    return <ConfirmInline label="Delete forever" confirmLabel="Delete forever"
+                      prompt={lost ? `This can’t be undone. ${lost.text}` : 'This can’t be undone.'} title={lost?.title}
+                      busy={busy} lock={purgeLock} onConfirm={() => void act(() => purgeTrashed(kind, item.id), () => onPurged?.([item.id]))} />;
+                  })()}
                 </span>
               </li>
             ))}

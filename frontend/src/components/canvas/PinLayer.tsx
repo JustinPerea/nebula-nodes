@@ -9,6 +9,9 @@ import { pinDisplayText, pinPoint, relativeTime } from '../../lib/canvasPins';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { PIN_SHOW_EVENT } from '../../lib/personThread';
+import { viewportRevealing } from '../../lib/canvasFit';
+import { springViewport } from '../../lib/viewportSpring';
 import '../../styles/canvasPins.css';
 
 /** A pin newer than this pops in when it first appears (older ones are just there). */
@@ -38,6 +41,29 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
   const [focused, setFocused] = useState(false);
   const [opened, setOpened] = useState(false);
   const expanded = hovered || focused || opened;
+
+  // The Message box's pin rows: Show pans the pin into view on a spring and opens its note.
+  useEffect(() => {
+    let stop = () => {};
+    const show = (event: Event) => {
+      if ((event as CustomEvent<{ pinId?: string }>).detail?.pinId !== pin.id) return;
+      const state = store.getState();
+      const point = pinPoint(pin, slot, state.nodeLookup);
+      if (point) {
+        const viewport = { x: state.transform[0], y: state.transform[1], zoom: state.transform[2] };
+        const block = { left: point.x - 20, top: point.y - 20, right: point.x + CARD_REACH_PX, bottom: point.y + 160 };
+        const target = viewportRevealing(block, viewport, { width: state.width, height: state.height }, state.minZoom);
+        stop();
+        if (target) stop = springViewport(viewport, target, (next) => { void store.getState().panZoom?.setViewport(next); });
+      }
+      setOpened(true);
+    };
+    window.addEventListener(PIN_SHOW_EVENT, show);
+    return () => {
+      stop();
+      window.removeEventListener(PIN_SHOW_EVENT, show);
+    };
+  }, [pin, slot, store]);
   const resolved = pin.status === 'resolved' && pin.reply !== null;
   // A new pin, or a new reply on an old one, earns a small pop.
   const popKey = `${pin.id}:${pin.reply?.at ?? ''}`;

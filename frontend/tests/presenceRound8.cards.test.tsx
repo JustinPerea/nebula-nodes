@@ -123,7 +123,8 @@ describe('GM r10 (1) and (5): the question form on a held tab', () => {
 
   it('the shared locked look covers the held class (one look, filled or ghost)', () => {
     const css = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
-    const ghost = css.match(/\.agent-roster__row,\s*\.agent-notes-btn--held\s*\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\)/g);
+    // The held class sits anywhere in the list (main's Message box and Studio buttons follow it).
+    const ghost = css.match(/\.agent-notes-btn--held[^)]*\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\)/g);
     expect(ghost?.length).toBe(2); // the rule and its :hover
   });
 });

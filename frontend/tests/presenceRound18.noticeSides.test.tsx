@@ -8,7 +8,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 import { SIDE_PANEL_GAP, sideClearance, watchSidePanels } from '../src/lib/noticeSides';
 
 const SHEET = readFileSync(join(__dirname, '../src/styles/noticeRegion.css'), 'utf8');

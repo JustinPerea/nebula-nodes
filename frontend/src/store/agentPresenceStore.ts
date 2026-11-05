@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
-import type { AgentCursorAnchor, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
+import type { AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
 import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
@@ -47,6 +47,10 @@ export interface AgentCursor {
    *  the event's `at`): the column order, the same in every tab and after a
    *  reload (GM - Design, PR #211 r21). */
   arrivedAt: number;
+  /** Whether `arrivedAt` is the backend's own arrival (`since`): the same in
+   *  every tab, so ties go by the cursor's key. Without it (an older event,
+   *  the agents' form) the tab's landing order breaks them. */
+  arrivalKnown: boolean;
 }
 
 export interface AgentCursorDid {
@@ -61,6 +65,8 @@ export interface AgentCursorDid {
 interface AgentPresenceState {
   agents: Record<string, AgentCursor>;
   apply: (event: AgentPresenceEvent, now?: number) => void;
+  /** Node moves carried these cursors in: each arrives now, by the backend. */
+  arrive: (cursors: AgentPresenceArrivalEvent['cursors']) => void;
   /** The live cursors the backend replays to this tab on connect: they
    *  replace what the tab had, so a reconnect never doubles a cursor. */
   replay: (cursors: readonly AgentPresenceEvent[], now?: number) => void;
@@ -186,6 +192,8 @@ function withEvent(
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
     replayed,
     arrivedAt: arrivalOf(event, previous),
+    arrivalKnown: typeof event.since === 'number' && Number.isFinite(event.since)
+      || Boolean(previous?.arrivalKnown && JSON.stringify(previous.target) === JSON.stringify(event.target)),
   };
   return next;
 }
@@ -195,6 +203,18 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
   apply: (event, now = Date.now()) => set((state) => {
     const agents = withEvent(state.agents, event, now);
     return agents === state.agents ? state : { agents };
+  }),
+  arrive: (cursors) => set((state) => {
+    let agents: Record<string, AgentCursor> | null = null;
+    for (const c of Array.isArray(cursors) ? cursors : []) {
+      if (!c || typeof c.agentId !== 'string' || typeof c.key !== 'string' || !Number.isFinite(c.since)) continue;
+      const key = `${c.agentId}#${c.key}`;
+      const cursor: AgentCursor | undefined = (agents ?? state.agents)[key];
+      if (!cursor || (cursor.arrivedAt === c.since && cursor.arrivalKnown)) continue;
+      // Not a new event: no seq, no say, no flight. Only its place in the column.
+      agents = { ...(agents ?? state.agents), [key]: { ...cursor, arrivedAt: c.since, arrivalKnown: true } };
+    }
+    return agents ? { agents } : state;
   }),
   replay: (cursors, now = Date.now()) => set(() => {
     // The backend's live set, as of this tab's hello. Cursors drawn from the
@@ -241,6 +261,7 @@ attachPresenceSink((event, receivedAt) => {
   const store = useAgentPresenceStore.getState();
   if (event.type === 'agentPresence') store.apply(event, receivedAt);
   else if (event.type === 'agentPresenceReplay') store.replay(event.cursors, receivedAt);
+  else if (event.type === 'agentPresenceArrival') store.arrive(event.cursors);
   else if (event.type === 'socketDemoted') store.demote();
   else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) store.forgetGraph();
 });

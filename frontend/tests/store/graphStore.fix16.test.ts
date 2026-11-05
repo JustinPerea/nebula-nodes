@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix round 16 (review 14, GM r25), on round 12's keyed backend in
@@ -197,6 +198,8 @@ const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text
 
 beforeEach(() => store.setSceneQuietRetryForTests(QUIET));
 afterEach(() => store.setSceneQuietRetryForTests(null));
+// A deleted scene's kept edits never reach the next test's n1 (see the last describe).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 
 
 const CANT = 'Nebula can’t save your changes to “Opening”.';
@@ -329,7 +332,8 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     h.failNext(0);
     said = [];
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     expect(clashes16()).toEqual({});
     expect(said.filter((line) => /deleted|can’t be saved/.test(line))).toEqual([]);
     useGraphStore.getState().undo();
@@ -340,13 +344,46 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     expect(briefOf()[0]).toBe('s1:mine');
   });
 
+  // PR #221 review 1 NIT-3: tests that wait on "Deleted the node." before
+  // pressing Undo (fix18, fix19, fix20 and others) rely on the delete's hold
+  // ending in the same synchronous call that shows the notice
+  // (applyDeleteAnswers sets it, then the finally clears deletesInFlight and
+  // settles the step). deleteLanded reads the hold itself; this pins the
+  // coupling the notice waits rely on, so a refactor that ends the hold later
+  // fails here, not as scattered 3 s timeouts.
+  it('the delete’s hold has ended by the time anything can act on its notice', async () => {
+    const h = backend(S3);
+    withRestore(h);
+    await clashOnS1(h);
+    h.failNext(0);
+    const heldAfterNotice: boolean[] = [];
+    let seen = false;
+    const stop = useGraphStore.subscribe(() => {
+      const state = useGraphStore.getState();
+      const notice = state.undoNotice as { text?: string; offer?: string; entry?: unknown } | null;
+      if (seen || notice?.text !== 'Deleted the node.' || notice.offer !== 'undo' || notice.entry !== state.undoStack.at(-1)) return;
+      seen = true;
+      // The first point a test's waitFor (or anything else) can run after the notice.
+      queueMicrotask(() => heldAfterNotice.push(store.deleteInFlightForTests()));
+    });
+    try {
+      useGraphStore.getState().deleteNode('n1');
+      expect(store.deleteInFlightForTests()).toBe(true);
+      await deleteLanded(useGraphStore);
+    } finally {
+      stop();
+    }
+    expect(heldAfterNotice).toEqual([false]);
+  });
+
   it('a restore from another window after the person’s delete: asked again', async () => {
     const h = backend(S3);
     withRestore(h);
     await clashOnS1(h);
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     h.restore(WINDOW);
     await vi.waitFor(() => expect(clashes16().n1?.line).toBe(CLASH16), { timeout: 3000, interval: 5 });
     await sleep(60);
@@ -366,7 +403,8 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     await vi.waitFor(() => expect(clashes16().n1).toBeTruthy(), { timeout: 3000, interval: 5 });
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     // Codex's value becomes the person's while the scene is away.
     h.state.shots = setPrompt(h.state.shots, 's1', 'same');
     h.restore(WINDOW);
@@ -380,7 +418,8 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     const restores = withRestore(h);
     await sleep(20);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteLanded(useGraphStore);
+    expect(h.state.deleted).toBe(true);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(h.state.deleted).toBe(false), { timeout: 3000, interval: 5 });
     await sleep(40);
@@ -472,4 +511,31 @@ describe('review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash wa
     expect(briefOf()[0]).toBe('s1:codex s1');
   });
 
+});
+
+// fix/ci-flakes-rename-fix16: the kept edits of a scene deleted while unsaved
+// (deletedSceneEdits) are keyed by node id on the canvas's revision, and
+// every test here reuses n1 on one canvas. Without the afterEach reset, B's
+// fresh n1 takes A's edits back as a delete undone and saves them (CI: such a
+// save took the 400 test's queued refusal). A and B run in this order.
+describe('a deleted scene’s kept edits stay in their own test', { shuffle: false }, () => {
+  it('A: leaves an unsaved edit kept for a deleted n1', async () => {
+    const h = backend(S3);
+    h.failNext(1000);
+    typeIn('s2', 'left by A');
+    await vi.waitFor(() => expect(h.puts.some((put) => put.shots.includes('s2:left by A'))).toBe(true), { timeout: 3000, interval: 5 });
+    h.remove({ kind: 'agent', name: 'Codex' }, AGENT);
+    await vi.waitFor(() => expect(gone()).toBe(true), { timeout: 3000, interval: 5 });
+    // Kept for when n1 comes back on this canvas (GM r20 answer 3).
+    expect(said.concat(slots().map((notice) => notice.text)).some((line) => line.includes('Codex deleted “Opening”'))).toBe(true);
+  });
+
+  it('B: the same n1 comes with nothing of A’s: no save, the scene as Nebula has it', async () => {
+    const h = backend(S3);
+    await vi.waitFor(() => expect(briefOf()).toEqual(['s1:a', 's2:b', 's3:c']), { timeout: 3000, interval: 5 });
+    await sleep(QUIET * 2);
+    expect(h.puts).toEqual([]);
+    expect(briefOf()).toEqual(['s1:a', 's2:b', 's3:c']);
+    expect(unsaved()).toBeNull();
+  });
 });

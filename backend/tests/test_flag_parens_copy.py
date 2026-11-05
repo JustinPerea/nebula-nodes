@@ -138,9 +138,20 @@ STRAIGHT_APOSTROPHE = re.compile(r"\w'\w|^'\w")
 SEMICOLON_OR_PARENS = re.compile(r"[;()]")
 
 
+# Shell code the CLI hands to a shell, not a sentence a person reads: its parens and `$$` are the shell's
+# (main's #225 session id, `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"`).
+SHELL_SNIPPETS = {"SESSION_ASSIGNMENT"}
+
+
+def _shell_snippets(tree: ast.AST) -> set[int]:
+    return {id(part) for node in ast.walk(tree)
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in SHELL_SNIPPETS for t in node.targets)
+            for part in ast.walk(node.value)}
+
+
 def _person_read_constants(source: str) -> list[ast.Constant]:
     tree = ast.parse(source)
-    skipped = _docstrings(tree) | _help_text(tree)
+    skipped = _docstrings(tree) | _help_text(tree) | _shell_snippets(tree)
     return [node for node in ast.walk(tree)
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped]
 

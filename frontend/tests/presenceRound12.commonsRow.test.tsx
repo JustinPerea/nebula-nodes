@@ -93,10 +93,10 @@ describe('the page place (lib/lockPlacement)', () => {
   });
   it('fails outside the page row', () => {
     expect(probe(`${control}<div><p id="l" class="person-lock-line" data-lock-place="page">x</p></div>`))
-      .toEqual(["x: not in its page's line row"]);
+      .toEqual(["x: not in its page’s line row"]);
   });
   it('fails after a control in the page row', () => {
     expect(probe(`${control}<div ${PAGE_LINES_ATTR}=""><p><button>Open</button></p><p id="l" class="person-lock-line" data-lock-place="page">x</p></div>`))
-      .toEqual(["x: after a control in its page's line row"]);
+      .toEqual(["x: after a control in its page’s line row"]);
   });
 });

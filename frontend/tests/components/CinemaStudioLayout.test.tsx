@@ -3,9 +3,12 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { Edge, Node } from '@xyflow/react';
 import { CinemaStudioView } from '../../src/components/cinema-studio/CinemaStudioView';
 import { cinemaConnectedInputs } from '../../src/lib/cinemaInputs';
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import type { CinemaSceneSpec, NodeData } from '../../src/types';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 const initialGraph = { ...useGraphStore.getState() };

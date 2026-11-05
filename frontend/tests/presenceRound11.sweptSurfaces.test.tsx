@@ -240,9 +240,12 @@ describe('the project trash: "delete projects for good"', () => {
   it('a confirm armed before a demote sends nothing; armed after the promote it sends', async () => {
     const actions = renderHome();
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    // Main's TrashRow arms its own confirm row: the trigger first, then the danger button inside it.
+    const trigger = () => document.querySelector<HTMLElement>('.project-home__trash-row .project-home__trigger--danger')!;
+    fireEvent.click(trigger());
     await hold();
-    const all = screen.getByRole('button', { name: 'Delete all' });
+    // One trashed project: main's Empty confirm reads "Delete forever", not "Delete all".
+    const all = document.querySelector<HTMLElement>('.project-home__danger:not(.project-home__trash-row .project-home__danger)')!;
     expectLocked(all, words);
     fireEvent.click(all);
     const forever = document.querySelector<HTMLElement>('.project-home__trash-row .project-home__danger')!;
@@ -252,7 +255,7 @@ describe('the project trash: "delete projects for good"', () => {
     expect(actions.onPurge).not.toHaveBeenCalled();
     promote();
     expect(shownLines(words)).toHaveLength(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(trigger());
     const live = document.querySelector<HTMLElement>('.project-home__trash-row .project-home__danger')!;
     expectUnlocked(live);
     fireEvent.click(live);

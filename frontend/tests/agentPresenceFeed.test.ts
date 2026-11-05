@@ -164,3 +164,26 @@ describe('a demoted tab (GM - Design, PR #211 r9 item 6; review 3, LOW-1)', () =
     expect(Object.keys(store.getState().agents)).toEqual(['codex']);
   });
 });
+
+// #211 follow-up (GM r23 item 2): the backend's new arrivals for cursors a
+// node move carried reach the store, before and after it loads, without a
+// new event: no seq, no say, only the place in the column.
+describe('the carried cursors\' new arrivals (agentPresenceArrival)', () => {
+  it('reach the store through the feed and change only the arrival', async () => {
+    const feedOnly = await import('../src/store/agentPresenceFeed');
+    emit(presence({ ...session('a', 1), since: 1000 }));
+    emit({ type: 'agentPresenceArrival', cursors: [{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 1, since: 5000 }] });
+    expect(feedOnly.heldPresenceEvents().map((e) => e.type)).toEqual(['agentPresence', 'agentPresenceArrival']);
+    const { store } = await load();
+    const cursor = store.getState().agents[`claude#${'a'.repeat(12)}`];
+    expect(cursor.arrivedAt).toBe(5000);
+    expect(cursor.arrivalKnown).toBe(true);
+    const seq = cursor.seq;
+    emit({ type: 'agentPresenceArrival', cursors: [{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 1, since: 7000 },
+      { agentId: 'claude', key: 'f'.repeat(12), ordinal: 9, since: 1 }, { bad: true }] });
+    const after = store.getState().agents[`claude#${'a'.repeat(12)}`];
+    expect(after.arrivedAt).toBe(7000);
+    expect(after.seq).toBe(seq);
+    expect(Object.keys(store.getState().agents)).toHaveLength(1);
+  });
+});

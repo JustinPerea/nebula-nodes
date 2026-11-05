@@ -19,6 +19,10 @@
  * doesn't name them; the token is what the backend refuses).
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 import { withFocusFixup } from './helpers/focusFixup';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { personOnlyRoutes } from './personGatedCallers';

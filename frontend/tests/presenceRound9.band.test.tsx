@@ -10,7 +10,11 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { useCallback, useEffect, useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 import { act, cleanup, render } from '@testing-library/react';
 
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
@@ -148,6 +152,7 @@ const NOT_CAPPED: Record<string, string> = {
   'lib/presetLibraryPlacement.ts': 'Styles\' placement; PresetLibrary holds it',
   'components/editor/VideoPreview.tsx': 'the editor\'s docked preview, always on screen: it sizes the video above the band, not a popover',
   'components/panels/NodeInspectorPopover.tsx': 'the docked Inspector, open whenever a node is selected (GM\'s floating panels, which a rare second line may overlap at its edge); asked of GM',
+  'components/moodboard-studio/OutsideChip.tsx': 'the board\'s edge chip (#210), a button that sits above the band while a tile is out of view: not a popover, no content a notice can cover',
   'components/projects/ProjectSizePanel.tsx': 'a floating panel the person keeps open while removing things; asked of GM with the Inspector',
 };
 

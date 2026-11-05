@@ -2075,6 +2075,15 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
 // canvas project (lib/currentProject): this store is its only source.
 useProjectStore.subscribe((state) => publishOpenProject(currentProjectOf(state)));
 
+// GM r108 D1: a "Back to “X”" toast whose way back is now the open project
+// has nothing left to offer, however the person got there (its Back, Open
+// on an Update, Projects, an agent opening it): it clears at once.
+useProjectStore.subscribe((state, previous) => {
+  const id = state.activeProject?.id;
+  if (!id || id === previous.activeProject?.id) return;
+  if (state.switchNotice?.previousProjectId === id) useProjectStore.setState({ switchNotice: null });
+});
+
 /** One coordinator stays mounted across Home, Canvas and all studios. */
 export function subscribeProjectAutosave(): () => void {
   const graph = useGraphStore.subscribe((state, previous) => {

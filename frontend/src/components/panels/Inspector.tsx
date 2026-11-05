@@ -45,6 +45,7 @@ import {
 import { getProjectContext } from '../../lib/projectContext';
 import { applyPaletteFocus, notePaletteFocus, planPaletteFocus, scrollPaletteSlot, setPaletteScrollKey } from './paletteFocus';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
+import { previewSize, previewSizeAttributes } from '../../lib/previewSize';
 import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
@@ -1074,13 +1075,19 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 const heading = `Couldn't upload ${quoted(file.name)}.`;
                 apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
                   .then((r) => r.json())
-                  .then((data: { filePath: string; url: string }) => {
+                  .then((data: { filePath: string; url: string; previewSize?: unknown }) => {
                     // filePath's card names the file (lib/fileName.ts), as
                     // /api/uploads keeps it for a node it creates.
                     const kept = param.key === 'filePath' ? fileNameParam(data.filePath, file.name) : null;
+                    // The image's size as shown (backend services/preview_size.py),
+                    // so the preview below has its height before it decodes; a
+                    // file without one drops the last file's.
+                    const rest = { ...activeNodeData.params };
+                    delete rest._previewSize;
+                    const size = previewSize(data.previewSize);
                     updateNodeData(activeNode.id, {
-                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url),
-                        ...(kept ? { _fileName: kept } : {}) },
+                      params: { ...rest, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url),
+                        ...(size ? { _previewSize: size } : {}), ...(kept ? { _fileName: kept } : {}) },
                     });
                   })
                   .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error', { error: err }));
@@ -1092,6 +1099,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               src={String(activeNodeData.params._previewUrl)}
               alt="Preview"
               className="inspector__file-preview"
+              // Its aspect ratio before it decodes (CSS keeps width 100%,
+              // height auto), so the floating Inspector measures its whole
+              // body on the first frame it opens (#226, GM r82).
+              {...previewSizeAttributes(activeNodeData.params._previewSize)}
             />
           )}
         </div>

@@ -7,9 +7,12 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(), apiFetch: transport.fetch,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
-import { clearCinemaScenePersistence, useGraphStore } from '../src/store/graphStore';
+import { clearCinemaScenePersistence, useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 function spec(prompt: string): CinemaSceneSpec {
   return { version: 1, base: { model: 'nano-banana' }, aspectRatio: '16:9', shots: [

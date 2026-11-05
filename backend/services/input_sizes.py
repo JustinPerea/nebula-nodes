@@ -1,6 +1,7 @@
 """The size of a run's input file, read when the run is checked, for prices
 that depend on it (model_pricing ``sizing``: SeedVR2 per megapixel, FLUX
-Video Upscale per megapixel-second, FLUX Video Edit per second).
+Video Upscale per megapixel-second, FLUX Video Edit per second, and the
+talking-head nodes per second of the audio track).
 
 What may be measured (security review 2026-10-21, finding 1). The price is
 measured when the run is checked, but the handler reads the file later
@@ -40,13 +41,20 @@ in-band H.264/HEVC SPS, a VP9 resize) is visible only to a decoder, so such
 a clip is measured at its header size. An image with more than one frame
 or size (GIF, APNG, animated WebP, multi-page TIFF, ICO/ICNS, MPO) is left
 unmeasured: which frame a provider takes isn't known.
+Audio is measured the same way (one audio stream, its packets); a PCM WAV
+whose ``data`` chunk understates the bytes the file holds (a rewritten header,
+which ffprobe and every other demuxer then honour) is left unmeasured
+(``_wav_understates``; chunks after the audio are allowed only up to 64 KiB and
+no more than the audio itself, and at most 1,024 chunks are walked). Known limit: for every other audio format the length
+is what the demuxer delivers, so a container whose own length field a provider
+reads differently from ffprobe is measured at ffprobe's.
 
 All of it reads files and may run ffprobe for many seconds, so it runs in a
 worker thread (``measure_run``, asyncio.to_thread); called on the event
 loop it raises instead of blocking every other request.
 
-Where the input comes from (run_input_sizes): an Image Input or Video Input
-in the run gives the file it holds; a node outside the run gives the output
+Where the input comes from (run_input_sizes): an Image Input, Video Input or
+Audio Input in the run gives the file it holds; a node outside the run gives the output
 it already has (a proposal's cached ancestor). Any other node in the same
 run makes its output during the run, so its size isn't known yet, and the
 node it feeds is unpriced until it is.
@@ -72,7 +80,7 @@ from urllib.parse import unquote, urlsplit
 from services import model_pricing
 
 # Image and Video Input nodes: their output is the file they hold.
-INPUT_NODES = {"image-input": "Image", "video-input": "Video"}
+INPUT_NODES = {"image-input": "Image", "video-input": "Video", "audio-input": "Audio"}
 # An inline image is decoded in memory; past this it isn't measured.
 MAX_DATA_URI_CHARS = 64 * 1024 * 1024
 _CACHE: OrderedDict[tuple[Any, ...], dict[str, Any] | None] = OrderedDict()
@@ -276,6 +284,116 @@ def _probe_video(path: Path) -> dict[str, Any] | None:
     return {"width": width, "height": height, "seconds": seconds, "frames": frames}
 
 
+def _probe_audio(path: Path) -> dict[str, Any] | None:
+    """A local audio file as {seconds}, an upper bound of what a provider
+    demuxing it would process (the module docstring); None when it can't be
+    bounded. For the talking-head nodes, which bill the audio's length.
+
+    The same two demux-only passes as _probe_video: every stream's header,
+    then every packet of the one audio stream (_scan_packets, capped, killed
+    at the deadline). Exactly one audio stream and no video stream: cover art
+    (an attached picture, an MP3's album image) doesn't count, but a clip
+    with real video isn't audio, and a second audio stream is one a provider
+    might take instead. Seconds are the largest of the stream's duration,
+    the container's and the span of the packets, so a falsified header
+    can't bring the bound under what the demuxer delivers."""
+    deadline = time.monotonic() + SIZE_PROBE_TIMEOUT_SECONDS
+    try:
+        header = _ffprobe(path, [
+            "-show_entries", "stream=index,codec_type,duration:stream_disposition=attached_pic:format=duration",
+        ], deadline)
+        if header is None:
+            return None
+        streams = [stream for stream in header.get("streams") or [] if isinstance(stream, dict)]
+        audio = [stream for stream in streams if stream.get("codec_type") == "audio"]
+        video = [stream for stream in streams if stream.get("codec_type") == "video"
+                 and not int((stream.get("disposition") or {}).get("attached_pic") or 0)]
+        if len(audio) != 1 or video:
+            return None
+        stream = audio[0]
+        scanned = _scan_packets(path, int(stream["index"]), deadline)
+    except (OSError, ValueError, TypeError, KeyError, IndexError, subprocess.TimeoutExpired):
+        return None
+    if scanned is None:
+        return None
+    seconds = max(_number(stream.get("duration")), _number((header.get("format") or {}).get("duration")), scanned[1])
+    if seconds <= 0 or _wav_understates(path, seconds):
+        return None
+    return {"seconds": seconds}
+
+
+# A WAV may carry metadata chunks (LIST, id3) after its audio, but not much: more
+# than this many bytes, or more than the audio itself, and the "metadata" could be
+# audio a provider reads on into, so the file stays unmeasured. The parser also
+# walks at most this many chunks (a file of thousands of empty ones is not a clip).
+WAV_MAX_TRAILING_BYTES = 64 * 1024
+WAV_MAX_CHUNKS = 1024
+
+
+def _wav_understates(path: Path, seconds: float) -> bool:
+    """True when a PCM WAV holds more audio than its header says: the bytes
+    after the header, over the byte rate, exceed ``seconds`` by more than the
+    chunks that legitimately follow the data (a LIST or id3 chunk) and a frame
+    of rounding. A demuxer that stops at the declared ``data`` size would
+    bill less than a provider that reads on, so the file stays unmeasured.
+    Anything that isn't a well-formed PCM WAV is left to the demuxer's length."""
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(12)
+            if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+                return False
+            size = os.fstat(handle.fileno()).st_size
+            byte_rate = block_align = 0
+            pcm = False
+            data_at = data_size = None
+            walked = 0
+            while data_at is None:
+                walked += 1
+                if walked > WAV_MAX_CHUNKS:
+                    return True
+                chunk = handle.read(8)
+                if len(chunk) < 8:
+                    return False
+                name, length = chunk[:4], int.from_bytes(chunk[4:], "little")
+                if name == b"fmt " and length >= 16:
+                    fmt = handle.read(length)
+                    tag = int.from_bytes(fmt[0:2], "little")
+                    sub = int.from_bytes(fmt[24:26], "little") if tag == 0xFFFE and len(fmt) >= 26 else tag
+                    pcm = tag in (1, 0xFFFE) and sub == 1
+                    byte_rate = int.from_bytes(fmt[8:12], "little")
+                    block_align = int.from_bytes(fmt[12:14], "little")
+                    handle.seek(length & 1, 1)
+                elif name == b"data":
+                    data_at, data_size = handle.tell(), length
+                else:
+                    handle.seek(length + (length & 1), 1)
+            if not pcm or byte_rate <= 0:
+                return False
+            trailing = 0
+            after = size - (data_at + data_size + (data_size & 1))
+            if after > WAV_MAX_TRAILING_BYTES or after > data_size:
+                return True
+            handle.seek(data_at + data_size + (data_size & 1))
+            while True:
+                walked += 1
+                if walked > WAV_MAX_CHUNKS:
+                    return True
+                chunk = handle.read(8)
+                if len(chunk) < 8:
+                    break
+                length = int.from_bytes(chunk[4:], "little")
+                if handle.tell() + length > size:
+                    trailing = 0
+                    break
+                trailing += 8 + length + (length & 1)
+                handle.seek(length + (length & 1), 1)
+    except (OSError, ValueError):
+        return False
+    from_file = (size - data_at) / byte_rate
+    allowed = trailing / byte_rate + (max(block_align, 1) + 1) / byte_rate
+    return from_file - seconds > allowed
+
+
 def _image_size(source: Any) -> dict[str, Any] | None:
     """An image's {width, height} from its header (Pillow's lazy open), or
     None when it has more than one frame or size (the module docstring)."""
@@ -378,7 +496,7 @@ def store_path(ref: str) -> Path | None:
 
 def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | None:
     """{width, height} for an image, {width, height, seconds, frames} for a
-    clip; None when it can't be known here. Only an inline image (with
+    clip, {seconds} for an audio file; None when it can't be known here. Only an inline image (with
     ``inline``) and a file in Nebula's output folder are read (module
     docstring). Off the event loop only."""
     _off_loop()
@@ -399,7 +517,8 @@ def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | Non
     if key in _CACHE:
         _CACHE.move_to_end(key)
         return _CACHE[key]
-    size = _image_size(path) if kind == "Image" else _probe_video(path) if kind == "Video" else None
+    size = (_image_size(path) if kind == "Image" else _probe_video(path) if kind == "Video"
+            else _probe_audio(path) if kind == "Audio" else None)
     _CACHE[key] = size
     while len(_CACHE) > _CACHE_SIZE:
         _CACHE.popitem(last=False)
@@ -409,7 +528,8 @@ def measure(ref: Any, kind: str, *, inline: bool = True) -> dict[str, Any] | Non
 def _port_kind(definition: Mapping[str, Any], port: str) -> str:
     for spec in definition.get("inputPorts") or []:
         if isinstance(spec, Mapping) and spec.get("id") == port:
-            return "Video" if str(spec.get("dataType") or "") == "Video" else "Image"
+            data_type = str(spec.get("dataType") or "")
+            return data_type if data_type in ("Video", "Audio") else "Image"
     return "Image"
 
 

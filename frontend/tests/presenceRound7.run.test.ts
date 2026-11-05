@@ -26,7 +26,10 @@ vi.mock('../src/lib/personSession', async (original) => ({
 vi.mock('../src/lib/paramsOutdated', async (original) => ({
   ...await original<typeof import('../src/lib/paramsOutdated')>(), reloadPage: vi.fn(),
 }));
-import { beforeQueuedSizeForTests, useGraphStore } from '../src/store/graphStore';
+import { beforeQueuedSizeForTests, resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
+
+// Scenes and the graph store: the per-node state a test left goes after each one (tests/sceneEditsResetRatchet).
+afterEach(() => resetDeletedSceneEditsForTests());
 import * as api from '../src/lib/api';
 import { ExecutionStartRejectedError } from '../src/lib/api';
 import { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } from '../src/lib/personSession';

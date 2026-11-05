@@ -217,6 +217,8 @@ const OWN_RING: Record<string, string> = {
   // token's colour (--mb-board-select is white at 92 %), 2px, plus a 5px halo
   // that tells it from the selected card's plain 2px ring.
   'styles/moodboard-board.css::.react-flow__node-card:focus-visible .moodboard-card': 'card ring in the token colour, with a halo against selected',
+  // A placeholder tile (a file still uploading, #210) takes focus like a card, with the card's ring.
+  'styles/moodboard-board.css::.react-flow__node-placeholder:focus-visible .moodboard-board__placeholder': 'the card ring, on a placeholder tile',
   // The Jev demo card's question field: "pink focus" in the TypeSafe brand
   // colour Justin chose for v6. It sits on that card only.
   'styles/jev-result.css::body.app-slava-restraint .model-node--jev .model-node__jev-field .model-node__jev-input:focus': 'Jev brand border',
@@ -237,6 +239,11 @@ const NO_OUTLINE: Record<string, string> = {
   'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
   // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
   'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:focus-visible': 'focused only from code: no ring',
+  'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
+  'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
+  // The proposal card's scrolling body: its fade mask would clip its own ring,
+  // so the wrapper draws the token ring instead (pinned below).
+  'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
   // #208 GM r23: the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
@@ -275,6 +282,25 @@ describe('every focus rule uses the token (the sweep)', () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it('#216 round 3l (GM r69 Q2): the canvas draws the token ring inside its edge, on Tab arrival and after a keyboard decision', () => {
+    // It fills the window, so the baseline's ring (outside its box, offset
+    // 2px) was clipped away: Tab arrival showed nothing.
+    for (const selector of ['body.app-slava-restraint .canvas-wrapper:focus-visible', 'body.app-slava-restraint .canvas-wrapper[data-focus-decided]:focus']) {
+      const rule = rules.find((r) => r.selectors.includes(selector));
+      expect(rule, selector).toBeTruthy();
+      expect(decl(rule!, 'outline')).toBe('var(--sr-focus-outline)');
+      expect(decl(rule!, 'outline-offset')).toBe('-2px');
+    }
+    // On the canvas (black), at well over 3:1.
+    expect(contrast(over(canvas, ringColor('--sr-focus-outline')), over(canvas))).toBeGreaterThanOrEqual(3);
+    // Nothing clears the canvas's ring any more (3k's quiet mark).
+    expect(rules.filter((r) => r.selectors.some((sel) => /canvas-wrapper\[data-focus-quiet\]/.test(sel)))).toEqual([]);
+  });
+
+  it('the proposal card body\'s cleared ring is drawn on its scroll wrapper with the token', () => {
+    expect(tokenRingFor('.proposal-bar__scroll:has(> .proposal-bar__body:focus-visible)')).toBe(true);
   });
 
   it('never clears the outline on focus without putting the token ring back', () => {
@@ -316,6 +342,8 @@ const CLEARED: Record<string, string> = {
   'styles/panels.css::.inspector__field': 'body.app-slava-restraint :is( .panel__search, .inspector__field, .inspector__action-button, .inspector__file-button, .inspector__favorite-button, .inspector__info-button, .panel__item, .panel-launcher, .toolbar__button ):focus-visible',
   'styles/panels.css::.connection-popup__search': 'body.app-slava-restraint .connection-popup__search:focus-visible',
   'styles/panels.css::.chat-panel__textarea': 'body.app-slava-restraint .chat-panel__textarea:focus-visible',
+  // The Message box's field (#225): the row it sits in draws the ring.
+  'styles/messageBox.css::.message-box__field': '.message-box__field-row:has(.message-box__field:focus-visible)',
   'styles/slava-restraint.css::body.app-slava-restraint .chat-panel__model-search': 'body.app-slava-restraint .chat-panel__model-search:focus-visible',
   'styles/slava-restraint.css::body.app-slava-restraint .chat-panel__textarea': 'body.app-slava-restraint .chat-panel__textarea:focus-visible',
   'styles/settings.css::body.app-slava-restraint .settings-search input': 'body.app-slava-restraint .settings-search:has(input:focus-visible)',
@@ -426,7 +454,10 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
     'components/panels/ChatModelPicker.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (GM r37)' },
     'components/panels/settings/ServiceAccountInput.tsx': { count: 1, why: 'a hidden file input, never focused' },
     'components/panels/settings/ProviderRow.tsx': { count: 1, why: 'a provider row a setup link moves focus to: keeps its :focus-visible ring (GM r38 3d)' },
-    'components/canvas/ProposalBar.tsx': { count: 1, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },
+    'components/canvas/ProposalBar.tsx': { count: 2, why: 'Review focuses the card, and a keyboard decision focuses the Undo notice it raised: the neutral ring from the keyboard (#161, GM r57)' },
+    'components/moodboard-studio/BoardCanvas.tsx': { count: 1, why: 'the board itself, where focus rests when no tile can take it: the token ring from the keyboard (moodboard-board.css, GM #210 r4)' },
+    'components/moodboard-studio/MoodboardStudioView.tsx': { count: 1, why: "the screen's <main>, focused from code with focusVisible: false, so it draws no ring" },
+    'lib/threadOpen.ts': { count: 1, why: 'a thread row an Update opened, focused from code: its ring from the keyboard, and the tabindex goes on its blur (messageBox.css [data-focus-target])' },
     'components/agent-notes/AgentNotesList.tsx': { count: 1, why: 'the Updates list, focused on open: a ring only from the keyboard (GM r37)' },
     'components/onboarding/OnboardingOverlay.tsx': { count: 1, why: 'the onboarding panel, focused on open: a ring only from the keyboard (GM r37)' },
     'components/proposals/AssetProposalStrip.tsx': { count: 2, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },

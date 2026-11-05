@@ -40,7 +40,7 @@ export interface PriceEntry {
   sources?: Array<{ url: string; quote: string }>;
   checked?: string;
   /** Quantities measured from the input on `port` (model_pricing.py sizing). */
-  sizing?: { port: string; output?: 'upscale'; megapixel?: number; roundUp?: string[]; say: string };
+  sizing?: { port: string; output?: 'upscale'; megapixel?: number; roundUp?: string[]; addSeconds?: number; say: string };
 }
 
 /** A run's measured input file (services/input_sizes.py). */
@@ -169,7 +169,9 @@ export function sizingPorts(entry: PriceEntry | undefined): string[] {
 export function sizeNote(entry: PriceEntry | undefined, definition: Partial<ModelNodeDefinition>): string | null {
   if (!awaitsInput(entry)) return null;
   const port = definition.inputPorts?.find((candidate) => candidate.id === entry!.sizing!.port);
-  return `${entry!.sizing!.say.trim()}; priced from your ${port?.dataType === 'Video' ? 'video' : 'image'}'s size when you run it`;
+  const say = entry!.sizing!.say.trim();
+  if (port?.dataType === 'Audio') return `${say.endsWith('.') ? say : `${say}.`} Priced from your audio\u2019s length when you run it`;
+  return `${say}; priced from your ${port?.dataType === 'Video' ? 'video' : 'image'}'s size when you run it`;
 }
 
 /** The SIZED_VARIABLES an entry reads, from its input's size, or null when
@@ -207,6 +209,8 @@ function sizedQuantities(entry: PriceEntry, values: Record<string, unknown>, siz
     if (amount === null) return null;
     out[key] = amount;
   }
+  // Seconds a vendor bills beyond the input's own (backend sized_quantities `addSeconds`).
+  if ('(source seconds)' in out && typeof sizing.addSeconds === 'number' && sizing.addSeconds > 0) out['(source seconds)'] += sizing.addSeconds;
   for (const key of sizing.roundUp ?? []) if (key in out) out[key] = Math.ceil(out[key] - 1e-9);
   return Object.fromEntries(wanted.map((key) => [key, out[key]]));
 }

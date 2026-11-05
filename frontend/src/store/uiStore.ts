@@ -300,6 +300,12 @@ interface UIState {
   /** The Agent log is expanded (not saved; it starts collapsed). The Updates
    * list's "See all actions →" opens it (PR9a). */
   agentLogOpen: boolean;
+  /** GM - Design, PR #216 r7, step 4: the proposal card collapsed the log
+   * to its header ('card'; it reopens when the card leaves), or the person
+   * reopened it over that while the card shows ('refused'; the card never
+   * collapses it again until it leaves). A collapse the person makes is
+   * theirs and is never undone. */
+  agentLogCardHold: 'none' | 'card' | 'refused';
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   /** Zoomed out past the level-of-detail cutoff (lib/canvasOverview.ts); set by the canvas. */
@@ -386,6 +392,10 @@ interface UIState {
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
   setAgentLogOpen: (open: boolean) => void;
+  /** The notice region's ask (step 4): `want` the log collapsed for the
+   * card, while `card` shows one. With no card, it reopens a log the card
+   * collapsed, and forgets the person's refusal. */
+  holdAgentLogForCard: (want: boolean, card: boolean) => void;
   /** Expand the Agent log ("See all actions →"). Does nothing while it is switched off. */
   openAgentLog: () => void;
   setCanvasPerfMode: (enabled: boolean) => void;
@@ -481,6 +491,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
   agentLogOpen: false,
+  agentLogCardHold: 'none',
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   canvasZoomedOut: false,
@@ -895,10 +906,25 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     set({ agentLogEnabled: enabled });
   },
 
-  setAgentLogOpen: (open) => set({ agentLogOpen: open }),
+  setAgentLogOpen: (open) => {
+    // Opened by anyone over the card's collapse: the card leaves it open.
+    // Collapsed by anyone: it is theirs, never reopened for the card.
+    const hold = get().agentLogCardHold;
+    set({ agentLogOpen: open, agentLogCardHold: hold === 'card' ? (open ? 'refused' : 'none') : hold });
+  },
+
+  holdAgentLogForCard: (want, card) => {
+    const { agentLogOpen, agentLogCardHold: hold, agentLogEnabled } = get();
+    if (!card || !want) {
+      if (hold === 'card') set({ agentLogOpen: agentLogEnabled, agentLogCardHold: 'none' });
+      else if (!card && hold === 'refused') set({ agentLogCardHold: 'none' });
+      return;
+    }
+    if (hold === 'none' && agentLogOpen) set({ agentLogOpen: false, agentLogCardHold: 'card' });
+  },
 
   openAgentLog: () => {
-    if (get().agentLogEnabled) set({ agentLogOpen: true });
+    if (get().agentLogEnabled) get().setAgentLogOpen(true);
   },
 
   setCanvasPerfMode: (enabled) => {

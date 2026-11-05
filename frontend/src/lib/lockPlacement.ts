@@ -66,11 +66,11 @@ export function lockPlacementProblems(root: ParentNode = document): string[] {
       // In the page's line row, after its lines (a because line first) and before nothing else
       // it locks: no control sits ahead of it in the row.
       const row = line.parentElement;
-      if (!row?.hasAttribute(PAGE_LINES_ATTR)) problems.push(`${text}: not in its page's line row`);
+      if (!row?.hasAttribute(PAGE_LINES_ATTR)) problems.push(`${text}: not in its page’s line row`);
       else {
         for (let at = line.previousElementSibling; at; at = at.previousElementSibling) {
           if (at.matches('button, input, select, textarea, a') || at.querySelector('button, input, select, textarea, a')) {
-            problems.push(`${text}: after a control in its page's line row`); break;
+            problems.push(`${text}: after a control in its page’s line row`); break;
           }
         }
       }

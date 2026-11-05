@@ -780,8 +780,17 @@ export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
   return response.json();
 }
 
-export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodboard> {
-  const response = await apiRequest("Couldn't create the board.", '/api/moodboards', {
+/** A board create. `requestId` (once per unsaved board) makes it safe to send
+ *  again: the same id answers with the board the first send made, marked
+ *  `repeated`, as it is now, instead of making a second one. */
+/** A create's answer. A repeat (the request id's board already made) is
+ *  the board as it is now, with the attempt that made it and its version
+ *  then (round 6g), so the Studio rebases on what that attempt sent. */
+export type MoodboardCreated = Moodboard & { repeated?: boolean; madeAttempt?: number | null; madeVersion?: number };
+
+export async function createMoodboard(body: MoodboardCreateInput & { requestId?: string; attempt?: number }): Promise<MoodboardCreated> {
+  // The save heading: a create is the board's first save, and the person never reads "create" (GM r14).
+  const response = await apiRequest(SAVE_BOARD, '/api/moodboards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

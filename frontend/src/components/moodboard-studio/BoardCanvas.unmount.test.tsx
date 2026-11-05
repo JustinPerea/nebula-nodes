@@ -33,7 +33,7 @@ beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return 800; } });
 });
 beforeEach(() => {
-  useBoardCanvasStore.setState({ selection: {}, viewports: {}, fitted: {}, frameRequest: null });
+  useBoardCanvasStore.setState({ selection: {}, viewports: {}, fitted: {}, placed: {}, frameRequest: null });
 });
 afterEach(() => cleanup());
 

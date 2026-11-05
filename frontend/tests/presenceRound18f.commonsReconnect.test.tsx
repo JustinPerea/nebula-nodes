@@ -6,7 +6,11 @@
  * Review 15 NIT-3: App's off route needs the Commons off (M13); "a project open" needs the
  * workspace screen, not only a loaded project, which a reload has (M19).
  */
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 import { act, cleanup, render, screen } from '@testing-library/react';
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../src/lib/backend', async (original) => ({ ...await original<typeof import('../src/lib/backend')>(), apiFetch: api.fetch }));

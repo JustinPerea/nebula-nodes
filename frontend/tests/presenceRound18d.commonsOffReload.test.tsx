@@ -8,7 +8,11 @@
  * Round 18e (GM r33 3): with no project open (always so after a reload) its way back reads
  * "← Projects", named "Projects", and goes to the Projects home; with one open, "← Canvas".
  */
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../src/lib/backend', async (original) => ({ ...await original<typeof import('../src/lib/backend')>(), apiFetch: api.fetch }));

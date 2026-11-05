@@ -212,36 +212,84 @@
   text-overflow: ellipsis;
 }
 
-/* The decision bar: same surface as the selection toolbar. It sits in the
-   app's notice region, above the notices (NoticeRegion; GM - Design,
-   2026-10-23: "The order from the bottom up is notices, then the proposal
-   bar."), so it keeps no spacing of its own over them. */
+/* The proposal card (GM - Design, 2026-11-01, the redesign of brand dogfood
+   item 24). It sits in the app's notice region, above the notices
+   (NoticeRegion; GM - Design, 2026-10-23: "The order from the bottom up is
+   notices, then the proposal bar."), so it keeps no spacing of its own over
+   them.
+
+   One column, top to bottom: the header line, the agent's note, the plan
+   line, the disclosure, then the footer with the buttons. It was a row (the
+   text beside three unshrinkable buttons), which at a ~385 px card left the
+   text about 75-100 px: the agent's name wrapped onto three lines and the
+   note was cut. As a column nothing squeezes the text: at any card width W
+   the note is W - 36 px wide (16 px of padding a side, the 1 px border and
+   the 3 px agent edge; tests/proposalCardLayout.test.ts).
+
+   Width: min(600px, the region's width). 600 is the cap so the note keeps a
+   reading measure (GM - Design, 2026-11-01); the agent log's room rule
+   (layouts.css) reads the same token. Under Restraint the surface, hairline,
+   ink and primary button come from the --sr tokens; the left edge keeps the
+   agent's colour in both skins. */
 .proposal-bar {
   --agent-color: #5b9dff;
+  --proposal-bar-max-w: 600px;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
+  flex-direction: column;
+  width: min(var(--proposal-bar-max-w), calc(100vw - 32px));
+  max-width: min(var(--proposal-bar-max-w), 100%);
   box-sizing: border-box;
-  padding: 10px 10px 10px 14px;
-  border: 1px solid rgb(255 255 255 / 0.14);
+  padding: 0;
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.14));
   border-left: 3px solid var(--agent-color);
   border-radius: var(--sr-node-media-radius, 14px);
-  background: rgb(20 20 22 / 0.94);
-  color: rgb(255 255 255 / 0.82);
+  background: var(--sr-glass-strong, rgb(20 20 22 / 0.94));
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
   box-shadow: 0 16px 42px rgb(0 0 0 / 0.38);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   pointer-events: auto;
+  /* The footer's narrow form reads the card's own width. */
+  container: proposal-card / inline-size;
+  /* Pinned over the scrolling card when it is capped under its header and
+     footer (GM r69 Q1; noticeRegion.css): the card's own surface, made
+     opaque over the canvas colour so what scrolls under it never shows. */
+  --notice-tight-foot-fill: linear-gradient(var(--sr-glass-strong, rgb(20 20 22 / 0.94)), var(--sr-glass-strong, rgb(20 20 22 / 0.94))), var(--sr-canvas, #000);
+  /* Its height cap: the room from the stack's bottom line up to the top
+     inset, less the notices under it (NoticeRegion writes it from
+     lib/noticeStackPlace.ts; GM - Design, PR #216 r3). The header and footer
+     stay put and the body between them scrolls. */
+  max-height: var(--notice-card-cap, calc(100dvh - var(--notice-region-bottom, 32px) - 72px));
   /* Its own surface in the notice region: it scales in on the toasts'
      spring (GM r9 answer 2; noticeRegion.css). */
   animation: notice-surface-in 420ms var(--notice-spring) both;
 }
 
+/* The proposal's run-later notice (DeferredRunNotice) keeps the bar's
+   surface as one row: its line, then Run and dismiss. */
 .proposal-bar--notice {
+  --proposal-bar-max-w: var(--notice-max-w, 560px);
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 10px 10px 14px;
   border-left-color: rgb(255 255 255 / 0.3);
+}
+
+.proposal-bar--notice .proposal-bar__summary {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.proposal-bar__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Review on the proposal's Update (Q112 a) focuses the bar: a ring in the
@@ -272,82 +320,236 @@
   100% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 transparent; }
 }
 
-.proposal-bar__main {
+/* Between the header and the footer: the one part of the card that gives
+   way. The wrapper is what shrinks (the region measures the card's fixed
+   rows against it) and draws the body's focus ring, which the body's own
+   mask would hide (review 1 LOW-7). */
+/* GM r10: the body's top edge (and its top fade) sits 4 px under the
+   header, so a line scrolled to that edge (lib/noticeStackPlace.ts
+   bodyScrollTop stops on a line boundary) never touches the header. The
+   note's own top margin gives those 4 px back, so the unscrolled card reads
+   as before. */
+.proposal-bar__scroll {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
-  gap: 2px;
+  box-sizing: border-box;
+  margin-top: 4px;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 8px;
+}
+
+.proposal-bar__scroll:has(> .proposal-bar__body:focus-visible) {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: -2px;
+}
+
+/* Everything between the header and the footer scrolls as one, "What Accept
+   writes" with it, with a 16 px fade on whichever edge hides content and
+   none at the ends (GM - Design, PR #216 r2-r3). No transition, so reduced
+   motion reads the same. */
+.proposal-bar__body {
+  --proposal-fade-top: 0px;
+  --proposal-fade-bottom: 0px;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 16px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--proposal-fade-top),
+    #000 calc(100% - var(--proposal-fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--proposal-fade-top),
+    #000 calc(100% - var(--proposal-fade-bottom)), transparent 100%);
+}
+
+.proposal-bar__body:focus-visible {
+  outline: none;
+}
+
+.proposal-bar__body[data-fade-top='true'] {
+  --proposal-fade-top: 16px;
+}
+
+.proposal-bar__body[data-fade-bottom='true'] {
+  --proposal-fade-bottom: 16px;
+}
+
+.proposal-bar__content {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
-.proposal-bar__who {
+.proposal-bar__note-area {
+  margin-top: 4px;
+}
+
+/* 1. The header: one 20 px line, fixed above the scrolling body. */
+.proposal-bar__head {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
+  box-sizing: content-box;
+  height: 20px;
+  min-width: 0;
+  padding: 14px 16px 0;
+  white-space: nowrap;
 }
 
 .proposal-bar__dot {
+  flex-shrink: 0;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--agent-color);
 }
 
+/* The name never wraps: it takes what's left of the line and truncates. It
+   isn't in the agent's colour (a dark or light one can fail contrast at
+   12 px); the dot and the left edge carry the colour. */
 .proposal-bar__agent {
-  color: var(--agent-color);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  font-size: 12px;
   font-weight: 600;
+  text-overflow: ellipsis;
 }
 
 .proposal-bar__proposes {
+  flex-shrink: 0;
   color: rgb(255 255 255 / 0.5);
+  font-size: 12px;
+}
+
+.proposal-bar__aside {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  padding-left: 6px;
 }
 
 .proposal-bar__pager {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
   color: rgb(255 255 255 / 0.5);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .proposal-bar__pager button {
   display: inline-flex;
   padding: 2px;
   border: 0;
+  border-radius: 4px;
   background: none;
   color: inherit;
   cursor: pointer;
 }
 
-/* The agent's note wraps to three lines; the rest is in the details. */
+.proposal-bar__pager button:hover {
+  color: rgb(255 255 255 / 0.85);
+}
+
+.proposal-bar__pager button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* Neutral at every value. */
+.proposal-bar__expires {
+  color: rgb(255 255 255 / 0.5);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 2. The note reads first, at the card's full width: up to six lines, then
+   "Show all" opens it in place on the layout spring. */
 .proposal-bar__note {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
-  color: #fff;
-  font-size: 13px;
-  line-height: 1.35;
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  font-size: 14px;
+  line-height: 1.45;
   white-space: pre-line;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  interpolate-size: allow-keywords;
+  transition: height 420ms var(--notice-spring);
 }
 
-.proposal-bar__note-full {
-  margin: 0;
-  color: rgb(255 255 255 / 0.85);
-  white-space: pre-line;
+/* Measured longer than six lines: the clamped height is a length, so the
+   open one (auto) can spring to it and back. */
+.proposal-bar__note[data-long='true'] {
+  height: calc(6 * 1.45em);
+}
+
+.proposal-bar__note[data-open='true'] {
+  display: block;
+  height: auto;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+}
+
+.proposal-bar__more {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: rgb(255 255 255 / 0.7);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.proposal-bar__more:hover {
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+}
+
+.proposal-bar__more:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* 3. The plan line: what Accept changes, runs and costs, by node name. It
+   may wrap at narrow widths and is never truncated. */
+.proposal-bar__plan {
+  margin: 8px 0 0;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 12px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-/* Run nodes that can't run here, in find_nodes' words. */
+/* For screen readers only: the price's "list prices, not a quote", which
+   its title shows only on hover. */
+.proposal-bar__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Run nodes that can't run here, in the person's words. */
 .proposal-bar__readiness {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 2px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
   color: rgb(255 255 255 / 0.72);
@@ -371,64 +573,100 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   color: rgb(255 255 255 / 0.5);
 }
 
-.proposal-bar__summary {
-  margin: 0;
-  color: rgb(255 255 255 / 0.72);
-}
-
-.proposal-bar__meta {
-  margin: 0;
-  color: rgb(255 255 255 / 0.4);
-  font-size: 11px;
-}
-
-.proposal-bar__details-toggle {
-  display: inline-flex;
-  align-self: flex-start;
+/* 4. The disclosure: a real row, full width, 32 px. Its label never
+   changes; the chevron and aria-expanded carry the state. */
+.proposal-bar__disclosure {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-  padding: 0;
+  gap: 6px;
+  width: calc(100% + 12px);
+  height: 32px;
+  margin: 10px -6px 0;
+  padding: 0 6px;
   border: 0;
-  background: none;
-  color: rgb(255 255 255 / 0.7);
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.85);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
+  text-align: left;
   cursor: pointer;
+  transition: background 120ms ease-out;
 }
 
-.proposal-bar__details-toggle:hover {
-  color: #fff;
+.proposal-bar__disclosure:hover {
+  background: rgb(255 255 255 / 0.04);
 }
 
-.proposal-bar__details-toggle:focus-visible {
+.proposal-bar__disclosure:focus-visible {
   outline: var(--sr-focus-outline, 2px solid #fff);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
-.proposal-bar__details-toggle[aria-expanded='true'] .proposal-bar__chevron {
-  transform: rotate(180deg);
+.proposal-bar__chevron {
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 0.6);
+  transition: transform 420ms var(--notice-spring);
 }
 
-/* Every value Accept will write, in full. Scrolls rather than growing the bar. */
+.proposal-bar__disclosure[aria-expanded='true'] .proposal-bar__chevron {
+  transform: rotate(90deg);
+}
+
+.proposal-bar__disclosure-label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-bar__disclosure-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: rgb(255 255 255 / 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The panel opens in place on the layout spring; it stays mounted (inert
+   while closed), so the height can spring from 0 to auto. */
+.proposal-bar__details-wrap {
+  height: 0;
+  overflow: clip;
+  visibility: hidden;
+  interpolate-size: allow-keywords;
+  transition: height 420ms var(--notice-spring), visibility 0s linear 420ms;
+}
+
+.proposal-bar__details-wrap[data-open='true'] {
+  height: auto;
+  visibility: visible;
+  transition: height 420ms var(--notice-spring), visibility 0s;
+}
+
+/* Every value Accept will write, in full. It scrolls with the card's body,
+   never on its own and never over the footer (GM - Design, PR #216 r3). */
 .proposal-bar__details {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 240px;
-  margin-top: 4px;
+  margin-top: 6px;
   padding: 8px 10px;
-  overflow: auto;
-  border: 1px solid rgb(255 255 255 / 0.1);
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.1));
   border-radius: 8px;
   background: rgb(0 0 0 / 0.25);
-  font-size: 11px;
+  font-size: 12px;
+}
+
+.proposal-bar__quote {
+  margin: 0;
+  color: rgb(255 255 255 / 0.5);
 }
 
 .proposal-bar__group-title {
   margin: 0 0 2px;
   color: rgb(255 255 255 / 0.85);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -464,11 +702,38 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__to {
-  color: #fff;
+  color: var(--sr-ink, #fff);
 }
 
+/* New and removed connections, one line each: “Prompt” → “Second take” ·
+   Prompt, the target's port muted; removed ones struck through (GM -
+   Design, PR #216 r2-r3). */
+.proposal-bar__wires {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal-bar__wire {
+  color: var(--sr-ink, #fff);
+  overflow-wrap: anywhere;
+}
+
+.proposal-bar__wire-port {
+  color: rgb(255 255 255 / 0.5);
+}
+
+.proposal-bar__wires[data-kind='unwired'] .proposal-bar__wire {
+  color: rgb(255 255 255 / 0.45);
+  text-decoration: line-through;
+}
+
+/* 5. The inline error, above the footer. */
 .proposal-bar__error {
-  margin: 2px 0 0;
+  margin: 8px 0 0;
   color: var(--line-warning, #ff8a80);
   /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
   overflow: clip;
@@ -476,24 +741,39 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
-.proposal-bar__actions {
+/* 6. The footer: a hairline on top, always at the card's foot. Show on the
+   left; Reject, then Accept, on the right. */
+.proposal-bar__footer {
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--sr-edge, rgb(255 255 255 / 0.08));
+}
+
+.proposal-bar__decide {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
   gap: 6px;
+  margin-left: auto;
 }
 
 .proposal-bar__button {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   height: 30px;
   padding: 0 10px;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.14));
+  border-radius: var(--sr-radius-control, 8px);
   background: rgb(255 255 255 / 0.05);
-  color: rgb(255 255 255 / 0.85);
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
   font: inherit;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 120ms ease-out, opacity 120ms ease-out;
 }
@@ -512,16 +792,49 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
+/* Accept is the app's one primary button (the asset proposals' Accept):
+   light fill, dark label, never the agent's colour. The button is the
+   person's decision, and a light agent colour (#ffd9e2) with white text
+   would fail contrast; the old one was white on lime, about 1.3:1. */
 .proposal-bar__button--primary {
-  border-color: transparent;
-  background: var(--agent-color);
-  color: #fff;
+  border-color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  background: var(--sr-ink, rgb(255 255 255 / 0.92));
+  color: var(--sr-canvas, #000);
   font-weight: 600;
 }
 
 .proposal-bar__button--primary:hover:not(:disabled) {
-  background: var(--agent-color);
-  filter: brightness(1.1);
+  border-color: var(--sr-ink-bold, #fff);
+  background: var(--sr-ink-bold, #fff);
+}
+
+/* Taller where a finger presses them. */
+@media (pointer: coarse) {
+  .proposal-bar__button {
+    height: 44px;
+  }
+}
+
+/* Below 400 px of card width (its content box, inside the 1 px border and
+   the 3 px edge), Show is its icon alone (aria-label "Show"), so the row
+   never wraps. */
+@container proposal-card (width < 396px) {
+  .proposal-bar__show-label {
+    display: none;
+  }
+
+  .proposal-bar__button--show {
+    width: 30px;
+    padding: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  @container proposal-card (width < 396px) {
+    .proposal-bar__button--show {
+      width: 44px;
+    }
+  }
 }
 
 /* The notice for someone else's edit (CanvasUndoNotice): it landed, or was
@@ -569,6 +882,53 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
    copy round 3b; an agent's clear with its Undo). A file drop's failures
    each take a line of their own (lib/canvasFileDrop.ts). Undo, Open copy
    and × sit vertically centred on the right (align-items above). */
+
+/* GM - Design, PR #216 r8: with the fold's count in this row ("Moved
+   “Hero shot” · Undo · 3 more"), the name gives way, cut with "…", so Undo
+   and "3 more" always fit on one line, even at 420. The one place a
+   notice's text is cut (pr198Fix6Copy names it). */
+/* Carrying the fold's count (GM r8), the name gives way on one line. Its
+   one unbroken line would otherwise widen the notice past the region (its
+   min-content), so the notice is held to its slot as every other row is. */
+/* GM r76: the other place, an Undo notice kept to one line where its full
+   height leaves the proposal card short of Accept and Reject (lib/
+   noticeStackPlace.ts, `clip`): it keeps its line and buttons, its text cut
+   with "…", the full text in its aria-label. */
+.canvas-undo-notice[data-notice-more-host],
+.canvas-undo-notice[data-notice-clipped] {
+  max-width: min(var(--notice-max-w, 560px), 100%);
+}
+
+.canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,
+.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.canvas-undo-notice__more-dot {
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 0.45);
+}
+
+/* A trailing text button: no fill, no border. */
+.canvas-undo-notice__more-button {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.85);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canvas-undo-notice__more-button:hover {
+  color: #fff;
+  text-decoration: underline;
+}
 
 .canvas-undo-notice__action,
 .canvas-undo-notice__close {
@@ -684,19 +1044,15 @@ body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
     animation: notice-fade-in 180ms ease-out both;
     transition: none;
   }
+  /* The note, the disclosure's panel and its chevron open straight. */
+  .proposal-bar__note,
+  .proposal-bar__details-wrap,
+  .proposal-bar__details-wrap[data-open='true'],
+  .proposal-bar__chevron {
+    transition: none;
+  }
   .proposal-bar[data-review='true'] {
     box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 2px var(--agent-color);
-  }
-}
-
-@media (max-width: 640px) {
-  .proposal-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .proposal-bar__actions {
-    justify-content: flex-end;
   }
 }
 

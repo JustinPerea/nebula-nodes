@@ -91,6 +91,15 @@ export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
  * wire (GM - Design, PR #211 r5: "the tip lands, and that's all").
  */
 export const AGENT_CURSOR_STALE_GAP_SECONDS = 0.25;
+/**
+ * The longest a gliding cursor waits past its own rest for the rest of its
+ * column (ms): the layer's rest gate holds a column's glide so it lands on
+ * one frame (GM - Design, #219 r65), and this caps the hold (r66), so a drag
+ * that keeps retargeting one member can't keep the others unsettled for as
+ * long as the person drags. A spring lands the members of one move within
+ * about 220 ms of each other, so a column glide never reaches it.
+ */
+export const AGENT_CURSOR_REST_HOLD_MAX_MS = 300;
 /** The land spring snaps onto the target within these (screen px, px/s). */
 const REST_DISTANCE_PX = 0.2;
 const REST_SPEED_PX = 2;
@@ -157,6 +166,11 @@ export interface CursorMotion {
   chase: number;
   held: boolean;
   stillFor: number;
+  /** Its landing ended its last step within the rest distance and speed:
+   *  it would come to rest now. The layer's column gate reads it, so the
+   *  cursors one layout change sets gliding come to rest on one frame
+   *  (GM - Design, #219 r65). */
+  nearRest?: boolean;
 }
 
 export interface StepResult {
@@ -388,7 +402,7 @@ export function isMoving(m: CursorMotion, zoom: number): boolean {
 
 /** One fixed step. Mutates the motion in place: no allocation per step. */
 function substep(
-  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point,
+  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point, mayRest = true,
 ): { handedOff: boolean; arrived: boolean } {
   let handedOff = false;
   const plan = m.plan;
@@ -443,8 +457,10 @@ function substep(
     // Settled onto the target, still or moving (speed relative to it): on a
     // moving one the tip rides from here, at 0 px.
     const targetMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
-    if (Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
-      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX) {
+    m.nearRest = Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
+      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX;
+    if (m.nearRest && mayRest) {
+      m.nearRest = false;
       m.pos.x = aimX;
       m.pos.y = aimY;
       m.vel.x = 0;
@@ -510,6 +526,14 @@ export function stepMotion(
      *  tip kinematically (GM - Design, PR #211 review 6, item 4). Default:
      *  any move of the spot on its carrier is a re-layout. */
     shifted?: boolean;
+    /** The cursors gliding in its column come to rest together (the layer's
+     *  CursorField.restGate, GM - Design #219 r65): false holds its landing
+     *  on the spring past its own rest; true (each of them was within the
+     *  rest distance and speed on the last frame) lets it rest, as it does
+     *  with no column: on the step it is within them on this frame, so a
+     *  spot that moved on the gate's frame is never snapped to (r75.1).
+     *  Default: it rests on its own. */
+    restGate?: boolean;
   },
 ): StepResult {
   const { zoom, reduced, opacityTarget } = opts;
@@ -631,7 +655,13 @@ export function stepMotion(
       at.x = glideFrom.x + (live.x - glideFrom.x) * f;
       at.y = glideFrom.y + (live.y - glideFrom.y) * f;
     }
-    const step = substep(m, at, h, zoom, opacityTarget, rest);
+    // Held by its column (false), it stays on the spring past its own rest;
+    // otherwise it rests on its own the step it is within the rest distance
+    // and speed. So on the gate's frame (true) it lands only if it is still
+    // near rest on this frame's steps: a spot that moved on the gate's frame
+    // (a crossing, a say, a join or a leave then, or the cap firing) starts
+    // a fresh glide, never a snap (#219 review 3, MEDIUM-1; GM r75.1).
+    const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate !== false);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
   }

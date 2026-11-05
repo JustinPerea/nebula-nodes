@@ -11,7 +11,7 @@ import {
   type AgentNoteAuthor,
   type AgentNotesSurface,
 } from '../../lib/agentNotes';
-import { cornerRight, roomBelow, showLabel, type Box } from '../../lib/agentNotesView';
+import { cornerRight, roomBelow, showLabel, threadOpenLabel, type Box } from '../../lib/agentNotesView';
 import { springCssVars, springLinear, SPRING_SOFT } from '../../lib/springs';
 import { viewportRevealing } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
@@ -23,6 +23,7 @@ import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasP
 import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { reviewCanvasProposal } from '../../lib/canvasProposalReview';
+import { openThreadIn } from '../../lib/threadOpen';
 import { ghostBoxes } from '../../lib/canvasProposals';
 import { goToCanvas, onCanvas, whenReady } from '../../lib/goToCanvas';
 import { useUIStore } from '../../store/uiStore';
@@ -42,6 +43,7 @@ import { failureMessage, writtenLine } from '../../lib/errorCopy';
 import { clearLineOnPromote } from '../../lib/clearsOnPromote';
 import { reportPersonRequired } from '../../lib/personSession';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { UPDATES_OPEN_EVENT } from '../../lib/personThread';
 
 /** The answer form (Q125 item 1): its own chunk, loaded once a question is open. */
 const loadQuestionsForm = () => import('./AgentQuestionsForm');
@@ -335,7 +337,7 @@ function seeAllActions(): Promise<void> {
     .then(() => whenReady(() => onCanvas() && agentLogHeader() !== null))
     .then((ready) => {
       if (request !== seeAllRequest || !onCanvas()) return;
-      if (!ready) throw writtenLine("The Agent log didn't open. Try again.");
+      if (!ready) throw writtenLine('The Agent log didn’t open. Try again.');
       useUIStore.getState().openAgentLog();
       window.requestAnimationFrame(() => {
         if (onCanvas()) agentLogHeader()?.focus({ preventScroll: true });
@@ -598,6 +600,12 @@ export function AgentNotesCorner({ sections, agents = null }: {
   useEffect(() => {
     openListRef.current = openList;
   });
+  // The Message box's "Claude left a note in Updates" row: Show opens the list.
+  useEffect(() => {
+    const show = () => { if (!openRef.current) openListRef.current(); };
+    window.addEventListener(UPDATES_OPEN_EVENT, show);
+    return () => window.removeEventListener(UPDATES_OPEN_EVENT, show);
+  }, []);
 
   // A click outside closes the list.
   useEffect(() => {
@@ -692,15 +700,17 @@ export function AgentNotesCorner({ sections, agents = null }: {
     }
     // Review leaves for where the proposal is decided; a Commons ask opens
     // in the Commons, another of its sections, which isn't leaving.
-    if (action.op.kind === 'proposal.review' && action.op.target !== 'commons'
+    if (((action.op.kind === 'proposal.review' && action.op.target !== 'commons') || action.op.kind === 'thread.open')
       && askingFirst(anchor, () => runAction(note, action, anchor))) return;
     useAgentNotesStore.getState().clearError();
     void Promise.resolve()
       .then(() => section.adapter.runAction(note, action))
       .then(() => {
-        // Review took the person to the strip: the list steps aside. (A
-        // Review that fails keeps the list open, with its reason.)
-        if (action.op.kind === 'proposal.review' && openRef.current) closeList(false);
+        // Review took the person to the strip, Open to the thread: the list
+        // steps aside. (One that fails keeps the list open, with its reason.)
+        if ((action.op.kind === 'proposal.review' || action.op.kind === 'thread.open') && openRef.current) {
+          closeList(false);
+        }
       })
       .catch(fail);
   }
@@ -1067,9 +1077,18 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         }
         // An asset proposal's Update (Q92 a): go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
+        // A reply saved in another project's thread (GM r100.3): open that thread.
+        if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId, action.op.replyId);
         // GM r9 3: no Update decides a proposal from its row any more (an old Accept or
         // Reject is read as Review, lib/agentNotes); anything else can't run here.
-        throw writtenLine(`"${action.label}" can't run from here.`);
+        throw writtenLine(`“${action.label}” can’t run from here.`);
+      },
+      // GM r108 c: Open on a reply's Update names whose reply and where.
+      actionLabel: (note, action) => {
+        if (action.op.kind !== 'thread.open') return undefined;
+        const id = action.op.projectId;
+        const name = useProjectStore.getState().projects.find((project) => project.id === id)?.name;
+        return threadOpenLabel(action.label, note.author.name, name);
       },
       actionState: (action) => {
         // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
@@ -1111,7 +1130,7 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
         useBoardCanvasStore.getState().requestShow(boardId, onBoard);
       },
       runAction: async (_note, action) => {
-        throw writtenLine(`"${action.label}" can't run here yet.`);
+        throw writtenLine(`“${action.label}” can’t run here yet.`);
       },
     };
   }, [boardId, order]);

@@ -72,6 +72,8 @@ const backend = () => [...net.backend].sort();
 const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.data.params.value;
 const stacks = () => ({ undo: store().undoStack.length, redo: store().redoStack.length });
 const notice = () => store().undoNotice?.text ?? null;
+// delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
+// holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
 const redo = async () => { act(() => { store().redo(); }); await settle(); };

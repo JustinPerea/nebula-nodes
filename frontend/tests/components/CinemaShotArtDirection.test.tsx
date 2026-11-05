@@ -5,9 +5,12 @@ import type { CinemaSceneSpec, CinemaShot, NodeData } from '../../src/types';
 import { freezeRunSnapshot, type RunRecord } from '../../src/lib/runHistory';
 import { effectiveCinemaLook } from '../../src/lib/cinemaArtDirection';
 import { CinemaShotPanel } from '../../src/components/cinema-studio/CinemaShotPanel';
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import { useCinemaMotionStore } from '../../src/store/cinemaMotionStore';
 import { useCinemaUploadStore } from '../../src/store/cinemaUploadStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const requests = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof import('../../src/lib/backend')>(),

@@ -6,6 +6,9 @@ import { useSlotWaiting } from '../../lib/noticeWaiting';
 /** How long the toast stays up while the pointer and focus are elsewhere. */
 export const BOARD_TOAST_MS = 6000;
 
+/** Each toast's dismiss time, kept across remounts (keyed by the toast the Studio holds). */
+const deadlines = new WeakMap<BoardToast, number>();
+
 export interface BoardToast {
   id: number;
   /** What happened: "Removed #1", "Undid: Moved #3". */
@@ -35,11 +38,30 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   const dismissRef = useRef(onDismiss);
   useEffect(() => { dismissRef.current = onDismiss; }, [onDismiss]);
 
+  // The deadline belongs to the toast, not to this mount: the Studio draws
+  // the toast again when the person switches Board and List (each view
+  // renders its own), and a remount must keep the time it had left (GM's
+  // #210 check: a line stayed up past its 6 s across the switch). Leaving
+  // the toast after holding it gives it a fresh BOARD_TOAST_MS, as before.
+  const wasHeld = useRef(false);
   useEffect(() => {
-    if (held || waiting) return;
-    const timer = window.setTimeout(() => dismissRef.current(), BOARD_TOAST_MS);
+    if (held || waiting) {
+      // Held (or waiting behind a capped popover, GM r13 2), the old deadline is void: a remount meanwhile (the view
+      // switched under the pointer) starts a fresh BOARD_TOAST_MS too.
+      wasHeld.current = true;
+      deadlines.delete(toast);
+      return;
+    }
+    const now = Date.now();
+    let until = deadlines.get(toast);
+    if (until === undefined || wasHeld.current) {
+      until = now + BOARD_TOAST_MS;
+      deadlines.set(toast, until);
+    }
+    wasHeld.current = false;
+    const timer = window.setTimeout(() => dismissRef.current(), Math.max(0, until - now));
     return () => window.clearTimeout(timer);
-  }, [held, waiting, toast.id]);
+  }, [held, waiting, toast]);
 
   return (
     <InNoticeRegion slot="board">

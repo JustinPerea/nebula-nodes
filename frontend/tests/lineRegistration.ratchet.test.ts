@@ -32,7 +32,9 @@ function sourceFiles(dir = SRC, ext = /\.(ts|tsx)$/): string[] {
 /** The components that register what they're handed, and the prop that holds the line. */
 export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLines: 'failure', CommonsErrorLine: 'line', LineBox: 'text',
   // Round 12 (GM r20 1): the Commons' page-lines row, which hands its line to CommonsErrorLine.
-  CommonsPageLines: 'line' };
+  CommonsPageLines: 'line',
+  // The Moodboard Studio's own wrapper (MoodboardStudioView FailureLine): a div around FailureLines.
+  FailureLine: 'failure' };
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
@@ -178,7 +180,13 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'pins.remove': [{ file: 'components/canvas/PinComposer.tsx', expr: 'errorLeave.shown' }],
   'pins.refusal': [{ file: 'components/canvas/PinComposer.tsx', expr: 'errorLeave.shown' }],
   'asset-proposals.decide': [{ file: 'components/proposals/AssetProposalStrip.tsx', expr: 'error' }],
-  'questions.answer': [{ file: 'components/agent-notes/AgentQuestionsForm.tsx', expr: 'error' }],
+  'questions.answer': [
+    { file: 'components/agent-notes/AgentQuestionsForm.tsx', expr: 'error' },
+    // The Message box's question row (main's #225), the same store line.
+    { file: 'components/panels/MessageBox.tsx', expr: 'error' },
+  ],
+  // The Message box's send refusal: the composer's one line.
+  'thread.send': [{ file: 'components/panels/MessageBox.tsx', expr: 'lineText' }],
   'questions.dismiss': [{ file: 'components/agent-notes/AgentQuestionsForm.tsx', expr: 'error' }],
   'canvas-proposals.refusal': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],
   'canvas-proposals.accept': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],

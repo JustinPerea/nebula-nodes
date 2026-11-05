@@ -1,4 +1,5 @@
 import type { Edge, Node, Viewport } from '@xyflow/react';
+import type { GoesWith } from './projectPurgeCopy';
 import type { NodeData } from '../types';
 import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
@@ -48,7 +49,11 @@ export interface ProjectSnapshot {
   createDraft?: CreateDraft | null;
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
-export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
+export interface TrashedProject extends ProjectSummary {
+  deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string };
+  /** What deleting it for good also deletes: its moodboards', characters' and styles' names (lib/projectPurgeCopy.ts). */
+  goesWith?: GoesWith;
+}
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
