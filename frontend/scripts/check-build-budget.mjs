@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts } from './check-built-fonts.mjs';
+import { chunkLabel, startupSet } from './lib/startupChunks.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(scriptDir, process.env.NEBULA_DESKTOP_BUILD === '1' ? '../dist-desktop' : '../dist');
@@ -33,6 +34,22 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
   );
 }
 
+// The entry alone is not the startup cost: chunks it imports statically or
+// modulepreloads load before the first paint too. Measured on main with
+// `npm run build`; the limits are that plus about 8 KB raw / 3 KB gzip. Raise
+// them only with the reason in the PR (the same rule as the entry limits).
+const MAX_STARTUP_BYTES = 1_990_000;
+const MAX_STARTUP_GZIP_BYTES = 520_000;
+const startup = await startupSet(distDir);
+const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
+
+if (startup.raw > MAX_STARTUP_BYTES || startup.gzip > MAX_STARTUP_GZIP_BYTES) {
+  throw new Error(
+    `Startup set exceeds budget: ${startup.raw} bytes raw / ${startup.gzip} bytes gzip across ${startup.members.length} chunks ` +
+    `(limits ${MAX_STARTUP_BYTES} / ${MAX_STARTUP_GZIP_BYTES}). Biggest members: ${biggest}`,
+  );
+}
+
 const assetNames = await readdir(path.join(distDir, 'assets'));
 for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   const source = await readFile(path.join(distDir, 'assets', assetName), 'utf8');
@@ -45,7 +62,8 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
 const fonts = await checkBuiltFonts(distDir, { desktop: process.env.NEBULA_DESKTOP_BUILD === '1' });
 
 console.log(
-  `Build budget passed: ${entrySize} bytes raw / ${entryGzipSize} bytes gzip; ` +
+  `Build budget passed: entry ${entrySize} bytes raw / ${entryGzipSize} bytes gzip; ` +
+  `startup set ${startup.raw} raw / ${startup.gzip} gzip in ${startup.members.length} chunks (biggest: ${biggest}); ` +
   `${assetNames.filter((name) => name.endsWith('.js')).length} JavaScript assets are eval-free; ` +
   `${fonts.fontFiles} bundled woff2 files (${fonts.fontBytes} bytes) behind ${fonts.faces} @font-face rules, no font CDN.`,
 );

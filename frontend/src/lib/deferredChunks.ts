@@ -3,7 +3,8 @@ import { placeholderRunDialogModule } from './placeholderRunDialogModule';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
- * startup entry (the 512 kB budget in scripts/check-build-budget.mjs).
+ * startup entry (the 512 kB budget in scripts/check-build-budget.mjs, which
+ * also budgets the startup set: the entry plus the chunks it loads statically).
  *
  * Every split module is listed in `DEFERRED_MODULES` below, and
  * `tests/entrySplit.test.ts` walks the static import graph from src/main.tsx
