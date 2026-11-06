@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardQuoted, changeCountLabel, proposalChangeCount, proposalChanges, proposalEstimateLabel } from '../../src/lib/canvasProposals';
+import { cardQuoted, changeCountLabel, proposalChangeCount, proposalChanges, proposalEstimateLabel } from '../../src/lib/canvasProposalsBar';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {

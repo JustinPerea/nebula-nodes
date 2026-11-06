@@ -16,7 +16,7 @@ import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { acceptChipTitle } from '../src/lib/canvasProposals';
+import { acceptChipTitle } from '../src/lib/canvasProposalsBar';
 import { hasRoutes, keyBilling, keyBillingAccount, keyBillingLabel } from '../src/lib/directRoute';
 import { chipEstimate, chipTitle, type PricingTable } from '../src/lib/pricing';
 import { providerKeyWarnings } from '../src/lib/providerSwitch';

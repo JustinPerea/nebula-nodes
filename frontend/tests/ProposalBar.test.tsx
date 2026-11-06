@@ -356,13 +356,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'depth', max: 64 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
   // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
@@ -373,13 +373,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'size', max: 16_777_216 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too large to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
   it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
@@ -665,13 +665,15 @@ describe('ProposalBar', () => {
   it.each([4, 5])('counts %i nodes in one line and lists every one in the details', (count) => {
     const list = notReadyOf(count);
     expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([`⚠${count} nodes can’t run here yet.`]);
-    // The details hold the list and what Accept writes: one name for both
-    // (GM, PR #203 r27 item 4), following its state.
-    const toggle = screen.getByRole('button', { name: 'Show the details' });
+    // The details hold the list and what Accept writes under one toggle,
+    // whose name never changes (GM - Design, 2026-11-01: the chevron and
+    // aria-expanded carry the state).
+    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Hide the details' })).toBe(toggle);
-    expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list/ })).toBeNull();
-    const details = screen.getByRole('region', { name: 'Details' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list|Show the details/ })).toBeNull();
+    const details = screen.getByRole('group', { name: 'What Accept writes' });
     for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
   });
 
@@ -709,17 +711,17 @@ describe('ProposalBar', () => {
     sameNamed(3);
     const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list.textContent).toBe('⚠4 nodes can’t run here yet.');
-    fireEvent.click(screen.getByRole('button', { name: 'Show the list' }));
-    expect([...screen.getByLabelText('Details').querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    expect([...screen.getByRole('group', { name: 'What Accept writes' }).querySelectorAll('p')].map((p) => p.textContent)).toEqual([
       '3 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
       '“Claude” needs your Anthropic API key. Add it in Settings.',
     ]);
   });
 
-  // GM, PR #203 r26: one toggle, one name: "Show the list" / "Hide the
-  // list"; the heading inside is "Can’t run here". Its name follows its
-  // state and focus stays on it.
-  it('opens the list with "Show the list" and closes it with "Hide the list", focus kept on the toggle', () => {
+  // GM - Design, 2026-11-01 (main) with GM, PR #203 r24: four not-ready nodes
+  // are one count line in the bar and every node's line in the details; the
+  // toggle's name never changes and focus stays on it.
+  it('four not-ready nodes: one count line, the list in the details, focus kept on the toggle', () => {
     const many = proposal('p_a');
     many.nodes = [];
     many.params = [];
@@ -728,15 +730,16 @@ describe('ProposalBar', () => {
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const list = screen.getByRole('list', { name: "Can't run here" });
-    expect(list.querySelectorAll('li')).toHaveLength(4);
-    expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
-    // The first ⚠ line is kept in view with the plan line (GM r6); the rest scroll.
-    const kept = [...list.querySelectorAll('li')].map((li) => li.hasAttribute('data-notice-keep'));
-    expect(kept).toEqual([true, false, false, false]);
-    expect(list.textContent).toContain('and 1 more in the details');
-    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
-    expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
+    const list = screen.getByRole('list', { name: "Can’t run here" });
+    expect(list.querySelectorAll('li')).toHaveLength(1);
+    expect(list.textContent).toContain('4 nodes can’t run here yet.');
+    // The ⚠ line is kept in view with the plan line (GM r6).
+    expect(list.querySelector('li')!.hasAttribute('data-notice-keep')).toBe(true);
+    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.getByRole('group', { name: 'What Accept writes' }).textContent).toContain('(+d)');
   });
 
   it('with no changes, the row reads "Every node that can’t run" with the count', () => {
@@ -873,7 +876,8 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     cost: { kind: 'mayCost', provider: 'speridlabs', label: 'may cost · Hugging Face' } }) as never;
 
   it('Idol alone with a token: "Accept and run" with "1 may cost", its own clause, and no estimate line', () => {
-    const view = proposal('p_a', { nodes: [idolNode()], edges: [], params: [], run: ['+idol'] });
+    const view = proposal('p_a', { nodes: [idolNode()], edges: [], params: [], run: ['+idol'],
+      plan: 'Adds “Idol” · Runs “Idol” · may use your Hugging Face credits' });
     view.cost = { ...view.cost, paidRuns: 0, freeRuns: 0, mayCostRuns: 1, providers: [], estimate: null,
       mayCost: [{ name: 'Idol', account: 'Hugging Face' }] };
     open(view);
@@ -882,9 +886,10 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     const accept = screen.getByRole('button', { name: 'Accept and run 1 may cost' });
     expect(accept).not.toHaveAttribute('aria-disabled');
     expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', 'Idol can use your Hugging Face credits.');
-    expect(document.querySelector('.proposal-bar__summary')).toHaveTextContent(/^Adds 1 node · runs Idol · may use your Hugging Face credits$/);
-    expect(document.querySelector('.proposal-bar__meta')?.textContent).toMatch(/^expires in \d+:\d\d$/);
-    expect(screen.queryByText(/paid|No list price|\$0/)).toBeNull();
+    // The plan line is the backend's (services/canvas_proposals.plan_line, tested in
+    // test_proposal_plan_line.py: "may cost" clauses, no price); the bar shows it as written.
+    expect(document.querySelector('.proposal-bar__plan')).toHaveTextContent('Adds “Idol” · Runs “Idol” · may use your Hugging Face credits');
+    expect(screen.queryByText(/No list price|\$0/)).toBeNull();
   });
 
   const mixed = () => {
@@ -907,11 +912,6 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
     render(<ProposalBar />);
     const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' });
-    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe(
-      'Adds 2 nodes · runs 2 paid models and Idol · Idol may use your Hugging Face credits');
-    expect(document.querySelector('.proposal-bar__meta')?.textContent).toMatch(
-      /^~\$0\.13 · List prices, not a quote · expires in \d+:\d\d$/);
-    expect(document.querySelector('.proposal-bar__summary')?.textContent).not.toMatch(/google|\(/);
     expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title',
       '“Nano Banana” and “Hero still” call paid providers. Estimated cost $0.13. Idol can use your Hugging Face credits.');
     graph.state.nodes = [];
@@ -923,8 +923,6 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid' })).toBeTruthy();
-    // Without Idol's clause the shared form stands, tag and all (GM: the wording batch).
-    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe('Adds 2 nodes · runs 2 paid models (google) · ~$0.13');
     // The chip still has its cost tooltip, by the Run chip's formatter (GM,
     // PR #203 r17 item 4); n4 isn't on this canvas, so it goes by its id.
     expect(document.querySelector('.proposal-bar__count')).toHaveAttribute('title',
@@ -945,8 +943,6 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
     render(<ProposalBar />);
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
-    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe(
-      'Adds 2 nodes · runs 2 paid models and Idol · Idol may use your Hugging Face credits');
   });
 
   it('before this tab has read the keys, the backend\'s classes stand', () => {

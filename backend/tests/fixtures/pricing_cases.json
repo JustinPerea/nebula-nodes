@@ -3777,7 +3777,10 @@
       "expected": {
         "low": null,
         "high": null,
-        "awaitingInput": true
+        "awaitingInput": true,
+        "reason": {
+          "kind": "awaitingInput"
+        }
       }
     },
     {

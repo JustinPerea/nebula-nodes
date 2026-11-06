@@ -65,6 +65,20 @@ def test_change_one_run_another():
     assert plan_line(view) == "Changes “Prompt”, runs “Hero shot” · Krea 2 on your Krea plan · Up to $0.43"
 
 
+def test_runs_say_their_class_paid_plan_may_cost_never_free():
+    """GM, PR #203 r11 item 2, r19 item 1 (the frontend's old line 1, now the backend's)."""
+    entries = [_entry("a", "A", model="GPT Image 2", billed="your OpenAI key"),
+               _entry("b", "B", model="GPT Image 2", billed="your OpenAI key"),
+               _entry("+k", "Krea 2")]
+    mixed = _view(run=["a", "b", "+k"], nodes=[{"ref": "+k", "name": "Krea 2"}],
+                  cost={"paidRuns": 2, "planRuns": 1, "nodes": entries})
+    assert plan_line(mixed) == "Adds and runs “Krea 2”, runs “A” and “B” · 2 paid runs · 1 on your Krea plan · no list price"
+    plan_only = _view(run=["+k"], cost={"paidRuns": 0, "planRuns": 1, "nodes": [entries[2]]})
+    assert plan_line(plan_only) == "Runs “Krea 2” · Krea 2 on your Krea plan · no list price"
+    may = _view(run=["n1"], cost={"mayCostRuns": 1, "mayCost": [{"name": "Idol", "account": "Hugging Face"}]})
+    assert "free" not in plan_line(may) and "Hugging Face" in plan_line(may)
+
+
 def test_adds_with_connections_and_counts_from_four():
     one = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}])
     assert plan_line(one) == "Adds “Krea 2” and 1 connection · nothing runs until you choose"

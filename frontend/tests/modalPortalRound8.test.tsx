@@ -19,6 +19,9 @@ import { StrictMode, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ModalPortal } from '../src/components/ModalPortal';
+import { DeferredKeyboardShortcutsDialog } from '../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 afterEach(() => {
   cleanup();

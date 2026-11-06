@@ -1,7 +1,8 @@
 // PR #203 round 15: GM r28 and r29, review 14 (copy MEDIUM-1, LOW-1).
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import { mergedNotReadyLine, notReadyShown, type ProposalNotReady } from '../../src/lib/canvasProposals';
+import { type ProposalNotReady } from '../../src/lib/canvasProposals';
+import { mergedNotReadyLine, notReadyShown } from '../../src/lib/canvasProposalsBar';
 import { addKeyLine, keyPhrase, KEY_NAMES } from '../../src/lib/directRoute';
 import { keychainKeptLine } from '../../src/lib/settingsWrites';
 import { modelKeyMissingText } from '../../src/lib/failureLines';

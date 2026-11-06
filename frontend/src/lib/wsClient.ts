@@ -168,15 +168,6 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
-/** Said by this client, never the backend: the server promoted this socket
- *  to the person's tab (its proposalSync on a verified hello). Until then the
- *  socket hears no `settingsChanged`, so a key change made between the
- *  connect and the promote reached nothing here; the tab reads its settings
- *  again on this (store/settingsChangedSocket.ts, PR #203 round 15). */
-export interface PersonPromotedEvent {
-  type: 'personPromoted';
-}
-
 /** Said by this client, never the backend: the server refused this socket's
  *  hello (its `personRequired` frame), so it gets the agents' form from now
  *  on. Person-only state the tab drew (numbered cursors) goes. */
@@ -515,7 +506,6 @@ export type ExecutionEvent = (
   | PersonThreadEvent
   | ChannelListenersEvent
   | SocketReconnectedEvent
-  | PersonPromotedEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
@@ -640,7 +630,6 @@ class WebSocketClient {
               notePersonPromoted();
             }
             this.dispatch(parsed);
-            if (promotedNow) this.dispatch({ type: 'personPromoted' });
           } catch (err) {
             console.error('[ws] failed to parse message:', err);
           }

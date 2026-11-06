@@ -36,7 +36,7 @@ import {
 } from '../src/components/commons/CommonsEvaluation';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { runChipLabel, runChipTitle, type RunScopeSummary } from '../src/lib/runScope';
-import { proposalEstimateLabel } from '../src/lib/canvasProposals';
+import { proposalEstimateLabel } from '../src/lib/canvasProposalsBar';
 import { formatSpentUsd } from '../src/lib/pricing';
 import { universalSettingLabel } from '../src/lib/universalSettingLabel';
 import { agentActionEntry } from '../src/store/agentLogStore';

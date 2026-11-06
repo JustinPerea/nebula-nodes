@@ -21,6 +21,8 @@ function sameReason(cost: RunCost, expected: SharedReason) {
   if (!expected) return expect(got).toBeUndefined();
   if (expected.kind === 'missingKey') return expect(got).toEqual({ kind: 'missingKey', key: keyPhrase(expected.keys ?? []) });
   if (expected.kind === 'leftOut') return expect(got).toEqual({ kind: 'leftOut', plus: expected.plus });
+  // The chip also says which input it waits on (`audio`, main's length-priced nodes): the backend's reason is the kind.
+  if (expected.kind === 'awaitingInput') return expect(got).toMatchObject({ kind: 'awaitingInput' });
   return expect(got).toEqual({ kind: expected.kind });
 }
 
@@ -587,7 +589,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
       expect(summary.cost!.high).toBe(0);
       expect(summary.cost!.unpriced).toEqual(['Talker']);
       expect(summary.cost!.sizeUnreadable).toEqual(['Talker']);
-      expect(describeRunScope(summary)).toContain('Nebula can\u2019t read the length of its audio');
+      expect(describeRunScope(summary)).toContain('Nebula couldn\u2019t read its audio\u2019s length');
       expect(describeRunScope(summary)).not.toMatch(/size/);
     }
   });

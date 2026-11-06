@@ -23,7 +23,7 @@ import { join, relative, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { acceptChipTitle, acceptCountChip, entryReason, proposalSummary } from '../src/lib/canvasProposals';
+import { acceptChipTitle, acceptCountChip, entryReason } from '../src/lib/canvasProposalsBar';
 import { costClass } from '../src/lib/costClass';
 import type { PricingTable } from '../src/lib/pricing';
 import { PROVIDER_KEYS } from '../src/lib/providerCatalog';
@@ -193,11 +193,10 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     } as unknown as ProposalView;
     expect(acceptCountChip(view)).toBe('2 paid · 1 on Krea plan');
     expect(acceptChipTitle(view, () => null)).toBe(run);
-    // Line 1 counts it outside "paid".
-    expect(proposalSummary(view)).toBe('Adds 3 nodes · runs 2 paid models · 1 on Krea plan');
+    // Line 1 (the plan line) counts it outside "paid": the backend writes it
+    // (services/canvas_proposals.plan_line; test_proposal_plan_line.py).
     const planOnly = { ...view, run: ['+k'], cost: { ...view.cost, paidRuns: 0, nodes: [view.cost.nodes[2]] } } as ProposalView;
     expect(acceptCountChip(planOnly)).toBe('1 on Krea plan');
-    expect(proposalSummary(planOnly)).toBe('Adds 3 nodes · runs 1 node on your Krea plan');
   });
 });
 
@@ -278,22 +277,22 @@ const APP = () => Object.fromEntries(sources(SRC).map((path) => [relative(SRC, p
 // Who may build each piece of a cost tooltip, and who may read the class's parts.
 const ALLOWED: Record<string, string[]> = {
   // The tooltip: the Run chip's and the Accept chip's, and the Run buttons' through describeRunScope.
-  costTitle: ['lib/canvasProposals.ts:acceptChipTitle', 'lib/runScope.ts:runChipTitle'],
+  costTitle: ['lib/canvasProposalsBar.ts:acceptChipTitle', 'lib/runScope.ts:runChipTitle'],
   runChipTitle: ['components/SelectionToolbar.tsx:runSelection', 'components/panels/Toolbar.tsx:Toolbar', 'lib/runScope.ts:describeRunScope'],
   paidSentence: ['lib/runScope.ts:costTitle'],
   estimateSentence: ['lib/runScope.ts:costTitle'],
   reasonGroups: ['lib/runScope.ts:costTitle'],
   mergedLead: ['lib/runScope.ts:costTitle'],
   // The chip rule (GM, PR #203 r20: "+" joins money, "·" joins classes): both chips, nothing else.
-  costChip: ['lib/canvasProposals.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
-  classCounts: ['lib/canvasProposals.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
-  mayCostSentence: ['lib/canvasProposals.ts:proposalMayCostSentence', 'lib/runScope.ts:costTitle'],
+  costChip: ['lib/canvasProposalsBar.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
+  classCounts: ['lib/canvasProposalsBar.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
+  mayCostSentence: ['lib/canvasProposalsBar.ts:proposalMayCostSentence', 'lib/runScope.ts:costTitle'],
   // Per-node figures: the costly-run confirm, the switcher's rows and the placeholder dialog's rows.
   formatUsdRange: ['lib/placeholderRunConfirm.ts:rowPrice', 'lib/providerSwitch.ts:price', 'lib/runScope.ts:runCostConfirmMessage'],
   // The class's parts: costClass, and the places that route or show readiness, never count.
   keyBilling: ['lib/costClass.ts:costClass', 'lib/directRoute.ts:keyBillingAccount'],
   usesKreaAccount: ['components/nodes/ModelNode.tsx:ModelNodeComponent', 'components/panels/Inspector.tsx:clearParam',
-    'lib/canvasProposals.ts:ghostKeyWarning', 'lib/costClass.ts:costClass', 'lib/directRoute.ts:selectRoute',
+    'lib/canvasProposalsBar.ts:ghostKeyWarning', 'lib/costClass.ts:costClass', 'lib/directRoute.ts:selectRoute',
     'lib/kreaConnection.ts:ownKeyStatus', 'lib/providerReadiness.ts:modelReadiness'],
 };
 

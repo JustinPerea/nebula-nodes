@@ -50,6 +50,8 @@ const CALLERS: Record<string, Entry> = {
   'lib/personThreadCompose.ts#sendMessage': { lock: 'send messages', in: ['components/panels/MessageBox.tsx'] },
   'store/agentQuestionsStore.ts#dismiss': { lock: 'answer this', in: ['components/agent-notes/AgentQuestionsForm.tsx'] },
   'lib/settingsWrites.ts#saveKey': { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
+  [`${SETTINGS}SettingsTopNotice.tsx#SettingsTopNotice`]: { lock: 'dismiss this', in: [`${SETTINGS}SettingsTopNotice.tsx`] },
+  [`${SETTINGS}SettingsTopNotice.tsx#load`]: { not: 'the restored-settings line is read only on a tab connected as the person (lib/personWork whenPerson), else on the promote' },
   'lib/settingsWrites.ts#removeKey': { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
   'lib/settingsWrites.ts#saveField': {
     lock: '', in: [`${SETTINGS}AgentSpendSection.tsx`, `${SETTINGS}StorageTab.tsx`, `${SETTINGS}ProvidersTab.tsx`],

@@ -50,7 +50,7 @@ describe('Run History lock map memo (review r6 NIT-5)', () => {
       snapshot: { nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
     useGraphStore.setState({ runHistory: [record], isExecuting: false, nodes: [idolNode(0)] as never });
     render(<RunHistoryPanel />);
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', LINE);
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', LINE);
     const read = calls.count;
     expect(read).toBeGreaterThan(0);
     // A drag: new node objects, same placeholders.
@@ -61,6 +61,6 @@ describe('Run History lock map memo (review r6 NIT-5)', () => {
     // it, so nothing in it needs the key any more.
     act(() => useGraphStore.setState({ nodes: [idolNode(240, true)] as never }));
     expect(calls.count).toBe(read + 1);
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).not.toHaveAttribute('data-key-locked');
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).not.toHaveAttribute('data-key-locked');
   });
 });

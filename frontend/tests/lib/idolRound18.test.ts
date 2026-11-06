@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import routeCases from '../../../backend/tests/fixtures/route_cases.json';
 import { providerSwitchState } from '../../src/lib/providerSwitch';
-import { notReadyShown } from '../../src/lib/canvasProposals';
+import { notReadyShown } from '../../src/lib/canvasProposalsBar';
 import { routeAction } from '../../src/lib/directRoute';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../../src/types';

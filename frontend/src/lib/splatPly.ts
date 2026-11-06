@@ -99,7 +99,7 @@ export function parseSplatPlyHeader(
   // or a stray index (f_rest_0..7 and f_rest_20) passes the count and then
   // throws in Spark (backend/services/splat_ply.py has the same rule).
   for (let index = 0; index < rest; index += 1) {
-    if (!restNames.includes(`f_rest_${index}`)) invalid(`the f_rest properties aren't f_rest_0 to f_rest_${rest - 1}`);
+    if (!restNames.includes(`f_rest_${index}`)) invalid(`the f_rest properties aren’t f_rest_0 to f_rest_${rest - 1}`);
   }
 
   const maxPoints = Math.min(options.maxPoints ?? SPLAT_PLY_MAX_POINTS, SPLAT_PLY_MAX_POINTS);

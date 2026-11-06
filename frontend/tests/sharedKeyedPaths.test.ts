@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { liveKeyBilling, proposalEstimateLabel } from '../src/lib/canvasProposals';
+import { liveKeyBilling, proposalEstimateLabel } from '../src/lib/canvasProposalsBar';
 import type { PricingTable } from '../src/lib/pricing';
 import { historyRunKeyLock } from '../src/lib/historyRunKeyLock';
 import { proposalAcceptLock } from '../src/lib/proposalAcceptLock';

@@ -333,7 +333,7 @@ def test_every_quoted_connection_is_a_real_label():
                 found.append(f"{path.relative_to(REPO)}: says “the API token”")
     assert found == []
     # The billing value the bar shows for the API key's connection.
-    bar = (REPO / "frontend" / "src" / "lib" / "canvasProposals.ts").read_text(encoding="utf-8")
+    bar = (REPO / "frontend" / "src" / "lib" / "canvasProposalsBar.ts").read_text(encoding="utf-8")
     assert "'api-token': 'API balance'" in bar and "API token balance" not in bar
 
 

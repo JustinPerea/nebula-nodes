@@ -137,7 +137,10 @@ describe('the missing key leads every other lock, on every Run surface (keyed ro
       const running = screen.getByRole('button', { name: surface.name });
       expect(running).toBeDisabled();
       expect(running).not.toHaveAttribute('data-key-locked');
-      if (surface.where !== "the toolbar's Run") expect(running).toHaveAttribute('title', RUN_LOCK_REASON);
+      // The notice says its run line beside the button, which points at it (main's
+      // lock.act `shown`); the others carry it as the title.
+      if (surface.where === 'the deferred-run notice') expect(running).toHaveAttribute('aria-describedby');
+      else if (surface.where !== "the toolbar's Run") expect(running).toHaveAttribute('title', RUN_LOCK_REASON);
       act(() => useGraphStore.setState({ isExecuting: false, runStarting: false } as never));
 
       act(() => setFollowingSwitch({ projectName: 'Second canvas', agent: 'Codex' }));

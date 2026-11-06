@@ -318,11 +318,11 @@ describe('the proposal bar between what the person opened and the lasting chrome
     expect(regionCss).toMatch(/No stacking context on the region, the stack or the slots/);
   });
 
-  it('the stack never grows into the top bars (GM r9 item 2): capped by its measured room, scrolling past it, items never shrinking', () => {
-    const stack = rules().filter(([selector]) => selector === '.notice-region__stack').map(([, body]) => body).join('\n');
-    expect(stack).toMatch(/max-height:\s*var\(--notice-room, none\)/);
-    const crowded = rules().find(([selector]) => selector === '.notice-region[data-notice-crowded] .notice-region__stack');
-    expect(crowded?.[1]).toMatch(/overflow-y:\s*auto/);
+  it('the stack never grows into the top bars (GM r9 item 2): placed under the measured top limit, items never shrinking', () => {
+    // Main's mechanism (#216): NoticeRegion measures the stack against
+    // lib/bottomBar noticeTopLimit and lib/noticeStackPlace places it; the
+    // old --notice-room cap is gone. What the CSS still holds: items never shrink.
+    expect(readFileSync(join(__dirname, '../src/components/NoticeRegion.tsx'), 'utf8')).toMatch(/measureNoticeStack\(region, stack, noticeTopLimit\(/);
     expect(rules().find(([selector]) => selector === '.notice-region__slot > *')?.[1]).toMatch(/flex-shrink:\s*0/);
   });
 });

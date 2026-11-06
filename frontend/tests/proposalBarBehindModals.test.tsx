@@ -6,13 +6,17 @@
 // it stay usable (GM r25). When the modal closes the bar's attributes are
 // back as they were (a leaving proposal's own `inert` kept), and focus goes
 // back to whatever opened the modal, never to the bar.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { OnboardingOverlay } from '../src/components/onboarding/OnboardingOverlay';
 import { ResultComparison, type ComparisonResult } from '../src/components/create-studio/ResultComparison';
 import { useUIStore } from '../src/store/uiStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const initialUI = useUIStore.getState();
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };

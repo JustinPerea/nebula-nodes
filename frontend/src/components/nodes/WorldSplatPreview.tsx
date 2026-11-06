@@ -16,6 +16,7 @@ import { isOfflineRefusal } from '../../lib/backendConnection';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import type { WorldViewerFailure, WorldViewerStatus } from './WorldEnvironmentViewer';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
 import '../../styles/world-preview.css';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
@@ -250,7 +251,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
                 {!failed && <p id={helpId} className="world-modal__help">{SPLAT_ORBIT_HINT}</p>}
                 {failed && (
                   <div className="world-modal__failure" role="alert" data-splat-failure={failureKind}>
-                    <p>{failureLine(failureKind, world)}</p>
+                    <p><LineText text={failureLine(failureKind, world)} /></p>
                     {failureKind === 'load' && (
                       <button type="button" className="world-modal__button" onClick={retry}>Try again</button>
                     )}

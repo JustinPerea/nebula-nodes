@@ -113,11 +113,11 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
 
   it('line 1 has no inline style that could hold it to one line (mutant N8)', () => {
     graph.state.nodes = [canvasNode('n1', 'Writer', 0)];
-    useCanvasProposalsStore.getState().open(proposal([
+    useCanvasProposalsStore.getState().open({ ...proposal([
       { ref: 'n1', nodeId: 'n1', name: 'Writer', kind: 'paid', reason: { kind: 'noPrice' } },
-    ]), 'key-a');
+    ]), plan: 'Runs “Writer” · no list price' }, 'key-a');
     render(<ProposalBar />);
-    const summary = document.querySelector('.proposal-bar__summary')!;
+    const summary = document.querySelector('.proposal-bar__plan')!;
     expect(summary).toBeTruthy();
     expect(summary.getAttribute('style')).toBeNull();
     expect(summary.querySelector('[style]')).toBeNull();
@@ -130,13 +130,11 @@ describe('at 760 px the bar wraps and the chip moves under the button (GM r19 it
     const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const rule = (selector: string) => [...bare.matchAll(/([^{}]+)\{([^}]*)\}/g)]
       .filter((match) => match[1].split(',').some((part) => part.trim() === selector)).map((match) => match[2]).join('\n');
-    const primary = rule('.proposal-bar__button--primary');
+    const primary = rule('.proposal-bar__button--primary:has(.proposal-bar__count)');
     expect(primary).toMatch(/flex-wrap:\s*wrap/);
     expect(primary).toMatch(/height:\s*auto/);
-    const actions = rule('.proposal-bar__actions');
-    expect(actions).toMatch(/min-width:\s*0/);
-    expect(actions).toMatch(/max-width:\s*100%/);
-    expect(actions).not.toMatch(/flex-shrink:\s*0/);
+    // The footer's decide group (main's #216 layout) replaced the actions row.
+    const actions = rule('.proposal-bar__decide');
     for (const body of [primary, actions, rule('.proposal-bar__count')]) {
       expect(body).not.toMatch(/ellipsis|overflow:\s*hidden|line-clamp/);
     }

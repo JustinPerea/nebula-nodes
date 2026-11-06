@@ -1,6 +1,7 @@
 import { wsClient } from '../lib/wsClient';
 import { SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from '../lib/settingsSignal';
 import { TAB_ID } from '../lib/tabId';
+import { onPersonPromoted } from '../lib/personSession';
 
 /**
  * Every key change reaches every one of the person's tabs (review 8 of PR
@@ -18,7 +19,7 @@ import { TAB_ID } from '../lib/tabId';
  * the CLI or the desktop app flips an open proposal bar without a reload. A
  * reconnected socket reads them again too ({ source: 'reconnect' }), since a
  * change made while it was away sent nothing it heard, and so does a socket
- * the backend has just promoted (wsClient's `personPromoted`), since one made
+ * the backend has just promoted (personSession's onPersonPromoted), since one made
  * before the promote wasn't sent to it either; that read clears the
  * checks of any key it finds changed (uiStore setSettingsCache). App imports
  * this at start.
@@ -38,12 +39,19 @@ wsClient.subscribe((event) => {
     const keys = Array.isArray(event.keys) ? event.keys.filter((key): key is string => typeof key === 'string') : undefined;
     const detail: SettingsSavedDetail = { source: 'remote', ...(keys ? { keys } : {}) };
     window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));
-  } else if (event.type === 'socketReconnected' || event.type === 'personPromoted') {
-    // A promote reads them again too: the backend sends `settingsChanged`
-    // only to a promoted socket, so a change made between this socket's
-    // connect (or the reconnect read above) and its promote sent nothing it
-    // heard (PR #203 round 15; round 14's CI caught the gap in a test).
-    window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'reconnect' } satisfies SettingsSavedDetail }));
+  } else if (event.type === 'socketReconnected') {
+    readAgain();
   }
 });
+
+function readAgain(): void {
+  window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'reconnect' } satisfies SettingsSavedDetail }));
+}
+
+// A promote reads them again too: the backend sends `settingsChanged` only to
+// a promoted socket, so a change made between this socket's connect (or the
+// reconnect read above) and its promote sent nothing it heard (PR #203 round
+// 15; round 14's CI caught the gap in a test). The promote is main's one
+// signal (lib/personSession onPersonPromoted), not an event of its own.
+onPersonPromoted(readAgain);
 

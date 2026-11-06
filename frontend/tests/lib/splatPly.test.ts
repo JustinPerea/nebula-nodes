@@ -84,7 +84,7 @@ describe('3DGS PLY preflight (the twin of backend services/splat_ply.py)', () =>
   ])('refuses f_rest properties with %s, as Spark reads them by name', (_, rest) => {
     const names = [...IDOL.slice(0, 9), ...rest, ...IDOL.slice(9)];
     expect(() => parseSplatPlyHeader(text(header(2, names))))
-      .toThrow(/f_rest properties aren't f_rest_0 to f_rest_8/);
+      .toThrow(/f_rest properties aren’t f_rest_0 to f_rest_8/);
   });
 
   it('takes f_rest_0 to f_rest_8 in any order', () => {

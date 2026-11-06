@@ -113,6 +113,8 @@ const SITES: Record<string, string> = {
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.agents': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.write': 'lib/settingsWrites.ts',
+  // PR #203: the restored-settings notice's dismissal (GET/POST /api/settings/notice are the person's only).
+  'settings.notice': 'components/panels/settings/SettingsTopNotice.tsx',
   // Round 10 (GM r17 item 5): the Inspector's star, whose refused save used to drop silently.
   'inspector.favorite': 'components/panels/Inspector.tsx',
   'krea.connection': 'components/panels/settings/useKreaConnection.ts',
@@ -184,6 +186,8 @@ const GATED: Record<string, Surface> = {
   _decidable_asset_proposal: ['asset-proposals.decide'],
   start_codex_chatgpt_login: ['chat.codex-login', 'chat.codex-login-check'],
   update_settings: ['settings.write', 'inspector.favorite'],
+  get_settings_notice: NO_LINE('a refused read shows nothing: SettingsTopNotice asks again on the promote (its PERSON_PROMOTED_EVENT listener)'),
+  dismiss_settings_notice: ['settings.notice'],
   remove_settings_api_key: ['settings.write'],
   credentials_update: ['settings.write'],
   configure_universal_node: ['graph.notify', 'graph.refusal'],
@@ -268,6 +272,7 @@ const PROMOTE_LISTENERS: Record<string, string> = {
   'store/canvasProposalsStore.ts': 'releases approvals dismissed while the gate held (a request, not a line)',
   // PR #204 round 11: person-only work the app starts on its own waits for the promote (no line).
   'lib/personWork.ts': 'runs the person-only work a held tab held back (a request, not a line)',
+  'store/settingsChangedSocket.ts': 'reads the settings again after the promote (a request, not a line)',
 };
 
 /** Round 5: what a route the trace can't find by its path is (none may be left unexplained).
@@ -310,6 +315,8 @@ const CALLERS: Record<string, Caller> = {
   'components/panels/ChatPanel.tsx#ChatPanel': ['settings.agent-warning'],
   // No line.
   'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: sent only from a tab connected as the person (lib/personWork); a refusal waits for the next promote, another failure logs and goes again on the next read'),
+  'components/panels/settings/SettingsTopNotice.tsx#SettingsTopNotice': ['settings.notice'],
+  'components/panels/settings/SettingsTopNotice.tsx#load': NO_LINE('a failed read shows nothing; the notice asks again on the promote (its PERSON_PROMOTED_EVENT listener)'),
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
   'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),

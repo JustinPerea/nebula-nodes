@@ -91,7 +91,7 @@ describe('RunHistoryPanel replay actions', () => {
     });
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     const { unmount } = render(<RunHistoryPanel />);
-    for (const name of ['Retry failed Single node run', 'Rerun Full graph']) {
+    for (const name of ['Retry failed Single node run', 'Rerun Full canvas']) {
       const button = screen.getByRole('button', { name });
       expect(button).toHaveAttribute('aria-disabled', 'true');
       expect(button).not.toBeDisabled();
@@ -109,7 +109,7 @@ describe('RunHistoryPanel replay actions', () => {
     // With the token they replay as before.
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
     render(<RunHistoryPanel />);
-    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(rerun).not.toHaveAttribute('aria-disabled');
     fireEvent.click(rerun);
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
@@ -122,9 +122,9 @@ describe('RunHistoryPanel replay actions', () => {
     useGraphStore.setState({ runHistory: [run], isExecuting: false });
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
     render(<RunHistoryPanel />);
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).not.toHaveAttribute('aria-disabled');
     act(() => useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } }));
-    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(rerun).toHaveAttribute('aria-disabled', 'true');
     expect(rerun).toHaveAccessibleDescription(LINE);
   });
@@ -140,20 +140,20 @@ describe('RunHistoryPanel replay actions', () => {
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     resetBackendConnectionForTests();
     render(<RunHistoryPanel />);
-    const going = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const going = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(going).toHaveAttribute('title', LINE);
     expect(going).toHaveAttribute('data-key-locked', '');
     expect(going).toHaveAttribute('aria-disabled', 'true');
     expect(going).not.toBeDisabled();
     act(() => noteBackendConnection('offline'));
-    const offline = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const offline = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(offline).toHaveAttribute('title', LINE);
     expect(offline).not.toHaveAttribute('data-offline-disabled');
     act(() => noteBackendConnection('online'));
     resetBackendConnectionForTests();
     // The key added: the run's own line is the reason now.
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
-    const keyed = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const keyed = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(keyed).toHaveAttribute('title', 'You can rerun it when the run finishes.');
     expect(keyed).not.toHaveAttribute('data-key-locked');
     expect(keyed).toBeDisabled();

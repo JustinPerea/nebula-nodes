@@ -23,6 +23,9 @@ import { SHORTCUTS_OPEN_EVENT } from '../src/lib/keyboardShortcuts';
 import { moveFocusFromLeave } from '../src/lib/noticeLeave';
 import { useUIStore } from '../src/store/uiStore';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
+import { DeferredKeyboardShortcutsDialog } from '../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 // The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
 beforeAll(regionNoticesReady);

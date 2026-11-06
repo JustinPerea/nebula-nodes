@@ -121,6 +121,13 @@ export const DeferredAssetsPanel = lazyWithPreload(
 
 // The ⌘K palette: mounted at once, draws nothing until opened; a ⌘K or a rail
 // open that beats the chunk is held by the wrapper (lib/heldIntents.ts).
+// The "?" dialog: the keys stay eager (components/KeyboardShortcuts.tsx), the dialog
+// and the focus machinery it brings in (ModalPortal) load on first open.
+export const DeferredKeyboardShortcutsDialog = lazyWithPreload(
+  () => import('../components/KeyboardShortcutsDialog'),
+  (module) => module.KeyboardShortcutsDialog,
+);
+
 export const DeferredCommandPalette = lazyWithPreload(
   () => import('../components/CommandPalette'),
   (module) => module.CommandPalette,
@@ -171,6 +178,12 @@ export const DeferredRegionNotices = lazyWithPreload(
 // so GraphFileActions.tsx awaits it at the moment of use.
 export const graphFileModule = deferredModule(() => import('./graphFile'));
 
+// Settings' writes (lib/settingsWrites.ts): the notice bar the Settings dock
+// draws at once uses them only when a notice times out or Undo is pressed, so
+// it awaits them at that moment; the tabs, loaded on open, import them as
+// usual.
+export const settingsWritesModule = deferredModule(() => import('./settingsWrites'));
+
 // The dialog before the person's direct run of agents' paid placeholders
 // (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
 export { placeholderRunDialogModule } from './placeholderRunDialogModule';
@@ -192,6 +205,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredNodeInspectorPopover.preload,
   DeferredAssetsPanel.preload,
   DeferredCommandPalette.preload,
+  DeferredKeyboardShortcutsDialog.preload,
   DeferredProposalBar.preload,
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
@@ -199,11 +213,14 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
   graphFileModule.preload,
+  settingsWritesModule.preload,
   placeholderRunDialogModule.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
+  'lib/settingsWrites.ts',
+  'components/KeyboardShortcutsDialog.tsx',
   'components/PlaceholderRunDialog.tsx',
   'components/askPlaceholderRun.tsx',
   'components/panels/AgentLog.tsx',

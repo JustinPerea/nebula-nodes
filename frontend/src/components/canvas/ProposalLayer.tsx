@@ -2,18 +2,8 @@ import { useEffect, useLayoutEffect, useRef, type PointerEvent as ReactPointerEv
 import { useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type Point, type SpringState } from '../../lib/agentCursorMotion';
-import {
-  briefValue,
-  changeTag,
-  fullValue,
-  ghostKeyWarning,
-  ghostPosition,
-  ghostRows,
-  notReadyWarning,
-  wireEnd,
-  wirePath,
-  type ProposalView,
-} from '../../lib/canvasProposals';
+import { ghostPosition, ghostRows, wireEnd, wirePath, type ProposalView } from '../../lib/canvasProposals';
+import { briefValue, changeTag, fullValue, ghostKeyWarning, notReadyWarning } from '../../lib/canvasProposalsBar';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';

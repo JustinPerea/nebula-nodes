@@ -23,20 +23,20 @@ describe('agent names never wrap (GM, PR #203 r11 item 6)', () => {
     expect(read('App.tsx')).toMatch(/import '\.\/styles\/agent-name\.css';/);
   });
 
-  it('the proposal bar\'s "who" line never wraps, so the column is never narrower than it', () => {
+  it('the proposal bar\'s name never wraps: it takes what is left of the line and truncates (main\'s #216 head)', () => {
     const css = read('styles/canvasProposals.css');
-    const rule = (selector: string) => css.match(new RegExp(`\\n${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
-    expect(rule('.proposal-bar__who')).toMatch(/white-space:\s*nowrap/);
-    expect(rule('.proposal-bar__main')).toMatch(/min-width:\s*min-content/);
-    expect(rule('.proposal-bar')).toMatch(/flex-wrap:\s*wrap/);
+    const rule = css.match(/\n\.proposal-bar__agent \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/min-width:\s*0/);
+    expect(rule).toMatch(/overflow:\s*hidden/);
+    expect(rule).toMatch(/text-overflow:\s*ellipsis/);
+    expect(read('components/canvas/ProposalBar.tsx')).toMatch(/className="proposal-bar__agent" title=\{current\.view\.agent\.name\}/);
   });
 
   // Each place a name is drawn, and the expression it draws.
   const sites: Array<[string, string]> = [
-    ['components/canvas/ProposalBar.tsx', 'current.view.agent.name'],
-    ['components/canvas/DeferredRunNotice.tsx', 'shown.agentName'],
+    // Not here: the proposal bar's head and the cursor's tag shrink their names by main's own
+    // mechanism (the test above; agentCursor.css), and the deferred-run notice no longer names the agent.
     ['components/canvas/ProposalLayer.tsx', 'agentName'],
-    ['components/canvas/AgentCursorLayer.tsx', 'cursor.name'],
     ['components/canvas/AgentNodeMarkLayer.tsx', 'first.agent.name'],
     ['components/canvas/AgentNodeMarkLayer.tsx', 'mark.agent.name'],
     ['components/canvas/PinLayer.tsx', 'pin.reply.agent.name'],

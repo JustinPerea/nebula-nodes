@@ -3928,3 +3928,137 @@ its cause before anything was changed:
     scope, eslint) clean; `npm run build` passed the budget (464290 bytes
     raw / 142656 gzip); `frontend/dist` removed. `npm run check:ratchets`
     does not exist on this branch.
+
+## Round 21: merge with main
+
+`git merge origin/main` (b2cf0a6f; about 330 commits: #204 person locks and
+notice regions, #205 lock lines, held Undo and count limits, #216 proposal
+card redesign, #222 file-param uploads, #231 routes and fal uploads, cursor
+phase 2, Settings changes). 55 files conflicted. Rule used throughout: where
+both sides built the same mechanism, main's is the base and this PR's
+behaviour is ported onto it; neither side's behaviour was dropped to make it
+compile. Where the two sides rule differently on the same thing, main's
+newer ruling stands in the code and the conflict is under "Flags" in the
+report to the coordinator.
+
+### Mechanisms both sides built (main's kept as the base)
+
+- **The proposal card (#216) and this PR's proposal bar.** `ProposalBar.tsx`
+  and `canvasProposals.css` are main's. Ported onto it: live key classes
+  (`useLiveProposalEntry`), the Accept lock for a missing key (`withKeyLock`,
+  the sr-only line, the click guard), the count chip beside "Accept and run"
+  with its tooltip and screen-reader description, the not-ready rule (one
+  line per node to 3, a count line from 4, the list in the details), and the
+  not-ready lines' merged reasons. Main's body scroll, plan line, "What
+  Accept writes" disclosure, gate lock and key-kept-in-view marks stand.
+  `proposalSummary`, `proposalMetaLine` and this PR's `DetailsBox` are gone:
+  the plan line (backend `canvas_proposals.plan_line`) says what they said,
+  and main's `lib/scrollMore.ts` `hasMoreBelow` replaces this PR's
+  `lib/hasMoreBelow.ts`.
+- **The plan line carries the cost classes.** `plan_line` now says a run on
+  the Krea plan ("N on your Krea plan", "no list price"), a run that may bill
+  the person's account ("may use your Hugging Face credits", named beside
+  other classes) and "free" only when nothing else runs. `billed_to` takes
+  the plan kind. `_runs_nothing` also needs no plan and no may-cost run.
+  "your Krea API token" became "your Krea API key" (this PR's rule, pinned by
+  `test_no_person_line_in_the_backend_says_krea_api_token`).
+- **Settings changes re-send the open proposals.** The plan line is written
+  by the backend, so a token added or removed after a proposal was made must
+  reach the card: `_broadcast_settings_changed` calls
+  `_resend_open_proposals` (a `proposalOpened` per open proposal, read with
+  the keys and names set now). The tab still relabels the cards at once from
+  its own settings cache (`liveKeyBilling`).
+- **`canvas_proposals.view`** takes both `api_keys` (this PR) and `live`
+  (main's names that follow a rename); the cost is `live_cost` first, then
+  `_cost_with_names`. `live_cost` keeps the entry's canvas name. A run entry
+  carries main's `name`, `model` and `billedTo` beside this PR's
+  `definitionId` and the class main's estimate gave it.
+- **The notice stack's top limit.** Main's `noticeTopLimit` and
+  `noticeStackPlace` replace this PR's `keepNoticesBelowTopBars`,
+  `--notice-room` and `data-notice-crowded` (removed, with `noticeRoom.test.ts`).
+- **Run-lock lines.** Main's `RUN_LOCK_VERBS` / `runFinishesLine` titles go
+  through this PR's `withKeyLock` on every Run surface (context menu, selection
+  toolbar, Inspector, toolbar, deferred-run notice); the missing key still
+  comes first.
+- **Refused-run log line.** This PR's `_say_refused_run` replaces main's inline
+  block in `_refused_cli_run`; it now passes `shows="error"` (main's
+  `_show_agent` parameter), so a tab draws the error cursor.
+- **Person lines.** `instance_missing_line` keeps this PR's raw `name`, quoted
+  once by `plan_name`; `route_unavailable_line` keeps `title` and `name` (the
+  type's name in quotes by default, a renamed node's own name when given).
+  Main's tests that called it with a pre-quoted name now pass the raw name.
+- **Settings rows.** Main's person lock (`lock.control()` / `lock.guard`,
+  `PersonLockLine`, `clearLineOnPromote`, `useGroupLockLine`) wraps this PR's
+  rows (`noun`, `moved`, `removedElsewhere`, `settleRowFocus`, `SettingsRowError`).
+  `SettingsRowError` now renders through `LineText`, as main's lines do.
+  `fail()` in `settingsWrites.ts` keeps the neutral lock-wait state and clears
+  the line on promote.
+- **WebSocket client.** `socketDemoted` and main's hello-token shift stay. The
+  PR's own `personPromoted` event is gone: `store/settingsChangedSocket.ts` reads
+  the settings again through main's one promote signal (`onPersonPromoted`).
+- **Agent presence.** `clean_log(whole=)` (this PR) beside main's session
+  slots, arrival order and chain helpers.
+- **CLI headers.** `X-Nebula-Surface: cli` (this PR) beside the cursor-session
+  header (main).
+
+### Counts and fixtures
+
+- Node count 312 (309 with Idol, plus main's three talking heads), in
+  `test_round19_node_names`, `test_video_qc_nodes`, and `MODEL_REFERENCE.md`.
+- `pricing_cases.json`: git placed main's new `sizedRunCases` (talking heads)
+  inside this PR's `classCases`; moved back to `sizedRunCases`.
+- `providerSwitch.ts`: main's "by length" for audio, with this PR's period and
+  curly apostrophe.
+
+### Fixes after the merge (found by the gates)
+
+- **Entry budget.** The merge put the entry at 521,657 B raw / 163,393 B gzip
+  (limits 512,000 / 160,000). Now 510,215 B raw / 159,590 B gzip. How:
+  `lib/canvasProposals.ts` split in two; the Accept/ghost/withAncestors core the
+  canvas needs at start stays, everything only the proposal bar and layer read
+  moved to `lib/canvasProposalsBar.ts` (a module shared with an eager chunk keeps
+  every export in the entry). `lib/settingsWrites` is its own chunk (the notice
+  bar `import()`s it; preloaded by `settingsWritesModule`). The "?" dialog is its
+  own chunk (`components/KeyboardShortcutsDialog.tsx`; the key listener stays).
+- **Accept lock lost to the person gate.** `{...gate.control()}` after the key
+  lock set `aria-disabled: undefined` over it, so a key-locked Accept was live.
+  `withGate` in `ProposalBar.tsx` puts the gate's marks under the button's own.
+- **Layering.** The notice region is `position: absolute; z-index: auto` again
+  (this PR, GM r7): a fixed element is a stacking context, which put the proposal
+  bar over every modal. Items carry their own layers. Needs a visual check against
+  main's fixed region (flag).
+- **Modal hiding vs the because line.** `hideBehind` marks what it holds inert
+  with `data-behind-modal`; `lib/notConnectedLine` counts a line there as shown
+  (main's GM r27 2: with a prompt open the notice still waits for the line).
+- **Settings notice routes** (`GET /api/settings/notice`, `POST .../dismiss`) are
+  the person's: the dismiss button locks (`usePersonLock('dismiss this')`), the
+  read waits for the promote (`whenPerson`), a refused dismissal's line clears on
+  the promote. Snapshot, ratchets and `HOLDERS`/`CALLERS` updated (73 routes).
+- **Plan line.** Backend `plan_line` is class-aware (paid, Krea plan, may cost);
+  new test `test_runs_say_their_class_...`. The frontend's old line 1 tests moved
+  to the backend.
+- **Tests moved to main's design.** Accept's name carries the count chip
+  ("Accept and run 1 paid"); the disclosure is "What Accept writes"; four or more
+  not-ready nodes read as one count line; "Rerun Full canvas"; the say pill's
+  radius is 10 px (two lines); the notice-room cap is main's `noticeTopLimit`;
+  agent names in the bar head and cursor tag shrink by main's mechanism.
+- **Misc.** `splatPly.ts` message uses ’ (main's apostrophe ratchet); apostrophe
+  baseline lowered by main's fixes; `not_ready_reasons.json` regenerated;
+  `pricing_cases` reasons asserted only where a case states one;
+  `WorldSplatPreview` failure line through `LineText`; `SettingsRowError`
+  registered in the line ratchet; tests that mount the notice region wait on
+  `regionNoticesReady`.
+
+### Flags
+
+- Main's paid-count-off-the-label ruling (#216) vs this PR's count chip: both
+  kept (the chip beside Accept, main's plan line above).
+- Main's fixed "What Accept writes" label vs this PR's `detailsDisclosure`
+  variants: main's; `detailsDisclosure` / `DETAILS_DISCLOSURE` are unused.
+- Not-ready count rule: this PR's (4 or more is one count line) over main's
+  "3 lines and N more", since it is the shared cross-surface rule.
+- Krea wording: "Sign in to Krea in Settings" (this PR's GM r21) over "Connect it
+  in Settings"; "API key" over "API token".
+- The deferred-run notice's running line is main's `aria-describedby` line, not a
+  title.
+

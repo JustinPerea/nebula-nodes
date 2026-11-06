@@ -91,6 +91,10 @@ export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
  * before: the slot is the bar's container, so the bar's own `inert` (a
  * leaving proposal's, lib/noticeLeave.ts) is never touched.
  */
+/** Set on what a modal holds inert and aria-hidden (hideBehind), so a line behind the scrim, which a
+ * sighted person still sees dimmed, still counts as shown (lib/notConnectedLine; PR #204 r27 2). */
+export const BEHIND_MODAL_ATTR = 'data-behind-modal';
+
 export function hideBehind(own: Element): () => void {
   // This call's hold on each element it hid. The element's own attributes
   // are kept once, by the first modal that hides it (`hidden`), and put back
@@ -108,6 +112,7 @@ export function hideBehind(own: Element): () => void {
     hiddenBy.set(element, { count: 1, inert: element.getAttribute('inert'), hidden: element.getAttribute('aria-hidden') });
     element.setAttribute('inert', '');
     element.setAttribute('aria-hidden', 'true');
+    element.setAttribute(BEHIND_MODAL_ATTR, '');
   };
   const isolate = () => {
     for (const sibling of document.body.children) if (sitsBehind(sibling, own)) hide(sibling);
@@ -129,6 +134,7 @@ export function hideBehind(own: Element): () => void {
       was.count -= 1;
       if (was.count > 0) continue;
       hiddenBy.delete(element);
+      element.removeAttribute(BEHIND_MODAL_ATTR);
       if (was.inert === null) element.removeAttribute('inert');
       else element.setAttribute('inert', was.inert);
       if (was.hidden === null) element.removeAttribute('aria-hidden');

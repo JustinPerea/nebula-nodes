@@ -120,7 +120,7 @@ describe('one source for the badge and "Connected · N" (review 11, copy NIT-2)'
 
 describe('a kind the canvas doesn’t name is never counted free (review 11, NIT-4)', () => {
   it('counts free runs from kind "free" when a token turns Idol into may cost', async () => {
-    const { liveKeyBilling } = await import('../src/lib/canvasProposals');
+    const { liveKeyBilling } = await import('../src/lib/canvasProposalsBar');
     const view = {
       nodes: [],
       cost: {

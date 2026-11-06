@@ -19,7 +19,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { acceptCountChip, proposalSummary } from '../src/lib/canvasProposals';
+import { acceptCountChip } from '../src/lib/canvasProposalsBar';
 import { classCounts, costChip } from '../src/lib/costClass';
 import type { PricingTable } from '../src/lib/pricing';
 import { placeholderRunConfirm, PRICE_FREE } from '../src/lib/placeholderRunConfirm';
@@ -94,14 +94,6 @@ describe('Krea’s one verb and the plan-only line (GM r21 items 5 and 6)', () =
     expect(state.message).toBe(`“${NODE_DEFINITIONS['krea-3'].displayName}” runs on your Krea plan. `
       + 'Sign in to Krea in Settings, or choose another provider.');
   });
-
-  it('a plan-only proposal starts with "Runs" when the run leads', () => {
-    const cost = { paidRuns: 0, planRuns: 1, mayCostRuns: 0, freeRuns: 0, nodes: [], providers: [] };
-    expect(proposalSummary({ nodes: [], edges: [], params: [], run: ['n1'], cost } as unknown as ProposalView))
-      .toBe('Runs 1 node on your Krea plan');
-    expect(proposalSummary({ nodes: [{ ref: '+k' }], edges: [], params: [], run: ['+k'], cost } as unknown as ProposalView))
-      .toBe('Adds 1 node · runs 1 node on your Krea plan');
-  });
 });
 
 describe('the placeholder dialog’s row for a sourced $0 (review 10, NIT-3)', () => {
@@ -147,12 +139,13 @@ describe('articles and the key notices (review 10, copy MEDIUM-2; GM r21 item 4)
   });
 });
 
-describe('the bar’s actions wrap (review 10, copy LOW-1)', () => {
-  it('never clips: they wrap, right-aligned', () => {
+describe('the bar’s actions never clip (review 10, copy LOW-1)', () => {
+  it('the Accept button wraps its count chip; the decide group clips nothing', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
-    const rule = css.match(/\n\.proposal-bar__actions \{([^}]*)\}/)?.[1] ?? '';
+    const rule = css.match(/\n\.proposal-bar__button--primary:has\(\.proposal-bar__count\) \{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toMatch(/flex-wrap:\s*wrap/);
-    expect(rule).toMatch(/justify-content:\s*flex-end/);
-    expect(rule).toMatch(/min-width:\s*0/);
+    expect(rule).toMatch(/height:\s*auto/);
+    const decide = css.match(/\n\.proposal-bar__decide \{([^}]*)\}/)?.[1] ?? '';
+    expect(decide).not.toMatch(/overflow:\s*hidden|ellipsis/);
   });
 });

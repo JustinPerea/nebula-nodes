@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptCountChip, acceptLabel } from '../../src/lib/canvasProposals';
+import { acceptCountChip, acceptLabel } from '../../src/lib/canvasProposalsBar';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 /**

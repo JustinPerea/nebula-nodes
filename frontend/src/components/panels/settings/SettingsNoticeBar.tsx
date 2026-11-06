@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
-import { dismissNotice, undoAddedKey } from '../../../lib/settingsWrites';
 import { focusRowAfterMove, settleRowFocus } from './rowHelpers';
 import { LineText } from '../../LineText';
 import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { PersonLockLine } from '../../PersonLock';
 import { useGroupLockLineId } from './groupLockLines';
+
+// lib/settingsWrites is its own chunk (lib/deferredChunks settingsWritesModule preloads it); the
+// import() stays here so the lock sweep (tests/personGatedCallers) follows Undo to its sender.
 
 /** Plain confirmations go quickly; one you can undo stays long enough to read the row's check first. */
 const NOTICE_MS = 6000;
@@ -39,7 +41,9 @@ export function SettingsNoticeBar() {
 
   useEffect(() => {
     if (!notice || held) return;
-    const timer = window.setTimeout(() => dismissNotice(notice.id), notice.undoKey ? UNDO_NOTICE_MS : NOTICE_MS);
+    const timer = window.setTimeout(
+      () => { void import('../../../lib/settingsWrites').then((writes) => writes.dismissNotice(notice.id)); },
+      notice.undoKey ? UNDO_NOTICE_MS : NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notice, held]);
 
@@ -56,7 +60,7 @@ export function SettingsNoticeBar() {
               const key = notice.undoKey!;
               focusRowAfterMove(key);
               // A handoff the undo didn't use never waits for a later mount (copy LOW-1).
-              void undoAddedKey(notice.id).then(() => settleRowFocus(key));
+              void import('../../../lib/settingsWrites').then((writes) => writes.undoAddedKey(notice.id)).then(() => settleRowFocus(key));
             })}>Undo</button>
           )}
           {notice.undoKey && !groupLine && <PersonLockLine lock={undoLock} place="control" />}

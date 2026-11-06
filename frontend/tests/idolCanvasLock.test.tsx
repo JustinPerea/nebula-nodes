@@ -99,7 +99,7 @@ describe('the canvas with a keyed Space node (Idol\'s keyed shape) and its key m
       const run = screen.getByRole('button', { name: /^Run/ });
       expect(run).not.toHaveAttribute('aria-disabled');
       expect(run).not.toHaveAttribute('data-key-locked');
-      expect(run.getAttribute('title')).toMatch(/^Run graph \(/);
+      expect(run.getAttribute('title')).toMatch(/^Run canvas/);
     }
   });
 
@@ -116,7 +116,7 @@ describe('the canvas with a keyed Space node (Idol\'s keyed shape) and its key m
     let ran: Promise<void> | undefined;
     const commands = buildCommands({ runGraph: () => { ran = useGraphStore.getState().executeGraph(); }, canRun: true, canvasNodes: [] } as never);
     const command = commands.find((candidate) => candidate.id === 'action:run');
-    expect(command?.title).toBe('Run graph');
+    expect(command?.title).toBe('Run canvas');
     command?.perform();
     await ran;
     expect(sentRuns()).toEqual([]);

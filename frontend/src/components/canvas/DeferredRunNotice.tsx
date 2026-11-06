@@ -79,6 +79,8 @@ export function DeferredRunNotice() {
   const runProps = withKeyLock(lock.act({}, { run: running, runTitle: line, shown: { id: lineId, text: line } }),
     keyLock, keyLockId);
   const runKeyLocked = runProps['data-key-locked'] !== undefined;
+  // A key-locked Run sends nothing (withKeyLock): the click is refused here.
+  const runNow = () => (runKeyLocked ? undefined : runDeferred());
   return (
     <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
       <p className="proposal-bar__summary" id={lineId}>{line}</p>
@@ -88,11 +90,7 @@ export function DeferredRunNotice() {
           className="proposal-bar__button proposal-bar__button--primary"
           {...runProps}
           {...(nothingLeft ? definedProps(dismissLock.control(lineId)) : {})}
-          onClick={() => {
-            if (runKeyLocked) return;
-            if (nothingLeft) dismissLock.guard(runDeferred)();
-            else void runDeferred();
-          }}
+          onClick={nothingLeft ? dismissLock.guard(runNow) : () => void runNow()}
         >
           <Play size={13} aria-hidden="true" />
           Run

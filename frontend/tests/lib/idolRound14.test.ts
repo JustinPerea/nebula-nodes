@@ -1,13 +1,7 @@
 // PR #203 round 14: GM r27 items 4 and 7, review 13 copy NIT-3.
 import { describe, expect, it } from 'vitest';
-import {
-  DETAILS_DISCLOSURE,
-  detailsDisclosure,
-  NOT_READY_DISCLOSURE,
-  mergedNotReadyLine,
-  notReadyShown,
-  type ProposalNotReady,
-} from '../../src/lib/canvasProposals';
+import { type ProposalNotReady } from '../../src/lib/canvasProposals';
+import { DETAILS_DISCLOSURE, detailsDisclosure, NOT_READY_DISCLOSURE, mergedNotReadyLine, notReadyShown } from '../../src/lib/canvasProposalsBar';
 import { reasonFor } from '../helpers/notReadyReasons';
 
 const row = (ref: string, name: string, person: string, extra: Partial<ProposalNotReady & { routeKeyLine: true }> = {}) =>

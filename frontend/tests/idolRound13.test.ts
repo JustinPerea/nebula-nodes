@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { notReadyShown } from '../src/lib/canvasProposals';
+import { notReadyShown } from '../src/lib/canvasProposalsBar';
 import { agentNameList, countsInstead, nodeNameList, quotedNames } from '../src/lib/errorCopy';
 import { credentialName, credentialNoun, LINK_NOUNS, PROVIDER_KEYS } from '../src/lib/providerCatalog';
 import { keyChangedLine, keyNoun } from '../src/lib/settingsWrites';

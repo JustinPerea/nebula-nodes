@@ -473,6 +473,16 @@
   },
   {
    "kind": "key",
+   "node": "kling-ai-avatar-v2",
+   "name": "Kling AI Avatar v2",
+   "one": "needs your fal.ai API key or Replicate token. Add one in Settings.",
+   "many": "need your fal.ai API key or Replicate token. Add one in Settings.",
+   "line": "“Kling AI Avatar v2” needs your fal.ai API key or Replicate token. Add one in Settings.",
+   "logOne": "needs your fal.ai API key or Replicate token. Add one in Settings, then run the node again.",
+   "logMany": "need your fal.ai API key or Replicate token. Add one in Settings, then run the nodes again."
+  },
+  {
+   "kind": "key",
    "node": "krea-2-generate",
    "name": "Krea 2",
    "one": "needs your Krea API key. Add it in Settings.",

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatChipEstimate, formatSpentUsd, formatUsd, formatUsdRange } from '../src/lib/pricing';
 import { runChipLabel, runChipTitle, type RunScopeSummary } from '../src/lib/runScope';
-import { proposalEstimateLabel } from '../src/lib/canvasProposals';
+import { proposalEstimateLabel } from '../src/lib/canvasProposalsBar';
 
 /**
  * PR #198 fix round 2, review 2's L4 and GM's asks 1-2 (gm-pr198-r2.md).

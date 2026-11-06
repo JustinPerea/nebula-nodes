@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { liveKeyBilling } from '../lib/canvasProposals';
+import { liveKeyBilling } from '../lib/canvasProposalsBar';
 import type { ProposalEntry } from '../store/canvasProposalsStore';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';

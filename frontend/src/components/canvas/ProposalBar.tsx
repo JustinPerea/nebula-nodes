@@ -1,20 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-import {
-  acceptChipTitle,
-  acceptCountChip,
-  acceptLabel,
-  changeCountLabel,
-  countdown,
-  decisionLine,
-  ghostBoxes,
-  notReadyShown,
-  proposalChangeCount,
-  proposalChanges,
-  proposalEstimateLabel,
-  proposalPlan,
-} from '../../lib/canvasProposals';
+import { ghostBoxes } from '../../lib/canvasProposals';
+import { acceptChipTitle, acceptCountChip, acceptLabel, changeCountLabel, countdown, decisionLine, notReadyShown, proposalChangeCount, proposalChanges, proposalEstimateLabel, proposalPlan } from '../../lib/canvasProposalsBar';
 import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
 import { runNodeName } from '../../lib/runScope';
@@ -159,6 +147,15 @@ function withAcceptCost<T extends { 'aria-describedby'?: string }>(props: T, cos
   if (!costId) return props;
   const ids = [props['aria-describedby'], costId].filter(Boolean).join(' ');
   return { ...props, 'aria-describedby': ids };
+}
+
+/** The person gate's marks under the button's own (key lock, canvas lock, cost
+ * description): what the button sets wins, an unset one never hides the gate's,
+ * and the descriptions add up. */
+function withGate<G extends { 'aria-describedby'?: string | undefined }, T extends { 'aria-describedby'?: string }>(gate: G, own: T): G & T {
+  const set = Object.fromEntries(Object.entries(own).filter(([, value]) => value !== undefined));
+  const ids = [...new Set([gate['aria-describedby'], own['aria-describedby']].join(' ').split(' ').filter(Boolean))].join(' ');
+  return { ...gate, ...set, 'aria-describedby': ids || undefined } as G & T;
 }
 
 /** Where a canvas node sits, so the Accept chip's reasons read left to
@@ -589,9 +586,8 @@ export function ProposalBar() {
               className="proposal-bar__button proposal-bar__button--primary"
               // The missing key first, then the canvas lock, then the gate
               // (withKeyLock, GM PR #203 r11 item 3), as on every Run surface.
-              {...withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pendingKind) }), acceptLock, acceptLockId),
-                pendingKind !== 'accept' && countChip && acceptTitle ? acceptCostId : null)}
-              {...gate.control()}
+              {...withGate(gate.control(), withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pendingKind) }), acceptLock, acceptLockId),
+                pendingKind !== 'accept' && countChip && acceptTitle ? acceptCostId : null))}
               onClick={(event) => {
                 if (gateHeld || acceptLock || !settled()) return;
                 byKeyboard(event, 'accept');
