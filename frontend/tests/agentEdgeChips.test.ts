@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Box } from '../src/lib/agentAnchorResolve';
-import { chipName, countName, planChips, type ChipCursor, type ChipSizes, type Obstacle } from '../src/lib/agentEdgeChips';
+import { chipName, countName, estimateChipWidth, planChips, type ChipCursor, type ChipSizes, type Obstacle } from '../src/lib/agentEdgeChips';
 import { visiblePane } from '../src/lib/agentChipChrome';
 import { AGENT_CURSOR_CHIP } from '../src/lib/agentCursorTuning';
 
@@ -195,5 +195,18 @@ describe('no two boxes ever overlap (property test)', () => {
       // (groups by panel can add more per side; the cap is per group: the count carries the rest)
       expect(result.chips.length + result.counts.reduce((s, c) => s + c.count, 0)).toBeLessThanOrEqual(cursors.length);
     }
+  });
+});
+
+describe('the chip width reckoned from the name', () => {
+  // The name's width in Chrome at 500 12px system-ui (live shot, 2026-11-05); the rest of the chip is its border,
+  // padding, dot, two gaps and the chevron: 46 px. The CSS ellipsis cuts a name by a fraction of a pixel, so
+  // "Claude" at 40.3 px in a 40 px slot read "Clau…" when the estimate gave 7 px a letter and no border.
+  const NAMES: Array<[string, number]> = [['Claude', 40.34], ['Codex', 36.66], ['Gemini', 40.1], ['Claude · 2', 58.07], ['Hermes', 41]];
+  it.each(NAMES)('%s has room for its whole name', (name, textPx) => {
+    expect(estimateChipWidth(name) - 46).toBeGreaterThanOrEqual(textPx);
+  });
+  it('stays at the cap for a long name', () => {
+    expect(estimateChipWidth('x'.repeat(60))).toBe(AGENT_CURSOR_CHIP.maxWidthPx);
   });
 });

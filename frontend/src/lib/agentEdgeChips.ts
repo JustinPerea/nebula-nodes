@@ -55,9 +55,11 @@ export interface ChipSizes {
   count: { width: number; height: number };
 }
 
-/** The chip's width reckoned from its name when it can't be measured: dot, name, chevron and padding. */
+/** The chip's width reckoned from its name when it can't be measured: the 1 px border each side, padding, dot, the
+ *  two gaps, the name at 8 px a letter and the chevron. The name is what the CSS ellipsis cuts: at 7 px a letter
+ *  and no border, "Claude" (40.3 px at 12 px type) came out "Clau…" and "Codex" (36.7 px) "Co…". */
 export function estimateChipWidth(label: string): number {
-  return Math.min(AGENT_CURSOR_CHIP.maxWidthPx, 8 + 6 + 6 + Math.ceil(label.length * 7) + 6 + 10 + 8);
+  return Math.min(AGENT_CURSOR_CHIP.maxWidthPx, 2 + 16 + 6 + 6 + Math.ceil(label.length * 8) + 6 + 10);
 }
 
 export const defaultSizes: ChipSizes = {
