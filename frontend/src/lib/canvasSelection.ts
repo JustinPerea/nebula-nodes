@@ -2,6 +2,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { backendAssetUrlSync, fetchUrl } from './backend';
 import { apiRequest } from './apiRequest';
+import { jszipModule } from './deferredChunks';
 import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
@@ -128,8 +129,8 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
   if (outputs.length === 0) return 0;
   // jszip (96 kB, its own vendor chunk) loads when a download starts, not with the
   // canvas: Canvas imports this file for the selection it shares (it was 28 kB
-  // gzip of the startup set).
-  const { default: JSZip } = await import('jszip');
+  // gzip of the startup set). deferredModule retries a stale chunk URL.
+  const { default: JSZip } = await jszipModule.load();
   const zip = new JSZip();
   const nameCounts = new Map<string, number>();
   let totalBytes = 0;
