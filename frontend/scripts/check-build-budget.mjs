@@ -36,10 +36,11 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 
 // The entry alone is not the startup cost: chunks it imports statically or
 // modulepreloads load before the first paint too. Measured on main with
-// `npm run build`; the limits are that plus about 8 KB raw / 3 KB gzip. Raise
+// `npm run build` (1,885,863 / 488,271 once jszip loaded on download); the
+// limits are that plus about 8 KB raw / 3.5 KB gzip. Raise
 // them only with the reason in the PR (the same rule as the entry limits).
-const MAX_STARTUP_BYTES = 1_990_000;
-const MAX_STARTUP_GZIP_BYTES = 520_000;
+const MAX_STARTUP_BYTES = 1_894_000;
+const MAX_STARTUP_GZIP_BYTES = 492_000;
 const startup = await startupSet(distDir);
 const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
 

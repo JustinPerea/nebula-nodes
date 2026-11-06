@@ -109,4 +109,12 @@ describe('startup entry split', () => {
     expect(graph.has(file), `${module} must be imported eagerly (App.tsx or another startup module)`).toBe(true);
   });
 
+  // jszip (96 kB, 28 kB gzip) rode the startup set for a
+  // download button's zip (lib/canvasSelection.ts imported it at the top).
+  // Packages are not walked above, so name the heavy ones here: anything on the
+  // startup path loads them with a dynamic import() where it is used.
+  it.each(['jszip'])('%s is not statically imported on the startup path', (pkg) => {
+    const holders = [...graph.keys()].filter((file) => staticImports(file).includes(pkg)).map(rel);
+    expect(holders, `${pkg} must load with import() where it is used, not with the entry`).toEqual([]);
+  });
 });
