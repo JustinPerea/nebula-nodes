@@ -42,7 +42,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Collection, Iterator, Mapping
 
 from services import node_route, universal_ports
-from services.cursor_actions import ACTIONS, SESSION_RE as _SESSION_RE, refusal as action_refusal
+from services.cursor_actions import (
+    ACTIONS, BOARD_PARTS, IMAGE_PARTS, PART_LABELS, SESSION_RE as _SESSION_RE, SURFACES, echoed as _echoed,
+    refusal as action_refusal,
+)
 from services.file_param_preview import file_param_keys
 from services.upload_names import file_param_name
 from services.selection_context import _safe_value as safe_value
@@ -269,8 +272,13 @@ def _finite(value: Any, label: str) -> float:
     return number
 
 
-def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target") -> dict[str, Any]:
-    """Validate a cursor target: ``{"nodeId", "handle"?}`` or flow ``{"x", "y"}``."""
+def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target", *,
+                 boards: Collection[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+    """Validate a cursor target: ``{"nodeId", "handle"?}``, flow ``{"x", "y"}``,
+    or a surface item ``{"surface": "moodboard", "board", "image"?, "part"?}``
+    (``parse_surface_target``; ``boards`` is the boards it may name)."""
+    if isinstance(raw, dict) and "surface" in raw:
+        return parse_surface_target(raw, boards, label)[0]
     if not isinstance(raw, dict):
         raise PresenceError(f"{label} must be an object with nodeId or x/y")
     if "nodeId" in raw:
@@ -289,6 +297,129 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
     if "x" in raw and "y" in raw:
         return {"x": _finite(raw["x"], f"{label}.x"), "y": _finite(raw["y"], f"{label}.y")}
     raise PresenceError(f"{label} must include nodeId or x and y")
+
+
+# A surface item's ids (a board's, an image's): what the DOM attribute allows.
+_ITEM_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+_BOARDS_LISTED = 6
+
+
+def _quoted(text: Any) -> str:
+    return f"\u201c{_echoed(text)}\u201d"
+
+
+def _board_list(boards: Collection[Mapping[str, Any]]) -> str:
+    names = [_quoted(str(board.get("name") or board.get("id"))) for board in boards]
+    if not names:
+        return "There are no moodboards yet."
+    more = f" and {len(names) - _BOARDS_LISTED} more" if len(names) > _BOARDS_LISTED else ""
+    return f"The boards here: {', '.join(names[:_BOARDS_LISTED])}{more}."
+
+
+def _find_board(ref: str, boards: Collection[Mapping[str, Any]], label: str) -> Mapping[str, Any]:
+    """A board by id, else by exact name (whitespace folded), which must be
+    one board's."""
+    by_id = [board for board in boards if board.get("id") == ref]
+    if by_id:
+        return by_id[0]
+    folded = " ".join(ref.split())
+    named = [board for board in boards if " ".join(str(board.get("name") or "").split()) == folded]
+    if len(named) == 1:
+        return named[0]
+    if len(named) > 1:
+        ids = ", ".join(str(board.get("id")) for board in named[:_BOARDS_LISTED])
+        raise PresenceError(f"{_quoted(ref)} names {len(named)} moodboards. Use an id: {ids}.")
+    raise PresenceError(f"No moodboard {_quoted(ref)} here. {_board_list(boards)}")
+
+
+def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, int]:
+    """An image of ``board`` by id, else by its number (``12`` or ``#12``,
+    1-based, as the Studio numbers them): its id and its number."""
+    if isinstance(ref, bool) or not isinstance(ref, (str, int)):
+        raise PresenceError(f"{label}.image must be an image's number or id")
+    text = str(ref).strip()
+    images = [image for image in board.get("images") or [] if isinstance(image, Mapping)]
+    for index, image in enumerate(images):
+        if str(image.get("id")) == text:
+            return text, index + 1
+    digits = text[1:] if text.startswith("#") else text
+    # ASCII digits only: "²" and "①" pass str.isdigit() but int() refuses them.
+    if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(images):
+        number = int(digits)
+        return str(images[number - 1].get("id")), number
+    where = _quoted(str(board.get("name") or board.get("id")))
+    if not images:
+        raise PresenceError(f"Board {where} has no images, so there is no image {_quoted(text)}.")
+    raise PresenceError(f"Board {where} has no image {_quoted(text)}. Use its number (1-{len(images)}) or its id.")
+
+
+def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
+                         label: str = "target") -> tuple[dict[str, Any], dict[str, Any]]:
+    """A surface target (the Moodboard panel and Studio), as the canonical
+    anchor and the names to show for it: ``({"surface", "itemId", "part"?},
+    {"board", "image"?, "part"?})``.
+
+    Asked as ``{"surface": "moodboard", "board": <id or exact name>,
+    "image"?: <id, N or #N>, "part"?: <part>}`` (or the anchor's own
+    ``itemId``), checked against ``boards`` (each ``{"id", "name",
+    "images": [{"id"}]}``) and turned into ids, so the anchor an event
+    carries is the same whatever the agent called the item. Parts: name,
+    direction, avoid, colors or colors-out on a board; note or weight on an image. A
+    drag's ``from`` is never a surface."""
+    if label != "target":
+        raise PresenceError(f"{label} can't be a moodboard: a drag starts at a node or a spot (nodeId, or x and y)")
+    surface = raw.get("surface")
+    if surface not in SURFACES:
+        raise PresenceError(f"{_quoted(surface)} isn\u2019t a surface Nebula knows. Use {' or '.join(SURFACES)}.")
+    if any(key in raw for key in ("nodeId", "x", "y", "handle")):
+        raise PresenceError(f"{label} is a moodboard or a node or a spot, not more than one")
+    if "itemId" in raw:
+        item = raw.get("itemId")
+        if not isinstance(item, str) or item.count("/") > 1:
+            raise PresenceError(f"{label}.itemId is invalid")
+        board_ref, slash, image_ref = item.partition("/")
+        if not _ITEM_ID_RE.fullmatch(board_ref) or (slash and not _ITEM_ID_RE.fullmatch(image_ref)):
+            raise PresenceError(f"{label}.itemId is invalid")
+        image_given: Any = image_ref if slash else None
+    else:
+        board_ref = raw.get("board")
+        image_given = raw.get("image")
+    if not isinstance(board_ref, str) or not board_ref.strip():
+        raise PresenceError("A moodboard target needs `board`: a board's id or its exact name.")
+    known = list(boards or [])
+    board = _find_board(board_ref.strip(), known, label)
+    board_id = str(board.get("id"))
+    if not _ITEM_ID_RE.fullmatch(board_id):
+        raise PresenceError(f"{label}.board is invalid")
+    names: dict[str, Any] = {"board": " ".join(str(board.get("name") or board_id).split())[:80]}
+    item_id = board_id
+    if image_given is not None:
+        image_id, number = _find_image(image_given, board, label)
+        if not _ITEM_ID_RE.fullmatch(image_id):
+            raise PresenceError(f"{label}.image is invalid")
+        item_id = f"{board_id}/{image_id}"
+        names["image"] = number
+    target: dict[str, Any] = {"surface": "moodboard", "itemId": item_id}
+    part = raw.get("part")
+    if part is not None:
+        allowed = IMAGE_PARTS if image_given is not None else BOARD_PARTS
+        if not isinstance(part, str) or part not in allowed:
+            of = "an image" if image_given is not None else "a board"
+            raise PresenceError(f"{_quoted(part)} isn\u2019t a part of {of}. Use "
+                                f"{', '.join(allowed[:-1])} or {allowed[-1]}.")
+        target["part"] = part
+        names["part"] = PART_LABELS[part]
+    return target, names
+
+
+def surface_ids(target: Mapping[str, Any]) -> tuple[str, str | None] | None:
+    """(board id, image id or None) of a surface anchor, or None for any
+    other target."""
+    item = target.get("surface") and target.get("itemId")
+    if not isinstance(item, str):
+        return None
+    board, _, image = item.partition("/")
+    return board, image or None
 
 
 def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -391,6 +522,9 @@ def _same_spot(before: dict[str, Any] | None, after: dict[str, Any]) -> bool:
     apart or less."""
     if before is None:
         return False
+    if "surface" in before or "surface" in after:
+        # A moodboard item: the same anchor (item and part), nothing nearer.
+        return before == after
     if "nodeId" in before or "nodeId" in after:
         return before.get("nodeId") is not None and before.get("nodeId") == after.get("nodeId")
     try:
@@ -452,6 +586,7 @@ class AgentPresence:
         did: Mapping[str, Any] | None = None,
         project_id: str | None = None,
         log: Any = None,
+        names: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -489,6 +624,11 @@ class AgentPresence:
         if target is None:
             return event
         event["target"] = target
+        if names and "surface" in target:
+            # What a moodboard item is called ({board, image?, part?}), so a
+            # line or a launcher park can name an item that isn't on screen.
+            # Beside the anchor, never in it: tabs compare anchors whole.
+            event["anchorNames"] = dict(names)
         if origin is not None:
             event["from"] = origin
         previous = self._agents.get(identity.id)
@@ -519,6 +659,13 @@ class AgentPresence:
             return dict(current["target"]), "cursor"
         return self._view_middle()
 
+    def here_names(self, identity: AgentIdentity) -> dict[str, Any] | None:
+        """The names of the moodboard item the agent's own cursor is on
+        (``here``'s target, when that is a surface), else None."""
+        current = self._agents.get(identity.id)
+        names = current.get("anchorNames") if current is not None else None
+        return dict(names) if names and "surface" in current["target"] else None
+
     def _view_middle(self) -> tuple[dict[str, Any], str]:
         view = self._view or {}
         viewport, screen = view.get("viewport"), view.get("screen")
@@ -537,6 +684,7 @@ class AgentPresence:
             {
                 **value["agent"],
                 "target": value["target"],
+                **({"anchorNames": value["anchorNames"]} if value.get("anchorNames") else {}),
                 "action": value["action"],
                 "say": value["say"],
                 "secondsAgo": round(now - value["_t"], 1),
@@ -636,6 +784,11 @@ class AgentPresence:
         reported: its corner). A handle counts as its node's point: the
         backend doesn't know where ports sit, and the cursors on one node
         move together anyway."""
+        if "surface" in target:
+            # A moodboard item is on a panel, not the canvas: no point in
+            # canvas units, so no chain and no carry (the tab's own layer
+            # places it, screen px at zoom 1).
+            return None
         node_id = target.get("nodeId")
         if node_id is None:
             try:
@@ -765,9 +918,14 @@ class AgentPresence:
         if in_place:
             if slot.target is not None:
                 person["target"] = dict(slot.target)
+                kept = (slot.event or {}).get("anchorNames")
+                if kept and "surface" in slot.target:
+                    person["anchorNames"] = dict(kept)
             elif raw or len(self._slots.get(identity.id) or {}) > 1:
                 # A session's first words: not on another session's cursor.
                 person["target"] = self._view_middle()[0]
+            if "surface" not in person["target"]:
+                person.pop("anchorNames", None)  # the names are of the agent's own cursor, not this one
         if not _same_spot(slot.anchor, person["target"]):
             slot.since = self._arrival(now)
             slot.anchor = dict(person["target"])
@@ -845,6 +1003,84 @@ class AgentPresence:
                         # Where the node was is where it is now: its arrival stays.
                         if (slot.anchor or {}).get("nodeId") == node_id:
                             slot.anchor = dict(fallback)
+
+    def forget_board(self, board_id: str, gone: list[dict[str, Any]] | None = None) -> int:
+        """Cursors on a deleted board, or on one of its images, leave, as a
+        cursor on a node with no place to fall back to does (forget_node):
+        the agent's cursor and every session's, their numbers free. Returns
+        how many left. ``gone`` collects each one as the open tabs name it
+        (``{"agentId", "key"}``, key None for an agent's plain cursor), so
+        the caller can tell them: a tab holds its cursors until told."""
+        left = 0
+        for key, value in list(self._agents.items()):
+            ids = surface_ids(value["target"])
+            if ids is not None and ids[0] == board_id:
+                del self._agents[key]
+                left += 1
+                if gone is not None:
+                    gone.append({"agentId": key, "key": None})
+        for agent_id, slots in self._slots.items():
+            for raw, slot in list(slots.items()):
+                ids = surface_ids(slot.target) if slot.target is not None else None
+                if ids is not None and ids[0] == board_id:
+                    del slots[raw]
+                    if gone is not None:
+                        gone.append({"agentId": agent_id, "key": slot.key})
+        return left
+
+    def forget_image(self, board_id: str, image_ids: Collection[str], *,
+                     holder: tuple[str, str | None] | None = None,
+                     fell: list[dict[str, Any]] | None = None) -> int:
+        """Cursors on removed images fall back to their board (the image
+        part gone with the image), the removal made elsewhere (the person's,
+        or another agent's). ``holder`` is (agent id, session) of the agent
+        that made the removal: its own cursor is on the image it just
+        removed and holds that spot, never flying to the board because its
+        own target went (GM - Design, PR #233 r4). Returns how many fell back.
+        ``fell`` collects each as the open tabs name it (``{"agentId", "key",
+        "target", "anchorNames"?}``, key None for an agent's plain cursor),
+        so the caller can move them there too."""
+        gone = {str(image_id) for image_id in image_ids}
+        board = {"surface": "moodboard", "itemId": board_id}
+
+        def on_gone(target: Mapping[str, Any] | None) -> bool:
+            ids = surface_ids(target) if target is not None else None
+            return ids is not None and ids[0] == board_id and ids[1] in gone
+
+        def board_names(names: Any) -> dict[str, Any] | None:
+            return {"board": names["board"]} if isinstance(names, Mapping) and names.get("board") else None
+
+        held_raw = holder[1] if holder is not None and holder[1] is not None and _valid_session(holder[1]) else ""
+        moved = 0
+        for key, value in list(self._agents.items()):
+            if on_gone(value["target"]) and not (holder is not None and key == holder[0]):
+                value["target"] = dict(board)
+                names = board_names(value.get("anchorNames"))
+                value.pop("anchorNames", None)
+                if names:
+                    value["anchorNames"] = names
+                moved += 1
+                if fell is not None:
+                    fell.append({"agentId": key, "key": None, "target": dict(board),
+                                 **({"anchorNames": names} if names else {})})
+        for agent_id, slots in self._slots.items():
+            for raw, slot in list(slots.items()):
+                if not on_gone(slot.target) or (holder is not None and agent_id == holder[0] and raw == held_raw):
+                    continue
+                if slot.anchor == slot.target:
+                    slot.anchor = dict(board)  # where the image was is where the board is: its arrival stays
+                slot.target = dict(board)
+                if slot.event is not None:
+                    slot.event["target"] = dict(board)
+                    names = board_names(slot.event.get("anchorNames"))
+                    slot.event.pop("anchorNames", None)
+                    if names:
+                        slot.event["anchorNames"] = names
+                moved += 1
+                if fell is not None:
+                    fell.append({"agentId": agent_id, "key": slot.key, "target": dict(board),
+                                 **({"anchorNames": names} if slot.event is not None and names else {})})
+        return moved
 
     def forget_graph(self) -> None:
         """Drop node anchors after the whole graph is cleared or replaced.

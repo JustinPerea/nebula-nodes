@@ -9,8 +9,8 @@
   position: fixed;
   left: 0;
   top: 0;
-  /* Above a Studio (--sr-layer-workspace, 50), which a plain popover (40) sits under. */
-  z-index: var(--sr-layer-workspace-overlay, 55);
+  /* Above a Studio (--sr-layer-workspace, 50), which a plain popover (40) sits under, and above the agent edge chips. */
+  z-index: var(--sr-layer-transient, 59);
   display: flex;
   flex-direction: column;
   gap: 1px;

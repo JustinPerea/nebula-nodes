@@ -144,6 +144,14 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
+// The screen layer (Phase 3, "Anywhere"): the cursors on every surface beside
+// the canvas. Mounted once at the app root; it draws nothing until a cursor
+// has a target on one, so it is in no first paint.
+export const DeferredAgentScreenLayer = lazyWithPreload(
+  () => import('../components/agent-cursor/AgentScreenLayer'),
+  (module) => module.AgentScreenLayer,
+);
+
 // Agents on the nodes (Q125 item 3): the mark above a node an agent is on
 // and the placeholder outline. It reads the roster when it mounts, so it
 // draws nothing before its chunk and misses nothing.
@@ -193,6 +201,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
+  DeferredAgentScreenLayer.preload,
   DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
   graphFileModule.preload,
@@ -280,6 +289,11 @@ export const DEFERRED_MODULES: readonly string[] = [
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
+  // The cursors' shared view and field, and the screen layer (Phase 3).
+  'components/agent-cursor/AgentCursorField.tsx',
+  'components/agent-cursor/AgentScreenLayer.tsx',
+  'lib/agentCursorSpringVars.ts',
+  'lib/agentCursorOutlines.ts',
   // The agent cursor's motion and look, only in the cursor layer's chunk.
   'lib/agentCursorPlanner.ts',
   'lib/agentCursorLook.ts',
@@ -288,6 +302,18 @@ export const DEFERRED_MODULES: readonly string[] = [
   'lib/agentCursorSays.ts',
   'lib/agentCursorField.ts',
   'lib/agentCursorTuning.ts',
+  // The surface the cursor is drawn on (Phase 3): the canvas's space reads React Flow.
+  'lib/agentCursorSpace.ts',
+  'lib/agentAnchorResolve.ts',
+  'lib/agentBoardView.ts',
+  'lib/agentLauncherDots.ts',
+  'lib/agentEdgeChips.ts',
+  'lib/agentChipChrome.ts',
+  'lib/agentChipPress.ts',
+  'components/canvas/CanvasEdgeChips.tsx',
+  'lib/agentCursorLayerOf.ts',
+  'lib/agentCursorHandoff.ts',
+  'lib/agentCursorPark.ts',
   // Its store: the normalising and the replay load with their readers; the
   // entry keeps only the socket feed (store/agentPresenceFeed.ts).
   'store/agentPresenceStore.ts',

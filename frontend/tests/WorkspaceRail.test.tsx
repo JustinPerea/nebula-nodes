@@ -32,6 +32,12 @@ describe('WorkspaceRail', () => {
     expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy();
   });
 
+  it('marks Open assets as the launcher an agent cursor parks beside', () => {
+    render(<WorkspaceRail />);
+    expect(screen.getByRole('button', { name: 'Open assets' }).getAttribute('data-agent-launcher')).toBe('moodboard');
+    expect(document.querySelectorAll('[data-agent-launcher]')).toHaveLength(1);
+  });
+
   it('provides one stable, live target for every onboarding step without taking an action', () => {
     const before = useUIStore.getState();
     render(<><WorkspaceModeNavigation /><WorkspaceRail /><ChatLauncher /></>);

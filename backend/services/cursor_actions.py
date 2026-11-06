@@ -23,6 +23,20 @@ _ECHO_CHARS = 40
 SESSION_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 
+def moodboard_clash(**given: object) -> list[str]:
+    """Which of a moodboard target's forbidden companions were given (a node,
+    a port, a spot, a drag's start): a moodboard item is a target of its own.
+    The one check for the route, MCP point_at and the CLI's `nebula point`;
+    an empty string or None counts as not given."""
+    return [name for name, value in given.items() if value is not None and value != ""]
+
+
+def moodboard_clash_refusal(names: list[str]) -> str:
+    """The refusal for ``moodboard_clash``'s result, in one wording everywhere."""
+    return (f"moodboard can't be combined with {', '.join(names)}. "
+            "Point at a moodboard, or at a node or a spot, in one call.")
+
+
 def session_ok(raw: object) -> bool:
     """Whether ``raw`` is a cursor session id the backend keeps."""
     return isinstance(raw, str) and SESSION_RE.fullmatch(raw) is not None
@@ -46,9 +60,8 @@ def _shown(text: str) -> str:
     return "".join(out)
 
 
-def refusal(value: object) -> str:
-    """The line an unknown action gets, everywhere (GM - Design, PR #211 r2):
-    it echoes the value given, cleaned (``_shown``) and cut to 40
+def echoed(value: object) -> str:
+    """A value as a refusal may echo it: cleaned (``_shown``) and cut to 40
     characters without splitting one (services/text_cut.safe_cut)."""
     if isinstance(value, str):
         shown = value[: _ECHO_CHARS * 4]  # a 100 KB value is never walked whole
@@ -58,4 +71,23 @@ def refusal(value: object) -> str:
     shown = _shown(shown)
     if len(shown) > _ECHO_CHARS:
         shown = shown[: safe_cut(shown, _ECHO_CHARS - 1)] + "\u2026"
-    return f"\u201c{shown}\u201d isn\u2019t an action Nebula knows. Use one of {ACTIONS_LIST_TEXT}."
+    return shown
+
+
+def refusal(value: object) -> str:
+    """The line an unknown action gets, everywhere (GM - Design, PR #211 r2):
+    it echoes the value given, cleaned and cut (``echoed``)."""
+    return f"\u201c{echoed(value)}\u201d isn\u2019t an action Nebula knows. Use one of {ACTIONS_LIST_TEXT}."
+
+
+# Surfaces a cursor can point at besides the canvas (Phase 3, "Anywhere"):
+# the Moodboard panel and Studio are one surface, `moodboard`. The anchor is
+# {"surface": "moodboard", "itemId": "<board>" | "<board>/<image>", "part"?}.
+SURFACES = ("moodboard",)
+# `colors` is the "Colors that must appear" row, `colors-out` the "Colors to keep out" row.
+BOARD_PARTS = ("name", "direction", "avoid", "colors", "colors-out")
+IMAGE_PARTS = ("note", "weight")
+# The words a part goes by (the labels the Studio shows for each control;
+# the frontend's AGENT_SURFACE_PART_LABELS holds the same, pinned by a test).
+PART_LABELS = {"name": "Name", "direction": "Direction", "avoid": "Avoid", "colors": "Colors",
+               "colors-out": "Colors to keep out", "note": "Note", "weight": "Weight"}

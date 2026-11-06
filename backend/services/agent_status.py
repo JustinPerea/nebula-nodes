@@ -241,6 +241,10 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
         seconds_ago = float(cursor.get("secondsAgo") or 0.0)
         target = cursor.get("target") or {}
         entry["cursor"] = {"nodeId": target.get("nodeId"), "action": cursor.get("action"), "secondsAgo": seconds_ago}
+        if "surface" in target:
+            # On the Moodboard panel or Studio: no node, so say which item, as
+            # `nebula look` and `context` do (formatter._surface_words).
+            entry["cursor"]["surface"] = {"target": dict(target), "anchorNames": cursor.get("anchorNames")}
         did = cursor.get("did")
         if isinstance(did, Mapping) and did.get("verb"):
             # The action's own time: a gesture since then kept it (GM's review).

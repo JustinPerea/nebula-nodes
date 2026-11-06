@@ -193,7 +193,8 @@ def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | Non
     budget = BUDGETS["canvas"] * CHARS_PER_TOKEN
     selection = [str(node_id) for node_id in snapshot.get("selection") or []]
     agents = [
-        {"name": agent.get("name"), "target": agent.get("target"), "secondsAgo": agent.get("secondsAgo")}
+        {"name": agent.get("name"), "target": agent.get("target"), "secondsAgo": agent.get("secondsAgo"),
+         **({"anchorNames": agent["anchorNames"]} if agent.get("anchorNames") else {})}
         for agent in snapshot.get("agents") or []
         if isinstance(agent, Mapping) and agent.get("id") != caller_id
     ][:MAX_AGENTS]

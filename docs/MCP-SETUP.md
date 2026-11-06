@@ -922,14 +922,81 @@ three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot
 four "Changed 4 settings on “Hero shot”"); several nodes are named without
 their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
 nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
-(your edit batch's `say`, else the journal's words: "Set aside #1 on board
-Dusk"; "Analyzed board Dusk"), and so is a run of the
-whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
-they move no cursor. The log is in the browser's memory only: the last 50
-entries, gone on reload.
+(your edit batch's `say`, else the journal's words: "Set aside image 1 on
+“Dusk”"; "Analyzed “Dusk”"), and so is a run of the
+whole canvas ("Running 4 nodes"). A run of the whole canvas has no one place
+and moves no cursor; a moodboard write moves yours to the board, image or
+control it touched (below). The log is in the browser's memory only: the last
+50 entries, gone on reload.
 
-The REST surface is `POST /api/canvas/cursor` (a `target`, or only `say` to
-narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
+### Beyond the canvas: pointing at a moodboard
+
+A cursor can also point at a moodboard, one of its images, or one of their
+controls, on the Moodboard panel or in Moodboard Studio (they are one surface,
+`moodboard`). The target is an anchor, never a screen position:
+
+```bash
+nebula point --moodboard "Desert light"                      # the board (its id or exact name)
+nebula point --moodboard "Desert light" --image 12            # image 12 (a number, #12 or its id)
+nebula point --moodboard "Desert light" --image 12 --part note --action type --say "Noting the shadows"
+```
+
+Over MCP: `point_at(moodboard="Desert light", image=12, part="note", action="type")`.
+`--moodboard` takes flags, not a target string, because a node id may hold a
+colon (`nebula point n2 --moodboard x` is a parser error, and so is `--from`
+with it: a drag starts at a node or a spot). Parts: `name`, `direction`,
+`avoid`, `colors` (“Colors that must appear”) or `colors-out` (“Colors to keep
+out”) on a board; `note` or `weight` on an image. A board that
+isn't there, a name that two boards share, an image past the last, or a part
+that item doesn't have is refused in plain words that say what to use.
+
+**Nebula never opens a panel or scrolls for the person.** What they see
+depends on what they have open:
+
+- **The item is on screen** (the Moodboards tab in the Assets dock, or the
+  Studio's board or list view): your cursor flies to it, and shows what you
+  are doing there.
+- **The item is on screen but scrolled or panned out of its panel**: your
+  cursor parks at the edge of the panel, on the side the item is, with a small
+  arrow toward it. Their own scroll brings it back.
+- **The Moodboard panel is closed**: your cursor parks at the button that
+  opens it (the rail's "Open assets"), with a dot in your colour. In a Studio,
+  a canvas target parks at "Back to Canvas". Whatever you do there, they open
+  it themselves.
+
+Your board writes move your cursor on their own, with the line you already
+get in the Agent log (a write you give a `say` shows that; "Added …" is the
+past tense because the line goes out after the write landed):
+
+| Write | Cursor goes to | Action |
+|---|---|---|
+| make a board; move it; restore it | the board | `click` |
+| add or place images; set aside; cover | the one image touched, else the board | `click` |
+| remove images | the image (your cursor holds that spot after it leaves; another agent's falls back to the board) | `click` |
+| weight | the image's `weight` | `click` |
+| a note (or a private note; its text is never sent) | the image's `note` | `type` |
+| name, direction, Avoid | the board's `name`, `direction`, `avoid` | `type` |
+| pinned colours (a toggle) | the board's `colors`, or `colors-out` when only the keep-out list changed | `click` |
+| analyze | the board's `colors` | `look` |
+| keep the brief | the board's `direction` | `click` |
+| delete a board | nothing: every cursor on it leaves | n/a |
+| a board outside the open project and Global (made in, or moved to, another project) | nothing: the panel doesn't list it, so the line shows in the Agent log and no cursor moves | n/a |
+
+A write that touches several things goes to the board, and two controls in
+one write are the board, not one control. The person's own writes send
+nothing. The event carries `target` (`{"surface": "moodboard", "itemId":
+"<board>" or "<board>/<image>", "part"?}`, ids only, whatever you called the
+item) and `anchorNames` (`{board, image?, part?}`: the board's name, the
+image's number, the control's label), so a line can name an item that isn't
+on screen. `nebula look` and `nebula context` say it as `on moodboard “Desert light”,
+image 12 (note)`, and `nebula agents` as `cursor on moodboard “Desert light”,
+image 12 (note)` under the agent. When a board is deleted or an image is
+removed by someone else, the person's open tabs move or clear the cursors at
+once, not after the two-minute expiry.
+
+The REST surface is `POST /api/canvas/cursor` (a `target`: a node, a spot or a
+moodboard item `{"surface": "moodboard", "board", "image"?, "part"?}`; or only
+`say` to narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
 run states; never persisted), plus `GET /api/canvas/events` (the change
 journal, below), `/api/canvas/pins` (the person's notes, below) and

@@ -30,6 +30,7 @@ import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
 import { LineText } from '../LineText';
+import { agentAnchor, agentLauncher } from '../../lib/agentAnchors';
 
 type Scope = 'global' | 'project';
 type Tab = 'characters' | 'moodboards' | 'styles';
@@ -233,6 +234,7 @@ export function AssetsPanel() {
               role="tab"
               aria-selected={tab === t.id}
               className={`assets-panel__tab${tab === t.id ? ' assets-panel__tab--active' : ''}`}
+              data-agent-launcher={t.id === 'moodboards' ? agentLauncher('moodboard') : undefined}
               onClick={() => setTab(t.id)}
             >
               {t.label}
@@ -326,6 +328,7 @@ export function AssetsPanel() {
               filteredMoodboards.map((m) => (
                 <AssetItem
                   key={m.id}
+                  agentBoard={m.id}
                   name={m.name}
                   sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
@@ -390,6 +393,7 @@ export function AssetsPanel() {
  * buttons; double-click opens it. Only "Add to canvas" and dragging add a node.
  */
 function AssetItem({
+  agentBoard,
   name,
   sub,
   thumbnail,
@@ -405,6 +409,8 @@ function AssetItem({
   onDelete,
   deleteBusy = false,
 }: {
+  /** A Moodboard row: the board an agent cursor can point at (lib/agentAnchors). */
+  agentBoard?: string;
   name: string;
   sub: ReactNode;
   thumbnail?: string;
@@ -432,7 +438,8 @@ function AssetItem({
   const stored = localOnly ? storedImageView(thumbnail) : null;
   const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
-    <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}>
+    <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}
+      data-agent-anchor={agentAnchor(agentBoard)} data-agent-launcher={agentLauncher('moodboard', agentBoard)}>
       <button
         type="button"
         className="character-palette__item assets-item__select"

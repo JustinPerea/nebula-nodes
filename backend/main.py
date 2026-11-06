@@ -151,6 +151,7 @@ from services.agent_presence import (
     clean_say,
     current_request_headers,
     identify as identify_agent,
+    parse_surface_target,
     parse_target,
     presence_session,
 )
@@ -166,7 +167,8 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, moodboard_clash, moodboard_clash_refusal,
+                                     refusal as cursor_action_refusal)
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
@@ -5965,19 +5967,32 @@ async def _show_agent(
         pass
 
 
-async def _say_agent_action(say: str) -> None:
-    """Tell open canvases what the calling agent did where no cursor can go
-    (a moodboard write, a run of the whole canvas). It is the cursor's own
-    event without a target, so the Agent log lists it under the agent's name
-    and colour and no cursor moves (frontend store/agentLogStore.ts). A no-op
-    for the browser's own requests; like _show_agent, it never fails the
-    route that called it.
+async def _say_agent_action(say: str, *, target: dict[str, Any] | None = None, action: str = "click",
+                            names: dict[str, Any] | None = None) -> None:
+    """Tell open canvases what the calling agent did. With no ``target``
+    (a run of the whole canvas, a board's delete), no cursor can go: it is
+    the cursor's own event without a target, so the Agent log lists it under
+    the agent's name and colour and no cursor moves (frontend
+    store/agentLogStore.ts).
+
+    A moodboard write passes ``target`` (a surface anchor,
+    services/moodboard_actions.board_anchor), ``action`` (its table's) and
+    ``names``: the agent's cursor goes to the board, the image or the
+    control it touched, on the person's Moodboard panel or Studio. That goes
+    through the same person form as any cursor event, so the cursor is the
+    session's numbered one ("Claude · 2"), never a second unnumbered cursor
+    that displaces session 1. A no-op for the browser's own requests; like
+    _show_agent, it never fails the route that called it.
     """
-    identity = identify_agent(current_request_headers())
+    headers = current_request_headers()
+    identity = identify_agent(headers)
     if identity is None:
         return
     try:
-        await manager.broadcast_raw(_point(identity, target=None, action="click", say=say))
+        event = _point(identity, target=target, action=action, say=say, names=names)
+        # With no target the person form is the event and its id (the Agent
+        # log lists it once by it); with one, the session's numbered cursor.
+        await _broadcast_presence(event, _person_form(event, identity, headers))
     except Exception:  # noqa: BLE001 - decoration must not break a saved write
         pass
 
@@ -6516,7 +6531,11 @@ _POINTED_AT_NODE = {"move": "Pointed at", "look": "Looked at"}
 _POINTED_AT_SPOT = {"look": "Looked around"}
 
 
-def _pointed(action: str, target: Mapping[str, Any]) -> dict[str, Any] | None:
+def _pointed(action: str, target: Mapping[str, Any], names: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    if isinstance(target, Mapping) and "surface" in target:
+        verb = _POINTED_AT_NODE.get(action)
+        label = (names or {}).get("board")
+        return {"verb": verb, "nodeId": None, "label": label} if verb and label else None
     node_id = target.get("nodeId") if isinstance(target, Mapping) else None
     if isinstance(node_id, str):
         verb = _POINTED_AT_NODE.get(action)
@@ -6525,11 +6544,32 @@ def _pointed(action: str, target: Mapping[str, Any]) -> dict[str, Any] | None:
     return {"verb": verb, "nodeId": None, "label": None} if verb else None
 
 
+def _open_project_id() -> str | None:
+    """The open project's id, None when none is open or the catalog is unreadable."""
+    try:
+        return _workspace_context()["activeProjectId"]
+    except Exception:  # noqa: BLE001 - the catalog unreadable: Global's boards still count
+        return None
+
+
+def _boards_to_point_at() -> list[dict[str, Any]]:
+    """The boards a cursor may point at: those of the open project, then
+    Global, as the Moodboards tab lists them."""
+    store = _moodboard_store()
+    project_id = _open_project_id()
+    boards = store.list(scope="project", projectId=project_id) if project_id else []
+    return [*boards, *store.list(scope="global")]
+
+
 @app.post("/api/canvas/cursor")
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
-    """Point the calling agent's cursor at a node, a port, or a canvas spot.
+    """Point the calling agent's cursor at a node, a port, a canvas spot, or
+    a moodboard item.
 
-    Body: {target?: {nodeId, handle?} | {x, y}, from?: same shape,
+    Body: {target?: {nodeId, handle?} | {x, y} | {surface: "moodboard",
+    board: <id or exact name>, image?: <id, N or #N>, part?: name, direction,
+    avoid, colors or colors-out (the keep-out colors) on a board; note or weight on an image}, from?: a node
+    or a spot (never a moodboard),
     action?: one of agent_presence.ACTIONS (move, look, think, type, click,
     drag, run, propose, wait, error), say?: text}. The caller must identify
     itself (agent token or X-Nebula-Agent). Any other action is a 422 that
@@ -6548,6 +6588,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             detail="Identify the agent with an X-Nebula-Agent header (e.g. 'Claude Code') or an agent token",
         )
     placed = "target"
+    names: dict[str, Any] | None = None
     try:
         if body.get("target") is None:
             if body.get("from") is not None:
@@ -6556,6 +6597,13 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
                 raise PresenceError("give a target (nodeId, or x and y), or only `say` to narrate where your "
                                     "cursor is")
             target, placed = agent_presence.here(identity)
+            names = agent_presence.here_names(identity) if placed == "cursor" else None
+        elif isinstance(body.get("target"), dict) and "surface" in body["target"]:
+            # A moodboard item: the boards it may name are read off the loop.
+            clash = moodboard_clash(**{"from": body.get("from")})  # a moodboard item is a target of its own
+            if clash:
+                raise PresenceError(moodboard_clash_refusal(clash))
+            target, names = parse_surface_target(body["target"], await asyncio.to_thread(_boards_to_point_at))
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
@@ -6570,7 +6618,8 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             say=body.get("say"),
             # A line said in place, or a cut gesture (_pointed gives None),
             # keeps the agent's last action and its time.
-            did=None if placed == "cursor" else _pointed(action, target),
+            did=None if placed == "cursor" else _pointed(action, target, names),
+            names=names,
         )
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -6579,7 +6628,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     person = _person_form(event, identity, headers, in_place=placed != "target")
     await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
-            "placed": placed}
+            "placed": placed, **({"anchorNames": names} if names else {})}
 
 
 # ---------- The Agents panel: status lines and the roster (Q125 item 2) ----------
@@ -21506,7 +21555,8 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
         return {**_moodboard_out(moodboard), "repeated": True,
                 "madeAttempt": earlier.get("attempt"), "madeVersion": earlier.get("version")}
     await _broadcast_stored_asset("moodboard", moodboard)
-    await _say_agent_action(moodboard_actions.describe_create(moodboard))
+    await _say_agent_action(moodboard_actions.describe_create(moodboard),
+                            **_board_point(moodboard, action="click"))
     return _moodboard_out(moodboard)
 
 
@@ -21570,16 +21620,72 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
         _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
+def _board_point(board: dict | None, image_id: str | None = None, part: str | None = None, *,
+                 action: str, also: dict | None = None) -> dict[str, Any]:
+    """The cursor's place for a board write, as _say_agent_action takes it
+    (services/moodboard_actions.board_anchor)."""
+    # The same reach as `point_at` (_boards_to_point_at): the open project's
+    # boards and Global's. A board elsewhere (made in, or moved to, another
+    # project) is not in the panel, so the cursor would park at "Open assets"
+    # for nothing; the write still says what happened in the Agent log.
+    scope = (board or also or {}).get("projectId")
+    if scope and scope != _open_project_id():
+        return {}
+    target, names = moodboard_actions.board_anchor(board, image_id, part, also=also)
+    return {"target": target, "action": action, "names": names}
+
+
+async def _tell_tabs(event: dict[str, Any], cursors: list[dict[str, Any]]) -> None:
+    """Person tabs hear which cursors the backend just dropped or moved
+    (agentPresenceLeave, agentPresenceRetarget): a tab holds a cursor until
+    told, so without this a deleted board's cursors stay drawn for the 120 s
+    prune and a new session can take the same number beside them. Never
+    fails the write."""
+    if not cursors:
+        return
+    try:
+        await manager.broadcast_browser({**event, "cursors": cursors[:_CURSOR_TELL_MAX]})
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("telling the tabs about cursors failed")
+
+
+_CURSOR_TELL_MAX = 64  # bounded like the live set: 8 sessions an agent over the agents seen
+
+
+async def _forget_removed_images(after: dict, changes: dict) -> None:
+    """A board write took images off the board: cursors on them fall back to
+    the board, except the cursor of the agent that made the write, which
+    holds the spot it clicked (agent_presence.forget_image). Never fails the
+    route."""
+    removed = (changes.get("kinds") or {}).get("removed") or []
+    if not removed:
+        return
+    try:
+        headers = current_request_headers()
+        identity = identify_agent(headers)
+        holder = (identity.id, presence_session(headers)) if identity is not None else None
+        fell: list[dict[str, Any]] = []
+        agent_presence.forget_image(str(after.get("id")), removed, holder=holder, fell=fell)
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("forgetting removed images failed")
+        return
+    # The tabs move the same cursors to the board, rather than hold them on a
+    # tile that is gone until the 120 s prune.
+    await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
+
+
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
                                   undo: bool = False) -> None:
     """One Agent log line for an agent's board write (an edit batch or a
     PUT): the agent's own ``say`` when it sent one, else the journal's
     summary of the change (services/moodboard_actions.describe_change),
-    marked "Undo:" for a batch of ``restore`` ops. A write that changed
+    "Undid a change to “Dusk”" for a batch of ``restore`` ops. A write that changed
     nothing, and the person's own writes, send nothing."""
     if not changes.get("slices") or identify_agent(current_request_headers()) is None:
         return
-    await _say_agent_action(say or moodboard_actions.describe_change(changes, before, after, undo=undo))
+    image_id, part, action = moodboard_actions.write_point(changes)
+    await _say_agent_action(say or moodboard_actions.describe_change(changes, before, after, undo=undo),
+                            **_board_point(after, image_id, part, action=action, also=before))
 
 
 def _base_version(raw: Any) -> int | None:
@@ -21636,6 +21742,7 @@ async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposa
     changes = diff(before, moodboard)
     _journal_board_change(before, moodboard, changes, proposal_id=proposal_id)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
+    await _forget_removed_images(moodboard, changes)
     await _say_agent_board_change(before, moodboard, changes)
     # The answer is the board plus `undo`, the `restore` that takes this
     # write back (the shape `/edits` answers with), made from the same diff:
@@ -21676,6 +21783,7 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
         undo = result.undo if len(body.ops) <= UNDO_BROADCAST_LIMIT else None
         await _broadcast_stored_asset("moodboard", board, edit={"touched": result.touched, "undo": undo})
         undo_batch = all(isinstance(op, dict) and op.get("op") == "restore" for op in body.ops)
+        await _forget_removed_images(board, result.changes)
         await _say_agent_board_change(before, board, result.changes, say=say, undo=undo_batch)
     return {"board": _moodboard_out(board), "version": board.get("version"), "applied": result.applied,
             "undo": result.undo}
@@ -21697,7 +21805,8 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
-    await _say_agent_action(moodboard_actions.describe_write("kept the brief on", moodboard))
+    await _say_agent_action(moodboard_actions.describe_write("kept the brief for", moodboard),
+                            **_board_point(moodboard, None, "direction", action="click"))
     return _moodboard_out(moodboard)
 
 
@@ -21740,7 +21849,8 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         except (KeyError, ValueError):
             raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
-    await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
+    await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard),
+                            **_board_point(moodboard, None, "colors", action="look"))
     return _moodboard_out(moodboard)
 
 
@@ -21968,6 +22078,11 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
+    # Cursors on the deleted board leave (the caller's too): there is no
+    # place left to point at.
+    gone: list[dict[str, Any]] = []
+    agent_presence.forget_board(moodboard_id, gone)
+    await _tell_tabs({"type": "agentPresenceLeave"}, gone)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
 
@@ -22051,7 +22166,8 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
     await _broadcast_stored_asset(kind, after, moved=True)
     if kind == "moodboard":
-        await _say_agent_action(moodboard_actions.describe_write("moved", after, f"to {names['to']}"))
+        await _say_agent_action(moodboard_actions.describe_move(after, names["to"]),
+                                **_board_point(after, action="click"))
     return result
 
 
@@ -22213,7 +22329,8 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
-        await _say_agent_action(moodboard_actions.describe_write("restored", asset))
+        await _say_agent_action(moodboard_actions.describe_write("restored", asset),
+                                **_board_point(asset, action="click"))
     if kind == "style":  # broadcast above
         await _style_written("restored", asset, broadcast=False)
     # Read back through the store, as GET does (a board gets its brief).

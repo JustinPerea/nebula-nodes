@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
-import type { AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
+import type { AgentAnchorNames, AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceLeaveEvent, AgentPresenceRetargetEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
 import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
@@ -28,6 +28,9 @@ export interface AgentCursor {
   color: string;
   verified: boolean;
   target: AgentCursorAnchor;
+  /** What a surface target is called (the board, the image's number, the
+   *  control), for the cursor's line: absent for a canvas target. */
+  anchorNames?: AgentAnchorNames;
   from?: AgentCursorAnchor;
   /** Normalised: an action this tab doesn't know is 'move'. */
   action: AgentCursorAction;
@@ -72,6 +75,13 @@ interface AgentPresenceState {
   /** The live cursors the backend replays to this tab on connect: they
    *  replace what the tab had, so a reconnect never doubles a cursor. */
   replay: (cursors: readonly AgentPresenceEvent[], now?: number) => void;
+  /** The backend dropped these cursors (their board was deleted): they leave
+   *  now, not at the 120 s prune, so a new session that takes the number
+   *  never draws beside the old one. */
+  leave: (cursors: AgentPresenceLeaveEvent['cursors']) => void;
+  /** The backend moved these cursors to a board (their image was removed
+   *  elsewhere): they go there now. Not a new event: no say, no new seq. */
+  retarget: (cursors: AgentPresenceRetargetEvent['cursors']) => void;
   prune: (now?: number) => void;
   /** The server refused this tab's hello (a demoted tab): its numbered
    *  cursors are person-only and go, as any cursor leaves; the agents' form
@@ -122,9 +132,28 @@ function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
   };
 }
 
+const ANCHOR_ITEM = /^[A-Za-z0-9_.-]{1,64}(\/[A-Za-z0-9_.-]{1,64})?$/;
+
+/** The names beside a surface anchor: a board name, an image number, a control label. */
+function cleanAnchorNames(raw: unknown, target: AgentCursorAnchor): AgentAnchorNames | undefined {
+  if (!('surface' in target) || !raw || typeof raw !== 'object') return undefined;
+  const names = raw as Record<string, unknown>;
+  if (typeof names.board !== 'string' || !names.board) return undefined;
+  return {
+    board: names.board,
+    ...(typeof names.image === 'number' && Number.isFinite(names.image) ? { image: names.image } : {}),
+    ...(typeof names.part === 'string' && names.part ? { part: names.part } : {}),
+  };
+}
+
 function isAnchor(value: unknown): value is AgentCursorAnchor {
   if (!value || typeof value !== 'object') return false;
   const anchor = value as Record<string, unknown>;
+  // A surface item: `itemId` is `<board>` or `<board>/<image>` (ids, 1-64 of the DOM attribute's characters).
+  if (anchor.surface === 'moodboard') {
+    return typeof anchor.itemId === 'string' && ANCHOR_ITEM.test(anchor.itemId)
+      && (anchor.part === undefined || typeof anchor.part === 'string');
+  }
   if (typeof anchor.nodeId === 'string') return anchor.handle === undefined || typeof anchor.handle === 'string';
   return Number.isFinite(anchor.x) && Number.isFinite(anchor.y);
 }
@@ -185,6 +214,7 @@ function withEvent(
     color: SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR,
     verified: Boolean(agent.verified),
     target,
+    anchorNames: cleanAnchorNames(event.anchorNames, target),
     from: !replayed && isAnchor(event.from) ? event.from : undefined,
     action: cursorAction(event.action),
     say: typeof event.say === 'string' ? event.say : '',
@@ -217,6 +247,26 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
       if (!cursor || (cursor.arrivedAt === c.since && cursor.arrivalKnown)) continue;
       // Not a new event: no seq, no say, no flight. Only its place in the column.
       agents = { ...(agents ?? state.agents), [key]: { ...cursor, arrivedAt: c.since, arrivalKnown: true } };
+    }
+    return agents ? { agents } : state;
+  }),
+  leave: (cursors) => set((state) => {
+    const kept = { ...state.agents };
+    for (const c of Array.isArray(cursors) ? cursors : []) {
+      if (!c || typeof c.agentId !== 'string') continue;
+      const key = typeof c.key === 'string' ? `${c.agentId}#${c.key}` : c.agentId;
+      delete kept[key];
+    }
+    return Object.keys(kept).length === Object.keys(state.agents).length ? state : { agents: kept };
+  }),
+  retarget: (cursors) => set((state) => {
+    let agents: Record<string, AgentCursor> | null = null;
+    for (const c of Array.isArray(cursors) ? cursors : []) {
+      if (!c || typeof c.agentId !== 'string' || !isAnchor(c.target)) continue;
+      const key = typeof c.key === 'string' ? `${c.agentId}#${c.key}` : c.agentId;
+      const cursor: AgentCursor | undefined = (agents ?? state.agents)[key];
+      if (!cursor) continue;
+      agents = { ...(agents ?? state.agents), [key]: { ...cursor, target: c.target, anchorNames: cleanAnchorNames(c.anchorNames, c.target) } };
     }
     return agents ? { agents } : state;
   }),
@@ -266,6 +316,8 @@ attachPresenceSink((event, receivedAt) => {
   if (event.type === 'agentPresence') store.apply(event, receivedAt);
   else if (event.type === 'agentPresenceReplay') store.replay(event.cursors, receivedAt);
   else if (event.type === 'agentPresenceArrival') store.arrive(event.cursors);
+  else if (event.type === 'agentPresenceLeave') store.leave(event.cursors);
+  else if (event.type === 'agentPresenceRetarget') store.retarget(event.cursors);
   else if (event.type === 'socketDemoted') store.demote();
   else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) store.forgetGraph();
 });

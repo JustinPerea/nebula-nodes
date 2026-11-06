@@ -1,0 +1,103 @@
+/* The canvas's edge chips (PR #233 slice 9). Their own stylesheet: the cursors'
+   (agentCursor.css, agentCursorAnywhere.css) take no pointer events, and a chip
+   is a button. Only .agent-edge-chip takes them; the box it sits in and the
+   "+N" count do not (tests/agentEdgeChipsCss.test.ts). */
+
+.agent-edge-chips {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Above the docks (55), below menus and popovers (--sr-layer-transient, 59), modals and the notice region:
+     a chip never covers a menu (final review of PR #233, finding 5). */
+  z-index: var(--sr-layer-edge-chips, 58);
+}
+
+.agent-edge-chip {
+  position: absolute;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-border, rgba(255, 255, 255, 0.14));
+  border-radius: 999px;
+  background: var(--sr-panel-bg, #181818);
+  color: var(--sr-ink, #e8e6e1);
+  font: 500 12px/1 var(--sr-font-sans, system-ui, sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  animation: agent-edge-chip-in var(--agent-cursor-chip) both;
+}
+
+.agent-edge-chip:hover {
+  border-color: color-mix(in srgb, var(--agent-color) 60%, transparent);
+}
+
+.agent-edge-chip:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: 2px;
+}
+
+.agent-edge-chip__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--agent-color);
+}
+
+.agent-edge-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-edge-chip__chevron {
+  flex: none;
+  margin-left: auto;
+  fill: none;
+  stroke: var(--agent-color);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(var(--chip-angle, 0rad));
+}
+
+/* "+N": a count of the agents beyond the chips an edge holds, not a control. */
+.agent-edge-count {
+  position: absolute;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--sr-panel-bg, #181818);
+  border: 1px solid var(--sr-border, rgba(255, 255, 255, 0.14));
+  color: var(--sr-ink, #e8e6e1);
+  font: 600 11px/1 var(--sr-font-sans, system-ui, sans-serif);
+  pointer-events: none;
+  animation: agent-edge-chip-in var(--agent-cursor-chip) both;
+}
+
+/* A new chip slides in 8 px from beyond its edge, on its own spring. */
+.agent-edge-chip[data-side="left"],
+.agent-edge-count[data-side="left"] { --chip-from: translateX(calc(-1 * var(--agent-cursor-chip-slide))); }
+.agent-edge-chip[data-side="right"],
+.agent-edge-count[data-side="right"] { --chip-from: translateX(var(--agent-cursor-chip-slide)); }
+.agent-edge-chip[data-side="top"],
+.agent-edge-count[data-side="top"] { --chip-from: translateY(calc(-1 * var(--agent-cursor-chip-slide))); }
+.agent-edge-chip[data-side="bottom"],
+.agent-edge-count[data-side="bottom"] { --chip-from: translateY(var(--agent-cursor-chip-slide)); }
+
+@keyframes agent-edge-chip-in {
+  from { opacity: 0; transform: var(--chip-from, none); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-edge-chip,
+  .agent-edge-count {
+    animation: none;
+  }
+}

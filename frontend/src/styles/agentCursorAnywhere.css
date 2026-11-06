@@ -1,0 +1,158 @@
+/* The screen layer (Phase 3, "Anywhere"): agent cursors on the surfaces beside
+   the canvas. Separate from agentCursor.css, whose ratchet
+   (tests/agentCursorCss.test.ts) forbids pointer-events: auto and
+   position: fixed there; nothing here takes a pointer event either. The
+   cursors themselves are agentCursor.css's (the same view). */
+
+.agent-screen-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* GM - Design 5: above the docks (--sr-layer-workspace-overlay, 55: Chat,
+     Settings, the Updates corner), below modals (--sr-layer-modal, 60) and
+     the notice region (--sr-layer-notice). */
+  z-index: calc(var(--sr-layer-modal, 60) - 1);
+}
+
+.agent-cursor-layer--screen {
+  /* Inside the fixed box's own stacking context: only its draw order matters. */
+  z-index: 2;
+}
+
+.agent-item-outlines {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* The item an agent is typing in (solid) or proposing on (dashed, as the dashed
+   halo): 1.5 px in the agent colour, the geometry set from JS. */
+.agent-item-outline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--agent-color);
+  border-radius: 6px;
+  pointer-events: none;
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
+.agent-item-outline[data-kind="dashed"] {
+  border-style: dashed;
+}
+
+.agent-item-outline__more {
+  position: absolute;
+  right: -1.5px;
+  top: -20px;
+  padding: 0 6px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--agent-color);
+  font: 600 11px/16px var(--sr-font-sans, system-ui, sans-serif);
+  white-space: nowrap;
+}
+
+/* The edge park's chevron (slice 7): 6 px, in the agent colour, 4 px clear of the
+   arrow, turned toward the item that is scrolled or panned out of view. Its
+   place and angle are set from the cursor's loop (--park-x, --park-y,
+   --park-angle); it is a mark, never a control. It comes in on the soft spring. */
+.agent-cursor__park-chevron {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  overflow: visible;
+  pointer-events: none;
+  transform: translate(var(--park-x, 0px), var(--park-y, 0px)) rotate(var(--park-angle, 0rad));
+  fill: none;
+  stroke: var(--agent-color);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
+/* The launcher's activity badge (slice 8, 10c): 6 px dots, agent colour, placed
+   from JS (middle at left/top) at the launcher's top right corner, outside the
+   glyph's box. A 1.5 px ring in the rail's background (rgba(24, 24, 26) in
+   workspace-rail.css) lets them read on the icon's edge; "+N" is the app's
+   smallest label size (--sr-type-micro). Opacity (the idle dim, the leave) runs
+   on the soft spring; a dot that arrives fades in on it. A mark, never a control. */
+.agent-launcher-dots {
+  --agent-badge-ring: rgb(24, 24, 26);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* The fade-in is `backwards`, not `both`: an animation holds its end value
+   over the inline opacity, so a dot that kept filling forwards could never
+   show the idle dim (0.45, set inline from JS). tests/agentLauncherDotsCss.test.ts. */
+.agent-launcher-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--agent-color);
+  box-shadow: 0 0 0 1.5px var(--agent-badge-ring);
+  pointer-events: none;
+  transition: opacity var(--agent-cursor-soft);
+  animation: agent-item-outline-in var(--agent-cursor-soft) backwards;
+}
+
+.agent-launcher-dot__more {
+  position: absolute;
+  height: 12px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  transform: translate(-100%, -50%);
+  border-radius: 6px;
+  background: var(--agent-color);
+  box-shadow: 0 0 0 1.5px var(--agent-badge-ring);
+  font: 600 var(--sr-type-micro, 9px)/12px var(--sr-font-sans, system-ui, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity var(--agent-cursor-soft);
+  animation: agent-item-outline-in var(--agent-cursor-soft) backwards;
+}
+
+/* One that left fades out where it was (the soft spring), then JS removes it. */
+.agent-launcher-dot[data-leaving],
+.agent-launcher-dot__more[data-leaving] {
+  opacity: 0;
+  animation: agent-launcher-dot-out var(--agent-cursor-soft) both;
+}
+
+@keyframes agent-launcher-dot-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes agent-item-outline-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-item-outline {
+    animation: none;
+  }
+
+  .agent-cursor__park-chevron {
+    animation: none;
+  }
+
+  .agent-launcher-dot,
+  .agent-launcher-dot__more {
+    animation: none;
+    transition: none;
+  }
+}

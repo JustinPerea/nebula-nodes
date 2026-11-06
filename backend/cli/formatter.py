@@ -457,6 +457,9 @@ def format_start(start: dict[str, Any]) -> str:
     lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
     for agent in canvas.get("agents") or []:
         target = agent.get("target") or {}
+        if "surface" in target:
+            lines.append(f"  {agent.get('name')}'s cursor is on {_surface_words(target, agent.get('anchorNames'))}")
+            continue
         at = target.get("nodeId") or (f"({target.get('x')},{target.get('y')})" if target else "?")
         lines.append(f"  {agent.get('name')}'s cursor is at {at}")
     for node in canvas.get("nodes") or []:
@@ -720,18 +723,36 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
         lines.append("AGENT CURSORS:")
         for agent in agents:
             target = agent.get("target") or {}
-            if "nodeId" in target:
-                at = target["nodeId"] + (f".{target['handle']}" if target.get("handle") else "")
+            if "surface" in target:
+                at = "on " + _surface_words(target, agent.get("anchorNames"))
+            elif "nodeId" in target:
+                at = "at " + target["nodeId"] + (f".{target['handle']}" if target.get("handle") else "")
             else:
-                at = f"({target.get('x', 0):.0f},{target.get('y', 0):.0f})"
+                at = f"at ({target.get('x', 0):.0f},{target.get('y', 0):.0f})"
             say = f' "{agent["say"]}"' if agent.get("say") else ""
-            lines.append(f"  {agent.get('name')} at {at}{say} ({agent.get('secondsAgo')}s ago)")
+            lines.append(f"  {agent.get('name')} {at}{say} ({agent.get('secondsAgo')}s ago)")
 
     events = snapshot.get("events")
     if isinstance(events, dict) and events.get("cursor") is not None:
         lines.append("")
         lines.append(f"EVENTS: cursor {events['cursor']} (nebula watch --since {events['cursor']})")
     return "\n".join(lines)
+
+
+def _surface_words(target: dict[str, Any], names: Any = None) -> str:
+    """Where a cursor on a moodboard item is, as `nebula look` and `agents`
+    say it: moodboard “Desert light”, image 12 (note). The names come
+    with the event (anchorNames); without them, the item's ids."""
+    item = str(target.get("itemId") or "")
+    board_id, _, image_id = item.partition("/")
+    names = names if isinstance(names, dict) else {}
+    board = str(names.get("board") or board_id or "?")
+    words = f"moodboard \u201c{board}\u201d" if names.get("board") else f"moodboard {board}"
+    if image_id:
+        words += f", image {names.get('image') or image_id}"
+    if target.get("part"):
+        words += f" ({target['part']})"
+    return words
 
 
 def _ago(iso: Any, now: float | None = None) -> str:
@@ -1323,6 +1344,9 @@ def format_agents(roster: dict[str, Any]) -> str:
             lines.append("  " + " · ".join(part for part in parts if part))
             if group == "needsYou" and detail:
                 lines.append(f"    {detail}")
+            surface = (entry.get("cursor") or {}).get("surface")
+            if isinstance(surface, dict) and isinstance(surface.get("target"), dict):
+                lines.append(f"    cursor on {_surface_words(surface['target'], surface.get('anchorNames'))}")
             # Q125 item 3: what its runs are running now, and its placeholders.
             for running in entry.get("running") or []:
                 seconds = int(float(running.get("secondsAgo") or 0))
