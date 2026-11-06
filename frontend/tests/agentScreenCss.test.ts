@@ -19,6 +19,12 @@ describe('agentCursorAnywhere.css', () => {
     expect(css).not.toMatch(/pointer-events:\s*(?:auto|all|fill|stroke|visible)/);
   });
 
+  it('clips nothing: a say draws past a tile\'s edge (06a read as a clip but was a dark pill over a black gutter, slice 10c)', () => {
+    for (const name of ['.agent-screen-layer', '.agent-cursor-layer--screen']) {
+      expect(rule(name)).not.toMatch(/overflow|clip|contain:|mask/);
+    }
+  });
+
   it('sits above the docks (55) and below modals (60) and the notice region (GM 5)', () => {
     expect(rule('.agent-screen-layer')).toMatch(/z-index:\s*calc\(var\(--sr-layer-modal, 60\) - 1\)/);
     const slava = readFileSync(resolve(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
@@ -77,6 +83,11 @@ describe('the store keeps what a surface target is called', () => {
 
   it('the launcher dots are click-through marks that fade on the soft spring and stay still under reduced motion', () => {
     for (const name of ['.agent-launcher-dot', '.agent-launcher-dot__more']) expect(rule(name)).toMatch(/pointer-events:\s*none/);
+    // The corner badge (slice 10c): a 1.5 px ring in the rail's background, "+N" at the smallest label token.
+    expect(rule('.agent-launcher-dot')).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
+    expect(rule('.agent-launcher-dot__more')).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
+    expect(rule('.agent-launcher-dot__more')).toMatch(/font:[^;]*var\(--sr-type-micro/);
+    expect(rule('.agent-launcher-dots')).toMatch(/--agent-badge-ring:\s*rgb\(24,\s*24,\s*26\)/);
     expect(rule('.agent-launcher-dot__more')).toMatch(/transition:[^;]*var\(--agent-cursor-soft\)/);
     const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(reduced).toMatch(/\.agent-launcher-dot,\s*\.agent-launcher-dot__more\s*\{[^}]*animation:\s*none/);

@@ -12,6 +12,11 @@ import { AGENT_CURSOR_CHIP } from './agentCursorTuning';
  * - **Under floating chrome** (the Inspector, the Agent log, Updates): the
  *   chip sits just outside that panel's edge, on the side facing the pane's
  *   middle, `insetPx` clear of it, where the same line leaves the panel.
+ * - **Clear of the canvas's chrome** (the top bar, the bottom bar, the rail,
+ *   Updates, the Agent log, the chat button, the undo toast, the open
+ *   panels): a chip never overlaps a `chrome` box. It slides along its edge
+ *   to the nearest free spot, `chromeGapPx` clear; where the edge has no room
+ *   it moves inward (or off a panel, outward) past the chrome that blocks it.
  * Chips on one edge stack along it `gapPx` apart and never overlap, any
  * other chip or "+N" included; an edge holds at most `maxPerEdge` (the most
  * recently active) and then a count, which is not a control.
@@ -109,13 +114,15 @@ const faceDistance = (p: Point, box: Box, side: Side): number => Math.abs((verti
  * pane; `obstacles` the floating panels. A cursor inside `view` and under no
  * panel has no chip.
  */
-export function planChips({ view, obstacles = [], cursors, sizes = defaultSizes }: {
+export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = defaultSizes }: {
   view: Box;
   obstacles?: readonly Obstacle[];
+  /** Fixed canvas chrome a chip must stand clear of. A cursor under one is not off screen: this only keeps chips off it. */
+  chrome?: readonly Box[];
   cursors: readonly ChipCursor[];
   sizes?: ChipSizes;
 }): ChipPlan {
-  const { insetPx, gapPx, maxPerEdge } = AGENT_CURSOR_CHIP;
+  const { insetPx, gapPx, chromeGapPx, maxPerEdge } = AGENT_CURSOR_CHIP;
   const centre = centreOf(view);
   const groups = new Map<string, Group>();
   const order: Group[] = [];
@@ -193,36 +200,72 @@ export function planChips({ view, obstacles = [], cursors, sizes = defaultSizes 
     const stack = group.members.filter((m) => keep.has(m.cursor.key)).sort((a, b) => a.natural - b.natural
       || (a.cursor.key < b.cursor.key ? -1 : 1));
     const [lo, hi] = group.along;
+    // Which way a chip's depth grows: inward from the pane's edge, away from a panel's face.
+    const dir = (group.outside ? -1 : 1) * (side === 'left' || side === 'top' ? 1 : -1);
+    const bounds: [number, number] = vertical(side) ? [view.left + insetPx, view.left + view.width - insetPx]
+      : [view.top + insetPx, view.top + view.height - insetPx];
     // On the pane's edge a chip extends inward from its line; off a panel's face, away from the panel.
-    const boxAt = (size: { width: number; height: number }, centreAlong: number): Box => {
+    // `depth` moves the line on, past chrome that holds the edge.
+    const boxAt = (size: { width: number; height: number }, centreAlong: number, depth = 0): Box => {
       const w = size.width;
       const h = size.height;
       const inward = !group.outside;
-      if (side === 'left') return { left: inward ? group.line : group.line - w, top: centreAlong - h / 2, width: w, height: h };
-      if (side === 'right') return { left: inward ? group.line - w : group.line, top: centreAlong - h / 2, width: w, height: h };
-      if (side === 'top') return { left: centreAlong - w / 2, top: inward ? group.line : group.line - h, width: w, height: h };
-      return { left: centreAlong - w / 2, top: inward ? group.line - h : group.line, width: w, height: h };
+      const line = group.line + dir * depth;
+      if (side === 'left') return { left: inward ? line : line - w, top: centreAlong - h / 2, width: w, height: h };
+      if (side === 'right') return { left: inward ? line - w : line, top: centreAlong - h / 2, width: w, height: h };
+      if (side === 'top') return { left: centreAlong - w / 2, top: inward ? line : line - h, width: w, height: h };
+      return { left: centreAlong - w / 2, top: inward ? line - h : line, width: w, height: h };
     };
     const extent = (size: { width: number; height: number }) => (vertical(side) ? size.height : size.width);
-    /** The first spot at or after `from` where `size` fits clear of everything placed, or null. */
-    const settle = (size: { width: number; height: number }, from: number): number | null => {
-      let pos = Math.max(from, lo + extent(size) / 2);
-      for (let guard = 0; guard < 64; guard += 1) {
-        const box = boxAt(size, pos);
-        const hit = placed.find((other) => overlaps(box, other, gapPx));
-        if (!hit) return pos + extent(size) / 2 <= hi ? pos : null;
-        const end = vertical(side) ? hit.top + hit.height : hit.left + hit.width;
-        pos = end + gapPx + extent(size) / 2;
+    const alongStart = (box: Box) => (vertical(side) ? box.top : box.left);
+    const alongEnd = (box: Box) => (vertical(side) ? box.top + box.height : box.left + box.width);
+    const acrossStart = (box: Box) => (vertical(side) ? box.left : box.top);
+    const acrossEnd = (box: Box) => (vertical(side) ? box.left + box.width : box.top + box.height);
+    /** The depths to try: the edge itself, then each way past a chrome box. */
+    const depths = (size: { width: number; height: number }): number[] => {
+      const base = boxAt(size, 0);
+      const found = new Set<number>([0]);
+      for (const c of chrome) {
+        const d = dir > 0 ? acrossEnd(c) + chromeGapPx - acrossStart(base) : acrossEnd(base) - (acrossStart(c) - chromeGapPx);
+        if (d <= 0) continue;
+        const moved = boxAt(size, 0, d);
+        if (acrossStart(moved) >= bounds[0] - 1e-6 && acrossEnd(moved) <= bounds[1] + 1e-6) found.add(d);
+      }
+      return [...found].sort((x, y) => x - y);
+    };
+    /** The nearest spot to `from` along the edge at `depth` where `size` is clear of everything placed and of the chrome, or null.
+     *  Past a chip it only goes on (the stack keeps its order); around chrome it may go either way. */
+    const settleAt = (size: { width: number; height: number }, from: number, depth: number): number | null => {
+      const half = extent(size) / 2;
+      const start = Math.max(from, lo + half);
+      const candidates = [start];
+      for (const other of placed) candidates.push(alongEnd(other) + gapPx + half);
+      for (const c of chrome) candidates.push(alongEnd(c) + chromeGapPx + half, alongStart(c) - chromeGapPx - half);
+      let best: number | null = null;
+      for (const pos of candidates) {
+        if (pos < lo + half - 1e-6 || pos + half > hi + 1e-6) continue;
+        const box = boxAt(size, pos, depth);
+        if (placed.some((other) => overlaps(box, other, gapPx)) || chrome.some((c) => overlaps(box, c, chromeGapPx))) continue;
+        const gap = Math.abs(pos - start);
+        if (best === null || gap < Math.abs(best - start) || (gap === Math.abs(best - start) && pos > best)) best = pos;
+      }
+      return best;
+    };
+    /** Where `size` goes: the first depth with a free spot, and the nearest spot to `from` on it. */
+    const settle = (size: { width: number; height: number }, from: number): { pos: number; depth: number } | null => {
+      for (const depth of depths(size)) {
+        const pos = settleAt(size, from, depth);
+        if (pos !== null) return { pos, depth };
       }
       return null;
     };
     let last = -Infinity;
     for (const member of stack) {
-      const pos = settle(member.size, member.natural);
-      if (pos === null) { hidden += 1; continue; }
-      const box = boxAt(member.size, pos);
+      const spot = settle(member.size, member.natural);
+      if (spot === null) { hidden += 1; continue; }
+      const box = boxAt(member.size, spot.pos, spot.depth);
       placed.push(box);
-      last = pos + extent(member.size) / 2;
+      last = spot.pos + extent(member.size) / 2;
       const c = centreOf(box);
       chips.push({ key: member.cursor.key, label: member.cursor.label, color: member.cursor.color, box, side,
         angle: Math.atan2(member.cursor.tip.y - c.y, member.cursor.tip.x - c.x) });
@@ -230,9 +273,9 @@ export function planChips({ view, obstacles = [], cursors, sizes = defaultSizes 
     if (hidden > 0) {
       // The count follows the last chip on the same line; with no room it is left out.
       const size = sizes.count;
-      const pos = settle(size, last === -Infinity ? stack[0]?.natural ?? lo : last + gapPx + extent(size) / 2);
-      if (pos !== null) {
-        const box = boxAt(size, pos);
+      const spot = settle(size, last === -Infinity ? stack[0]?.natural ?? lo : last + gapPx + extent(size) / 2);
+      if (spot !== null) {
+        const box = boxAt(size, spot.pos, spot.depth);
         placed.push(box);
         counts.push({ id: `${group.id}:${side}`, count: hidden, box, side });
       }

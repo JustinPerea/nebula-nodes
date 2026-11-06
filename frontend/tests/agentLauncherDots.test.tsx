@@ -108,6 +108,17 @@ describe('the dot on a launcher (PR #233 slice 8)', () => {
     expect(parseFloat(dot.style.top)).toBe(RAIL_BOX.top + AGENT_CURSOR_DOT.insetPx);
   });
 
+  it('is a corner badge: the dot and its ring stay within the corner, clear of the glyph\'s box (the middle 20 px of a 40 px button)', () => {
+    const { px, ringPx, insetPx, gapPx, maxDots } = AGENT_CURSOR_DOT;
+    const reach = insetPx + px / 2 + ringPx; // from the corner, to the far side of the first dot's ring
+    expect(reach).toBeLessThan(10); // a 20 px glyph in a 40 px button starts 10 px in
+    // Both dots: the far side of the second is within the button's top strip, above the glyph.
+    expect(insetPx + (maxDots - 1) * (px + gapPx) + px / 2 + ringPx).toBeLessThan(20);
+    // The rings touch but do not overlap.
+    expect(gapPx).toBeGreaterThanOrEqual(2 * ringPx);
+    expect(px).toBe(6);
+  });
+
   it('is on the board row when the dock is open, the rail when it is not', () => {
     put('launcher', 'moodboard:b1', { left: 900, top: 200, width: 280, height: 40 });
     put('launcher', 'moodboard', RAIL_BOX);
@@ -127,7 +138,7 @@ describe('the dot on a launcher (PR #233 slice 8)', () => {
     expect(dots()).toHaveLength(0);
   });
 
-  it('two agents give two dots side by side, 2 px apart, in arrival order', () => {
+  it('two agents give two dots side by side, a ring apart, in arrival order', () => {
     put('launcher', 'moodboard', RAIL_BOX);
     renderLayer();
     send(event(0));

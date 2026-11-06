@@ -149,16 +149,19 @@ export const AGENT_CURSOR_OUTLINE = {
   gapPx: 3,
 } as const;
 
-/** The launcher's activity dot (PR #233 slice 8, GM - Design 2): a 6 px dot in
- *  the agent colour on the launcher a cursor is parked at, `gapPx` apart from
- *  the next. Up to `maxDots` agents get a dot each; with more, the earliest
- *  `maxDots` keep one and "+N" counts the rest. `insetPx` is how far in from the
- *  launcher's top right corner the first dot's middle sits. */
+/** The launcher's activity badge (PR #233 slice 8, GM - Design 2; slice 10c): a
+ *  6 px dot in the agent colour on the launcher a cursor is parked at, with a
+ *  `ringPx` ring in the rail's background so it reads on the icon's edge, `gapPx`
+ *  apart from the next (the rings just touch). Up to `maxDots` agents get a dot
+ *  each; with more, the earliest `maxDots` keep one and "+N" counts the rest.
+ *  `insetPx` is how far in from the launcher's top right corner the first dot's
+ *  middle sits: the badge straddles the corner, outside the glyph's box. */
 export const AGENT_CURSOR_DOT = {
   px: 6,
-  gapPx: 2,
+  ringPx: 1.5,
+  gapPx: 3,
   maxDots: 2,
-  insetPx: 4,
+  insetPx: 2,
 } as const;
 
 /** The canvas edge chip (PR #233 slice 9, GM - Design 7 and 8): where a
@@ -170,6 +173,8 @@ export const AGENT_CURSOR_DOT = {
 export const AGENT_CURSOR_CHIP = {
   insetPx: 12,
   gapPx: 6,
+  /** A chip stands this far clear of the canvas's own chrome (GM: a chip stands clear of chrome). */
+  chromeGapPx: 8,
   maxPerEdge: 3,
   slidePx: 8,
   heightPx: 28,

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { readChipView, visiblePane } from '../src/lib/agentChipChrome';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { CANVAS_CHROME_SELECTORS, readChipView, visiblePane } from '../src/lib/agentChipChrome';
 
 /** PR #233 slice 9: what the chips read of the page: docks narrow the pane, floating panels are obstacles. */
 const PANE = { left: 0, top: 0, width: 1000, height: 600 };
@@ -30,5 +32,39 @@ describe('readChipView', () => {
     put('agent-log panel--exiting', { left: 0, top: 0, width: 50, height: 50 });
     const ids = readChipView(PANE).obstacles.map((o) => o.id.replace(/\d+$/, '')).sort();
     expect(ids).toEqual(['agent-log', 'inspector', 'updates']);
+  });
+});
+
+describe('the canvas chrome chips stand clear of', () => {
+  const attr = (name: string, box: { left: number; top: number; width: number; height: number }) => {
+    const el = put('', box);
+    el.setAttribute(name, '');
+    return el;
+  };
+
+  it('reads the top bar, the bottom bar, the rail, Updates, the Agent log, the chat button and the undo toast', () => {
+    attr('data-top-bar', { left: 300, top: 24, width: 400, height: 40 });
+    attr('data-bottom-bar', { left: 300, top: 640, width: 400, height: 48 });
+    put('workspace-rail__shell', { left: 5, top: 250, width: 40, height: 200 });
+    put('agent-notes-chip', { left: 880, top: 24, width: 110, height: 36 });
+    put('agent-log', { left: 700, top: 400, width: 280, height: 180 });
+    put('panel-launcher panel-launcher--chat', { left: 940, top: 640, width: 40, height: 40 });
+    put('canvas-undo-notice', { left: 300, top: 590, width: 300, height: 36 });
+    expect(readChipView(PANE).chrome).toHaveLength(7);
+  });
+
+  it('skips a box that is not on screen (no size) or is leaving', () => {
+    attr('data-top-bar', { left: 0, top: 0, width: 0, height: 0 });
+    put('agent-log panel--exiting', { left: 0, top: 0, width: 50, height: 50 });
+    expect(readChipView(PANE).chrome).toHaveLength(0);
+  });
+
+  it('every selector still names something the app renders', () => {
+    const known = ['CanvasTabs.tsx', 'panels/Toolbar.tsx', 'WorkspaceRail.tsx', 'agent-notes/AgentNotesCorner.tsx',
+      'panels/AgentLog.tsx', 'panels/MessageBox.tsx', 'panels/NodeInspectorPopover.tsx', 'agent-notes/AgentNotesList.tsx', 'agent-notes/AgentNoteCard.tsx', 'ChatLauncher.tsx', 'canvas/CanvasLateNotice.tsx']
+      .map((file) => readFileSync(resolve(process.cwd(), 'src/components', file), 'utf8')).join('\n');
+    const names = CANVAS_CHROME_SELECTORS.flatMap((selector) => selector.split(',').map((part) => part.trim()))
+      .filter((part) => part.startsWith('.')).map((part) => part.slice(1));
+    for (const name of names) expect(known, name).toContain(name);
   });
 });

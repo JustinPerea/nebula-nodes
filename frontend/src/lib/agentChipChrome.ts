@@ -1,5 +1,6 @@
 import { intersect, area, type Box } from './agentAnchorResolve';
 import type { Obstacle } from './agentEdgeChips';
+import { BOTTOM_BAR_ATTR, TOP_BAR_ATTR } from './bottomBar';
 
 /**
  * What the edge chips read of the page (PR #233 slice 9): the visible pane
@@ -7,7 +8,10 @@ import type { Obstacle } from './agentEdgeChips';
  * Board view's column) and the floating panels a cursor can be under (the
  * Inspector, the Agent log, Updates). Reads rects by the panels' own class
  * names (the ones lib/noticeSides.ts and lib/canvasFit.ts already read), so
- * no panel needs a new attribute and the entry stays as it is. In the cursor
+ * no panel needs a new attribute and the entry stays as it is. It reads the
+ * canvas's fixed chrome too (the top bar, the bottom bar, the rail, Updates,
+ * the Agent log, the chat button, the undo toast): chips stand clear of those
+ * (`CANVAS_CHROME_SELECTORS`). In the cursor
  * chunk (lib/deferredChunks.ts DEFERRED_MODULES).
  */
 
@@ -19,6 +23,24 @@ export const CHROME_SELECTORS: readonly { id: string; selector: string }[] = [
   { id: 'inspector', selector: '.node-inspector-popover, .panel--inspector' },
   { id: 'agent-log', selector: '.agent-log' },
   { id: 'updates', selector: '.agent-notes-panel, .agent-note-card' },
+];
+
+/**
+ * The canvas's own fixed chrome, which an edge chip must not sit on (GM: a chip
+ * stands clear of chrome). By the attributes the layout code already reads
+ * (`TOP_BAR_ATTR`, `BOTTOM_BAR_ATTR`: lib/bottomBar.ts) and the classes of the
+ * rest; tests/agentChipChrome.test.ts checks each still exists in the source.
+ */
+export const CANVAS_CHROME_SELECTORS: readonly string[] = [
+  `[${TOP_BAR_ATTR}]`,
+  `[${BOTTOM_BAR_ATTR}]`,
+  '.workspace-rail__shell',
+  '.agent-notes-chip',
+  '.agent-log',
+  '.panel-launcher',
+  '.canvas-undo-notice',
+  '.node-inspector-popover, .panel--inspector',
+  '.agent-notes-panel, .agent-note-card',
 ];
 
 const boxOf = (element: Element): Box | null => {
@@ -40,7 +62,7 @@ export function visiblePane(pane: Box, docks: readonly Box[]): Box {
   return { left, top: pane.top, width: Math.max(0, right - left), height: pane.height };
 }
 
-export interface ChipView { view: Box; obstacles: Obstacle[] }
+export interface ChipView { view: Box; obstacles: Obstacle[]; chrome: Box[] }
 
 /** The visible pane and the floating panels now, in client px. */
 export function readChipView(pane: Box, root: ParentNode = document): ChipView {
@@ -52,5 +74,6 @@ export function readChipView(pane: Box, root: ParentNode = document): ChipView {
       if (box) obstacles.push({ id: `${id}${index}`, box });
     });
   }
-  return { view: visiblePane(pane, docks), obstacles };
+  const chrome = [...root.querySelectorAll(CANVAS_CHROME_SELECTORS.join(', '))].flatMap((element) => boxOf(element) ?? []);
+  return { view: visiblePane(pane, docks), obstacles, chrome };
 }
