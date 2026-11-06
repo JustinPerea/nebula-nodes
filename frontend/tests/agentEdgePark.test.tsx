@@ -3,6 +3,7 @@ import { act, cleanup, render } from '@testing-library/react';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 import { clampToClip, type Box, type ResolverEnv } from '../src/lib/agentAnchorResolve';
 import { arrowExitPx, parkChevron, PARK_CHEVRON_GAP_PX, PARK_CHEVRON_PX } from '../src/lib/agentCursorPark';
+import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_STROKE, AGENT_CURSOR_ARROW_TIP } from '../src/lib/agentCursorLook';
 import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { useBoardCanvasStore } from '../src/store/boardCanvasStore';
@@ -68,6 +69,19 @@ const tipOf = (el: HTMLElement) => {
 };
 const chevron = () => document.querySelector<SVGElement>('.agent-cursor__park-chevron');
 const angleOf = (el: Element) => Number((el as HTMLElement).style.getPropertyValue('--park-angle').replace('rad', ''));
+/** The drawn cursor's extent in client px, worked out from the tuning constants and the placed chevron. */
+const drawn = (el: HTMLElement) => {
+  const tip = tipOf(el)!;
+  const half = AGENT_CURSOR_ARROW_STROKE / 2;
+  const arrowRight = tip.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - AGENT_CURSOR_ARROW_TIP.x + half;
+  const arrowBottom = tip.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) - AGENT_CURSOR_ARROW_TIP.y + half;
+  const c = chevron() as unknown as HTMLElement | null;
+  const px = (name: string) => Number(c!.style.getPropertyValue(name).replace('px', ''));
+  const chevronRight = c ? tip.x + px('--park-x') - AGENT_CURSOR_ARROW_TIP.x + PARK_CHEVRON_PX / 2 : -Infinity;
+  const chevronBottom = c ? tip.y + px('--park-y') - AGENT_CURSOR_ARROW_TIP.y + PARK_CHEVRON_PX / 2 : -Infinity;
+  return { arrowRight, arrowBottom, chevronRight, chevronBottom,
+    right: Math.max(arrowRight, chevronRight), bottom: Math.max(arrowBottom, chevronBottom) };
+};
 const near = (a: { x: number; y: number }, b: { x: number; y: number }, within = 1) =>
   Math.hypot(a.x - b.x, a.y - b.y) <= within;
 
@@ -123,8 +137,8 @@ describe('the clamp: just inside the panel\'s top or bottom edge, nearest the it
     send(event());
     flush();
     const tip = tipOf(cursors()[0])!;
-    // The list's bottom edge is y 600; 12 px inside it.
-    expect(tip.y).toBeCloseTo(LIST.top + LIST.height - 12, 0);
+    // The list's bottom edge is y 600: the drawn cursor ends 12 px inside it, so the tip is higher.
+    expect(drawn(cursors()[0]).bottom).toBeCloseTo(LIST.top + LIST.height - 12, 0);
     // Along the line from the panel's middle toward the item: left of centre, as the item is.
     expect(tip.x).toBeGreaterThan(LIST.left + 12);
     expect(tip.x).toBeLessThan(aim(tile(900)).x + 40);
@@ -284,6 +298,55 @@ describe('the window is a clip too', () => {
     renderLayer();
     send(event());
     flush();
-    expect(tipOf(cursors()[0])!.y).toBeCloseTo(VIEW.height - 12, 0);
+    expect(drawn(cursors()[0]).bottom).toBeCloseTo(VIEW.height - 12, 0);
+  });
+});
+
+describe('the whole drawn cursor stays 12 px inside the clip (slice 10b)', () => {
+  const inside = (box: Box) => {
+    put('anchor', 'moodboard:b1/i1', box);
+    renderLayer();
+    send(event());
+    flush();
+    return drawn(cursors()[0]);
+  };
+  it('bottom park in the List clip: arrow and chevron both end 12 px above the edge', () => {
+    const d = inside(tile(900));
+    expect(d.arrowBottom).toBeLessThanOrEqual(LIST.top + LIST.height - 12 + 0.5);
+    expect(d.chevronBottom).toBeLessThanOrEqual(LIST.top + LIST.height - 12 + 0.5);
+    expect(d.bottom).toBeCloseTo(LIST.top + LIST.height - 12, 0);
+    expect(Math.sin(angleOf(chevron()!))).toBeGreaterThan(0.9);
+  });
+  it('bottom park with the window as the clip', () => {
+    clip = VIEW;
+    const d = inside(tile(1500, 700));
+    expect(d.bottom).toBeCloseTo(VIEW.height - 12, 0);
+    expect(d.chevronBottom).toBeLessThanOrEqual(VIEW.height - 12 + 0.5);
+  });
+  it('right park: arrow and chevron end 12 px inside the right edge', () => {
+    const d = inside({ left: 2000, top: 300, width: 160, height: 120 });
+    expect(d.right).toBeCloseTo(LIST.left + LIST.width - 12, 0);
+    expect(d.chevronRight).toBeLessThanOrEqual(LIST.left + LIST.width - 12 + 0.5);
+    expect(d.arrowRight).toBeLessThanOrEqual(LIST.left + LIST.width - 12 + 0.5);
+  });
+  it('right park with the window as the clip', () => {
+    clip = VIEW;
+    expect(inside({ left: 3000, top: 300, width: 160, height: 120 }).right).toBeCloseTo(VIEW.width - 12, 0);
+  });
+  it('top and left parks are unchanged: the tip 12 px inside', () => {
+    put('anchor', 'moodboard:b1/i1', tile(-300));
+    renderLayer();
+    send(event());
+    flush();
+    expect(tipOf(cursors()[0])!.y).toBeCloseTo(LIST.top + 12, 0);
+    cleanup();
+    document.body.innerHTML = '';
+    boxes.clear();
+    useAgentPresenceStore.getState().clear();
+    put('anchor', 'moodboard:b1/i1', { left: -400, top: 300, width: 160, height: 120 });
+    renderLayer();
+    send(event());
+    flush();
+    expect(tipOf(cursors()[0])!.x).toBeCloseTo(LIST.left + 12, 0);
   });
 });

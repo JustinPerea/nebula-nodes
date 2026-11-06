@@ -11,6 +11,7 @@ import {
   type Box,
   type ResolverEnv,
 } from '../src/lib/agentAnchorResolve';
+import { parkReachPx } from '../src/lib/agentCursorPark';
 import type { AgentCursorAnchor } from '../src/lib/wsClient';
 
 /** Cursor Phase 3, slice 4: the DOM resolver chain, over fake rects. */
@@ -157,9 +158,9 @@ describe('the edge park', () => {
 
   it.each([
     ['above', { left: 250, top: -400, width: 100, height: 100 }, { x: 300, y: 100 + EDGE_INSET_PX }, -Math.PI / 2],
-    ['below', { left: 250, top: 900, width: 100, height: 100 }, { x: 300, y: 400 - EDGE_INSET_PX }, Math.PI / 2],
+    ['below', { left: 250, top: 900, width: 100, height: 100 }, { x: 300, y: 400 - EDGE_INSET_PX - parkReachPx(Math.PI / 2).down }, Math.PI / 2],
     ['left', { left: -500, top: 226, width: 100, height: 100 }, { x: 100 + EDGE_INSET_PX, y: 250 }, Math.PI],
-    ['right', { left: 900, top: 226, width: 100, height: 100 }, { x: 500 - EDGE_INSET_PX, y: 250 }, 0],
+    ['right', { left: 900, top: 226, width: 100, height: 100 }, { x: 500 - EDGE_INSET_PX - parkReachPx(0).right, y: 250 }, 0],
   ] as const)('parks at the clip\'s edge on the side the item is (%s), the chevron toward it', (_side, box, parked, angle) => {
     page.add(anchorAttr('b1', 'i9'), box, clip);
     const result = resolver().resolve(board('b1/i9'));
@@ -173,8 +174,8 @@ describe('the edge park', () => {
   it('clamps along the line from the clip\'s middle, so a scroll slides the cursor along the edge', () => {
     const far = clampToClip({ x: 2000, y: 250 }, clip);
     const farther = clampToClip({ x: 2000, y: 260 }, clip);
-    expect(far.point.x).toBeCloseTo(500 - EDGE_INSET_PX, 5);
-    expect(farther.point.x).toBeCloseTo(500 - EDGE_INSET_PX, 5);
+    expect(far.point.x).toBeCloseTo(500 - EDGE_INSET_PX - parkReachPx(0).right, 0);
+    expect(farther.point.x).toBeCloseTo(500 - EDGE_INSET_PX - parkReachPx(Math.atan2(10, 1900)).right, 0);
     expect(farther.point.y).toBeGreaterThan(far.point.y); // it moved with the item, along the edge
     expect(clampToClip({ x: 120, y: 120 }, clip).point).toEqual({ x: 120, y: 120 }); // inside the inset clip: where it is
     expect(clampToClip({ x: 300, y: 250 }, { left: 0, top: 0, width: 20, height: 20 }).point).toEqual({ x: 10, y: 10 }); // too small for the inset

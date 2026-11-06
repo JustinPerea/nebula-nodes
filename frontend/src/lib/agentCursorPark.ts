@@ -1,5 +1,5 @@
 import type { Point } from './agentCursorMotion';
-import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_TIP } from './agentCursorLook';
+import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_STROKE, AGENT_CURSOR_ARROW_TIP } from './agentCursorLook';
 
 /**
  * The edge park's chevron (Phase 3 slice 7; design section 5): a target in
@@ -33,4 +33,19 @@ export function arrowExitPx(angle: number): number {
 export function parkChevron(tip: Point, toward: Point): { angle: number; distance: number } {
   const angle = Math.atan2(toward.y - tip.y, toward.x - tip.x);
   return { angle, distance: arrowExitPx(angle) + PARK_CHEVRON_GAP_PX + PARK_CHEVRON_PX / 2 };
+}
+
+/** How far right and down of the tip the drawn cursor reaches when it parks
+ *  with its chevron at `angle`: the arrow with its stroke, or the chevron
+ *  placed at `parkChevron`'s distance with its own stroke, whichever goes
+ *  further. The edge park's clamp keeps these inside the clip (agentAnchorResolve
+ *  clampToClip). From the tuning constants, never a layout read. */
+export function parkReachPx(angle: number): { right: number; down: number } {
+  const half = AGENT_CURSOR_ARROW_STROKE / 2;
+  const distance = arrowExitPx(angle) + PARK_CHEVRON_GAP_PX + PARK_CHEVRON_PX / 2;
+  const chevronHalf = PARK_CHEVRON_PX / 2 + 0.75;
+  return {
+    right: Math.max(ARROW_RIGHT_PX + half, Math.cos(angle) * distance + chevronHalf),
+    down: Math.max(ARROW_DOWN_PX + half, Math.sin(angle) * distance + chevronHalf),
+  };
 }

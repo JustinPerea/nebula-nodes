@@ -1,5 +1,6 @@
 import { agentAnchor } from './agentAnchors';
 import { boardView } from './agentBoardView';
+import { parkReachPx } from './agentCursorPark';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
@@ -98,13 +99,20 @@ const inside = (p: Point, box: Box): boolean =>
  */
 export function clampToClip(target: Point, clip: Box): { point: Point; angle: number } {
   const centre = { x: clip.left + clip.width / 2, y: clip.top + clip.height / 2 };
-  const halfW = Math.max(0, clip.width / 2 - EDGE_INSET_PX);
-  const halfH = Math.max(0, clip.height / 2 - EDGE_INSET_PX);
   const dx = target.x - centre.x;
   const dy = target.y - centre.y;
+  // The arrow hangs below and right of its tip and the chevron sits beyond it
+  // toward the item, so the right and bottom edges inset the drawn cursor's
+  // box (the whole cursor stays in view), not just the tip. The top and left
+  // keep the tip itself inset. The chevron's angle is along the line from the
+  // middle, which the point stays on.
+  const reach = parkReachPx(Math.atan2(dy, dx));
+  // The tip's room from the middle: to the right and down it is the box's, to the left and up it is the tip's.
+  const roomX = dx > 0 ? Math.max(0, clip.width / 2 - EDGE_INSET_PX - reach.right) : Math.max(0, clip.width / 2 - EDGE_INSET_PX);
+  const roomY = dy > 0 ? Math.max(0, clip.height / 2 - EDGE_INSET_PX - reach.down) : Math.max(0, clip.height / 2 - EDGE_INSET_PX);
   const along = Math.min(
-    dx === 0 ? Infinity : halfW / Math.abs(dx),
-    dy === 0 ? Infinity : halfH / Math.abs(dy),
+    dx === 0 ? Infinity : roomX / Math.abs(dx),
+    dy === 0 ? Infinity : roomY / Math.abs(dy),
     1,
   );
   const point = { x: centre.x + dx * along, y: centre.y + dy * along };
