@@ -94,7 +94,7 @@ function gatedFunctions(): string[] {
 
 /** Every registration, by its marker: the file it is in. */
 const SITES: Record<string, string> = {
-  'project.kept-save': 'store/projectStore.ts',
+  'project.kept-save': 'store/projectFlows.ts',
   banner: 'components/PersonRequiredBanner.tsx',
   'create.enhance': 'components/create-studio/CreateComposer.tsx',
   'chat.codex-login': 'components/panels/ChatPanel.tsx',
@@ -136,10 +136,10 @@ const SITES: Record<string, string> = {
   'canvas-proposals.refusal': 'store/canvasProposalsStore.ts',
   'canvas-proposals.accept': 'store/canvasProposalsStore.ts',
   'canvas-proposals.reject': 'store/canvasProposalsStore.ts',
-  'project.error': 'store/projectStore.ts',
-  'project.save': 'store/projectStore.ts',
-  'project.save-retry': 'store/projectStore.ts',
-  'project.load-retry': 'store/projectStore.ts',
+  'project.error': 'store/projectFlows.ts',
+  'project.save': 'store/projectFlows.ts',
+  'project.save-retry': 'store/projectFlows.ts',
+  'project.load-retry': 'store/projectFlows.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
   'graph.refusal': 'store/graphStore.ts',
   'graph.notify': 'store/graphStore.ts',
@@ -326,24 +326,24 @@ const CALLERS: Record<string, Caller> = {
   'store/graphStore.ts#flushCinemaScenePersistence': ['cinema.scene-save-retry'],
   'store/graphStore.ts#renameNode': NO_LINE('a refused rename puts the old name back, with no line of its own (the banner says why)'),
   'store/graphStore.ts#sendRestoredWire': NO_LINE('Keep mine\'s wire put back: a refused one stays off the card and the info line names its shot (shotBackWithoutLine), what came back, not why'),
-  'store/projectStore.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
+  'store/projectFlows.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
   // GM r7 (2): the load screens retry on the promote (showNotConnectedLoad in each catch).
   // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
   // which throws on), whose refusal lands in this function's outer catch (GM r7 2).
-  'store/projectStore.ts#followProjectSwitch': ['project.load-retry'],
+  'store/projectFlows.ts#followProjectSwitch': ['project.load-retry'],
   // PR #199: the kept tab's Save as a project (POST /api/projects/recover) reaches the gate through
   // the kept-save check; its refusal's line goes on the promote.
-  'store/projectStore.ts#saveKeptEdits': ['project.kept-save'],
-  'store/projectStore.ts#dismissCatalogRestore': NO_LINE('the × on the restore notice: .catch(() => undefined), the notice stays'),
-  'store/projectStore.ts#dismissCanvasHeldUnreadable': NO_LINE('the × on the unreadable-canvases notice: .catch(() => undefined), the notice stays'),
+  'store/projectFlows.ts#saveKeptEdits': ['project.kept-save'],
+  'store/projectFlows.ts#dismissCatalogRestore': NO_LINE('the × on the restore notice: .catch(() => undefined), the notice stays'),
+  'store/projectFlows.ts#dismissCanvasHeldUnreadable': NO_LINE('the × on the unreadable-canvases notice: .catch(() => undefined), the notice stays'),
   // Round 14 (GM r23 item 5): the Updates mark-read is never the person's own press.
   'store/agentNotesStore.ts#sendRead': NO_LINE('a mark-read refused for this tab shows nothing: the updates stay unread, the page\'s because line says why, and the read waits for the promote (lib/personWork)'),
 };
 
 /** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
 const RETRIES: Record<string, string> = {
-  'project.save-retry': 'store/projectStore.ts',
-  'project.load-retry': 'store/projectStore.ts',
+  'project.save-retry': 'store/projectFlows.ts',
+  'project.load-retry': 'store/projectFlows.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
   'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',

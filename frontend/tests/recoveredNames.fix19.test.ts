@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CUT_SPACES, NAME_LIMIT, duplicateName, recoveredCanvasName, recoveredCopyFallbackName } from '../src/lib/recoveredNames';
+import { projectStoreSource } from './helpers/projectStoreSource';
 
 interface NameCase { source: string; family: 'copy' | 'recovered' | 'canvas'; taken: string[]; expect: string }
 const CASES = JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/data/copy_name_cases.json'), 'utf8')) as NameCase[];
@@ -39,7 +40,7 @@ describe('GM r27 2: the tab names copies as Nebula does (the shared cases)', () 
 
 describe('the kept Save’s fallback', () => {
   it('the kept Save passes the tab’s names in use (the list and Recently deleted)', () => {
-    const src = readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8');
+    const src = projectStoreSource();
     expect(src).toContain('recoveredCopyFallbackName(kept.sourceName, namesInUse())');
     expect(src).toMatch(/\[\.\.\.projects\.map\(\(project\) => project\.name\), \.\.\.trash\.map\(\(entry\) => entry\.name\)\]/);
   });

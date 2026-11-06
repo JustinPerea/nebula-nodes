@@ -158,7 +158,10 @@ function keepWithEdits(): void {
 }
 
 
-const OVER_LIMIT = 'You have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.';
+// GM r24 (b), verbatim: the three kept-save refusals match (limit over, limit at, storage cap).
+const OVER_LIMIT = 'Nebula couldn’t save your edits as a project because you have 501 projects, over the limit of 500. Delete 2, and Nebula saves your edits.';
+const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete one, and Nebula saves your edits.';
+const STORAGE_FULL_LINE = 'Nebula couldn’t save your edits as a project because the project list is full. Delete a project and remove it from Recently deleted, and Nebula saves your edits.';
 const limitAnswer = (overrides: Record<string, unknown> = {}) => new Response(JSON.stringify({
   detail: 'Project limit reached', limit: 'projects', projectLimit: 500, projectCount: 501, deletes: 2, ...overrides,
 }), { status: 413, headers: { 'Content-Type': 'application/json' } });
@@ -171,7 +174,9 @@ describe('a kept save refused for the project limit (round 23, RD LOW-2)', () =>
     const state = useProjectStore.getState();
     expect(isCanvasKept()).toBe(true);
     expect(state.keptEdits).toMatchObject({ saving: false });
-    expect(state.keptEdits?.error).toContain(OVER_LIMIT);
+    expect(state.keptEdits?.error).toBe(OVER_LIMIT);
+    // GM r24 (b): the notice offers [Choose a project to delete] for it.
+    expect(state.keptEdits?.chooseToDelete).toBe('projects');
     expect(state.unsavedEdits).toBeNull();
     expect(state.screen).toBe('workspace');
     expect(useGraphStore.getState().keptUndo.length).toBeGreaterThan(0);
@@ -196,32 +201,44 @@ describe('a kept save refused for the project limit (round 23, RD LOW-2)', () =>
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha-rec');
   });
 
-  const STORAGE_FULL = 'Nebula couldn’t save your edits as a project because Nebula’s project list is full. ';
   const storageAnswer = () => new Response(JSON.stringify({ detail: 'Project storage limit reached', limit: 'storage' }),
     { status: 413, headers: { 'Content-Type': 'application/json' } });
 
-  it('GM r23, 3: a kept save refused for the storage cap keeps kept mode and says the project list is full, with the size advice', async () => {
+  it('GM r24 (b): at the limit, and over it by one project more than the limit, each in GM’s words', async () => {
+    keepWithEdits();
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', limitAnswer({ projectCount: 3, projectLimit: 3, deletes: undefined })));
+    await useProjectStore.getState().saveKeptEdits();
+    expect(useProjectStore.getState().keptEdits?.error).toBe(AT_LIMIT);
+    // Over it with no count from the backend: the count past the limit plus one (2 projects, limit 1).
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', limitAnswer({ projectCount: 2, projectLimit: 1, deletes: undefined })));
+    await useProjectStore.getState().saveKeptEdits();
+    expect(useProjectStore.getState().keptEdits?.error)
+      .toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2, and Nebula saves your edits.');
+    expect(useProjectStore.getState().keptEdits?.chooseToDelete).toBe('projects');
+    expect(isCanvasKept()).toBe(true);
+  });
+
+  it('GM r23, 3; r24 (b): a kept save refused for the storage cap keeps kept mode and says the project list is full, in the one line', async () => {
     keepWithEdits();
     vi.mocked(projects.recoverProject).mockRejectedValue(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
     await useProjectStore.getState().saveKeptEdits();
     const state = useProjectStore.getState();
     expect(isCanvasKept()).toBe(true);
     expect(state.keptEdits).toMatchObject({ saving: false });
-    // No Recently deleted items in the listing: the advice that says to empty it too.
-    expect(state.keptEdits?.error).toBe(`${STORAGE_FULL}Delete a project, then remove it from Recently deleted too, and Nebula will save it.`);
+    expect(state.keptEdits?.error).toBe(STORAGE_FULL_LINE);
+    expect(state.keptEdits?.chooseToDelete).toBe('storage');
     expect(state.unsavedEdits).toBeNull();
     expect(state.screen).toBe('workspace');
     expect(useGraphStore.getState().keptUndo.length).toBeGreaterThan(0);
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('alpha typed and more');
   });
 
-  it('GM r23, 3: with items in Recently deleted the advice says to delete one there', async () => {
+  it('GM r24 (b): with items in Recently deleted the line is the same one', async () => {
     keepWithEdits();
     useProjectStore.setState({ trash: [{ ...summary('old'), deletedAt: '2026-10-01T00:00:00Z', purgeAt: '2026-10-31T00:00:00Z' }] as never });
     vi.mocked(projects.recoverProject).mockRejectedValue(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
     await useProjectStore.getState().saveKeptEdits();
-    expect(useProjectStore.getState().keptEdits?.error)
-      .toBe(`${STORAGE_FULL}Permanently delete a project in Recently deleted and Nebula will save it.`);
+    expect(useProjectStore.getState().keptEdits?.error).toBe(STORAGE_FULL_LINE);
     expect(isCanvasKept()).toBe(true);
   });
 
@@ -230,12 +247,12 @@ describe('a kept save refused for the project limit (round 23, RD LOW-2)', () =>
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', storageAnswer()));
     await useProjectStore.getState().saveKeptEdits();
     expect(isCanvasKept()).toBe(true);
-    expect(useProjectStore.getState().keptEdits?.error).toContain('project list is full');
+    expect(useProjectStore.getState().keptEdits?.error).toBe(STORAGE_FULL_LINE);
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', limitAnswer()));
     await useProjectStore.getState().saveKeptEdits();
     expect(isCanvasKept()).toBe(true);
-    expect(useProjectStore.getState().keptEdits?.error).toContain(OVER_LIMIT);
-    expect(useProjectStore.getState().keptEdits?.error).not.toContain('project list is full');
+    expect(useProjectStore.getState().keptEdits?.error).toBe(OVER_LIMIT);
+    expect(useProjectStore.getState().keptEdits?.chooseToDelete).toBe('projects');
     vi.mocked(projects.recoverProject).mockResolvedValue(project('alpha-rec', 'Glass campaign (recovered)'));
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('alpha'), summary('alpha-rec')] }));
     vi.mocked(projects.openProject).mockResolvedValueOnce({ project: project('alpha-rec', 'Glass campaign (recovered)'),

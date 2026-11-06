@@ -46,6 +46,9 @@ export const REVIEWED_NEUTRAL: Array<{ file?: string; name: RegExp }> = [
   // PR #199: the restore notice's "Open Recently deleted" opens that list on
   // the Projects home; it deletes nothing.
   { file: 'components/projects/ProjectHome.tsx', name: /^Open Recently deleted$/ },
+  // PR #199 round 25 (GM r24): the kept notice's [Choose a project to delete]
+  // opens the chooser; it deletes nothing (each Delete in it is red).
+  { file: 'components/projects/KeptEditsNotice.tsx', name: /^Choose a project to delete$/ },
   // Round 23 moved the notice into its own lazy file (the first-load split).
   { file: 'components/projects/ProjectHomeNotices.tsx', name: /^Open Recently deleted$/ },
 ];

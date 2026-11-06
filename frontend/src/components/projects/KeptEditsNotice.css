@@ -2,6 +2,10 @@
    until [Save as a project] files the edits. A refused edit meanwhile (a
    move, an add, a run) nudges it once, on the repo's k 500 / c 36 spring
    sampled as linear() (the same curve as the opening bar's pulse). */
+/* Three buttons (Choose a project to delete, Save, Discard) would squeeze the
+   words to a column: the line takes the full width and the buttons sit under it. */
+.kept-edits-notice--choose { flex-wrap: wrap; justify-content: flex-end; }
+.kept-edits-notice--choose .canvas-undo-notice__text { flex: 1 1 100%; }
 .kept-edits-notice__error {
   display: block;
   margin-top: 2px;

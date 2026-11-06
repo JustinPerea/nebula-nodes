@@ -114,6 +114,6 @@
   "store/assetProposalsStore.ts": 1,
   "store/canvasProposalsStore.ts": 3,
   "store/graphStore.ts": 31,
-  "store/projectStore.ts": 26,
+  "store/projectFlows.ts": 26,
   "store/providerReadinessStore.ts": 1
 }

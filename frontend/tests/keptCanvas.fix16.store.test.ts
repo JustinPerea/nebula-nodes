@@ -61,8 +61,8 @@ vi.mock('../src/lib/projects', async (original) => ({
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
 }));
 
-import { DISCARDED_KEPT_EDITS, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, keptDiscardTarget, keptExitBlocker,
-  resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { DISCARDED_KEPT_EDITS, keptDiscardTarget, keptExitBlocker } from '../src/store/projectFlows';
 import { setFollowingSwitch } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests, subscribeOfflinePulse } from '../src/lib/backendConnection';
 import { useGraphStore } from '../src/store/graphStore';

@@ -49,13 +49,33 @@ export function sizeCapAdvice(trashHasItems: boolean): string {
     : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
 }
 
-/** GM r23 on PR #199, 3: the kept save the storage cap refused. The edits
- * stay kept (they are the only copy), and this line says why, with the size
- * advice, as the project limit's refusal keeps them with its own line. The
- * heading is the one GM approved in r23, 2 (it matches the button). */
-export function keptStorageFullLine(trashHasItems: boolean): string {
-  return `Nebula couldn’t save your edits as a project because Nebula’s project list is full. ${sizeCapAdvice(trashHasItems)}`;
+/** The head all three kept-save refusals share (GM r24 (b): "make the three
+ * kept-save refusals match", and no second "Nebula"). */
+const KEPT_SAVE_REFUSED = 'Nebula couldn’t save your edits as a project because';
+
+/** GM r23 on PR #199, 3; GM r24 (b), verbatim: the kept save the storage cap
+ * refused. The edits stay kept (they are the only copy), and this line says
+ * why and what makes room. */
+export function keptStorageFullLine(): string {
+  return `${KEPT_SAVE_REFUSED} the project list is full. Delete a project and remove it from Recently deleted, and Nebula saves your edits.`;
 }
+
+/** GM r24 (b), verbatim: the kept save the project limit refused. At the
+ * limit, "…because you’ve reached the limit of 3 projects. Delete one, and
+ * Nebula saves your edits."; over it, "…because you have 2 projects, over the
+ * limit of 1. Delete 2, and Nebula saves your edits." `deletes` is what the
+ * backend counted, else the count past the limit plus one. */
+export function keptLimitLine(count: number, limit: number, deletes?: number | null): string {
+  const n = Math.max(1, typeof deletes === 'number' && Number.isInteger(deletes) && deletes > 0 ? deletes : count - limit + 1);
+  const why = count > limit
+    ? `you have ${count} ${count === 1 ? 'project' : 'projects'}, over the limit of ${limit}`
+    : `you’ve reached the limit of ${limit} ${limit === 1 ? 'project' : 'projects'}`;
+  return `${KEPT_SAVE_REFUSED} ${why}. ${n === 1 ? 'Delete one' : `Delete ${n}`}, and Nebula saves your edits.`;
+}
+
+/** GM r24 (b): the button that opens the chooser on either of those two
+ * notices. Kept mode locks Projects, so deleting has nowhere to happen without it. */
+export const CHOOSE_A_PROJECT_TO_DELETE = 'Choose a project to delete';
 
 /** The button the notice shows when something is in Recently deleted. */
 export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';

@@ -115,7 +115,9 @@ describe('review 21 NIT-3 (G1, G2): either half of moving on alone counts', () =
     expect(nodeOf('n2')).toBeTruthy();
     expect(nodeOf('n2')?.selected ?? false).toBe(false);
     expect(nodeOf('n1')?.selected).toBe(true);
-    expect(useUIStore.getState().selectedNodeId).toBeNull();
+    // Since main's "the unpinned Inspector follows the selection" (#205 r11-r18, merged in
+    // round 25), the one selected node is the inspected one too.
+    expect(useUIStore.getState().selectedNodeId).toBe('n1');
   });
 
   it('control: nothing changed since the press: n2 comes back selected and inspected', async () => {

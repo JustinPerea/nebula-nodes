@@ -72,8 +72,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
-  { file: 'components/projects/restoreCopyCore.ts', text: '`Nebula couldn’t save your edits as a project because Nebula’s project list is full. ${sizeCapAdvice(trashHasItems)}`',
-    why: "GM's because form (PR #199 r23, 3) for the kept save the storage cap refused: the tail is one of two fixed advice sentences" },
+  { file: 'components/projects/restoreCopyCore.ts', text: "`${KEPT_SAVE_REFUSED} ${why}. ${n === 1 ? 'Delete one' : `Delete ${n}`}, and Nebula saves your edits.`",
+    why: "GM's because form (PR #199 r24, b) for the kept save the project limit refused: the head is the three refusals' shared words, the tail is fixed words and the real numbers" },
   { file: 'lib/canvasFollow.ts', text: '`Nebula couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`',
     why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”."' },
   { file: 'lib/canvasFollow.ts', text: '`${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`',

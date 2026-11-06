@@ -55,8 +55,9 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { RELOAD_FOR_UPDATE_UNNAMED, refreshOpenHold, reopenHold, reopenHoldLine, reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave,
-  subscribeReopenHold, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
+import { reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { RELOAD_FOR_UPDATE_UNNAMED, reopenHold, subscribeReopenHold, loadReopenHoldLines } from '../src/store/projectFlows';
+import { refreshOpenHold, reopenHoldLine } from '../src/store/projectFlows';
 import { useCinemaUploadStore } from '../src/store/cinemaUploadStore';
 import { UNLOCK_LABEL } from '../src/lib/worldLabsWaiting';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';

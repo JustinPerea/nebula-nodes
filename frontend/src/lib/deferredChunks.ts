@@ -1,5 +1,6 @@
 import { deferredModule, lazyWithPreload } from './lazyWithPreload';
 import { placeholderRunDialogModule } from './placeholderRunDialogModule';
+import { projectFlowsModule } from '../store/projectFlowsLoader';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
@@ -192,12 +193,15 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredRegionNotices.preload,
   graphFileModule.preload,
   placeholderRunDialogModule.preload,
+  projectFlowsModule.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
   'components/PlaceholderRunDialog.tsx',
   'components/askPlaceholderRun.tsx',
+  // The project store's flows (PR #199 round 25): store/projectFlowsLoader.ts.
+  'store/projectFlows.ts',
   'components/panels/AgentLog.tsx',
   'components/agent-notes/AgentNotesCorner.tsx',
   'components/agent-notes/AgentNoteCard.tsx',

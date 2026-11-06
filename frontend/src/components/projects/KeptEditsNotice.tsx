@@ -5,7 +5,8 @@ import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/ke
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
 import { runFinishesLine } from '../../lib/runLock';
 import { LineText } from '../LineText';
-import { SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { CHOOSE_A_PROJECT_TO_DELETE, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { KeptDeleteChooser } from './KeptDeleteChooser';
 import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
 import './KeptEditsNotice.css';
 
@@ -51,9 +52,15 @@ export function KeptEditsNotice() {
   // The confirm belongs to the kept canvas it was asked for: it goes with it.
   const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
   const discardButton = useRef<HTMLButtonElement>(null);
+  // GM r24 (b): the chooser belongs to the kept canvas it was opened for, as the confirm does.
+  const [choosingFor, setChoosingFor] = useState<typeof kept>(null);
+  const chooseButton = useRef<HTMLButtonElement>(null);
   if (!kept || !onWorkspace) return null;
   const confirming = confirmingFor !== null && confirmingFor.sourceId === kept.sourceId;
   const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
+  const choosing = choosingFor !== null && choosingFor.sourceId === kept.sourceId;
+  // The cure for a refusal the person fixes by deleting: only while that line shows.
+  const offerChooser = Boolean(kept.error && kept.chooseToDelete);
   // Review 14 (lock-order NIT-3): kept leaves these two on, so the next
   // locks apply in the app's order: the run, following, then offline.
   // GM r37 and r39 (lib/runLock): the run's line says what unlocks the button, by its verb.
@@ -67,18 +74,21 @@ export function KeptEditsNotice() {
   const saveHeld = savingHeld ? { ...savingHeld, ...(savingHeld.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: busy };
   const discardHeld = discardingHeld ? { ...discardingHeld, ...(discardingHeld.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: busy };
   return (
-    <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}
+    <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}${offerChooser ? ' kept-edits-notice--choose' : ''}`}
       role="status" aria-live="polite" data-kept-edits="">
       <span key={pulses} className="canvas-undo-notice__text">
         {keptEditsLine(kept)}
         {update && <span className="kept-edits-notice__error" data-kept-update="">{update}</span>}
         {kept.error && <span className="kept-edits-notice__error" role="alert"><LineText text={kept.error} /></span>}
       </span>
+      {offerChooser && <button type="button" ref={chooseButton} className="canvas-undo-notice__action kept-edits-notice__choose--neutral" disabled={lock.offline}
+        data-kept-choose-delete="" onClick={() => setChoosingFor(kept)}>{CHOOSE_A_PROJECT_TO_DELETE}</button>}
       <button type="button" className="canvas-undo-notice__action" {...saveHeld} aria-busy={kept.saving || undefined}
         data-kept-save="" onClick={() => void useProjectStore.getState().saveKeptEdits()}>{SAVE_AS_A_PROJECT}</button>
       <button type="button" ref={discardButton} className="canvas-undo-notice__action kept-edits-notice__discard" {...discardHeld}
         aria-busy={kept.discarding || undefined} data-kept-discard-button=""
         onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>
+      {choosing && offerChooser && <KeptDeleteChooser returnTo={chooseButton} onClose={() => setChoosingFor(null)} />}
       {confirming && <KeptDiscardConfirm returnTo={discardButton} onKeep={() => setConfirming(false)}
         onDiscard={() => { setConfirming(false); void useProjectStore.getState().discardKeptEdits(); }} />}
     </div>

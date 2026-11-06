@@ -62,7 +62,8 @@ vi.mock('../src/lib/projects', async (original) => ({
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
 }));
 
-import { DISCARDED_KEPT_EDITS, KEPT_UPDATE_LINE, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { KEPT_UPDATE_LINE, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { DISCARDED_KEPT_EDITS } from '../src/store/projectFlows';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';

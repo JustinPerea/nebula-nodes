@@ -75,8 +75,10 @@ export interface ProjectHomeProps {
    * restore stopped, kept in this tab; the whole line), and
    * 'none' hides Try again (the whole line). 'openFollowed' (GM r29 on
    * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
-   * neutral box (nothing was lost) with [Open “<openFollowedName>”]. */
-  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed';
+   * neutral box (nothing was lost) with [Open “<openFollowedName>”].
+   * 'partLoad' (GM r24, c): a flow's chunk didn't load; the same box with
+   * [Try again]. */
+  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad';
   /** The project [Open “…”] opens, with retry 'openFollowed'. */
   openFollowedName?: string | null;
   /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
@@ -823,14 +825,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && retry === 'openFollowed' ? <div {...track('error')}>
+          {showError && (retry === 'openFollowed' || retry === 'partLoad') ? <div {...track('error')}>
             <div className="project-home__notice project-home__notice--copy" role="alert" tabIndex={-1} data-followed-notice="" data-line-box="">
               {errorDetails ? <div className="project-home__notice-text project-home__error-text"><LineText text={error} className="project-home__error-line" />
                 <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
                 : <span className="project-home__notice-text"><LineText text={error} /></span>}
               <span className="project-home__notice-actions">
                 <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
-                  Open “{openFollowedName}”</button></span></div></div>
+                  {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
           : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>

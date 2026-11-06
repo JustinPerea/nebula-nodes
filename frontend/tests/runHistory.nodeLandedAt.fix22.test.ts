@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphStore } from '../src/store/graphStore';
 import * as api from '../src/lib/api';
 import { setProjectContext } from '../src/lib/projectContext';
-import { remapSnapshotIds } from '../src/store/projectStore';
+import { remapSnapshotIds } from '../src/store/projectFlows';
 import {
   RUN_HISTORY_STORAGE_KEY, loadRunHistory, recordNodeLanded, type RunRecord,
 } from '../src/lib/runHistory';

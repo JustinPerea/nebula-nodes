@@ -1,0 +1,18 @@
+/* The kept canvas's project chooser (GM r24 (b) on PR #199): the project
+   limit's and the storage cap's cure, in the Discard confirm's dialog. The
+   buttons are the dialog's own (.prompt-dialog__actions: their look and the
+   shared disabled look); only the red on hover is said here, by kind. */
+.kept-delete-chooser { max-height: min(560px, calc(100vh - 64px)); overflow: auto; }
+.kept-delete-chooser__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.kept-delete-chooser__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.kept-delete-chooser__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kept-delete-chooser__trash { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--sr-edge, #333); font-size: 14px; line-height: 1.5; }
+.kept-delete-chooser__delete:hover:not(:disabled),
+.kept-delete-chooser__trigger--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+.kept-delete-chooser__delete:active:not(:disabled),
+.kept-delete-chooser__trigger--danger:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
+.kept-delete-chooser .prompt-dialog__actions button { font-size: 13px; }

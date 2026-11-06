@@ -50,7 +50,9 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { refreshOpenHold, reopenHold, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { reopenHold } from '../src/store/projectFlows';
+import { refreshOpenHold } from '../src/store/projectFlows';
 import { focusCanvasSoon } from '../src/lib/canvasFocus';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';

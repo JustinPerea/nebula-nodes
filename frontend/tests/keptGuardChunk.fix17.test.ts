@@ -25,6 +25,8 @@ function dist({ entry, copy, copies = 1 }: { entry: string; copy: string; copies
   writeFileSync(join(dir, 'index.html'), '<script type="module" crossorigin src="/assets/index-AbC123.js"></script>');
   writeFileSync(join(dir, 'assets', 'index-AbC123.js'), entry);
   for (let i = 0; i < copies; i += 1) writeFileSync(join(dir, 'assets', `catalogRestoreCopy-Zz${i}.js`), copy);
+  // Round 25: the build also has the lazy flows chunk (the script requires exactly one).
+  writeFileSync(join(dir, 'assets', 'projectFlows-Qq1.js'), 'export const flows=1');
   return dir;
 }
 

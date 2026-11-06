@@ -27,7 +27,8 @@ import { setProjectContext } from '../lib/projectContext';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
-import { keptEditsLine, RESTORED_LIST_RELOAD, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { keptEditsLine, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { RESTORED_LIST_RELOAD } from './projectFlows';
 import type { ProjectSnapshot, SavedProject } from '../lib/projects';
 
 const saveProject = vi.mocked(api.saveProject);

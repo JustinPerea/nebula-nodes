@@ -32,7 +32,7 @@ import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/P
 import { ProjectWorkspaceControls } from '../src/components/projects/ProjectWorkspaceControls';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
-import { copyDeletedAfterUpdateLine } from '../src/store/projectStore';
+import { copyDeletedAfterUpdateLine } from '../src/store/projectFlows';
 
 afterEach(cleanup);
 

@@ -148,6 +148,7 @@ body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; 
  * is open (GM r34 A4 on PR #199); its live region stays mounted empty. */
 .run-history__safeguards p.run-history__reopen-line {
   margin: 0 0 8px;
+  font-family: var(--notice-font);
   font-size: 11px;
   font-weight: 600;
 }

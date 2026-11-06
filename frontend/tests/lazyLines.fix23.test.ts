@@ -52,6 +52,7 @@ vi.mock('../src/lib/projects', async (original) => ({
 }));
 
 type Store = typeof import('../src/store/projectStore');
+type Flows = typeof import('../src/store/projectFlows');
 type Graph = typeof import('../src/store/graphStore')['useGraphStore'];
 
 const P = 'Glass campaign';
@@ -77,6 +78,7 @@ function gate() {
 const settle = async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
 
 let store: Store;
+let flows: Flows;
 let graph: Graph;
 let stopAutosave: (() => void) | null = null;
 
@@ -92,6 +94,7 @@ async function boot(): Promise<void> {
     return await original<typeof import('../src/lib/reopenHoldLines')>();
   });
   store = await import('../src/store/projectStore');
+  flows = await import('../src/store/projectFlows');
   graph = (await import('../src/store/graphStore')).useGraphStore;
   const projects = await import('../src/lib/projects');
   const execution = await import('../src/lib/api');
@@ -158,8 +161,8 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
     await settle();
     expect(chunk.loads).toBe(1);
     opened.open();
-    await store.loadReopenHoldLines();
-    await store.loadReopenHoldLines();
+    await flows.loadReopenHoldLines();
+    await flows.loadReopenHoldLines();
     expect(chunk.loads).toBe(1);
     expect(store.reopenHoldNow()).toEqual({ id: 'alpha', line: UNCERTAIN });
   });
@@ -274,7 +277,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     expect(store.reopenHoldNow()).toBeNull();
     await settle();
     expect(chunk.loads).toBe(2);
-    await store.loadReopenHoldLines();
+    await flows.loadReopenHoldLines();
     expect(store.reopenHoldNow()?.line).toBe(UNCERTAIN);
   });
 });

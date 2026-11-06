@@ -17,7 +17,8 @@ const COPY: { file: string; only?: string[] }[] = [
   { file: 'components/projects/catalogRestoreCopy.ts' },
   { file: 'components/projects/KeptEditsNotice.tsx' },
   { file: 'lib/keptCanvas.ts' },
-  { file: 'store/projectStore.ts', only: ['RESTORED_LIST_RELOAD', 'RESTORED_LIST_UNSAVED'] },
+  { file: 'store/projectStore.ts', only: ['RESTORED_LIST_UNSAVED'] },
+  { file: 'store/projectFlows.ts', only: ['RESTORED_LIST_RELOAD'] },
 ];
 
 const STRAIGHT = /[A-Za-z](?:\\)?'[A-Za-z]/;

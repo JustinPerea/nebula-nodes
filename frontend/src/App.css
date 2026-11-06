@@ -6,6 +6,13 @@
   padding: 0;
 }
 
+/* The face notice text is drawn in (GM r24 d): the system face draws “ and ”
+   apart, where Inter draws both as slanted ticks, so every surface that says
+   the held-reopen line takes this one (tests/reopenQuotesFont.fix24). */
+:root {
+  --notice-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
 html,
 body,
 #root {
@@ -278,6 +285,7 @@ button[data-offline-neutral]:hover {
   box-shadow: 0 10px 34px rgb(0 0 0 / 52%);
   background: rgb(39 23 13 / 97%);
   color: #ffd2b3;
+  font-family: var(--notice-font);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -319,6 +327,7 @@ button[data-offline-neutral]:hover {
   box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
   background: rgb(6 6 7 / 96%);
   color: rgb(255 255 255 / 86%);
+  font-family: var(--notice-font);
   font-size: 13px;
   line-height: 1.4;
 }

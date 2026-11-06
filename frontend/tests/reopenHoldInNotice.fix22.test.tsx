@@ -18,6 +18,7 @@ import { reopenHoldLine } from '../src/lib/reopenHoldLines';
 import { failureMessage } from '../src/lib/errorCopy';
 import * as projects from '../src/lib/projects';
 import { frames } from './helpers/frames';
+import { projectStoreSource } from './helpers/projectStoreSource';
 
 const AMBIGUITY = { runId: 'run-1', nodeId: 'n1', kind: 'worldlabs-environment', message: 'Staged.', durable: true };
 const ITS = reopenHoldLine('Delta', 'delta', { state: 'ambiguity', nodeId: 'n1', nodeName: 'World', projectId: 'delta',
@@ -124,7 +125,7 @@ describe('GM r33, 2: the failure headings this PR adds say who, with the curly a
   });
 
   it('the kept edits’, the follow’s and the reopen’s headings', () => {
-    const store = readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8');
+    const store = projectStoreSource();
     for (const heading of ['Nebula couldn’t open the project.', 'Nebula couldn’t discard the kept edits.',
       'Nebula couldn’t save your edits.', 'Nebula couldn’t reopen the project.',
       'Nebula couldn’t save your edits as a project.']) expect(store).toContain(heading);

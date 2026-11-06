@@ -7,6 +7,15 @@ import { primeRestoreCopyForTests } from '../src/components/projects/restoreCopy
 primeRestoreCopyForTests(restoreCopy);
 import { stopWatchingBareLines, takeBareLines, watchBareLines } from './helpers/bareLines';
 
+// PR #199 round 25: the project store's flows (store/projectFlows) load lazily
+// in the app; tests read them at once, as if loaded. The loader says how
+// (only a file whose graph holds the store has one); a test that resets
+// modules calls it again after its re-import. No top-level await: the flows
+// import the store, which imports the loader.
+beforeEach(async () => {
+  await (globalThis as { __nebulaPrimeProjectFlows?: () => Promise<void> }).__nebulaPrimeProjectFlows?.();
+});
+
 // JSDOM does not implement document.elementsFromPoint. Define a no-op stub so
 // vi.spyOn can intercept it in tests that mock the return value. Guarded so
 // pure-logic tests running under `@vitest-environment node` (no DOM) can still

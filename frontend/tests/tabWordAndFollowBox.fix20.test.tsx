@@ -19,6 +19,7 @@ vi.mock('../src/lib/apiRequest', () => ({
 
 import { tabWord } from '../src/lib/tabWord';
 import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/ProjectHome';
+import { projectStoreSource } from './helpers/projectStoreSource';
 import { recoverProject, saveProject } from '../src/lib/projects';
 import { apiRequest } from '../src/lib/apiRequest';
 
@@ -29,11 +30,11 @@ describe('GM r29 fix 2: the shared tab/window word', () => {
 
   it('GM r31, 3: the other-tab follow failure is active, in the browser’s word and the desktop app’s', async () => {
     vi.resetModules();
-    const browser = await import('../src/store/projectStore');
+    const browser = await import('../src/store/projectFlows');
     expect(browser.personFollowFailedLine('Delta')).toBe('You reopened “Delta” in another tab, but this tab couldn’t follow it.');
     (window as { nebulaDesktop?: unknown }).nebulaDesktop = { apiBaseUrl: 'http://127.0.0.1:1' };
     vi.resetModules();
-    const desktop = await import('../src/store/projectStore');
+    const desktop = await import('../src/store/projectFlows');
     expect(desktop.personFollowFailedLine('Delta')).toBe('You reopened “Delta” in another window, but this window couldn’t follow it.');
   });
 
@@ -66,7 +67,7 @@ describe('GM r29 fix 2: the shared tab/window word', () => {
     const literal = /['"`][^'"`\n]*\b(this|the|another) (tab|window)\b[^'"`\n]*['"`]/;
     const files = ['components/projects/restoreCopyCore.ts', 'components/projects/KeptDiscardConfirm.tsx'];
     for (const file of files) expect(src(file).split('\n').filter((line) => literal.test(line) && !/^\s*(\/\/|\*)/.test(line))).toEqual([]);
-    const store = src('store/projectStore.ts');
+    const store = projectStoreSource();
     for (const line of ['Nebula was updated while this ', 'and the ${TAB} reloads to use the update', 'then reload the ${TAB} to use the update',
       'but this ${TAB} couldn’t follow it.', 'Reload the ${TAB} to use the update']) expect(store).toContain(line);
     expect(store).not.toMatch(/['"`][^'"`\n]*\b(this|the|another) (tab|window)\b[^'"`\n]*\b(couldn’t follow|was open|reloads to use|to use the update)/);

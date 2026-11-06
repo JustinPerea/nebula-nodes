@@ -58,7 +58,9 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { deletesKeptLine, refreshOpenHold, reopenHold, reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
+import { reopenHoldNow, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { deletesKeptLine, reopenHold, loadReopenHoldLines } from '../src/store/projectFlows';
+import { refreshOpenHold } from '../src/store/projectFlows';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
@@ -81,6 +83,7 @@ import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus
 import { act, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { projectStoreSource } from './helpers/projectStoreSource';
 
 const initial = useProjectStore.getState();
 const realCanSwitch = useGraphStore.getState().canSwitchProject;
@@ -530,9 +533,9 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     expect(takeTabId(null)).not.toBe(takeTabId(null));
   });
 
-  it('the line for nodes Nebula kept', () => {
-    expect(deletesKeptLine(['Hero prompt'])).toBe('Nebula kept “Hero prompt” because another tab saved it last. Delete it again to remove it.');
-    expect(deletesKeptLine(['Hero prompt', 'Brief'])).toBe('Nebula kept “Hero prompt” and “Brief” because another tab saved them last. Delete them again to remove them.');
+  it('the line for nodes Nebula kept (GM r24 a, verbatim)', () => {
+    expect(deletesKeptLine(['Hero prompt'])).toBe('Nebula kept “Hero prompt” because another tab changed it. Delete it again if you still want it gone.');
+    expect(deletesKeptLine(['Hero prompt', 'Brief'])).toBe('Nebula kept “Hero prompt” and “Brief” because another tab changed them. Delete them again if you still want them gone.');
   });
 
   it('a handoff whose delete Nebula kept: the node is back on the canvas, and the line says why', async () => {
@@ -552,7 +555,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     const calls = vi.mocked(projects.saveProject).mock.calls.map(([id, , revision, pending]) => ({ id, revision, deleted: pending?.deleted }));
     expect(calls, JSON.stringify(calls)).toContainEqual({ id: 'alpha', revision: 'rev-a', deleted: [local] });
     expect(useGraphStore.getState().nodes.some((node) => node.id === 'n2')).toBe(true);
-    await vi.waitFor(() => expect(noticeNow()).toBe('Nebula kept “Kept copy” because another tab saved it last. Delete it again to remove it.'));
+    await vi.waitFor(() => expect(noticeNow()).toBe('Nebula kept “Kept copy” because another tab changed it. Delete it again if you still want it gone.'));
   });
 
   it('round 23 (review 21 NIT-2): a handoff whose delete a World Labs record held says so, never silently', async () => {
@@ -589,7 +592,7 @@ describe('review 19 item 12: saved canvases are ordered by what Nebula owns, nev
 
 describe('review 19 item 14: curly apostrophes on the lines round 20 touched', () => {
   it('the update line and the reopen fallback', () => {
-    const store = readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8');
+    const store = projectStoreSource();
     expect(store).toContain('your unsaved edits haven’t been saved yet.');
     expect(store).toContain('Try again before you reload, or they’ll be lost.');
     expect(store).toContain("'Nebula couldn’t reopen the project.'");

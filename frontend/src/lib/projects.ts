@@ -4,7 +4,7 @@ import type { NodeData } from '../types';
 import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
 import { apiRequest } from './apiRequest';
-import { RequestFailedError, type StorageLimit } from './errorCopy';
+import { RequestFailedError, type ProjectCounts, type StorageLimit } from './errorCopy';
 
 /** The card's picture (backend services/project_cover.py): a pinned image,
  * the newest made image, or up to four input references for a mosaic. */
@@ -169,16 +169,19 @@ export interface ProjectDeletion {
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,
     options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;
-      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; hold?: unknown; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
+      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; hold?: unknown; sentAt?: number | null; sentBeforePromote?: boolean;
+      projectCounts?: ProjectCounts | null } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull,
       storageLimit: options.storageLimit, code: options.code, overSaveLimit: options.overSaveLimit,
-      sizeBytes: options.sizeBytes, hold: options.hold, sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
+      sizeBytes: options.sizeBytes, hold: options.hold, sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote,
+      ...(options.projectCounts ? { projectCounts: options.projectCounts } : {}) });
     this.name = 'ProjectRequestError';
   }
 }
 const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
   { heading: error.heading, detail: error.detail, storageFull: error.storageFull, storageLimit: error.storageLimit,
-    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, hold: error.hold, sentAt: error.sentAt });
+    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, hold: error.hold, sentAt: error.sentAt,
+    projectCounts: error.projectCounts });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;

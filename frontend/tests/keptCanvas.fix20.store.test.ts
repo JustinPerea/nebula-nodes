@@ -52,7 +52,9 @@ vi.mock('../src/lib/projects', async (original) => ({
   getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
-import { projectRetryOffer, reopenHold, reopenHoldLine, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore, loadReopenHoldLines } from '../src/store/projectStore';
+import { projectRetryOffer, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
+import { reopenHold, loadReopenHoldLines } from '../src/store/projectFlows';
+import { reopenHoldLine } from '../src/store/projectFlows';
 import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import type { ProposalView } from '../src/lib/wsClient';
 import { tabLocalDeletes, useGraphStore } from '../src/store/graphStore';
