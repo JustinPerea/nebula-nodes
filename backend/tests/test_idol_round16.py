@@ -203,7 +203,9 @@ def _saved(path):
 
 
 def _left(folder):
-    return sorted(p.name for p in folder.iterdir())
+    # without the private temp folder when empty (round 23b)
+    return sorted(p.name for p in folder.iterdir()
+                  if not (p.name == settings.TEMP_FOLDER and p.is_dir() and not any(p.iterdir())))
 
 
 @pytest.mark.unprivileged

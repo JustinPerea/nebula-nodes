@@ -31,7 +31,7 @@ import services.settings as settings
 from tests.test_idol_round10 import sockets  # noqa: F401 - fixture
 from tests.test_idol_round12 import PERSON, _person
 from tests.test_idol_round15 import home_file  # noqa: F401 - fixture
-from tests.test_idol_round17_settings import _parses, _wait_for, keyed  # noqa: F401 - fixture
+from tests.test_idol_round17_settings import _parses, _wait_for, keyed, shared_temp_name  # noqa: F401 - fixture
 from tests.test_idol_round18_settings import _cut_copy, _popen, _stop, home_state  # noqa: F401 - fixture
 
 A_SAVES = {"apiKeys": {"FAL_KEY": "fal-from-A-" + "a" * 40}, "favorites": ["A" * 4000]}
@@ -42,6 +42,7 @@ A_CODE = """
 import os, time
 import services.settings as s
 s._locked = lambda path: None
+s._new_temp = s.temp_path_for  # the shared name (round 23: saves name their own)
 s.LOCK_TIMEOUT_SECONDS = 120
 real = s._replace
 def wait_then_replace(temp, path):
@@ -65,6 +66,7 @@ B_CODE = """
 import os, time
 import services.settings as s
 s._locked = lambda path: None
+s._new_temp = s.temp_path_for  # the shared name (round 23: saves name their own)
 s.LOCK_TIMEOUT_SECONDS = 120
 real_time = time.time
 s.time.time = lambda: real_time() + {ahead!r}
@@ -104,7 +106,7 @@ def _marks(tmp_path: Path) -> dict[str, Path]:
 
 # -- 1. no flock: the stale temp, the folder's clock, a future one -----------------------------
 
-def test_two_saves_meeting_one_stale_temp_never_remove_each_others(keyed, tmp_path):
+def test_two_saves_meeting_one_stale_temp_never_remove_each_others(keyed, tmp_path, shared_temp_name):
     """Review 19's q1: B judges the stale temp and pauses before taking it;
     A takes it, makes its own and writes it whole. B then finds A's temp,
     not the one it judged: it puts it back and waits. Never a torn file."""
@@ -136,7 +138,7 @@ def test_two_saves_meeting_one_stale_temp_never_remove_each_others(keyed, tmp_pa
         _stop(a, b)
 
 
-def test_a_wall_clock_running_fast_never_takes_a_live_temp(keyed, tmp_path):
+def test_a_wall_clock_running_fast_never_takes_a_live_temp(keyed, tmp_path, shared_temp_name):
     """Review 19's q2: B's clock is two minutes fast (or the folder's server
     two minutes behind). On the folder's own clock A's temp is fresh: B
     waits for it, and both save whole."""
@@ -161,7 +163,7 @@ def test_a_wall_clock_running_fast_never_takes_a_live_temp(keyed, tmp_path):
         _stop(a, b)
 
 
-def test_a_temp_dated_ahead_of_the_folder_is_stale(keyed, monkeypatch):
+def test_a_temp_dated_ahead_of_the_folder_is_stale(keyed, monkeypatch, shared_temp_name):
     """Review 19's q3: a temp a year ahead blocked every save with no flock
     and the sweep never removed it."""
     temp = settings.temp_path_for(keyed)
@@ -336,7 +338,7 @@ def test_the_replaced_file_is_named_by_time_and_kept_once(home_state):
 
 # -- 6. the guards review 19's mutants reached ----------------------------------------------------
 
-def test_the_copys_temp_without_the_lock_is_never_taken_while_fresh(keyed, monkeypatch):
+def test_the_copys_temp_without_the_lock_is_never_taken_while_fresh(keyed, monkeypatch, shared_temp_name):
     """R1: an in-place save with no flock writes its copy through the copy's
     temp, as a save without the lock: a fresh foreign temp there is waited
     for, then the save is busy, never removed."""

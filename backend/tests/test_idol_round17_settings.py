@@ -19,6 +19,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import re
 import shutil
 import signal
 import stat
@@ -44,6 +45,14 @@ DARWIN = sys.platform == "darwin"
 
 
 @pytest.fixture
+def shared_temp_name(monkeypatch):
+    """Put the one shared temp name back (round 23 gave each save a name of
+    its own): for the tests of what a save does when it meets a file at
+    that name, the leftover of an older version or a staged race."""
+    monkeypatch.setattr(settings, "_new_temp", settings.temp_path_for)
+
+
+@pytest.fixture
 def keyed(home_file):
     """settings.json holding a key, about 2 KB."""
     home_file.write_text(json.dumps(OLD, indent=2) + "\n", encoding="utf-8")
@@ -55,7 +64,10 @@ def _parses(path: Path) -> dict:
 
 
 def _left(folder: Path) -> list[str]:
-    return sorted(p.name for p in folder.iterdir())
+    """What is in ``folder``, without the private temp folder when it is
+    empty (round 23b: each save's temp lives in one, which stays)."""
+    return sorted(p.name for p in folder.iterdir()
+                  if not (p.name == settings.TEMP_FOLDER and p.is_dir() and not any(p.iterdir())))
 
 
 def _child(code: str, timeout: float = 60) -> subprocess.CompletedProcess:
@@ -678,8 +690,9 @@ def test_a_save_names_its_temp_file_as_the_sweep_knows_it(keyed, monkeypatch):
     monkeypatch.setattr(settings, "_replace", look)
     settings.save_settings({"favorites": []})
     [name] = names
-    # Round 18: one fixed name, the one the deny lists and the sweep name (review 17, settings MEDIUM-1).
-    assert name == ".settings.json.nebula-tmp" == settings.temp_path_for(keyed).name
+    # Round 23: the shared name, then this save's process id and a token (round 18 had the shared name alone).
+    assert re.fullmatch(r"\.settings\.json\.nebula-tmp-%d-[0-9a-f]{16}" % os.getpid(), name), name
+    assert name.startswith(settings.temp_path_for(keyed).name + "-")
 
 
 # -- LOW-2: mutants S15 and S16 ---------------------------------------------------------

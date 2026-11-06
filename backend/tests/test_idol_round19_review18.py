@@ -54,7 +54,7 @@ from tests.test_idol_round10 import sockets  # noqa: F401 - fixture
 from tests.test_idol_round12 import PERSON, _person
 from tests.test_idol_round15 import home_file  # noqa: F401 - fixture
 from tests.test_idol_round15 import _refused as _refusal
-from tests.test_idol_round17_settings import OLD, _hard_link, _parses, _wait_for, keyed  # noqa: F401
+from tests.test_idol_round17_settings import OLD, _hard_link, _parses, _wait_for, keyed, shared_temp_name  # noqa: F401
 from tests.test_idol_round18_settings import COPY_LINE, NEW, _cut_copy, _stop, home_state  # noqa: F401
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -70,7 +70,7 @@ def _popen(code: str) -> subprocess.Popen:
 
 # -- LOW-1: no flock, one fixed temp name ---------------------------------------------
 
-def test_without_the_lock_a_fresh_temp_file_is_waited_for_never_removed(keyed, monkeypatch):
+def test_without_the_lock_a_fresh_temp_file_is_waited_for_never_removed(keyed, monkeypatch, shared_temp_name):
     temp = settings.temp_path_for(keyed)
     temp.write_bytes(b"another save's half")
     temp.chmod(0o600)
@@ -89,7 +89,7 @@ def test_without_the_lock_a_fresh_temp_file_is_waited_for_never_removed(keyed, m
     assert keyed.read_bytes() == before and temp.read_bytes() == b"another save's half"
 
 
-def test_without_the_lock_a_stale_temp_file_is_a_save_cut_short_and_replaced(keyed, monkeypatch):
+def test_without_the_lock_a_stale_temp_file_is_a_save_cut_short_and_replaced(keyed, monkeypatch, shared_temp_name):
     temp = settings.temp_path_for(keyed)
     temp.write_bytes(b"a save cut short long ago")
     past = time.time() - settings.STALE_TEMP_SECONDS - 5
@@ -122,7 +122,8 @@ def test_a_folder_at_the_temp_name_raises_never_waits(keyed, monkeypatch):
 NO_FLOCK_A = """
 import os, time
 import services.settings as s
-s._locked = lambda path: None  # a filesystem that takes no flock
+s._locked = lambda path: None
+s._new_temp = s.temp_path_for  # the shared name (round 23: saves name their own)  # a filesystem that takes no flock
 s.LOCK_TIMEOUT_SECONDS = 120
 real = s._replace
 def wait_then_replace(temp, path):
@@ -142,6 +143,7 @@ NO_FLOCK_B = """
 import os, time
 import services.settings as s
 s._locked = lambda path: None
+s._new_temp = s.temp_path_for  # the shared name (round 23: saves name their own)
 s.LOCK_TIMEOUT_SECONDS = 120  # events decide the wait, never the clock
 s._temp_waiting = lambda: open({b_waiting!r}, "w").close()
 real = s._write_all
@@ -267,7 +269,7 @@ def test_a_settings_write_another_nebula_holds_past_the_wait_is_a_409(keyed, loc
     assert keyed.read_bytes() == before
 
 
-def test_a_save_that_meets_another_saves_temp_past_the_wait_is_a_409(keyed, monkeypatch):
+def test_a_save_that_meets_another_saves_temp_past_the_wait_is_a_409(keyed, monkeypatch, shared_temp_name):
     monkeypatch.setattr(settings, "LOCK_TIMEOUT_SECONDS", 0.2)
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     monkeypatch.setattr(settings, "_locked", lambda path: None)
@@ -353,7 +355,7 @@ IN_THE_WAY = ("Nothing was saved because {folder} is a folder, and Nebula needs 
 
 
 @pytest.mark.parametrize("name", ["temp", "copy", "copy-temp"])
-def test_a_folder_at_a_fixed_file_name_is_a_409(home_state, keyed, monkeypatch, name):
+def test_a_folder_at_a_fixed_file_name_is_a_409(home_state, keyed, monkeypatch, name, shared_temp_name):
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     copy = settings.backup_path(keyed)
     if name == "temp":  # no settings.json yet, so there is nothing to write in place
@@ -437,7 +439,9 @@ def test_a_symlinked_settings_files_real_temp_is_on_the_deny_list(keyed, tmp_pat
     real.write_bytes(keyed.read_bytes())
     keyed.unlink()
     keyed.symlink_to(real)
-    assert settings.secret_temp_paths() == [settings.temp_path_for(keyed), settings.temp_path_for(real)]
+    assert [p for p in settings.secret_temp_paths() if p.name != settings.TEMP_FOLDER] == [
+        settings.temp_path_for(keyed), settings.temp_path_for(real)]
+    assert settings.temp_folder_for(real.parent) in settings.secret_temp_paths()  # round 23b
     denied = agent_profiles.default_secret_paths()
     assert settings.temp_path_for(real) in denied and settings.temp_path_for(keyed) in denied
 
@@ -452,8 +456,12 @@ def test_the_copys_temp_file_is_inside_the_copy_folder_while_it_holds_the_keys(h
                         real(temp, locked=locked))
     settings.save_settings({"favorites": ["in place"]})
     copy = settings.backup_path(keyed)
-    assert opened == [settings.temp_path_for(copy)]
-    assert opened[0].parent == settings.settings_copy_folder() == copy.parent
+    shared = settings.temp_path_for(copy)
+    [temp] = opened  # round 23: the shared name, then the save's process id and a token
+    # round 23b: in the private folder inside the copy folder
+    assert temp.parent == settings.temp_folder_for(shared.parent) and temp.name.startswith(shared.name + "-")
+    assert settings.is_secret_temp_name(temp.name)
+    assert opened[0].parent.parent == settings.settings_copy_folder() == copy.parent
 
 
 @pytest.mark.unprivileged

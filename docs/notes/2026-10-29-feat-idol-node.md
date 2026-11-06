@@ -3863,7 +3863,10 @@ its cause before anything was changed:
   exclusion. A writer whose rename lands in the moment its temp sits in
   the judging folder gets ENOENT and its save fails cleanly. A failed save
   still unlinks the temp name, which in a three-process race could be
-  another's. Neither leaves a torn settings.json.
+  another's. Neither leaves a torn settings.json. **Corrected in round 23:
+  this was wrong.** Three saves (W in flight, J judging an older stale temp,
+  X making a temp at the name J freed) tore settings.json: J's link back
+  failed, and W renamed the name, now X's half-written file, over it.
 - **`test_chat_uploads` leaves `OUTPUT_ROOT/generated` behind** for later
   tests. Its own cleanup is out of scope here.
 
@@ -4218,3 +4221,118 @@ the old comparison on macOS too and passes now. The two other identity checks in
 file compare an open file descriptor with the path (`_lock_holds`, the in-place
 overwrite): an inode held open can't be reused, so they are unchanged.
 Not run on Linux; the 24 round 20 settings tests and the new one pass here.
+
+
+## Round 23: a save can never rename another save's temp file over settings.json
+
+The final review of round 22 (`idol23/final/review.md`) found a torn
+settings.json without flock, and round 20's "neither leaves a torn
+settings.json" above was wrong. Three saves: judge J moves W's fresh temp into
+the judging folder (it judged an older stale temp at the same shared name),
+X creates its temp at the freed name, J's link back fails with EEXIST, and W
+renames the name, now X's half-written file, over settings.json. Its
+reproduction is now `test_three_saves_without_flock_never_rename_another_saves_half_written_temp`
+in `backend/tests/test_idol_round23_settings.py`.
+
+Both layers, in `backend/services/settings.py`:
+
+1. **A name of its own per save.** `new_temp_path_for` (via the `_new_temp`
+   seam): `.settings.json.nebula-tmp-<pid>-<16 hex>` beside the file, and
+   `.settings-backup-<hash>.json.nebula-tmp-<pid>-<16 hex>` in the copy folder.
+   The shared name (`temp_path_for`) is kept as the prefix and still swept,
+   judged and denied (older versions' leftovers). A judge can now only move
+   a file that is truly orphaned, and no save is handed another's file.
+   - Sweep (`_sweep`, `_swept_unique_name`): the settings folder, the state
+     folder and the copy folder are scanned for every unique name; locked, all
+     are leftovers; unlocked, each is judged by its own name and stat
+     (`_orphaned`): stale on its folder's clock, and its writer (the pid in the
+     name; round 17's names carry one too) gone, or silent for an hour
+     (`ALIVE_WRITER_SECONDS`, since a crashed server's pid can be another
+     process's by the next start). Then `_remove_judged` checks it by its own
+     identity, as before.
+   - Deny lists: `agent_profiles.secret_deny_rules` adds `<shared name>-*`
+     beside the shared name's rule (Claude Code rules take globs);
+     `secret_temp_paths` lists every unique temp there now (for the path-based
+     lists); `file_access.require_allowed_path` refuses any path whose name is
+     a save's own temp name (`is_secret_temp_name`), wherever it is.
+2. **The name is checked before the rename.** `_is_own`: `os.fstat(fd)` against
+   `os.lstat(temp)`, device and inode, after the write and again after the
+   metadata is carried. If the name is another file's, the save writes again
+   under a new name (`TEMP_ATTEMPTS` = 3, then `SettingsBusy`). A failed save
+   removes only its own file (`_remove_own`, by identity), never a stranger's.
+   The copy write (`_write_copy`) does the same.
+
+Linux identity fix (device + inode + mtime + size, `_same_temp`) unchanged.
+
+### Tests and mutations (round 23)
+
+`test_idol_round23_settings.py` (35): the review's reproduction; the check
+itself and a failed save removing only its own file; two saves at once with
+`locked=False` (25 rounds, threads, 200 kB bodies: valid JSON equal to one of
+the two writes, nothing left beside it); unique names; the sweep (old unique
+temps and the copy's removed, a fresh one, an alive writer's and a
+person's `.settings.json.nebula-tmp-notours` kept; an alive writer's after an
+hour; locked sweep); a judge among many names; the deny rules and
+`require_allowed_path`. Mutations: `_is_own` returning True fails the torn
+test and the check test; the sweep not matching the new names fails three
+sweep tests; both together plus the shared name (a2ed98f4's behaviour) fail the
+torn test. Tests of what a save does at the shared name (round 17 to 20:
+waiting for a fresh one, replacing a stale one, a folder there, the subprocess
+races) now put the shared name back with the `shared_temp_name` fixture (and
+`s._new_temp = s.temp_path_for` in their child scripts); the round 17 name test
+now expects the unique name.
+
+### Flags
+- A temp a save cut short now waits for the next start's sweep (a later save no
+  longer finds and replaces it at the shared name). It holds the settings,
+  keys included, but is 0600, on every agent deny list, and swept at start.
+- Codex's `deny_paths` are exact paths: a unique temp made after its
+  profile is built isn't on that list (it is on Claude's by glob and refused
+  to graph and media reads by name). The temp lives for milliseconds in a save.
+  Closed in round 23b below.
+
+## Round 23b: every save's temp lives in one private folder every agent's deny covers
+
+Round 23 left Codex's exact-path `deny_paths` unable to name a unique temp made
+after its profile was built (a save's temp holds the API keys). Fixed without
+globs, in `backend/services/settings.py` and `agent_profiles.py`:
+
+- Each save's unique temp (the name from round 23, unchanged) is created inside
+  `.settings-nebula-tmp/` beside the file it saves (the copy's: inside the copy
+  folder), made 0700 (`_own_temp_folder`, `new_temp_path_for`). A folder that is
+  a symlink, a file, not owned by this user or open to group/other
+  (`_checked_temp_folder`) is never written into: the save fails with
+  `SettingsUnwritable` (cause "in_the_way", naming the folder; the 409 line is
+  the existing one for something in the way). A folder that can't be made
+  keeps round 23's fallbacks (in place, or read-only folder).
+- `_require_same_device` checks the folder and the file's folder share `st_dev`
+  before the rename (settings and copy), else `SettingsUnwritable(EXDEV)`;
+  never a cross-device copy. The failed save removes only its own temp.
+- Deny: `temp_folders()` (settings folder in both spellings, and the copy
+  folder) is listed in `agent_profiles.secret_dirs()` (so Codex's deny paths,
+  Claude's `deny_read_dirs` rules and `require_allowed_path` all cover the
+  folder and anything later made in it) and in `secret_temp_paths()` (the
+  path lists; `secret_deny_rules` adds `<folder>/**` for it). Round 23's
+  `<shared name>-*` glob and name refusal stay for old-layout leftovers.
+- Sweep (`_sweep`): reads the temp folders only while they pass
+  `_checked_temp_folder` (a symlink is never followed), removes every leftover
+  there (locked), or judges each (`_orphaned`, `_remove_judged`, whose judging
+  folder is then inside the temp folder) unlocked; still sweeps the old shared
+  name and round 23's unique names beside settings.json.
+- The empty temp folder stays after a save (removing it would race a second
+  save between its mkdir and open). Tests that listed the folder for "nothing
+  left" now ignore an empty `.settings-nebula-tmp` (`_left` in rounds 16 and 17;
+  inline in 15, 18, 19, and round 23's two-saves test).
+
+Tests: `backend/tests/test_idol_round23b_settings.py` (14): Codex's profile
+denies the folder and a temp made after it; Claude's rules; `require_allowed_path`;
+`secret_temp_paths`; symlinked, file, open and foreign folders refused; the copy's
+temp folder; the cross-device error; the sweep (folder and old layout, unlocked
+judge, no symlink following). Mutation: `temp_folders()` returning `[]` fails 6
+of them (the Codex ones included). Round 23's torn three-saves and two-saves
+tests pass unchanged apart from the listing.
+
+### Flags (23b)
+- Refusal of a bad folder reuses cause "in_the_way", whose 409 text says "a
+  folder is in the way"; fine for a symlink or file, loose for "not yours".
+  A dedicated line would be a GM copy call.

@@ -741,8 +741,8 @@ The server exposes these tools for building and running (see
   wait, about 10 seconds: "Nothing was saved because another Nebula is
   saving your settings. Try again in a moment."; nothing changed, and
   trying again later is fine). A save replaces the file whole
-  (keeping its mode, owner, ACL and extended attributes) through one temp
-  file beside it, `.settings.json.nebula-tmp`; a file with a second name or
+  (keeping its mode, owner, ACL and extended attributes) through a temp
+  file of its own in a private folder beside it, `.settings-nebula-tmp/.settings.json.nebula-tmp-<pid>-<token>` (0700; a symlinked or foreign folder fails the save; no agent can read the folder); a file with a second name or
   another owner, a folder that takes no new file, metadata that can't be
   carried, or a rename the system refuses, is written in place instead, with
   a copy kept in Nebula's `settings-copy` folder until the write is done, and
@@ -752,10 +752,12 @@ The server exposes these tools for building and running (see
   for the next start (the `settings.not_restored` event). Every save holds an
   exclusive lock where the filesystem supports flock, and PUT and DELETE
   settings hold it from their read to their save. Where the filesystem takes
-  no flock (some network mounts), a save that finds another save's temp file
-  waits for it and then answers `settings_busy`; it never replaces a temp
-  file another save may still be writing. One that a save cut short left
-  (older than a minute on the folder's own clock, or dated more than 5
+  no flock (some network mounts), every save writes its own temp file and renames it only while
+  the name is still that open file (device and inode), else writes again, so
+  it never replaces the file with another save's half-written temp; a save
+  that finds a leftover at the older shared name `.settings.json.nebula-tmp`
+  waits for it and then answers `settings_busy`. One that a save cut short left
+  (its writer gone, and older than a minute on the folder's own clock, or dated more than 5
   seconds ahead of it) is removed only while it is still that file: it is
   moved into `.settings-nebula-judging` beside it, checked by inode there,
   and removed, or put back if it is another save's since. No agent can read

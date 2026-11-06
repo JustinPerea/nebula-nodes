@@ -42,7 +42,7 @@ from tests.test_idol_round10 import sockets  # noqa: F401 - fixture
 from tests.test_idol_round12 import _person
 from tests.test_idol_round15 import home_file  # noqa: F401 - fixture
 from tests.test_idol_round15 import _refused as _refusal
-from tests.test_idol_round17_settings import (OLD, _child, _hard_link, _parses, _wait_for, copy_body, keyed,  # noqa: F401
+from tests.test_idol_round17_settings import (OLD, _child, _hard_link, _parses, _wait_for, copy_body, keyed, shared_temp_name,  # noqa: F401
                                                write_copy)
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -140,9 +140,10 @@ def test_an_in_place_save_keeps_its_copy_and_temp_only_in_the_copy_folder(home_s
     monkeypatch.setattr(settings, "_overwrite", look)
     settings.save_settings(NEW)
     [(mode, in_copy, in_state)] = seen
-    assert mode == 0o700 and in_copy == [settings.backup_path(keyed).name]
+    assert mode == 0o700 and in_copy == [settings.TEMP_FOLDER, settings.backup_path(keyed).name]  # the copy's temp is in the private folder
     assert in_state == ["settings-copy", "settings.json"]
-    assert list(settings.settings_copy_folder().iterdir()) == []
+    assert [p.name for p in settings.settings_copy_folder().iterdir()] == [settings.TEMP_FOLDER]  # empty, kept
+    assert list(settings.temp_folder_for(settings.settings_copy_folder()).iterdir()) == []
 
 
 # -- MEDIUM-1: the start sweep, under the lock --------------------------------------------
@@ -189,7 +190,7 @@ def test_without_the_lock_the_sweep_keeps_a_fresh_temp_file(home_state, keyed, m
     assert settings.sweep_stale_temp_files() == [temp] and not temp.exists()
 
 
-def test_a_temp_file_a_cut_save_left_is_replaced_by_the_next_save(keyed):
+def test_a_temp_file_a_cut_save_left_is_replaced_by_the_next_save(keyed, shared_temp_name):
     temp = settings.temp_path_for(keyed)
     temp.write_text("a save cut short", encoding="utf-8")
     temp.chmod(0o644)

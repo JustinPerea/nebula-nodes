@@ -137,7 +137,7 @@ def test_a_file_that_turns_read_only_after_the_read_is_refused_at_the_write(home
         assert _refused(write()) == (409, PERSON_LINE, "settings_unwritable")
         home_file.chmod(0o644)
     assert home_file.read_bytes() == before
-    assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
+    assert sorted(p.name for p in home_file.parent.iterdir() if p.name != settings.TEMP_FOLDER) == ["settings.json"]
 
 
 def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, monkeypatch):
@@ -151,7 +151,7 @@ def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, 
     monkeypatch.setattr(settings, "_replace", refuse)
     assert _person().put("/api/settings", json={"favorites": []}).status_code == 200
     assert json.loads(home_file.read_text(encoding="utf-8"))["favorites"] == []
-    assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
+    assert sorted(p.name for p in home_file.parent.iterdir() if p.name != settings.TEMP_FOLDER) == ["settings.json"]
 
 
 def test_a_failure_that_is_not_about_permission_is_not_called_one(home_file, monkeypatch):
@@ -162,7 +162,7 @@ def test_a_failure_that_is_not_about_permission_is_not_called_one(home_file, mon
     with pytest.raises(OSError) as raised:
         settings.save_settings({"favorites": []})
     assert not isinstance(raised.value, settings.SettingsUnwritable)
-    assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
+    assert sorted(p.name for p in home_file.parent.iterdir() if p.name != settings.TEMP_FOLDER) == ["settings.json"]
 
 
 def test_a_save_replaces_the_file_whole_and_keeps_its_mode(home_file):

@@ -662,58 +662,219 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *,
     file, an owner, group or metadata that can't be carried, or a rename
     that is refused, falls back to the in-place write (_InPlaceInstead).
 
-    The temp file has one fixed name beside the file (temp_path_for), which
-    the agents' deny lists name (agent_profiles.default_secret_paths;
-    review 17 of PR #203, settings MEDIUM-1). One found there is a save cut
-    short when this save holds the lock, and is replaced; without the lock
-    it may be another save in flight (_open_temp)."""
+    Each save writes a temp file of its own, named for it (new_temp_path_for:
+    ".settings.json.nebula-tmp-<pid>-<token>" beside the file), so no save
+    can be handed another's file, and a judge of a stale temp can only ever
+    move a file that is truly orphaned (round 23 of PR #203: three saves
+    without flock, the shared name, torn settings.json). Before the rename
+    the save checks the name still points at its own open file (_is_own:
+    device and inode); if not, it writes again under a new name rather than
+    rename a stranger's file, and a failed save removes only its own file.
+    The agents' deny lists name the pattern (agent_profiles.secret_deny_rules)."""
     mode = before.st_mode & 0o7777 if before is not None else 0o600  # a new file holds keys
-    temp = str(temp_path_for(path))
-    try:
-        fd = _open_temp(temp, locked=locked)  # 0600
-    except SettingsBusy:
-        raise
-    except OSError as exc:
-        if before is not None and exc.errno in (*_NOT_ALLOWED_ERRNOS, errno.EEXIST):
-            raise _InPlaceInstead from exc
-        if exc.errno == errno.EEXIST:  # a folder at the temp file's name, and no file to write in place
-            raise SettingsUnwritable(exc.errno, "a folder is where the temp file goes", temp, "in_the_way") from exc
-        if exc.errno in _NOT_ALLOWED_ERRNOS:
-            raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
-        if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
-            raise SettingsUnwritable(exc.errno, "a folder on the way is a file", path.parent, "not_a_folder") from exc
-        raise
-    done = False
-    try:
+    for _attempt in range(TEMP_ATTEMPTS):
         try:
-            _write_all(fd, data)
-            _sync(fd)
-            if before is not None:
-                _carry_owner(fd, before)
-            os.fchmod(fd, mode)
-        finally:
-            os.close(fd)
-        if before is not None:
-            _carry_metadata(path, temp)
-        try:
-            _replace(temp, path)
-        except OSError as exc:
-            if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
-                raise _InPlaceInstead from exc  # an ACL that denies delete, say
-            if exc.errno in _NOT_ALLOWED_ERRNOS:
-                raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+            temp = str(_new_temp(path))
+            fd = _open_temp(temp, locked=locked)  # 0600
+        except (SettingsBusy, SettingsUnwritable):
             raise
-        done = True
-    finally:
-        if not done:
-            _remove_temp(temp)
-    _sync_folder(path.parent)
+        except OSError as exc:
+            if before is not None and exc.errno in (*_NOT_ALLOWED_ERRNOS, errno.EEXIST):
+                raise _InPlaceInstead from exc
+            if exc.errno == errno.EEXIST:  # a folder at the temp file's name, and no file to write in place
+                raise SettingsUnwritable(exc.errno, "a folder is where the temp file goes", temp, "in_the_way") from exc
+            if exc.errno in _NOT_ALLOWED_ERRNOS:
+                raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
+            if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
+                raise SettingsUnwritable(exc.errno, "a folder on the way is a file", path.parent, "not_a_folder") from exc
+            raise
+        mine = _identity(fd)
+        done = False
+        stranger = False
+        try:
+            try:
+                _write_all(fd, data)
+                _sync(fd)
+                if before is not None:
+                    _carry_owner(fd, before)
+                os.fchmod(fd, mode)
+                stranger = not _is_own(fd, temp)
+                if not stranger and before is not None:
+                    _carry_metadata(path, temp)
+                    stranger = not _is_own(fd, temp)
+            finally:
+                os.close(fd)
+            if stranger:
+                continue  # the name is another file's now: ours was moved away; write again
+            _require_same_device(temp, path)
+            try:
+                _replace(temp, path)
+            except OSError as exc:
+                if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
+                    raise _InPlaceInstead from exc  # an ACL that denies delete, say
+                if exc.errno in _NOT_ALLOWED_ERRNOS:
+                    raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+                raise
+            done = True
+        finally:
+            if not done and not stranger:
+                _remove_own(temp, mine)
+        _sync_folder(path.parent)
+        return
+    raise SettingsBusy("the save's temp file kept being taken", path)
+
+
+# How many temp files one save writes before giving up (each one a stranger's
+# file found at the name, which with unique names is a race with a judge).
+TEMP_ATTEMPTS = 3
+
+
+def _identity(fd: int) -> tuple[int, int]:
+    info = os.fstat(fd)
+    return (info.st_dev, info.st_ino)
+
+
+def _is_own(fd: int, temp: str) -> bool:
+    """Whether ``temp`` still names the file open as ``fd``: device and
+    inode, ``os.fstat(fd)`` against ``os.lstat(temp)``."""
+    try:
+        have = os.fstat(fd)
+        at_name = os.lstat(temp)
+    except OSError:
+        return False
+    return (have.st_dev, have.st_ino) == (at_name.st_dev, at_name.st_ino) and stat.S_ISREG(at_name.st_mode)
+
+
+def _remove_own(temp: str, mine: tuple[int, int]) -> None:
+    """Remove ``temp`` only while it is still this save's own file."""
+    try:
+        info = os.lstat(temp)
+    except OSError:
+        return
+    if (info.st_dev, info.st_ino) == mine:
+        _remove_temp(temp)
 
 
 def temp_path_for(path: Path) -> Path:
-    """The one temp file a save of ``path`` writes before the rename:
-    ".settings.json.nebula-tmp" beside it."""
+    """The shared temp name earlier rounds wrote (".settings.json.nebula-tmp"
+    beside the file): still swept, judged and denied, and the prefix of
+    every save's own name (new_temp_path_for)."""
     return path.with_name(f".{path.name}{TEMP_SUFFIX_FIXED}")
+
+
+# Every save's temp file lives in one private folder beside the file it saves
+# (round 23b of PR #203): the agents' deny lists name the folder, so a temp
+# made after an agent's profile is built (Codex's deny paths are exact, and
+# its profile is built before the save) is inside a denied folder.
+TEMP_FOLDER = ".settings-nebula-tmp"
+
+
+def temp_folder_for(parent: Path) -> Path:
+    """The private folder for the temp files of saves into ``parent``."""
+    return parent / TEMP_FOLDER
+
+
+def _refuse_temp_folder(folder: Path, why: str) -> SettingsUnwritable:
+    return SettingsUnwritable(errno.EPERM, why, folder, "in_the_way")
+
+
+def _checked_temp_folder(folder: Path) -> Path:
+    """``folder`` as this user's own private folder (a real directory, never
+    a symlink, owned by this user, no group or other access), or the refusal
+    that fails the save: Nebula never writes keys into a folder someone else
+    made or pointed elsewhere."""
+    try:
+        info = os.lstat(folder)
+    except OSError as exc:
+        raise _refuse_temp_folder(folder, "the temp folder can't be checked") from exc
+    if not stat.S_ISDIR(info.st_mode):
+        raise _refuse_temp_folder(folder, "the temp folder is a symlink or a file, not a folder")
+    if not _owned(info) or info.st_mode & 0o077:
+        raise _refuse_temp_folder(folder, "the temp folder isn't this user's own private folder")
+    return folder
+
+
+def _own_temp_folder(parent: Path) -> Path:
+    """The private temp folder in ``parent``, made 0700 when it isn't there,
+    and checked either way (_checked_temp_folder). A folder that can't be
+    made raises the OSError (the caller's fallbacks); one that is there but
+    isn't ours refuses the save."""
+    folder = temp_folder_for(parent)
+    try:
+        os.mkdir(folder, 0o700)
+    except FileExistsError:
+        pass
+    return _checked_temp_folder(folder)
+
+
+def _safe_temp_folder(parent: Path) -> Path | None:
+    """The temp folder in ``parent`` for a sweep to read, only when it is a
+    real folder of this user's own: None when absent or not ours (a symlink
+    is never followed). Never makes it."""
+    try:
+        return _checked_temp_folder(temp_folder_for(parent))
+    except (SettingsUnwritable, OSError):
+        return None
+
+
+def temp_folders() -> list[Path]:
+    """Every temp folder a save may use, as configured and resolved: the
+    settings file's folder (both spellings) and the copy folder. Agents may
+    never read them (agent_profiles.secret_dirs). Never raises."""
+    folders: list[Path] = []
+    for where in (lambda: settings_path().parent, lambda: settings_file().parent, settings_copy_folder):
+        try:
+            folders.append(temp_folder_for(where()))
+        except Exception:  # noqa: BLE001 - a folder that can't be read is listed by the others
+            continue
+    return list(dict.fromkeys(folders))
+
+
+def _require_same_device(temp: str, target: Path) -> None:
+    """The temp file and the file it replaces must share a device, or the
+    rename would be a copy (not atomic, and a half-written file visible):
+    an error, never a cross-device copy."""
+    try:
+        same = os.stat(os.path.dirname(temp) or ".").st_dev == os.stat(target.parent).st_dev
+    except OSError as exc:
+        raise _refuse_temp_folder(Path(temp).parent, "the temp folder can't be checked") from exc
+    if not same:
+        raise SettingsUnwritable(errno.EXDEV, "the temp folder is on another filesystem", Path(temp).parent,
+                                 "in_the_way")
+
+
+def new_temp_path_for(path: Path) -> Path:
+    """A temp file name for one save of ``path``: inside the private temp
+    folder beside it (_own_temp_folder), the shared name, then the process
+    id and a random token, so no two saves ever share one."""
+    shared = temp_path_for(path)
+    folder = _own_temp_folder(path.parent)
+    return folder / f"{shared.name}-{os.getpid()}-{secrets.token_hex(8)}"
+
+
+def _new_temp(path: Path) -> Path:
+    """The seam a save names its temp file through (tests put the shared
+    name back to stage a race)."""
+    return new_temp_path_for(path)
+
+
+_UNIQUE_TEMP_TAIL = re.compile(r"\.nebula-tmp-(\d+)-[0-9a-f]{16}")
+
+
+def unique_temp_pid(name: str, base: str) -> int | None:
+    """The process id in ``name`` when it is one save's own temp name for a
+    file called ``base`` (".<base>.nebula-tmp-<pid>-<token>"), else None."""
+    prefix = f".{base}"
+    if not name.startswith(prefix):
+        return None
+    match = _UNIQUE_TEMP_TAIL.fullmatch(name[len(prefix):])
+    return int(match.group(1)) if match else None
+
+
+def is_secret_temp_name(name: str) -> bool:
+    """Whether ``name`` is a save's own temp file (any file name it saves,
+    the settings file's or a copy's): no agent or graph path may reach it."""
+    return bool(re.fullmatch(r"\..+\.nebula-tmp-\d+-[0-9a-f]{16}", name))
 
 
 def _open_temp(temp: str, *, locked: bool) -> int:
@@ -1089,15 +1250,27 @@ def backup_path(path: Path) -> Path:
 
 
 def secret_temp_paths() -> list[Path]:
-    """The temp file a save writes beside the settings file, as configured
-    and resolved: agents may never read it (agent_profiles.
-    default_secret_paths). Never raises."""
-    paths = [temp_path_for(settings_path())]
+    """The temp files a save writes beside the settings file, as configured
+    and resolved: the shared name, and every save's own named file there now
+    (new_temp_path_for). Agents may never read them
+    (agent_profiles.default_secret_paths); a file made after this list is
+    taken is caught by name (is_secret_temp_name; agent_profiles.
+    secret_deny_rules adds the pattern). Never raises."""
+    bases = [temp_path_for(settings_path())]
     try:
         resolved = temp_path_for(settings_file())
     except SettingsUnreadable:
-        return paths
-    return paths if resolved in paths else [*paths, resolved]
+        resolved = None
+    if resolved is not None and resolved not in bases:
+        bases.append(resolved)
+    paths = [*temp_folders(), *bases]
+    for base in bases:
+        try:
+            paths += sorted(entry for entry in base.parent.iterdir()
+                            if entry.name.startswith(base.name + "-") and is_secret_temp_name(entry.name))
+        except OSError:
+            continue
+    return paths
 
 
 def _copy_digest(path: Path, text: str, next_text: str) -> str:
@@ -1178,23 +1351,33 @@ def _folder_at(*paths: Path) -> Path | None:
 
 
 def _write_copy(target: Path, body: bytes) -> None:
-    """``body`` to ``target`` through its fixed temp file in the same
-    folder, synced, renamed, then the folder synced."""
-    temp = str(temp_path_for(target))
-    fd = _open_temp(temp, locked=_holds_lock())
-    done = False
-    try:
+    """``body`` to ``target`` through a temp file of its own in the same
+    folder (new_temp_path_for), synced, renamed only while the name is still
+    that file (_is_own), then the folder synced."""
+    for _attempt in range(TEMP_ATTEMPTS):
+        temp = str(_new_temp(target))
+        fd = _open_temp(temp, locked=_holds_lock())
+        mine = _identity(fd)
+        done = False
+        stranger = False
         try:
-            _write_all(fd, body)
-            _sync(fd)
+            try:
+                _write_all(fd, body)
+                _sync(fd)
+                stranger = not _is_own(fd, temp)
+            finally:
+                os.close(fd)
+            if stranger:
+                continue
+            _require_same_device(temp, target)
+            os.replace(temp, target)
+            done = True
         finally:
-            os.close(fd)
-        os.replace(temp, target)
-        done = True
-    finally:
-        if not done:
-            _remove_temp(temp)
-    _sync_folder(target.parent)
+            if not done and not stranger:
+                _remove_own(temp, mine)
+        _sync_folder(target.parent)
+        return
+    raise SettingsBusy("the copy's temp file kept being taken", target)
 
 
 class _NotOurs(OSError):
@@ -1630,7 +1813,11 @@ TEMP_SUFFIX_FIXED = ".nebula-tmp"
 # the sweep removes only these, never a file the person named like one).
 TEMP_PREFIX = ".settings-nebula-"
 TEMP_SUFFIX = ".tmp"
-_TEMP_NAME = re.compile(r"\.settings-nebula-\d+-[a-z0-9_]{8}\.tmp")
+_TEMP_NAME = re.compile(r"\.settings-nebula-(\d+)-[a-z0-9_]{8}\.tmp")
+# A save whose writer is alive is never touched while it is younger than this:
+# a save never takes an hour, and a process id a crash left can be another
+# process's by the next start.
+ALIVE_WRITER_SECONDS = 3600.0
 # Where the sweep can't hold the save's lock (no flock), a temp file newer
 # than this may be another process's save, so it is kept.
 STALE_TEMP_SECONDS = 60.0
@@ -1664,11 +1851,25 @@ def sweep_stale_temp_files(now: float | None = None) -> list[Path]:
 def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
     removed: list[Path] = []
     state = _state_dir()
-    folders = list(dict.fromkeys([*([path.parent] if path is not None else []), state]))
+    folders = list(dict.fromkeys([*([path.parent] if path is not None else []), state, settings_copy_folder()]))
     candidates: list[Path] = []
     for folder in folders:
         try:
-            candidates += [entry for entry in folder.iterdir() if _TEMP_NAME.fullmatch(entry.name)]
+            candidates += [entry for entry in folder.iterdir()
+                           if _TEMP_NAME.fullmatch(entry.name) or _swept_unique_name(entry, path)]
+        except OSError:
+            continue
+    # Each save's temp now lives in a private folder (TEMP_FOLDER): every
+    # file there is a save's own, and the folder is only read when it is
+    # this user's real folder, never through a symlink.
+    for parent in dict.fromkeys([*([path.parent] if path is not None else []), settings_copy_folder()]):
+        inside = _safe_temp_folder(parent)
+        if inside is None:
+            continue
+        folders.append(inside)
+        try:
+            candidates += [entry for entry in inside.iterdir()
+                           if _TEMP_NAME.fullmatch(entry.name) or is_secret_temp_name(entry.name)]
         except OSError:
             continue
     if path is not None:
@@ -1694,7 +1895,7 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
             else:
                 if entry.parent not in clocks:
                     clocks[entry.parent] = _folder_now(entry.parent) if now is None else now
-                if not _stale(info, clocks[entry.parent]) or not _remove_judged(entry, info):
+                if not _orphaned(entry, info, clocks[entry.parent]) or not _remove_judged(entry, info):
                     continue
             removed.append(entry)
         except OSError:
@@ -1720,6 +1921,46 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
             pass
     _move_legacy_copies(state)
     return removed
+
+
+def _swept_unique_name(entry: Path, path: Path | None) -> bool:
+    """Whether ``entry`` is a save's own temp name (new_temp_path_for) for
+    the settings file or for a copy of it."""
+    if path is not None and unique_temp_pid(entry.name, path.name) is not None:
+        return True
+    return re.fullmatch(r"\.settings-backup-[0-9a-f]{16}\.json\.nebula-tmp-\d+-[0-9a-f]{16}", entry.name) is not None
+
+
+def _writer_pid(name: str) -> int | None:
+    """The process id a temp name carries (a save's own, or round 17's)."""
+    match = re.fullmatch(r"\..+\.nebula-tmp-(\d+)-[0-9a-f]{16}", name) or _TEMP_NAME.fullmatch(name)
+    return int(match.group(1)) if match else None
+
+
+def _alive(pid: int) -> bool:
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _orphaned(entry: Path, info: os.stat_result, now: float) -> bool:
+    """A temp file nobody is writing: stale on its folder's clock (_stale),
+    and its writer, named in it, gone, or silent for ALIVE_WRITER_SECONDS.
+    Each one is judged by its own name and stat, never by the others'."""
+    if not _stale(info, now):
+        return False
+    pid = _writer_pid(entry.name)
+    if pid is None or not _alive(pid):
+        return True
+    return now - info.st_mtime > ALIVE_WRITER_SECONDS
 
 
 def _move_legacy_copies(state: Path) -> None:
