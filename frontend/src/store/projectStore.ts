@@ -45,6 +45,11 @@ export interface KeptEdits {
    * storage cap, which the person fixes by deleting: the notice offers
    * [Choose a project to delete] while this is set and the line shows. */
   chooseToDelete?: 'projects' | 'storage' | null;
+  /** PR #199 r26: the project-limit refusal's numbers. The notice's line is derived from them and the live
+   * project count, so it follows each Delete. `autoRetried`: the one automatic save after deleting made
+   * room has been spent (a refusal after it is shown as any other; the person's own press resets it). */
+  limitCounts?: { count: number; limit: number; deletes: number | null } | null;
+  autoRetried?: boolean;
 }
 
 /** The kept line as the notice shows it. */

@@ -1061,3 +1061,28 @@ Bytes (entry raw / gzip, startup closure raw):
 - The notice's refusal line is not refreshed after a Delete in the chooser; it says the old counts until Save is pressed again.
 - `relistProjects` now refreshes the workspace revision while a canvas is kept: a change outside the chooser's need, made because Delete was refused on a stale revision.
 - The kept-guard script's new rule (markers may sit in a chunk the entry imports statically) is weaker than "in the entry file"; the cause of rolldown moving the store core to its own chunk is not understood.
+
+## Fix round 26 (the kept chooser deletes the app's way; the refusal line is live; the CI test)
+
+### Item 1: the chooser reuses the app's delete
+
+- The chooser already rendered in `ModalPortal` with the `prompt-dialog` scrim, the shared focus trap (`useAlertDialog`), Escape and return of focus; round 25's shot looked bare only because the scrim is 45% black over a dark canvas. No change there; `tests/keptChooserR26.test.tsx` now pins the portal, the scrim class, `aria-modal`, and Escape returning focus to [Choose a project to delete].
+- The app's project Delete has no confirm: Projects home's trash button moves the project to Recently deleted and shows the Undo toast ("Moved “X” to Recently deleted", [Undo], dismiss). The chooser's Delete now does the same: `UndoToast` was moved out of `ProjectHome.tsx` to `components/projects/UndoToast.tsx` (same markup, timer, notice slot) and the chooser renders it from `lastDeleted`; [Undo] calls `restore(id, 'undo')`. No new copy.
+- Rows show what the project card shows: name, "Edited <date>" and "N nodes · M connections" (`editedDate.ts`, `projectFacts.tsx` `ProjectCounts`, used by the card too).
+- Mutation: removing the toast from the chooser fails "Delete moves the project ... Undo".
+
+### Item 2: the refusal line is live
+
+- `KeptEdits.limitCounts` keeps the refusal's numbers; `KeptEditsNotice` derives the project-limit line from `limitCounts.limit` and the live `projects.length` (`keptLimitLine`), so it changes the moment a Delete lands; [Choose a project to delete] goes when there is room.
+- When the live count is below the limit, the line is `KEPT_ROOM_LINE` and the notice saves once by itself (`autoRetried` marks it spent; a refusal after it shows as any other; the person's own [Save as a project] resets it). The saved state is round 25's normal one (the project opens, saved toast). Held by a run, following or offline: the room line stays and Save is held as before.
+- Storage cap: the client has no storage-use number, so the line can't be derived from one. It stays until Recently deleted gets smaller (an Empty or a Delete forever freed something; a Delete adds to it and frees nothing), then the same one automatic save runs. Flag for GM.
+- Mutations: line not derived (stale), no auto save, auto save without the once-only mark: each fails its test.
+
+### Item 3: "Delete 2" is ambiguous (for GM)
+
+- Limit lines now read "...over the limit of 1. Delete 2 projects, and Nebula saves your edits." and "...you’ve reached the limit of 3 projects. Delete 1 project, and Nebula saves your edits." (was "Delete one" / "Delete 2"; the head is unchanged).
+- New: `There’s room now. Nebula is saving your edits as a project.` (shown while the one automatic save starts, or while a run/offline holds it).
+
+### Item 4: CI's `test_nit2_a_tab_back_within_the_grace_carries_it_on`
+
+- Not a regression from main's merge: the backend still refuses the agent's add with `canvas_kept_in_tab`. The test raced: `_kept(tab, True)` waits for `kept_in_tab()`, which is already true from the first socket's grace, so the test moved the fake clock to 60 s before the server had read the tab's frame; the grace lapsed first and the add went through. It fails intermittently (about 1 in 3 here), more under load. Fix: wait until the tab is in `manager.kept_tabs` before moving the clock; both "tab back" tests close their socket in `finally`. No backend change, so there is no refusal order to choose: main's count limits and this PR's kept refusal are unchanged (the kept refusal, `_refuse_agent_while_kept`, runs in the canvas guard before the route (and in the run/paid-start refusal); `_refuse_agent_growth_past_save_limit` runs inside the routes, after it, so a kept canvas answers with the kept code first and the count limit applies once kept mode ends).

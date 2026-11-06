@@ -4,7 +4,9 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
 import { editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyFallback, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
-import { UNDO_VISIBLE_MS } from './toastTiming';
+import { ProjectCounts } from './projectFacts';
+import { editedDate } from './editedDate';
+import { UndoToast } from './UndoToast';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
@@ -12,7 +14,6 @@ import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } 
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
-import { InNoticeRegion } from '../InNoticeRegion';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
@@ -21,12 +22,11 @@ import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { useKeptCanvas } from '../../lib/keptCanvas';
-import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
+import { NoticeLeave } from '../../lib/noticeLeave';
 import { LineText } from '../LineText';
 import { PersonLockLine, type PersonLock } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
-import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
   id: string;
@@ -245,12 +245,6 @@ function coverTitle(project: ProjectSummary): string {
   return project.coverBy && project.coverBy.kind !== 'person' ? `Cover: set by ${actorLabel(project.coverBy)}` : 'Cover: pinned';
 }
 
-function editedDate(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Saved project';
-  return `Edited ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date)}`;
-}
-
 function recentTimestamp(project: ProjectSummary) {
   const opened = Date.parse(project.lastOpenedAt ?? '');
   if (Number.isFinite(opened)) return opened;
@@ -283,9 +277,7 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
-        {counts
-          ? <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
-          : <span data-testid="project-card-no-counts" />}
+        {counts ? <ProjectCounts project={project} /> : <span data-testid="project-card-no-counts" />}
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
@@ -511,32 +503,6 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
         </div>
       )}
     </section>
-  );
-}
-
-function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
-  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
-}) {
-  // Held while pointed at or focused, as the app's other toasts.
-  const [paused, setPaused] = useState(false);
-  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
-  const waiting = useSlotWaiting('project-home');
-  useEffect(() => {
-    if (paused || waiting) return;
-    const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [paused, waiting, onDismiss, project.id]);
-  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
-  return (
-    <InNoticeRegion slot="project-home">
-      <div className="project-home__toast" role="status" aria-live="polite" {...leave}
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
-        <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-      </div>
-    </InNoticeRegion>
   );
 }
 

@@ -5,7 +5,7 @@ import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/ke
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
 import { runFinishesLine } from '../../lib/runLock';
 import { LineText } from '../LineText';
-import { CHOOSE_A_PROJECT_TO_DELETE, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { CHOOSE_A_PROJECT_TO_DELETE, KEPT_ROOM_LINE, keptLimitLine, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import { KeptDeleteChooser } from './KeptDeleteChooser';
 import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
 import './KeptEditsNotice.css';
@@ -50,6 +50,23 @@ export function KeptEditsNotice() {
   const offline = lock.offline;
   const running = useGraphStore((state) => !state.canSwitchProject({ exceptSaves: true }));
   // The confirm belongs to the kept canvas it was asked for: it goes with it.
+  // PR #199 r26: the refusal's line follows the live list, and the one automatic save once deleting
+  // has made room (the project limit: fewer projects than the limit; the storage cap, which the client
+  // can't measure: Recently deleted got smaller, so something was freed).
+  const liveCount = useProjectStore((state) => state.projects.length);
+  const trashCount = useProjectStore((state) => state.trash.length);
+  const lastTrash = useRef(trashCount);
+  const limitCounts = kept?.chooseToDelete === 'projects' ? kept.limitCounts ?? null : null;
+  const room = limitCounts !== null && liveCount < limitCounts.limit;
+  const blocked = running || lock.following || offline;
+  useEffect(() => {
+    const shrank = trashCount < lastTrash.current;
+    lastTrash.current = trashCount;
+    if (!kept || !kept.error || kept.saving || kept.discarding || kept.autoRetried || blocked) return;
+    if (!(room || (kept.chooseToDelete === 'storage' && shrank))) return;
+    useProjectStore.setState({ keptEdits: { ...kept, autoRetried: true } });
+    void useProjectStore.getState().saveKeptEdits();
+  }, [kept, room, trashCount, blocked]);
   const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
   const discardButton = useRef<HTMLButtonElement>(null);
   // GM r24 (b): the chooser belongs to the kept canvas it was opened for, as the confirm does.
@@ -60,7 +77,10 @@ export function KeptEditsNotice() {
   const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
   const choosing = choosingFor !== null && choosingFor.sourceId === kept.sourceId;
   // The cure for a refusal the person fixes by deleting: only while that line shows.
-  const offerChooser = Boolean(kept.error && kept.chooseToDelete);
+  const offerChooser = Boolean(kept.error && kept.chooseToDelete && !room);
+  const refusal = limitCounts && kept.error ? (room ? KEPT_ROOM_LINE
+    : keptLimitLine(liveCount, limitCounts.limit, liveCount === limitCounts.count ? limitCounts.deletes : null))
+    : limitCounts && kept.saving && kept.autoRetried ? KEPT_ROOM_LINE : kept.error;
   // Review 14 (lock-order NIT-3): kept leaves these two on, so the next
   // locks apply in the app's order: the run, following, then offline.
   // GM r37 and r39 (lib/runLock): the run's line says what unlocks the button, by its verb.
@@ -79,12 +99,15 @@ export function KeptEditsNotice() {
       <span key={pulses} className="canvas-undo-notice__text">
         {keptEditsLine(kept)}
         {update && <span className="kept-edits-notice__error" data-kept-update="">{update}</span>}
-        {kept.error && <span className="kept-edits-notice__error" role="alert"><LineText text={kept.error} /></span>}
+        {refusal && <span className="kept-edits-notice__error" role="alert"><LineText text={refusal} /></span>}
       </span>
       {offerChooser && <button type="button" ref={chooseButton} className="canvas-undo-notice__action kept-edits-notice__choose--neutral" disabled={lock.offline}
         data-kept-choose-delete="" onClick={() => setChoosingFor(kept)}>{CHOOSE_A_PROJECT_TO_DELETE}</button>}
       <button type="button" className="canvas-undo-notice__action" {...saveHeld} aria-busy={kept.saving || undefined}
-        data-kept-save="" onClick={() => void useProjectStore.getState().saveKeptEdits()}>{SAVE_AS_A_PROJECT}</button>
+        data-kept-save="" onClick={() => {
+          useProjectStore.setState({ keptEdits: { ...kept, autoRetried: false } });
+          void useProjectStore.getState().saveKeptEdits();
+        }}>{SAVE_AS_A_PROJECT}</button>
       <button type="button" ref={discardButton} className="canvas-undo-notice__action kept-edits-notice__discard" {...discardHeld}
         aria-busy={kept.discarding || undefined} data-kept-discard-button=""
         onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>

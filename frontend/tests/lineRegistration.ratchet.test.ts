@@ -196,7 +196,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
     { file: 'components/projects/ProjectHome.tsx', expr: 'error' },
   ],
   'project.load-retry': { none: 'a retry: its line is project.error' },
-  'project.kept-save': [{ file: 'components/projects/KeptEditsNotice.tsx', expr: 'kept.error' }],
+  'project.kept-save': [{ file: 'components/projects/KeptEditsNotice.tsx', expr: 'refusal' }],
   'project.save': [{ file: 'components/create-studio/ResultCard.tsx', expr: 'saveError' }],
   'project.save-retry': { none: 'a retry: its line is project.save' },
   'graph.refusal': [

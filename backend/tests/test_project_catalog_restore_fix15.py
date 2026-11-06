@@ -138,13 +138,19 @@ def test_nit2_a_tab_back_within_the_grace_carries_it_on(app, clock):
     _closed(socket)
     clock.ahead = 5.0
     again, tab = _person_tab(client)
-    _kept(tab, True)
-    # Long past the first socket's grace: the tab that came back holds it.
-    clock.ahead = 60.0
-    assert _refused_kept(_agent_add(client))
-    _kept(tab, False)
-    assert _agent_add(client).status_code == 200
-    _closed(again)
+    try:
+        _kept(tab, True)
+        # kept_in_tab() is already true here (the first socket's grace still runs), so it proves
+        # nothing about this frame: wait until the server has put the tab in kept_tabs, or moving
+        # the clock on first lets the grace lapse before the tab's frame is read (CI, 2026-11-05).
+        assert _settles(lambda: bool(main_module.manager.kept_tabs))
+        # Long past the first socket's grace: the tab that came back holds it.
+        clock.ahead = 60.0
+        assert _refused_kept(_agent_add(client))
+        _kept(tab, False)
+        assert _agent_add(client).status_code == 200
+    finally:
+        _closed(again)
 
 
 def test_nit2_a_tab_back_within_the_grace_that_says_kept_false_ends_it(app, clock):
@@ -155,11 +161,13 @@ def test_nit2_a_tab_back_within_the_grace_that_says_kept_false_ends_it(app, cloc
     _closed(socket)
     clock.ahead = 5.0
     again, tab = _person_tab(client)
-    assert _refused_kept(_agent_add(client))
-    tab.send_json({"type": "keptEdits", "kept": False})
-    assert _settles(lambda: not main_module.manager.kept_in_tab())
-    assert _agent_add(client).status_code == 200
-    _closed(again)
+    try:
+        assert _refused_kept(_agent_add(client))
+        tab.send_json({"type": "keptEdits", "kept": False})
+        assert _settles(lambda: not main_module.manager.kept_in_tab())
+        assert _agent_add(client).status_code == 200
+    finally:
+        _closed(again)
 
 
 def test_nit2_an_agents_socket_can_neither_end_nor_extend_the_grace(app, clock):

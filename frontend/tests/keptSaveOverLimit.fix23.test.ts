@@ -159,8 +159,8 @@ function keepWithEdits(): void {
 
 
 // GM r24 (b), verbatim: the three kept-save refusals match (limit over, limit at, storage cap).
-const OVER_LIMIT = 'Nebula couldn’t save your edits as a project because you have 501 projects, over the limit of 500. Delete 2, and Nebula saves your edits.';
-const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete one, and Nebula saves your edits.';
+const OVER_LIMIT = 'Nebula couldn’t save your edits as a project because you have 501 projects, over the limit of 500. Delete 2 projects, and Nebula saves your edits.';
+const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete 1 project, and Nebula saves your edits.';
 const STORAGE_FULL_LINE = 'Nebula couldn’t save your edits as a project because the project list is full. Delete a project and remove it from Recently deleted, and Nebula saves your edits.';
 const limitAnswer = (overrides: Record<string, unknown> = {}) => new Response(JSON.stringify({
   detail: 'Project limit reached', limit: 'projects', projectLimit: 500, projectCount: 501, deletes: 2, ...overrides,
@@ -213,7 +213,7 @@ describe('a kept save refused for the project limit (round 23, RD LOW-2)', () =>
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(await requestError('Nebula couldn’t save your edits.', limitAnswer({ projectCount: 2, projectLimit: 1, deletes: undefined })));
     await useProjectStore.getState().saveKeptEdits();
     expect(useProjectStore.getState().keptEdits?.error)
-      .toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2, and Nebula saves your edits.');
+      .toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.');
     expect(useProjectStore.getState().keptEdits?.chooseToDelete).toBe('projects');
     expect(isCanvasKept()).toBe(true);
   });

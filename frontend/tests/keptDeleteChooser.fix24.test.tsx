@@ -22,7 +22,7 @@ beforeAll(regionNoticesReady);
 
 const summary = (id: string, name: string) => ({ id, name, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
   lastOpenedAt: null, nodeCount: 0, edgeCount: 0, thumbnail: null });
-const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete one, and Nebula saves your edits.';
+const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete 1 project, and Nebula saves your edits.';
 const STORAGE = 'Nebula couldn’t save your edits as a project because the project list is full. Delete a project and remove it from Recently deleted, and Nebula saves your edits.';
 const initialProject = useProjectStore.getState();
 const remove = vi.fn(async () => {});
@@ -49,8 +49,8 @@ afterEach(() => {
 describe('GM r24 (b): the lines, verbatim', () => {
   it('the three kept-save refusals match', () => {
     expect(keptLimitLine(3, 3)).toBe(AT_LIMIT);
-    expect(keptLimitLine(2, 1)).toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2, and Nebula saves your edits.');
-    expect(keptLimitLine(501, 500, 2)).toBe('Nebula couldn’t save your edits as a project because you have 501 projects, over the limit of 500. Delete 2, and Nebula saves your edits.');
+    expect(keptLimitLine(2, 1)).toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.');
+    expect(keptLimitLine(501, 500, 2)).toBe('Nebula couldn’t save your edits as a project because you have 501 projects, over the limit of 500. Delete 2 projects, and Nebula saves your edits.');
     expect(keptStorageFullLine()).toBe(STORAGE);
     // No second "Nebula" before "project list", and no "Nebula will".
     for (const line of [AT_LIMIT, STORAGE]) expect(line.match(/Nebula/g)).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('GM r24 (b): [Choose a project to delete] on the project-limit and stor
     fireEvent.click(screen.getByRole('button', { name: 'Choose a project to delete' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose a project to delete' });
     const rows = within(dialog).getAllByRole('listitem');
-    expect(rows.map((row) => row.textContent)).toEqual(['AlphaDelete', 'BetaDelete', 'GammaDelete']);
+    expect(rows.map((row) => within(row).getByRole('button').getAttribute('aria-label'))).toEqual(['Delete Alpha', 'Delete Beta', 'Delete Gamma']);
     // Nothing to empty: no Empty button.
     expect(within(dialog).queryByRole('button', { name: 'Empty Recently deleted' })).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete Beta' }));

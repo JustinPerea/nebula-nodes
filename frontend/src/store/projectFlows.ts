@@ -328,7 +328,7 @@ async function saveKeptEdits(): Promise<void> {
         : isStorageCapRefusal(error) ? keptStorageFullLine()
         : counts ? keptLimitLine(counts.count, counts.limit, counts.deletes)
         : failureUnder(error, "Nebula couldn’t save your edits.");
-      useProjectStore.setState({ keptEdits: { ...current, saving: false, error: line, chooseToDelete: choose } });
+      useProjectStore.setState({ keptEdits: { ...current, saving: false, error: line, chooseToDelete: choose, limitCounts: counts } });
       // The chooser lists what is there now (this tab's list may be older).
       if (choose) void relistProjects();
       // GM, #204 r3: a refusal only because this tab isn't connected as the person goes on the promote.

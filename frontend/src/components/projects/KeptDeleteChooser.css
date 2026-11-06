@@ -5,6 +5,8 @@
 .kept-delete-chooser { max-height: min(560px, calc(100vh - 64px)); overflow: auto; }
 .kept-delete-chooser__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .kept-delete-chooser__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.kept-delete-chooser__facts { display: grid; min-width: 0; gap: 2px; }
+.kept-delete-chooser__meta { color: var(--sr-ink-dim, #aaa); font-size: 12px; }
 .kept-delete-chooser__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kept-delete-chooser__trash { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--sr-edge, #333); font-size: 14px; line-height: 1.5; }
 .kept-delete-chooser__delete:hover:not(:disabled),
