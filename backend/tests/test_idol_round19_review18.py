@@ -452,16 +452,17 @@ def test_the_copys_temp_file_is_inside_the_copy_folder_while_it_holds_the_keys(h
     _hard_link(keyed)
     opened = []
     real = settings._open_temp
-    monkeypatch.setattr(settings, "_open_temp", lambda temp, *, locked: opened.append(Path(temp)) or
-                        real(temp, locked=locked))
+    monkeypatch.setattr(settings, "_open_temp", lambda temp, *, locked, dir_fd=None: opened.append((Path(temp), dir_fd)) or
+                        real(temp, locked=locked, dir_fd=dir_fd))
     settings.save_settings({"favorites": ["in place"]})
     copy = settings.backup_path(keyed)
     shared = settings.temp_path_for(copy)
-    [temp] = opened  # round 23: the shared name, then the save's process id and a token
-    # round 23b: in the private folder inside the copy folder
-    assert temp.parent == settings.temp_folder_for(shared.parent) and temp.name.startswith(shared.name + "-")
+    [(temp, dir_fd)] = opened  # round 23: the shared name, then the save's process id and a token
+    # round 23b: in the private folder inside the copy folder; round 23c: a
+    # bare name made through that folder's descriptor
+    assert dir_fd is not None and temp.name.startswith(shared.name + "-")
     assert settings.is_secret_temp_name(temp.name)
-    assert opened[0].parent.parent == settings.settings_copy_folder() == copy.parent
+    assert settings.temp_folder_for(copy.parent) in settings.temp_folders() and copy.parent == settings.settings_copy_folder()
 
 
 @pytest.mark.unprivileged

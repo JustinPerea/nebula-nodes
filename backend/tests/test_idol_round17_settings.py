@@ -247,7 +247,7 @@ elif point == "after-the-grow":
 elif point == "after-the-new-json":
     s._truncate = lambda fd, length: die()
 elif point == "before-the-rename":
-    s._replace = lambda src, dst: die()
+    s._replace = lambda src, dst, **dir_fd: die()
 s.save_settings({{"apiKeys": {{"FAL_KEY": "fal-new"}}, "favorites": {favorites!r}}})
 print("SAVED")
 """
@@ -281,7 +281,7 @@ seam = {seam!r}
 real = getattr(s, seam)
 held = {{"done": False}}
 
-def hold(*args):
+def hold(*args, **kw):
     if not held["done"]:
         held["done"] = True
         open({inside!r}, "w").close()
@@ -290,7 +290,7 @@ def hold(*args):
             if time.monotonic() > deadline:
                 raise SystemExit("never released")
             time.sleep(0.01)
-    return real(*args)
+    return real(*args, **kw)
 
 setattr(s, seam, hold)
 s.save_settings({{"apiKeys": {{"FAL_KEY": "fal-A"}}, "favorites": ["a" * 3000]}})
@@ -683,9 +683,9 @@ def test_a_save_names_its_temp_file_as_the_sweep_knows_it(keyed, monkeypatch):
     names = []
     real = settings._replace
 
-    def look(src, dst):
+    def look(src, dst, **dir_fd):
         names.append(Path(src).name)
-        real(src, dst)
+        real(src, dst, **dir_fd)
 
     monkeypatch.setattr(settings, "_replace", look)
     settings.save_settings({"favorites": []})

@@ -145,7 +145,7 @@ def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, 
     too) falls back to the in-place write that saved before round 15, and
     leaves no temp file. The seam is settings._replace, never os.replace for
     the whole process (review 15, sockets-tests NIT-2)."""
-    def refuse(_src, _dst):
+    def refuse(_src, _dst, **_dir_fd):
         raise OSError(errno.EROFS, "Read-only file system")
 
     monkeypatch.setattr(settings, "_replace", refuse)
@@ -155,7 +155,7 @@ def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, 
 
 
 def test_a_failure_that_is_not_about_permission_is_not_called_one(home_file, monkeypatch):
-    def full(_src, _dst):
+    def full(_src, _dst, **_dir_fd):
         raise OSError(errno.ENOSPC, "No space left on device")
 
     monkeypatch.setattr(settings, "_replace", full)

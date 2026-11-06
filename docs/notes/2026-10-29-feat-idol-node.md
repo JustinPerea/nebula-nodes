@@ -4336,3 +4336,48 @@ tests pass unchanged apart from the listing.
 - Refusal of a bad folder reuses cause "in_the_way", whose 409 text says "a
   folder is in the way"; fine for a symlink or file, loose for "not yours".
   A dedicated line would be a GM copy call.
+
+## Round 23c: the security check's three findings on the settings temp folder
+
+(`backend/services/settings.py`; tests `backend/tests/test_idol_round23b_settings.py`.)
+
+- **A folder that can't be private no longer fails every save (MEDIUM).**
+  `_open_private_folder` returns None for a symlink, a file, a foreign-owned
+  folder, or one still open to others after an `fchmod 0700` (vfat dmask,
+  CIFS dir_mode, NTFS-3g report fixed modes). The save then writes in place:
+  the existing `_InPlaceInstead` path with its verified copy, or
+  `_write_new_in_place` (O_EXCL, 0600, no symlink) when settings.json isn't
+  there yet. The copy (`_write_copy`) falls back to `_write_copy_directly`.
+  Logged once per start (`_note_private_refusal`), no path, no contents. The
+  folder is never written to, a symlink or foreign folder never followed. The
+  sweep only reads a folder that passes the same checks (no chmod, no mkdir).
+- **No TOCTOU (LOW).** The folder is opened once with
+  `O_DIRECTORY | O_NOFOLLOW`, checked with `fstat` on the descriptor, and the
+  temp is made (`O_EXCL | O_NOFOLLOW`, checked with `fstat`), identity-checked
+  (`_is_own`), renamed (`os.replace(name, settings, src_dir_fd=)`), removed,
+  judged (`_remove_judged`, `_judging_folder_fd`) and the clock probe
+  (`_folder_now`) made through it. `new_temp_path_for` now only names (the
+  seam `_new_temp` still returns a Path; one outside the private folder, as the
+  older tests stub it, keeps the path flow). The sweep lists with
+  `os.scandir(fd)` and removes with `os.unlink(name, dir_fd=)`
+  (`_sweep_private`, `_sweep_judging`). Every descriptor is closed in a
+  `finally`.
+- **The sweep only touches its own file's temps (LOW).** `_sweep_private` and
+  `_swept_unique_name` match `unique_temp_pid(name, base)` for the settings
+  file's name and its copy's name (`backup_path(path).name`), never
+  `is_secret_temp_name`. With no settings path nothing in the folders is swept.
+- **Codex test (weak).** `test_codex_denies_the_temp_folder_and_a_temp_made_after_its_profile`
+  builds the real launcher arguments first (`codex_session._codex_base_args`),
+  then makes the folder and a temp, then checks the built `filesystem` entry
+  for the folder is a prefix of the temp's path.
+- Older tests that patched `_replace` take `**dir_fd` now; the round 23 start
+  sweep test names its copy temp with this file's own copy name.
+
+### Flags (23c)
+- `_carry_metadata` (ACL and xattr copy) and `_darwin_clear_acl` still name
+  the temp by full path (libc `copyfile` / `acl_set_file` take paths). A swap
+  between the fd-checked create and the copy can at worst make that call fail
+  or touch a file at a name no other file has; no keys are written by it, and
+  `_is_own` re-checks the name by descriptor after it.
+- A first save with no private folder is not atomic (a kill mid-write can leave
+  a torn new settings.json); there is no old file to lose.

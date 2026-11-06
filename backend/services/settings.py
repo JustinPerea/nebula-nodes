@@ -5,6 +5,7 @@ import copy
 import errno
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -496,7 +497,10 @@ def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bo
     try:
         _write_atomically(path, data, before, locked=locked)
     except _InPlaceInstead:
-        _write_in_place(path, data, before, backup=backup)  # type: ignore[arg-type] - only raised with a file there
+        if before is None:  # the private temp folder can't be had and there is no file yet
+            _write_new_in_place(path, data)
+            return
+        _write_in_place(path, data, before, backup=backup)
 
 
 # Extended attributes every new file gets on its own, so a temp file needs
@@ -637,9 +641,11 @@ def _darwin_clear_acl(path: str) -> None:
             libc.acl_free(acl)
 
 
-def _remove_temp(temp: str) -> None:
+def _remove_temp(temp: str, dir_fd: int | None = None, where: str | None = None) -> None:
+    """Remove ``temp`` (a name in the folder open as ``dir_fd``, else a
+    path); ``where``: its full path, for the macOS ACL clear."""
     try:
-        os.unlink(temp)
+        os.unlink(temp, dir_fd=dir_fd)
         return
     except PermissionError:
         if _PLATFORM != "darwin":
@@ -647,8 +653,8 @@ def _remove_temp(temp: str) -> None:
     except OSError:
         return  # the folder turned read-only too: swept at the next start
     try:
-        _darwin_clear_acl(temp)
-        os.unlink(temp)
+        _darwin_clear_acl(where or temp)
+        os.unlink(temp, dir_fd=dir_fd)
     except OSError:
         pass
 
@@ -672,56 +678,80 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *,
     rename a stranger's file, and a failed save removes only its own file.
     The agents' deny lists name the pattern (agent_profiles.secret_deny_rules)."""
     mode = before.st_mode & 0o7777 if before is not None else 0o600  # a new file holds keys
-    for _attempt in range(TEMP_ATTEMPTS):
-        try:
-            temp = str(_new_temp(path))
-            fd = _open_temp(temp, locked=locked)  # 0600
-        except (SettingsBusy, SettingsUnwritable):
-            raise
-        except OSError as exc:
-            if before is not None and exc.errno in (*_NOT_ALLOWED_ERRNOS, errno.EEXIST):
-                raise _InPlaceInstead from exc
-            if exc.errno == errno.EEXIST:  # a folder at the temp file's name, and no file to write in place
-                raise SettingsUnwritable(exc.errno, "a folder is where the temp file goes", temp, "in_the_way") from exc
-            if exc.errno in _NOT_ALLOWED_ERRNOS:
-                raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
-            if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
-                raise SettingsUnwritable(exc.errno, "a folder on the way is a file", path.parent, "not_a_folder") from exc
-            raise
-        mine = _identity(fd)
-        done = False
-        stranger = False
-        try:
+    folder_fd: int | None = None  # the private temp folder, opened once and used by descriptor
+    try:
+        for _attempt in range(TEMP_ATTEMPTS):
+            temp = ""
             try:
-                _write_all(fd, data)
-                _sync(fd)
-                if before is not None:
-                    _carry_owner(fd, before)
-                os.fchmod(fd, mode)
-                stranger = not _is_own(fd, temp)
-                if not stranger and before is not None:
-                    _carry_metadata(path, temp)
-                    stranger = not _is_own(fd, temp)
-            finally:
-                os.close(fd)
-            if stranger:
-                continue  # the name is another file's now: ours was moved away; write again
-            _require_same_device(temp, path)
-            try:
-                _replace(temp, path)
-            except OSError as exc:
-                if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
-                    raise _InPlaceInstead from exc  # an ACL that denies delete, say
-                if exc.errno in _NOT_ALLOWED_ERRNOS:
-                    raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+                temp_path = _new_temp(path)
+                temp = str(temp_path)
+                key, dir_fd = temp, None
+                if temp_path.parent == temp_folder_for(path.parent):
+                    if folder_fd is None:
+                        folder_fd = _private_folder_or_in_place(path.parent)
+                    key, dir_fd = temp_path.name, folder_fd
+                fd = _open_temp(key, locked=locked) if dir_fd is None else _open_temp(key, locked=locked, dir_fd=dir_fd)
+            except (SettingsBusy, SettingsUnwritable):
                 raise
-            done = True
-        finally:
-            if not done and not stranger:
-                _remove_own(temp, mine)
-        _sync_folder(path.parent)
-        return
-    raise SettingsBusy("the save's temp file kept being taken", path)
+            except OSError as exc:
+                if before is not None and exc.errno in (*_NOT_ALLOWED_ERRNOS, errno.EEXIST):
+                    raise _InPlaceInstead from exc
+                if exc.errno == errno.EEXIST:  # a folder at the temp file's name, and no file to write in place
+                    raise SettingsUnwritable(exc.errno, "a folder is where the temp file goes", temp, "in_the_way") from exc
+                if exc.errno in _NOT_ALLOWED_ERRNOS:
+                    raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
+                if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
+                    raise SettingsUnwritable(exc.errno, "a folder on the way is a file", path.parent, "not_a_folder") from exc
+                raise
+            mine = _identity(fd)
+            done = False
+            stranger = False
+            try:
+                try:
+                    if not _fresh_regular(fd):
+                        raise _InPlaceInstead
+                    _write_all(fd, data)
+                    _sync(fd)
+                    if before is not None:
+                        _carry_owner(fd, before)
+                    os.fchmod(fd, mode)
+                    stranger = not _is_own(fd, key, dir_fd)
+                    if not stranger and before is not None:
+                        _carry_metadata(path, temp)
+                        stranger = not _is_own(fd, key, dir_fd)
+                finally:
+                    os.close(fd)
+                if stranger:
+                    continue  # the name is another file's now: ours was moved away; write again
+                _require_same_device(key, path, dir_fd)
+                try:
+                    if dir_fd is None:
+                        _replace(key, path)
+                    else:
+                        _replace(key, path, src_dir_fd=dir_fd)
+                except OSError as exc:
+                    if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
+                        raise _InPlaceInstead from exc  # an ACL that denies delete, say
+                    if exc.errno in _NOT_ALLOWED_ERRNOS:
+                        raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+                    raise
+                done = True
+            finally:
+                if not done and not stranger:
+                    _remove_own(key, mine, dir_fd, temp)
+            _sync_folder(path.parent)
+            return
+        raise SettingsBusy("the save's temp file kept being taken", path)
+    finally:
+        if folder_fd is not None:
+            os.close(folder_fd)
+
+
+def _fresh_regular(fd: int) -> bool:
+    """The file just made through ``fd`` is a plain file with one name,
+    this user's: what O_EXCL | O_NOFOLLOW gave, checked on the descriptor."""
+    info = os.fstat(fd)
+    return stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and _owned(info)
 
 
 # How many temp files one save writes before giving up (each one a stranger's
@@ -734,25 +764,26 @@ def _identity(fd: int) -> tuple[int, int]:
     return (info.st_dev, info.st_ino)
 
 
-def _is_own(fd: int, temp: str) -> bool:
-    """Whether ``temp`` still names the file open as ``fd``: device and
-    inode, ``os.fstat(fd)`` against ``os.lstat(temp)``."""
+def _is_own(fd: int, temp: str, dir_fd: int | None = None) -> bool:
+    """Whether ``temp`` (a name in the folder open as ``dir_fd``, else a
+    path) still names the file open as ``fd``: device and inode,
+    ``os.fstat(fd)`` against an lstat of the name."""
     try:
         have = os.fstat(fd)
-        at_name = os.lstat(temp)
+        at_name = os.lstat(temp, dir_fd=dir_fd)
     except OSError:
         return False
     return (have.st_dev, have.st_ino) == (at_name.st_dev, at_name.st_ino) and stat.S_ISREG(at_name.st_mode)
 
 
-def _remove_own(temp: str, mine: tuple[int, int]) -> None:
+def _remove_own(temp: str, mine: tuple[int, int], dir_fd: int | None = None, where: str | None = None) -> None:
     """Remove ``temp`` only while it is still this save's own file."""
     try:
-        info = os.lstat(temp)
+        info = os.lstat(temp, dir_fd=dir_fd)
     except OSError:
         return
     if (info.st_dev, info.st_ino) == mine:
-        _remove_temp(temp)
+        _remove_temp(temp, dir_fd, where)
 
 
 def temp_path_for(path: Path) -> Path:
@@ -778,43 +809,77 @@ def _refuse_temp_folder(folder: Path, why: str) -> SettingsUnwritable:
     return SettingsUnwritable(errno.EPERM, why, folder, "in_the_way")
 
 
-def _checked_temp_folder(folder: Path) -> Path:
-    """``folder`` as this user's own private folder (a real directory, never
-    a symlink, owned by this user, no group or other access), or the refusal
-    that fails the save: Nebula never writes keys into a folder someone else
-    made or pointed elsewhere."""
-    try:
-        info = os.lstat(folder)
-    except OSError as exc:
-        raise _refuse_temp_folder(folder, "the temp folder can't be checked") from exc
-    if not stat.S_ISDIR(info.st_mode):
-        raise _refuse_temp_folder(folder, "the temp folder is a symlink or a file, not a folder")
-    if not _owned(info) or info.st_mode & 0o077:
-        raise _refuse_temp_folder(folder, "the temp folder isn't this user's own private folder")
-    return folder
+# Directory file descriptors (round 23c of PR #203): the private folder is
+# opened once, checked with fstat on the open descriptor, and every temp file
+# is made, judged, renamed and removed through that descriptor, so a folder
+# swapped for a symlink after the check is never written to.
+_HAS_DIR_FD = hasattr(os, "O_DIRECTORY") and all(
+    call in os.supports_dir_fd for call in (os.open, os.rename, os.unlink, os.stat, os.mkdir))
+_DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+_private_refusal_logged = False
 
 
-def _own_temp_folder(parent: Path) -> Path:
-    """The private temp folder in ``parent``, made 0700 when it isn't there,
-    and checked either way (_checked_temp_folder). A folder that can't be
-    made raises the OSError (the caller's fallbacks); one that is there but
-    isn't ours refuses the save."""
-    folder = temp_folder_for(parent)
-    try:
-        os.mkdir(folder, 0o700)
-    except FileExistsError:
-        pass
-    return _checked_temp_folder(folder)
+def _note_private_refusal() -> None:
+    """Said once per start, with no path and no contents: the private temp
+    folder can't be had here, so saves write in place."""
+    global _private_refusal_logged
+    if _private_refusal_logged:
+        return
+    _private_refusal_logged = True
+    logging.getLogger(__name__).warning(
+        "settings: the private temp folder can't be made private here (a filesystem with fixed modes, or a "
+        "folder that isn't this user's own); saves write the file in place")
 
 
-def _safe_temp_folder(parent: Path) -> Path | None:
-    """The temp folder in ``parent`` for a sweep to read, only when it is a
-    real folder of this user's own: None when absent or not ours (a symlink
-    is never followed). Never makes it."""
-    try:
-        return _checked_temp_folder(temp_folder_for(parent))
-    except (SettingsUnwritable, OSError):
+def _open_private_folder(parent: Path, *, make: bool) -> int | None:
+    """The open descriptor of this user's private temp folder in ``parent``
+    (a real directory opened without following a symlink, owned by this
+    user, no group or other access, all read from the open descriptor), or
+    None when it can't be had that way: a symlink, a file, another owner's
+    folder, or one that stays open to others after a chmod 0700 (a
+    filesystem with fixed modes). It is never written to then, never
+    followed. ``make``: made 0700 when it isn't there, and a chmod 0700
+    tried when it is open to others (a sweep only reads). A folder that
+    can't be made raises the OSError (the caller's fallbacks)."""
+    if not _HAS_DIR_FD:
         return None
+    folder = temp_folder_for(parent)
+    if make:
+        try:
+            os.mkdir(folder, 0o700)
+        except FileExistsError:
+            pass
+    try:
+        fd = os.open(folder, _DIR_FLAGS)
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or not _owned(info):
+            raise OSError(errno.EPERM, "not this user's folder")
+        if info.st_mode & 0o077:
+            if not make:
+                raise OSError(errno.EPERM, "open to others")
+            try:
+                os.fchmod(fd, 0o700)
+            except OSError:
+                pass
+            if os.fstat(fd).st_mode & 0o077:
+                raise OSError(errno.EPERM, "can't be made private")
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def _private_folder_or_in_place(parent: Path) -> int:
+    """_open_private_folder for a save: the descriptor, or _InPlaceInstead
+    (logged once) when the folder can't be private."""
+    fd = _open_private_folder(parent, make=True)
+    if fd is None:
+        _note_private_refusal()
+        raise _InPlaceInstead
+    return fd
 
 
 def temp_folders() -> list[Path]:
@@ -830,12 +895,13 @@ def temp_folders() -> list[Path]:
     return list(dict.fromkeys(folders))
 
 
-def _require_same_device(temp: str, target: Path) -> None:
+def _require_same_device(temp: str, target: Path, dir_fd: int | None = None) -> None:
     """The temp file and the file it replaces must share a device, or the
     rename would be a copy (not atomic, and a half-written file visible):
     an error, never a cross-device copy."""
     try:
-        same = os.stat(os.path.dirname(temp) or ".").st_dev == os.stat(target.parent).st_dev
+        here = os.fstat(dir_fd).st_dev if dir_fd is not None else os.stat(os.path.dirname(temp) or ".").st_dev
+        same = here == os.stat(target.parent).st_dev
     except OSError as exc:
         raise _refuse_temp_folder(Path(temp).parent, "the temp folder can't be checked") from exc
     if not same:
@@ -845,11 +911,11 @@ def _require_same_device(temp: str, target: Path) -> None:
 
 def new_temp_path_for(path: Path) -> Path:
     """A temp file name for one save of ``path``: inside the private temp
-    folder beside it (_own_temp_folder), the shared name, then the process
-    id and a random token, so no two saves ever share one."""
+    folder beside it (temp_folder_for), the shared name, then the process
+    id and a random token, so no two saves ever share one. Only the name:
+    the folder is opened and checked by the save (_open_private_folder)."""
     shared = temp_path_for(path)
-    folder = _own_temp_folder(path.parent)
-    return folder / f"{shared.name}-{os.getpid()}-{secrets.token_hex(8)}"
+    return temp_folder_for(path.parent) / f"{shared.name}-{os.getpid()}-{secrets.token_hex(8)}"
 
 
 def _new_temp(path: Path) -> Path:
@@ -877,9 +943,10 @@ def is_secret_temp_name(name: str) -> bool:
     return bool(re.fullmatch(r"\..+\.nebula-tmp-\d+-[0-9a-f]{16}", name))
 
 
-def _open_temp(temp: str, *, locked: bool) -> int:
+def _open_temp(temp: str, *, locked: bool, dir_fd: int | None = None) -> int:
     """The temp file, new and this user's only (0600), never through a
-    symlink. A file already there (review 18 of PR #203, settings LOW-1):
+    symlink; ``temp`` is a name in the folder open as ``dir_fd`` (round 23c
+    of PR #203: nothing is reached by path then), else a path. A file already there (review 18 of PR #203, settings LOW-1):
 
     - with the lock (``locked``), a save cut short: removed, then made again;
     - without it (a filesystem that takes no flock), another save in flight
@@ -897,22 +964,22 @@ def _open_temp(temp: str, *, locked: bool) -> int:
     waited = False
     while True:
         try:
-            return os.open(temp, flags, 0o600)
+            return os.open(temp, flags, 0o600, dir_fd=dir_fd)
         except FileExistsError:
             pass
         try:
-            info = os.lstat(temp)
+            info = os.lstat(temp, dir_fd=dir_fd)
         except FileNotFoundError:
             continue  # gone since: make it now
         if stat.S_ISDIR(info.st_mode):
             raise FileExistsError(errno.EEXIST, "a folder is where the temp file goes", temp)
         if locked:
             try:
-                os.unlink(temp)
+                os.unlink(temp, dir_fd=dir_fd)
             except FileNotFoundError:
                 pass
-            return os.open(temp, flags, 0o600)
-        if _stale(info, _folder_now(Path(temp).parent)) and _remove_judged(temp, info):
+            return os.open(temp, flags, 0o600, dir_fd=dir_fd)
+        if _stale(info, _folder_now(Path(temp).parent, dir_fd)) and _remove_judged(temp, info, dir_fd):
             continue
         if not waited:
             waited = True
@@ -927,16 +994,18 @@ def _open_temp(temp: str, *, locked: bool) -> int:
 CLOCK_SLACK_SECONDS = 5.0
 
 
-def _folder_now(folder: Path) -> float:
+def _folder_now(folder: Path, dir_fd: int | None = None) -> float:
     """Now on ``folder``'s own clock (review 19 of PR #203, settings LOW-1):
     the time a file just made there is stamped with, which on a network
     mount is the server's, not this machine's. A probe under a temp file's
     name (agents can't read it; a start sweeps one a kill left), made and
     removed at once. This machine's clock when the folder takes no file."""
-    probe = folder / f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
+    probe = f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
+    if dir_fd is None:
+        probe = str(folder / probe)  # a path; with ``dir_fd``, a name in that folder
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
-        fd = os.open(probe, flags, 0o600)
+        fd = os.open(probe, flags, 0o600, dir_fd=dir_fd)
     except OSError:
         return time.time()
     try:
@@ -946,7 +1015,7 @@ def _folder_now(folder: Path) -> float:
     finally:
         os.close(fd)
         try:
-            os.unlink(probe)
+            os.unlink(probe, dir_fd=dir_fd)
         except OSError:
             pass
 
@@ -985,20 +1054,20 @@ def judging_folders() -> list[Path]:
     return list(dict.fromkeys(judging_folder_for(folder) for folder in folders))
 
 
-def _judging_folder_fd(parent: Path) -> int | None:
+def _judging_folder_fd(parent: Path, dir_fd: int | None = None) -> int | None:
     """The judging folder beside ``parent``'s temp files, open (made 0700
     when it isn't there), or None when it can't be had as this user's own
     folder: the temp then isn't taken, and the save waits (busy)."""
-    folder = judging_folder_for(parent)
+    folder = judging_folder_for(parent) if dir_fd is None else JUDGING_FOLDER  # a name in ``dir_fd``'s folder
     try:
-        os.mkdir(folder, 0o700)
+        os.mkdir(folder, 0o700, dir_fd=dir_fd)
     except FileExistsError:
         pass
     except OSError:
         return None
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
-        fd = os.open(folder, flags)
+        fd = os.open(folder, flags, dir_fd=dir_fd)
     except OSError:
         return None
     try:
@@ -1021,26 +1090,27 @@ def _same_temp(a: os.stat_result, b: os.stat_result) -> bool:
             == (b.st_dev, b.st_ino, b.st_mtime_ns, b.st_size))
 
 
-def _remove_judged(temp: str | Path, judged: os.stat_result) -> bool:
+def _remove_judged(temp: str | Path, judged: os.stat_result, dir_fd: int | None = None) -> bool:
     """Remove the temp file judged stale, only while it is still that file
     (review 19 of PR #203, settings LOW-1): moved to a name of its own in
     the judging folder beside it (out of agents' reach, on the same
     filesystem so the move is a rename), checked there by device, inode, modification time and size (_same_temp),
     then removed. Another file found there (a save that made its own since)
     is put back under the name, never over a newer one (link, which doesn't
-    replace). True when the judged file is gone."""
+    replace). True when the judged file is gone. ``dir_fd``: ``temp`` is a
+    name in that folder, and everything is done through it."""
     temp = str(temp)
-    fd = _judging_folder_fd(Path(os.path.dirname(temp) or "."))
+    fd = _judging_folder_fd(Path(os.path.dirname(temp) or "."), dir_fd)
     if fd is None:
         return False
     name = f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
     try:
         try:
-            os.rename(temp, name, dst_dir_fd=fd)
+            os.rename(temp, name, src_dir_fd=dir_fd, dst_dir_fd=fd)
         except FileNotFoundError:
             # Gone since, or the judging folder was swept away under the
             # move: only the first means the judged file is gone.
-            return not os.path.lexists(temp)
+            return not _lexists(temp, dir_fd)
         try:
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
         except FileNotFoundError:
@@ -1049,13 +1119,21 @@ def _remove_judged(temp: str | Path, judged: os.stat_result) -> bool:
             os.unlink(name, dir_fd=fd)
             return True
         try:
-            os.link(name, temp, src_dir_fd=fd, follow_symlinks=False)
+            os.link(name, temp, src_dir_fd=fd, dst_dir_fd=dir_fd, follow_symlinks=False)
         except OSError:
             return False  # another is at the name now: this one waits in the judging folder, swept once stale
         os.unlink(name, dir_fd=fd)
         return False
     finally:
         os.close(fd)
+
+
+def _lexists(name: str, dir_fd: int | None) -> bool:
+    try:
+        os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return True
 
 
 def _temp_waiting() -> None:
@@ -1174,6 +1252,34 @@ def _write_in_place(path: Path, data: bytes, before: os.stat_result, *, backup: 
         os.close(fd)
     if backup:
         _drop_backup(path)
+
+
+def _write_new_in_place(path: Path, data: bytes) -> None:
+    """A settings file that isn't there yet, made where it goes (0600,
+    never through a symlink, never over a file): the save when no private
+    temp folder can be had (_private_folder_or_in_place). A file there now
+    is another save's: decide again (_Changed)."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno in (errno.EEXIST, errno.ELOOP):
+            raise _Changed from exc
+        if exc.errno in _NOT_ALLOWED_ERRNOS:
+            raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
+        raise
+    try:
+        _write_all(fd, data)
+        _sync(fd)
+    except OSError:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(fd)
+    _sync_folder(path.parent)
 
 
 def _overwrite(fd: int, data: bytes, old: bytes) -> None:
@@ -1351,33 +1457,72 @@ def _folder_at(*paths: Path) -> Path | None:
 
 
 def _write_copy(target: Path, body: bytes) -> None:
-    """``body`` to ``target`` through a temp file of its own in the same
-    folder (new_temp_path_for), synced, renamed only while the name is still
-    that file (_is_own), then the folder synced."""
-    for _attempt in range(TEMP_ATTEMPTS):
-        temp = str(_new_temp(target))
-        fd = _open_temp(temp, locked=_holds_lock())
-        mine = _identity(fd)
-        done = False
-        stranger = False
-        try:
+    """``body`` to ``target`` through a temp file of its own in a private
+    folder in the same folder (new_temp_path_for; used by descriptor, like
+    a save's), synced, renamed only while the name is still that file
+    (_is_own), then the folder synced. Where the private folder can't be
+    had (_open_private_folder) the copy is written to ``target`` directly,
+    never into the temp folder."""
+    folder_fd: int | None = None
+    try:
+        for _attempt in range(TEMP_ATTEMPTS):
+            temp_path = _new_temp(target)
+            temp = str(temp_path)
+            key, dir_fd = temp, None
+            if temp_path.parent == temp_folder_for(target.parent):
+                if folder_fd is None:
+                    folder_fd = _open_private_folder(target.parent, make=True)
+                    if folder_fd is None:
+                        _note_private_refusal()
+                        _write_copy_directly(target, body)
+                        return
+                key, dir_fd = temp_path.name, folder_fd
+            fd = _open_temp(key, locked=_holds_lock()) if dir_fd is None else _open_temp(key, locked=_holds_lock(), dir_fd=dir_fd)
+            mine = _identity(fd)
+            done = False
+            stranger = False
             try:
-                _write_all(fd, body)
-                _sync(fd)
-                stranger = not _is_own(fd, temp)
+                try:
+                    _write_all(fd, body)
+                    _sync(fd)
+                    stranger = not _is_own(fd, key, dir_fd)
+                finally:
+                    os.close(fd)
+                if stranger:
+                    continue
+                _require_same_device(key, target, dir_fd)
+                if dir_fd is None:
+                    os.replace(key, target)
+                else:
+                    os.replace(key, target, src_dir_fd=dir_fd)
+                done = True
             finally:
-                os.close(fd)
-            if stranger:
-                continue
-            _require_same_device(temp, target)
-            os.replace(temp, target)
-            done = True
-        finally:
-            if not done and not stranger:
-                _remove_own(temp, mine)
-        _sync_folder(target.parent)
-        return
-    raise SettingsBusy("the copy's temp file kept being taken", target)
+                if not done and not stranger:
+                    _remove_own(key, mine, dir_fd, temp)
+            _sync_folder(target.parent)
+            return
+        raise SettingsBusy("the copy's temp file kept being taken", target)
+    finally:
+        if folder_fd is not None:
+            os.close(folder_fd)
+
+
+def _write_copy_directly(target: Path, body: bytes) -> None:
+    """The copy written at its own name (0600, a name made new, never
+    through a symlink): the way a folder with fixed modes takes it. Not
+    atomic; the copy is read back and checked after (_keep_backup)."""
+    try:
+        os.unlink(target)
+    except FileNotFoundError:
+        pass
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(target, flags, 0o600)
+    try:
+        _write_all(fd, body)
+        _sync(fd)
+    finally:
+        os.close(fd)
+    _sync_folder(target.parent)
 
 
 class _NotOurs(OSError):
@@ -1859,19 +2004,13 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
                            if _TEMP_NAME.fullmatch(entry.name) or _swept_unique_name(entry, path)]
         except OSError:
             continue
-    # Each save's temp now lives in a private folder (TEMP_FOLDER): every
-    # file there is a save's own, and the folder is only read when it is
-    # this user's real folder, never through a symlink.
-    for parent in dict.fromkeys([*([path.parent] if path is not None else []), settings_copy_folder()]):
-        inside = _safe_temp_folder(parent)
-        if inside is None:
-            continue
-        folders.append(inside)
-        try:
-            candidates += [entry for entry in inside.iterdir()
-                           if _TEMP_NAME.fullmatch(entry.name) or is_secret_temp_name(entry.name)]
-        except OSError:
-            continue
+    # Each save's temp lives in a private folder (TEMP_FOLDER), swept by
+    # descriptor (_sweep_private) and only for this settings file's own temp
+    # names and its copy's, never another file's (round 23c of PR #203).
+    clocks: dict[Path, float] = {}
+    if path is not None:
+        for parent, base in dict.fromkeys([(path.parent, path.name), (settings_copy_folder(), backup_path(path).name)]):
+            removed += _sweep_private(parent, base, now, locked=locked)
     if path is not None:
         candidates += [temp_path_for(path), temp_path_for(backup_path(path))]
     # What a judge left in a judging folder (a kill part way): its own
@@ -1884,7 +2023,6 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
             continue
     # Without the lock, only files stale on their folder's own clock (or
     # ``now``, a test's), each removed only while it is the file judged.
-    clocks: dict[Path, float] = {}
     for entry in dict.fromkeys(candidates):
         try:
             info = entry.lstat()
@@ -1925,10 +2063,91 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
 
 def _swept_unique_name(entry: Path, path: Path | None) -> bool:
     """Whether ``entry`` is a save's own temp name (new_temp_path_for) for
-    the settings file or for a copy of it."""
-    if path is not None and unique_temp_pid(entry.name, path.name) is not None:
-        return True
-    return re.fullmatch(r"\.settings-backup-[0-9a-f]{16}\.json\.nebula-tmp-\d+-[0-9a-f]{16}", entry.name) is not None
+    this settings file or for its copy, and no other file's (round 23c)."""
+    if path is None:
+        return False
+    return (unique_temp_pid(entry.name, path.name) is not None
+            or unique_temp_pid(entry.name, backup_path(path).name) is not None)
+
+
+def _sweep_private(parent: Path, base: str, now: float | None, *, locked: bool) -> list[Path]:
+    """The temp files of the file called ``base`` in the private folder in
+    ``parent``, listed, judged and removed through the folder's open
+    descriptor (round 23c of PR #203): the folder is only read when it is
+    this user's own private folder, never through a symlink, and only names
+    of ``base``'s own temp files are touched (a.json's sweep leaves b.json's
+    in-flight temp alone). With the save's lock every one is a leftover;
+    without it, one stale and orphaned, removed only while it is the file
+    judged. Its judging folder (a kill part way through a judgement) is
+    cleared the same way."""
+    removed: list[Path] = []
+    dir_fd = _open_private_folder(parent, make=False)
+    if dir_fd is None:
+        return removed
+    folder = temp_folder_for(parent)
+    try:
+        clock: float | None = now
+
+        def folder_now() -> float:
+            nonlocal clock
+            if clock is None:
+                clock = _folder_now(folder, dir_fd)
+            return clock
+
+        try:
+            names = [entry.name for entry in os.scandir(dir_fd) if unique_temp_pid(entry.name, base) is not None]
+        except OSError:
+            names = []
+        for name in names:
+            try:
+                info = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not _owned(info):
+                    continue
+                if locked:
+                    os.unlink(name, dir_fd=dir_fd)
+                elif not _orphaned(folder / name, info, folder_now()) or not _remove_judged(name, info, dir_fd):
+                    continue
+                removed.append(folder / name)
+            except OSError:
+                continue
+        _sweep_judging(dir_fd, locked=locked, clock=folder_now)
+    finally:
+        os.close(dir_fd)
+    return removed
+
+
+def _sweep_judging(dir_fd: int, *, locked: bool, clock: Callable[[], float]) -> None:
+    """What a judge left in the judging folder inside the private folder
+    open as ``dir_fd``: its own names only, removed once stale (at once with
+    the lock), then the judging folder if empty."""
+    try:
+        fd = os.open(JUDGING_FOLDER, _DIR_FLAGS, dir_fd=dir_fd)
+    except OSError:
+        return
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or not _owned(info):
+            return
+        for entry in os.scandir(fd):
+            if not _TEMP_NAME.fullmatch(entry.name):
+                continue
+            try:
+                found = os.stat(entry.name, dir_fd=fd, follow_symlinks=False)
+                if not stat.S_ISREG(found.st_mode) or found.st_nlink != 1 or not _owned(found):
+                    continue
+                if not locked and not _stale(found, clock()):
+                    continue
+                os.unlink(entry.name, dir_fd=fd)
+            except OSError:
+                continue
+    except OSError:
+        return
+    finally:
+        os.close(fd)
+    try:
+        os.rmdir(JUDGING_FOLDER, dir_fd=dir_fd)
+    except OSError:
+        pass
 
 
 def _writer_pid(name: str) -> int | None:

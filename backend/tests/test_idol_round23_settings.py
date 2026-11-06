@@ -180,7 +180,7 @@ def test_the_start_sweep_removes_old_unique_temps_and_leaves_a_fresh_one(keyed, 
     gone = _unique(keyed, pid=dead, token="aaaaaaaaaaaaaaaa")
     fresh = _unique(keyed, pid=dead, token="bbbbbbbbbbbbbbbb")
     alive = _unique(keyed, pid=os.getpid(), token="cccccccccccccccc")
-    copy_gone = settings.settings_copy_folder() / f".settings-backup-0123456789abcdef.json.nebula-tmp-{dead}-dddddddddddddddd"
+    copy_gone = settings.settings_copy_folder() / f".{settings.backup_path(keyed).name}.nebula-tmp-{dead}-dddddddddddddddd"  # this file's own copy
     settings.settings_copy_folder().mkdir(parents=True, exist_ok=True)
     mine = [gone, fresh, alive, copy_gone]
     for temp in mine:

@@ -400,7 +400,7 @@ def test_a_desktop_key_save_works_with_a_read_only_settings_file(home_file, monk
 def test_a_save_cut_short_after_the_temp_file_leaves_no_copy(home_file, monkeypatch, raised):
     before = home_file.read_bytes()
 
-    def cut(_src, _dst):
+    def cut(_src, _dst, **_dir_fd):
         raise raised("cut short")
 
     monkeypatch.setattr(settings, "_replace", cut)
@@ -424,9 +424,9 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
         seen.append(("written", stat.S_IMODE(os.fstat(fd).st_mode), b"fal-secret" in os.pread(fd, 1 << 16, 0)))
         real_owner(fd, before)
 
-    def renamed(src, dst):
-        seen.append(("renamed", stat.S_IMODE(os.stat(src).st_mode)))
-        real_replace(src, dst)
+    def renamed(src, dst, **dir_fd):  # round 23c: the temp is a name in the folder open as src_dir_fd
+        seen.append(("renamed", stat.S_IMODE(os.stat(src, dir_fd=dir_fd.get("src_dir_fd")).st_mode)))
+        real_replace(src, dst, **dir_fd)
 
     monkeypatch.setattr(settings, "_carry_owner", written)
     monkeypatch.setattr(settings, "_replace", renamed)
