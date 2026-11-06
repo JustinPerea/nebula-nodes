@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
-import type { AgentAnchorNames, AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
+import type { AgentAnchorNames, AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceLeaveEvent, AgentPresenceRetargetEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
 import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
@@ -75,6 +75,13 @@ interface AgentPresenceState {
   /** The live cursors the backend replays to this tab on connect: they
    *  replace what the tab had, so a reconnect never doubles a cursor. */
   replay: (cursors: readonly AgentPresenceEvent[], now?: number) => void;
+  /** The backend dropped these cursors (their board was deleted): they leave
+   *  now, not at the 120 s prune, so a new session that takes the number
+   *  never draws beside the old one. */
+  leave: (cursors: AgentPresenceLeaveEvent['cursors']) => void;
+  /** The backend moved these cursors to a board (their image was removed
+   *  elsewhere): they go there now. Not a new event: no say, no new seq. */
+  retarget: (cursors: AgentPresenceRetargetEvent['cursors']) => void;
   prune: (now?: number) => void;
   /** The server refused this tab's hello (a demoted tab): its numbered
    *  cursors are person-only and go, as any cursor leaves; the agents' form
@@ -243,6 +250,26 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
     }
     return agents ? { agents } : state;
   }),
+  leave: (cursors) => set((state) => {
+    const kept = { ...state.agents };
+    for (const c of Array.isArray(cursors) ? cursors : []) {
+      if (!c || typeof c.agentId !== 'string') continue;
+      const key = typeof c.key === 'string' ? `${c.agentId}#${c.key}` : c.agentId;
+      delete kept[key];
+    }
+    return Object.keys(kept).length === Object.keys(state.agents).length ? state : { agents: kept };
+  }),
+  retarget: (cursors) => set((state) => {
+    let agents: Record<string, AgentCursor> | null = null;
+    for (const c of Array.isArray(cursors) ? cursors : []) {
+      if (!c || typeof c.agentId !== 'string' || !isAnchor(c.target)) continue;
+      const key = typeof c.key === 'string' ? `${c.agentId}#${c.key}` : c.agentId;
+      const cursor: AgentCursor | undefined = (agents ?? state.agents)[key];
+      if (!cursor) continue;
+      agents = { ...(agents ?? state.agents), [key]: { ...cursor, target: c.target, anchorNames: cleanAnchorNames(c.anchorNames, c.target) } };
+    }
+    return agents ? { agents } : state;
+  }),
   replay: (cursors, now = Date.now()) => set(() => {
     // The backend's live set, as of this tab's hello. Cursors drawn from the
     // agents' form before the hello (no session) are the same cursors under
@@ -289,6 +316,8 @@ attachPresenceSink((event, receivedAt) => {
   if (event.type === 'agentPresence') store.apply(event, receivedAt);
   else if (event.type === 'agentPresenceReplay') store.replay(event.cursors, receivedAt);
   else if (event.type === 'agentPresenceArrival') store.arrive(event.cursors);
+  else if (event.type === 'agentPresenceLeave') store.leave(event.cursors);
+  else if (event.type === 'agentPresenceRetarget') store.retarget(event.cursors);
   else if (event.type === 'socketDemoted') store.demote();
   else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) store.forgetGraph();
 });

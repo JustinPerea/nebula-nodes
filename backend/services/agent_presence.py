@@ -343,7 +343,8 @@ def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, in
         if str(image.get("id")) == text:
             return text, index + 1
     digits = text[1:] if text.startswith("#") else text
-    if digits.isdigit() and 1 <= int(digits) <= len(images):
+    # ASCII digits only: "²" and "①" pass str.isdigit() but int() refuses them.
+    if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(images):
         number = int(digits)
         return str(images[number - 1].get("id")), number
     where = _quoted(str(board.get("name") or board.get("id")))
@@ -1003,32 +1004,42 @@ class AgentPresence:
                         if (slot.anchor or {}).get("nodeId") == node_id:
                             slot.anchor = dict(fallback)
 
-    def forget_board(self, board_id: str) -> int:
+    def forget_board(self, board_id: str, gone: list[dict[str, Any]] | None = None) -> int:
         """Cursors on a deleted board, or on one of its images, leave, as a
         cursor on a node with no place to fall back to does (forget_node):
         the agent's cursor and every session's, their numbers free. Returns
-        how many left."""
+        how many left. ``gone`` collects each one as the open tabs name it
+        (``{"agentId", "key"}``, key None for an agent's plain cursor), so
+        the caller can tell them: a tab holds its cursors until told."""
         left = 0
         for key, value in list(self._agents.items()):
             ids = surface_ids(value["target"])
             if ids is not None and ids[0] == board_id:
                 del self._agents[key]
                 left += 1
-        for slots in self._slots.values():
+                if gone is not None:
+                    gone.append({"agentId": key, "key": None})
+        for agent_id, slots in self._slots.items():
             for raw, slot in list(slots.items()):
                 ids = surface_ids(slot.target) if slot.target is not None else None
                 if ids is not None and ids[0] == board_id:
                     del slots[raw]
+                    if gone is not None:
+                        gone.append({"agentId": agent_id, "key": slot.key})
         return left
 
     def forget_image(self, board_id: str, image_ids: Collection[str], *,
-                     holder: tuple[str, str | None] | None = None) -> int:
+                     holder: tuple[str, str | None] | None = None,
+                     fell: list[dict[str, Any]] | None = None) -> int:
         """Cursors on removed images fall back to their board (the image
         part gone with the image), the removal made elsewhere (the person's,
         or another agent's). ``holder`` is (agent id, session) of the agent
         that made the removal: its own cursor is on the image it just
         removed and holds that spot, never flying to the board because its
-        own target went (GM - Design, PR #233 r4). Returns how many fell back."""
+        own target went (GM - Design, PR #233 r4). Returns how many fell back.
+        ``fell`` collects each as the open tabs name it (``{"agentId", "key",
+        "target", "anchorNames"?}``, key None for an agent's plain cursor),
+        so the caller can move them there too."""
         gone = {str(image_id) for image_id in image_ids}
         board = {"surface": "moodboard", "itemId": board_id}
 
@@ -1049,6 +1060,9 @@ class AgentPresence:
                 if names:
                     value["anchorNames"] = names
                 moved += 1
+                if fell is not None:
+                    fell.append({"agentId": key, "key": None, "target": dict(board),
+                                 **({"anchorNames": names} if names else {})})
         for agent_id, slots in self._slots.items():
             for raw, slot in list(slots.items()):
                 if not on_gone(slot.target) or (holder is not None and agent_id == holder[0] and raw == held_raw):
@@ -1063,6 +1077,9 @@ class AgentPresence:
                     if names:
                         slot.event["anchorNames"] = names
                 moved += 1
+                if fell is not None:
+                    fell.append({"agentId": agent_id, "key": slot.key, "target": dict(board),
+                                 **({"anchorNames": names} if slot.event is not None and names else {})})
         return moved
 
     def forget_graph(self) -> None:

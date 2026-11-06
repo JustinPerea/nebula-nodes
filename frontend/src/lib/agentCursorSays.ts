@@ -99,7 +99,8 @@ export function defaultSay(action: AgentCursorAction, { node, from = null, pulle
  *  backend's words too (cursor_actions.PART_LABELS). Phase 3, GM - Design
  *  r4 item 4. */
 export const AGENT_SURFACE_PART_LABELS = {
-  name: 'Name', direction: 'Direction', avoid: 'Avoid', colors: 'Colors', note: 'Note', weight: 'Weight',
+  name: 'Name', direction: 'Direction', avoid: 'Avoid', colors: 'Colors', 'colors-out': 'Colors to keep out',
+  note: 'Note', weight: 'Weight',
 } as const;
 
 /** What a surface anchor's line can name. `board` is the board's name,
@@ -133,6 +134,7 @@ export function surfaceSay(action: AgentCursorAction, { board, image = null, has
     case 'avoid': return compose(['Changing ', ' on ', ''], [names.avoid, board]);
     case 'name': return compose(['Renaming ', ''], [board]);
     case 'colors': return compose(['Changing ', ' on ', ''], [names.colors, board]);
+    case 'colors-out': return compose(['Changing ', ' on ', ''], [names['colors-out'], board]);
     case 'note': return `Writing a note on ${onImage}`;
     case 'weight': return `Changing \u201c${names.weight}\u201d on ${onImage}`;
     default: return compose(['Changing ', ''], [board]);

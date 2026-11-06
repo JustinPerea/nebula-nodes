@@ -6562,7 +6562,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {target?: {nodeId, handle?} | {x, y} | {surface: "moodboard",
     board: <id or exact name>, image?: <id, N or #N>, part?: name, direction,
-    avoid or colors on a board; note or weight on an image}, from?: a node
+    avoid, colors or colors-out (the keep-out colors) on a board; note or weight on an image}, from?: a node
     or a spot (never a moodboard),
     action?: one of agent_presence.ACTIONS (move, look, think, type, click,
     drag, run, propose, wait, error), say?: text}. The caller must identify
@@ -21619,7 +21619,24 @@ def _board_point(board: dict | None, image_id: str | None = None, part: str | No
     return {"target": target, "action": action, "names": names}
 
 
-def _forget_removed_images(after: dict, changes: dict) -> None:
+async def _tell_tabs(event: dict[str, Any], cursors: list[dict[str, Any]]) -> None:
+    """Person tabs hear which cursors the backend just dropped or moved
+    (agentPresenceLeave, agentPresenceRetarget): a tab holds a cursor until
+    told, so without this a deleted board's cursors stay drawn for the 120 s
+    prune and a new session can take the same number beside them. Never
+    fails the write."""
+    if not cursors:
+        return
+    try:
+        await manager.broadcast_browser({**event, "cursors": cursors[:_CURSOR_TELL_MAX]})
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("telling the tabs about cursors failed")
+
+
+_CURSOR_TELL_MAX = 64  # bounded like the live set: 8 sessions an agent over the agents seen
+
+
+async def _forget_removed_images(after: dict, changes: dict) -> None:
     """A board write took images off the board: cursors on them fall back to
     the board, except the cursor of the agent that made the write, which
     holds the spot it clicked (agent_presence.forget_image). Never fails the
@@ -21631,9 +21648,14 @@ def _forget_removed_images(after: dict, changes: dict) -> None:
         headers = current_request_headers()
         identity = identify_agent(headers)
         holder = (identity.id, presence_session(headers)) if identity is not None else None
-        agent_presence.forget_image(str(after.get("id")), removed, holder=holder)
+        fell: list[dict[str, Any]] = []
+        agent_presence.forget_image(str(after.get("id")), removed, holder=holder, fell=fell)
     except Exception:  # noqa: BLE001 - decoration must not break a saved write
         logging.getLogger("nebula.presence").exception("forgetting removed images failed")
+        return
+    # The tabs move the same cursors to the board, rather than hold them on a
+    # tile that is gone until the 120 s prune.
+    await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
 
 
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
@@ -21704,7 +21726,7 @@ async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposa
     changes = diff(before, moodboard)
     _journal_board_change(before, moodboard, changes, proposal_id=proposal_id)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
-    _forget_removed_images(moodboard, changes)
+    await _forget_removed_images(moodboard, changes)
     await _say_agent_board_change(before, moodboard, changes)
     # The answer is the board plus `undo`, the `restore` that takes this
     # write back (the shape `/edits` answers with), made from the same diff:
@@ -21745,7 +21767,7 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
         undo = result.undo if len(body.ops) <= UNDO_BROADCAST_LIMIT else None
         await _broadcast_stored_asset("moodboard", board, edit={"touched": result.touched, "undo": undo})
         undo_batch = all(isinstance(op, dict) and op.get("op") == "restore" for op in body.ops)
-        _forget_removed_images(board, result.changes)
+        await _forget_removed_images(board, result.changes)
         await _say_agent_board_change(before, board, result.changes, say=say, undo=undo_batch)
     return {"board": _moodboard_out(board), "version": board.get("version"), "applied": result.applied,
             "undo": result.undo}
@@ -22042,7 +22064,9 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     # Cursors on the deleted board leave (the caller's too): there is no
     # place left to point at.
-    agent_presence.forget_board(moodboard_id)
+    gone: list[dict[str, Any]] = []
+    agent_presence.forget_board(moodboard_id, gone)
+    await _tell_tabs({"type": "agentPresenceLeave"}, gone)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
 

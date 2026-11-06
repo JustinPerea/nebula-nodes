@@ -113,7 +113,7 @@ describe('the part labels', () => {
   it('are the backend’s words (cursor_actions.PART_LABELS)', () => {
     const python = readFileSync(resolve(__dirname, '../../backend/services/cursor_actions.py'), 'utf8');
     const block = /PART_LABELS = \{([^}]*)\}/.exec(python)?.[1] ?? '';
-    const backend = Object.fromEntries([...block.matchAll(/"(\w+)":\s*"(\w+)"/g)].map((m) => [m[1], m[2]]));
+    const backend = Object.fromEntries([...block.matchAll(/"([\w-]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
     expect(AGENT_SURFACE_PART_LABELS).toEqual(backend);
   });
 
@@ -131,7 +131,10 @@ describe('the part labels', () => {
     expect(studio('MoodboardListView.tsx')).toContain(`<span>${AGENT_SURFACE_PART_LABELS.weight} {`);
     const brief = studio('MoodboardBrief.tsx');
     expect(brief).toContain(`label="${AGENT_SURFACE_PART_LABELS.colors} that must appear"`);
-    expect(brief).toContain(`label="${AGENT_SURFACE_PART_LABELS.colors} to keep out"`);
+    expect(brief).toContain(`label="${AGENT_SURFACE_PART_LABELS['colors-out']}"`);
+    // Each row is its own control: the keep-out row has its own anchor (review 1, C6).
+    expect(brief).toMatch(/label="Colors that must appear"\s+anchor=\{agentAnchor\(board, null, 'colors'\)\}/);
+    expect(brief).toMatch(/label="Colors to keep out"\s+anchor=\{agentAnchor\(board, null, 'colors-out'\)\}/);
   });
 
   it('Note is the Studio’s "Image note" field', () => {

@@ -47,6 +47,10 @@ export class CursorHandoff {
   epoch = 0;
 
   private entries = new Map<string, HandoffEntry>();
+  /** Which layer last drew each cursor (it set its view's first spot): the
+   *  layer that had it holds it until the other has claimed it. */
+  private claims = new Map<string, CursorLayer>();
+  private claimListeners = new Set<() => void>();
   private watching: (() => void) | null = null;
   /** The clock the entries are dated by (a test's own). */
   now: () => number;
@@ -85,14 +89,34 @@ export class CursorHandoff {
     return entry;
   }
 
+  /** `layer` has `key`'s cursor on screen now: it resolved and drew it. */
+  claim(key: string, layer: CursorLayer): void {
+    if (this.claims.get(key) === layer) return;
+    this.claims.set(key, layer);
+    for (const listener of [...this.claimListeners]) listener();
+  }
+
+  /** The layer that drew `key` last, if any. */
+  claimedBy(key: string): CursorLayer | undefined {
+    return this.claims.get(key);
+  }
+
+  /** Called whenever a layer claims a cursor. Returns its unsubscribe. */
+  onClaim(listener: () => void): () => void {
+    this.claimListeners.add(listener);
+    return () => { this.claimListeners.delete(listener); };
+  }
+
   /** `key`'s cursor is gone for good. */
   forget(key: string): void {
     this.entries.delete(key);
+    this.claims.delete(key);
   }
 
   /** Tests: forget everything and stop watching. */
   reset(): void {
     this.entries.clear();
+    this.claims.clear();
     this.epoch = 0;
     this.watching?.();
     this.watching = null;

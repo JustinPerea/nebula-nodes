@@ -316,7 +316,7 @@ export function BriefFields({
         />
         <PinnedColorRow
           label="Colors to keep out"
-          anchor={agentAnchor(board, null, 'colors')}
+          anchor={agentAnchor(board, null, 'colors-out')}
           colors={pinnedColors.exclude}
           other={pinnedColors.include}
           onChange={(exclude) => onChange({ pinnedColors: { ...pinnedColors, exclude } })}

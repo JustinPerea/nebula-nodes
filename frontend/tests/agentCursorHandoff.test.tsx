@@ -193,8 +193,10 @@ describe('canvas to the panel: one cursor travels (PR #233 slice 6)', () => {
     expect(rest).toEqual(N1);
     const registry = toClient(N1);
     send(event(onTile()));
-    expect(canvasCursor()).toBeNull(); // the canvas layer no longer draws it
+    // The canvas layer holds its last spot until the screen layer has drawn it (review 1, M5).
+    expect(tipOf(canvasCursor()!)).toEqual(N1);
     step(1);
+    expect(canvasCursor()).toBeNull(); // the screen layer has it: the canvas layer lets go
     const first = tipOf(screenCursor()!)!;
     // One frame in: within a frame's travel of where the canvas drew it.
     expect(dist(first, registry)).toBeLessThan(25);
@@ -206,10 +208,12 @@ describe('canvas to the panel: one cursor travels (PR #233 slice 6)', () => {
   it('draws it once, with no exit fade on the layer it left', () => {
     restOnCanvasThenSendToTile();
     send(event(onTile()));
-    expect(allCursors()).toHaveLength(1);
+    // Held where it was, not faded; the screen layer's has not drawn yet (no place on it).
+    expect(allCursors().filter((el) => el.style.transform !== '')).toEqual([canvasCursor()]);
     expect(document.querySelector('[data-leaving="true"]')).toBeNull();
     step(1);
     expect(allCursors()).toHaveLength(1);
+    expect(screenCursor()).not.toBeNull();
   });
 
   it('never steps further in a frame than a flight of that length can: no jump', () => {
@@ -253,10 +257,12 @@ describe('canvas to the panel: one cursor travels (PR #233 slice 6)', () => {
 
   it('converts at the viewport of that frame: a zoom between the last frame and the hand-off is safe', () => {
     restOnCanvasThenSendToTile();
-    const registry = toClient(N1); // at the zoom it was drawn at
     send(event(onTile()));
     pane.transform = [10, 20, 4]; // the person zoomed in the same frame
     notifyStore();
+    // The held canvas cursor rides the zoom with its node, and the screen
+    // layer starts from where it is drawn then, at that viewport.
+    const registry = toClient(N1);
     step(1);
     expect(dist(tipOf(screenCursor()!)!, registry)).toBeLessThan(25);
   });
@@ -271,8 +277,9 @@ describe('the panel to the canvas', () => {
     expect(tipOf(screenCursor()!)).toEqual(aim(TILE));
     const registry = toFlow(aim(TILE));
     send(event());
-    expect(screenCursor()).toBeNull();
+    expect(tipOf(screenCursor()!)).toEqual(aim(TILE)); // held until the canvas has drawn it
     step(1);
+    expect(screenCursor()).toBeNull();
     const first = tipOf(canvasCursor()!)!;
     expect(dist(first, registry)).toBeLessThan(25 / pane.transform[2] + 1);
     expect(dist(first, N1)).toBeGreaterThan(150);

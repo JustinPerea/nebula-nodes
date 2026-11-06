@@ -59,7 +59,7 @@ def test_parts_go_with_their_item_and_their_label_is_the_studios():
         assert target == {"surface": "moodboard", "itemId": "b1/i3", "part": part}
         assert names == {"board": "Desert light", "image": 3, "part": PART_LABELS[part]}
     assert PART_LABELS == {"name": "Name", "direction": "Direction", "avoid": "Avoid", "colors": "Colors",
-                           "note": "Note", "weight": "Weight"}
+                           "colors-out": "Colors to keep out", "note": "Note", "weight": "Weight"}
 
 
 def test_the_anchors_own_item_id_round_trips():
@@ -95,11 +95,11 @@ def test_parse_target_takes_the_surface_form_beside_the_other_two():
      "Board “Desert light” has no image “0”. Use its number (1-12) or its id."),
     ({"surface": "moodboard", "board": "b1", "image": True}, "target.image must be an image's number or id"),
     ({"surface": "moodboard", "board": "b1", "part": "tint"},
-     "“tint” isn’t a part of a board. Use name, direction, avoid or colors."),
+     "“tint” isn’t a part of a board. Use name, direction, avoid, colors or colors-out."),
     ({"surface": "moodboard", "board": "b1", "image": 1, "part": "colors"},
      "“colors” isn’t a part of an image. Use note or weight."),
     ({"surface": "moodboard", "board": "b1", "part": "note"},
-     "“note” isn’t a part of a board. Use name, direction, avoid or colors."),
+     "“note” isn’t a part of a board. Use name, direction, avoid, colors or colors-out."),
     ({"surface": "moodboard", "board": "b1", "nodeId": "n1"},
      "target is a moodboard or a node or a spot, not more than one"),
     ({"surface": "moodboard", "itemId": "b1/i1/x"}, "target.itemId is invalid"),
@@ -327,7 +327,7 @@ def test_the_route_refuses_in_the_house_voice(api):
         ({"surface": "characters", "board": "x"}, "“characters” isn’t a surface Nebula knows. Use moodboard."),
         ({"surface": "moodboard", "board": "Nope"}, "No moodboard “Nope” here. The boards here: “Dusk dunes”."),
         ({"surface": "moodboard", "board": "Dusk dunes", "part": "weight"},
-         "“weight” isn’t a part of a board. Use name, direction, avoid or colors."),
+         "“weight” isn’t a part of a board. Use name, direction, avoid, colors or colors-out."),
     ]:
         refused = _point(client, target)
         assert refused.status_code == 422 and refused.json()["detail"] == said, refused.text

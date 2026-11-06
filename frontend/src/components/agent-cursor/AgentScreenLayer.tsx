@@ -86,6 +86,7 @@ export function AgentScreenLayer({ canvasMounted, env }: {
     return screenSpace({
       resolver: new AnchorResolver(resolverEnv),
       measure: resolverEnv.measure,
+      watch: resolverEnv.watch,
       pane: () => context.pane,
       canvasMounted: () => context.canvasMounted,
       gone: removedImage,

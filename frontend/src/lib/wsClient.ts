@@ -27,7 +27,8 @@ export type ErrorCategory =
  * or an item on a surface beside the canvas (Phase 3, "Anywhere"): the
  * Moodboard panel and Studio, one surface. `itemId` is `<board>` or
  * `<board>/<image>` (ids only, whatever the agent called the item); `part`
- * is a control: name, direction, avoid or colors on a board, note or weight
+ * is a control: name, direction, avoid, colors or colors-out (the keep-out
+ * colors) on a board, note or weight
  * on an image. The DOM carries the same string as `data-agent-anchor`
  * (lib/agentAnchors.ts). */
 export type AgentCursorAnchor =
@@ -119,6 +120,21 @@ export interface AgentPresenceEvent {
 export interface AgentPresenceArrivalEvent {
   type: 'agentPresenceArrival';
   cursors: { agentId: string; key: string; ordinal: number; since: number }[];
+}
+
+/** Person tabs only: the backend dropped these cursors (their board was
+ *  deleted), so they leave here too, and their numbers are free. `key` is the
+ *  session's key, null for an agent's plain cursor. */
+export interface AgentPresenceLeaveEvent {
+  type: 'agentPresenceLeave';
+  cursors: { agentId: string; key: string | null }[];
+}
+
+/** Person tabs only: the backend moved these cursors to a board (the image
+ *  they were on was removed elsewhere), so they go there here too. */
+export interface AgentPresenceRetargetEvent {
+  type: 'agentPresenceRetarget';
+  cursors: { agentId: string; key: string | null; target: AgentCursorAnchor; anchorNames?: AgentAnchorNames }[];
 }
 
 /** Person tabs only, right after a verified hello: every live cursor, so a
@@ -451,6 +467,8 @@ export type ExecutionEvent = (
   | AgentPresenceEvent
   | AgentPresenceReplayEvent
   | AgentPresenceArrivalEvent
+  | AgentPresenceLeaveEvent
+  | AgentPresenceRetargetEvent
   | SocketDemotedEvent
   | AgentStatusEvent
   | AgentRunEvent

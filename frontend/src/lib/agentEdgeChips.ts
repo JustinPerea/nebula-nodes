@@ -96,6 +96,13 @@ interface Group {
 function leaves(from: Point, to: Point, box: Box): { point: Point; side: Side } {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) {
+    // No direction to leave by (the tip is exactly where it points): the nearest
+    // face, the same every time (ties go left, right, top, bottom).
+    const side = (['left', 'right', 'top', 'bottom'] as Side[])
+      .reduce((best, face) => (faceDistance(from, box, face) < faceDistance(from, box, best) ? face : best));
+    return { point: vertical(side) ? { x: faceLine(box, side), y: from.y } : { x: from.x, y: faceLine(box, side) }, side };
+  }
   const tx = dx > 0 ? (box.left + box.width - from.x) / dx : dx < 0 ? (box.left - from.x) / dx : Infinity;
   const ty = dy > 0 ? (box.top + box.height - from.y) / dy : dy < 0 ? (box.top - from.y) / dy : Infinity;
   const t = Math.min(tx, ty);
@@ -137,9 +144,29 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
     found.members.push(member);
   };
 
+  /** The pane's edge as a group of chips: the line they stand off and the stretch along it. */
+  const viewGroup = (side: Side): Omit<Group, 'members'> => ({
+    id: 'view', side, outside: false,
+    line: side === 'left' ? view.left + insetPx
+      : side === 'right' ? view.left + view.width - insetPx
+        : side === 'top' ? view.top + insetPx : view.top + view.height - insetPx,
+    along: vertical(side) ? [view.top + insetPx, view.top + view.height - insetPx]
+      : [view.left + insetPx, view.left + view.width - insetPx],
+  });
+  /** Agents with no chip of their own (no room for one, or no free spot on their edge): they are counted on
+   *  the nearest edge that has room, after the chips are down. */
+  const spilled: { tip: Point; n: number }[] = [];
+
   for (const cursor of cursors) {
     const size = sizes.chip(cursor);
+    // A pane too narrow or short to hold a chip inside its inset gets none: it would stand off screen, still
+    // focusable. Its agent is counted instead.
+    const holds = view.width - 2 * insetPx >= size.width && view.height - 2 * insetPx >= size.height;
     if (!inside(cursor.tip, view)) {
+      if (!holds) {
+        spilled.push({ tip: cursor.tip, n: 1 });
+        continue;
+      }
       // At the pane's edge: where the line from the middle to the tip crosses the inset rect,
       // the chip's whole box inside it.
       const halfW = Math.max(0, view.width / 2 - insetPx - size.width / 2);
@@ -151,17 +178,16 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
       const side: Side = sx <= sy ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'bottom' : 'top');
       const s = Math.min(sx, sy, 1);
       const at = { x: centre.x + dx * s, y: centre.y + dy * s };
-      const line = side === 'left' ? view.left + insetPx
-        : side === 'right' ? view.left + view.width - insetPx
-          : side === 'top' ? view.top + insetPx : view.top + view.height - insetPx;
-      add({ id: 'view', side, outside: false, line, along: vertical(side)
-        ? [view.top + insetPx, view.top + view.height - insetPx] : [view.left + insetPx, view.left + view.width - insetPx] },
-      { cursor, size, natural: vertical(side) ? at.y : at.x });
+      add(viewGroup(side), { cursor, size, natural: vertical(side) ? at.y : at.x });
       continue;
     }
     const under = obstacles.filter((o) => inside(cursor.tip, o.box))
       .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0];
     if (!under) continue;
+    if (!holds) {
+      spilled.push({ tip: cursor.tip, n: 1 });
+      continue;
+    }
     // Just outside the panel's edge that faces the pane's middle: the box grown by the inset.
     // Where that leaves no room inside the pane, the next nearest face does.
     const grown = { left: under.box.left - insetPx, top: under.box.top - insetPx,
@@ -188,17 +214,9 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
   const placed: Box[] = [];
   const chips: PlacedChip[] = [];
   const counts: PlacedCount[] = [];
-  // The pane's edges first (top, bottom, left, right), then each panel's: a stack
-  // sees what is already down, so no two ever overlap.
-  const rank = (group: Group) => (group.id === 'view' ? 0 : 1) * 4 + ['top', 'bottom', 'left', 'right'].indexOf(group.side);
-  for (const group of [...order].sort((a, b) => rank(a) - rank(b))) {
+  /** The geometry of one edge's stack: where a box of a size goes at a spot and depth, and the nearest free spot. */
+  const lay = (group: Group) => {
     const { side } = group;
-    const shown = [...group.members].sort((a, b) => b.cursor.activeAt - a.cursor.activeAt || (a.cursor.key < b.cursor.key ? -1 : 1))
-      .slice(0, maxPerEdge);
-    const keep = new Set(shown.map((m) => m.cursor.key));
-    let hidden = group.members.length - shown.length;
-    const stack = group.members.filter((m) => keep.has(m.cursor.key)).sort((a, b) => a.natural - b.natural
-      || (a.cursor.key < b.cursor.key ? -1 : 1));
     const [lo, hi] = group.along;
     // Which way a chip's depth grows: inward from the pane's edge, away from a panel's face.
     const dir = (group.outside ? -1 : 1) * (side === 'left' || side === 'top' ? 1 : -1);
@@ -259,6 +277,21 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
       }
       return null;
     };
+    return { boxAt, extent, settle };
+  };
+  // The pane's edges first (top, bottom, left, right), then each panel's: a stack
+  // sees what is already down, so no two ever overlap.
+  const rank = (group: Group) => (group.id === 'view' ? 0 : 1) * 4 + ['top', 'bottom', 'left', 'right'].indexOf(group.side);
+  for (const group of [...order].sort((a, b) => rank(a) - rank(b))) {
+    const { side } = group;
+    const { boxAt, extent, settle } = lay(group);
+    const [lo] = group.along;
+    const shown = [...group.members].sort((a, b) => b.cursor.activeAt - a.cursor.activeAt || (a.cursor.key < b.cursor.key ? -1 : 1))
+      .slice(0, maxPerEdge);
+    const keep = new Set(shown.map((m) => m.cursor.key));
+    let hidden = group.members.length - shown.length;
+    const stack = group.members.filter((m) => keep.has(m.cursor.key)).sort((a, b) => a.natural - b.natural
+      || (a.cursor.key < b.cursor.key ? -1 : 1));
     let last = -Infinity;
     for (const member of stack) {
       const spot = settle(member.size, member.natural);
@@ -271,14 +304,42 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
         angle: Math.atan2(member.cursor.tip.y - c.y, member.cursor.tip.x - c.x) });
     }
     if (hidden > 0) {
-      // The count follows the last chip on the same line; with no room it is left out.
+      // The count follows the last chip on the same line; with no room there (chrome
+      // holds the whole edge) it goes to the nearest edge that has some.
       const size = sizes.count;
       const spot = settle(size, last === -Infinity ? stack[0]?.natural ?? lo : last + gapPx + extent(size) / 2);
       if (spot !== null) {
         const box = boxAt(size, spot.pos, spot.depth);
         placed.push(box);
         counts.push({ id: `${group.id}:${side}`, count: hidden, box, side });
+      } else {
+        spilled.push({ tip: group.members[0].cursor.tip, n: hidden });
       }
+    }
+  }
+  // Counted where there is room: the pane's edge nearest the agent, then the next nearest.
+  // A pane too small to hold a count inside its inset holds none.
+  const holdsCount = view.width - 2 * insetPx >= sizes.count.width && view.height - 2 * insetPx >= sizes.count.height;
+  for (const { tip, n } of holdsCount ? spilled : []) {
+    const near = (side: Side): number => (side === 'left' ? Math.abs(tip.x - view.left)
+      : side === 'right' ? Math.abs(view.left + view.width - tip.x)
+        : side === 'top' ? Math.abs(tip.y - view.top) : Math.abs(view.top + view.height - tip.y));
+    const sides = (['top', 'bottom', 'left', 'right'] as Side[]).sort((a, b) => near(a) - near(b));
+    for (const side of sides) {
+      const joined = counts.find((count) => count.id === `view:${side}`);
+      if (joined) {
+        joined.count += n;
+        break;
+      }
+      const group = { ...viewGroup(side), members: [] };
+      const { boxAt, settle } = lay(group);
+      const spot = settle(sizes.count, vertical(side) ? Math.min(Math.max(tip.y, group.along[0]), group.along[1])
+        : Math.min(Math.max(tip.x, group.along[0]), group.along[1]));
+      if (spot === null) continue;
+      const box = boxAt(sizes.count, spot.pos, spot.depth);
+      placed.push(box);
+      counts.push({ id: `view:${side}`, count: n, box, side });
+      break;
     }
   }
   return { chips, counts };

@@ -115,7 +115,7 @@ def describe_move(board: Mapping[str, Any] | None, to: str) -> str:
 #   weight ........................ image:weight, click
 #   note .......................... image:note, type
 #   name, direction, avoid ........ board:name, :direction, :avoid, type
-#   pins (a toggle) ............... board:colors, click
+#   pins (a toggle) ............... board:colors, click (the keep-out row: board:colors-out)
 #   analyze ....................... board:colors, look
 #   keep the brief ................ board:direction, click
 #   delete ........................ no target; the board's cursors leave
@@ -154,6 +154,20 @@ def board_anchor(board: Mapping[str, Any] | None, image_id: str | None = None, p
     return target, names
 
 
+def _only_keep_out_changed(changes: Mapping[str, Any]) -> bool:
+    """A pin write that changed the "keep out" list and not the "must appear"
+    one: the cursor goes to that row, as the Studio draws them apart."""
+    for item in changes.get("slices") or []:
+        if item.get("part") != "fields":
+            continue
+        before = (item.get("before") or {}).get("pinnedColors")
+        after = (item.get("expect") or {}).get("pinnedColors")
+        if not isinstance(before, Mapping) or not isinstance(after, Mapping):
+            return False
+        return before.get("include") == after.get("include") and before.get("exclude") != after.get("exclude")
+    return False
+
+
 def write_point(changes: Mapping[str, Any]) -> tuple[str | None, str | None, str]:
     """Where a board change (``moodboard_edits.diff``'s) puts the cursor:
     (image id or None, part or None, action). One image touched is that
@@ -166,6 +180,8 @@ def write_point(changes: Mapping[str, Any]) -> tuple[str | None, str | None, str
     image_kinds = [kind for kind in _IMAGE_KINDS if kinds.get(kind)]
     if fields and not (image_kinds or frames):
         parts = {FIELD_PARTS[key] for key in fields if key in FIELD_PARTS}
+        if parts == {("colors", "click")} and _only_keep_out_changed(changes):
+            parts = {("colors-out", "click")}
         if len(fields) == 1 and len(parts) == 1:
             part, action = next(iter(parts))
             return None, part, action

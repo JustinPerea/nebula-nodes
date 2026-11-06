@@ -233,7 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     point_p.add_argument("--image", default=None, metavar="N",
                          help="With --moodboard: one of its images, by number (12 or #12) or id")
     point_p.add_argument("--part", default=None, metavar="PART",
-                         help="With --moodboard: a control: name, direction, avoid or colors on a board; note "
+                         help="With --moodboard: a control: name, direction, avoid, colors or colors-out (the keep-out colors) on a board; note "
                               "or weight on an --image")
     point_p.add_argument("--say", default="",
                          help="Short line shown next to your cursor: your own action only "

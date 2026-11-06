@@ -48,6 +48,7 @@ import {
   type CursorMotion,
 } from '../../lib/agentCursorPlanner';
 import { cursorHandoff } from '../../lib/agentCursorHandoff';
+import type { CursorLayer } from '../../lib/agentCursorLayerOf';
 import { parkChevron, PARK_CHEVRON_PX } from '../../lib/agentCursorPark';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
@@ -1119,7 +1120,7 @@ const COUNT_FILL = '#52525b';
 /** The count cursor's list: up to this many names, then how many more. */
 const COUNT_LIST_NAMES = 3;
 
-function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, leaving = false, nameTaken = false, onExited }: {
+function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, leaving = false, held = false, nameTaken = false, onExited }: {
   /** The surface it is drawn on. */
   space: CursorSpace;
   cursor: AgentCursor;
@@ -1130,6 +1131,9 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   fontVersion?: number;
   /** Removed from the store: it fades out where it is, then onExited forgets it. */
   leaving?: boolean;
+  /** Handed to the other layer, which has not drawn it yet: this layer holds
+   *  the last spot (GM - Design 6) until that one claims it. */
+  held?: boolean;
   /** While leaving, a live cursor shows the same name: the pill hides at once. */
   nameTaken?: boolean;
   onExited?: (key: string) => void;
@@ -1569,7 +1573,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       el.style.opacity = String(Math.min(1, Math.max(0, m.opacity.x)));
       if (pointerRef.current) pointerRef.current.style.transform = m.lean.x === 0 ? '' : `rotate(${m.lean.x}deg)`;
       // The edge park's chevron: toward the item from where the tip is drawn now.
-      const toward = leaving ? null : space.edgeToward?.(cursor.target) ?? null;
+      const toward = leaving ? null : space.edgeToward?.(cursor.target, cursor.key) ?? null;
       if ((toward !== null) !== parkedRef.current) {
         parkedRef.current = toward !== null;
         setParked(toward !== null);
@@ -1751,6 +1755,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
           apply();
           lastTime.current = null;
           if (field.exitingCounts.delete(cursor.key)) field.wakeAll();
+          cursorHandoff.forget(cursor.key);
           exited.current?.(cursor.key);
           return;
         }
@@ -1759,8 +1764,8 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         request();
         return;
       }
-      const resolved = space.resolve(cursor.target);
-      const start = dragging && cursor.from ? space.resolve(cursor.from) : null;
+      const resolved = space.resolve(cursor.target, cursor.key);
+      const start = dragging && cursor.from ? space.resolve(cursor.from, `${cursor.key}>from`) : null;
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
         if ('nodeId' in cursor.target) field.nodeGone(cursor.target.nodeId);
@@ -1786,7 +1791,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const nodeAt = nodeState?.at ?? null;
       const nodeDragged = nodeState?.dragging ?? false;
       field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged,
-        space.chainPoint(cursor.target) ?? resolved);
+        space.chainPoint(cursor.target, cursor.key) ?? resolved);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -1834,6 +1839,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
           motion.current = createMotion(target, opacityTarget());
           field.motions.set(cursor.key, motion.current);
         }
+        cursorHandoff.claim(cursor.key, space.layer);
         const m = motion.current;
         // Back mid-exit: it is put on its spot, and the fade reverses on the
         // same spring from where it is.
@@ -1875,6 +1881,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
           ? createMotion(target, opacityTarget())
           : handed ?? createMotion(entranceStart(goal, start ? { from: start, to: target } : null, z), 0);
         field.motions.set(cursor.key, motion.current);
+        cursorHandoff.claim(cursor.key, space.layer);
         // A hand-off isn't a first sighting: its name doesn't flash again.
         firstSightAt.current = handed ? performance.now() - AGENT_CURSOR_NAME_FIRST_SIGHT_MS : performance.now();
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
@@ -1905,7 +1912,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       // one the cursor is still flying to, is not (space.carried).
       const dragged = (goal === target && anchor !== undefined && 'nodeId' in cursor.target
         && (Boolean(anchor.dragging) || placedByPerson(cursor.target.nodeId, anchor.position)))
-        || (goal === target && !m.plan && !m.landing && space.carried?.(cursor.target) === true);
+        || (goal === target && !m.plan && !m.landing && space.carried?.(cursor.target, cursor.key) === true);
       const restAt = onPixels(goal);
       const restOffset = { x: restAt.x - goal.x, y: restAt.y - goal.y };
       const restGate = field.restGate(cursor.key, z, time);
@@ -2058,13 +2065,21 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   useEffect(() => {
     if (leaving) return undefined;
     field.claim(cursor.key);
-    return () => field.release(cursor.key);
-  }, [field, cursor.key, leaving]);
+    return () => {
+      field.release(cursor.key);
+      space.forget?.(cursor.key);
+    };
+  }, [field, space, cursor.key, leaving]);
   // An unmounted cursor stops for good: another cursor leaving in the same
   // commit wakes it (forget), and a tick run after its cleanup would stamp
   // its old spot again, a ghost that pushes the next cursor there aside
   // (live, after a backend restart's empty replay).
   useLayoutEffect(() => () => writeHandoff.current(true), []);
+  // Held for the other layer: its entry for the cursor is written as it goes
+  // to hold, so the receiving layer's first frame still carries it on.
+  useLayoutEffect(() => {
+    if (held) writeHandoff.current(true);
+  }, [held]);
   useEffect(() => () => {
     wake.current = () => {};
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -2232,6 +2247,8 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
 
 const PRUNE_INTERVAL_MS = 5_000;
 
+const otherLayer = (layer: CursorLayer): CursorLayer => (layer === 'canvas' ? 'screen' : 'canvas');
+
 /** What a layer's own marks (the screen layer's item outlines) read of the
  *  column field: which cursors have landed, and when one first does. */
 export interface CursorLandings {
@@ -2284,18 +2301,38 @@ export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass =
   // drops (a prune, a number taken over, a demoted tab, a refused hello, a
   // forgotten token) stays drawn for one fade, from its last event. Under
   // reduced motion it goes at once. The same key coming back ends its exit.
-  const [shown, setShown] = useState(() => ({ agents, leaving: {} as Record<string, AgentCursor> }));
+  const [shown, setShown] = useState(() => ({
+    agents, leaving: {} as Record<string, AgentCursor>, held: {} as Record<string, AgentCursor>,
+  }));
   let leaving = shown.leaving;
+  let held = shown.held;
   if (shown.agents !== agents) {
     const next: Record<string, AgentCursor> = {};
+    const nextHeld: Record<string, AgentCursor> = {};
     const fade = !prefersReducedMotion();
-    // Handed to the other layer (still in the store): no exit.
+    // Handed to the other layer (still in the store): no exit fade, but only
+    // once that layer has drawn it. Until then this one holds the last spot
+    // (GM - Design 6): a layer that can't resolve it yet (the anchor isn't
+    // there, its chunk hasn't loaded) would otherwise leave nothing on screen.
     const handedOver = (key: string) => key in everyone;
+    const claimed = (key: string) => cursorHandoff.claimedBy(key) === otherLayer(space.layer);
     for (const [key, cursor] of Object.entries(shown.leaving)) if (!(key in agents) && !handedOver(key)) next[key] = cursor;
-    for (const [key, cursor] of Object.entries(shown.agents)) if (fade && !(key in agents) && !handedOver(key)) next[key] = cursor;
+    for (const [key, cursor] of Object.entries({ ...shown.agents, ...shown.held })) {
+      if (key in agents) continue;
+      if (handedOver(key)) {
+        if (!claimed(key)) nextHeld[key] = cursor;
+      } else if (fade) next[key] = cursor;
+    }
     leaving = next;
-    setShown({ agents, leaving: next });
+    held = nextHeld;
+    setShown({ agents, leaving: next, held: nextHeld });
   }
+  // The other layer drew a cursor this one holds: it is theirs now.
+  useEffect(() => cursorHandoff.onClaim(() => setShown((state) => {
+    const rest = Object.fromEntries(Object.entries(state.held)
+      .filter(([key]) => cursorHandoff.claimedBy(key) !== otherLayer(space.layer)));
+    return Object.keys(rest).length === Object.keys(state.held).length ? state : { ...state, held: rest };
+  })), [space.layer]);
   const onExited = useCallback((key: string) => setShown((state) => {
     if (!(key in state.leaving)) return state;
     const rest = { ...state.leaving };
@@ -2360,18 +2397,20 @@ export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass =
 
   const cursors = Object.values(agents);
   const exiting = Object.values(leaving);
-  if (cursors.length === 0 && exiting.length === 0) return null;
+  const holding = Object.values(held);
+  if (cursors.length === 0 && exiting.length === 0 && holding.length === 0) return null;
   const byKey = new Map(cursors.map((cursor) => [cursor.key, cursor]));
   const names = new Set(cursors.map((cursor) => cursorLabel(cursor.name, cursor.session)));
   // One list, so a cursor coming back mid-exit keeps its view. Leaving
   // cursors paint under every live one; the most recently active paints on top.
   const views = [
-    ...paintOrder(exiting).map((key) => ({ cursor: leaving[key], leaving: true })),
-    ...paintOrder(cursors).map((key) => ({ cursor: byKey.get(key)!, leaving: false })),
+    ...paintOrder(exiting).map((key) => ({ cursor: leaving[key], leaving: true, held: false })),
+    ...paintOrder(holding).map((key) => ({ cursor: held[key], leaving: false, held: true })),
+    ...paintOrder(cursors).map((key) => ({ cursor: byKey.get(key)!, leaving: false, held: false })),
   ];
   const layer = (
     <div className={layerClass} style={cursorSpringVars()}>
-      {views.map(({ cursor, leaving: out }) => (
+      {views.map(({ cursor, leaving: out, held: holds }) => (
         <AgentCursorView
           key={cursor.key}
           space={space}
@@ -2381,6 +2420,7 @@ export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass =
           field={field}
           fontVersion={fontVersion}
           leaving={out}
+          held={holds}
           nameTaken={out && names.has(cursorLabel(cursor.name, cursor.session))}
           onExited={onExited}
         />

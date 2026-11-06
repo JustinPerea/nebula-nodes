@@ -45,6 +45,11 @@ export interface ResolverEnv {
    *  worked out from the card's position and the camera, the pane's box as
    *  its clip, and the pane as its element. null: not such a card. */
   culled?(board: string, image: string): { box: Box; clip: Box; element: Element } | null;
+  /** The elements whose resize or move can move `element` or change what it
+   *  shows through: its ancestors up to the outermost one that clips it (the
+   *  dock's scroll area and what grows inside it). The space watches them,
+   *  so a resting cursor re-reads when only the item's place changed. */
+  watch?(element: Element): readonly Element[];
 }
 
 export type LauncherStep = 'board' | 'surface' | 'canvas';
@@ -268,6 +273,16 @@ export function domEnv(): ResolverEnv {
         if (!best || distance < best.distance) best = { box, distance };
       }
       return best ? { box: best.box, clip, element: pane } : null;
+    },
+    watch: (element) => {
+      const chain: Element[] = [];
+      let outer = 0;
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        chain.push(parent);
+        const style = getComputedStyle(parent);
+        if (style.overflowX !== 'visible' || style.overflowY !== 'visible') outer = chain.length;
+      }
+      return chain.slice(0, outer);
     },
     clip: (element) => {
       let clip = viewport();

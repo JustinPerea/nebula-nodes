@@ -8,7 +8,7 @@ import { cursorLabel } from '../../lib/agentCursorLabel';
 import { cursorSpringVars } from '../../lib/agentCursorSpringVars';
 import { chipName, countName, planChips, type ChipCursor, type ChipPlan } from '../../lib/agentEdgeChips';
 import { readChipView } from '../../lib/agentChipChrome';
-import { panToTarget } from '../../lib/agentChipPress';
+import { leaveChipFocus, panToTarget } from '../../lib/agentChipPress';
 import '../../styles/agentEdgeChips.css';
 
 /**
@@ -34,6 +34,7 @@ export function CanvasEdgeChips({ agents, space }: { agents: Record<string, Agen
   const agentsRef = useRef(agents);
   const stopPan = useRef<(() => void) | null>(null);
   const planned = useRef('');
+  const watching = Object.keys(agents).length > 0;
 
   // The pane's box is read when the view or the window moves, not on each recheck:
   // the recheck is for panels, which stand over the pane and don't change it.
@@ -72,6 +73,8 @@ export function CanvasEdgeChips({ agents, space }: { agents: Record<string, Agen
     const signature = JSON.stringify(next);
     if (signature === planned.current) return;
     planned.current = signature;
+    // A focused chip that is about to go: focus moves to the canvas first.
+    leaveChipFocus(new Set(next.chips.map((chip) => chip.key)));
     setPlan(next);
   }, [measure]);
 
@@ -88,14 +91,16 @@ export function CanvasEdgeChips({ agents, space }: { agents: Record<string, Agen
     const unsubscribe = space.subscribe(schedule);
     const resize = () => { resized.current = true; schedule(); };
     window.addEventListener('resize', resize);
-    const timer = window.setInterval(() => update(false), RECHECK_MS);
+    // The recheck is for a panel that opened or moved, so it runs only while
+    // there is a canvas cursor it could matter to: no cursors, no timer.
+    const timer = watching ? window.setInterval(() => update(false), RECHECK_MS) : null;
     return () => {
       unsubscribe();
       window.removeEventListener('resize', resize);
-      window.clearInterval(timer);
+      if (timer !== null) window.clearInterval(timer);
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [space, update]);
+  }, [space, update, watching]);
   useEffect(() => () => stopPan.current?.(), []);
 
   const press = useCallback((key: string) => {
@@ -118,6 +123,7 @@ export function CanvasEdgeChips({ agents, space }: { agents: Record<string, Agen
           className="agent-edge-chip"
           data-side={chip.side}
           aria-label={chipName(chip.label)}
+          data-chip-key={chip.key}
           onClick={() => press(chip.key)}
           style={{ left: chip.box.left, top: chip.box.top, width: chip.box.width, height: chip.box.height,
             ['--agent-color' as string]: chip.color, ['--chip-angle' as string]: `${chip.angle}rad` }}

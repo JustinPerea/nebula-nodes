@@ -91,6 +91,9 @@
   pointer-events: none;
 }
 
+/* The fade-in is `backwards`, not `both`: an animation holds its end value
+   over the inline opacity, so a dot that kept filling forwards could never
+   show the idle dim (0.45, set inline from JS). tests/agentLauncherDotsCss.test.ts. */
 .agent-launcher-dot {
   position: absolute;
   width: 6px;
@@ -101,7 +104,7 @@
   box-shadow: 0 0 0 1.5px var(--agent-badge-ring);
   pointer-events: none;
   transition: opacity var(--agent-cursor-soft);
-  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+  animation: agent-item-outline-in var(--agent-cursor-soft) backwards;
 }
 
 .agent-launcher-dot__more {
@@ -118,7 +121,7 @@
   white-space: nowrap;
   pointer-events: none;
   transition: opacity var(--agent-cursor-soft);
-  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+  animation: agent-item-outline-in var(--agent-cursor-soft) backwards;
 }
 
 /* One that left fades out where it was (the soft spring), then JS removes it. */

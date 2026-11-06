@@ -46,10 +46,15 @@ export interface CursorSpace {
   viewKey(): unknown;
   /** Called on any change to the nodes or the view. Returns its unsubscribe. */
   subscribe(listener: () => void): () => void;
-  /** Where an anchor sits in this space now, or null if it isn't drawn. */
-  resolve(anchor: AgentCursorAnchor): Point | null;
+  /** Where an anchor sits in this space now, or null if it isn't drawn.
+   *  `owner` is the cursor asking (its key): what a screen space remembers
+   *  of the last read is kept per cursor, so each rides or flies on its own. */
+  resolve(anchor: AgentCursorAnchor, owner?: string): Point | null;
+  /** The cursor `owner` is gone (exited, or its view unmounted): drop what
+   *  was remembered for it. Absent on a space that remembers nothing. */
+  forget?(owner: string): void;
   /** The point a cursor counts as for its target chain (see chainPoint). */
-  chainPoint(anchor: AgentCursorAnchor): Point | null;
+  chainPoint(anchor: AgentCursorAnchor, owner?: string): Point | null;
   nodeInfo(id: string): CursorNodeInfo | undefined;
   labels(): CursorLabels;
   /** A client-pixel point (inside `box`, the pane's rect) in this space, or
@@ -64,11 +69,11 @@ export interface CursorSpace {
    *  its spot is the item's own (a scroll, a resize), not a new place to fly
    *  to: a resting cursor rides it. Absent on a surface with no such moves
    *  (the canvas has the person's drags instead: `nodeInfo`). */
-  carried?(anchor: AgentCursorAnchor): boolean;
+  carried?(anchor: AgentCursorAnchor, owner?: string): boolean;
   /** Where the item is, in client px, when the cursor is parked at the edge
    *  of its panel because the item is scrolled or panned out of view (the
    *  chevron points there); null otherwise. Absent on a surface with none. */
-  edgeToward?(anchor: AgentCursorAnchor): Point | null;
+  edgeToward?(anchor: AgentCursorAnchor, owner?: string): Point | null;
   /** The drag wire's path from a port to the free end; absent on a surface
    *  with no wires. */
   wire?(from: Point, to: Point): string;
@@ -138,6 +143,8 @@ export interface ScreenSpaceOptions {
   resolver: AnchorResolver;
   /** An element's box in client px (the resolver's own measure). */
   measure: (element: Element) => Box | null;
+  /** Which elements, besides a resolved item, can move it (ResolverEnv.watch). */
+  watch?: (element: Element) => readonly Element[];
   /** The fixed box the cursors are drawn in (it fills the window). */
   pane: () => Element | null;
   /** The canvas is on screen (a canvas anchor is then the canvas layer's). */
@@ -154,15 +161,17 @@ export interface ScreenSpaceOptions {
 
 /** What `domEvents` hands back for the space to say which elements to watch. */
 export interface ResizeObserverLike {
-  /** The elements whose size to watch now (the last ones resolved). */
+  /** The elements whose size to watch now (what the live cursors resolved to, and what can move it). */
   watch(elements: readonly Element[]): void;
 }
 
 export interface ScreenSpace extends CursorSpace {
   /** Wake every cursor now (the canvas mounted or went, a panel opened). */
   refresh(): void;
-  /** The last resolution of `anchor`, if it was resolved. */
-  resolution(anchor: AgentCursorAnchor): Resolution | undefined;
+  /** The last resolution of `anchor` (by `owner`, else by any cursor), if it was resolved. */
+  resolution(anchor: AgentCursorAnchor, owner?: string): Resolution | undefined;
+  /** How many reads are remembered (tests: it stays one per live cursor). */
+  held(): number;
   /** The exact item's box as it is visible (inside its clip), for the item
    *  outline; null while the item isn't drawn, is clipped out, or the cursor
    *  parks at a launcher or an edge. */
@@ -211,6 +220,10 @@ export function domEvents(notify: () => void, observe: { current: ResizeObserver
   };
   window.addEventListener('resize', schedule);
   document.addEventListener('scroll', schedule, { capture: true, passive: true });
+  // A panel that slides or resizes with a transition moves its items with no
+  // size change an observer would see: it settles on one of these.
+  document.addEventListener('transitionend', schedule, { capture: true, passive: true });
+  document.addEventListener('animationend', schedule, { capture: true, passive: true });
   // The Board view's camera: a card panned out of its pane has no element to observe.
   const unwatchBoard = watchBoardView(schedule);
   return () => {
@@ -221,6 +234,8 @@ export function domEvents(notify: () => void, observe: { current: ResizeObserver
     observe.current = null;
     window.removeEventListener('resize', schedule);
     document.removeEventListener('scroll', schedule, { capture: true });
+    document.removeEventListener('transitionend', schedule, { capture: true });
+    document.removeEventListener('animationend', schedule, { capture: true });
   };
 }
 
@@ -233,9 +248,14 @@ export function domEvents(notify: () => void, observe: { current: ResizeObserver
  * runs its loop then) and once on each wake while it rests. A resting cursor
  * rides its item's own move (`carried`) and flies only to a different element.
  */
-export function screenSpace({ resolver, measure, pane, canvasMounted, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
+export function screenSpace({ resolver, measure, watch, pane, canvasMounted, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
   const listeners = new Set<() => void>();
-  const last = new Map<string, { resolution: Resolution; point: Point | null; same: boolean }>();
+  // What each cursor last read, by the cursor (its key, and `${key}>from` for
+  // a drag's start): the second of two cursors resting on one item compares
+  // with its own last read, not the other's. One entry a cursor, so it never
+  // outgrows the live cursors; an entry whose element left the page is dropped.
+  interface Read { anchor: string; resolution: Resolution; point: Point | null; same: boolean; watched: readonly Element[] }
+  const last = new Map<string, Read>();
   const observe: { current: ResizeObserverLike | null } = { current: null };
   let teardown: (() => void) | null = null;
 
@@ -243,8 +263,26 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
     resolver.invalidate();
     for (const listener of [...listeners]) listener();
   };
-  const watching = () => observe.current?.watch([...last.values()].flatMap(({ resolution: r }) =>
-    ('element' in r ? [r.element] : [])));
+  const elementOf = (resolution: Resolution): Element | null => ('element' in resolution ? resolution.element : null);
+  const watching = () => {
+    const live = new Set<Element>();
+    for (const [key, read] of [...last]) {
+      const element = elementOf(read.resolution);
+      if (element === null) continue;
+      if (!element.isConnected) {
+        last.delete(key); // a card that was replaced or a panel that closed: nothing to hold or watch
+        continue;
+      }
+      live.add(element);
+      for (const around of read.watched) if (around.isConnected) live.add(around);
+    }
+    observe.current?.watch([...live]);
+  };
+  const slot = (anchor: AgentCursorAnchor, owner?: string): string => owner ?? anchorKey(anchor);
+  const read = (anchor: AgentCursorAnchor, owner?: string): Read | undefined => {
+    const found = last.get(slot(anchor, owner));
+    return found && found.anchor === anchorKey(anchor) ? found : undefined;
+  };
 
   const locate = (anchor: AgentCursorAnchor): Resolution =>
     resolver.resolve(anchor, { canvasMounted: canvasMounted(), gone: gone(anchor) });
@@ -267,18 +305,28 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
         }
       };
     },
-    resolve(anchor) {
+    resolve(anchor, owner) {
       const resolution = locate(anchor);
-      const key = anchorKey(anchor);
-      last.set(key, { resolution, point: resolutionPoint(resolution), same: sameSpot(last.get(key)?.resolution, resolution) });
+      const key = slot(anchor, owner);
+      const before = read(anchor, owner);
+      const element = elementOf(resolution);
+      // What can move the item besides its own size: found once per element, not per frame.
+      const watched = element === null ? [] : before && elementOf(before.resolution) === element
+        ? before.watched : watch?.(element) ?? [];
+      const point = resolutionPoint(resolution);
+      last.set(key, { anchor: anchorKey(anchor), resolution, point, same: sameSpot(before?.resolution, resolution), watched });
       watching();
-      return last.get(key)!.point;
+      return point;
+    },
+    forget(owner) {
+      const dropped = last.delete(owner);
+      if (last.delete(`${owner}>from`) || dropped) watching();
     },
     // The same read as this frame's resolve: a cursor's chain is its own.
-    chainPoint: (anchor) => last.get(anchorKey(anchor))?.point ?? resolutionPoint(locate(anchor)),
-    carried: (anchor) => last.get(anchorKey(anchor))?.same === true,
-    edgeToward: (anchor) => {
-      const resolution = last.get(anchorKey(anchor))?.resolution;
+    chainPoint: (anchor, owner) => read(anchor, owner)?.point ?? resolutionPoint(locate(anchor)),
+    carried: (anchor, owner) => read(anchor, owner)?.same === true,
+    edgeToward: (anchor, owner) => {
+      const resolution = read(anchor, owner)?.resolution;
       return resolution?.kind === 'edge' ? resolution.toward : null;
     },
     nodeInfo: () => undefined,
@@ -287,14 +335,22 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
     toClient: (point) => point,
     snap: (p, _box, dpr) => ({ x: Math.round(p.x * dpr) / dpr, y: Math.round(p.y * dpr) / dpr }),
     refresh: notify,
-    resolution: (anchor) => last.get(anchorKey(anchor))?.resolution,
+    held: () => last.size,
+    resolution: (anchor, owner) => {
+      if (owner !== undefined) return read(anchor, owner)?.resolution;
+      const key = anchorKey(anchor);
+      for (const found of last.values()) if (found.anchor === key) return found.resolution;
+      return undefined;
+    },
     launcherOf(anchor) {
       const resolution = locate(anchor);
       return resolution.kind === 'launcher' ? { element: resolution.element, box: resolution.box } : null;
     },
+    // Read afresh, as the launcher is: a container that resized clips the item
+    // differently now, before the cursor's own frame has read it again.
     outlineOf(anchor) {
-      const resolution = last.get(anchorKey(anchor))?.resolution;
-      if (resolution?.kind !== 'anchor') return null;
+      const resolution = locate(anchor);
+      if (resolution.kind !== 'anchor') return null;
       const box = measure(resolution.element);
       if (!box) return null;
       const visible = intersect(box, resolution.clip);

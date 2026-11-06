@@ -1344,6 +1344,9 @@ def format_agents(roster: dict[str, Any]) -> str:
             lines.append("  " + " · ".join(part for part in parts if part))
             if group == "needsYou" and detail:
                 lines.append(f"    {detail}")
+            surface = (entry.get("cursor") or {}).get("surface")
+            if isinstance(surface, dict) and isinstance(surface.get("target"), dict):
+                lines.append(f"    cursor on {_surface_words(surface['target'], surface.get('anchorNames'))}")
             # Q125 item 3: what its runs are running now, and its placeholders.
             for running in entry.get("running") or []:
                 seconds = int(float(running.get("secondsAgo") or 0))

@@ -70,9 +70,10 @@ def refusal(value: object) -> str:
 # the Moodboard panel and Studio are one surface, `moodboard`. The anchor is
 # {"surface": "moodboard", "itemId": "<board>" | "<board>/<image>", "part"?}.
 SURFACES = ("moodboard",)
-BOARD_PARTS = ("name", "direction", "avoid", "colors")
+# `colors` is the "Colors that must appear" row, `colors-out` the "Colors to keep out" row.
+BOARD_PARTS = ("name", "direction", "avoid", "colors", "colors-out")
 IMAGE_PARTS = ("note", "weight")
 # The words a part goes by (the labels the Studio shows for each control;
 # the frontend's AGENT_SURFACE_PART_LABELS holds the same, pinned by a test).
 PART_LABELS = {"name": "Name", "direction": "Direction", "avoid": "Avoid", "colors": "Colors",
-               "note": "Note", "weight": "Weight"}
+               "colors-out": "Colors to keep out", "note": "Note", "weight": "Weight"}

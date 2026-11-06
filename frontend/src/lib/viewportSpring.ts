@@ -24,7 +24,11 @@ export function springProgress(apply: (progress: number) => void, done: () => vo
   const target = { x: SCALE, y: 0 };
   let last: number | null = null;
   let frame: number | null = null;
+  // A cancel from inside `apply` (a caller that stops on seeing the person
+  // move the camera) lands while a frame is running: it must stop the next.
+  let stopped = false;
   const tick = (time: number) => {
+    if (stopped) return;
     const dt = last === null ? 1 / 60 : (time - last) / 1000;
     last = time;
     state = stepSpring(state, target, dt, AGENT_CURSOR_SPRING);
@@ -35,10 +39,12 @@ export function springProgress(apply: (progress: number) => void, done: () => vo
       return;
     }
     apply(state.x / SCALE);
+    if (stopped) return;
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
   return () => {
+    stopped = true;
     if (frame !== null) cancelAnimationFrame(frame);
     frame = null;
   };

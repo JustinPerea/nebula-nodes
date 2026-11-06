@@ -162,6 +162,8 @@ def test_placing_one_card_is_that_image_and_set_aside_too(api):
     ("direction", "Low sun, long shadows", "direction", "type"),
     ("avoid", ["neon"], "avoid", "type"),
     ("pinnedColors", {"include": ["#C8A27A"], "exclude": []}, "colors", "click"),
+    # The keep-out row is its own control (review 1, C6): an exclude pin goes there, not to "must appear".
+    ("pinnedColors", {"include": [], "exclude": ["#2F4F4F"]}, "colors-out", "click"),
 ])
 def test_a_field_is_its_control_typed_and_a_pin_is_a_click_on_colors(api, field, value, part, action):
     client, sent, _, _ = api
@@ -170,7 +172,7 @@ def test_a_field_is_its_control_typed_and_a_pin_is_a_click_on_colors(api, field,
     event = _cursor(sent)
     assert _where(event) == (board["id"], part, action), event
     assert event["anchorNames"]["part"] == {"name": "Name", "direction": "Direction", "avoid": "Avoid",
-                                            "colors": "Colors"}[part]
+                                            "colors": "Colors", "colors-out": "Colors to keep out"}[part]
 
 
 def test_two_controls_in_one_write_are_the_board_not_a_control(api):

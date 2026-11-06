@@ -945,7 +945,8 @@ Over MCP: `point_at(moodboard="Desert light", image=12, part="note", action="typ
 `--moodboard` takes flags, not a target string, because a node id may hold a
 colon (`nebula point n2 --moodboard x` is a parser error, and so is `--from`
 with it: a drag starts at a node or a spot). Parts: `name`, `direction`,
-`avoid` or `colors` on a board; `note` or `weight` on an image. A board that
+`avoid`, `colors` (“Colors that must appear”) or `colors-out` (“Colors to keep
+out”) on a board; `note` or `weight` on an image. A board that
 isn't there, a name that two boards share, an image past the last, or a part
 that item doesn't have is refused in plain words that say what to use.
 
@@ -975,7 +976,7 @@ past tense because the line goes out after the write landed):
 | weight | the image's `weight` | `click` |
 | a note (or a private note; its text is never sent) | the image's `note` | `type` |
 | name, direction, Avoid | the board's `name`, `direction`, `avoid` | `type` |
-| pinned colours (a toggle) | the board's `colors` | `click` |
+| pinned colours (a toggle) | the board's `colors`, or `colors-out` when only the keep-out list changed | `click` |
 | analyze | the board's `colors` | `look` |
 | keep the brief | the board's `direction` | `click` |
 | delete a board | nothing: every cursor on it leaves | n/a |
@@ -986,8 +987,11 @@ nothing. The event carries `target` (`{"surface": "moodboard", "itemId":
 "<board>" or "<board>/<image>", "part"?}`, ids only, whatever you called the
 item) and `anchorNames` (`{board, image?, part?}`: the board's name, the
 image's number, the control's label), so a line can name an item that isn't
-on screen. `nebula look`, `nebula agents` and `nebula context` say it: `on
-moodboard “Desert light”, image 12 (note)`.
+on screen. `nebula look` and `nebula context` say it as `on moodboard “Desert light”,
+image 12 (note)`, and `nebula agents` as `cursor on moodboard “Desert light”,
+image 12 (note)` under the agent. When a board is deleted or an image is
+removed by someone else, the person's open tabs move or clear the cursors at
+once, not after the two-minute expiry.
 
 The REST surface is `POST /api/canvas/cursor` (a `target`: a node, a spot or a
 moodboard item `{"surface": "moodboard", "board", "image"?, "part"?}`; or only

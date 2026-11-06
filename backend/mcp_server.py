@@ -639,8 +639,9 @@ def point_at(
 
     Beyond the canvas: point at a moodboard with `moodboard` (its id or exact
     name), at one of its images with `image` (its number, `12` or `#12`, or
-    its id), and at a control with `part`: `name`, `direction`, `avoid` or
-    `colors` on a board; `note` or `weight` on an image. Use these alone:
+    its id), and at a control with `part`: `name`, `direction`, `avoid`,
+    `colors` ("Colors that must appear") or `colors-out` ("Colors to keep
+    out") on a board; `note` or `weight` on an image. Use these alone:
     they can't be combined with `node_id`, `port`, `x`, `y` or the drag's
     `from_node_id`. Nebula never opens a panel or scrolls for the person: if
     the Moodboard panel is closed or the item is out of view, your cursor
