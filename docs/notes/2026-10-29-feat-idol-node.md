@@ -4381,3 +4381,33 @@ tests pass unchanged apart from the listing.
   `_is_own` re-checks the name by descriptor after it.
 - A first save with no private folder is not atomic (a kill mid-write can leave
   a torn new settings.json); there is no old file to lose.
+
+## Round 23d: the settings metadata copy and the ACL clear go by descriptor
+
+(`backend/services/settings.py`; tests `backend/tests/test_idol_round23d_settings.py`, the fake in `test_idol_round17_settings.py`.)
+
+- **No path to the temp is left (LOW).** The 23c flag is closed. After the
+  folder was opened by descriptor, `copyfile(path, temp)` and
+  `acl_set_file(temp)` still followed a symlink swapped in at
+  `.settings-nebula-tmp`: an empty file with settings.json's xattrs landed in
+  the other folder and settings.json lost its own. Now `_carry_metadata(path,
+  temp_fd)` opens settings.json `O_RDONLY | O_NOFOLLOW` and `_copy_metadata`
+  works between the two open files: macOS `fcopyfile(src, dst, NULL,
+  COPYFILE_ACL | COPYFILE_XATTR)`, Linux `os.listxattr/getxattr/setxattr` on
+  descriptors (POSIX ACLs are the `system.posix_acl_access` xattr). Any
+  failure is `_InPlaceInstead`; nothing falls back to a path call.
+- **ACL clear by descriptor.** `_remove_temp` opens the temp by its name in
+  the folder's descriptor (`O_NOFOLLOW`, `dir_fd=`), checks it is still the
+  save's own (device, inode), and `_darwin_clear_acl(fd)` uses
+  `acl_set_fd_np(ACL_TYPE_EXTENDED)`. `_remove_own` and `_remove_temp` lost
+  the `where` path argument.
+- **The sweep restores a folder opened up by chmod.** `_open_private_folder`
+  has `restore=`; `_sweep_private` passes it, so a folder that is a real
+  directory this user owns but is group/other-accessible gets `fchmod 0700` on
+  its descriptor and is then swept. Symlinks, files and foreign folders are
+  still skipped.
+- Kept by path on purpose: `_has_own_metadata(path)` reads settings.json (the
+  old file, not the temp) to decide whether a copy is needed.
+- Mutation: the path `copyfile` back in the save fails
+  `test_a_folder_swapped_after_open_gets_no_copy_of_the_metadata` and the
+  Linux descriptor test.

@@ -581,69 +581,84 @@ _COPYFILE_ACL = 1 << 0
 _COPYFILE_XATTR = 1 << 2
 
 
-def _carry_metadata(path: Path, temp: str) -> None:
-    """Give the temp file the old file's ACL and extended attributes, so the
-    rename loses neither (review 16 of PR #203, settings MEDIUM-1 a), through
-    _copy_metadata, the one seam on every system. A copy that fails, or a
-    system with no way to copy them, writes the file in place instead."""
+def _carry_metadata(path: Path, temp_fd: int) -> None:
+    """Give the temp file (open as ``temp_fd``) the old file's ACL and
+    extended attributes, so the rename loses neither (review 16 of PR #203,
+    settings MEDIUM-1), through _copy_metadata, the one seam on every
+    system. Descriptors only (round 23d: a path to the temp would follow a
+    folder swapped for a symlink after the save opened it): the old file is
+    opened without following a symlink. A copy that fails, or a system with
+    no way to copy them, writes the file in place instead."""
     try:
         if not _has_own_metadata(path):
             return
     except OSError:
         pass  # unknown: the copy says whether it can be carried
     try:
-        _copy_metadata(path, temp)
+        src_fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+                         | getattr(os, "O_NONBLOCK", 0))
     except OSError as exc:
         raise _InPlaceInstead from exc
+    try:
+        _copy_metadata(src_fd, temp_fd)
+    except OSError as exc:
+        raise _InPlaceInstead from exc
+    finally:
+        os.close(src_fd)
 
 
-def _copy_metadata(path: Path, temp: str) -> None:
-    """The copy itself: macOS through copyfile(3) with COPYFILE_ACL |
-    COPYFILE_XATTR, Linux by copying each xattr (its POSIX ACL is
-    system.posix_acl_access). Raises OSError when any of it can't be
-    copied, or the system has neither."""
+def _copy_metadata(src_fd: int, dst_fd: int) -> None:
+    """The copy itself, between two open files: macOS through fcopyfile(3)
+    with COPYFILE_ACL | COPYFILE_XATTR, Linux by copying each xattr (its
+    POSIX ACL is system.posix_acl_access). Raises OSError when any of it
+    can't be copied, or the system has neither. Never a call by path."""
     if _PLATFORM == "darwin":
-        _darwin_copy_metadata(path, temp)
+        _darwin_copy_metadata(src_fd, dst_fd)
     elif _listxattr is not None and _getxattr is not None and _setxattr is not None:
-        for name in _listxattr(path, follow_symlinks=False):
+        for name in _listxattr(src_fd):
             if name not in _OWN_XATTRS:
-                _setxattr(temp, name, _getxattr(path, name, follow_symlinks=False), follow_symlinks=False)
+                _setxattr(dst_fd, name, _getxattr(src_fd, name))
     else:
-        raise OSError(errno.ENOTSUP, "no way to carry the file's metadata", str(path))
+        raise OSError(errno.ENOTSUP, "no way to carry the file's metadata")
 
 
-def _darwin_copy_metadata(path: Path, temp: str) -> None:
+def _darwin_copy_metadata(src_fd: int, dst_fd: int) -> None:
     import ctypes
 
     libc = _libc()
-    libc.copyfile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32]
-    libc.copyfile.restype = ctypes.c_int
-    if libc.copyfile(os.fsencode(path), os.fsencode(temp), None, _COPYFILE_ACL | _COPYFILE_XATTR) < 0:
-        raise OSError(ctypes.get_errno(), "copyfile failed", str(path))
+    libc.fcopyfile.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    libc.fcopyfile.restype = ctypes.c_int
+    if libc.fcopyfile(src_fd, dst_fd, None, _COPYFILE_ACL | _COPYFILE_XATTR) < 0:
+        raise OSError(ctypes.get_errno(), "fcopyfile failed")
 
 
-def _darwin_clear_acl(path: str) -> None:
-    """Take a copied ACL off a temp file again, so one that denies delete
-    doesn't keep the temp file (with the keys) from being removed."""
+def _darwin_clear_acl(fd: int) -> None:
+    """Take a copied ACL off a temp file again (open as ``fd``), so one that
+    denies delete doesn't keep the temp file (with the keys) from being
+    removed. Raises OSError when it can't."""
     import ctypes
 
     libc = _libc()
     libc.acl_init.argtypes = [ctypes.c_int]
     libc.acl_init.restype = ctypes.c_void_p
-    libc.acl_set_file.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
-    libc.acl_set_file.restype = ctypes.c_int
+    libc.acl_set_fd_np.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+    libc.acl_set_fd_np.restype = ctypes.c_int
     libc.acl_free.argtypes = [ctypes.c_void_p]
     acl = libc.acl_init(0)
-    if acl:
-        try:
-            libc.acl_set_file(os.fsencode(path), _ACL_TYPE_EXTENDED, acl)
-        finally:
-            libc.acl_free(acl)
+    if not acl:
+        raise OSError(ctypes.get_errno(), "acl_init failed")
+    try:
+        if libc.acl_set_fd_np(fd, acl, _ACL_TYPE_EXTENDED) < 0:
+            raise OSError(ctypes.get_errno(), "acl_set_fd_np failed")
+    finally:
+        libc.acl_free(acl)
 
 
-def _remove_temp(temp: str, dir_fd: int | None = None, where: str | None = None) -> None:
+def _remove_temp(temp: str, dir_fd: int | None = None, mine: tuple[int, int] | None = None) -> None:
     """Remove ``temp`` (a name in the folder open as ``dir_fd``, else a
-    path); ``where``: its full path, for the macOS ACL clear."""
+    path). On macOS an ACL that denies delete is cleared first, on the
+    file's own descriptor (opened by that same name without following a
+    symlink, and only while it is still ``mine``), never by path."""
     try:
         os.unlink(temp, dir_fd=dir_fd)
         return
@@ -653,7 +668,14 @@ def _remove_temp(temp: str, dir_fd: int | None = None, where: str | None = None)
     except OSError:
         return  # the folder turned read-only too: swept at the next start
     try:
-        _darwin_clear_acl(where or temp)
+        fd = os.open(temp, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+                     | getattr(os, "O_NONBLOCK", 0), dir_fd=dir_fd)
+        try:
+            if mine is not None and _identity(fd) != mine:
+                return
+            _darwin_clear_acl(fd)
+        finally:
+            os.close(fd)
         os.unlink(temp, dir_fd=dir_fd)
     except OSError:
         pass
@@ -717,7 +739,7 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *,
                     os.fchmod(fd, mode)
                     stranger = not _is_own(fd, key, dir_fd)
                     if not stranger and before is not None:
-                        _carry_metadata(path, temp)
+                        _carry_metadata(path, fd)
                         stranger = not _is_own(fd, key, dir_fd)
                 finally:
                     os.close(fd)
@@ -738,7 +760,7 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *,
                 done = True
             finally:
                 if not done and not stranger:
-                    _remove_own(key, mine, dir_fd, temp)
+                    _remove_own(key, mine, dir_fd)
             _sync_folder(path.parent)
             return
         raise SettingsBusy("the save's temp file kept being taken", path)
@@ -776,14 +798,14 @@ def _is_own(fd: int, temp: str, dir_fd: int | None = None) -> bool:
     return (have.st_dev, have.st_ino) == (at_name.st_dev, at_name.st_ino) and stat.S_ISREG(at_name.st_mode)
 
 
-def _remove_own(temp: str, mine: tuple[int, int], dir_fd: int | None = None, where: str | None = None) -> None:
+def _remove_own(temp: str, mine: tuple[int, int], dir_fd: int | None = None) -> None:
     """Remove ``temp`` only while it is still this save's own file."""
     try:
         info = os.lstat(temp, dir_fd=dir_fd)
     except OSError:
         return
     if (info.st_dev, info.st_ino) == mine:
-        _remove_temp(temp, dir_fd, where)
+        _remove_temp(temp, dir_fd, mine)
 
 
 def temp_path_for(path: Path) -> Path:
@@ -831,7 +853,7 @@ def _note_private_refusal() -> None:
         "folder that isn't this user's own); saves write the file in place")
 
 
-def _open_private_folder(parent: Path, *, make: bool) -> int | None:
+def _open_private_folder(parent: Path, *, make: bool, restore: bool = False) -> int | None:
     """The open descriptor of this user's private temp folder in ``parent``
     (a real directory opened without following a symlink, owned by this
     user, no group or other access, all read from the open descriptor), or
@@ -839,7 +861,9 @@ def _open_private_folder(parent: Path, *, make: bool) -> int | None:
     folder, or one that stays open to others after a chmod 0700 (a
     filesystem with fixed modes). It is never written to then, never
     followed. ``make``: made 0700 when it isn't there, and a chmod 0700
-    tried when it is open to others (a sweep only reads). A folder that
+    tried when it is open to others. ``restore``: the sweep's own, a chmod
+    0700 (fchmod on the descriptor, only of a real directory this user owns)
+    when it was opened up since, so the temps inside are swept (round 23d). A folder that
     can't be made raises the OSError (the caller's fallbacks)."""
     if not _HAS_DIR_FD:
         return None
@@ -858,7 +882,7 @@ def _open_private_folder(parent: Path, *, make: bool) -> int | None:
         if not stat.S_ISDIR(info.st_mode) or not _owned(info):
             raise OSError(errno.EPERM, "not this user's folder")
         if info.st_mode & 0o077:
-            if not make:
+            if not (make or restore):
                 raise OSError(errno.EPERM, "open to others")
             try:
                 os.fchmod(fd, 0o700)
@@ -1498,7 +1522,7 @@ def _write_copy(target: Path, body: bytes) -> None:
                 done = True
             finally:
                 if not done and not stranger:
-                    _remove_own(key, mine, dir_fd, temp)
+                    _remove_own(key, mine, dir_fd)
             _sync_folder(target.parent)
             return
         raise SettingsBusy("the copy's temp file kept being taken", target)
@@ -2081,7 +2105,7 @@ def _sweep_private(parent: Path, base: str, now: float | None, *, locked: bool) 
     judged. Its judging folder (a kill part way through a judgement) is
     cleared the same way."""
     removed: list[Path] = []
-    dir_fd = _open_private_folder(parent, make=False)
+    dir_fd = _open_private_folder(parent, make=False, restore=True)
     if dir_fd is None:
         return removed
     folder = temp_folder_for(parent)

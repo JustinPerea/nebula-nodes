@@ -595,22 +595,31 @@ def test_linux_an_xattr_that_cant_be_set_on_the_new_file_writes_in_place(keyed, 
 
 
 class _FakeLinuxXattrs:
-    """Linux's xattr calls over a dict, so the Linux copy runs on any system."""
+    """Linux's xattr calls over a dict, so the Linux copy runs on any system.
+    The calls take descriptors (round 23d), keyed here by the file's
+    (device, inode); a path is accepted too."""
 
     def __init__(self, refuse: bool) -> None:
-        self.attrs: dict[str, dict[str, bytes]] = {}
+        self.attrs: dict[tuple[int, int], dict[str, bytes]] = {}
         self.refuse = refuse
+        self.seen: list[object] = []
 
-    def listxattr(self, path, *args, **kwargs):
-        return list(self.attrs.get(os.fspath(path), {}))
+    @staticmethod
+    def key(target):
+        info = os.fstat(target) if isinstance(target, int) else os.stat(target)
+        return (info.st_dev, info.st_ino)
 
-    def getxattr(self, path, name, *args, **kwargs):
-        return self.attrs[os.fspath(path)][name]
+    def listxattr(self, target, *args, **kwargs):
+        return list(self.attrs.get(self.key(target), {}))
 
-    def setxattr(self, path, name, value, *args, **kwargs):
+    def getxattr(self, target, name, *args, **kwargs):
+        return self.attrs[self.key(target)][name]
+
+    def setxattr(self, target, name, value, *args, **kwargs):
+        self.seen.append(target)
         if self.refuse:
             raise OSError(errno.EPERM, "refused")
-        self.attrs.setdefault(os.fspath(path), {})[name] = value
+        self.attrs.setdefault(self.key(target), {})[name] = value
 
 
 @pytest.mark.parametrize("refuse", [True, False], ids=["refused-in-place", "carried-atomic"])
@@ -622,7 +631,8 @@ def test_the_linux_copy_as_linux_runs_it(keyed, monkeypatch, refuse):
     place; one it takes is copied, then the rename. This runs the Linux
     branch on macOS too."""
     fake = _FakeLinuxXattrs(refuse)
-    fake.attrs[os.fspath(keyed)] = {"user.nebula-tag": b"kept", "security.selinux": b"own"}
+    old_key = fake.key(keyed)  # the new file takes the old name by the rename
+    fake.attrs[old_key] = {"user.nebula-tag": b"kept", "security.selinux": b"own"}
     monkeypatch.setattr(settings, "_PLATFORM", "linux")
     for name in ("listxattr", "getxattr", "setxattr"):
         monkeypatch.setattr(settings, f"_{name}", getattr(fake, name))
@@ -634,7 +644,8 @@ def test_the_linux_copy_as_linux_runs_it(keyed, monkeypatch, refuse):
         assert keyed.stat().st_ino == inode
     else:
         assert keyed.stat().st_ino != inode
-        copied = [attrs for path, attrs in fake.attrs.items() if path != os.fspath(keyed)]
+        copied = [attrs for key, attrs in fake.attrs.items() if key != old_key]
+        assert fake.seen and all(isinstance(target, int) for target in fake.seen), "the Linux copy must go by descriptor"
         # The person's xattr went onto the temp file; the system's own label didn't.
         assert copied == [{"user.nebula-tag": b"kept"}]
 
