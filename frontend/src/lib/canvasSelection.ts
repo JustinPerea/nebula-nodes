@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { backendAssetUrlSync, fetchUrl } from './backend';
@@ -127,6 +126,10 @@ function extensionFor(url: string, contentType: string | null): string {
 export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<number> {
   const outputs = collectDownloadableOutputs(nodes);
   if (outputs.length === 0) return 0;
+  // jszip (96 kB, its own vendor chunk) loads when a download starts, not with the
+  // canvas: Canvas imports this file for the selection it shares (it was 28 kB
+  // gzip of the startup set).
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const nameCounts = new Map<string, number>();
   let totalBytes = 0;
