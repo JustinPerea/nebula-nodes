@@ -165,6 +165,10 @@ export const DeferredRegionNotices = lazyWithPreload(
 // so GraphFileActions.tsx awaits it at the moment of use.
 export const graphFileModule = deferredModule(() => import('./graphFile'));
 
+// jszip, for the selection toolbar's download zip (lib/canvasSelection.ts): only
+// inside that action, so it loads at the moment of use, with the chunk retry.
+export const jszipModule = deferredModule(() => import('jszip'));
+
 // The dialog before the person's direct run of agents' paid placeholders
 // (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
 export { placeholderRunDialogModule } from './placeholderRunDialogModule';
