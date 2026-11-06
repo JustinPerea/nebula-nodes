@@ -14,7 +14,6 @@
   "components/create-studio/CreateView.tsx": 1,
   "components/create-studio/ReferenceTray.tsx": 1,
   "components/create-studio/ResultCard.tsx": 1,
-  "components/DeferredPanels.tsx": 1,
   "components/moodboard-studio/MoodboardBrief.tsx": 3,
   "components/moodboard-studio/MoodboardStudioView.tsx": 9,
   "components/nodes/MeshPreview.tsx": 3,
@@ -114,5 +113,6 @@
   "store/canvasProposalsStore.ts": 3,
   "store/graphStore.ts": 31,
   "store/projectStore.ts": 27,
-  "store/providerReadinessStore.ts": 1
+  "store/providerReadinessStore.ts": 1,
+  "components/panels/DeferredMaskPainter.tsx": 1
 }

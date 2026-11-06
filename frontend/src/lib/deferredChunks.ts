@@ -184,6 +184,14 @@ export const graphFileModule = deferredModule(() => import('./graphFile'));
 // usual.
 export const settingsWritesModule = deferredModule(() => import('./settingsWrites'));
 
+// Settings' "restored at start" line (components/panels/settings/SettingsTopNotice.tsx):
+// it draws only what a fetch brings in (never at the first paint), so
+// Settings mounts it at once (deferredAtOnce) and it appears when it lands.
+export const DeferredSettingsTopNotice = lazyWithPreload(
+  () => import('../components/panels/settings/SettingsTopNotice'),
+  (module) => module.SettingsTopNotice,
+);
+
 // The dialog before the person's direct run of agents' paid placeholders
 // (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
 export { placeholderRunDialogModule } from './placeholderRunDialogModule';
@@ -215,11 +223,16 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   graphFileModule.preload,
   settingsWritesModule.preload,
   placeholderRunDialogModule.preload,
+  DeferredSettingsTopNotice.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
   'lib/settingsWrites.ts',
+  // Every key's URL, notes and token instructions: Settings' rows and search read them.
+  'lib/providerCatalog.ts',
+  'components/panels/settings/SettingsTopNotice.tsx',
+  'lib/settingsNotice.ts',
   'components/KeyboardShortcutsDialog.tsx',
   'components/PlaceholderRunDialog.tsx',
   'components/askPlaceholderRun.tsx',
@@ -253,6 +266,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/onboarding/OnboardingOverlay.tsx',
   'components/ConnectionPopup.tsx',
   'components/panels/MaskPainterModal.tsx',
+  // The mask painter's wrapper and the shell it draws while its chunk loads.
+  'components/panels/DeferredMaskPainter.tsx',
   'components/nodes/MeshPreview.tsx',
   'components/nodes/WorldPreview.tsx',
   'components/nodes/WorldSplatPreview.tsx',

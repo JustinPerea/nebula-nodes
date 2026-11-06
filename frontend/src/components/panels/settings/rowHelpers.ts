@@ -1,5 +1,4 @@
 import { isKeySet } from '../../../lib/directRoute';
-import { PROVIDER_KEYS } from '../../../lib/providerCatalog';
 import { providerCheckIsCurrent, PROVIDER_KEY_LABELS, type ProviderHealthState } from '../../../lib/providerReadiness';
 
 export type RowTone = 'ok' | 'warn' | 'busy' | 'idle';
@@ -57,7 +56,7 @@ export function nousConnected(health: Pick<ProviderHealthState, 'providers' | 'c
  * Nous when its last check found it signed in. */
 export function connectedRows({ apiKeys, kreaStatus, health }: ConnectionState): Record<string, boolean> {
   return {
-    ...Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, isKeySet(apiKeys, spec.key)])),
+    ...Object.fromEntries(Object.keys(PROVIDER_KEY_LABELS).map((key) => [key, isKeySet(apiKeys, key)])),
     [KREA_ROW]: !!kreaStatus && kreaStatus !== 'disconnected',
     [NOUS_ROW]: nousConnected(health),
   };

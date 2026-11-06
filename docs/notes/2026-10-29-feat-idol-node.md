@@ -4062,3 +4062,159 @@ report to the coordinator.
 - The deferred-run notice's running line is main's `aria-describedby` line, not a
   title.
 
+
+## Round 22: entry budget, the notice region in a real browser, GM's flags, a Linux settings fix
+
+### 1. Entry budget
+
+Main's entry: 504,228 B raw (built the same way, `vite build --sourcemap`, from
+a clean origin/main b2cf0a6f). This branch at 54f9483c: 510,645 B (+6,417).
+Now: **501,438 B raw / 156,764 B gzip** (`npm run build`, budget check passed),
+2,790 B under main and 10,562 B under CI's 512,000 limit. The brief's target was
+at most main + 2,500 (506,728); the bytes below came out in three moves that
+are each a plain relocation.
+
+Measured by summing the entry's source map by source module (a minified
+chunk's bytes per original file, `persrc.mjs` in the round's scratch folder).
+Before = this branch at 54f9483c; after = now; main = origin/main.
+
+| Module | main | before | after | What |
+| --- | ---: | ---: | ---: | --- |
+| `lib/providerCatalog.ts` | 4,834 | 6,469 | 0 | every key's URL, notes, Hugging Face token text, `credentialName`; loads with Settings (its rows and search) |
+| `lib/credentialNoun.ts` (new) | 0 | 0 | 105 | the one thing the canvas needs from the catalog: key or token, by key name |
+| `components/DeferredPanels.tsx` | 4,568 | 4,568 | 3,162 | the mask painter's wrapper and shell moved out (-1,406) |
+| `components/panels/maskPainterDialog.ts` | 209 | 209 | 0 | rides with that wrapper |
+| `components/panels/settings/SettingsTopNotice.tsx` | 0 | 1,016 | 0 | "restored at start" line, its own chunk |
+| `lib/settingsNotice.ts` | 0 | 459 | 0 | the same chunk |
+| `lib/deferredChunks.ts` | 3,543 | 3,998 | 4,187 | the new chunk's entry and the DEFERRED_MODULES list |
+
+What moved and why it is safe on the entry:
+
+- **Provider catalog.** The canvas read `providerCatalog` only for the credential
+  noun ("Add token" / "needs a token") and `rowHelpers.connectedRows` for the key
+  names. `lib/credentialNoun.ts` carries the noun (Replicate and Hugging Face say
+  token, the rest key; unknown keys say key, as before) and `connectedRows` reads
+  the key names from `PROVIDER_KEY_LABELS`. `tests/credentialNoun.test.ts` pins both
+  to the catalog (every key's noun from its link word; the two key lists equal), so
+  a new provider that the table misses fails there. `providerCatalog` is in
+  DEFERRED_MODULES. This is the Idol-specific part: the Hugging Face token's
+  instruction, caveat and note text, and the `keyLink` word for every provider.
+- **Mask painter wrapper** (`components/panels/DeferredMaskPainter.tsx`): only the
+  Inspector, itself a lazy chunk, renders it. Moved out of `DeferredPanels.tsx`
+  unchanged; imports in six tests follow it. `MaskPainterPortal.round10` waited a
+  fixed 50 ms for the painter's chunk; it now waits for the painter itself (the
+  wrapper no longer rides in a module that pulled the chunk in early).
+- **Settings top notice** (`DeferredSettingsTopNotice.tsx`, `deferredAtOnce`):
+  it draws only what a fetch brings in, so it mounts at once and appears with its
+  chunk; preloaded on idle with the rest. A chunk that fails draws nothing and
+  leaves Settings as it was (`tests/components/SettingsTopNoticeChunk.test.tsx`;
+  DeferredBoundary's quiet failure).
+
+Stays on the entry, and why: the Accept key lock and the deferred run's key lock
+(`proposalAcceptLock`, 788 B; `deferredRunKeyLock`) are locks a click can hit before
+any chunk is in; `ModalPortal` (2,329 B vs 296 on main) and its focus machinery in
+`modalFocus` (+1,304) are reached by Projects home (`UnsavedEditsNotice`), and the
+`hideBehind` inert marking is a focus-safety rule, not first-paint-optional; the
+World v2 splat card (`worldV2Splat` 575, the splat branch of `RepresentationViewer`
+504, `DeferredViewers` 554) draws in the node card at first paint where a chunk
+fallback can't hold its box. None is needed to come under the target now; they are
+the next candidates if the entry grows again.
+
+No Idol-only chunk with its own failure line was added (the Idol body and its
+settings rows were already lazy: the World v2 viewer is `DeferredWorldSplatPreview`,
+the Settings rows are in Settings' tabs). The chunk-failure lines are the existing
+ones: the splat viewer's disabled button (`WorldSplatPreview` in DeferredViewers),
+Settings' tab boundary, and the new quiet one above.
+
+### 2. The notice region in a real browser (Puppeteer, 1440x900 and 1000x800)
+
+Servers: `serve_isolated.py` on 8979 (branch) and 8980 (clean origin/main in a temp
+worktree), a static file server on 5979/5980, fake nothing (no keys), all requests to
+8000-8010, 5173, 8840, 5840 aborted by the page; the person token by stdin.
+
+Findings, from `getComputedStyle` on every ancestor of `.notice-region`:
+
+- The region is portalled to `<body>`; on main it is `position: fixed`, on the branch
+  `absolute`. With no positioned ancestor, an absolute element's containing block is
+  the initial containing block: the same box as the window, until the viewport
+  scrolls. No screen scrolls (html/body/#root scrollHeight = clientHeight at home,
+  Canvas, Moodboard (assets) dock, Settings, help, the "?" dialog, Creator Studio),
+  but with any body-level overflow the viewport scrolled and the branch's region went
+  with it (stress: scrollTo(0, 500) with an absolute element at 3000 px: branch y 202,
+  main y 702, which is the window's bottom). **Fixed:** `body { position: relative;
+  overflow: clip }` in `App.css` makes the containing block the full-window body,
+  which can't scroll even programmatically. After it, the stress test leaves the
+  region at y 702, as main. `tests/noticeRegionContainingBlock.test.ts` reads both
+  rules.
+- **A real difference GM didn't rule on, now removed:** this PR's own
+  `:root:has(.workspace-rail) .notice-region` rule (review 11, copy LOW-2) set `left`
+  and `right` outright. Main already clears the rail through
+  `--notice-left-clearance` (workspace-rail.css, PR #216 r2 bug 3) and centres the
+  region. With the Agent log docked the branch's region was at x 70, 975 px wide;
+  main's is x 395, 650 px (the notice sat 160 px left of centre). The rule is gone
+  and `tests/idolRound12.test.ts` now holds main's mechanism instead (the rail writes
+  the variable; the region reads it; no override). At 1000 px with the rail the region
+  is x 219, 420 px wide on both, clear of the rail.
+- Region rects after the fix, every state: identical to main (home, canvas with the
+  log docked, with it hidden, Moodboard dock, Settings, help, "?", Creator Studio, the
+  narrow window). Layers differ only where GM ruled (r7): notices z 20010 where
+  main's whole region was 20010; the proposal bar z 9 under a modal's scrim where
+  main's sat over it.
+
+Paired shots (full viewport; shrunk copies in `small/`), all in the scratch folder
+`idol23/shots/`: `1-notice-canvas`, `2-notice-agent-log-docked`,
+`3-proposal-bar-modal`, `4-notice-rail-narrow-1000`, each `-branch.png` and
+`-main.png`. In 3 the "?" dialog is open over a Codex proposal and a "Deleted the
+node. Undo" notice: main's bar is above the dialog; the branch's is under its scrim,
+the notice above it.
+
+### 3. For GM (drafts for the open flags from round 20)
+
+- **The Krea sign-in need** (a route set to Krea, signed out; the stop line, the
+  switcher row and the agent's text read it): "“Hero shot” is set to Krea, which
+  needs you signed in to Krea. Sign in to Krea in Settings, or switch to fal.ai."
+  Without a rename: "“FLUX 3 Image” is set to Krea, …". In the Auto row's reason:
+  "Auto · Krea needs a sign-in".
+- **Nothing finished** (the done card and the Agent log): "Codex’s run didn’t
+  finish. “Idol” is waiting for you to run it because it could bill your Hugging
+  Face account." and, for three nodes, "Codex’s run of 3 nodes didn’t finish.
+  “Idol” is waiting for you to run it because it could bill your Hugging Face
+  account." (as built in round 20, with the apostrophe below).
+- **Several nodes waiting, nothing else:** "Codex’s run of 2 nodes didn’t finish.
+  “Idol” and “Idol 2” are waiting for you to run them because they could bill
+  your Hugging Face account." From four nodes, counts: "Codex’s run of 5 nodes
+  didn’t finish. 4 nodes are waiting for you to run them because they could bill
+  your Hugging Face account."
+- **"Codex’s" with a curly apostrophe.** `run_done_cards.possessive` builds
+  `Codex's` for every name (main's pattern, GM's 2026-10-25 wording "Codex's run
+  of …", pinned by `test_run_done_cards`). The drafts above use ’. Not changed in
+  code: it changes main's shipped line for every agent, and the line ratchet and
+  its tests read the straight one. GM to rule; the change is one line plus the
+  tests' strings.
+- **The provider switcher's accessible name** was a bug and is fixed: on a renamed
+  node its description and menu name said the node's type (“FLUX 3 Image”). They now
+  say the node's own name, as the stop line and the card do; a node on its type name
+  keeps it. Create Studio's pill has no node label and keeps the model's name. Main
+  names the type for every node (it has no rename-aware line); this follows the
+  branch's r39 item 8 rule. `ProviderSwitcher.test.tsx` lines 520 and 532 now expect
+  “Fixture” (the test node's label), `ProviderSwitcherName.round22.test.tsx` pins both.
+
+### 5. Linux CI: three round 20 settings tests
+
+CI on 54f9483c failed `test_two_saves_meeting_one_stale_temp_never_remove_each_others`,
+`test_only_the_judged_temp_is_removed` and
+`test_the_judged_temp_is_checked_where_no_agent_reads`. **The product was wrong,
+not the tests.** `_remove_judged` decided "this is the file I judged" by device and
+inode alone. ext4 and tmpfs hand a just-freed inode to the next file made, so after
+the judged temp was removed, another save's new temp usually has the same inode:
+the check said it was the judged one and deleted it. APFS doesn't reuse inodes
+that fast, so macOS never showed it. A wrong answer here deletes another save's
+temp, the one guarding settings.json. Fix (`services/settings.py` `_same_temp`):
+identity is device, inode, modification time (ns) and size; a rename keeps the last
+two and a successor has its own. New test
+`test_a_successor_that_took_the_freed_inode_is_not_the_judged_temp` simulates the
+Linux reuse by reporting the judged inode for every stat in the module; it fails on
+the old comparison on macOS too and passes now. The two other identity checks in the
+file compare an open file descriptor with the path (`_lock_holds`, the in-place
+overwrite): an inode held open can't be reused, so they are unchanged.
+Not run on Linux; the 24 round 20 settings tests and the new one pass here.

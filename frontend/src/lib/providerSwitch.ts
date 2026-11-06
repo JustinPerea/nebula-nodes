@@ -9,7 +9,7 @@ import {
 } from './directRoute';
 import { awaitsInput, entryForRoute, estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
-import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
+import { credentialNounFor } from './credentialNoun';
 
 /**
  * What the provider switcher (components/nodes/ProviderSwitcher.tsx) shows
@@ -198,12 +198,9 @@ export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
 /** "Auto · needs a key", in the providers' own noun (GM, PR #203 r35 item
  * 2): "needs a token" when every key that would let it run is a token
  * (Replicate, Hugging Face), from the one key-noun source Settings uses
- * (providerCatalog.credentialNoun); "a key" otherwise. */
+ * (lib/credentialNoun, pinned to providerCatalog.credentialNoun by its test); "a key" otherwise. */
 export function autoNeedsCredential(missing: readonly string[]): string {
-  const nouns = new Set(missing.map((key) => {
-    const spec = PROVIDER_KEY_SPECS[key];
-    return spec ? credentialNoun(spec) : 'key';
-  }));
+  const nouns = new Set(missing.map(credentialNounFor));
   return nouns.size === 1 ? `Auto · needs a ${[...nouns][0]}` : AUTO_NEEDS_A_KEY;
 }
 
@@ -527,7 +524,7 @@ export function providerKeyWarnings(
 
 /** The words of a switcher row's setup button (GM, PR #203 r30 item 3).
  * `label` is what it shows, the provider's button noun from the one source
- * Settings' buttons use (providerCatalog.credentialNoun: "Add token" for
+ * Settings' buttons use (lib/credentialNoun: "Add token" for
  * Replicate and Hugging Face, "Add key" for the rest), with a decorative
  * "→" after it; the button's accessible name is `label`, so it holds what
  * sighted people read (WCAG 2.5.3). `description` is the one add-key line
@@ -537,7 +534,5 @@ export function providerKeyWarnings(
 export function setupButtonWords(row: Pick<ProviderRow, 'keyState' | 'setup' | 'label'>): { label: string; description: string } {
   if (row.keyState === 'sign-in') return { label: 'Sign in', description: 'Sign in to Krea in Settings.' };
   const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
-  const spec = key ? PROVIDER_KEY_SPECS[key] : undefined;
-  const noun = spec ? credentialNoun(spec) : 'key';
-  return { label: `Add ${noun}`, description: (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.` };
+  return { label: `Add ${credentialNounFor(key)}`, description: (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.` };
 }

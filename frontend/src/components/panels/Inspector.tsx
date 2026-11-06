@@ -16,7 +16,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { apiRequest } from '../../lib/apiRequest';
 import { quoted } from '../../lib/canvasFileDrop';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
-import { MaskPainterModal } from '../DeferredPanels';
+import { MaskPainterModal } from './DeferredMaskPainter';
 import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
 import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';

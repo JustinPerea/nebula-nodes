@@ -850,11 +850,21 @@ def _judging_folder_fd(parent: Path) -> int | None:
     return fd
 
 
+def _same_temp(a: os.stat_result, b: os.stat_result) -> bool:
+    """Whether two stats are one file, not a successor that took its inode.
+    Linux filesystems (ext4, tmpfs) hand a just-freed inode to the next file
+    made, so device and inode alone call another save's new temp the judged
+    one (CI on 54f9483c); a rename keeps modification time and size, and a
+    successor has its own."""
+    return ((a.st_dev, a.st_ino, a.st_mtime_ns, a.st_size)
+            == (b.st_dev, b.st_ino, b.st_mtime_ns, b.st_size))
+
+
 def _remove_judged(temp: str | Path, judged: os.stat_result) -> bool:
     """Remove the temp file judged stale, only while it is still that file
     (review 19 of PR #203, settings LOW-1): moved to a name of its own in
     the judging folder beside it (out of agents' reach, on the same
-    filesystem so the move is a rename), checked there by device and inode,
+    filesystem so the move is a rename), checked there by device, inode, modification time and size (_same_temp),
     then removed. Another file found there (a save that made its own since)
     is put back under the name, never over a newer one (link, which doesn't
     replace). True when the judged file is gone."""
@@ -874,7 +884,7 @@ def _remove_judged(temp: str | Path, judged: os.stat_result) -> bool:
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
         except FileNotFoundError:
             return True  # a start sweep took it: it was stale
-        if (info.st_dev, info.st_ino) == (judged.st_dev, judged.st_ino):
+        if _same_temp(info, judged):
             os.unlink(name, dir_fd=fd)
             return True
         try:

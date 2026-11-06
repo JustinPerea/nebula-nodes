@@ -82,18 +82,21 @@ describe('the Krea sign-in words (GM r23; review 11, copy NIT-3 and LOW-3)', () 
   });
 });
 
-describe('the notice region keeps clear of the workspace rail (review 11, copy LOW-2)', () => {
+describe('the notice region keeps clear of the workspace rail (review 11, copy LOW-2; round 22)', () => {
+  // Main's mechanism (workspace-rail.css writes --notice-left-clearance while the rail shows; the
+  // region's own left and right read it, centred). This PR's own :has(.workspace-rail) rule set
+  // left and right outright and lost the centring beside the docked Agent log (live check, round 22:
+  // 70 px wide at x 70 where main is 650 px at x 395); it is gone.
   const css = readFileSync(resolve(SRC, 'styles/noticeRegion.css'), 'utf8');
-  const rule = css.match(/:root:has\(\.workspace-rail\) \.notice-region\s*\{([^}]*)\}/)?.[1] ?? '';
+  const rail = readFileSync(resolve(SRC, 'styles/workspace-rail.css'), 'utf8');
 
-  it('starts past the rail’s column and keeps the same room on the right', () => {
-    expect(rule).toMatch(/--notice-rail-clearance:\s*calc\(var\(--workspace-rail-left[^)]*\) \+ var\(--workspace-rail-width[^)]*\) \+ var\(--notice-gap\)\)/);
-    expect(rule).toMatch(/left:\s*max\(var\(--page-gutter, 16px\), var\(--notice-rail-clearance\)\)/);
-    expect(rule).toMatch(/right:\s*max\(var\(--page-gutter, 16px\), var\(--notice-rail-clearance\), var\(--agent-log-clearance, 0px\)\)/);
+  it('starts past the rail’s column through the one clearance variable', () => {
+    expect(rail).toMatch(/:root:has\(\.workspace-rail\)\s*\{[^}]*--notice-left-clearance:\s*calc\(var\(--workspace-rail-left\) \+ var\(--workspace-rail-width\)/);
+    expect(css).toMatch(/--notice-l:\s*max\(var\(--page-gutter, 16px\), var\(--notice-left-clearance, 0px\)\)/);
   });
 
-  it('changes no layer: the bar stays under the rail’s labels, menus and popovers', () => {
-    expect(rule).not.toMatch(/z-index|transform|isolation|filter|opacity|contain|will-change/);
+  it('sets no left or right of its own under the rail, which would drop the centring', () => {
+    expect(css).not.toMatch(/:has\(\.workspace-rail\)\s*\.notice-region/);
   });
 });
 

@@ -451,3 +451,30 @@ def test_a_judging_folder_swept_away_under_the_move_leaves_the_temp_judged_again
 
     monkeypatch.setattr(settings.os, "rename", swept)
     assert settings._remove_judged(temp, judged) is False and temp.exists()
+
+
+def test_a_successor_that_took_the_freed_inode_is_not_the_judged_temp(tmp_path, monkeypatch):
+    """CI on 54f9483c (Linux): a filesystem hands a freed inode to the next
+    file made, so another save's new temp had the judged one's device and
+    inode. Simulated here on any platform: every stat in the settings module
+    reports the judged file's inode."""
+    temp = tmp_path / ".settings.json.nebula-tmp"
+    temp.write_bytes(b"judged")
+    past = time.time() - 600
+    os.utime(temp, (past, past))
+    judged = os.lstat(temp)
+    temp.unlink()
+    temp.write_bytes(b"another save's, made since")
+    real_stat = os.stat
+
+    def reusing(path, *a, **k):
+        info = real_stat(path, *a, **k)
+        fields = list(info)[:7] + [0, 0, 0]
+        fields[1], fields[2] = judged.st_ino, judged.st_dev
+        return os.stat_result(tuple(fields) + (info.st_atime, info.st_mtime, info.st_ctime,
+                                               info.st_atime_ns, info.st_mtime_ns, info.st_ctime_ns))
+
+    monkeypatch.setattr(settings.os, "stat", reusing)
+    assert settings._remove_judged(temp, judged) is False
+    monkeypatch.undo()
+    assert temp.read_bytes() == b"another save's, made since"

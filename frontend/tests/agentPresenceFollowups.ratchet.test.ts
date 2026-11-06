@@ -1347,8 +1347,8 @@ const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string 
 const LOCKED_COMPONENTS: Record<string, { file: string; via?: string[]; reason: string }> = {
   AssetItem: { file: 'components/panels/AssetsPanel.tsx', reason: 'Add to canvas and the drag take the lock (round 23)' },
   ProviderSwitcher: { file: 'components/nodes/ProviderSwitcher.tsx', reason: 'every provider row, fix and switch row takes the lock (fix round 2 of PR #200)' },
-  // DeferredPanels' MaskPainterModal renders the real one from its lazy chunk.
-  MaskPainterModal: { file: 'components/panels/MaskPainterModal.tsx', via: ['components/DeferredPanels.tsx'],
+  // DeferredMaskPainter's MaskPainterModal renders the real one from its lazy chunk.
+  MaskPainterModal: { file: 'components/panels/MaskPainterModal.tsx', via: ['components/panels/DeferredMaskPainter.tsx'],
     reason: 'Save Mask, the tools and the strokes take the lock (fix rounds 2 and 3 of PR #200)' },
   // Fix round 3 (review 3 LOW-6): G now checks CinemaStudioView and CreateView
   // (files that never read the lock); these are the delegates DELEGATES names.

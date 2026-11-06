@@ -12,7 +12,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import { SettingsTabs } from './settings/SettingsTabs';
 import { SettingsNoticeBar } from './settings/SettingsNoticeBar';
-import { SettingsTopNotice } from './settings/SettingsTopNotice';
+import { SettingsTopNotice } from './settings/DeferredSettingsTopNotice';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import '../../styles/panels.css';
 import '../../styles/settings.css';

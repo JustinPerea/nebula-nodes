@@ -517,7 +517,7 @@ describe('the card', () => {
   it('shows the provider chip in place of the missing-key badge, and the switch note until dismissed', () => {
     withKeys({ FAL_KEY: KEY });
     renderCard({ _provider: 'replicate' });
-    const chip = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Replicate\. (?!Can't run)\S/ });
+    const chip = screen.getByRole('button', { description: /^Provider for “Fixture”: Replicate\. (?!Can't run)\S/ });
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));
@@ -529,7 +529,7 @@ describe('the card', () => {
   it('a pick from the chip writes the node and leaves the note on the card', () => {
     withKeys({ FAL_KEY: KEY, BFL_API_KEY: KEY });
     renderCard({ resolution: '1.5k' });
-    fireEvent.click(screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Auto · Black Forest Labs$/ }));
+    fireEvent.click(screen.getByRole('button', { description: /^Provider for “Fixture”: Auto · Black Forest Labs$/ }));
     fireEvent.click(row(/^fal\.ai/));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ _provider: 'fal', resolution: '2k' });
     expect(useProviderNoteStore.getState().notes.n1).toBe("1.5k isn't on fal.ai: set to 2k");

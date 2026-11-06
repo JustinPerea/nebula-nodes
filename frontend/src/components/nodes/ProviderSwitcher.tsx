@@ -69,7 +69,7 @@ export function ProviderSwitcher({ definition, params, variant, onPick, wired = 
       </div>
     );
   }
-  return <ProviderPopoverTrigger state={state} variant={variant} displayName={definition.displayName} onPick={pick} onFix={fix} />;
+  return <ProviderPopoverTrigger state={state} variant={variant} displayName={name ?? definition.displayName} onPick={pick} onFix={fix} />;
 }
 
 function openSetup(target: ProviderSetupTarget | undefined) {
