@@ -25,6 +25,10 @@ export const CHROME_SELECTORS: readonly { id: string; selector: string }[] = [
   { id: 'updates', selector: '.agent-notes-panel, .agent-note-card' },
 ];
 
+/** Transient menus and popovers over the canvas: the right-click menu, the
+ *  connection popup, the move menu and any `role="menu"`. */
+export const TRANSIENT_SELECTORS: readonly string[] = ['.context-menu', '.connection-popup', '.asset-move__menu', '[role="menu"]'];
+
 /**
  * The canvas's own fixed chrome, which an edge chip must not sit on (GM: a chip
  * stands clear of chrome). By the attributes the layout code already reads
@@ -41,6 +45,8 @@ export const CANVAS_CHROME_SELECTORS: readonly string[] = [
   '.canvas-undo-notice',
   '.node-inspector-popover, .panel--inspector',
   '.agent-notes-panel, .agent-note-card',
+  // Open menus and popovers: a chip stands clear of one as well as under it (final review of PR #233, 5).
+  ...TRANSIENT_SELECTORS,
 ];
 
 const boxOf = (element: Element): Box | null => {

@@ -6,7 +6,7 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, moodboard_clash, refusal as cursor_action_refusal
 
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
@@ -778,10 +778,12 @@ def main() -> None:
         point = _subparser(parser, "point")
         if args.moodboard is None:
             point.error("--image and --part go with --moodboard BOARD (its id or exact name)")
-        if args.target is not None:
+        # The same check as the route and MCP (services/cursor_actions.moodboard_clash), in flag words.
+        clash = moodboard_clash(target=args.target, origin=args.origin or None)
+        if "target" in clash:
             point.error("--moodboard is a target of its own: give it or a node, port or spot "
                         f"({args.target!r}), not both")
-        if args.origin:
+        if "origin" in clash:
             point.error("--from can't go with --moodboard: a drag starts at a node or a spot")
     elif args.command == "point" and args.target is None:
         # One actionable line, with that command's usage (cli/parser.py).

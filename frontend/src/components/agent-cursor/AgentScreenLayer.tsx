@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } f
 import { useAgentPresenceStore, type AgentCursor } from '../../store/agentPresenceStore';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { AnchorResolver, domEnv, type ResolverEnv } from '../../lib/agentAnchorResolve';
-import { screenSpace, type ScreenSpace } from '../../lib/agentCursorSpace';
+import { useStoreApi } from '@xyflow/react';
+import { screenSpace, watchFlowStore, type FlowStoreLike, type ScreenSpace } from '../../lib/agentCursorSpace';
 import { layerOf } from '../../lib/agentCursorLayerOf';
 import { inkFor } from '../../lib/agentCursorLook';
 import { OutlineBook } from '../../lib/agentCursorOutlines';
@@ -63,6 +64,15 @@ class LayerContext {
   }
 }
 
+/** The canvas's React Flow store, when the layer sits inside its provider (the app's always does). */
+function useFlowStore(): FlowStoreLike | null {
+  try {
+    return useStoreApi() as unknown as FlowStoreLike;
+  } catch {
+    return null;
+  }
+}
+
 export function AgentScreenLayer({ canvasMounted, env }: {
   /** The canvas is on screen: a canvas anchor is then the canvas layer's. */
   canvasMounted: boolean;
@@ -97,6 +107,11 @@ export function AgentScreenLayer({ canvasMounted, env }: {
   useLayoutEffect(() => {
     if (context.setCanvasMounted(canvasMounted)) space.refresh();
   }, [canvasMounted, context, space]);
+
+  // The canvas panning, zooming or a node dragging moves a cursor parked at a
+  // Moodboard node with no DOM event: wake on the canvas store's changes.
+  const flowStore = useFlowStore();
+  useEffect(() => (flowStore ? watchFlowStore(flowStore, () => space.refresh()) : undefined), [flowStore, space]);
 
   return (
     <div className="agent-screen-layer" ref={(el) => context.setPane(el)} style={cursorSpringVars()}>

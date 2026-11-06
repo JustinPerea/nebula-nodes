@@ -239,6 +239,38 @@ export function domEvents(notify: () => void, observe: { current: ResizeObserver
   };
 }
 
+/** The part of React Flow's store the wake reads (`useStoreApi`'s). */
+export interface FlowStoreLike {
+  getState(): { transform?: unknown; nodes?: unknown };
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * Wakes `wake` (one call a frame at most) when the canvas viewport pans or
+ * zooms or a node moves: a React Flow transform change fires no DOM event, so
+ * a cursor parked at a Moodboard node on the canvas would stay behind
+ * (review of PR #233, finding 1). Reads two store fields on a store change,
+ * and no layout; the wake itself is the space's one re-read.
+ */
+export function watchFlowStore(store: FlowStoreLike, wake: () => void): () => void {
+  let frame: number | null = null;
+  let { transform, nodes } = store.getState();
+  const off = store.subscribe(() => {
+    const state = store.getState();
+    if (state.transform === transform && state.nodes === nodes) return;
+    ({ transform, nodes } = state);
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      wake();
+    });
+  });
+  return () => {
+    off();
+    if (frame !== null) cancelAnimationFrame(frame);
+  };
+}
+
 /**
  * A surface beside the canvas as a CursorSpace (Phase 3 slice 5): the whole
  * window, in client pixels at zoom 1, resolved through the DOM

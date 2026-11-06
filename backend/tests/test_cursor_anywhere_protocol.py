@@ -349,6 +349,23 @@ def test_a_line_said_in_place_on_a_board_keeps_the_cursor_and_its_names(api):
     assert event["target"]["surface"] == "moodboard" and event["anchorNames"] == {"board": "Dusk dunes"}
 
 
+def test_the_route_refuses_a_moodboard_target_with_a_drag_start_as_mcp_does(api):
+    """Final review 4: the route took `from` with a moodboard target (200) while MCP and the CLI refuse it."""
+    client, sent, _, _ = api
+    _create(client)
+    before = len(sent)
+    for origin in ({"nodeId": "n1"}, {"x": 1, "y": 2}):
+        refused = client.post("/api/canvas/cursor", headers=AGENT, json={
+            "target": {"surface": "moodboard", "board": "Dusk dunes"}, "from": origin, "action": "drag"})
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["detail"] == ("moodboard can't be combined with from. "
+                                            "Point at a moodboard, or at a node or a spot, in one call.")
+    assert len(sent) == before  # nothing was broadcast
+    with pytest.raises(ValueError) as mcp_said:
+        mcp_server.point_at(moodboard="b1", from_node_id="n1", action="drag")
+    assert refused.json()["detail"].replace("from.", "from_node_id.") in str(mcp_said.value)
+
+
 def _create_id(client) -> str:
     return client.get("/api/moodboards").json()[0]["id"]
 

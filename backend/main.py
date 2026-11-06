@@ -167,7 +167,8 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, moodboard_clash, moodboard_clash_refusal,
+                                     refusal as cursor_action_refusal)
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
@@ -6543,14 +6544,19 @@ def _pointed(action: str, target: Mapping[str, Any], names: Mapping[str, Any] | 
     return {"verb": verb, "nodeId": None, "label": None} if verb else None
 
 
+def _open_project_id() -> str | None:
+    """The open project's id, None when none is open or the catalog is unreadable."""
+    try:
+        return _workspace_context()["activeProjectId"]
+    except Exception:  # noqa: BLE001 - the catalog unreadable: Global's boards still count
+        return None
+
+
 def _boards_to_point_at() -> list[dict[str, Any]]:
     """The boards a cursor may point at: those of the open project, then
     Global, as the Moodboards tab lists them."""
     store = _moodboard_store()
-    try:
-        project_id = _workspace_context()["activeProjectId"]
-    except Exception:  # noqa: BLE001 - the catalog unreadable: Global's boards still count
-        project_id = None
+    project_id = _open_project_id()
     boards = store.list(scope="project", projectId=project_id) if project_id else []
     return [*boards, *store.list(scope="global")]
 
@@ -6594,6 +6600,9 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             names = agent_presence.here_names(identity) if placed == "cursor" else None
         elif isinstance(body.get("target"), dict) and "surface" in body["target"]:
             # A moodboard item: the boards it may name are read off the loop.
+            clash = moodboard_clash(**{"from": body.get("from")})  # a moodboard item is a target of its own
+            if clash:
+                raise PresenceError(moodboard_clash_refusal(clash))
             target, names = parse_surface_target(body["target"], await asyncio.to_thread(_boards_to_point_at))
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
@@ -21615,6 +21624,13 @@ def _board_point(board: dict | None, image_id: str | None = None, part: str | No
                  action: str, also: dict | None = None) -> dict[str, Any]:
     """The cursor's place for a board write, as _say_agent_action takes it
     (services/moodboard_actions.board_anchor)."""
+    # The same reach as `point_at` (_boards_to_point_at): the open project's
+    # boards and Global's. A board elsewhere (made in, or moved to, another
+    # project) is not in the panel, so the cursor would park at "Open assets"
+    # for nothing; the write still says what happened in the Agent log.
+    scope = (board or also or {}).get("projectId")
+    if scope and scope != _open_project_id():
+        return {}
     target, names = moodboard_actions.board_anchor(board, image_id, part, also=also)
     return {"target": target, "action": action, "names": names}
 

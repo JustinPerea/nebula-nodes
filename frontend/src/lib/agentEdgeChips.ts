@@ -1,4 +1,4 @@
-import type { Box, Point } from './agentAnchorResolve';
+import { area, intersect, type Box, type Point } from './agentAnchorResolve';
 import { AGENT_CURSOR_CHIP } from './agentCursorTuning';
 
 /**
@@ -23,6 +23,9 @@ import { AGENT_CURSOR_CHIP } from './agentCursorTuning';
  *
  * In the cursor chunk (lib/deferredChunks.ts DEFERRED_MODULES).
  */
+
+/** The last-resort count's search along an edge: a spot every this many px. */
+const STEP_PX = 12;
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
 
@@ -318,17 +321,19 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
     }
   }
   // Counted where there is room: the pane's edge nearest the agent, then the next nearest.
-  // A pane too small to hold a count inside its inset holds none.
+  // A pane too small to hold a count inside its inset holds none there.
   const holdsCount = view.width - 2 * insetPx >= sizes.count.width && view.height - 2 * insetPx >= sizes.count.height;
-  for (const { tip, n } of holdsCount ? spilled : []) {
+  for (const { tip, n } of spilled) {
     const near = (side: Side): number => (side === 'left' ? Math.abs(tip.x - view.left)
       : side === 'right' ? Math.abs(view.left + view.width - tip.x)
         : side === 'top' ? Math.abs(tip.y - view.top) : Math.abs(view.top + view.height - tip.y));
     const sides = (['top', 'bottom', 'left', 'right'] as Side[]).sort((a, b) => near(a) - near(b));
-    for (const side of sides) {
+    let counted = false;
+    for (const side of holdsCount ? sides : []) {
       const joined = counts.find((count) => count.id === `view:${side}`);
       if (joined) {
         joined.count += n;
+        counted = true;
         break;
       }
       const group = { ...viewGroup(side), members: [] };
@@ -339,8 +344,45 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
       const box = boxAt(sizes.count, spot.pos, spot.depth);
       placed.push(box);
       counts.push({ id: `view:${side}`, count: n, box, side });
+      counted = true;
       break;
     }
+    // A pane with no area is not on screen: there is nowhere to draw a count.
+    if (counted || view.width <= 0 || view.height <= 0) continue;
+    // Last resort (the coordinator's ruling on review 1, C8): chrome covers every free spot on every edge, or
+    // the pane holds no count. The information that agents are off screen is never dropped: the count sits over
+    // chrome at the least-covered spot on the edges, nearest the agent on a tie. It is a count, not a button
+    // (pointer-events none), so it takes no clicks from what it sits over.
+    const covered = (box: Box): number => chrome.reduce((sum, c) => sum + area(intersect(box, c)), 0);
+    let best: { box: Box; side: Side; score: number; gap: number } | null = null;
+    for (const side of sides) {
+      const joined = counts.find((count) => count.id === `view:${side}`);
+      if (joined) {
+        joined.count += n;
+        best = null;
+        counted = true;
+        break;
+      }
+      const group = { ...viewGroup(side), members: [] };
+      const { boxAt } = lay(group);
+      const [lo, hi] = group.along;
+      const half = (vertical(side) ? sizes.count.height : sizes.count.width) / 2;
+      const aim = vertical(side) ? tip.y : tip.x;
+      const mid = (lo + hi) / 2;
+      const stops = lo + half <= hi - half
+        ? [Math.min(Math.max(aim, lo + half), hi - half)]
+        : [mid];
+      for (let pos = lo + half; pos <= hi - half; pos += STEP_PX) stops.push(pos);
+      for (const pos of stops) {
+        const box = boxAt(sizes.count, pos);
+        const score = covered(box) + (placed.some((other) => overlaps(box, other)) ? 1e9 : 0);
+        const gap = Math.abs(pos - aim);
+        if (best === null || score < best.score || (score === best.score && gap < best.gap)) best = { box, side, score, gap };
+      }
+    }
+    if (counted || best === null) continue;
+    placed.push(best.box);
+    counts.push({ id: `view:${best.side}`, count: n, box: best.box, side: best.side });
   }
   return { chips, counts };
 }

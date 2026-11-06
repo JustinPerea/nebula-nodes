@@ -364,7 +364,7 @@ def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
     ``itemId``), checked against ``boards`` (each ``{"id", "name",
     "images": [{"id"}]}``) and turned into ids, so the anchor an event
     carries is the same whatever the agent called the item. Parts: name,
-    direction, avoid or colors on a board; note or weight on an image. A
+    direction, avoid, colors or colors-out on a board; note or weight on an image. A
     drag's ``from`` is never a surface."""
     if label != "target":
         raise PresenceError(f"{label} can't be a moodboard: a drag starts at a node or a spot (nodeId, or x and y)")

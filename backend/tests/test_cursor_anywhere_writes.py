@@ -108,6 +108,51 @@ def test_move_and_restore_are_the_board_click(api):
     assert _cursor(sent)["say"] == "Restored “Desert light”"
 
 
+def _other_project() -> str:
+    """A second canvas project in this test's store: not the open one."""
+    import main as main_module
+    from services.project_store import make_project
+
+    store = main_module.project_store
+    with store.transaction() as catalog:
+        other = make_project("Other project")
+        catalog["projects"][other["id"]] = other
+        store.commit(catalog)
+    return other["id"]
+
+
+def _agent_events(sent) -> list[dict]:
+    return [person for person, _ in sent if person.get("type") == "agentPresence"]
+
+
+def test_a_board_made_in_another_project_sends_no_cursor_target(api):
+    """Final review 2: the panel doesn't list that board, so a cursor parked
+    at "Open assets" for it would be pointing at nothing. The log line stays."""
+    client, sent, _, _ = api
+    _create(client, LANE_A, projectId=_other_project())
+    event = _agent_events(sent)[-1]
+    assert not event.get("target") and event["say"] == "Made “Desert light” with 3 images"
+    # A board of the open project, and a Global one, still point.
+    mine = _create(client, LANE_A, projectId=api[3])
+    assert _where(_cursor(sent)) == (mine["id"], None, "click")
+    glob = _create(client, LANE_A)
+    assert _where(_cursor(sent)) == (glob["id"], None, "click")
+
+
+def test_moving_a_board_to_another_project_sends_no_cursor_target(api):
+    client, sent, _, project_id = api
+    board = _create(client, projectId=project_id)
+    moved = client.post(f"/api/moodboards/{board['id']}/move", headers=LANE_A, json={"projectId": _other_project()})
+    assert moved.status_code == 200, moved.text
+    event = _agent_events(sent)[-1]
+    assert not event.get("target") and event["say"]  # it still says what it did
+    # ...and moving one into the open project points at it.
+    away = _create(client, projectId=_other_project())
+    back = client.post(f"/api/moodboards/{away['id']}/move", headers=LANE_A, json={"projectId": project_id})
+    assert back.status_code == 200, back.text
+    assert _where(_cursor(sent)) == (away["id"], None, "click")
+
+
 def test_adding_one_image_is_that_image_and_several_are_the_board(api):
     client, sent, _, _ = api
     board = _create(client)

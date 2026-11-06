@@ -23,6 +23,20 @@ _ECHO_CHARS = 40
 SESSION_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 
+def moodboard_clash(**given: object) -> list[str]:
+    """Which of a moodboard target's forbidden companions were given (a node,
+    a port, a spot, a drag's start): a moodboard item is a target of its own.
+    The one check for the route, MCP point_at and the CLI's `nebula point`;
+    an empty string or None counts as not given."""
+    return [name for name, value in given.items() if value is not None and value != ""]
+
+
+def moodboard_clash_refusal(names: list[str]) -> str:
+    """The refusal for ``moodboard_clash``'s result, in one wording everywhere."""
+    return (f"moodboard can't be combined with {', '.join(names)}. "
+            "Point at a moodboard, or at a node or a spot, in one call.")
+
+
 def session_ok(raw: object) -> bool:
     """Whether ``raw`` is a cursor session id the backend keeps."""
     return isinstance(raw, str) and SESSION_RE.fullmatch(raw) is not None

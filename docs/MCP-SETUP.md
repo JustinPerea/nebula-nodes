@@ -980,6 +980,7 @@ past tense because the line goes out after the write landed):
 | analyze | the board's `colors` | `look` |
 | keep the brief | the board's `direction` | `click` |
 | delete a board | nothing: every cursor on it leaves | n/a |
+| a board outside the open project and Global (made in, or moved to, another project) | nothing: the panel doesn't list it, so the line shows in the Agent log and no cursor moves | n/a |
 
 A write that touches several things goes to the board, and two controls in
 one write are the board, not one control. The person's own writes send

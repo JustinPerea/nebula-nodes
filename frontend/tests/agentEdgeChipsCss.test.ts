@@ -23,9 +23,9 @@ describe('agentEdgeChips.css', () => {
     }
   });
 
-  it('sits with the screen layer: above the docks, below modals', () => {
+  it('sits above the docks and below menus and modals (the layer test checks the order)', () => {
     expect(blocks.find((b) => b.selector === '.agent-edge-chips')?.body)
-      .toMatch(/z-index:\s*calc\(var\(--sr-layer-modal, 60\) - 1\)/);
+      .toMatch(/z-index:\s*var\(--sr-layer-edge-chips, 58\)/);
   });
 
   it('slides in on the sampled spring and stands still under reduced motion; no ease words', () => {

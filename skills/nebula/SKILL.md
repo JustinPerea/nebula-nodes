@@ -921,7 +921,7 @@ your session as listening.
 
 `--moodboard BOARD` (its id or exact name) points at a moodboard instead of a
 node or a spot, with `--image N` (a number, `#12` or an id) and `--part`
-(`name`, `direction`, `avoid` or `colors` on a board; `note` or `weight` on
+(`name`, `direction`, `avoid`, `colors` or `colors-out` on a board; `note` or `weight` on
 an image). It takes no target and no `--from`. Nebula never opens a panel or
 scrolls for the person: if the Moodboard panel is closed or the item is out of
 view, your cursor parks at the button that opens it or at the edge of what

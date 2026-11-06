@@ -24,7 +24,9 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
-from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
+from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, moodboard_clash as _moodboard_clash,
+                                     moodboard_clash_refusal as _moodboard_clash_refusal,
+                                     refusal as _cursor_action_refusal, session_ok)
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -669,12 +671,9 @@ def point_at(
         # A moodboard item: its own target, never mixed with a node or a spot.
         if not moodboard:
             raise ValueError("point_at: image and part need moodboard (its id or exact name)")
-        clash = [name for name, given in (("node_id", node_id), ("port", port), ("x", x), ("y", y),
-                                          ("from_node_id", from_node_id), ("from_port", from_port))
-                 if given is not None and given != ""]
+        clash = _moodboard_clash(node_id=node_id, port=port, x=x, y=y, from_node_id=from_node_id, from_port=from_port)
         if clash:
-            raise ValueError(f"point_at: moodboard can't be combined with {', '.join(clash)}. "
-                             "Point at a moodboard, or at a node or a spot, in one call.")
+            raise ValueError(f"point_at: {_moodboard_clash_refusal(clash)}")
         item: dict[str, Any] = {"surface": "moodboard", "board": moodboard}
         if image is not None:
             item["image"] = image

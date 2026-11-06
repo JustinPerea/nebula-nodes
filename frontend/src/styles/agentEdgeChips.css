@@ -7,8 +7,9 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  /* With the screen layer: above the docks, below modals and the notice region. */
-  z-index: calc(var(--sr-layer-modal, 60) - 1);
+  /* Above the docks (55), below menus and popovers (--sr-layer-transient, 59), modals and the notice region:
+     a chip never covers a menu (final review of PR #233, finding 5). */
+  z-index: var(--sr-layer-edge-chips, 58);
 }
 
 .agent-edge-chip {
