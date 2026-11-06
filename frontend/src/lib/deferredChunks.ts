@@ -153,6 +153,15 @@ export const DeferredPinLayer = lazyWithPreload(
   (module) => module.PinLayer,
 );
 
+// The note dialog and the kept-notes stack (components/canvas/PinComposer.tsx):
+// both draw only after a person's action (a note opened, a send refused or
+// kept), never at the first paint, so it is mounted at once and appears when
+// its chunk lands. It brings the prompt dialog (PromptDialog) with it.
+export const DeferredPinComposer = lazyWithPreload(
+  () => import('../components/canvas/PinComposer'),
+  (module) => module.PinComposer,
+);
+
 export const DeferredAgentCursorLayer = lazyWithPreload(
   () => import('../components/canvas/AgentCursorLayer'),
   (module) => module.AgentCursorLayer,
@@ -222,6 +231,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalBar.preload,
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
+  DeferredPinComposer.preload,
   DeferredAgentCursorLayer.preload,
   DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
@@ -320,6 +330,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/RegionNotices.tsx',
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
+  'components/canvas/PinComposer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
   // The agent cursor's motion and look, only in the cursor layer's chunk.
   'lib/agentCursorPlanner.ts',

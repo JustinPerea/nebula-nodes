@@ -1,6 +1,7 @@
 import {
   DeferredAgentCursorLayer,
   DeferredAgentNodeMarkLayer,
+  DeferredPinComposer,
   DeferredPinLayer,
   DeferredProposalBar,
   DeferredProposalLayer,
@@ -26,6 +27,8 @@ import '../../store/agentPresenceFeed';
 export const ProposalBar = deferredAtOnce(DeferredProposalBar, 'ProposalBar');
 export const ProposalLayer = deferredAtOnce(DeferredProposalLayer, 'ProposalLayer');
 export const PinLayer = deferredAtOnce(DeferredPinLayer, 'PinLayer');
+/** The note dialog and the kept-notes stack: drawn only after a person's action. */
+export const PinComposer = deferredAtOnce(DeferredPinComposer, 'PinComposer');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
 /** Agents on the nodes: each one's mark, and the placeholders' outlines (Q125 item 3). */
 export const AgentNodeMarks = deferredAtOnce(DeferredAgentNodeMarkLayer, 'AgentNodeMarks');

@@ -4411,3 +4411,33 @@ tests pass unchanged apart from the listing.
 - Mutation: the path `copyfile` back in the save fails
   `test_a_folder_swapped_after_open_gets_no_copy_of_the_metadata` and the
   Linux descriptor test.
+
+## Round 24: fit the startup set after main's new budget
+
+Main now budgets the whole startup set (#234, limit lowered in #235 to
+1,894,000 raw / 492,000 gzip; main measures 1,885,838 / 488,256). Round 23d
+plus the merge measured 1,895,667 raw (a sourcemap build) and 1,894,117 in the
+plain build, 117 over, +8.3 kB over main.
+
+- **Measured** with `startupSet()` (scripts/lib/startupChunks.mjs) on main and
+  the branch, and a sourcemap build summed by source file. The growth was
+  spread over many small modules, not one: ModalPortal/modalFocus +3.3 kB,
+  nodeDefinitions +2.2 kB (Idol's definition), provider switch/readiness
+  +4.5 kB, runScope/directRoute/placeholderRunConfirm +3.0 kB, key lock
+  (runKeyLock, proposalAcceptLock, canvasLock/canvasFollow) +3.0 kB, World v2
+  splat card +1.6 kB, Settings dock +1.5 kB, wsClient moved chunks (+2.5 kB in
+  its own chunk, -2.5 kB out of clearsOnPromote).
+- **Moved**: PinComposer (the note dialog and the kept-notes stack) is now
+  `DeferredPinComposer` (lib/deferredChunks.ts), mounted at once in Canvas
+  through `deferredAtOnce` (components/canvas/DeferredCanvasOverlays.tsx), with
+  a preload on idle and an entry in DEFERRED_MODULES. It draws only after a
+  person's action, never at the first paint; PromptDialog goes with it (its
+  only startup importer). Startup set: 1,881,993 raw / 486,544 gzip, 3,845 raw
+  under main and 12.0 kB raw / 5.5 kB gzip under the limit. The limit is not
+  raised.
+- **Stays at startup, on purpose**: ModalPortal and its focus code
+  (modalFocus), because the held-edits notice on Projects home
+  (UnsavedEditsNotice) confirms in a ModalPortal and is kept in the entry for a
+  tab whose chunks went stale; the key lock (runKeyLock) and its proposal
+  twin, which must work before any chunk loads; the Idol node definition; the
+  route/readiness code the cards draw from at the first paint (ModelNode).
