@@ -3,7 +3,8 @@ import { placeholderRunDialogModule } from './placeholderRunDialogModule';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
- * startup entry (the 512 kB budget in scripts/check-build-budget.mjs).
+ * startup entry (the 512 kB budget in scripts/check-build-budget.mjs, which
+ * also budgets the startup set: the entry plus the chunks it loads statically).
  *
  * Every split module is listed in `DEFERRED_MODULES` below, and
  * `tests/entrySplit.test.ts` walks the static import graph from src/main.tsx
@@ -191,6 +192,10 @@ export const DeferredSettingsTopNotice = lazyWithPreload(
   () => import('../components/panels/settings/SettingsTopNotice'),
   (module) => module.SettingsTopNotice,
 );
+
+// jszip, for the selection toolbar's download zip (lib/canvasSelection.ts): only
+// inside that action, so it loads at the moment of use, with the chunk retry.
+export const jszipModule = deferredModule(() => import('jszip'));
 
 // The dialog before the person's direct run of agents' paid placeholders
 // (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
