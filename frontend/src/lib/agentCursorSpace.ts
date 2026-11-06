@@ -2,6 +2,7 @@ import { getBezierPath, Position, type Node, type useStoreApi } from '@xyflow/re
 import type { NodeData } from '../types';
 import { chainPoint, resolveAnchor, type AnchorLookup, type Point } from './agentCursorMotion';
 import { area, intersect, type AnchorResolver, type Box, type Resolution } from './agentAnchorResolve';
+import { watchBoardView } from './agentBoardView';
 import type { CursorLayer } from './agentCursorLayerOf';
 import type { AgentCursorAnchor } from './wsClient';
 
@@ -166,6 +167,9 @@ export interface ScreenSpace extends CursorSpace {
    *  outline; null while the item isn't drawn, is clipped out, or the cursor
    *  parks at a launcher or an edge. */
   outlineOf(anchor: AgentCursorAnchor): Box | null;
+  /** The launcher `anchor` resolves to right now (read afresh, not from a
+   *  frame's resolve), when the cursor parks at one: the launcher dots. */
+  launcherOf(anchor: AgentCursorAnchor): { element: Element; box: Box } | null;
 }
 
 const anchorKey = (anchor: AgentCursorAnchor): string => JSON.stringify(anchor);
@@ -207,7 +211,10 @@ export function domEvents(notify: () => void, observe: { current: ResizeObserver
   };
   window.addEventListener('resize', schedule);
   document.addEventListener('scroll', schedule, { capture: true, passive: true });
+  // The Board view's camera: a card panned out of its pane has no element to observe.
+  const unwatchBoard = watchBoardView(schedule);
   return () => {
+    unwatchBoard();
     if (frame !== null) cancelAnimationFrame(frame);
     mutations?.disconnect();
     sizes?.disconnect();
@@ -281,6 +288,10 @@ export function screenSpace({ resolver, measure, pane, canvasMounted, gone, even
     snap: (p, _box, dpr) => ({ x: Math.round(p.x * dpr) / dpr, y: Math.round(p.y * dpr) / dpr }),
     refresh: notify,
     resolution: (anchor) => last.get(anchorKey(anchor))?.resolution,
+    launcherOf(anchor) {
+      const resolution = locate(anchor);
+      return resolution.kind === 'launcher' ? { element: resolution.element, box: resolution.box } : null;
+    },
     outlineOf(anchor) {
       const resolution = last.get(anchorKey(anchor))?.resolution;
       if (resolution?.kind !== 'anchor') return null;

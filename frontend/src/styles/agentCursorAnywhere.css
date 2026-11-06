@@ -77,6 +77,56 @@
   animation: agent-item-outline-in var(--agent-cursor-soft) both;
 }
 
+/* The launcher's activity dot (slice 8): 6 px, agent colour, placed from JS
+   (middle at left/top). Its opacity (the idle dim, the leave) runs on the soft
+   spring; a dot that arrives fades in on it. A mark, never a control. */
+.agent-launcher-dots {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.agent-launcher-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--agent-color);
+  pointer-events: none;
+  transition: opacity var(--agent-cursor-soft);
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
+.agent-launcher-dot__more {
+  position: absolute;
+  height: 12px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  transform: translate(-100%, -50%);
+  border-radius: 6px;
+  background: var(--agent-color);
+  font: 600 9px/12px var(--sr-font-sans, system-ui, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity var(--agent-cursor-soft);
+  animation: agent-item-outline-in var(--agent-cursor-soft) both;
+}
+
+/* One that left fades out where it was (the soft spring), then JS removes it. */
+.agent-launcher-dot[data-leaving],
+.agent-launcher-dot__more[data-leaving] {
+  opacity: 0;
+  animation: agent-launcher-dot-out var(--agent-cursor-soft) both;
+}
+
+@keyframes agent-launcher-dot-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @keyframes agent-item-outline-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -89,5 +139,11 @@
 
   .agent-cursor__park-chevron {
     animation: none;
+  }
+
+  .agent-launcher-dot,
+  .agent-launcher-dot__more {
+    animation: none;
+    transition: none;
   }
 }

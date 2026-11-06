@@ -118,3 +118,31 @@ GM - Design's ruling on #233 wording, built in the shared helpers so the Agent l
 ## The type caret on the screen layer (GM, 2026-11-05)
 
 The shared field already draws `sayCaret` / `tipCaret` for any non-node target; no code change. Screen-layer tests pin: a `type` cursor on a Studio anchor shows `.agent-cursor__say-caret` while its say shows, `.agent-cursor__tip-caret` after the hold ends, and a count cursor has the tip caret. Mutation: `sayCaret` false for a surface target fails all three. GM also confirmed the outlines as built (2 rings, "+N" on the outermost counts the agents without a ring).
+
+## Slices 7b–9 handoff (paused for restart)
+
+Nothing committed, nothing stashed. No processes of mine left running; the two mutation backups were restored (verified identical). Gates (`tsc`, lint, ratchets, build, `pr_tests.sh`) have NOT been run on this state; the earlier build/lint run was on a half-edited tree. Not measured: entry bytes for 7b/8/9.
+
+### 7b: culled Board cards (built, tests green: `tests/agentBoardCulled.test.tsx`, 6 pass; mutation "skip culled" failed 4, restored)
+- `lib/agentBoardView.ts` (registry: boardId, pane, camera, cards, subscribe), registered from `BoardFlow` in `moodboard-studio/BoardCanvas.tsx` (effect after `shownRef`). Cards come from `shownRef` nodes (flow position and size), not a store.
+- `ResolverEnv.culled?` in `lib/agentAnchorResolve.ts`; `exact()` returns an `edge` resolution (element = the pane) when nothing in the DOM matches an image anchor; `domEnv().culled` does pane rect + camera maths. `domEvents` in `agentCursorSpace.ts` wakes on `watchBoardView`.
+- Left: confirm `entrySplit` passes (BoardCanvas now imports `lib/agentBoardView.ts`, listed in DEFERRED_MODULES; if BoardCanvas is on the entry graph the test will say). One test title was fixed from "bottom edge" to "top edge" (sed failed on BSD; redo with python if title still says bottom). No real-registry integration test through BoardFlow.
+
+### 8: launcher dots (built; `tests/agentLauncherDots.test.tsx` 13 pass; mutation "keep removed agents" failed 3, restored)
+- `lib/agentLauncherDots.ts` (`launcherDots`, `DotBook`, ghosts that fade on the soft spring), `ScreenSpace.launcherOf` in `agentCursorSpace.ts`, `LauncherDots` in `AgentScreenLayer.tsx`, CSS in `agentCursorAnywhere.css`, `AGENT_CURSOR_DOT` in `agentCursorTuning.ts`.
+- Decisions to flag to GM: "+N" is count minus 1 (3 agents = one dot and "+2"); dots appear once the cursor has landed; a new target that still resolves to the same launcher keeps its dot. Ghost opacity moved to CSS (the inline-styles lint rejected static `opacity: 0`). Lint must be rerun to confirm.
+- Left: add a CSS ratchet line for the dot rules if wanted (`agentScreenCss.test.ts` still passes by construction: no pointer-events there, no ease words; not re-run).
+
+### 9: canvas edge chips (built, mostly untested)
+- Files: `lib/agentEdgeChips.ts` (pure `planChips`, names), `lib/agentChipChrome.ts` (visible pane = pane less `.workspace-dock-panel, .chat-panel`; chrome = Inspector, `.agent-log`, Updates by existing class names), `lib/agentChipPress.ts` (the only pan, `springViewport`), `components/canvas/CanvasEdgeChips.tsx` (portal on body, rechecks every 250 ms plus store changes), `styles/agentEdgeChips.css` (own file; only `.agent-edge-chip` takes pointer events), tuning `AGENT_CURSOR_CHIP`/`_SPRING` and `--agent-cursor-chip` vars, mounted in `AgentCursorLayer.tsx`. `agentCursorNoOpen.test.ts` updated (PRESS_HANDLERS = agentChipPress.ts, new files scanned, 16 pass).
+- HALF-DONE EDIT: the last python patch to `agentEdgeChips.ts` (obstacle chips stand OUTSIDE the panel face: `outside` group flag, mirrored `boxAt`, fallback to another face when no room) was applied but `tsc` and `tests/agentEdgeChips.test.ts` were not re-run. Before the patch 17 of 19 passed; the 2 failures were exactly the obstacle placement the patch fixes. Re-run it first; the 400-layout no-overlap property test must pass after it.
+- Left: (a) `tests/agentEdgeChipsLayer.test.tsx` (mock React Flow store like `agentCursorLayer.test.tsx`: chip is a button named "Claude, show where it’s working", count is `role=img` named "+2 agents off screen", press calls `springViewport` once with a viewport centring the target and nothing pans on render; mock `viewportSpring`); (b) `tests/agentEdgeChipsCss.test.ts` (pointer-events auto only on `.agent-edge-chip`, reduced motion none, no ease words); (c) mutation "chip pans on render" (call `panToTarget` in an effect) must fail the render test; (d) chrome test for `readChipView` selectors; (e) all gates, entry bytes (stop past 503,500), `person_gate.py` diff empty, golden DOM test unchanged (chips are in a body portal, so it should be); (f) commit messages `commit-s7b.txt`, `commit-s8.txt`, `commit-s9.txt` (not written; /private/tmp is wiped, put them in the worktree if rewritten). Slices share hunks in `agentCursorSpace.ts`, `deferredChunks.ts`, `agentCursorTuning.ts`, `agentCursorSpringVars.ts` and `agentCursorNoOpen.test.ts`, so one combined message is simplest.
+- Not verified: the dot/chip look in a browser; the drawn tip is approximated by the anchor's resolved point (not the column-offset tip); a `setSelection`-style real chip press in Canvas.
+
+## Slices 7b–9 finished (after the restart)
+
+- Entry bundle: 502,135 bytes (`index-C-OBbbHy.js`; limit 503,500). `entrySplit` passes.
+- Launcher dots now match the design: 1 agent 1 dot, 2 agents 2 dots, 3+ two dots and "+N" counting the agents without a dot (3 agents "+1", 4 "+2"). Earlier handoff text ("one dot and +2") is superseded.
+- Edge chips: obstacle chips stand outside the panel's face; `agentEdgeChips.ts` tsc fix (`as Side[]` for the sort). Chip layer caches the pane box (re-read on a moved view, resize, or a press), so its 250 ms recheck reads only the panels: `agentCursorLayer.test.tsx` "no layout read" caught the earlier version.
+- `CanvasEdgeChips` sets its agents ref in an effect (react-hooks/refs) and carries one reasoned `set-state-in-effect` disable (DOM measurement, as elsewhere).
+- Tests added: `agentEdgeChipsLayer.test.tsx`, `agentEdgeChipsCss.test.ts`, `agentChipChrome.test.ts`; a dot-CSS case in `agentScreenCss.test.ts`.

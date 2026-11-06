@@ -1,4 +1,6 @@
 import {
+  AGENT_CURSOR_CHIP,
+  AGENT_CURSOR_CHIP_SPRING,
   AGENT_CURSOR_CLICK,
   AGENT_CURSOR_DASHED,
   AGENT_CURSOR_ERROR,
@@ -29,7 +31,10 @@ export function cursorSpringVars(): Record<`--${string}`, string> {
   const turn = stepCurve(AGENT_CURSOR_RING_SPRING);
   const breath = thinkCurve();
   const fade = springLinear(springFromStiffness(AGENT_CURSOR_FADE_SPRING.stiffness, AGENT_CURSOR_FADE_SPRING.damping));
+  const chip = springLinear(springFromStiffness(AGENT_CURSOR_CHIP_SPRING.stiffness, AGENT_CURSOR_CHIP_SPRING.damping));
   springVars = {
+    '--agent-cursor-chip': `${chip.durationMs}ms ${chip.easing}`,
+    '--agent-cursor-chip-slide': `${AGENT_CURSOR_CHIP.slidePx}px`,
     '--agent-cursor-soft': `${soft.durationMs}ms ${soft.easing}`,
     '--agent-cursor-ring': `${ring.durationMs}ms ${ring.easing}`,
     '--agent-cursor-ring-from': `${AGENT_CURSOR_CLICK.ringFromPx}px`,

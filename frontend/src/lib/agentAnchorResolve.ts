@@ -1,4 +1,5 @@
 import { agentAnchor } from './agentAnchors';
+import { boardView } from './agentBoardView';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
@@ -38,6 +39,11 @@ export interface ResolverEnv {
   query(selector: string): readonly Element[];
   measure(element: Element): Box | null;
   clip(element: Element): Box;
+  /** An image card the Board view doesn't render because it is panned fully
+   *  out of the pane (`onlyRenderVisibleElements`): its box in viewport px
+   *  worked out from the card's position and the camera, the pane's box as
+   *  its clip, and the pane as its element. null: not such a card. */
+  culled?(board: string, image: string): { box: Box; clip: Box; element: Element } | null;
 }
 
 export type LauncherStep = 'board' | 'surface' | 'canvas';
@@ -184,7 +190,15 @@ export class AnchorResolver {
       const { point, angle } = clampToClip(aim, pick.clip);
       parked ??= { kind: 'edge', point, toward: aim, angle, element: pick.element, clip: pick.clip };
     }
-    return parked;
+    if (parked) return parked;
+    // Not in the DOM at all: an image card the Board view culled (panned out
+    // of its pane) is still on the board, so it parks at the pane's edge.
+    const [board, image] = anchor.itemId.split('/');
+    const culled = image ? this.env.culled?.(board, image) : null;
+    if (!culled || area(culled.box) === 0) return null;
+    const aim = aimPoint(culled.box);
+    const { point, angle } = clampToClip(aim, culled.clip);
+    return { kind: 'edge', point, toward: aim, angle, element: culled.element, clip: culled.clip };
   }
 
   private launcher(key: string, step: LauncherStep, share = LAUNCHER_VISIBLE_SHARE): Resolution | null {
@@ -228,6 +242,24 @@ export function domEnv(): ResolverEnv {
     measure: (element) => {
       const rect = element.getBoundingClientRect();
       return rect.width === 0 && rect.height === 0 ? null : { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    },
+    culled: (board, image) => {
+      const view = boardView();
+      const pane = view?.pane();
+      const camera = view?.camera();
+      if (!view || view.boardId !== board || !pane || !camera) return null;
+      const rect = pane.getBoundingClientRect();
+      const clip = intersect(viewport(), { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+      const centre = { x: clip.left + clip.width / 2, y: clip.top + clip.height / 2 };
+      let best: { box: Box; distance: number } | null = null;
+      for (const card of view.cards()) {
+        if (card.imageId !== image) continue;
+        const box = { left: rect.left + camera.x + card.x * camera.zoom, top: rect.top + camera.y + card.y * camera.zoom,
+          width: card.width * camera.zoom, height: card.height * camera.zoom };
+        const distance = Math.hypot(box.left + box.width / 2 - centre.x, box.top + box.height / 2 - centre.y);
+        if (!best || distance < best.distance) best = { box, distance };
+      }
+      return best ? { box: best.box, clip, element: pane } : null;
     },
     clip: (element) => {
       let clip = viewport();

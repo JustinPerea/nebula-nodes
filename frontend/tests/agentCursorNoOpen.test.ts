@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
  * Design: the never-opens-or-scrolls ratchet). The cursor chunk that draws on
  * surfaces beside the canvas only reads rects: no scroll, no pan, no zoom, no
  * opening of a dock or an editor. This scans its source so it can't slip back.
- * The one allowed exception, later (slice 9), is the edge chip's press handler,
+ * The one allowed exception (slice 9) is the edge chip's press handler,
  * a person's action, in its own file (listed in PRESS_HANDLERS).
  */
 const SRC = resolve(__dirname, '../src');
@@ -21,10 +21,16 @@ const CHUNK = [
   'lib/agentCursorOutlines.ts',
   'lib/agentCursorHandoff.ts',
   'lib/agentCursorPark.ts',
+  'lib/agentBoardView.ts',
+  'lib/agentLauncherDots.ts',
+  'lib/agentEdgeChips.ts',
+  'lib/agentChipChrome.ts',
+  'lib/agentChipPress.ts',
+  'components/canvas/CanvasEdgeChips.tsx',
 ];
 /** A person's press, in its own file, may pan (slice 9's edge chip). */
-const PRESS_HANDLERS: string[] = [];
-const FORBIDDEN = /scrollIntoView|scrollTo\b|scrollBy\b|scrollTop\s*[-+]?=|scrollLeft\s*[-+]?=|setViewport|setCenter|fitView|enter\w*Editor|setLeftDock|togglePanel|\.focus\(|\.click\(/;
+const PRESS_HANDLERS: string[] = ['lib/agentChipPress.ts'];
+const FORBIDDEN = /scrollIntoView|scrollTo\b|scrollBy\b|scrollTop\s*[-+]?=|scrollLeft\s*[-+]?=|setViewport|springViewport|panZoom|setCenter|fitView|enter\w*Editor|setLeftDock|togglePanel|\.focus\(|\.click\(/;
 
 const code = (path: string) => readFileSync(resolve(SRC, path), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -33,6 +39,13 @@ const code = (path: string) => readFileSync(resolve(SRC, path), 'utf8')
 describe('the cursor chunk never opens or scrolls anything for the person', () => {
   it.each(CHUNK.filter((path) => !PRESS_HANDLERS.includes(path)))('%s reads rects only', (path) => {
     expect(code(path)).not.toMatch(FORBIDDEN);
+  });
+
+  it('the chip\'s press is the one pan: only agentChipPress.ts springs the camera, and only CanvasEdgeChips.tsx imports it', () => {
+    const panning = CHUNK.filter((path) => /springViewport|panZoom|setViewport/.test(code(path)));
+    expect(panning).toEqual(PRESS_HANDLERS);
+    const importers = CHUNK.filter((path) => /agentChipPress/.test(code(path)));
+    expect(importers).toEqual(['components/canvas/CanvasEdgeChips.tsx']);
   });
 
   it('knows every file the screen layer\'s chunk is made of', () => {

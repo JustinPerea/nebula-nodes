@@ -5,6 +5,7 @@ import { useAgentPresenceStore } from '../../store/agentPresenceStore';
 import { canvasSpace } from '../../lib/agentCursorSpace';
 import { layerOf } from '../../lib/agentCursorLayerOf';
 import { AgentCursorSurface } from '../agent-cursor/AgentCursorField';
+import { CanvasEdgeChips } from './CanvasEdgeChips';
 
 // The tests that import the layer's numbers keep their path.
 export { CARRY_PREVIEW_HOLD_MS } from '../agent-cursor/AgentCursorField';
@@ -52,12 +53,15 @@ export function AgentCursorLayer() {
   }, []);
 
   return (
-    <AgentCursorSurface
-      agents={agents}
-      everyone={everyone}
-      space={space}
-      zoom={zoom}
-      inLayer={(layer) => <ViewportPortal>{layer}</ViewportPortal>}
-    />
+    <>
+      <AgentCursorSurface
+        agents={agents}
+        everyone={everyone}
+        space={space}
+        zoom={zoom}
+        inLayer={(layer) => <ViewportPortal>{layer}</ViewportPortal>}
+      />
+      <CanvasEdgeChips agents={agents} space={space} />
+    </>
   );
 }

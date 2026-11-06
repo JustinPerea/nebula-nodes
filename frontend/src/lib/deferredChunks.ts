@@ -300,6 +300,12 @@ export const DEFERRED_MODULES: readonly string[] = [
   // The surface the cursor is drawn on (Phase 3): the canvas's space reads React Flow.
   'lib/agentCursorSpace.ts',
   'lib/agentAnchorResolve.ts',
+  'lib/agentBoardView.ts',
+  'lib/agentLauncherDots.ts',
+  'lib/agentEdgeChips.ts',
+  'lib/agentChipChrome.ts',
+  'lib/agentChipPress.ts',
+  'components/canvas/CanvasEdgeChips.tsx',
   'lib/agentCursorLayerOf.ts',
   'lib/agentCursorHandoff.ts',
   'lib/agentCursorPark.ts',

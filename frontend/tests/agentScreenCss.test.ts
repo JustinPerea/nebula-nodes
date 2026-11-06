@@ -74,4 +74,11 @@ describe('the store keeps what a surface target is called', () => {
     expect(Object.values(useAgentPresenceStore.getState().agents)[0].anchorNames).toBeUndefined();
     useAgentPresenceStore.getState().clear();
   });
+
+  it('the launcher dots are click-through marks that fade on the soft spring and stay still under reduced motion', () => {
+    for (const name of ['.agent-launcher-dot', '.agent-launcher-dot__more']) expect(rule(name)).toMatch(/pointer-events:\s*none/);
+    expect(rule('.agent-launcher-dot__more')).toMatch(/transition:[^;]*var\(--agent-cursor-soft\)/);
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.agent-launcher-dot,\s*\.agent-launcher-dot__more\s*\{[^}]*animation:\s*none/);
+  });
 });

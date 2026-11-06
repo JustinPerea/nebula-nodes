@@ -148,3 +148,34 @@ export const AGENT_CURSOR_OUTLINE = {
   dashPx: 4,
   gapPx: 3,
 } as const;
+
+/** The launcher's activity dot (PR #233 slice 8, GM - Design 2): a 6 px dot in
+ *  the agent colour on the launcher a cursor is parked at, `gapPx` apart from
+ *  the next. Up to `maxDots` agents get a dot each; with more, the earliest
+ *  `maxDots` keep one and "+N" counts the rest. `insetPx` is how far in from the
+ *  launcher's top right corner the first dot's middle sits. */
+export const AGENT_CURSOR_DOT = {
+  px: 6,
+  gapPx: 2,
+  maxDots: 2,
+  insetPx: 4,
+} as const;
+
+/** The canvas edge chip (PR #233 slice 9, GM - Design 7 and 8): where a
+ *  cursor off screen is pointed to. `insetPx` from the visible edge (or from
+ *  the chrome it is under), `gapPx` between stacked chips, at most `maxPerEdge`
+ *  chips on an edge and then a "+N" count; `slidePx` is how far a new chip
+ *  slides in, on `AGENT_CURSOR_CHIP_SPRING`. `heightPx`, `maxWidthPx` and
+ *  `countPx` are the chip's and the count's boxes the layout reckons with. */
+export const AGENT_CURSOR_CHIP = {
+  insetPx: 12,
+  gapPx: 6,
+  maxPerEdge: 3,
+  slidePx: 8,
+  heightPx: 28,
+  maxWidthPx: 168,
+  countHeightPx: 20,
+  countWidthPx: 36,
+} as const;
+/** The chip's slide-in: k 300 / c 30 (plan section 3). */
+export const AGENT_CURSOR_CHIP_SPRING: TuningSpring = { stiffness: 300, damping: 30, mass: 1 };

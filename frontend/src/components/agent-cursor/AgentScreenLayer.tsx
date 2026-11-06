@@ -6,6 +6,7 @@ import { screenSpace, type ScreenSpace } from '../../lib/agentCursorSpace';
 import { layerOf } from '../../lib/agentCursorLayerOf';
 import { inkFor } from '../../lib/agentCursorLook';
 import { OutlineBook } from '../../lib/agentCursorOutlines';
+import { DOT_IDLE_OPACITY, DotBook } from '../../lib/agentLauncherDots';
 import { cursorSpringVars } from '../../lib/agentCursorSpringVars';
 import type { AgentCursorAnchor } from '../../lib/wsClient';
 import { AgentCursorSurface, type CursorLandings } from './AgentCursorField';
@@ -25,10 +26,11 @@ import '../../styles/agentCursorAnywhere.css';
  * layer (lib/agentCursorLayerOf.ts); this one filters the one presence store
  * for the rest.
  *
- * Nothing here opens, scrolls or pans anything: it reads rects. The seams
- * left for the next slices: the hand-off (6) at `layerOf`'s flip, the edge
- * park's chevron (7) and the launcher park's dots (8) on `ScreenSpace.resolution`.
+ * Nothing here opens, scrolls or pans anything: it reads rects.
  */
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
 /** The image's item no longer exists: a removed image the cursor holds the
  *  spot of (GM - Design 4). Only while its board is open in the Studio and
@@ -103,7 +105,12 @@ export function AgentScreenLayer({ canvasMounted, env }: {
         space={space}
         zoom={1}
         layerClass="agent-cursor-layer agent-cursor-layer--screen"
-        beside={(landings) => <ItemOutlines agents={agents} space={space} landings={landings} />}
+        beside={(landings) => (
+          <>
+            <ItemOutlines agents={agents} space={space} landings={landings} />
+            <LauncherDots agents={agents} space={space} landings={landings} />
+          </>
+        )}
       />
     </div>
   );
@@ -141,6 +148,52 @@ function ItemOutlines({ agents, space, landings }: { agents: Record<string, Agen
           {ring.more > 0 ? <span className="agent-item-outline__more" style={{ color: inkFor(ring.color) }}>{`+${ring.more}`}</span> : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The launcher dots (slice 8, GM - Design 2): a 6 px agent-colour dot on the
+ * launcher a landed cursor is parked at (the board's row, the dock's tab, the
+ * rail's "Open assets", a Studio's "Back to Canvas"); two agents give two
+ * dots, from three one dot and "+N". Dimmed with the cursor at the idle, gone
+ * when it leaves, is sent elsewhere or is pruned. Drawn here, not in the rail
+ * (so it never re-renders on a presence event); `aria-hidden`, the Agents
+ * panel lists every agent. Lib: lib/agentLauncherDots.ts.
+ */
+function LauncherDots({ agents, space, landings }: { agents: Record<string, AgentCursor>; space: ScreenSpace; landings: CursorLandings }) {
+  const [book] = useState(() => new DotBook({ landings, space, reducedMotion: prefersReducedMotion }));
+  const { groups, ghosts } = useSyncExternalStore(book.subscribe, book.getSnapshot);
+  useEffect(() => { book.setAgents(agents); }, [book, agents]);
+  if (groups.length === 0 && ghosts.length === 0) return null;
+  return (
+    <div className="agent-launcher-dots" aria-hidden="true">
+      {groups.map((group) => (
+        <div key={group.launcher} className="agent-launcher-dots__group" data-launcher={group.launcher}>
+          {group.dots.map((dot) => (
+            <span
+              key={dot.key}
+              className="agent-launcher-dot"
+              data-agent-key={dot.key}
+              data-idle={dot.idle ? 'true' : undefined}
+              style={{ left: dot.at.x, top: dot.at.y, opacity: dot.idle ? DOT_IDLE_OPACITY : 1, ['--agent-color' as string]: dot.color }}
+            />
+          ))}
+          {group.moreAt ? (
+            <span
+              className="agent-launcher-dot__more"
+              style={{ left: group.moreAt.x, top: group.moreAt.y, ['--agent-color' as string]: group.moreColor, color: inkFor(group.moreColor) }}
+            >{`+${group.more}`}</span>
+          ) : null}
+        </div>
+      ))}
+      {ghosts.map((ghost) => (ghost.more > 0 ? (
+        <span key={ghost.id} className="agent-launcher-dot__more" data-leaving="true"
+          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, color: inkFor(ghost.color) }}>{`+${ghost.more}`}</span>
+      ) : (
+        <span key={ghost.id} className="agent-launcher-dot" data-leaving="true"
+          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color }} />
+      )))}
     </div>
   );
 }

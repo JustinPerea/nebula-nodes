@@ -23,6 +23,8 @@ import { offlineDisabledReason } from '../../lib/errorCopy';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { createBoardFitFollow, sameCamera, type BoardFitFollow } from './boardFitFollow';
 import { BOARD_FALLBACK_INSETS, frameInInsets, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
+import { registerBoardView } from '../../lib/agentBoardView';
+import { useStudioBoardId } from './useStudioBoardId';
 import '../../styles/moodboard-board.css';
 
 /** A card moved on the board: where its top-left now is, in whole board pixels. */
@@ -326,6 +328,35 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, []);
   const shownRef = useRef(shown);
   shownRef.current = shown;
+  // The camera and the cards, for the agent cursor: a card panned fully out
+  // of the pane isn't rendered (onlyRenderVisibleElements), so the cursor
+  // finds it here and parks at the pane's edge (lib/agentBoardView.ts).
+  const studioBoardId = useStudioBoardId();
+  const cardListeners = useRef(new Set<() => void>());
+  useEffect(() => {
+    if (!studioBoardId) return undefined;
+    return registerBoardView({
+      boardId: studioBoardId,
+      pane: () => flowStore.getState().domNode ?? null,
+      camera: () => {
+        const transform = flowStore.getState().transform;
+        return transform ? { x: transform[0], y: transform[1], zoom: transform[2] } : null;
+      },
+      cards: () => shownRef.current.flatMap((node) => (node.type === 'card'
+        ? [{ imageId: (node.data as { imageId: string }).imageId, x: node.position.x, y: node.position.y,
+          width: node.width ?? 0, height: node.height ?? 0 }]
+        : [])),
+      subscribe: (listener) => {
+        cardListeners.current.add(listener);
+        let last = flowStore.getState().transform;
+        const off = flowStore.subscribe((state) => {
+          if (state.transform !== last) { last = state.transform; listener(); }
+        });
+        return () => { cardListeners.current.delete(listener); off(); };
+      },
+    });
+  }, [studioBoardId, flowStore]);
+  useEffect(() => { for (const listener of [...cardListeners.current]) listener(); }, [shown]);
   const imagesRef = useRef(images);
   imagesRef.current = images;
   const onMoveRef = useRef(onMove);
