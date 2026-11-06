@@ -77,6 +77,14 @@ export function keptLimitLine(count: number, limit: number, deletes?: number | n
  * starts or while a run or offline holds it. */
 export const KEPT_ROOM_LINE = 'There’s room now. Nebula is saving your edits as a project.';
 
+/** PR #199 r27 (for GM): the notice's line while a Delete that made room still shows its Undo:
+ * the save waits for the toast to go (or for [Save as a project]), so Undo is real. */
+export const KEPT_ROOM_WAIT_LINE = 'There’s room now. Nebula will save your edits as a project when Undo goes away.';
+
+/** PR #199 r27 (for GM): why the project the kept edits came from can't be deleted from here, in the
+ * chooser's row and after the heading of the refusal Delete gives. */
+export const KEPT_SOURCE_DELETE_LINE = 'Your kept edits came from this project. You can delete it after you save them as a project or discard them.';
+
 /** GM r24 (b): the button that opens the chooser on either of those two
  * notices. Kept mode locks Projects, so deleting has nowhere to happen without it. */
 export const CHOOSE_A_PROJECT_TO_DELETE = 'Choose a project to delete';

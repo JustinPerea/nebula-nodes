@@ -1,15 +1,14 @@
-import { useId, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { ModalPortal } from '../ModalPortal';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { PersonLockLine } from '../PersonLock';
 import { emptyTrashLine } from '../../lib/projectPurgeCopy';
-import { useProjectStore } from '../../store/projectStore';
-import { NoticeLeave } from '../../lib/noticeLeave';
-import { CHOOSE_A_PROJECT_TO_DELETE } from './restoreCopyCore';
+import { isKeptUpdateLine, useProjectStore } from '../../store/projectStore';
+import { LineText } from '../LineText';
+import { CHOOSE_A_PROJECT_TO_DELETE, KEPT_SOURCE_DELETE_LINE } from './restoreCopyCore';
 import { ProjectCounts } from './projectFacts';
 import { editedDate } from './editedDate';
-import { UndoToast } from './UndoToast';
 import { useAlertDialog } from './useAlertDialog';
 import '../../styles/prompt-dialog.css';
 import './KeptDeleteChooser.css';
@@ -34,14 +33,25 @@ export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; 
   const projects = useProjectStore((state) => state.projects);
   const trash = useProjectStore((state) => state.trash);
   const busy = useProjectStore((state) => state.busy);
-  const lastDeleted = useProjectStore((state) => state.lastDeleted);
+  // The kept canvas's own project: its Delete is refused by the store (PR #199 r27), so it shows
+  // disabled with the reason instead of a button that can only fail.
+  const sourceId = useProjectStore((state) => state.keptEdits?.sourceId ?? null);
+  const activeId = useProjectStore((state) => state.activeProject?.id ?? null);
+  // A failure of this dialog's own actions (Delete refused as out of date or held, Undo, Empty), in the
+  // words the store gives it: projectStore.error is only drawn on Projects home, which kept mode locks.
+  const failure = useProjectStore((state) => (isKeptUpdateLine(state.error) ? null : state.error));
+  useEffect(() => {
+    const { error } = useProjectStore.getState();
+    if (error && !isKeptUpdateLine(error)) useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null });
+  }, []);
   const lock = useCanvasLock();
   const purgeLock = usePersonLock('delete projects for good');
   const [armed, setArmed] = useState(false);
   const overlay = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const close = useRef<HTMLButtonElement>(null);
-  useAlertDialog({ overlay, card, initialFocus: close, onClose, returnTo });
+  // Escape disarms an armed Empty first, as the app's Empty does, and only then closes the dialog.
+  useAlertDialog({ overlay, card, initialFocus: close, onClose: () => { if (armed) setArmed(false); else onClose(); }, returnTo });
   const held = busy || lock.offline;
   const detail = emptyTrashLine(trash);
   const prompt = `Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?${detail ? ` ${detail}` : ''}`;
@@ -52,24 +62,26 @@ export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; 
           aria-labelledby={headingId} data-kept-delete-chooser="">
           <h2 id={headingId} className="prompt-dialog__heading">{CHOOSE_A_PROJECT_TO_DELETE}</h2>
           <ul className="kept-delete-chooser__list">
-            {projects.map((project) => (
+            {projects.map((project) => {
+              const keptSource = project.id === sourceId || project.id === activeId;
+              return (
               <li key={project.id} className="kept-delete-chooser__row">
                 <span className="kept-delete-chooser__facts">
                   <span className="kept-delete-chooser__name">{project.name}</span>
                   <span className="kept-delete-chooser__meta">{editedDate(project.updatedAt)} · <ProjectCounts project={project} /></span>
+                  {keptSource && <span className="kept-delete-chooser__why" data-kept-source-why="">{KEPT_SOURCE_DELETE_LINE}</span>}
                 </span>
                 <span className="prompt-dialog__actions">
-                  <button type="button" className="kept-delete-chooser__delete" aria-label={`Delete ${project.name}`} title="Move to Recently deleted" disabled={held}
+                  <button type="button" className="kept-delete-chooser__delete" aria-label={`Delete ${project.name}`} title={keptSource ? KEPT_SOURCE_DELETE_LINE : 'Move to Recently deleted'} disabled={held || keptSource}
                     data-kept-delete-project={project.id} onClick={() => void useProjectStore.getState().remove(project.id)}>Delete</button>
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
-          {/* Delete is the app's own: it moves the project to Recently deleted and the same toast
-              offers Undo (Projects home's Delete has no confirm either). */}
-          <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={busy}
-            onUndo={() => void useProjectStore.getState().restore(last.id, 'undo')}
-            onDismiss={() => useProjectStore.getState().dismissUndo()} leave={leave} />}</NoticeLeave>
+          {failure && <p className="kept-delete-chooser__error" role="alert" data-kept-chooser-error=""><LineText text={failure} /></p>}
+          {/* Delete is the app's own: it moves the project to Recently deleted and the notice's Undo toast
+              (KeptEditsNotice, which stays when this closes) offers Undo, as Projects home's does. */}
           {trash.length > 0 && (
             <div className="kept-delete-chooser__trash" role="group" aria-label="Recently deleted">
               {armed ? (
@@ -77,7 +89,7 @@ export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; 
                   <span className="kept-delete-chooser__prompt">{prompt}</span>
                   <PersonLockLine lock={purgeLock} place="control" />
                   <div className="prompt-dialog__actions">
-                    <button type="button" autoFocus onClick={() => setArmed(false)}>Cancel</button>
+                    <button type="button" autoFocus disabled={busy} onClick={() => setArmed(false)}>Cancel</button>
                     <button type="button" className="prompt-dialog__danger" disabled={held} {...purgeLock.control()} data-kept-empty-confirm=""
                       onClick={() => { setArmed(false); if (!purgeLock.locked) void useProjectStore.getState().emptyTrash(); }}>
                       {trash.length === 1 ? 'Delete forever' : 'Delete all'}</button>

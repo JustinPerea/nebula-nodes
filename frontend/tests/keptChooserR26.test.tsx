@@ -83,7 +83,7 @@ describe('the chooser is the app\'s modal and deletes the app\'s way', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete Beta' }));
     expect(remove).toHaveBeenCalledWith('b');
     const toast = await screen.findByText('Moved “Beta” to Recently deleted');
-    fireEvent.click(within(toast.parentElement as HTMLElement).getByRole('button', { name: 'Undo' }));
+    fireEvent.click(within(toast.parentElement as HTMLElement).getByRole('button', { name: 'Undo', hidden: true }));
     expect(restore).toHaveBeenCalledWith('b', 'undo');
   });
 

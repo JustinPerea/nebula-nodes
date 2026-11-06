@@ -25,7 +25,7 @@ import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
 import { useCinemaUploadStore } from './cinemaUploadStore';
 import type { ProjectList, CatalogRestore, ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
-import { editsRecoveredToast, filedCopyLine, keptLimitLine, keptStorageFullLine, agentClosedLine, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE } from '../components/projects/restoreCopyCore';
+import { editsRecoveredToast, filedCopyLine, KEPT_SOURCE_DELETE_LINE, keptLimitLine, keptStorageFullLine, agentClosedLine, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE } from '../components/projects/restoreCopyCore';
 import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { canonicalBackendAssetUrls, rewriteBackendAssetUrls } from '../lib/backend';
@@ -2437,6 +2437,15 @@ export const actions = {
     const state = get();
     if (!state.initialized || state.busy) return;
     const deletingActive = state.activeProject?.id === id;
+    // PR #199 r27 (final review, HIGH-1): the kept canvas's own project (the active one, or the one its
+    // edits came from) is never deleted while the canvas is kept: deleting the open project releases the
+    // canvas, and the kept edits are the only copy. Refused here, so Projects home, the chooser and every
+    // other caller are safe alike; the line says what unlocks it.
+    if (isCanvasKept() && (deletingActive || id === state.keptEdits?.sourceId)) {
+      pulseKeptCanvas();
+      showError(new Error('kept'), null, sentences('Couldn’t delete the project.', KEPT_SOURCE_DELETE_LINE));
+      return;
+    }
     const held = deletingActive ? worldLabsHold("Couldn't delete the project.") : null;
     if (held) { showError(held, { action: 'delete', id }); return; }
     if (deletingActive && !useGraphStore.getState().canSwitchProject()) {

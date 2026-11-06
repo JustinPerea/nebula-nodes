@@ -145,6 +145,9 @@ AGENT_WRITES = {
     "create": lambda client: client.post("/api/projects", headers=CODEX, json={"name": "Codex's", "workspaceRevision": _rev(client)}),
     "open": lambda client: client.post(f"/api/projects/{client.app.state.fix12_other}/open", headers=CODEX,
                                        json={"workspaceRevision": _rev(client)}),
+    # PR #199 r27: deleting the open project empties the live canvas the kept tab's save would open over.
+    "delete-open": lambda client: client.request("DELETE", f"/api/projects/{client.app.state.fix12_active}", headers=CODEX,
+                                                 json={"workspaceRevision": _rev(client)}),
 }
 
 
@@ -155,6 +158,7 @@ def test_r16_mcp_an_agents_write_while_the_tab_keeps_edits_is_refused_with_its_c
     _create(client, "Delta")
     _add_text(client, "delta-1")
     client.app.state.fix12_other = other
+    client.app.state.fix12_active = _active(client)
     before = client.get("/api/graph", headers=PERSON).json()
     with client.websocket_connect("/ws", headers=PERSON) as socket:
         socket.receive_json()

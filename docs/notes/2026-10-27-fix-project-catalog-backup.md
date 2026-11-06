@@ -1086,3 +1086,33 @@ Bytes (entry raw / gzip, startup closure raw):
 ### Item 4: CI's `test_nit2_a_tab_back_within_the_grace_carries_it_on`
 
 - Not a regression from main's merge: the backend still refuses the agent's add with `canvas_kept_in_tab`. The test raced: `_kept(tab, True)` waits for `kept_in_tab()`, which is already true from the first socket's grace, so the test moved the fake clock to 60 s before the server had read the tab's frame; the grace lapsed first and the add went through. It fails intermittently (about 1 in 3 here), more under load. Fix: wait until the tab is in `manager.kept_tabs` before moving the clock; both "tab back" tests close their socket in `finally`. No backend change, so there is no refusal order to choose: main's count limits and this PR's kept refusal are unchanged (the kept refusal, `_refuse_agent_while_kept`, runs in the canvas guard before the route (and in the run/paid-start refusal); `_refuse_agent_growth_past_save_limit` runs inside the routes, after it, so a kept canvas answers with the kept code first and the count limit applies once kept mode ends).
+
+## Fix round 27 (the final review: the kept project's own Delete, the lost Undo, silent failures)
+
+### Item 1 (HIGH): deleting the kept canvas's own project wiped its edits
+
+- Cause: the chooser listed the kept source project (after a restore, the active project is usually an older copy of it), and `remove()` took its "deleting the open project" branch, which ends in `releaseLoadedProject()` -> `loadProjectGraph([], [], [])` -> `releaseKeptCanvas()`. The edits were the only copy.
+- Fix at the store, so every caller is safe (`store/projectFlows.ts`, top of `remove`): while `isCanvasKept()`, `remove(id)` of the active project, or of `keptEdits.sourceId`, is refused before anything is sent: the kept line pulses, and `projectStore.error` says "Couldn’t delete the project. Your kept edits came from this project. You can delete it after you save them as a project or discard them." (no Try again).
+- Chosen: refuse, not "delete the old project and keep the kept canvas". Refusing never touches the canvas, the kept state or the save flow (Save files a Recovered copy and opens it, which works the same either way); deleting underneath a kept canvas would leave a canvas with a project context that no longer exists and no `activeProject`, which every workspace surface would have to learn. The cost is small: the list holds up to 500 projects, the person can delete any other one, and Save or Discard unlocks this one. The chooser leaves that row's Delete disabled with the same reason under it (`KEPT_SOURCE_DELETE_LINE`), so no press can only fail.
+- Other paths: Projects home Delete and the chooser both call `remove()`; Empty Recently deleted and `purge` only touch the trash; project open/create/Load/Import are refused while kept by `refuseLeavingKeptCanvas` (r20); the backend's graphSync and projectsChanged are ignored by the tab while kept (`syncNow` returns early). The backend's delete route runs `_project_replacement_guard` for the open project, which refuses an agent (MCP/CLI) with `canvas_kept_in_tab` while a tab keeps edits; r27 adds that delete to the agent-write table in `test_project_catalog_restore_fix12.py` (it was untested). The person's own backend delete from another tab is unchanged: it can't reach the kept canvas, which lives in the tab. No backend source change.
+- Tests: `tests/keptRemoveR27.test.ts` (refused for the active project, refused for the source when another project is active, another project still deletes with the canvas intact, nothing kept deletes as before), `tests/keptDeleteR27.test.tsx` (the row), `test_r16_mcp_an_agents_write_while_the_tab_keeps_edits_is_refused_with_its_code[delete-open]`. Mutations: guard off fails the two refusal tests; the row not disabled fails both row tests; the backend's `_refuse_agent_while_kept` removed from the guard fails `[delete-open]` (and `[create]`, `[open]`).
+
+### Item 2 (MEDIUM): the Delete that made room lost its Undo
+
+- The Undo toast moved from the chooser to `KeptEditsNotice` (it stays mounted while the canvas is on screen, and shows even if Save ended kept mode first), so closing the chooser no longer unmounts it. The notice region keeps it usable above the dialog.
+- The automatic save waits while `lastDeleted` is set (the toast's own 8 s window, or Dismiss, or Undo); [Save as a project] pressed sooner doesn't wait. Undo puts the project back, room goes, no save, and the refusal line returns. The chooser now closes for good when room appears (an Undo no longer reopens it by itself).
+- New line for GM: while the save waits, "There’s room now. Nebula will save your edits as a project when Undo goes away." (`KEPT_ROOM_WAIT_LINE`); after the toast goes it reads the r26 line.
+- Mutations: save not waiting, toast not drawn outside: each fails the three waiting tests. Live: shots below.
+
+### Item 3 (LOW): chooser failures were silent
+
+- The chooser shows `projectStore.error` (the store's own line for a Delete refused as out of date or held, an Undo or Empty that failed, and item 1's refusal) in a `role="alert"` line under the list, except the kept update line, which the notice already draws. It clears an older error when it opens, so only its own failures show. Mutation: line removed fails its test.
+
+### Item 4: Empty in the chooser
+
+- Escape disarms an armed Empty before it closes the dialog; Cancel is disabled while busy (ProjectHome's `ConfirmInline`). Mutations: each fails its test.
+
+### Notes
+
+- The r26 Undo test now finds the toast with `hidden: true`: with no notice region in a bare render it sits behind the modal's inert layer; in the app the region stays above dialogs.
+- `test_world_labs_stamp_fix23.py::test_agents_reads_are_byte_identical_with_and_without_stamps` failed once in the 121-file run and passes alone (49 passed); not touched by this round.

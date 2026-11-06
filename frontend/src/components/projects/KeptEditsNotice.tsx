@@ -5,8 +5,10 @@ import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/ke
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
 import { runFinishesLine } from '../../lib/runLock';
 import { LineText } from '../LineText';
-import { CHOOSE_A_PROJECT_TO_DELETE, KEPT_ROOM_LINE, keptLimitLine, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { CHOOSE_A_PROJECT_TO_DELETE, KEPT_ROOM_LINE, KEPT_ROOM_WAIT_LINE, keptLimitLine, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import { KeptDeleteChooser } from './KeptDeleteChooser';
+import { NoticeLeave } from '../../lib/noticeLeave';
+import { UndoToast } from './UndoToast';
 import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
 import './KeptEditsNotice.css';
 
@@ -56,6 +58,11 @@ export function KeptEditsNotice() {
   const liveCount = useProjectStore((state) => state.projects.length);
   const trashCount = useProjectStore((state) => state.trash.length);
   const lastTrash = useRef(trashCount);
+  // PR #199 r27: the Delete that made room keeps its Undo toast (drawn below, outside the chooser), and the
+  // automatic save waits until that Undo goes away; [Save as a project] doesn't wait.
+  const lastDeleted = useProjectStore((state) => state.lastDeleted);
+  const projectBusy = useProjectStore((state) => state.busy);
+  const undoShowing = lastDeleted !== null;
   const limitCounts = kept?.chooseToDelete === 'projects' ? kept.limitCounts ?? null : null;
   const room = limitCounts !== null && liveCount < limitCounts.limit;
   const blocked = running || lock.following || offline;
@@ -64,21 +71,32 @@ export function KeptEditsNotice() {
     lastTrash.current = trashCount;
     if (!kept || !kept.error || kept.saving || kept.discarding || kept.autoRetried || blocked) return;
     if (!(room || (kept.chooseToDelete === 'storage' && shrank))) return;
+    if (undoShowing) return;
     useProjectStore.setState({ keptEdits: { ...kept, autoRetried: true } });
     void useProjectStore.getState().saveKeptEdits();
-  }, [kept, room, trashCount, blocked]);
+  }, [kept, room, trashCount, blocked, undoShowing]);
   const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
   const discardButton = useRef<HTMLButtonElement>(null);
   // GM r24 (b): the chooser belongs to the kept canvas it was opened for, as the confirm does.
   const [choosingFor, setChoosingFor] = useState<typeof kept>(null);
   const chooseButton = useRef<HTMLButtonElement>(null);
-  if (!kept || !onWorkspace) return null;
+  // Room made: the chooser has done its work and closes for good (an Undo that takes the room back
+  // doesn't open it again by itself).
+  if (room && choosingFor !== null) setChoosingFor(null);
+  if (!onWorkspace) return null;
+  // The toast outlives the chooser (and kept mode, when [Save as a project] went first).
+  const undoToast = (
+    <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={projectBusy}
+      onUndo={() => void useProjectStore.getState().restore(last.id, 'undo')}
+      onDismiss={() => useProjectStore.getState().dismissUndo()} leave={leave} />}</NoticeLeave>
+  );
+  if (!kept) return undoToast;
   const confirming = confirmingFor !== null && confirmingFor.sourceId === kept.sourceId;
   const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
   const choosing = choosingFor !== null && choosingFor.sourceId === kept.sourceId;
   // The cure for a refusal the person fixes by deleting: only while that line shows.
   const offerChooser = Boolean(kept.error && kept.chooseToDelete && !room);
-  const refusal = limitCounts && kept.error ? (room ? KEPT_ROOM_LINE
+  const refusal = limitCounts && kept.error ? (room ? (undoShowing && !kept.autoRetried ? KEPT_ROOM_WAIT_LINE : KEPT_ROOM_LINE)
     : keptLimitLine(liveCount, limitCounts.limit, liveCount === limitCounts.count ? limitCounts.deletes : null))
     : limitCounts && kept.saving && kept.autoRetried ? KEPT_ROOM_LINE : kept.error;
   // Review 14 (lock-order NIT-3): kept leaves these two on, so the next
@@ -112,6 +130,7 @@ export function KeptEditsNotice() {
         aria-busy={kept.discarding || undefined} data-kept-discard-button=""
         onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>
       {choosing && offerChooser && <KeptDeleteChooser returnTo={chooseButton} onClose={() => setChoosingFor(null)} />}
+      {undoToast}
       {confirming && <KeptDiscardConfirm returnTo={discardButton} onKeep={() => setConfirming(false)}
         onDiscard={() => { setConfirming(false); void useProjectStore.getState().discardKeptEdits(); }} />}
     </div>
