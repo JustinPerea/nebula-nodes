@@ -40,9 +40,15 @@ export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; 
   // A failure of this dialog's own actions (Delete refused as out of date or held, Undo, Empty), in the
   // words the store gives it: projectStore.error is only drawn on Projects home, which kept mode locks.
   const failure = useProjectStore((state) => (isKeptUpdateLine(state.error) ? null : state.error));
+  // Cleared on open (an older failure isn't this dialog's) and on close (no surface draws it after,
+  // so it would surface later on Projects home as a stale line; PR #199 r27 check).
   useEffect(() => {
-    const { error } = useProjectStore.getState();
-    if (error && !isKeptUpdateLine(error)) useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null });
+    const clearOwnFailure = () => {
+      const { error } = useProjectStore.getState();
+      if (error && !isKeptUpdateLine(error)) useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null });
+    };
+    clearOwnFailure();
+    return clearOwnFailure;
   }, []);
   const lock = useCanvasLock();
   const purgeLock = usePersonLock('delete projects for good');
