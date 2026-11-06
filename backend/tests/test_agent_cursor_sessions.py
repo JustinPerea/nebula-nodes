@@ -1037,8 +1037,8 @@ def test_a_person_tab_gets_the_replay_on_its_hello_and_no_one_else_does(sockets,
         assert "agentPresenceReplay" not in [m["type"] for m in _connect(api, frames, headers)]
     # The boundary, key for key: a socket that never says hello gets exactly
     # what it got before any session was live, and agents' reads don't change.
-    def timeless(messages):  # a notes sync stamps its send time
-        return [{k: v for k, v in m.items() if k != "at"} for m in messages]
+    def timeless(messages):  # a notes sync stamps its send time; a graphSync its number (one per read, PR #205)
+        return [{k: v for k, v in m.items() if k not in ("at", "syncSeq")} for m in messages]
     assert timeless(_connect(api, [])) == timeless(no_hello_before)
     for path in ("/api/canvas/agents", "/api/canvas/snapshot"):
         read = json.dumps(api.client.get(path, headers=CLAUDE).json())

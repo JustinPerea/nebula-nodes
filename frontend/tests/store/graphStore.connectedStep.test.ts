@@ -114,6 +114,19 @@ describe('connected next-step preparation', () => {
     expect(useGraphStore.getState().edges).toEqual([priorEdge]);
   });
 
+  it('during a run (GM PR #205 r4 item 3): sends the request and adds the connected node, with no lock line', async () => {
+    useGraphStore.setState({ isExecuting: true });
+    transport.fetch.mockResolvedValueOnce(confirmed());
+    const id = await useGraphStore.getState().addNodeAndConnect('veo-3', position, connect);
+    const state = useGraphStore.getState();
+    expect(id).toBe('n3');
+    expect(state.nodes.map((item) => item.id)).toEqual(['n1', 'n2', 'n3']);
+    expect(state.edges).toEqual([priorEdge, canonicalEdge]);
+    expect(transport.fetch).toHaveBeenCalledWith('/api/graph/node-and-connect', expect.objectContaining({ method: 'POST' }));
+    expect(state.undoNotice).toBeNull();
+    expect(state.isExecuting).toBe(true);
+  });
+
   it('uses the pre-request undo snapshot when graphSync arrives before acknowledgement', async () => {
     const resolve = deferred();
     const pending = useGraphStore.getState().addNodeAndConnect('veo-3', position, connect);
@@ -176,7 +189,8 @@ describe('connected next-step preparation', () => {
     ['local-only origin', () => useGraphStore.setState({ nodes: [node('local-source')] }), 'veo-3', { ...connect, source: 'local-source' }],
     ['missing port', () => {}, 'veo-3', { ...connect, sourceHandle: 'removed-port' }],
     ['wrong data type', () => {}, 'veo-3', { ...connect, targetHandle: 'prompt' }],
-    ['active execution', () => useGraphStore.setState({ isExecuting: true }), 'veo-3', connect],
+    // GM PR #205 r4 item 3: a run going no longer guards it (its add and its
+    // connect are each allowed during a run): see "during a run" below.
     ['active import', () => useGraphStore.setState({ isImportingGraph: true }), 'veo-3', connect],
   ])('guards %s before sending a request', async (_label, setup, definitionId, connection) => {
     setup();
@@ -195,7 +209,7 @@ describe('connected next-step preparation', () => {
     expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['n1']);
     expect(useGraphStore.getState().edges).toEqual([]);
     expect(useGraphStore.getState().undoStack).toHaveLength(0);
-    expect(alert).toHaveBeenCalledWith(expect.stringContaining('canvas changed'));
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining('The canvas changed before this could finish. Check it, then try again.'));
   });
 
   it('permanently revokes a request when its source is deleted and restored before acknowledgement', async () => {

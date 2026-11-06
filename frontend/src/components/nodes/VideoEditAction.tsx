@@ -5,6 +5,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { DynamicNodeData, NodeData } from '../../types';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { lockLine } from '../../lib/runLock';
 import '../../styles/canvas-next-steps.css';
 
 function videoSource(data: NodeData, displayedOutputs: NodeData['outputs']) {
@@ -39,7 +40,7 @@ export function VideoEditAction({ id, data, displayedOutputs, className = 'model
     <button type="button"
       className={`${className} model-node__video-edit nodrag nopan`}
       {...lock.act({ disabled: isImportingGraph || !canvasActive,
-        title: isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result' })}
+        title: isImportingGraph ? lockLine('edit this video result', 'import') : 'Edit this video result' })}
       onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}

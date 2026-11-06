@@ -3,9 +3,12 @@ import type { CSSProperties } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Pin, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useGraphStore } from '../../store/graphStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
+import { canvasFocusTarget } from '../../lib/noticeFocus';
+import { inspectorFocusResumeWaiting, takeInspectorFocusResume } from '../../lib/inspectorFocusResume';
 import { hasMoreBelow } from '../../lib/scrollMore';
 import { FLOATING_CHROME_CLEARANCE, floatingBottomLimit, floatingChromeTopLine, floatingTopLimit } from '../../lib/bottomBar';
 import { springCssVars } from '../../lib/springs';
@@ -25,6 +28,33 @@ const PINNED_RESIZE_MIN_WIDTH = 240;
 const PINNED_RESIZE_MIN_HEIGHT = 260;
 const PINNED_GAP = 12;
 const VIEWPORT_GUTTER = 16;
+
+/** The canvas card that holds focus, if any. */
+function focusedCard(): Element | null {
+  const active = document.activeElement;
+  return active instanceof Element ? active.closest('.react-flow__node') : null;
+}
+
+/** Focus fell to the page: it goes to the canvas. */
+function focusCanvasFromPage(): void {
+  if (document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
+}
+
+/** While focus is still in a leaving card, wait for the card to go (a frame
+ * or a few), then move focus from the page to the canvas. Returns the stop. */
+function focusCanvasOnceCardLeaves(card: Element): () => void {
+  let frame = 0;
+  let frames = 0;
+  const waitForCard = () => {
+    if (card.isConnected && document.activeElement !== document.body && frames++ < 30) {
+      frame = requestAnimationFrame(waitForCard);
+      return;
+    }
+    focusCanvasFromPage();
+  };
+  frame = requestAnimationFrame(waitForCard);
+  return () => cancelAnimationFrame(frame);
+}
 
 /** The springs the foot row's "more below" hairline comes and goes on (GM r87). */
 const FOOT_SPRINGS = springCssVars() as CSSProperties;
@@ -305,7 +335,7 @@ export function NodeInspectorPopover() {
   // frame first (review 2 LOW-2: it showed for a frame, and for good when
   // the node had no card on screen, past every line). Set while rendering,
   // so the closed render is the one React commits.
-  if ((!visible || !selectedNodeId) && frame !== null) setFrame(null);
+  if ((!visible || (!selectedNodeId && !pinned)) && frame !== null) setFrame(null);
   // The node whose open has settled (GM r92 Q3): until then the popover
   // carries data-opening and the foot's "more below" hairline waits, so a
   // body that overflows only while its content settles never shows it.
@@ -393,8 +423,9 @@ export function NodeInspectorPopover() {
     lineRef.current = null;
     lineHeldRef.current = null;
     // Closed: the next open measures afresh (the frame state is cleared
-    // as it closes, above).
-    if (!visible || !selectedNodeId) {
+    // as it closes, above). A pinned one stays open with no node: its empty
+    // state (GM PR #205 r10 items 2-3), so the screen agrees with the store.
+    if (!visible || (!selectedNodeId && !pinned)) {
       frameRef.current = null;
       needRef.current = null;
       anchorAtRef.current = null;
@@ -412,7 +443,7 @@ export function NodeInspectorPopover() {
     }
 
     // A new open (or another node): it settles as placement for a while.
-    const open = { nodeId: selectedNodeId, settled: false, stable: 0, last: null };
+    const open = { nodeId: selectedNodeId ?? '', settled: false, stable: 0, last: null };
     openRef.current = open;
 
     // The hairline (GM r92 Q3, r98): off until the open has settled; then the
@@ -506,7 +537,7 @@ export function NodeInspectorPopover() {
             };
           }
         }
-        const nextFrame = measurePinnedFrame(selectedNodeId, pinnedPreferenceRef.current);
+        const nextFrame = measurePinnedFrame(selectedNodeId ?? '', pinnedPreferenceRef.current);
         if (!frameEquals(frameRef.current, nextFrame)) {
           frameRef.current = nextFrame;
           setFrame(nextFrame);
@@ -516,7 +547,7 @@ export function NodeInspectorPopover() {
         const popover = popoverRef.current;
         advanceOpen(popover, popover?.querySelector<HTMLElement>('.node-inspector-popover__content')?.offsetHeight ?? null,
           tick);
-      } else {
+      } else if (selectedNodeId) {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
           // Where the node is, from its own box and the canvas's transform
@@ -728,17 +759,52 @@ export function NodeInspectorPopover() {
   }, []);
 
   // A confirmed next-step picker unmounts its focused choice. Resume keyboard
-  // work in the Inspector only when focus was lost; preserve an active control.
+  // work in the Inspector only then (it asks: resumeInspectorFocus), and only
+  // when focus was lost; preserve an active control. Never for a node an
+  // Undo or a Redo brought back, or any other way the shown node changed
+  // (review 6 of PR #205, inspector-pin MEDIUM-1; GM r13 item 5: focus stays
+  // on the canvas, and the Inspector updates without taking it).
   const hasFrame = Boolean(frame);
   useLayoutEffect(() => {
     if (!visible || !selectedNodeId || !hasFrame || frame?.suspended
-      || document.activeElement !== document.body) return;
+      || document.activeElement !== document.body || !inspectorFocusResumeWaiting()) return;
+    takeInspectorFocusResume();
     popoverRef.current?.querySelector<HTMLElement>(
       '.node-inspector-popover__body input:not(:disabled), .node-inspector-popover__body textarea:not(:disabled), .node-inspector-popover__body select:not(:disabled)',
     )?.focus();
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
+  // A node left the canvas (a Delete, an Undo, an agent's delete) and its
+  // card took focus with it. Focus goes to the canvas, never to the page, so
+  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin
+  // MEDIUM-1; GM r13 item 5). The Inspector naming none (an unpinned one
+  // closing took focus from its field): the same.
+  const shownBefore = useRef(selectedNodeId);
+  useLayoutEffect(() => {
+    const previous = shownBefore.current;
+    shownBefore.current = selectedNodeId;
+    if (previous !== null && selectedNodeId === null) focusCanvasFromPage();
+  }, [selectedNodeId]);
+  // Any focused card whose node left, whichever node the Inspector shows or
+  // names after (review 8, lines-inspector LOW-1: an agent's delete of the
+  // shown card while another node stays selected names that one, never none,
+  // and a card the Inspector doesn't show can hold focus too). React Flow
+  // removes the card a render after the node goes (it copies the nodes into
+  // its own store), so while focus is still in the leaving card, wait for the
+  // card to go, then move it (review 7 LOW-1).
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    const unsubscribe = useGraphStore.subscribe((state, before) => {
+      if (state.nodes === before.nodes) return;
+      const card = focusedCard();
+      const id = card?.getAttribute('data-id');
+      if (!card || !id || state.nodes.some((node) => node.id === id) || !before.nodes.some((node) => node.id === id)) return;
+      stop?.();
+      stop = focusCanvasOnceCardLeaves(card);
+    });
+    return () => { unsubscribe(); stop?.(); };
+  }, []);
 
-  if (!visible || !selectedNodeId || !frame) return null;
+  if (!visible || (!selectedNodeId && !pinned) || !frame) return null;
 
   return createPortal(
     <div

@@ -139,14 +139,14 @@ describe("Projects: Couldn’t save your edits.", () => {
 
   it("after a download: GM's line with the file's name and the real way to open it", () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: 'Glass campaign - unsaved edits.nebula', reopens: true } })} />);
-    const line = screen.getByText('Your edits are saved as Glass campaign - unsaved edits.nebula. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.');
+    const line = screen.getByText('Your edits are saved as Glass campaign - unsaved edits.nebula. Open it with “Load canvas” under “Canvas actions” in a new project to bring them back.');
     expect(line.closest('[role="status"]')).toBeTruthy();
     expect(screen.queryByText("Couldn’t save your edits.")).toBeNull();
   });
 });
 
 const SAVED = 'Glass campaign - unsaved edits.nebula';
-const REOPEN_LINE = `Your edits are saved as ${SAVED}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.`;
+const REOPEN_LINE = `Your edits are saved as ${SAVED}. Open it with “Load canvas” under “Canvas actions” in a new project to bring them back.`;
 
 describe('review: the line after a download, and where focus goes', () => {
   // Q118 (GM, 2026-10-23: "#178's TOO-LARGE LINE: yes, it goes. The Load
@@ -154,7 +154,7 @@ describe('review: the line after a download, and where focus goes', () => {
   it('every download reads the Load graph line, even one past a reader limit', () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: SAVED, reopens: false } })} />);
     expect(screen.getByRole('status').textContent).toBe(REOPEN_LINE);
-    expect(screen.queryByText(/too large for “Load graph”/)).toBeNull();
+    expect(screen.queryByText(/too large for “Load canvas”/)).toBeNull();
   });
 
   it('after a download, focus moves to the line that says where the file went', async () => {

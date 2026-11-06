@@ -55,10 +55,10 @@ describe('Paper run history inspection and explicit latest-source replay', () =>
     render(<RunHistoryPanel />);
     expect(rerunHistoryRecord).not.toHaveBeenCalled();
     expect(rerunHistoryWithLatestPaperSource).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full graph' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full canvas' }));
     expect(rerunHistoryRecord).toHaveBeenCalledWith('run-a');
     expect(rerunHistoryWithLatestPaperSource).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full graph with latest source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full canvas with latest source' }));
     expect(rerunHistoryWithLatestPaperSource).toHaveBeenCalledWith('run-a');
   });
 
@@ -66,7 +66,7 @@ describe('Paper run history inspection and explicit latest-source replay', () =>
     const rerunHistoryWithLatestPaperSource = vi.fn(async () => undefined);
     useGraphStore.setState({ runHistory: [run], rerunHistoryWithLatestPaperSource, isExecuting: true });
     render(<RunHistoryPanel />);
-    const action = screen.getByRole('button', { name: 'Rerun Full graph with latest source' });
+    const action = screen.getByRole('button', { name: 'Rerun Full canvas with latest source' });
     expect(action).toBeDisabled();
     fireEvent.click(action);
     expect(rerunHistoryWithLatestPaperSource).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe('Paper run history inspection and explicit latest-source replay', () =>
     const rerunHistoryWithLatestPaperSource = vi.fn(async () => undefined);
     useGraphStore.setState({ runHistory: [run], rerunHistoryWithLatestPaperSource, nodes: [], isExecuting: false });
     render(<RunHistoryPanel />);
-    const action = screen.getByRole('button', { name: 'Rerun Full graph with latest source' });
+    const action = screen.getByRole('button', { name: 'Rerun Full canvas with latest source' });
     expect(action).toBeDisabled();
     expect(action).toHaveAttribute('title', 'Refresh or reconnect the Paper source first.');
     fireEvent.click(action);

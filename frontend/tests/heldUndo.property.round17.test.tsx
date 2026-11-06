@@ -213,10 +213,11 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
     fake.canvas = '0';
     (fake.ctx as unknown as { setProjectContext: (v: unknown) => void }).setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     const fk = nebula() as unknown as { broadcast: () => void; deliverEcho: () => boolean;
-      echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number; canvas?: string; agent?: boolean }> };
+      echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number; seq: number; canvas?: string; agent?: boolean }> };
     fk.broadcast = function broadcast(): void {
+      // Numbered when read, as main.py numbers every graphSync (PR #205 round 9).
       fk.echoes.push({ nodes: [...nebula().nodes.values()].map((n) => JSON.parse(JSON.stringify(n))), edges: JSON.parse(JSON.stringify(nebula().edges)),
-        request: nebula().request, canvas: fake.canvas, agent: agentNow });
+        request: nebula().request, seq: nebula().nextSyncSeq(), canvas: fake.canvas, agent: agentNow });
       if (!nebula().holdEchoes) nebula().deliverEchoes();
     };
     fk.deliverEcho = function deliverEcho(): boolean {
@@ -225,11 +226,11 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
       const edit = graph.agent ? { actor: { kind: 'agent', name: 'Codex', id: 'codex' }, id: `ed_ag${graph.request}` }
         : { actor: { kind: 'person' }, tab: nebula().tab, id: 'ed_own' };
       nebula().emit({ nodes: FakeNebula.syncNodes(graph as never), edges: graph.edges, empty: graph.nodes.length === 0, edit,
-        canvasRevision: graph.canvas, workspaceRevision: 'r1' });
+        syncSeq: graph.seq, canvasRevision: graph.canvas, workspaceRevision: 'r1' });
       return true;
     };
   }  if (foreign) {
-    const fake = nebula() as unknown as { deliverEcho: () => boolean; echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number }> };
+    const fake = nebula() as unknown as { deliverEcho: () => boolean; echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number; seq: number }> };
     fake.deliverEcho = function deliverEcho(): boolean {
       const graph = fake.echoes.shift();
       if (!graph) return false;
@@ -238,7 +239,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
         : kind === 'agent' ? { actor: { kind: 'agent', name: 'Codex', id: 'codex' }, id: `ed_ag${graph.request}` }
           : kind === 'tab' ? { actor: { kind: 'person' }, tab: 'another-window', id: `ed_tab${graph.request}` }
             : { actor: { kind: 'person' }, tab: nebula().tab, id: 'ed_own' };
-      nebula().emit({ nodes: FakeNebula.syncNodes(graph as never), edges: graph.edges, empty: graph.nodes.length === 0, ...(edit ? { edit } : {}) });
+      nebula().emit({ nodes: FakeNebula.syncNodes(graph as never), edges: graph.edges, empty: graph.nodes.length === 0, syncSeq: graph.seq, ...(edit ? { edit } : {}) });
       return true;
     };
   }

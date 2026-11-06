@@ -12,6 +12,7 @@ import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents
 import '../../../styles/personal-agents.css';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
+import { SettingsSwitch } from './Switch';
 import { LineBox } from '../../LineBox';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
@@ -42,10 +43,23 @@ function personalAgentBusy(agent: PersonalAgent): boolean {
   return agent.install?.state === 'downloading' || agent.signIn?.state === 'waiting';
 }
 
-type Run = (work: () => Promise<unknown>) => Promise<void>;
+/** `switching`: the switch this work saves, so it shows the position the person gave it. */
+type Run = (work: () => Promise<unknown>, switching?: Switching) => Promise<void>;
+
+/** A switch whose own change is being saved, and the position the person
+ * gave it (GM, PR #205 r1 answer 6: shown at once, held while it saves). */
+type Switching = { id: string; field: 'enabled' | 'useNebulaKey'; to: boolean };
+
+/** One switch of the section: the person's new position while its own save
+ * is out; any switch here is held while the section is busy (held, then the
+ * locked look after 150 ms, so a quick save greys nothing). */
+function switchState(busy: boolean, switching: Switching | null, id: string, field: Switching['field'], saved: boolean) {
+  const own = switching && switching.id === id && switching.field === field ? switching : null;
+  return { checked: own ? own.to : saved, saving: busy };
+}
 
 /** Gemini: hand the CLI the Gemini API key saved in Settings, only when the person turns it on. */
-function KeyOption({ agent, busy, run, lock }: { agent: PersonalAgent; busy: boolean; run: Run; lock: LockProps }) {
+function KeyOption({ agent, busy, switching, run, lock }: { agent: PersonalAgent; busy: boolean; switching: Switching | null; run: Run; lock: LockProps }) {
   const option = agent.keyOption;
   if (!option) return null;
   const blocked = option.blocked ?? (!option.keySaved && !option.enabled
@@ -53,9 +67,9 @@ function KeyOption({ agent, busy, run, lock }: { agent: PersonalAgent; busy: boo
   return (
     <span className="personal-agents__option" data-testid="personal-agent-key-option">
       <label className="personal-agents__option-label">
-        <input type="checkbox" role="switch" className="settings-switch" checked={option.enabled}
-          disabled={busy || (Boolean(blocked) && !option.enabled)} {...lock}
-          onChange={(event) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: event.target.checked }))} />
+        <SettingsSwitch {...switchState(busy, switching, agent.id, 'useNebulaKey', option.enabled)} lock={lock}
+          disabled={Boolean(blocked) && !option.enabled}
+          onChange={(to) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: to }), { id: agent.id, field: 'useNebulaKey', to })} />
         Use my Gemini API key from Nebula
       </label>
       <span className="personal-agents__fine">{option.billing}</span>
@@ -132,6 +146,7 @@ export function PersonalAgentsSection() {
   const [list, setList] = useState<PersonalAgentList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState<Switching | null>(null);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
   // PR #204 round 10 (GM r15, r17 item 4): every route here is the person's alone. A listed
   // agent's switches, Remove and Antigravity's download and sign-in lock as a group, with one
@@ -142,8 +157,9 @@ export function PersonalAgentsSection() {
   // PR #204 round 11: the list is read only on a tab connected as the person (usePersonView).
   const { held: demoted, ready, epoch, readsOnPromote } = usePersonView();
 
-  const load = useCallback(function readAgain() {
-    fetchPersonalAgents()
+  // Returns the read, so a change's hold lasts until the list answers (run).
+  const load = useCallback(function readAgain(): Promise<void> {
+    return fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
       .catch((exc: unknown) => {
         // GM r6 (2): what retries on the promote says why in the "because" form.
@@ -175,14 +191,17 @@ export function PersonalAgentsSection() {
     return () => window.clearInterval(timer);
   }, [following, load]);
 
-  const run = async (work: () => Promise<unknown>) => {
+  const run: Run = async (work, next) => {
     // Every change here is the person's alone (aria-disabled doesn't stop a click or a change).
     if (rowLock.locked) return;
     setBusy(true);
+    setSwitching(next ?? null);
     setError(null);
     try {
       await work();
-      load();
+      // The list answers before the hold ends, so a switch never shows its
+      // old position between the save and the reload.
+      await load();
       announceChange();
     } catch (exc) {
       const line = failureMessage(exc, "Couldn’t update your agents.");
@@ -190,6 +209,7 @@ export function PersonalAgentsSection() {
       clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents (GM, #204 r3)
     } finally {
       setBusy(false);
+      setSwitching(null);
     }
   };
 
@@ -232,14 +252,14 @@ export function PersonalAgentsSection() {
                 <code>{[agent.command, ...agent.args].join(' ')}</code>
                 {agent.termsNote && <span className="personal-agents__terms" role="note">{agent.termsNote}</span>}
               </span>
-              <KeyOption agent={agent} busy={busy} run={run} lock={rowLock.control()} />
+              <KeyOption agent={agent} busy={busy} switching={switching} run={run} lock={rowLock.control()} />
               <DownloadAndSignIn agent={agent} busy={busy} run={run} lock={rowLock.control()} />
             </span>
             <span className="settings-model-limit__controls">
               {agent.startable && (
-                <input type="checkbox" role="switch" className="settings-switch" checked={agent.enabled}
-                  aria-label={`Use ${agent.displayName} in chat`} disabled={busy} {...rowLock.control()}
-                  onChange={(event) => void run(() => updatePersonalAgent(agent.id, { enabled: event.target.checked }))} />
+                <SettingsSwitch {...switchState(busy, switching, agent.id, 'enabled', agent.enabled)} lock={rowLock.control()}
+                  aria-label={`Use ${agent.displayName} in chat`}
+                  onChange={(to) => void run(() => updatePersonalAgent(agent.id, { enabled: to }), { id: agent.id, field: 'enabled', to })} />
               )}
               {agent.kind === 'custom' && (
                 <button type="button" className="settings__button settings__button--danger" disabled={busy}

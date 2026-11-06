@@ -3,7 +3,7 @@
  * (saveEditsToFile) and "Download a copy" (saveProjectCopyToFile) past V8's
  * string cap. JSON.stringify throws RangeError("Invalid string length") for a
  * canvas over 2^29 - 24 characters, the case #190 handles for Save graph
- * ("Couldn't save the graph. It's too big to save in a browser."). GM: the
+ * ("Nebula couldn’t save the canvas. It's too big to save in a browser."). GM: the
  * headings stay, and the body is "It's too big to download in a browser.",
  * so the two read as a pair with only the verb changed.
  */

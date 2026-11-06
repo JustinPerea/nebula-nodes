@@ -44,7 +44,7 @@ export const useCinemaMotionStore = create<{
   setHandoffs: (update) => set({ handoffs: update(get().handoffs) }),
   clear: () => set({ handoffs: [] }),
   interruptPending: () => set({ handoffs: get().handoffs.map((item) => item.status === 'pending'
-    ? { ...item, attempt: uuidv4(), status: 'error', error: 'Connection interrupted by graph import. Retry after the import finishes.' }
+    ? { ...item, attempt: uuidv4(), status: 'error', error: 'A canvas import interrupted the connection. Try again when the import finishes.' }
     : item) }),
   reconcile: (nodes, edges) => {
     const current = get().handoffs;

@@ -8,6 +8,7 @@ import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave'
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
+import { lockLine } from '../../lib/runLock';
 import { offlineMark, STUDIO_OFFLINE_LINE_ID, useBackendOffline, useOfflineRowShown } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
@@ -31,6 +32,9 @@ type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
 /** Round 18o (GM r51 Q4): Save corrections & next, pressed from its button, hands focus on to the
  * next reference's heading once the save lands. */
 type AcceptFrom = { focusNext?: boolean };
+
+/** A save refused while a grade is still being written (GM, PR #205 r1). */
+const GRADE_LOCK_LINE = lockLine('save this review', 'grade');
 
 /**
  * Agent review. `onWork` is the panel contract (commons-leave): unsaved
@@ -162,8 +166,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     }
   }
   function accept(item: ReviewItem, labels: EvaluationLabels, from: AcceptFrom = {}): Promise<SaveResult> {
-    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: 'Wait for the grade in progress to finish.',
-      message: 'Wait for the grade in progress to finish.', retry: true });
+    // GM, PR #205 r1: the lock line, by the refused action.
+    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: GRADE_LOCK_LINE, message: GRADE_LOCK_LINE, retry: true });
     pendingWrites.current++;
     requestVersion.current++;
     setError('');

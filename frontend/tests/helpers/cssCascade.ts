@@ -209,6 +209,9 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
   root.walkRules((rule: Rule) => {
     for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
       if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
+      // A forced-colors block is a mode of its own (GM PR #205 r8 item 4): the
+      // cascade here is the normal one; tests read that block on its own.
+      if (parent.type === 'atrule' && (parent as AtRule).name === 'media' && /forced-colors\s*:\s*active/.test((parent as AtRule).params)) return;
     }
     const media: string[] = [];
     const container: string[] = [];
