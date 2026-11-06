@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startupSet } from './lib/startupChunks.mjs';
 
 /**
  * PR #199 round 17 (GM r23, 3): a canvas kept in this tab is only here, so
@@ -47,18 +48,13 @@ const lazyCopy = assetNames.filter((name) => /^catalogRestoreCopy-[^/]+\.js$/.te
 if (lazyCopy.length !== 1) {
   throw new Error(`Kept guard check: expected one catalogRestoreCopy chunk in ${distDir}/assets, found ${lazyCopy.length}`);
 }
-/** The chunks the entry loads before it runs: itself and every chunk it
- * imports statically, transitively (`from"./x.js"` and `import"./x.js"`;
- * dynamic `import(…)` and the preload list are not static). */
-const staticImports = (code) => [...code.matchAll(/(?:from|import)\s*["']\.\/([^"']+\.js)["']/g)].map((match) => match[1]);
+/** The chunks the page loads before anything runs: main's shared startup
+ * walker (scripts/lib/startupChunks.mjs): the entry, the modulepreloads, and
+ * every static import of those, transitively. */
+const startup = await startupSet(distDir);
 const loadedWithEntry = new Map();
-const pending = [entryMatch[1]];
-while (pending.length > 0) {
-  const name = pending.pop();
-  if (loadedWithEntry.has(name)) continue;
-  const code = await readFile(path.join(distDir, 'assets', name), 'utf8');
-  loadedWithEntry.set(name, code);
-  for (const next of staticImports(code)) if (assetNames.includes(next)) pending.push(next);
+for (const member of startup.members) {
+  loadedWithEntry.set(member.name, await readFile(path.join(distDir, 'assets', member.name), 'utf8'));
 }
 const copy = await readFile(path.join(distDir, 'assets', lazyCopy[0]), 'utf8');
 // The project flows chunk loads later, on its own (store/projectFlowsLoader).
