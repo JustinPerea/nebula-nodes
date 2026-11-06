@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, NamedTuple
 
 from models.graph import GraphNode, PortValueDict
-from execution.person_line import missing_file_line, with_person_line
+from execution.person_line import missing_file_line, with_api_status, with_person_line
 
 RouteRun = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -73,6 +73,20 @@ def refuse(where: str, text: str, person: str | None = None) -> ValueError:
     ``{where.person} {person or text}`` on the card. ``person`` is the tail
     in words when ``text`` names a field key or a value."""
     return with_person_line(ValueError(f"{where} {text}"), f"{_person(where)} {person or text}")
+
+
+def refuse_needs(where: str, what: str, *, longer: bool = False) -> ValueError:
+    """A run stopped before any request because a required input isn't
+    connected (GM r118): agents read ``{where} needs {what}``; the card says
+    "Nebula couldn\u2019t run \u201cX\u201d because it needs {what}. Connect
+    one, then run it again." with the node's own name, never the provider's."""
+    node = _person(where).rpartition(" on ")[0] or _person(where)
+    named = "this node" if node == "This node" else f"\u201c{node}\u201d"
+    if longer:
+        line = f"Nebula couldn\u2019t run {named} because it needs {what}. Use a longer audio track, then run it again."
+    else:
+        line = f"Nebula couldn\u2019t run {named} because it needs {what}. Connect one, then run it again."
+    return with_person_line(ValueError(f"{where} needs {what}"), line)
 
 
 def where_for(node: GraphNode, route: Mapping[str, Any], text: str) -> Where:
@@ -387,6 +401,16 @@ _FAL_FIELDS: dict[str, dict[str, tuple[str, bool]]] = {
     "fal-ai/flux-2-flex": {},
     "fal-ai/flux-2/klein/9b": {},
     "fal-ai/flux-2/klein/4b": {},
+    # Talking heads (read 2026-11-04 from fal's per-endpoint queue OpenAPI):
+    # BytedanceOmnihumanV15Input, BytedanceOmnihumanV2Input and
+    # KlingVideoAiAvatarV2{Standard,Pro}Input all take ``image_url`` and
+    # ``audio_url`` (both required) and an optional ``prompt``. Keyed by
+    # whole id: the last segments ("v1.5", "v2", "standard", "pro") say
+    # nothing about the shape.
+    "fal-ai/bytedance/omnihuman/v1.5": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/bytedance/omnihuman/v2": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/kling-video/ai-avatar/v2/standard": {"image": ("image_url", False), "audio": ("audio_url", False)},
+    "fal-ai/kling-video/ai-avatar/v2/pro": {"image": ("image_url", False), "audio": ("audio_url", False)},
 }
 FAL_KEYFRAMES = "keyframes-to-video"
 # A route param that picks the endpoint (endpointWhen) and isn't a request
@@ -411,6 +435,10 @@ FAL_ENDPOINT_DROPS: dict[str, frozenset[str]] = {
     "fal-ai/flux-2-flex": _FLUX2_SWITCHES,
     "fal-ai/flux-2/klein/9b": _FLUX2_SWITCHES,
     "fal-ai/flux-2/klein/4b": _FLUX2_SWITCHES,
+    # Kling AI Avatar v2: ``mode`` (std or pro) picks fal's endpoint; neither
+    # schema has a mode field (Replicate's does, and gets it).
+    "fal-ai/kling-video/ai-avatar/v2/standard": frozenset({"mode"}),
+    "fal-ai/kling-video/ai-avatar/v2/pro": frozenset({"mode"}),
 }
 
 
@@ -434,9 +462,77 @@ def keyframe_indexes(count: int, duration: int) -> list[int]:
     return [round(i * last / (count - 1)) for i in range(count)]
 
 
+_FAL_AUDIO_DRIVEN = frozenset({"fal-ai/bytedance/omnihuman/v1.5", "fal-ai/bytedance/omnihuman/v2",
+                               "fal-ai/kling-video/ai-avatar/v2/standard", "fal-ai/kling-video/ai-avatar/v2/pro"})
+
+
+# A local file goes to fal as one base64 data URI held in memory (media_url),
+# so a talking head's image and audio are checked before they are read. fal's
+# own page for OmniHuman 2.0 gives the limits (read 2026-11-04): image "Max
+# size: 30 MB", audio "Max size: 15 MB". The other three pages publish none,
+# so they get a fixed cap that keeps the request a sane size.
+FAL_DATA_URI_MAX_BYTES = 20 * 1024 * 1024
+FAL_MEDIA_MAX_BYTES: dict[tuple[str, str], int] = {
+    ("fal-ai/bytedance/omnihuman/v2", "image"): 30 * 1024 * 1024,
+    ("fal-ai/bytedance/omnihuman/v2", "audio"): 15 * 1024 * 1024,
+}
+
+
+def _megabytes(size: int) -> str:
+    return f"{size / (1024 * 1024):.1f}".removesuffix(".0")
+
+
+def _data_uri_bytes(value: Any) -> int:
+    """The decoded size of a base64 data: URI (0 for anything else), from its
+    length alone, so a large one is refused before it is decoded."""
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return 0
+    head, _, body = value.partition(",")
+    return len(body) * 3 // 4 if head.endswith(";base64") else len(body)
+
+
+def _split_data_uri(value: str) -> tuple[bytes, str] | None:
+    """(bytes, mime) of a base64 data: URI; None when it isn't one or can't be decoded."""
+    head, sep, body = value.partition(",")
+    if not sep or not head.startswith("data:") or not head.endswith(";base64"):
+        return None
+    try:
+        data = base64.b64decode(body, validate=True)
+    except ValueError:
+        return None
+    return data, (head[len("data:"):-len(";base64")].split(";")[0] or "application/octet-stream")
+
+
+def refuse_too_large(where: str, endpoint: str, port: str, values: list[Any]) -> None:
+    """Stop before reading a local file over the route's limit into memory."""
+    limit = FAL_MEDIA_MAX_BYTES.get((endpoint, port), FAL_DATA_URI_MAX_BYTES)
+    for value in values:
+        path = local_media_path(value)
+        size = path.stat().st_size if path is not None else _data_uri_bytes(value)
+        if size > limit:
+            what = "audio" if port == "audio" else port.replace("_", " ")
+            node = _person(where).rpartition(" on ")[0] or _person(where)
+            named = "this node" if node == "This node" else f"\u201c{node}\u201d"
+            raise with_person_line(
+                ValueError(f"{where} takes {what} up to {_megabytes(limit)} MB, and this file is {_megabytes(size)} MB"),
+                f"Nebula couldn\u2019t run {named} because its {what} file is too large at {_megabytes(size)} MB, "
+                f"and fal.ai takes up to {_megabytes(limit)} MB. Use a smaller file, then run it again.")
+
+
+# fal's page for OmniHuman 2.0 gives the audio's length as "Duration between
+# 4 and 300 seconds" and bills "Duration of audio input/video output" (read
+# 2026-11-04): it says nothing of padding or billing a shorter clip, so a
+# shorter one is refused here instead of priced.
+FAL_MIN_AUDIO_SECONDS: dict[str, float] = {"fal-ai/bytedance/omnihuman/v2": 4.0}
+
+
 def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, Any],
-               node_name: str = "This node") -> dict[str, Any]:
-    """The media fields for ``endpoint`` from the wired ports."""
+               node_name: str = "This node", *, upload: bool = False) -> dict[str, Any]:
+    """The media fields for ``endpoint`` from the wired ports. A local file goes
+    as a base64 data URI, except with ``upload`` on a talking-head endpoint:
+    fal refuses data: URLs there (HTTP 422 "Failed to download the file", seen
+    in a real run 2026-11-04), so the local path is kept for ``upload_local_media``
+    to replace with the URL fal's storage gives it."""
     shape = fal_shape(endpoint)
     where = Where(f"fal.ai's {endpoint}", f"{node_name} on fal.ai")
     if shape == FAL_KEYFRAMES:
@@ -467,7 +563,20 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
             raise refuse(where, f"takes one source for {field}; disconnect one of the connected inputs",
                          f"takes one source {kind}, but the {' and the '.join(both)} are both connected. "
                          "Disconnect one.")
-        fields[field] = [media_url(v) for v in values] if many else media_url(one_value(inputs, port, where))
+        if shape in _FAL_AUDIO_DRIVEN:
+            refuse_too_large(where, shape, port, values)
+        as_field = media_url
+        if upload and shape in _FAL_AUDIO_DRIVEN:
+            # a local file stays a path (media_url keeps a data: URI as it is); upload_local_media
+            # sends both to fal's storage
+            as_field = lambda v: str(v) if local_media_path(v) is not None else media_url(v)  # noqa: E731
+        fields[field] = [as_field(v) for v in values] if many else as_field(one_value(inputs, port, where))
+    # The talking heads need both media; fal would answer a missing one with a
+    # raw 422, so stop here in the same words as the Replicate route.
+    if shape in _FAL_AUDIO_DRIVEN:
+        for field, what in (("image_url", "an image"), ("audio_url", "an audio track")):
+            if field not in fields:
+                raise refuse_needs(where, what)
     return fields
 
 
@@ -476,6 +585,114 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
 # fal's queue first, so a video job gets 600 polls x 3 s, 30 minutes, between
 # Replicate's 15 and BFL's 60. When it runs out, the job is cancelled upstream.
 FAL_VIDEO_POLLS: tuple[int, float] = (600, 3.0)
+
+
+# fal's storage, as fal's own client (fal-client 1.0.3, client.py
+# `_upload_via_storage`, read 2026-11-04) uploads a file: POST
+# https://rest.fal.ai/storage/upload/initiate?storage_type=gcs with the fal key,
+# JSON {file_name, content_type}, answered with {upload_url, file_url}; then PUT
+# the bytes to upload_url with the same Content-Type. file_url is what the model
+# takes. fal's page "fal CDN" (fal.ai/docs/documentation/model-apis/fal-cdn)
+# says a model's input is a URL and a data URI is "not recommended".
+FAL_REST_URL = "https://rest.fal.ai"
+FAL_UPLOAD_TIMEOUT = 300.0
+
+
+async def upload_local_media(fields: dict[str, Any], api_key: str, where: Where) -> dict[str, Any]:
+    """``fields`` with each local file path or base64 data: URI (see
+    ``fal_fields(upload=True)``) replaced by the https URL of that file uploaded
+    to fal's storage. Every input is checked before anything is uploaded, and a
+    file is uploaded once."""
+    from execution.missing_credential import MissingCredentialError
+
+    sources: dict[str, tuple[Path | bytes, str, str, str]] = {}  # value -> (source, file name, mime, what)
+    for field, value in fields.items():
+        if not isinstance(value, str) or field not in ("image_url", "audio_url") or value in sources:
+            continue
+        what = "audio" if field == "audio_url" else "image"
+        path = local_media_path(value)
+        if path is not None:
+            sources[value] = (path, path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream", what)
+        elif value.startswith("data:"):
+            inline = _split_data_uri(value)
+            if inline is None:
+                node = _person(where).rpartition(" on ")[0] or _person(where)
+                named = "this node" if node == "This node" else f"\u201c{node}\u201d"
+                raise with_person_line(
+                    ValueError(f"{where} got an {what} data: URI that isn't base64"),
+                    f"Nebula couldn\u2019t run {named} because its {what} file couldn\u2019t be read. "
+                    "Reconnect the file, then run it again.")
+            data, mime = inline
+            sources[value] = (data, f"{what}{mimetypes.guess_extension(mime) or ''}", mime, what)
+    if sources and not api_key:
+        raise MissingCredentialError("FAL_KEY is required")
+    uploaded = {value: await _upload_to_fal(source, name, mime, api_key, where, what)
+                for value, (source, name, mime, what) in sources.items()}
+    return {field: uploaded.get(value, value) if field in ("image_url", "audio_url") and isinstance(value, str)
+            else value for field, value in fields.items()}
+
+
+async def _upload_to_fal(source: Path | bytes, file_name: str, mime: str, api_key: str, where: Where,
+                         what: str) -> str:
+    import asyncio
+
+    import httpx
+
+    node = _person(where).rpartition(" on ")[0] or _person(where)
+    named = "this node" if node == "This node" else f"\u201c{node}\u201d"
+    cannot = f"{where} could not upload its {what} file to fal.ai's storage"
+    try:
+        data = source if isinstance(source, bytes) else await asyncio.to_thread(source.read_bytes)
+        headers = {"Authorization": f"Key {api_key}", "Accept": "application/json", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=FAL_UPLOAD_TIMEOUT) as client:
+            start = await client.post(f"{FAL_REST_URL}/storage/upload/initiate?storage_type=gcs", headers=headers,
+                                      json={"file_name": file_name, "content_type": mime})
+            if start.status_code not in (200, 201):
+                raise with_person_line(
+                    with_api_status(RuntimeError(f"{cannot}: HTTP {start.status_code}"), start.status_code),
+                    f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. "
+                    "Check your fal.ai API key in Settings, then run it again.")
+            try:
+                info = start.json()
+            except ValueError:
+                info = {}
+            upload_url, file_url = info.get("upload_url"), info.get("file_url")
+            # Both https: the file's bytes go to upload_url, and the provider fetches file_url.
+            if not (isinstance(upload_url, str) and upload_url.startswith("https://")
+                    and isinstance(file_url, str) and file_url.startswith("https://")):
+                raise with_person_line(
+                    RuntimeError(f"{cannot}: no upload_url or file_url in the answer"),
+                    f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. Run it again.")
+            put = await client.put(upload_url, content=data, headers={"Content-Type": mime})
+            # 2xx only: httpx doesn't follow redirects, so a 3xx means nothing was stored
+            if not 200 <= put.status_code < 300:
+                raise with_person_line(
+                    # no API status: a presigned storage upload, not fal's API with the person's key
+                    RuntimeError(f"{cannot}: HTTP {put.status_code} on the upload"),
+                    f"Nebula couldn\u2019t run {named} because fal.ai wouldn\u2019t store its {what} file. Run it again.")
+            return file_url
+    except (httpx.HTTPError, OSError) as exc:
+        raise with_person_line(
+            RuntimeError(f"{cannot}: the connection failed"),
+            f"Nebula couldn\u2019t run {named} because fal.ai couldn\u2019t be reached to upload its {what} file. "
+            "Check your connection, then run it again.") from exc
+
+
+async def refuse_short_audio(endpoint: str, inputs: Mapping[str, Any], node_name: str) -> None:
+    """Refuse audio under the endpoint's minimum before the request, when its
+    length is known (a file in Nebula's output folder); one that can't be
+    measured goes to fal, which checks it."""
+    minimum = FAL_MIN_AUDIO_SECONDS.get(endpoint)
+    if minimum is None:
+        return
+    import asyncio
+    from services import input_sizes
+
+    measured = await asyncio.to_thread(input_sizes.measure, one_value(inputs, "audio", Where("", "")), "Audio")
+    seconds = (measured or {}).get("seconds")
+    if isinstance(seconds, (int, float)) and seconds < minimum:
+        raise refuse_needs(Where(f"fal.ai's {endpoint}", f"{node_name} on fal.ai"),
+                           f"audio of at least {minimum:g} s", longer=True)
 
 
 async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
@@ -493,7 +710,13 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     endpoint_id = str(endpoint if endpoint is not None else route.get("endpoint") or "").strip("/")
     dropped = FAL_ENDPOINT_SWITCHES | FAL_ENDPOINT_DROPS.get(endpoint_id, frozenset())
     sent = {key: value for key, value in _set(node.params).items() if key not in dropped}
-    params = {**sent, **fal_fields(endpoint_id, node.params, inputs, _node_name(definition))}
+    fields = fal_fields(endpoint_id, node.params, inputs, _node_name(definition), upload=True)
+    await refuse_short_audio(endpoint_id, inputs, _node_name(definition))
+    if fal_shape(endpoint_id) in _FAL_AUDIO_DRIVEN:
+        # The size cap above ran before any file was read; now each local file goes to fal's storage.
+        fields = await upload_local_media(fields, api_keys.get("FAL_KEY", ""), Where(
+            f"fal.ai's {endpoint_id}", f"{_node_name(definition)} on fal.ai"))
+    params = {**sent, **fields}
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)
     prompt = prompt_of(inputs)
     fal_inputs = {"prompt": PortValueDict(type="Text", value=prompt)} if prompt is not None else {}
@@ -518,9 +741,33 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
 REPLICATE_SOURCE_VIDEO: dict[str, str] = {"black-forest-labs/flux-video-upscale": "input_video"}
 
 
+# Talking-head models: a still ``image`` and an ``audio`` track, both
+# required, and an optional ``prompt``; the output is the video's URL.
+# bytedance/omni-human-1.5 (image, audio, prompt, fast_mode, seed) and
+# kwaivgi/kling-avatar-v2 (image, audio, prompt, mode), from each model's
+# Input schema (replicate.com/<model>/api/schema), read 2026-11-04.
+REPLICATE_AUDIO_DRIVEN = frozenset({"bytedance/omni-human-1.5", "kwaivgi/kling-avatar-v2"})
+# 600 polls at Replicate's 3 s interval (handlers/replicate_model.py POLL_INTERVAL): 30 minutes.
+REPLICATE_AUDIO_DRIVEN_POLLS = 600
+
+
 def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where: str,
                     model: str = "") -> tuple[dict[str, Any], set[str]]:
     """The prediction input and which of its fields are media."""
+    if model in REPLICATE_AUDIO_DRIVEN:
+        refuse_unwired(inputs, {"prompt", "image", "audio"}, where)
+        body = _set(params)
+        prompt = prompt_of(inputs)
+        if prompt is not None:
+            body["prompt"] = prompt
+        image = one_value(inputs, "image", where)
+        if image is None:
+            raise refuse_needs(where, "an image")
+        audio = one_value(inputs, "audio", where)
+        if audio is None:
+            raise refuse_needs(where, "an audio track")
+        body["image"], body["audio"] = image, audio
+        return body, {"image", "audio"}
     if model in REPLICATE_SOURCE_VIDEO:
         field = REPLICATE_SOURCE_VIDEO[model]
         refuse_unwired(inputs, {"prompt", "video"}, where)
@@ -558,8 +805,11 @@ async def run_replicate_model(node: GraphNode, inputs: dict[str, PortValueDict],
     _, data_type = output_port(definition)
     model = str(endpoint if endpoint is not None else route.get("endpoint") or "")
     body, media = replicate_input(node.params, inputs, where_for(node, route, f"Replicate's {model}"), model)
+    # A talking head took 3.5 to 6.6 min on fal (Kling) and over 15 min (OmniHuman 2.0) in a real run
+    # (2026-11-04); Replicate's default of 300 polls x 3 s is 15 min, so these models get 30 min.
+    budget = {"max_polls": REPLICATE_AUDIO_DRIVEN_POLLS} if model in REPLICATE_AUDIO_DRIVEN else {}
     path = await replicate_model.run_model(model, body, replicate_model.api_key(api_keys), media_type=data_type,
-                                           media_fields=media, node_id=node.id, emit=emit)
+                                           media_fields=media, node_id=node.id, emit=emit, **budget)
     return as_output(definition, path)
 
 

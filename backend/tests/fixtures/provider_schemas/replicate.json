@@ -266,7 +266,94 @@
      "description": "Moderation strictness for the prompt and the delivered frames, 0 (strictest) to 4 (most permissive)."
     }
    }
+  },
+  "bytedance/omni-human-1.5": {
+   "type": "object",
+   "title": "Input",
+   "required": [
+    "image",
+    "audio"
+   ],
+   "properties": {
+    "seed": {
+     "type": "integer",
+     "title": "Seed",
+     "x-order": 4,
+     "nullable": true,
+     "description": "Random seed for reproducible generation."
+    },
+    "audio": {
+     "type": "string",
+     "title": "Audio",
+     "format": "uri",
+     "x-order": 1,
+     "description": "Input audio file (MP3, WAV, etc.). Duration must be less than 35 seconds. If the audio exceeds 35 seconds, an error will be generated and the generation will fail."
+    },
+    "image": {
+     "type": "string",
+     "title": "Image",
+     "format": "uri",
+     "x-order": 0,
+     "description": "Input image containing a human subject, face or character."
+    },
+    "prompt": {
+     "type": "string",
+     "title": "Prompt",
+     "x-order": 2,
+     "nullable": true,
+     "description": "Optional prompt for precise control of the scene, movements, camera movements, etc. Supports Chinese, English, Japanese, Korean, Spanish, and Indonesian."
+    },
+    "fast_mode": {
+     "type": "boolean",
+     "title": "Fast Mode",
+     "default": false,
+     "x-order": 3,
+     "description": "Enable fast mode to speed up generation by sacrificing some effects."
+    }
+   }
+  },
+  "kwaivgi/kling-avatar-v2": {
+   "type": "object",
+   "title": "Input",
+   "required": [
+    "image",
+    "audio"
+   ],
+   "properties": {
+    "mode": {
+     "enum": [
+      "std",
+      "pro"
+     ],
+     "type": "string",
+     "title": "mode",
+     "description": "Video generation mode.",
+     "default": "std",
+     "x-order": 3
+    },
+    "audio": {
+     "type": "string",
+     "title": "Audio",
+     "format": "uri",
+     "x-order": 1,
+     "description": "Audio file for avatar. Supports .mp3/.wav/.m4a/.aac, max 5MB."
+    },
+    "image": {
+     "type": "string",
+     "title": "Image",
+     "format": "uri",
+     "x-order": 0,
+     "description": "Avatar reference image. Supports .jpg/.jpeg/.png, max 10MB, dimensions >= 300px, aspect ratio 1:2.5 to 2.5:1."
+    },
+    "prompt": {
+     "type": "string",
+     "title": "Prompt",
+     "x-order": 2,
+     "nullable": true,
+     "description": "Positive text prompt to define avatar actions, emotions, and camera movements."
+    }
+   }
   }
  },
- "_note": "black-forest-labs/flux-video-upscale added for PR 3 from https://replicate.com/black-forest-labs/flux-video-upscale/api/schema, read 2026-10-15."
+ "_note": "black-forest-labs/flux-video-upscale added for PR 3 from https://replicate.com/black-forest-labs/flux-video-upscale/api/schema, read 2026-10-15. bytedance/omni-human-1.5 and kwaivgi/kling-avatar-v2 (the talking-head nodes) added from https://replicate.com/<model>/api/versions (the latest version's dereferenced Input schema, which replicate.com/<model>/api/schema shows), read 2026-11-04."
 }

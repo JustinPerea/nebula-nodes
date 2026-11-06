@@ -83,7 +83,9 @@ The server exposes these tools for building and running (see
   or `"by input size"` with a `priceNote` for a node priced from its input
   file (SeedVR2 Upscale: "$0.001 per megapixel of the larger of input and
   output, rounded up to a whole megapixel; priced from your image's size when
-  you run it"). `ready_only=false` also lists nodes that can't run here, with what's
+  you run it"), or `"by audio length"` with a `priceNote` for a talking-head
+  node, priced per second of its Audio Input's file.
+  `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode. A row that runs free on
   someone's own allowance has `billing`, saying who can still be billed past
@@ -260,7 +262,7 @@ The server exposes these tools for building and running (see
   before running a node priced from its input's size on a file of yours
   (see [Spending limits](#spending-limits)). An in-app chat's turn reads
   only its own workspace, and the read follows no links.
-- `load_graph_file`: opens a graph file (`path`) as the person's Load graph
+- `load_graph_file`: opens a graph file (`path`) as the person's Load canvas
   does (`nebula load <file>`, Q123 a): a plain `.nebula` or `.json`, or a
   `.nebula.zip` bundle (a graph plus its files). A bundle streams to `POST
   /api/outputs/restore?rewriteLinks=true` with your own headers: its files
@@ -270,7 +272,7 @@ The server exposes these tools for building and running (see
   empty, with a warning). Under the 16 MB save limit the file replaces the
   open project's canvas (make a new project first, `new_project`, unless the
   person asked for that). A file over the limit opens as a new project named
-  after the file, as the person's Load graph does (Q120): the import is
+  after the file, as the person's Load canvas does: the import is
   first asked to refuse it (`refuseOverSaveLimit`), the project is made as
   `new_project` makes one, and the file loads there (`newProjectForFile`,
   which loads only into an empty project); the project that was open is left
@@ -281,7 +283,58 @@ The server exposes these tools for building and running (see
   until it is under the limit, and `project_size` shows what's large. The
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
-  files up to 528 MB.
+  files up to 528 MB. A bundle the restore refuses is refused with the
+  backend's own words (`detail`, which `load_graph_file` and `nebula load`
+  say after the file's path, e.g. "graph.json contains too many nodes").
+  The HTTP answer also carries a `code` beside `detail`, which the person's
+  tab uses to pick its line under "Nebula couldn’t load the canvas.":
+  - "This file is too complex to open.": `graph_too_complex` (too many
+    values, or nested too deeply), `bundle_too_many_members` (with
+    `maxMembers`), `bundle_expands_too_far` (with `limitBytes`) and
+    `bundle_unsafe_ratio` (with `maxRatio`);
+  - "Part of this file holds a value Nebula can’t read.":
+    `graph_unreadable_value` (a NaN, an Infinity or a number past a
+    float's range);
+  - "Nebula couldn’t open this file because it has more than 10,000 nodes, the most Nebula opens." / "… 50,000 connections …":
+    `graph_too_many_nodes` (with `maxNodes`) and `graph_too_many_edges`
+    (with `maxEdges`);
+  - "This canvas is N MB. Nebula opens canvases up to M MB.":
+    `graph_too_large` (with `sizeBytes`, graph.json's unpacked size as the
+    bundle declares it, and `limitBytes`);
+  - "This file uses a node this version of Nebula doesn’t have.":
+    `unknown_definition` (a node type it doesn't know) and
+    `graph_unknown_port` (a connection to a port that node doesn't have);
+  - "This file is damaged or isn’t a Nebula canvas.": `graph_invalid`
+    (graph.json isn't a Nebula graph: its shape, a parser error, or any
+    other check of its nodes and connections), `graph_cycle` (its
+    connections loop back on themselves) and the
+    zip's own checks, `bundle_not_zip`, `bundle_encrypted`,
+    `bundle_unsupported_compression`, `bundle_unsafe_path`,
+    `bundle_path_too_long` (with `maxPathBytes` or `maxComponentBytes`),
+    `bundle_link`, `bundle_special_file`, `bundle_size_metadata` and
+    `bundle_missing_graph`;
+  - "This file is from a newer Nebula. Update Nebula, then open it
+    again.": `graph_newer_version` (with `version`);
+  - "Its files couldn’t be copied. Try again.": `bundle_restore_failed`
+    (500);
+  - "One of its files is N MB. Nebula opens files up to M MB.":
+    `bundle_member_too_large` (with `sizeBytes`, that file's unpacked size
+    as the bundle declares it, and `limitBytes`);
+  - "This file is N MB. Nebula opens files up to M MB.":
+    `bundle_upload_too_large` (with `sizeBytes`, the upload's size, and
+    `limitBytes`). A streamed upload with no Content-Length is refused
+    before its end arrives, so it has no `sizeBytes` and reads "This file
+    is larger than M MB, the most Nebula opens." (a member refusal without
+    `sizeBytes` would read "One of its files is larger than M MB, the most
+    Nebula opens.").
+  N is to the nearest tenth of a MB and M whole MB, as in the canvas size
+  line. Any other refusal of the file (a 400, 413 or 422 with no `code`, a code
+  with no line here, a size code without its numbers, an empty body) reads
+  "This file is damaged or isn’t a Nebula canvas." under the heading,
+  for a bundle and a plain file alike; the person never reads the
+  backend's words (the tab's console keeps them). A server failure (500)
+  with no code reads as any request Nebula didn't answer does. Agents keep
+  the backend's `detail` in every case.
 - `remove_from_canvas`: deletes nodes or single connections, all or nothing.
   On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
   back with their connections (as the person's own delete is, from the
@@ -290,16 +343,47 @@ The server exposes these tools for building and running (see
   on the canvas or its bars, never in a panel that owns its keys such as the
   Inspector or chat, nor behind a modal dialog). A delete (the person's,
   yours or another agent's) takes the nodes and their connections off the
-  canvas the moment it is made; edits to them still waiting to be sent
-  (the person's typing, yours) are dropped once Nebula confirms it, and a
-  sync that still shows them meanwhile leaves them off. If Nebula refuses
-  it, the nodes come back where they were, with their connections, not
-  selected, with the usual line saying why, and the waiting edits go out.
-  A Cmd+Z pressed while a delete is still on its way undoes nothing and
-  says "Nothing was undone. Your last change was still saving."; once the
-  delete has landed, one Cmd+Z brings the nodes back with their
-  connections, on the canvas and in Nebula's graph, and Redo deletes them
-  again. A Cmd+Z the person presses before another step has reached Nebula
+  canvas the moment it is made; edits to them still waiting to be sent (the
+  person's typing, yours) are dropped once Nebula confirms it, and a sync
+  that still shows them meanwhile leaves them off. If Nebula refuses it, the
+  nodes come back where they were, with their connections, not selected,
+  with the usual line saying why, and the waiting edits go out. A Cmd+Z
+  pressed while a delete is still on its way waits for the delete's answer,
+  saying nothing meanwhile, then brings the nodes back with their
+  connections, on the canvas and in Nebula's graph, with the usual "Restored
+  the node." (Redo deletes them again), as a Cmd+Z after the delete has
+  landed does. Nodes any Undo or Redo brings back (the person's step or an
+  agent's, yours included) come back selected, replacing the selection, as a
+  paste does: one selection, so the Inspector's node and its "…" pill move
+  to the node brought back (when several come back, the Inspector says
+  "N nodes selected", pinned or not; when the node it shows leaves the
+  canvas, by an Undo, a Redo, a delete, yours included, or Load canvas, it
+  shows what is still selected: one node shows it, and two or more read
+  "N nodes selected"; with nothing left selected, a pinned Inspector stays
+  pinned and says "No node selected", and an unpinned one closes; opening
+  another project resets the panels, which unpins and closes it). The
+  Inspector follows the person's selection: one node shows it, two or more
+  read "N nodes selected", and an unpinned Inspector closes only when
+  nothing is selected. Either way it
+  brings them back as Nebula last had them: your edit to a node (or a
+  connection you made or took off) that Nebula took while the person's
+  delete was on its way comes back with it, a connection only while the node
+  at its other end is there; the person's own typing, and a rename of theirs
+  not yet answered, stay theirs (your rename after theirs landed is yours).
+  Each edit is its own undo step under the delete, as Nebula had them, never
+  merged across agents or edits: the person's next Cmd+Z after the restore
+  undoes only the newest edit, with "Undid <agent>’s edit.", the next one
+  the edit before it, and none of their older steps reverts them. A delete
+  Nebula refuses keeps the node with each edit its own step the same way. If
+  Nebula refuses the delete, the nodes come back with the delete's own line
+  and the waiting Cmd+Z says nothing more. If the restore is refused or
+  fails, or the delete gets no answer within 15 s, the canvas says "Nebula
+  couldn’t bring back “X”. Try Undo again." (the names as the cards read
+  then; several nodes by the usual list, four or more counted). After the
+  15 s give-up, a late answer to the delete never brings the nodes back by
+  itself: the next Cmd+Z does. The line goes as soon as it stops being true:
+  a newer step above the delete (Cmd+Z would undo that step) or another
+  canvas. A Cmd+Z the person presses before another step has reached Nebula
   waits for Nebula's answer, then undoes it (a clear, an upload once its
   node is on the canvas, an accepted proposal, a model picked on an
   OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
@@ -307,58 +391,60 @@ The server exposes these tools for building and running (see
   line). That Cmd+Z is bound to the step it was pressed for, and a second
   Cmd+Z to the step below it. While its own step is still on its way it
   waits, even if something else lands meanwhile; a later step of the
-  person's still on its way is no newer edit (the Cmd+Z applies beneath
-  it). Your edits to a node that a waiting Cmd+Z holds are kept and show on
-  the canvas once it lands, with their Agent log line and their own undo
-  step (a run's outputs too); if Nebula doesn't answer an undo within 15 s
-  it fails with "Couldn't undo that." and the reason, and the edits it held
-  go out in order. An undo Nebula refuses leaves the canvas as Nebula's
-  graph is. An edit or Cmd+Z still waiting when another project opens or a
-  graph import replaces the canvas is never sent: it would land on the
-  wrong project. A delete's change lands when Nebula's own sync takes its
-  nodes off, which can come before its answer: no undo after that brings
-  those nodes back to the canvas or to Nebula's graph unless it undoes
-  that delete. A delete of several nodes
-  is one step however its nodes' syncs arrive (one per node, with your edit
-  or the person's typing between them): one Cmd+Z brings them all back. A
-  sync that already took a node off makes its delete done, whatever its
-  answer says, and undoing a delete puts back only what it removed (a node
-  you added meanwhile stays). A clear the person issues after a Cmd+Z that
-  is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
-  cleared; an undo takes off only the nodes its own step added (a node you,
-  another agent or the person added while that step was on its way stays),
-  and always the ones it did add, even after a delete of one and its undo
-  brought it back (adding a node from the library, a drop, the command
-  palette, a Character or Moodboard drop and Creator's inserts are each
-  their own step too); while an undo or redo is still on its way to
+  person's still on its way is no newer edit (the Cmd+Z applies beneath it).
+  Your edits to a node that a waiting Cmd+Z holds are kept and show on the
+  canvas once it lands, with their Agent log line and their own undo step (a
+  run's outputs too), in Nebula's order across every node it held. An edit
+  of yours the person typed into the same node after goes above their typing
+  as a step of its own, so their Cmd+Z never takes your edit off and yours
+  never brings their undone typing back; if Nebula doesn't answer an undo within 15 s it fails
+  with "Couldn't undo that." and the reason, and the edits it held go out in
+  order. An undo Nebula refuses leaves the canvas as Nebula's graph is. An
+  edit or Cmd+Z still waiting when another project opens or a graph import
+  replaces the canvas is never sent: it would land on the wrong project. A
+  delete's change lands when Nebula's own sync takes its nodes off, which
+  can come before its answer: no undo after that brings those nodes back to
+  the canvas or to Nebula's graph unless it undoes that delete. A delete of
+  several nodes is one step however its nodes' syncs arrive (one per node,
+  with your edit or the person's typing between them): one Cmd+Z brings them
+  all back. A sync that already took a node off makes its delete done,
+  whatever its answer says, and undoing a delete puts back only what it
+  removed (a node you added meanwhile stays). A clear the person issues
+  after a Cmd+Z that is still waiting supersedes it: the Cmd+Z is dropped
+  and the canvas ends cleared; an undo takes off only the nodes its own step
+  added (a node you, another agent or the person added while that step was
+  on its way stays), and always the ones it did add, even after a delete of
+  one and its undo brought it back (adding a node from the library, a drop,
+  the command palette, a Character or Moodboard drop and Creator's inserts
+  are each their own step too); while an undo or redo is still on its way to
   Nebula, the person's next edits (typing, a delete, an added node) reach
-  Nebula after it, in the order the person made them, so the graph you
-  read never shows a later edit undone by an earlier Cmd+Z;
-  a Cmd+Z never does nothing without a word: a step that ended up changing
-  nothing is passed over (the press undoes the step below it), and a press
-  whose step was taken back meanwhile (a refused clear) counts in the
-  skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
-  and a step taken while a clear was on its way never brings a cleared
-  node back. If a newer edit has settled on top of its step by then
-  (yours, another agent's, or the person's own later edit), it never undoes
-  that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
-  change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
-  presses were dropped); if some presses went through and some were
-  dropped, the restore's line ends with what was skipped, undos and redos
-  counted apart: "1 undo was skipped while a change was saving.", "2 undos
-  and 1 redo were skipped while a change was saving." (Redo stays). The same line shows if Nebula hasn't answered
-  within 15 s, or another project opens (the person's own switch, or your
-  load into the open project, whose own notice stays beside it). A clear
-  takes off only the nodes that were on the canvas when the person cleared,
-  never one you added after it (even under a reused id such as n1), and an
-  accept the person undid while it was on its way runs nothing (its
-  approval goes back). Its
-  result has `undo` too, which puts the nodes back with their params,
-  outputs, names and connections, the person's pins on them, and the proposals
-  the delete closed when they still fit. `removals` lists, per node it
-  deleted, the pins it detached and the proposals it closed (each record
-  also names its `projectId` and the node's `definitionId`, and `replaces`
-  when it supersedes an earlier delete of the same node).
+  Nebula after it, in the order the person made them, so the graph you read
+  never shows a later edit undone by an earlier Cmd+Z; a Cmd+Z never does
+  nothing without a word: a step that ended up changing nothing is passed
+  over (the press undoes the step below it), and a press whose step was
+  taken back meanwhile (a refused clear) counts in the skipped line below; a
+  Cmd+Z pressed after the clear undoes the clear once it lands, and a step
+  taken while a clear was on its way never brings a cleared node back. If a
+  newer edit has settled on top of its step by then (yours, another agent's,
+  or the person's own later edit), it never undoes that edit instead: it is
+  dropped, and the canvas says "Nothing was undone. Your last change was
+  still saving." ("Nothing was redone. …" when only Cmd+Shift+Z presses were
+  dropped); if some presses went through and some were dropped, the
+  restore's line ends with what was skipped, undos and redos counted apart:
+  "1 undo was skipped while a change was saving.", "2 undos and 1 redo were
+  skipped while a change was saving." (Redo stays). The same line shows if
+  Nebula hasn't answered within 15 s, or another project opens (the person's
+  own switch, or your load into the open project, whose own notice stays
+  beside it). A clear takes off only the nodes that were on the canvas when
+  the person cleared, never one you added after it (even under a reused id
+  such as n1), and an accept the person undid while it was on its way runs
+  nothing (its approval goes back). Its result has `undo` too, which puts
+  the nodes back with their params, outputs, names and connections, the
+  person's pins on them, and the proposals the delete closed when they still
+  fit. `removals` lists, per node it deleted, the pins it detached and the
+  proposals it closed (each record also names its `projectId` and the node's
+  `definitionId`, and `replaces` when it supersedes an earlier delete of the
+  same node).
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
   since stays as it is and is listed in `skipped`; so does a node someone
@@ -488,10 +574,73 @@ The server exposes these tools for building and running (see
   The one exception is `load_graph_file`'s import into the empty project it
   made for a file over the limit (`newProjectForFile`). An
   edit that makes it smaller goes through, and the person's own edits and
-  Load graph are never refused for size. A tab's save over the limit gets
+  Load canvas are never refused for size. A tab's save over the limit gets
   the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
   the 16 MiB limit"). CLI: `nebula project size [<id>|current]` (`--json`
   prints this result).
+  The same edits, `load_graph_file`'s `newProjectForFile` import (only its
+  size check is waived) and a proposal (below) are refused when they would
+  leave the canvas past the
+  shape limits the person's Save checks, measured as Save measures them
+  (from the canvas file's root, where a param's value sits 5 levels down,
+  and over the whole canvas, so several writes add up): 400 "This edit would
+  leave the canvas nested more than 64 levels deep from its file's root, and
+  the person's canvas can't save it. Nothing changed. Nest the value less
+  deeply." or 413 "This edit would leave the canvas holding more than
+  1,000,000 values, and the person's canvas can't save it. Nothing changed.
+  Make the edit smaller, or remove what the canvas no longer needs (ask the
+  person first)." The value count includes the project's run history when it
+  could reach the limit. An edit that leaves a canvas already past a limit
+  no worse goes through: on a canvas already holding more than 1,000,000
+  values, one that doesn't add values; on one already nested too deeply,
+  one that adds no value past 64 levels (it may only take depth away). A
+  request with no agent marker gets
+  `code: "person_required"` with the same `detail`. The person's own edits
+  are never refused; their Save says "Nebula couldn’t save the canvas because
+  it’s too complex." (or "Nebula couldn’t save the canvas because part of it
+  holds a value it can’t store.") and names the Undo that brings
+  the canvas back within the limits: when undoing the newest step alone
+  does and it is yours, "Undo <agent>’s last change, then try again." (one
+  with no named agent: "Undo the last change, then try again."); when it
+  takes more than one, "Undo the last 2 changes, then try again." (always
+  digits); when no number of Undos does (a change nobody named that made
+  no step, older than every step), the line stops at its first sentence.
+  The Agent log reads "Nebula couldn’t save the canvas because it holds
+  more than 1,000,000 values." (or "…because part of it is nested more
+  than 64 levels deep.", "…because a number in it isn’t finite.",
+  "…because a value in it refers back to itself."). The canvas's import of the CLI graph
+  measures the file Save would write and says "This canvas is too complex
+  to open." under "Nebula couldn’t import the CLI canvas.". The node and
+  connection counts are held at the same limits as `edit_canvas` on every
+  agent write (a node or connection added one call at a time, a cluster, a
+  proposal, an Accept): 413 "A canvas holds at most 10,000 nodes and 50,000
+  connections (the most a project can save). This edit would leave …, so
+  nothing changed.", unless the edit leaves the count no larger than it is. An
+  Accept that would pass them is refused 409 `proposal_too_complex` with
+  `limit: {kind: "nodes", max: 10000}` or `{kind: "connections", max: 50000}`.
+  A file opened with more of either says "Nebula couldn’t open this file
+  because it has more than 10,000 nodes, the most Nebula opens." (or "…more
+  than 50,000 connections…").
+  A proposal is measured when it is made, as the edit it stages, for
+  these shape limits and the 16 MiB project size limit (`propose_change`
+  gets the same 400 or 413; the size refusal's 413 carries
+  `limit: "size"` and `sizeBytes`), and again on every Accept, since the
+  canvas may have changed since. An Accept that would leave the canvas
+  past a limit is refused 409 with `code: "proposal_too_complex"`,
+  `agent` (the proposing agent's name), `limit: {kind: "depth", max: 64}`,
+  `{kind: "values", max: 1000000}` or `{kind: "size", max: 16777216}`
+  (bytes) and a `detail` naming the proposal; nothing changes and the
+  proposal stays open. A `proposal.accept_refused` event says so (with
+  `proposalId`, `agentId`, `code` and `limit`). The person's bar reads
+  "Nebula couldn’t accept this because the canvas would be too complex to
+  save. Reject it, or ask <agent> to change it." (for the size limit,
+  "… because the canvas would be too large to save. …"; for a count,
+  "… because the canvas would have more than 10,000 nodes, the most Nebula
+  saves. Reject it, or ask <agent> to change it.", or "… 50,000 connections …")
+  with Accept still live. A Save past a count says "Nebula couldn’t save the
+  canvas because it has more than 10,000 nodes, the most Nebula saves. Delete
+  some, then try again."; the CLI canvas import, "Nebula couldn’t import the
+  CLI canvas because it has more than 10,000 nodes, the most Nebula opens."
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -531,7 +680,24 @@ The server exposes these tools for building and running (see
   `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
   own text, unchanged) and, since error-copy round 3, `asset.last_error_kind`:
   `unavailable` (network, a timeout or the provider down), `unreadable` (the
-  model declined or couldn't read the image) or `other`. Curating (corrections, regions, a reference's role,
+  model declined or couldn't read the image), `other`, or `transparent`
+  (below). The reader sees a
+  reference with transparency composited onto #0a0a0a, the tile and stage
+  surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
+  transparent to add colors (no pixel at alpha 16 of 255) is never sent and
+  is marked failed with `last_error` "too transparent to add colors; not sent
+  to the reader" and kind `transparent`, which the Commons shows as no
+  error, with the plain neutral badge "Not analyzed" (its own colour,
+  `--sr-ink-light`) and no
+  Retry or Re-analyze: "This image is too transparent to analyze." The
+  person's re-analyze route answers that state rather than requeuing it,
+  since the file can't change (assets are stored by their sha256), and
+  the person's Re-analyze stale leaves it as it is too (its `queued`
+  counts only what was requeued).
+  `commons_search` rows carry `last_error_kind` too. References measured before
+  `measure-2` keep their palettes until analyzed again. The Vision node and
+  QC send an image with transparency as it shows on a canvas node (#0a0a0a)
+  too. Curating (corrections, regions, a reference's role,
   why or inbox place) is the person's: agents propose it, see
   [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
@@ -643,9 +809,13 @@ And these canvas tools:
   cursor already is and it doesn't move; an agent with no cursor yet gets
   one at the middle of the person's view, or at (0, 0) when no canvas has
   reported a view (the result's `placed` is `cursor`, `view` or `origin`;
-  `nebula point --say "..."` does the same). The cursor is named after
-  `$NEBULA_AGENT_NAME`, or the MCP client's own name. What the agent
-  noticed goes in `post_note` instead (see [Updates](#updates)).
+  `nebula point --say "..."` does the same). `action` says what the agent
+  is doing there: `move`, `look`, `think`, `type`, `click`, `drag`, `run`,
+  `propose`, `wait` or `error` (default `move`; any other value is refused
+  with that list; see [Agent cursors](#agent-cursors-nebula-look-and-nebula-watch)).
+  The cursor is named after `$NEBULA_AGENT_NAME`, or the MCP client's own
+  name. What the agent noticed goes in `post_note` instead (see
+  [Updates](#updates)).
 - `post_note` / `list_notes`: post what the agent noticed, a report or a
   suggestion, and read the list back. The person reads them under
   **Updates** in the top right of every screen (the canvas, Projects, the
@@ -750,8 +920,119 @@ explicitly, with a short line about your own action:
 ```bash
 NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
 nebula point n2.prompt --from n1.text --say "Connecting the prompt"
+nebula point n4 --action propose --say "Waiting for your OK"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
+
+The action (`point_at`'s `action`, `nebula point --action`, the cursor
+route's `action`) says what you are doing at the cursor. These are the only
+values. Any other is refused (a 422 over HTTP, an error from `point_at` and
+`nebula point`) with one line that names the value you gave, for example:
+“hover” isn’t an action Nebula knows. Use one of move, look, think, type,
+click, drag, run, propose, wait or error.
+
+Each action has its own look on the person's canvas, and a line it shows
+beside the cursor when you send no `say` (`--say`). Your own say always
+wins. The cursor's glow (a soft copy of the arrow in your colour) is where
+most of them show.
+
+| Action | Means | The cursor shows | Line with no say |
+|---|---|---|---|
+| `move` | going there, no gesture (the default) | nothing extra | none |
+| `look` | reading or checking something | the glow dims and a bright arc sweeps once around (1.4 s) | Looking at “Brief” (at a spot: Looking here) |
+| `think` | working something out at that spot | the glow breathes while you stay on it | Thinking |
+| `type` | writing a prompt or changing a field | a caret at the end of the card's text field, blinking while text arrives; at a port (`n2.resolution`), an underline under that row; with the field off screen, the caret ends the line, or sits beside the tip once the line is gone (a count cursor has none) | Writing the prompt for “FLUX.2”; at a port, Changing “Resolution” on “FLUX.2” (at a spot: Writing) |
+| `click` | pressing something | the arrow presses and a ring blooms from the tip | none |
+| `drag` | connecting, with `from_node_id`/`from_port` (`--from`; the default with it) | the canvas's own curved connection, pulled from the port behind the cursor; it lands like a click | Connecting “Brief” to “FLUX.2” (no source node: Connecting to “FLUX.2”; to a spot with no start, none: that is only a move) |
+| `run` | starting a run | a thin arc circles the arrow once (1.2 s); the node then shows the run | Started “FLUX.2” (at a spot: Started a run) |
+| `propose` | you proposed a change and wait for the person's OK | a dashed glow and a small ghost card by the tip; the cursor stays still | Waiting for your OK, until that proposal is accepted, rejected, withdrawn or expired (a `propose` with no proposal open ends at once) |
+| `wait` | you asked the person something and wait for the answer | a dashed glow and a pin by the tip; the cursor stays still | Waiting for your answer, until the person answers or dismisses a question you asked with `ask_person` (with none asked, until your next action) |
+| `error` | something you tried failed | one sideways shake and a red flash of the glow | Couldn’t run “FLUX.2” after your run there; Couldn’t change “FLUX.2” after your edit or connection there; else Couldn’t do that |
+
+- A held state (look, think, type, propose, wait) shows for at least 0.4 s,
+  and until your next action; a new action replaces it at once. think, look
+  and type also end when your cursor goes idle (20 s). propose and wait end
+  when the person settles what they wait on (the table above), at once, and
+  after a reload too.
+- A line shows for max(3 s, 60 ms per character), at most 8 s. "Thinking",
+  "Waiting for your OK" and "Waiting for your answer" stay as long as their
+  state does, and go with it when the person settles it.
+- The lines are display only: the Agent log keeps your own words.
+- Under reduced motion each state is a still frame: a dimmed glow (look), a
+  steady glow (think), a steady caret (type), a full circle (run), the
+  dashed glow and mark (propose, wait) and a red glow (error).
+
+Graph edits through Nebula's API pick their own action on the person's
+canvas:
+
+- any change to a param's value shows as `type`, whether it comes through
+  `PUT /api/graph/node/{id}` (`nebula set`), `edit_canvas` or `nebula apply`
+  (when the edit's focus is a node whose values changed);
+- a rename, an added node, a removal or a move with no value change shows as
+  `click` (a node moved on the canvas as `move`);
+- a connection shows as `drag`, a run as `run`, a proposal as `propose`, and
+  a run that couldn't start as `error`.
+
+Agents read `click` for all of these but the connection and the move, as
+before.
+
+**One cursor per session.** Each session of an agent gets its own cursor on
+the person's canvas, in the agent's colour at a different lightness. The
+first is named as the agent ("Claude"). A new session takes the lowest
+number free among the agent's live cursors, where the plain "Claude" counts
+as 1 ("Claude · 2", "Claude · 3"). A live cursor keeps its number until it
+leaves, so nothing renumbers under the person. A cursor leaves when:
+
+- it has had no event for 120 s;
+- the canvas is cleared or replaced while it points at a node (a cursor at
+  a spot on the canvas stays);
+- the node it points at is deleted before Nebula knew where that node was
+  drawn (once it knows, the cursor stays where the node was);
+- a ninth session of the agent pushes it out: the least recently seen idle
+  one (quiet for 20 s) goes first, else the least recently seen (one agent
+  shows at most 8 at once).
+
+Its number is then free. A tab still showing that cursor drops it when
+another session of the agent takes the number, or after 120 s. The backend is the one place that
+numbers; every tab shows the number it gives. A tab of the person's that
+opens mid-session gets every live cursor at once, where it is, so all tabs
+show the same cursors and numbers. None of this reaches agents. Where the
+session comes from:
+
+| Client | Its session |
+|---|---|
+| In-app Claude or Codex chat | The chat itself (Nebula sets it in the chat's token, never the agent) |
+| An MCP server (Claude Code, Codex, Cursor, a personal agent) | One per server process, so each agent chat that starts its own server gets its own cursor; `NEBULA_AGENT_SESSION` sets it |
+| `nebula` under Claude Code | The Claude Code session (a hash of `CLAUDE_CODE_SESSION_ID`, never the id itself), unless `NEBULA_AGENT_SESSION` is set |
+| `nebula` elsewhere, an app token, a bare `X-Nebula-Agent` request | `NEBULA_AGENT_SESSION` (the `X-Nebula-Agent-Session` header) if set, else one cursor for the agent's name, as before |
+
+**`NEBULA_AGENT_SESSION`, for orchestrators.** It says which session a
+call is: up to 64 of `A-Z a-z 0-9 _ . : -`. Anything else is ignored for
+the cursor, as if unset: under Claude Code the CLI still uses the Claude Code
+session's cursor, and an MCP server its own per-process one. The CLI sends it on every call; the MCP server reads it once at
+start, for every call it serves.
+
+- **Without it, subagents share the parent's cursor.** A Claude Code
+  subagent sees its parent's `CLAUDE_CODE_SESSION_ID`, so a session and all
+  its subagents move one CLI cursor. Over MCP they share the parent's server
+  connection, and so its one cursor too.
+- **To give each subagent its own cursor**, pick a value per lane and have
+  the lane put it on every CLI call it makes:
+  `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`. Each lane
+  then shows as its own cursor ("Claude Code · 2"). An MCP server's value
+  covers all of its callers, so lanes that need their own cursors use the
+  CLI.
+- It also keys the lane's scene reads (below), so a lane reads and writes
+  with the same value.
+- An agent that uses both MCP and the CLI under one name shows two cursors
+  unless both use the same `NEBULA_AGENT_SESSION`.
+
+The session is for the cursor only: it never changes who the agent is, its
+colour's hue, what it may do or its spending. Only the person's own canvas
+sees it. What agents read stays per agent: `nebula look`, `nebula agents`,
+`nebula context` and the MCP reads list one cursor per agent, with no
+sessions or numbers, and with the action the agent itself sent (a backend
+edit reads as `click`, `drag` or `move`, as before).
 
 Every one of these actions is also listed in the canvas's **Agent log**
 (bottom right, shown by default with or without the chat; hide it from its
@@ -775,7 +1056,12 @@ when a change is only those, the cursor moves without words and the log says
 "Changed a setting on “<node>”" or "Changed 3 settings on “<node>”". No
 action is left out: the presence event carries `log`, the Agent log's line,
 when it differs from `say`, and an action with no words at all is listed in
-the Agents panel's words ("Changed “Hero”"). Moodboard writes are listed there too
+the Agents panel's words ("Changed “Hero”"). An `edit_canvas` with no `note`
+is logged as the Message box's working line shows it: one node names up to
+three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot”", from
+four "Changed 4 settings on “Hero shot”"); several nodes are named without
+their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
+nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -859,6 +1145,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`, `mayCostRuns`, `planRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
+| `proposal.accept_refused` | the person's Accept was refused because the canvas would be past Save's shape limits or the project over its size limit; nothing changed and the proposal is still open | `proposalId`, `agentId`, `code` (`proposal_too_complex`), `limit` (`kind`: `depth`, `values` or `size`, `max`; bytes for `size`) |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
@@ -885,7 +1172,11 @@ Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 `GET /api/canvas/events` is a long-poll. Query: `after` (an event cursor;
 default "from now"), `journal` (the id from a previous response), `wait`
 (seconds, capped at 25), `limit` (1–100), `kinds` (groups like `node` or
-exact kinds like `node.params`) and `self=1` to include your own events. It
+exact kinds like `node.params`), `self=1` to include your own events, and
+`ownReplies=1` to include, of your own events, only your `thread.replied`
+and your `pin.resolved` made from this same session (a channel listener uses
+it: its reply from any route, or its pin answer from its own shell, answers
+a deliberate push; a sibling session's pin answer never shows). It
 answers at once when newer events exist, otherwise waits. Resume with
 `after=<cursor>`: the cursor also moves past events filtered out for you, so
 your own edits never wake you. `gap: true` means the 500-event buffer
@@ -899,8 +1190,8 @@ snapshot, and outputs never appear.
 ### Claude Code channels (experiment)
 
 With `--channel`, Nebula's MCP server pushes into a running Claude Code
-session, so Claude hears your pins and edits without sitting in
-`wait_for_canvas_change`. It is built on [Claude Code
+session, so Claude hears your messages, pins, answers and edits without
+sitting in `wait_for_canvas_change`. It is built on [Claude Code
 channels](https://code.claude.com/docs/en/channels-reference), a research
 preview: the flags, the protocol and this section may change, and a Claude
 Code update can break it. The code is `backend/mcp_channel.py` (what to push
@@ -909,10 +1200,31 @@ and when) and `serve_channel` in `backend/mcp_server.py` (how it hooks into the 
 It is off unless you start a session with it. Without `--channel` the server
 is exactly the one above: same capabilities, instructions and tools.
 
-**Try it.** Write a session-only MCP config, for example
-`~/.nebula-listen.mcp.json` (mode 600, outside any repo). Copy the command,
-args and env of your saved `nebula` server (`claude mcp get nebula` shows
-them) and add `--channel`; it names your token file, never the token:
+**Try it.** One command writes the session-only MCP config and prints the
+command that starts Claude Code with it:
+
+```bash
+nebula mcp connect claude-code --channel --token-file <the file Settings shows>
+```
+
+It takes the token the same way `nebula mcp connect` does (`--token-file`,
+`$NEBULA_APP_TOKEN_FILE`, or for a token made before token files
+`$NEBULA_APP_TOKEN` / `--paste-token`), checks it with Nebula, and writes
+`~/.nebula-listen.mcp.json` (mode 600, outside any repo) with one
+`nebula-listen` server: the same command, args and env as the saved `nebula`
+server, plus `--channel`. It names your token file, never the token, and
+prints no token. Running it again is safe: with no token given it reuses the
+token file the config already names, and an unchanged config isn't
+rewritten. On the first run with no token given (the canvas's Message box
+copies the bare `nebula mcp connect claude-code --channel`), it reads the
+token file path that Claude Code's saved `nebula` server names in
+`~/.claude.json` (what the plain `nebula mcp connect claude-code` wrote), then
+the token from that file with the same strict reader. Only a token file is
+reused, never a token held in that config, and the token never goes on argv,
+in the output or in the clipboard. With neither, it says to connect Claude
+Code first. It never writes Claude Code's own config. `--print` shows the
+config and the command without writing; `nebula mcp disconnect claude-code
+--channel` removes it. What it writes, if you'd rather write it by hand:
 
 ```json
 {
@@ -929,14 +1241,23 @@ them) and add `--channel`; it names your token file, never the token:
 }
 ```
 
-Then, each time:
+Then, each time (the command it prints, with the full path):
 
 ```bash
-claude --mcp-config ~/.nebula-listen.mcp.json \
-  --dangerously-load-development-channels server:nebula-listen \
-  --disallowedTools "mcp__nebula__*"
+NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
+`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's
+path (never the token), so `nebula reply` and the other `nebula` commands
+Claude runs there are the same agent as its tools (J2, below).
+`NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your shell at
+each launch (the time and the shell's own process id, POSIX tools only),
+so each Claude Code you start this way is its own session: its listener,
+its cursor and its shell's `nebula` commands share one fresh session id
+(D2, round 5), and two terminals running the same command are two
+sessions, each with its own cursor label. The command is for macOS, Linux
+and WSL shells; Windows shells (cmd, PowerShell) can't run the
+`NAME=value command` form.
 `--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
 same tools out of the session, so `nebula-listen` serves both the tools and the
 pushes. It has to: the listener learns which proposals and runs are Claude's,
@@ -971,10 +1292,36 @@ tools work but nothing is pushed. (Nebula's own Team org keeps it off for
 now; the experiment is tried on individual accounts.) It doesn't work with
 `claude -p` or the Agent SDK: Claude Code ignores the flag there.
 
-**What wakes Claude:**
+**What wakes Claude.** Two kinds of wake, with different pacing (Justin,
+2026-11-03): what you send on purpose reaches Claude at once, and what
+Claude only notices keeps the limits below.
 
-- a pin you add, at once (pins under 1 s apart go together), as long as it
-  is still open when it goes (below);
+*Deliberate sends*, at once:
+
+- a message you send it from the canvas (the Message box, event
+  `person.message`): only the session it is addressed to wakes, by the
+  `listenerId` Nebula gave that session's listener (readiness, below);
+- a pin you add (pins under 1 s apart go together), as long as it is still
+  open when it goes (below);
+- your answer to questions this session asked with `ask_person`
+  (`question.answered`): only the session that asked wakes, with your
+  answers in the push. The journal never holds answers, so the listener
+  reads them back first (`GET /api/canvas/questions/{id}`, which only the
+  asker may read); if that fails, the push says to call `get_answers`. An
+  answer it is already waiting for in `get_answers` doesn't push, and a set
+  wakes it once. A dismissed or withdrawn set doesn't wake it.
+
+A deliberate send skips every pacing limit: no 30 s spacing, no 20 an hour,
+no wait while Claude is mid-turn, and no wait for a gated turn's window,
+which it ends (below). Its only limit is a runaway cap of 200 in a rolling
+hour, counted on its own; past it they wait for the hour, never dropped,
+and arrive marked `held`. Whatever passive waits rides along in the same
+push, however recent (your edits, its proposals' decisions, run ends), and a
+deliberate push never counts toward the passive limits, so it never delays
+the next passive wake.
+
+*Passive wakes*, under the limits:
+
 - your decision on one of its own proposals (accepted, rejected, expired or
   invalidated), from `propose_change` or `propose_asset_change`, unless it is
   already waiting for it in `get_proposal` or withdrew it. One an undo
@@ -1010,10 +1357,14 @@ accepted proposal applies are not counted as your edits (Nebula marks them
 with `proposalId`; a node's name can't pass for one), nor is the board write
 of an accepted `propose_asset_change` of Claude's own (turning on a board's
 Send notes to generators, marked the same way). Another agent's accepted
-board proposal still adds a line, since you made it happen. At most 20 wakes an
-hour, 30 s apart; anything past a limit arrives with the next one (`held` says
-how many waited), and past 100 waiting edits (or 100 pins) the push gives a
-count and asks for `look_at_canvas`; a pile of edits never pushes a pin out.
+board proposal still adds a line, since you made it happen. At most 20 passive
+wakes an hour, 30 s apart; anything past a limit arrives with the next one
+(`held` says how many waited), and past 100 waiting edits (or 100 pins, or
+100 messages) the push gives a count and asks for `look_at_canvas`; a pile of
+edits never pushes a pin out. The `NEBULA_CHANNEL_<FIELD>` variables on the
+listener (its `env` block) override any of `mcp_channel.Limits`, the
+deliberate cap included (`NEBULA_CHANNEL_DELIBERATE_PER_HOUR`); they exist for
+tests.
 After 2 hours with no activity from you (selections
 and moves count) it stops listening, and the next Nebula tool result says so;
 in Claude Code, /mcp > nebula-listen > Reconnect starts it again. If the
@@ -1022,9 +1373,11 @@ result says so) and the tools keep working. If Nebula keeps failing to answer
 for one of Claude's runs (10 errors in a row, about 6 minutes), the listener
 stops following it and the next result says to read it with `get_run`.
 
-A push arrives as `<channel source="nebula-listen" wake="pin|proposal|run|change"
-count="…" cursor="…" journal="…" project_id="…">`, with `held="…"` and
-`gate="change"` when they apply. The text is written from the same events
+A push arrives as `<channel source="nebula-listen"
+wake="message|answer|pin|proposal|run|change" count="…" cursor="…"
+journal="…" project_id="…">`, with `held="…"` and `gate="change"` when they
+apply. A deliberate push's wake names the most specific thing it carries: a
+message, else an answer, else a pin. The text is written from the same events
 `wait_for_canvas_change` returns: event summaries (redacted param values never
 appear, only which params changed), the pin's text, a proposal's note and the
 reason you gave, a run's status and how many nodes ran. Nothing else is
@@ -1037,16 +1390,24 @@ can't leave the tag); every other quoted text is one line.
 
 **What a woken turn may do** (plan v2.7 Q42 a and Q51 a). Some pushes are
 gated (`gate="change"`): Claude may look (the read tools), point and say
-something (`point_at`), post an Update (`post_note`), answer a pin and propose
+something (`point_at`), post an Update (`post_note`), reply to you in the
+Message box (`reply_to_person`, and read it with `read_thread`), answer a pin and propose
 (`propose_change`, `propose_asset_change` for a cover, a board's notes or the
 Commons, `get_proposal`, `withdraw_proposal`). Edits, runs, project
 switches, board writes and any tool not on that list are refused for that
 turn, so it offers instead of editing under your hands. Which pushes:
 
-- **Never gated:** a push that holds a pin of yours still open (whatever
-  else it carries), and one for your accepting its proposal or for its own
-  run's end. Those act
-  like any turn, and none of them ends a gated turn's window early.
+- **Never gated, and it ends a gated window:** a deliberate send (a
+  message, an answer, a pin of yours still open), whatever else rides with
+  it. Its turn acts like any turn and is never refused for pacing.
+- **Never gated:** a push for your accepting its proposal or for its own
+  run's end. Those act like any turn, and none of them ends a gated turn's
+  window early.
+- **Its turn is never gated after the fact:** no gated push goes while the
+  turn an ungated push started (a deliberate send, an accept, its own run's
+  end) seems under way, by the same guess as a gated window: at least 60 s
+  after that push, then 20 s with no Nebula call and none running. Edits
+  you make while Claude reads your message wait and ride a later push.
 - **Always gated:** a push for a proposal you rejected, that expired or that
   was invalidated (it may only offer again), and a push carrying your edits:
   a change, the end of your run, a moodboard or canvas line, or lost events.
@@ -1054,24 +1415,23 @@ turn, so it offers instead of editing under your hands. Which pushes:
   run's end is gated, since the edits are your hands on the canvas.
 
 A gated push goes only when Claude isn't mid-turn, so the gate never lands
-on a turn already running. No push ever closes or shortens a gated turn's
-window: a push that isn't gated (a pin too) waits until the window has
-ended on its own terms, at least 60 s after the gated push and then 20 s
-with no Nebula call and none running. A Nebula call still running (a
-`get_proposal` or `wait_for_canvas_change` wait) keeps the window open,
-however long it waits. The cost: a pin you add during a gated turn's window
-waits for that window's end, at least a minute after the change push and
-longer while that turn keeps calling Nebula. While a pin waits, no other
+on a turn already running. No passive push ever closes or shortens a gated
+turn's window: one that isn't gated (an accept, its own run's end) waits
+until the window has ended on its own terms, at least 60 s after the gated
+push and then 20 s with no Nebula call and none running. A Nebula call still
+running (a `get_proposal` or `wait_for_canvas_change` wait) keeps the window
+open, however long it waits.
+
+A deliberate send doesn't wait for the window: it goes at once and ends it,
+so the turn it starts can do what you asked (until 2026-11-03 a pin waited
+for the window's end, at least a minute, and a request in it was refused).
+The cost, accepted: Claude Code queues pushes that arrive while Claude is
+busy for its next turn, so a change turn still running when it goes is
+freed to edit. After it, no gated push goes until its own turn has ended
+(the same 60 s and 20 s guess), so a nudge you make while Claude is still
+reading your message never gates the turn the message started. While a pin waits for its 1 s merge and its check, no other
 gated push goes, unless Nebula can't answer the check (below): a proposal
-you reject meanwhile, and the edits you make meanwhile, go with the pin
-when it does, in one push that isn't gated (it holds a pin). Edits from
-your last 8 s before it goes are the exception: they aren't due yet (the
-8 s quiet time), so they follow in a gated push of their own, at least
-30 s later and once Claude has made no Nebula call for 20 s. So a pin waits
-only for the window it came in, however long you keep editing. Claude
-Code wouldn't give it to the running turn anyway (pushes that arrive while
-Claude is busy are delivered together on its next turn), so sending it
-sooner could only have freed the change turn to edit.
+you reject meanwhile, and the edits you make meanwhile, ride along with it.
 
 **Only a pin still open lifts the gate.** A pin wake needs a pin of yours
 that is still open when it goes. A pin you delete, one any agent answers
@@ -1105,9 +1465,46 @@ can't see where a Claude Code turn ends, so the timing is guessed from when
 Nebula sends the push: the window lasts at least 60 s after it and until
 Nebula has had no call for 20 s. That guess can miss both ways:
 
-- A turn you type can be refused. If you type a request to Claude within
-  that minute, it is refused the same way (in the live check Claude proposed
-  the edit instead).
+- A turn you type in the terminal can be refused. If you type a request to
+  Claude within that minute, it is refused the same way (in the live check
+  Claude proposed the edit instead): the gate can't tell your typed turn
+  from the change turn, since Nebula never sees the terminal. A request you
+  send from the canvas (a message, a pin or an answer) is never refused
+  this way: it ends the window as it goes, and no gated push goes until
+  that session has answered every request it got from you, or 10 minutes
+  after the latest if it hasn't (`DELIBERATE_SPAN_CAP`, Justin 2026-11-04).
+  The listener keeps, per session (one listener is one session), the
+  pushes it hasn't seen answered, one group of ids per push that carried
+  messages or answers. It reports each push to Nebula, which records it
+  for that session (`POST /api/agent/thread/accepted`, with the message ids
+  and the question set ids). A reply then answers that session's oldest
+  unanswered push, and Nebula names it in the reply (`replyTo`: the push's
+  newest message, else its first question set); the listener removes that
+  group, whichever route the reply took (`reply_to_person`, or `nebula
+  reply` from the session's own shell). Each pin is answered by that
+  session's own answer on that pin (`resolve_pin`, or `nebula pin resolve`
+  from its shell), or once you delete the pin. So two messages need two
+  replies, and a reply to the first never ends the second's span. A reply
+  or pin answer from another session under the same token, from another
+  token, or one Nebula refused (never journaled) answers nothing here.
+  When Nebula never heard of a push (its report failed, or Nebula
+  restarted before the listener reported it again), only the
+  `reply_to_person` tool's own result can answer it. The listener learns
+  of a shell reply from its own `thread.replied` event and of a shell pin
+  answer from its own `pin.resolved`, which its long-poll asks for with
+  `ownReplies=1` (its other own events stay out of its feed).
+  The 10 minutes end the protected turn only: Nebula keeps an unanswered
+  push for 24 hours, so a reply after 11 minutes still answers its message
+  and lands in its project. A listener holds a new push while 64 are
+  unanswered in that span (it goes once one is answered or the span ends),
+  and one agent's pushes are never pushed out by another agent's. A listener
+  that crashes after pushing a message but before reporting it to Nebula
+  pushes that message again after a restart in the same session (delivery is
+  at least once: a duplicate in the same session, never in another). How long
+  Claude thinks or works in other tools between Nebula calls doesn't
+  matter. After the last answer, an edit you made meanwhile goes as a gated
+  push once Claude has been quiet for 20 s. A typed request still can be
+  refused, until the gate moves into Nebula.
 - A change turn can go ungated. If Claude is busy with other work (no Nebula
   call) when a gated push is sent, Claude Code hands it over on the next
   turn; if that is more than a minute later, the window has already ended
@@ -1120,6 +1517,325 @@ them in that turn, but nothing stops it. A later version moves the gate into
 Nebula itself, where it covers every client. "5 minutes per turn" can't be
 enforced either; after 5 minutes a gated turn's tool results say to wrap up.
 
+**Is it listening? (readiness).** Once Claude Code is ready, the listener
+tells Nebula every 15 s (`POST /api/agent/channel`, as its own agent and
+session) and at once when listening stops, and deletes its entry when the
+session ends; Nebula drops an entry it hasn't heard from for 45 s
+(`backend/services/channel_listeners.py`). One session is one process:
+each beat carries the process's own nonce, and while an entry lives a
+second process naming the same agent and session is refused (`409`,
+`X-Nebula-Code: listener_session_taken`) and its goodbye never removes the
+first's entry. It prints:
+
+- "error: Nebula couldn’t connect this listener because another process is
+  already listening as this session. Start each Claude Code with this
+  command, which gives each one its own session, then start this listener
+  again." then `nebula mcp connect claude-code --channel` on its own line.
+
+That line is for a real second process only. A refused process first takes
+the other entry for a restart's leftover (Claude Code restarted its MCP
+server, and the old process's entry lives up to 45 s): it waits quietly,
+nothing shown on the canvas, and prints only "Nebula is waiting for this
+session’s previous listener to time out, then this one connects by
+itself." It asks again every 5 s, so once the other entry is gone (its
+goodbye, or 45 s after a crash) it registers, and reads any message you
+sent it meanwhile. Still refused after 60 s, it prints the line above.
+A beat Nebula refuses for its token, or never answers, is also tried again
+every 5 s.
+
+**Only a Settings agent token registers a listener** (Justin, 2026-11-03
+and 2026-11-04). The listener must hold a valid agent token from Settings ›
+Connect your agent. `nebula mcp connect claude-code --channel` doesn't make
+one: it reads the token file Settings saved (or the one Claude Code's
+saved `nebula` server names) and points the listener at it. The agent is
+the token's: a name header beside it changes nothing, so one agent's token
+never registers as another. An in-app agent's turn token (the Claude, Codex
+and other agents Nebula runs itself) is verified but can't listen. A
+listener with no token, with a token Nebula no longer knows (revoked), or
+with an in-app agent's token is refused (`401`, `X-Nebula-Code:
+listener_no_token`, `listener_token_invalid` or `listener_in_app_token`)
+and never gets a listener id, so the person's messages never reach it. The
+server prints the reason once on stderr:
+
+- "error: Nebula couldn’t connect this listener because it has no token.
+  Copy one from Settings › Connect your agent, then run this command again."
+- "error: Nebula couldn’t connect this listener because its token isn’t
+  valid anymore. Copy a new one from Settings › Connect your agent, then run
+  this command again."
+- "error: Nebula couldn’t connect this listener because it uses an in-app
+  agent’s token, and only a token from Settings › Connect your agent can
+  listen. Copy one there, then run this command again."
+
+Revoking the token in Settings drops its listeners at once: the canvas
+stops offering them, and a message sent to one is refused as stopped.
+
+`channel_status` shows it as `thisServer.registerError` until a beat goes
+through. The canvas keeps its "Connect Claude Code…" state meanwhile. A
+listener's `listenerId` is stable for its (agent, session) while Nebula
+runs (an HMAC under a secret made at launch), so a lapsed beat or an
+eviction never strands the messages sent to it; a restarted Nebula gives
+new ids. Entries are capped per agent (8) and in all (64). So the canvas tells three states
+apart, per agent session:
+
+- no entry: **not connected** (never started with the channel, or its
+  session ended);
+- `state: "stopped"` (`reason`: `idle` after 2 hours with nothing from you,
+  or `error`): **the listener stopped** while the session runs on; /mcp >
+  nebula-listen > Reconnect starts it again;
+- `state: "listening"`: connected, and Nebula pushes to it.
+
+Nebula can't see whether Claude Code delivers a push (it never acknowledges
+one): a session started without `--dangerously-load-development-channels`,
+or on a Team org with Channels off, still reads "listening".
+
+- The person's tabs: a `channelListeners` socket message on every change and
+  after a verified hello, and `GET /api/canvas/channel` with the person
+  token: `{projectId, listeners: [{listenerId, agent: {id, name, color,
+  verified}, state, reason, projectId, since, seenAt, session: {key,
+  ordinal}}], rev}`. `session` is the session's cursor (`key` as the
+  cursor events carry it, `ordinal` its number, null with no live cursor),
+  so "Message Claude · 2" names the cursor it reaches. `projectId` on a
+  listener is the project it last saw open; a listener always follows the
+  open project.
+- An agent: `GET /api/canvas/channel` returns only its own entries, without
+  `session`; MCP `channel_status` adds `thisServer` (whether this server
+  runs with `--channel`, and its listener's state). With no agent token it
+  doesn't ask Nebula, like `nebula channel`: `listeners` is null, `token`
+  false, and `detail` says "This Nebula server has no agent token, so
+  Nebula can’t tell which listeners are yours. Run this command, then
+  start Claude Code as it says." with the command on the next line
+  (review 3, NIT-2). **`nebula channel
+  [--json]`** prints the same entries from the terminal, one per line
+  (`ch_… stopped · idle since 12:14 last heard 12:10`); with none it says
+  "You have no listener, so Nebula doesn’t count you as connected to the
+  canvas. Run this command, then start Claude Code as it says." and the
+  command on the next line. With no agent token at all it doesn't ask
+  Nebula (no listener can be yours) and says "This terminal has no agent
+  token, so Nebula can’t tell which listeners are yours. Run this command,
+  then start Claude Code as it says." then the command on the next line,
+  then "The nebula CLI in that session reads its token file." (GM r94).
+- **The session's own shell is the same agent** (J2, Justin 2026-11-04).
+  The launch command `--channel` prints starts with
+  `NEBULA_APP_TOKEN_FILE=<the token file's path>` (the path, never the
+  token) and `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"`, so the `nebula` CLI in
+  Claude's own Bash reads the same token as the listener and speaks for
+  the same session. The CLI reads tokens in the MCP server's order (D3,
+  round 5): `NEBULA_AGENT_TOKEN`, else `NEBULA_APP_TOKEN_FILE` (unless a
+  personal agent's `NEBULA_AGENT_TOKEN_FILE` is set), else
+  `NEBULA_APP_TOKEN`; the file wins over a `NEBULA_APP_TOKEN` set beside it.
+  It reads the file with the MCP server's strict reader (a regular file of
+  yours, mode 600, no symlink), keeps the token in its own memory (never
+  in its environment, argv or a log), and fails closed on a bad file, even
+  with a good `NEBULA_APP_TOKEN` set (GM r97): "Nebula couldn’t read this
+  agent’s token because NEBULA_APP_TOKEN_FILE <clause>. Copy a new one from
+  Settings › Connect your agent, then run this command." with `nebula mcp
+  connect claude-code --channel` on the next line. The clause is one of
+  "points to a file that doesn’t exist", "points to something that isn’t
+  a regular file", "points to a file too large to be a token", "points to
+  a file that belongs to another user", "points to a file other users can
+  read", "points to a file Nebula can’t open" (a symlink, among others),
+  "points to a file Nebula can’t read", "points to a file that doesn’t
+  hold a token" or "points to a file Nebula can’t use". Set but
+  empty: "NEBULA_APP_TOKEN_FILE is empty. Unset it, or point it at the
+  token file that Settings › Connect your agent saved." So `nebula reply`,
+  `nebula thread`, `nebula pin resolve` and `nebula channel` from that
+  session act as its MCP tools do: a `nebula reply` from it answers that
+  session's message, takes its label and flies its own cursor (never a
+  "Claude Code · 2"), and it and `nebula pin resolve` end the listener's
+  deliberate span like the tools (below).
+- **One session, one listener process** (D2, round 5). Each listener
+  process sends a random nonce with its beats; a second process beating on
+  the same agent and session is refused `409 listener_session_taken` with
+  a because-line, printed once by the second listener ("Nebula couldn’t
+  connect this listener because another process is already listening as
+  this session. Start each Claude Code with the launch command this
+  prints, which gives each its own session, then start this one again."
+  and the command on the next line), so two Claude Codes
+  started with one fixed `NEBULA_AGENT_SESSION` never share a span. A
+  listener that stops beating stops counting as fresh 25 s after its last
+  beat.
+- Only a listener with a Settings agent token registers (above), and the
+  routes a listener reads its messages from and reports on
+  (`/api/agent/thread/inbox`, `accepted`, `held`) refuse any other caller
+  the same way, with the same codes (a revoked token there gets
+  `listener_token_invalid` and r81's line too). The inbox finds a message
+  in whichever project it was sent (each names its `projectId`), and
+  `accepted`/`held` mark it there, so a project switch before the listener
+  reads it never strands it. The listener reads its inbox again after
+  lost journal events (`gap`, `reset`) and after a read that failed every
+  try. A message sent before a Nebula restart and never pushed stays
+  "sent": the restarted Nebula gives the listener a new id. Revoking the
+  listener's token in Settings settles its messages still in flight as
+  `dropped`; the box says "Nebula couldn’t send your message because
+  Claude Code stopped listening. Reconnect it in the terminal, then send it
+  again."
+  A listener whose beats stop (never ended) keeps its in-flight messages
+  for 10 minutes, the send's own cap (`DELIBERATE_SPAN_CAP`): the row reads
+  "…It’ll get this message if it reconnects from the same terminal." and, if
+  the same terminal beats again inside them, the message is delivered once.
+  Beats go on while Claude works, so a lapse is a stopped process, not a long
+  task; after the 10 minutes the row is dropped for good and a resend is
+  offered, so a message is never delivered twice. (The 24 hours above is how
+  long Nebula keeps an unanswered push to match a late reply, a separate bound.)
+
+**The Message box.** The person messages a listening session from the
+canvas: the composer at the foot of the Agent log (`/` focuses it). Its
+thread is kept with the project (`backend/services/person_thread.py`), so a
+reload and every tab show the same rows.
+
+- Sending is the person's alone: `POST /api/canvas/thread/messages` `{text
+  (2,000 characters at most, lines kept), to: <listenerId>, nodeIds?,
+  clientId?}`, with the person token. It goes to the listening session that
+  was active most recently, or the one the person picks. Refused only with
+  `409 listener_stopped` (the person's line in `person`) when that listener
+  is gone or stopped. The 201st message to one listener in a rolling hour is
+  accepted and **held**, never refused (GM r55): the listener holds a
+  deliberate send past its runaway cap. The row's `state` is `held` while
+  Nebula knows it waits: the route marks it when that listener already had
+  200 messages this hour, and the listener reports any other it holds
+  (`POST /api/agent/thread/held`; pins and answers count toward its cap
+  too). The box reads "Sends in a few minutes because you’ve sent 200 this
+  hour." until it goes.
+- The journal gets a `person.message` event, `data: {messageId, text,
+  nodeIds, to: <listenerId>}`. Only the listener named in `to` wakes: it
+  reads its messages back (`GET /api/agent/thread/inbox`, answered for that
+  agent session only), pushes them at once (wake `message`, a deliberate
+  send) and then says so (`POST /api/agent/thread/accepted`), which the box
+  shows as "Waiting for Claude" ("Waiting for Claude · 2" for a second
+  session: a session is named by its cursor label). Nebula never claims
+  Claude read a message.
+- Claude answers with **MCP `reply_to_person(text, node_id?)`** or **`nebula
+  reply "<text>" [--node nX]`** (2,000 characters, counted as a person sees
+  them). With a node, its cursor flies there and shows the reply's first
+  sentence (140 characters). Only agents reply, and **only with a Settings
+  agent token** (J1, Justin 2026-11-04, the same as listening). Refused with
+  `401` and a code:
+  - `reply_no_token` (a name alone, or nothing), three lines: "Nebula
+    couldn’t post this reply because this agent has no token. Copy one from
+    Settings › Connect your agent, run this command, then reply again.",
+    then `nebula mcp connect claude-code --channel`, then "The nebula CLI
+    finds the token through NEBULA_APP_TOKEN_FILE, which this command sets
+    up."
+  - `reply_in_app_token` (an in-app agent's turn token): "Nebula couldn’t
+    post this reply because it uses an in-app agent’s token, and only an
+    agent connected from Settings › Connect your agent can reply in the
+    Message box. Answer the person in this chat instead."
+  - `reply_token_invalid` (revoked or unknown): "Nebula couldn’t post this
+    reply because its token isn’t valid anymore. Copy a new one from
+    Settings › Connect your agent, run this command, then reply again.",
+    then the command on the next line.
+
+  Every saved reply is journaled as `thread.replied` (`data: {replyId,
+  replyTo, text, nodeId}`; only `replyId` and `replyTo` while the thread is
+  narrowed, below; never a session key or listener id, since every agent
+  reads it), and a refused one never is. Replies are paced per token agent: 5 in a row, then one every
+  2 s. Past that the reply isn't saved: `429 replies_rate_limited` with
+  `retryAfter` (seconds) and the line "Nebula couldn’t post this reply
+  because replies are paced at 5 in a row, then one every 2 s. You can
+  reply again in 2 s, so put everything you have to say in one reply." A
+  reply Nebula refuses for another reason never spends one. With no
+  push to answer and no project open: `409 no_project`, "Nebula couldn’t
+  post this reply because no project is open. Open one with open_project,
+  then reply again." (GM r110). Open the project the person's message came
+  from (`list_projects` gives ids): `open_project` switches the person's
+  canvas, so never open an unrelated one just to post a reply.
+- **Which push a reply answers: the push ledger** (review 4). The listener
+  reports each push it makes (`POST /api/agent/thread/accepted` with
+  `messageIds` and `questionIds`, and its process's `nonce`). Nebula
+  records it for that listener's agent and session (memory only; a
+  message counts when it is that listener's and was sent or held, or a
+  re-send of one already accepted for that agent; a question set when that
+  agent asked it and the person answered it). A reply answers its
+  session's **oldest** open push (Claude Code queues pushes while Claude
+  works, so oldest first is the order Claude answers in), whose project
+  still exists and within the 10-minute cap of the listener's span:
+  `replyTo` is that push's newest message, else its first question set.
+  The push is marked answered once the reply is saved. A reply with no
+  open push to answer is a follow-up in the open project's thread
+  (`replyTo` null). A shell with no session of its own answers for its
+  agent's one fresh listener (beat in the last 35 s); with more than one
+  fresh listener it doesn't guess: `replyTo` is null and the answer
+  carries a `note` (printed by `nebula reply`): "Nebula posted this reply
+  but couldn’t tell which message it answers because 2 Claude Code
+  sessions are listening and this terminal isn’t one of them. Reply from
+  the Claude Code the person messaged. To stop this, start each Claude
+  Code with this command, which gives it its own session that its
+  terminals share." with `nebula mcp connect claude-code --channel` on the
+  next line (GM r108). The row carries the answering listener's session,
+  so the box clears only that message's status and the ones before it (a
+  question set's id clears none), and the cursor that flies is that
+  listener's (GM r100.1). Sessions are a convenience boundary inside one
+  token, not an auth boundary: any holder of the token can name any
+  session.
+- **A reply goes to the thread of the push it answers** (GM r100.3,
+  r112.2). When that push is in another project than the open one, the
+  reply is saved in that project's thread (unread there) and an Update is
+  posted on the open project: "Claude Code replied in “Coast”." (the
+  agent's name, the project's name; an unnamed project reads “Untitled”),
+  with an **Open** action (`thread.open`, with the project and the reply)
+  that opens that project, its Agent log, and focuses the reply. One
+  Update per agent and project while it is unread: a later reply updates
+  it in place (moved to the top, the latest time) and counts, "Claude
+  Code replied 3 times in “Coast”."; once read, the next starts a new
+  one. These count toward the agent's 6 Updates a minute; past that the
+  Update is left as it is (the reply is saved). Its `nodeId` is checked
+  only when the reply goes to the open canvas: for another project's
+  thread it is ignored, no cursor flies (GM r108 b), and the answer's
+  `note` says "Nebula posted this reply in “Coast” but didn’t point at n3
+  because that project isn’t open, so your cursor stayed where it
+  was." In the open project no Update is posted.
+- Under the channel, a deliberate wake (a message, an answer, a pin) is a
+  span owned by the listener session that got it. The listener keeps one
+  group of ids per push and removes the one a reply names (`replyTo`),
+  through `reply_to_person` in its own process or a `thread.replied` in
+  its events (`nebula reply` from its own shell); the span ends when none
+  is left, or at the 10-minute cap from the latest push. Only the tool's
+  own result, never an event, answers a push Nebula never recorded (the
+  report failed, or Nebula restarted before the listener reported it
+  again). After Nebula restarts (a journal reset) the listener reports its
+  open pushes again; a listener that restarts in the same session gets
+  them from its first beat (`openPushes`). A pin's push ends only on this
+  session's own `resolve_pin`, a `pin.resolved` for that pin from this
+  agent and this session (`nebula pin resolve` from its own shell; the
+  events route keeps each `pin.resolved`'s session beside the journal,
+  never in the event), or the person deleting the pin. A sibling session's
+  reply or resolve under the same token never ends it.
+- The listener's inbox, accepted and held calls carry its process's
+  `nonce`: while another process holds the session's entry, they get `409
+  listener_session_taken`, as its beats do. A message is matched to its
+  listener by agent and session (kept on the row, never sent anywhere), so
+  one sent before Nebula restarted is still read after it.
+- The thread keeps at most 300 rows. Past that the oldest agent rows go
+  first, then the person's settled rows; a message still `sent` or `held`
+  is never trimmed. The person's tabs get each row in a `personThread` socket
+  message (`change: "sync"` after a verified hello, `"rows"` after).
+- **Who reads what** (Justin, 2026-11-03): every connected agent reads the
+  thread, the same as pins: the person's messages and every agent's replies,
+  in the journal and through **MCP `read_thread(limit?)`**, **`nebula
+  thread`** or `GET /api/canvas/thread` (a message names the agent it was
+  for in `toAgent`; cursor keys and listener ids are the person's form only).
+  The rule is one switch, `person_thread.AGENTS_READ_WHOLE_THREAD`: turned
+  off, the read tool, the journal events and the cursor's say narrow at once
+  to the person plus each row's own agent (the events keep only ids: a
+  message's `to`, a reply's `replyId`). Questions stay owner-scoped: a
+  question row names its set (`questionId`) and asker (`agent`) for every
+  agent, but only the asker reads its `questions` (text and options), and no
+  agent reads the person's answer there (`get_answers` is the asker's).
+  An agent that reads with a marker but no name gets `400` "Nebula couldn’t
+  show the thread because this agent has no name. Set NEBULA_AGENT_NAME or
+  pass --as with a name, then read the thread again."
+- While a session listens, its `ask_person` questions, proposals, Updates and
+  pin replies, and the person's new pins, also add a row to the thread that
+  points at them (the card stays the only place to Accept; a question is
+  never a spend approval). A question with no options is answered from the
+  box's composer; the answer reaches the agent as `question.answered`, the
+  same as an answer from the Agents panel, never as a thread message. If the
+  agent withdraws the question while the person types, the answer is
+  refused (`409`), nothing goes out, and the box says that sending again
+  posts the words as a message every agent can read. Once a set closes, its
+  thread row keeps the outcome in the person's form only, so "You chose …"
+  and "You answered …" survive a reload.
+
 **Stop** by restarting Claude Code without the flag.
 
 **Nothing arrives?** Start with `claude --debug-file <file> …` and look for
@@ -1130,8 +1846,7 @@ is "negotiated a modern protocol revision", set
 newest revision 2025-11-25) the connection stays on the earlier handshake and
 registers without it. The server writes a line to stderr when it starts
 listening and when it stops. `NEBULA_CHANNEL_TRACE=<file>` appends the
-client's `initialize` request to a file; the `NEBULA_CHANNEL_*` timing
-variables in `mcp_channel.Limits` exist for tests.
+client's `initialize` request to a file.
 
 ### Who counts as the person
 
@@ -1197,11 +1912,15 @@ Person-only, refused with 403 `person_required` otherwise:
 - making, limiting, coloring and revoking connected-agent tokens
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
-  workspace or agent token is minted without the person;
+  workspace or agent token is minted without the person. The chat socket is
+  the tab's own (no agent uses it): its `person_required` error echoes the
+  frame's `ref` (a string of 1 to 64 characters) when the frame carried one,
+  so the tab reads each refusal against the frame it answers;
 - deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
   `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
-  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
-  agent it can restore instead (see Recently deleted below);
+  `POST /api/projects/trash/empty`). It can't be undone, and a project takes
+  its moodboards, characters and styles with it. The refusal tells an agent it can restore instead
+  (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -1836,13 +2555,21 @@ Rules:
 An agent can propose a change instead of making it: new nodes, connections, param
 changes on existing nodes, and which nodes to run. The person sees ghost
 nodes and dashed connections in the agent's colour and a bar at the bottom of the
-canvas with **Show**, **Reject** and **Accept** (or **Accept and run**, with a
-count chip beside it: "2 paid", "2 paid · 1 may cost"). Each ghost card names
-its cost ("paid · fal", "free · runs locally", and for Idol "may cost ·
-Hugging Face" with the person's token, "free · Hugging Face" without), and
-the proposal's cost classes are read with the keys set when it is shown:
-a token added or removed after you proposed changes them in `get_proposal`,
-`list_proposals` and `nebula proposals`. They can drag ghosts before accepting; the nodes land where they
+canvas: your note, then a line saying what Accept changes and runs, by node
+name, with the model and who pays for a single paid run and the price
+("Changes and runs “Hero shot” · Krea 2 on your Krea plan · no list price"),
+then **Show**, **Reject** and **Accept** (or **Accept and run**). The view's
+`plan` is that line word for word, and `nebula proposal` prints it as
+`card`; `changeCount` is the count the card and the Update show (each new
+node, connection, changed node and removed connection). A model change that
+leaves existing connections on ports the new model doesn't have removes them
+on Accept, as the model picker does: `removedEdges` lists them, the line says
+"removes 2 connections", and the card lists them struck through. A
+proposal that clears the model, or names one whose ports Nebula can't read,
+is refused (`unwire` them with `edit_canvas`); setting the model a node
+already has reads its ports again (`params[].inputsUpdated`, "GPT-4o · inputs
+updated" on the card). Names on the card, in `plan` and in get_proposal (the
+removed connections' too) follow the person's renames while the proposal is open; the note stays as written. The cost classes (paid, free, may cost, on the Krea plan) are read with the keys set when it is shown: each ghost card names its cost ("paid · fal", "free · runs locally", and for Idol "may cost · Hugging Face" with the person's token, "free · Hugging Face" without), and a token added or removed after you proposed changes them in `get_proposal`, `list_proposals` and `nebula proposals`. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
@@ -1855,7 +2582,8 @@ only runs nodes). Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
-`proposal: {id, kind: "canvas", targetId: <project id>}`). Its one
+`proposal: {id, kind: "canvas", targetId: <project id>, since}`, `since`
+being when it was asked, ms, as its `createdAt`). Its one
 **Review** action (`proposal.review`, `target: "canvas"`) takes the person
 to the canvas from any screen, with that proposal shown in the bar and its
 ghosts in view. Every proposal gets its own Update, on the list of the
@@ -2075,8 +2803,9 @@ is in no environment, argv or file the backend gives them. Codex can read the
 browser's storage on disk but its shell has no network to use it with (see
 "In-app agents use this server").
 
-Before the click, the bar's "See what Accept writes" list shows every value
-Accept will write: new nodes' params and `from → to` for changed params, in
+Before the click, the card's "What Accept writes" disclosure shows every value
+Accept will write: new nodes' params, `from → to` for changed params, and
+each new and removed connection (“Prompt” → “Second take” · Prompt), in
 full (up to 4,000 characters per value, with a marker beyond that). These
 values reach only the browser (`personValues` in `proposalOpened` /
 `proposalSync`); agents see the shortened, redacted view. If a param the
@@ -2112,7 +2841,9 @@ a proposal instead, and what it noticed is an Update.
   is `{questions: {id, status, questions, answers, ...}}`.
 - **The person answers:** the set posts one Update from the agent ("Claude
   Code has 2 questions.", with Answer, and Show on canvas when it names
-  nodes). Answer opens the form in the Updates corner. They may skip any
+  nodes). Its ref is `questions: {id, count, since}`: how many questions
+  (as the line says) and when the set was asked (ms, as its `createdAt`),
+  never the questions. Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
   none. When it closes, its line goes past tense ("Claude Code asked 2
   questions." / "asked a question.", on the stored Update, so `list_notes`
@@ -2184,7 +2915,14 @@ the Updates corner lists the agents working in the open project in two
 groups: **Needs you** (an agent with open questions or proposals there,
 longest wait first) and **Working** (everyone else around, most recent
 first). Clicking a Working row shows its node on the canvas; clicking a
-Needs-you row opens its oldest question set or proposal.
+Needs-you row opens its oldest question set or proposal. A tab that isn't
+connected as the person gets only your asks' Updates, so it counts Needs
+you from them (each ask's `since` orders it, a question set's `count` says
+how many, and an asset Update your asks on one target share counts `asks`
+from `firstSince`): the same rows, order and badge as once it is connected,
+with the row's action locked until then. What you read here is unchanged:
+`GET /api/canvas/agents` and its MCP and CLI reads count from Nebula's own
+open sets and proposals, whatever any tab holds.
 
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
@@ -2643,9 +3381,34 @@ proposal's `createdAt`; after the Update falls back to your older ask on the
 same target, that ask's). Plus, for a cover, `cover`: `"automatic"` or
 `"image"` (which kind, never which image), and for a Commons ask `changes`
 (how many edits) (1 to 999) and `inbox: true` when it only asks to take a
-reference out of the inbox.
+reference out of the inbox. Because one Update stands for all your open asks
+on that target, it also carries `asks` (how many of your proposals on that
+target are open and share it, 1 to 3: your open-proposal cap) and
+`firstSince` (when the oldest of them was made, ms). A new ask posts a new
+Update with them (op `added`, and the one it replaces `removed`); one of them
+closing or an undo reopening one changes them in place (op `changed`).
+You see `asks` and `firstSince` only on your own Updates: another agent's
+`list_notes`, `nebula notes`, `GET /api/canvas/agent-notes` and a board's
+`GET /api/moodboards/{id}/agent-notes` (and the socket's Updates messages) get its Updates without them, as before they existed, and
+so does a caller that names no agent. The person's tabs see them: a tab
+connected as the person, and a held tab, which says it is a tab with the
+`X-Nebula-Tab` header (`?tab=1` on its socket) and carries no agent marker.
+A tab claim never beats a marker: a request with both is read as that
+agent. "Your own" means the same agent: for an unverified agent that is its
+name, so a caller naming itself after you reads your two counts, as it can
+already withdraw your unverified proposals. The claim needs no secret: any
+local program, a page on any localhost origin, or an agent sandboxed with
+localhost network access can send it without a marker and see the two
+counts. An agent that reaches Nebula only through MCP or the CLI can't send
+it: neither ever does, and MCP always names itself. The claim reaches nothing else (it is not
+the person and passes no gate). The counts are not a secret either:
+`GET /api/asset-proposals` and the journal list every open ask with its
+agent, target and time, so this keeps other agents' Updates as they were
+before the fields existed rather than hiding anything.
 A tab that isn't connected as the person sees only the Update, and its
-placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
+placeholder card and the Commons proposals line read these, never the text;
+its Agents panel counts `asks` proposals from `firstSince`, as the connected
+tab counts and orders your open asks, so nothing moves when it connects. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
 Studio on that board, or to the Commons on that reference, from whichever
 screen they are on. One per agent and
@@ -2757,7 +3520,9 @@ which has no list price; Jev mode is priced per request) and a node whose priced
 canvas are never limited.
 
 Some prices depend on the input file (SeedVR2 Upscale and Video Upscale,
-FLUX Video Upscale and Edit [fast]: `sizing` in
+FLUX Video Upscale and Edit [fast], and the talking-head nodes, which are priced
+per second from the length of an Audio Input's file, and are unpriced (never priced
+from a size) when that length can't be read: `sizing` in
 [MODEL-PRICING](MODEL-PRICING.md#what-counts)). The check measures the file
 the run will send: an Image Input or Video Input's file, `nebula quick`'s
 file, or (in a proposal) an upstream output that already exists. The limit
@@ -3211,8 +3976,10 @@ wins:
 
 With 1 or 2 set, the app file isn't read. The backend scrubs
 `NEBULA_APP_TOKEN` and `NEBULA_APP_TOKEN_FILE` from every process it starts,
-so an in-app chat never spends as an app. The `nebula` CLI reads only
-`NEBULA_AGENT_TOKEN` and `NEBULA_APP_TOKEN`, as before.
+so an in-app chat never spends as an app. The `nebula` CLI uses the same
+order for `NEBULA_AGENT_TOKEN`, `NEBULA_APP_TOKEN_FILE` and
+`NEBULA_APP_TOKEN` (D3, round 5): a bad file fails the command instead of
+falling back to `NEBULA_APP_TOKEN`.
 
 The agent shows by its name and color on the
 canvas, and `get_spend_limits` reports `budget: "app"` with its
@@ -3282,6 +4049,48 @@ Boards, characters and Styles stay until the person deletes them for good:
 there is no timer. Projects keep their 30-day expiry. Files live in
 `<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
 (`backend/services/asset_trash.py`).
+
+A project deleted for good (Delete forever, Empty, or past its 30 days) takes
+its moodboards, characters and styles with it: those filed under it and the
+ones deleted from it that wait in Recently deleted, with a board's Updates.
+They are gone like anything deleted for good: `GET /api/moodboards/{id}` or
+`/api/characters/{id}` answers 404 without `code: "in_trash"`, a Moodboard or
+Character node says it was deleted for good (and a run of one says it can't
+be found), a style leaves the Styles lists (nothing saved points at a style),
+and `storedAssetChanged` (`deleted: true`; a style also journals
+`style.purged`) goes out for each before `projectsChanged`. Images stay in
+the outputs folder, as every generated file does. Global moodboards,
+characters and styles are not touched. Each project in Recently deleted lists
+what would go with it as `goesWith` (`moodboards`, `characters`, `styles`:
+names). A purge that stops part way finishes on the next purge, project
+listing or start (`backend/services/project_asset_purge.py`). Only a
+moodboard, character or style folder whose real location is beside the
+project catalog is purged (`~/.nebula/moodboards` with `~/.nebula/projects`,
+or the desktop app's data folder, whose `NEBULA_*_ROOT` it sets; linking the
+whole `~/.nebula` or data folder elsewhere still counts). A store folder
+linked on its own to another place, a link to nothing, or a folder beside
+another catalog is left alone: the project stays on the list and its files
+stay where they are (never moved to Global). The same rule gates the
+start-up move of old-style assets to Global
+(`backend/services/asset_project_rehome.py`): a store that isn't beside this
+project catalog is not touched, so a backend started on a copy of a catalog
+never moves the person's real boards of a project the copy lacks. The count
+it left is logged once per start, with no path. The project also stays on the
+list, and its files stay, when part of a store was a link (its `.trash`, a
+side folder or the project's folder: never followed), when the store folder is
+empty with no real folder in it (a mount point, or an older install that never
+saved one of that kind: the desktop app now makes each store with its `_global`,
+and saving anything makes a folder, after which the id clears; the backend logs
+one line per start when this holds an id), or when the store sits on another device than its folder (a mount). A stray
+`projects/catalog.json` beside the stores (left by a test run or a copied data
+folder) turns the purge and the move off for those stores; the backend logs
+it once per start, and it has to be removed by hand. A moodboard, character or
+style in Recently deleted with `goesWithProject: true` goes when its project is
+deleted for good (the flag is false for a record under a linked `.trash` or
+whose project id isn't a catalog id; `nebula trash list` says "removed for good
+with its project"; without the flag it says nothing). Anything filed under a project the
+catalog doesn't know (for example from before this change), in a store beside it, is moved to
+Global at start, with a backup, as before; never deleted.
 
 ### Building and running over MCP
 
@@ -3401,7 +4210,10 @@ model's file inputs are its ports. One backend module has the rules
   refused and names them; `unwire` them in the same edit. That covers a new
   model without those ports, and clearing the model or naming one Nebula
   can't read, which leaves the definition's ports. (The person's picker drops
-  them instead, as it always did.)
+  them instead, as it always did, and so does a proposal (`propose_change`,
+  `nebula propose`) when Nebula knows the new model's ports: Accept removes
+  them and the view lists them in `removedEdges`; with unknown ports, or a
+  cleared model, a proposal is refused the same way.)
 - Replicate: a port per file input (`x-uploadable`, or a `uri` string),
   named as the schema names it, and one output. A file output's schema is a
   plain `uri` string whatever the file is, so its type comes from the
@@ -3568,6 +4380,15 @@ name and connections, and new nodes go away with their connections. Redo (Cmd-Sh
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
 
+While a restore holds a node (the person's Undo of a delete, on its way),
+an edit made to it waits and lands when the restore's answer does, in
+Nebula's order with every other held edit, across nodes: each edit stays
+one step (an edit's later part joins the step its first part made, which
+clears the person's Redo, as any agent edit after an Undo does). A rename
+of the person's that Nebula refuses leaves nothing behind: no later Undo
+or Redo writes it back. A restore Nebula applied but answered late is kept,
+not put back.
+
 An open canvas draws exactly the backend's connections between backend nodes: a
 connection an agent took away (an unwire, `disconnect`, an undo, a node re-typed
 to other ports) leaves it at once, with no reload, and its next save doesn't
@@ -3598,6 +4419,17 @@ it. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or
 "(redo)" on each line. Agents never need to call it; they undo their own
 edits with `undo_canvas_edit`.
+
+Every graphSync carries `syncSeq`, a whole number that grows with each sync
+in the order each read the graph; every socket gets the syncs in that order,
+its first sync included. It starts from the backend's start time in
+microseconds, so a backend started later numbers its syncs above an earlier
+one's. The answers to `POST /api/graph/restore` and `DELETE
+/api/graph/node/{id}` carry the `syncSeq` of the sync that sent their change
+(a delete of a node already gone, a 404, carries none). The canvas uses it
+so that no sync read before Nebula applied the person's Undo, Redo or Delete
+undoes it: it handles the answer once that sync, or a later one, has
+arrived. Agents may ignore it; nothing an agent sends uses it.
 
 Undo puts back everything a delete removed (GM - Design, 2026-10-23). Every
 node delete (`DELETE /api/graph/node/{id}`, an apply's `remove`, a restore
@@ -4228,25 +5060,41 @@ A call you can make next is code, in backticks with its own quotes
 (`` `get_run('run_ab12')` ``).
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
-the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
-context menu, the Inspector, and the selection toolbar when only rendering
-scenes are selected) is disabled, titled "Stop the run first." or "Wait for
-“Scene” to finish." ("Stop the runs first." / "Wait for the running shots to
-finish." for several scenes).
+the run first." or "You can remove “Shot 2” when it finishes."; the scene's
+Delete (the context menu, the Inspector, and the selection toolbar when only
+rendering scenes are selected) is disabled, titled "Stop the run first." or
+"You can delete “Scene” when it finishes." ("Stop the runs first." / "You
+can delete them when the running shots finish." for several scenes).
 
 How a delete or an undo reads depends on whose run it is:
 
 - **A run this window started** locks every delete, undo and redo on the
-  canvas until it ends (the toolbar's are disabled, titled "Wait for the
-  active run to finish."). The Delete key, the menu's Delete and Undo/Redo
-  are never silent: a selection of only rendering scenes reads GM's scene
-  line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
-  first."), an undo that would remove a rendering shot reads "Couldn’t undo.
-  It would remove “Shot 2”, which is still running. Stop the run first.",
-  and anything else reads the lock's own reason: "Couldn't delete “Brief”.
-  Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for
-  the active run to finish.", "Couldn't undo. Wait for the active run to
-  finish." ("Couldn't redo. …"). Nothing is sent.
+  canvas until it ends (the toolbar's are disabled, each titled by its own
+  verb: "You can delete it when the run finishes."). The Delete key, the
+  menu's Delete and Undo/Redo are never silent: a selection of only
+  rendering scenes reads GM's scene line ("Couldn’t delete “Scene”. “Shot 2”
+  is still running. Stop the run first."), an undo that would remove a
+  rendering shot reads "Couldn’t undo. It would remove “Shot 2”, which is
+  still running. Stop the run first.", and anything else reads the lock's
+  own line alone: "You can delete “Brief” when the run finishes.", "You can
+  delete “A”, “B” and “C” when the run finishes.", "You can delete the
+  connection when the run finishes.", "You can undo when the run finishes."
+  ("You can redo …"). Nothing is sent for any of these. The other keys say
+  theirs in the same place: Cmd+D "You can duplicate “Brief” when the run
+  finishes.", Cmd+V "You can paste when the run finishes.", and, as the
+  command palette's rows say them, Cmd+Enter "You can run the canvas when
+  the run finishes.", Cmd+S "You can save the canvas when the run finishes."
+  and Cmd+O "You can load a canvas when the run finishes." (Cmd+S and Cmd+O
+  say an import's wait, "You can save the canvas when the import
+  finishes.", and Create's launch, "You can save the canvas when Nebula
+  finishes preparing the run.", the same way; Cmd+Enter says an import's
+  and runs during Create's launch, as the toolbar's Run and the palette's
+  do). The palette's Run canvas, Save
+  canvas and Load canvas stay listed, greyed, each with its line as its own
+  text. Adding a node is not locked by a run: from the library, the palette,
+  or a connection dropped on empty canvas (its node picker opens as with no
+  run, and the node comes connected), and connecting two nodes isn't either;
+  your own adds and connections aren't refused during a run.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is
@@ -4422,7 +5270,7 @@ nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
 nebula project show <id>            # a saved project unopened: nodes, connections, cover, runs (get_project)
 nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
-nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load graph opens it (load_graph_file)
+nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load canvas opens it (load_graph_file)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, Styles, projects
@@ -4533,6 +5381,7 @@ Studio shows. Both use `backend/moodboard_client.py`.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard new "Dusk" ./refs --request-id dusk-board-0001   # safe to run again; use a new id for each board
 nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5 --strength 0.6
@@ -4556,6 +5405,21 @@ nebula character move <character> --to "Shoot B"
 nebula moodboard delete <board>
 ```
 
+- Request ids: `nebula moodboard new --request-id <id>` / `moodboard_create(...,
+  request_id=...)` (the API's `requestId` on `POST /api/moodboards`) make a
+  create safe to send again after a lost answer: the same id returns the
+  board it first made, as it is now, instead of a second board, even after
+  Nebula restarts. Use a new id for each board. A reused id returns the
+  board it first made whatever the other arguments say, marked `repeated:
+  true` (the CLI prints `Board “X” was already made by an earlier call with
+  this request id.`, MCP puts that line in `note`), and the image count
+  isn't checked against this call's sources. An id already used for a board
+  in another project (or in Global) is refused with 409 and `code:
+  "request_id_scope"`, never answered with that board. Ids are kept beside
+  the boards (`.creates/`, which no scan, export or import reads) for 7
+  days, and go when their board is deleted for good. Moodboard Studio also
+  sends `attempt` (1 to 1,000,000) with its id; a repeat then answers
+  `madeAttempt` and `madeVersion`. Agents leave it out.
 - "Project" is a canvas project, the same one the app's Project tabs show:
   `--project current` (`project_id="current"`) is the one open on the canvas,
   otherwise an id from `nebula projects` / `list_projects`. An id that isn't a
@@ -4680,7 +5544,7 @@ nebula moodboard delete <board>
   lists also catch up on a change made while their tab's socket was closed
   (a backend restart), once it opens again. A Preview of the run
   counts only the images that steer ("4 images"), weight 0 left out like
-  the switch, and so does the analysis's summary ("4 reference image(s)
+  the switch, and so does the analysis's summary ("4 reference images
   analyzed"). The Moodboard node's bundle leaves weight-0 images out of
   `images`, `analysis.images` and `representativeImages` as it does switched ones. When nothing
   steers, the analysis warns "Every reference is set aside, so none of them
@@ -4765,6 +5629,55 @@ nebula moodboard delete <board>
   (its part of the board share), largest first. `show` prints them as
   `#4 0.35%, #5 0.26%`. An analysis from before sources existed has none;
   `analyze` again to see them.
+- Colour counts alpha (analysis version 6, Commons `measure-2`): pixels
+  under alpha 16 of 255 aren't counted, the rest count by their alpha, and
+  a share is of what's seen. An image with transparency is read at 256 px
+  by an area filter that weighs each pixel by its alpha, so a thin stroke
+  still counts, with its own colour. An image with no pixel at 16 or above
+  (clear, or a faint haze) has no colours: its `analysis.images` entry has
+  `transparent: true`, `colors: []` and null `lightness` and `saturation`,
+  and the summary and `warnings` say `#N is too transparent to add
+  colors.` It takes no part of the board's weight; any other image counts
+  as one full reference however much of it is clear.
+- Nebula stores two facts on each image entry of the HTTP board
+  (`GET /api/moodboards/{id}`; MCP's image views leave them out):
+  `hasTransparency` (a pixel less than opaque) and `hasClearPixels` (a
+  pixel under alpha 16 of 255), with `alphaFileStat`, the file's
+  `[mtime_ns, size, ino, ctime_ns]` when they were read (the inode and
+  change time catch a same-size copy whose mtime was put back, and a
+  replace by rename; a stamp of the older `[mtime_ns, size]` form never
+  matches, so that image is read again once and restamped). Each is read once when the image
+  is added (off the event loop, before the board is locked), and once at
+  startup (in the background) for the images of boards analyzed before
+  version 6. A use trusts them only while the file's stat still matches
+  `alphaFileStat` (one stat, no decode), so an image stored as opaque is
+  never decoded to find clear pixels; a file replaced in place at the same
+  path is read again (decoded once per file version). A client that sends
+  the images back may echo all three; what it sends is ignored. An
+  unreadable or missing file has none, which never marks a board out of
+  date.
+- A saved analysis older than version 6 that measured an image with clear
+  pixels (set aside or not) has out-of-date colours: it counted the black
+  those pixels hide. An image added after that analysis, or one that is
+  only semi-transparent (no clear pixel; it was counted in its real colour),
+  doesn't make it so. On every read
+  its analysis carries `outdated` ("These colors counted transparent areas
+  as dark. Analyze again to update them.", which Moodboard Studio and
+  `show` print), and the composed `brief` carries `outdated` too ("This
+  brief uses the old colors. The next run analyzes the board again and
+  sends an updated one.", or on a hand-written brief "This brief uses the
+  old colors. The next run sends it with the updated ones."), printed right
+  after the brief's text. At strength 0 nothing is sent, so the brief has no
+  `outdated`. Neither is ever saved. The dry run's `saved` has `outdated`
+  beside `current`, which still says only whether the analysis describes
+  the board; `--dry-run` prints both lines when both hold. The
+  Moodboard node analyzes such a board again and warns "The board’s saved
+  colors counted transparent areas as dark, so this run analyzed it again.
+  Analyze it in Moodboard Studio to save the new analysis." An older
+  analysis of a board with no transparency stays as it is.
+- Summaries count in a real plural: "1 reference image analyzed as look.",
+  "7 reference images analyzed as look."; one saved with "image(s)" reads
+  with today's.
 - `analyze --dry-run` (`moodboard_analyze` with `dry_run`) calls
   `POST /api/moodboards/{id}/analyze/dry-run`: the analysis and the brief
   generators would get, plus `changes` against what's saved (palette and
@@ -4816,6 +5729,16 @@ nebula moodboard delete <board>
     `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
     says who read (`source: "model"`). Board and image
     notes go only when the board's `sendNotes` is on; private notes never.
+  - A reference with transparency is sent as it shows on the board card:
+    composited onto #080808 (the card's rgba(255, 255, 255, 0.03) over the
+    black canvas), never onto the colour hidden under its alpha. An opaque
+    one is sent exactly as before. One too transparent to add colors (no
+    pixel at alpha 16) is never sent or priced: `--estimate` lists it in
+    `transparent` ("#N wasn’t read because it’s too transparent."), and the
+    read shows "#N is too transparent to add colors." and "#N is unsorted
+    because it’s too transparent." (its `why`: "It’s too transparent to add
+    colors."). An image stored as opaque or with no clear pixel is never
+    decoded to tell, and the rest are checked once, off the event loop.
     A reference that isn't a file on this computer is skipped and listed.
   - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
 

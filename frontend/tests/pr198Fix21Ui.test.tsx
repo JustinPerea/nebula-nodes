@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,7 +22,14 @@ import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
 import { SceneUnsavedMark } from '../src/components/nodes/SceneUnsavedMark';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const initial = useGraphStore.getState();

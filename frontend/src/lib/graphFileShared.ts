@@ -45,13 +45,84 @@ export const GRAPH_MAX_DEPTH = 64;
 export const GRAPH_MAX_VALUES = 1_000_000;
 
 /** A graph past one of those limits (a written line: the save or load alert
- * puts its own heading over it; error copy round 3e). */
+ * puts its own heading over it; error copy round 3e). One error, two fields
+ * (GM PR #205 r10 item 4): `reason`, the person's line, worded for where the
+ * check ran; `detail`, the engine's exact reason, for the log. */
 export class GraphStructureLimitError extends FailureNotice {
-  constructor(reason: string) {
+  readonly detail: string;
+  /** The shape walk's cause, when it was one: too complex, or a value. */
+  readonly shape?: 'complex' | 'value';
+
+  constructor(reason: string, detail = reason, shape?: 'complex' | 'value') {
     super('', reason);
     this.name = 'GraphStructureLimitError';
+    this.detail = detail;
+    if (shape) this.shape = shape;
   }
 }
+
+/** Where a shape check ran: a Save, a file being opened (Load canvas, and
+ * whether Load canvas would open a downloaded edits file), or the CLI's
+ * canvas coming in (Import CLI canvas). */
+export type GraphCheckUse = 'save' | 'open' | 'import';
+
+/** The step a Save's shape line offers, by the newest Undo step (GM PR #205
+ * r13 item 1): the person's, an agent's (named as "Undid Claude’s edit."
+ * names it), or none at all, when there is nothing to undo. */
+export type SaveUndoStep = { kind: 'person' } | { kind: 'agent'; name: string } | { kind: 'unknown' } | { kind: 'none' }
+  // GM PR #205 r16 item 1: the canvas fits again only after this many Undos (2 or more).
+  | { kind: 'steps'; count: number };
+
+/** A Save's shape line (GM PR #205 r10 item 4, r13 item 1): the cause, then
+ * the Undo that can fix it, never one that can't. */
+export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { kind: 'person' }): string {
+  // GM PR #205 r12 item 1: the "because" form, one whole line (no heading over it).
+  const cause = kind === 'complex' ? 'Nebula couldn’t save the canvas because it’s too complex.'
+    : 'Nebula couldn’t save the canvas because part of it holds a value it can’t store.';
+  if (step.kind === 'none') return cause;
+  if (step.kind === 'steps') return `${cause} Undo the last ${step.count} changes, then try again.`;
+  const whose = step.kind === 'agent' ? `${step.name}’s` : step.kind === 'unknown' ? 'the' : 'your';
+  return `${cause} Undo ${whose} last change, then try again.`;
+}
+
+/** GM PR #205 r9 item 2, r12 item 1: the node and connection limits, in the
+ * person's words ("edges" is ours). One whole line in the "because" form, with
+ * the limit and, where the person can act, a step: a Save says to delete some,
+ * a file or the CLI's canvas (which the person can't edit in the app) has none.
+ * A file being opened and the CLI's canvas "opens"; Save "saves". */
+const tooManyLine = (limit: number, noun: 'nodes' | 'connections', use: GraphCheckUse) => {
+  const count = limit.toLocaleString();
+  if (use === 'open') return `Nebula couldn’t open this file because it has more than ${count} ${noun}, the most Nebula opens.`;
+  if (use === 'import') return `Nebula couldn’t import the CLI canvas because it has more than ${count} ${noun}, the most Nebula opens.`;
+  return `Nebula couldn’t save the canvas because it has more than ${count} ${noun}, the most Nebula saves. Delete some, then try again.`;
+};
+export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'nodes', use);
+export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'connections', use);
+
+/** GM PR #205 r10 item 4 and its addendum: the shape walk's reasons, which
+ * the person can't act on, as a cause they understand. Too many values or
+ * too deep: `complex`; a non-finite number or a circular value: `value`.
+ * A Save can be undone into shape; a file can't be fixed in Nebula, so its
+ * lines have no step. */
+const SHAPE_LINES: Record<GraphCheckUse, Record<'complex' | 'value', string>> = {
+  save: {
+    complex: saveShapeLine('complex'),
+    value: saveShapeLine('value'),
+  },
+  open: {
+    complex: 'This file is too complex to open.',
+    value: 'Part of this file holds a value Nebula can’t read.',
+  },
+  // GM PR #205 r13 item 2: the CLI's canvas isn't a file the person picked.
+  import: {
+    complex: 'This canvas is too complex to open.',
+    value: 'Part of this canvas holds a value Nebula can’t read.',
+  },
+};
+
+/** One of those lines, for a check that ran somewhere else (the backend's
+ * restore of a bundle's graph.json, GM PR #205 r11 item 2). */
+export const shapeLine = (use: GraphCheckUse, kind: 'complex' | 'value'): string => SHAPE_LINES[use][kind];
 
 /** True when JSON.stringify failed because the text is longer than the engine
  * lets a string be (#190). Chromium (V8, the desktop app's engine too) caps a
@@ -109,13 +180,17 @@ function* jsonChildValues(value: object): Generator<unknown> {
 /** Match the backend restore preflight without recursive JavaScript calls.
  * The enter/exit frames preserve JSON-tree depth semantics and reject cycles
  * in live state before JSON.stringify can throw after expensive asset work. */
-export function assertGraphComplexityWithinLimits(value: unknown): void {
+export function assertGraphComplexityWithinLimits(value: unknown, use: GraphCheckUse,
+  step?: SaveUndoStep | (() => SaveUndoStep)): void {
+  // A Save's step is worked out only when the Save is refused (it walks the stack).
+  const refuse = (kind: 'complex' | 'value', detail: string) => new GraphStructureLimitError(
+    use === 'save' ? saveShapeLine(kind, typeof step === 'function' ? step() : step) : SHAPE_LINES[use][kind], detail, kind);
   if (isRecord(value)) {
     if (Array.isArray(value.nodes) && value.nodes.length > GRAPH_MAX_NODES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+      throw new GraphStructureLimitError(tooManyNodesLine(GRAPH_MAX_NODES, use), `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
     }
     if (Array.isArray(value.edges) && value.edges.length > GRAPH_MAX_EDGES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
+      throw new GraphStructureLimitError(tooManyEdgesLine(GRAPH_MAX_EDGES, use), `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
     }
   }
 
@@ -148,19 +223,17 @@ export function assertGraphComplexityWithinLimits(value: unknown): void {
     const current = frame.value;
     valueCount += 1;
     if (valueCount > GRAPH_MAX_VALUES) {
-      throw new GraphStructureLimitError(
-        `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`,
-      );
+      throw refuse('complex', `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`);
     }
     if (frame.depth > GRAPH_MAX_DEPTH) {
-      throw new GraphStructureLimitError(`Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+      throw refuse('complex', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
     }
     if (typeof current === 'number' && !Number.isFinite(current)) {
-      throw new GraphStructureLimitError('Graph contains a non-finite number.');
+      throw refuse('value', 'Graph contains a non-finite number.');
     }
     if (!current || typeof current !== 'object') continue;
     if (ancestors.has(current)) {
-      throw new GraphStructureLimitError('Graph contains a circular value that cannot be saved.');
+      throw refuse('value', 'Graph contains a circular value that cannot be saved.');
     }
 
     ancestors.add(current);
@@ -171,6 +244,42 @@ export function assertGraphComplexityWithinLimits(value: unknown): void {
       depth: frame.depth + 1,
     });
   }
+}
+
+/** A value's shape as the walk above counts it, never stopping early: every
+ * value once, the deepest depth (from `baseDepth`, the value's own depth in
+ * the file), and whether it holds a value the walk refuses (a non-finite
+ * number, a circular value). For measuring a canvas a node at a time: the
+ * Undo that fixes a refused Save (GM PR #205 r16 item 1). */
+export interface ShapeMeasure { count: number; depth: number; bad: boolean }
+export function measureShape(value: unknown, baseDepth = 0): ShapeMeasure {
+  type Frame = { kind: 'value'; value: unknown; depth: number } | { kind: 'children'; iterator: Iterator<unknown>; depth: number }
+    | { kind: 'exit'; value: object };
+  const stack: Frame[] = [{ kind: 'value', value, depth: baseDepth }];
+  const ancestors = new WeakSet<object>();
+  const measure: ShapeMeasure = { count: 0, depth: baseDepth, bad: false };
+  while (stack.length > 0) {
+    const frame = stack.pop() as Frame;
+    if (frame.kind === 'exit') { ancestors.delete(frame.value); continue; }
+    if (frame.kind === 'children') {
+      const child = frame.iterator.next();
+      if (!child.done) {
+        stack.push(frame);
+        stack.push({ kind: 'value', value: child.value, depth: frame.depth });
+      }
+      continue;
+    }
+    const current = frame.value;
+    measure.count += 1;
+    if (frame.depth > measure.depth) measure.depth = frame.depth;
+    if (typeof current === 'number' && !Number.isFinite(current)) measure.bad = true;
+    if (!current || typeof current !== 'object') continue;
+    if (ancestors.has(current)) { measure.bad = true; continue; }
+    ancestors.add(current);
+    stack.push({ kind: 'exit', value: current });
+    stack.push({ kind: 'children', iterator: jsonChildValues(current), depth: frame.depth + 1 });
+  }
+  return measure;
 }
 
 /**
@@ -386,7 +495,7 @@ function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport
 export function editsFileReopens(text: string, file: unknown): boolean {
   if (new Blob([text]).size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) return false;
   try {
-    assertGraphComplexityWithinLimits(file);
+    assertGraphComplexityWithinLimits(file, 'open');
     return true;
   } catch (error) {
     if (error instanceof GraphStructureLimitError) return false;
@@ -421,11 +530,16 @@ export function projectFileName(projectName: string): string {
   return editsFileName(projectName).replace(/ - unsaved edits\.nebula$/, '.nebula');
 }
 
+/** GM PR #205 r9 item 2: the file pickers' labels (the extensions stay), on
+ * every picker: Load canvas, Save canvas, Download a copy and Download your edits. */
+export const GRAPH_PICKER_LABEL = 'Nebula canvas';
+export const GRAPH_BUNDLE_PICKER_LABEL = 'Nebula canvas bundle';
+
 async function writeGraphText(text: string, suggestedName: string): Promise<SavedEditsFile | null> {
   // Parsed only when the size allows a reopen at all.
   const reopens = new Blob([text]).size <= GRAPH_BUNDLE_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
   const blob = new Blob([text], { type: 'application/json' });
   const name = await saveBlobWithPicker(blob, suggestedName,
-    { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
+    { description: GRAPH_PICKER_LABEL, accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
   return name === null ? null : { name, reopens };
 }

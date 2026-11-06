@@ -35,7 +35,6 @@ import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { Toolbar } from '../src/components/panels/Toolbar';
 import { ContextMenu } from '../src/components/ContextMenu';
 import { AgentLog } from '../src/components/panels/AgentLog';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import { FOLLOWING_MARK, canvasLockOf } from '../src/lib/canvasLock';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
@@ -62,21 +61,23 @@ const button = (name: RegExp) => screen.getAllByRole('button')
 describe('M2: the run lock comes first, and carries no following mark', () => {
   it('canvasLockOf: run, then follow, then offline', () => {
     const lock = canvasLockOf({ projectName: 'Second canvas', agent: 'Codex' }, true);
-    expect(lock.act(undefined, { run: true })).toEqual({ disabled: true, title: RUN_LOCK_REASON });
+    // GM r39 item 2: no shared default; the control's own line wins.
+    expect(lock.act(undefined, { run: true, runTitle: 'You can run it when the run finishes.' }))
+      .toEqual({ disabled: true, title: 'You can run it when the run finishes.' });
     expect(lock.act(undefined, { run: true, runTitle: 'Wait for the graph import to finish.' }).title)
       .toBe('Wait for the graph import to finish.');
     expect(lock.act()).toMatchObject({ disabled: true, title: WAIT, [FOLLOWING_MARK]: '' });
     expect(canvasLockOf(null, true).act()).toMatchObject({ disabled: true });
-    expect(canvasLockOf(null, true).act().title).not.toBe(RUN_LOCK_REASON);
+    expect(canvasLockOf(null, true).act().title ?? '').not.toMatch(/when the run finishes/);
   });
 
   it('SelectionToolbar, run and follow: the run-locked buttons have no following mark; Ask keeps it', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [], isExecuting: true });
     follow();
     render(<SelectionToolbar />);
-    for (const name of [/^Run/i, /^Duplicate/i, /^Arrange/i, /^Delete/i]) {
+    for (const [name, verb] of [[/^Run/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Arrange/i, 'arrange'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
-      expect(b.getAttribute('title'), String(name)).toBe(RUN_LOCK_REASON);
+      expect(b.getAttribute('title'), String(name)).toBe(`You can ${verb} them when the run finishes.`);
       expect(b.hasAttribute(FOLLOWING_MARK), String(name)).toBe(false);
     }
     expect(button(/^Ask/i)!.hasAttribute(FOLLOWING_MARK)).toBe(true);
@@ -87,11 +88,15 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    for (const name of ['Load graph', 'Import CLI graph', 'Clear canvas', 'Arrange']) {
+    // GM r39 item 2: Load, Import, Clear and Auto-layout, each in GM's words.
+    for (const [name, line] of [['Load canvas', 'You can load a canvas when the run finishes.'],
+      ['Import CLI canvas', 'You can import a canvas when the run finishes.'],
+      ['Clear canvas', 'You can clear the canvas when the run finishes.'],
+      ['Arrange', 'You can arrange the canvas when the run finishes.']] as const) {
       const b = screen.getAllByRole('button').find((candidate) => candidate.textContent?.startsWith(name));
       expect(b, name).toBeDefined();
       expect(b, name).toBeDisabled();
-      expect(b!.getAttribute('title'), name).toBe(RUN_LOCK_REASON);
+      expect(b!.getAttribute('title'), name).toBe(line);
       expect(b!.hasAttribute(FOLLOWING_MARK), name).toBe(false);
     }
   });
@@ -102,7 +107,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     const arrange = screen.getAllByRole('button').find((b) => b.textContent?.startsWith('Arrange'))!;
-    expect(arrange.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    expect(arrange.getAttribute('title')).toBe('You can arrange the canvas when the run finishes.');
   });
 
   it('the context menu, run and follow: Run, Duplicate and Delete read the run line', () => {
@@ -110,10 +115,11 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     act(() => useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null));
     render(<ContextMenu />);
-    for (const name of [/^Run This Node/i, /^Duplicate/i, /^Delete/i]) {
+    // GM r39 item 2: the row's verb plus "it".
+    for (const [name, verb] of [[/^Run This Node/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
       expect(b, String(name)).toBeDefined();
-      expect(b.getAttribute('title'), String(name)).toBe(RUN_LOCK_REASON);
+      expect(b.getAttribute('title'), String(name)).toBe(`You can ${verb} it when the run finishes.`);
       expect(b.hasAttribute(FOLLOWING_MARK), String(name)).toBe(false);
     }
   });
@@ -123,12 +129,12 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     useGraphStore.getState().deleteSelected();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(JSON.stringify(useGraphStore.getState().undoNotice ?? useGraphStore.getState())).toMatch(/Wait for the active run to finish/);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('You can delete “Brief” when the run finishes.');
     const step = { kind: 'snapshot', nodes: [], edges: [] };
     useGraphStore.setState({ undoNotice: null, undoStack: [step], redoStack: [] } as never);
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(JSON.stringify(useGraphStore.getState().undoNotice)).toMatch(/Wait for the active run to finish/);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('You can undo when the run finishes.');
   });
 });
 
@@ -166,7 +172,10 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     render(<DeferredRunNotice />);
     const run = screen.getByRole('button', { name: /Run/ });
     expect(run).toBeDisabled();
-    expect(run.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    // GM r40 item 3: the notice's own line, read live (no node n1 on this canvas: "it").
+    // GM PR #205 r1: the line is beside [Run], so no tooltip; [Run] points at it.
+    expect(run.hasAttribute('title')).toBe(false);
+    expect(run).toHaveAccessibleDescription('You can run it when the current run finishes.');
     expect(run.hasAttribute(FOLLOWING_MARK)).toBe(false);
     act(() => useGraphStore.setState({ isExecuting: false }));
     expect(screen.getByRole('button', { name: /Run/ }).getAttribute('title')).toBe(WAIT);
@@ -176,9 +185,9 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
   it('the sources: Rerun with latest source, Forget and the deferred Run go through lock.act with the run', () => {
     const root = resolve(__dirname, '../src/components');
     const sites: [string, RegExp][] = [
-      ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
-      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting \}\)/],
-      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: isExecuting \|\| runStarting \}\)/],
+      ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting, runTitle: runFinishesLine\(OFFLINE_VERBS\.rerun\) \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
+      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting, runTitle: runFinishesLine\(RUN_LOCK_VERBS\.forgetRun\) \}\)/],
+      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: running, runTitle: line, shown: \{ id: lineId, text: line \} \}\)/],
     ];
     for (const [file, pattern] of sites) {
       const source = readFileSync(resolve(root, file), 'utf8');
@@ -199,9 +208,62 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     const { unmount } = render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe(`${1180 - 820 + 8}px`);
+    // Its top edge plus the gap, for a proposal card that sits above it (PR #216 r1).
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
+    // Hidden: both go (review 1 LOW-6 of PR #216: the notice stack reads them).
+    act(() => { useUIStore.setState({ agentLogEnabled: false } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
+    act(() => { useUIStore.setState({ agentLogEnabled: true } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
     unmount();
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
+  });
+
+  it('giving way to the card (GM r6) never moves the line it writes: its top is the one it has with no give', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1180 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    // Squeezed to 200 of its own 344 (the person's resize, inline).
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect(820, 1164, 584, 784));
+    useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
+    const { container, unmount } = render(<AgentLog />);
+    const log = container.querySelector<HTMLElement>('.agent-log')!;
+    act(() => { log.style.height = '344px'; window.dispatchEvent(new Event('resize')); });
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
+    expect(root.getPropertyValue('--agent-log-natural-h')).toBe('344px');
+    expect(root.getPropertyValue('--agent-log-floor')).not.toBe('');
+    expect(log.dataset.docked).toBe('true');
+    // Its floor: the header and 2 rows of the body, with the body's padding
+    // and the log's borders (37 + 8 + 8 + 2 × 20 + 2).
+    const head = log.querySelector<HTMLElement>('.agent-log__drag-row')!;
+    const body = log.querySelector<HTMLElement>('.agent-log__body')!;
+    Object.defineProperty(head, 'offsetHeight', { configurable: true, value: 37 });
+    Object.defineProperty(log, 'offsetHeight', { configurable: true, value: 344 });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 342 });
+    body.style.padding = '8px 0';
+    body.style.lineHeight = '20px';
+    for (const msg of log.querySelectorAll<HTMLElement>('.agent-log__msg')) msg.style.lineHeight = '20px';
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(root.getPropertyValue('--agent-log-floor')).toBe('95px');
+    unmount();
+    expect(root.getPropertyValue('--agent-log-natural-h')).toBe('');
+    expect(root.getPropertyValue('--agent-log-floor')).toBe('');
+    spy.mockRestore();
+  });
+
+  it('the log\'s body gives way on the spring, held at its foot, down to its floor (GM r6)', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(block).toMatch(/--agent-log-give: var\(--agent-log-squeeze, 0px\);/);
+    expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
+    // Bounded by the shown height while a give is in force (review 3 MEDIUM-2).
+    expect(block).toMatch(/max-height:\s*max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 10000000\)\)/);
+    expect(block).toMatch(/transition:\s*--agent-log-give 420ms var\(--agent-log-spring\)/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],/);
   });
 
   it('dragged to the top left: no clearance', () => {
@@ -211,11 +273,15 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
   });
 
   it('the region reads it', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
-    expect(css).toMatch(/right:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\)\)/);
+    // Round 18 (GM r28 2): the right inset is the larger of the gutter, the log and a right side panel.
+    expect(css).toMatch(/--notice-r:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\), var\(--notice-right-clearance, 0px\)\)/);
+    expect(css).toMatch(/\bright:\s*max\(var\(--notice-r\),/);
+    expect(css).toMatch(/bottom:\s*var\(--notice-region-bottom\)/);
   });
 });

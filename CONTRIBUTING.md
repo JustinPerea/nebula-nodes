@@ -16,6 +16,22 @@ npm --prefix frontend run build
 node scripts/check-node-contracts.mjs
 ```
 
+Before pushing, run the ratchets: tests that read the source tree or the docs
+from disk and fail on a pattern (straight apostrophes, banned phrases, wording
+in `SKILL.md`). A change far from them can still break them, and a
+changed-files run won't pick them up.
+
+```bash
+npm --prefix frontend run check:ratchets
+```
+
+It finds those tests itself (frontend vitest files that read the disk, backend
+pytest files that walk `backend/` or read the agent docs, plus a short fixed
+list), runs the frontend ones with two workers and the backend ones in a temp
+`HOME`, and exits non-zero with the failing test ids. It adds no new coverage
+over the full suites; it is the quick way to run just the tests a small change
+tends to break.
+
 A Claude Code cloud session installs the backend and frontend dependencies at
 start, through `.claude/settings.json`, which runs
 `scripts/cloud-session-setup.mjs` and, in a Linux cloud session,

@@ -5,6 +5,8 @@ import { AgentSpendSection } from './AgentSpendSection';
 import { PersonalAgentsSection } from './PersonalAgentsSection';
 import { SwitchRow } from './Switch';
 import { SettingsRowError } from './SettingsRowError';
+import { PersonLockLine } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 
 function usd(value: number) {
   return value < 1 ? `$${value.toFixed(2)}` : `$${value}`;
@@ -13,6 +15,10 @@ function usd(value: number) {
 /** Preferences apply the moment they change. Most live in this browser; the
  * run-cost threshold is saved to settings.json, because it limits agents too. */
 export function PreferencesTab() {
+  // PR #204 round 10 (GM r15): the run-cost threshold is PUT /api/settings, the person's alone.
+  // Round 11 (GM r18 b): Job notifications live in this browser only (lib/jobNotifications,
+  // localStorage), so only this row locks, its line inside the box right under it.
+  const costLock = usePersonLock('change this');
   // Selected one by one: the UI store changes constantly while the canvas is in use.
   const ui = {
     runCostConfirmUsd: useUIStore((s) => s.runCostConfirmUsd),
@@ -45,14 +51,15 @@ export function PreferencesTab() {
               id="settings-run-cost-confirm"
               className="settings__select settings__select--compact"
               value={costValue}
-              aria-describedby="settings-run-cost-confirm-help"
-              onChange={(event) => void saveRunCostConfirm(event.target.value === 'off' ? null : Number(event.target.value))}
+              {...costLock.control('settings-run-cost-confirm-help')}
+              onChange={(event) => { if (!costLock.locked) void saveRunCostConfirm(event.target.value === 'off' ? null : Number(event.target.value)); }}
             >
               {customCost && <option value={costValue}>{usd(ui.runCostConfirmUsd!)} or more</option>}
               {RUN_COST_CONFIRM_CHOICES.map((value) => <option key={value} value={String(value)}>{usd(value)} or more</option>)}
               <option value="off">Never</option>
             </select>
           </div>
+          <PersonLockLine lock={costLock} place="control" />
           <SettingsRowError id="runCostConfirmUsd" message={costError} />
           <SwitchRow title="Job notifications" description="When a run finishes in a background tab, or after a long run"
             checked={ui.notificationPrefs.enabled} onChange={(enabled) => ui.setNotificationPrefs({ enabled })} />

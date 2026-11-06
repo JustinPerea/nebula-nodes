@@ -1,4 +1,5 @@
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
+import { LineText } from '../../LineText';
 
 /**
  * A Settings row's line for its last failed write. A line that lost nothing
@@ -12,6 +13,6 @@ export function SettingsRowError({ id, message }: { id: string; message?: string
   const neutral = useSettingsDraftStore((s) => Boolean(s.neutral[id]) && s.errors[id] === message);
   if (!message) return null;
   return neutral
-    ? <p className="settings-row__error settings-row__error--neutral" role="status">{message}</p>
-    : <p className="settings-row__error" role="alert">{message}</p>;
+    ? <p className="settings-row__error settings-row__error--neutral" role="status"><LineText text={message} /></p>
+    : <p className="settings-row__error" role="alert"><LineText text={message} /></p>;
 }

@@ -35,6 +35,7 @@ NODES = ["flux-3-image", "flux-3-image-klein", "flux-3-image-klein-base", "flux-
          "flux-video-upscale", "krea-3"]
 CLIP = "https://example.com/clip.mp4"
 REF = "https://example.com/ref.png"
+AUDIO = "https://example.com/voice.mp3"
 
 
 def defaults(definition: dict[str, Any]) -> dict[str, Any]:

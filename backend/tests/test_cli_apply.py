@@ -60,7 +60,7 @@ def api(tmp_path, monkeypatch, person):
         store.commit(catalog)
     book = ProposalBook()
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

@@ -76,9 +76,23 @@ describe('the unsaved edits file', () => {
     (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = picker;
     await expect(saveEditsToFile(snapshot, 'Glass campaign')).resolves.toEqual({ name: 'Glass campaign edits.nebula', reopens: true });
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'Glass campaign - unsaved edits.nebula' }));
+    // GM PR #205 r9 item 2: every picker says "Nebula canvas".
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({
+      types: [{ description: 'Nebula canvas', accept: { 'application/json': ['.nebula'] } }] }));
     expect(written).toHaveLength(1);
     const loaded = await readGraphSelection({ file: written[0] as Blob, isZip: false });
     expect(loaded.nodes.map((node) => node.id)).toEqual(['n1', 'n2']);
+  });
+
+  it('Download a copy says "Nebula canvas" on its picker too', async () => {
+    const picker = vi.fn(async () => ({
+      name: 'Glass campaign.nebula',
+      createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+    }));
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = picker;
+    await shared.saveProjectCopyToFile(snapshot, 'Glass campaign');
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'Glass campaign.nebula',
+      types: [{ description: 'Nebula canvas', accept: { 'application/json': ['.nebula'] } }] }));
   });
 
   it('a cancelled save picker reports the cancel and downloads nothing', async () => {

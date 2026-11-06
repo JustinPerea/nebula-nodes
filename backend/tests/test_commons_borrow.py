@@ -244,3 +244,21 @@ def test_agents_cannot_borrow_from_quarantined_assets(store):
         borrow.record_borrow(store, actor_id="agent:mcp:cursor", hide_quarantined=True, **kwargs)
     with store.db.read() as conn:
         assert conn.execute("SELECT count(*) FROM commons_events WHERE kind = 'borrow_rejected'").fetchone()[0] == 1
+
+
+def test_palette_fidelity_on_a_transparent_output_is_unverifiable(store, tmp_path, monkeypatch):
+    # Alpha counts (measure-2): a fully transparent output has no palette, so
+    # there is nothing to check a borrowed colour against (it used to raise
+    # on an empty palette, or before alpha counted, match a hidden black).
+    col = store.ensure_collection("x", "manual")
+    res = analyzed(store, col)
+    out_root = tmp_path / "output"
+    (out_root / "run-2").mkdir(parents=True)
+    Image.new("RGBA", (32, 32), (0, 0, 0, 0)).save(out_root / "run-2" / "clear.png")
+    monkeypatch.setattr("services.output._resolve_output_root", lambda: out_root)
+    target = res.asset["measurements"]["palette"][0]["hex"]
+    b = borrow.record_borrow(store, actor_id="a", asset_id=res.asset["id"], attribute="palette", value=target,
+                             region_id=None, used_in={"kind": "nebula_output", "ref": "/api/outputs/run-2/clear.png"},
+                             why="w", scope_ids=search.scope_collection_ids(store, None))
+    assert borrow.run_fidelity(store, b["id"]) == {
+        "status": "unverifiable", "reason": "output is too transparent, so it has no palette"}

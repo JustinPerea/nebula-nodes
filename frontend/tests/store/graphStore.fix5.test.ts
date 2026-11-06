@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix round 5 (review 5; GM's r6 and r7 rulings), the store side:
@@ -30,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 // GM r28 item 2 (round 19): the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
@@ -553,11 +556,11 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
   it('own run: names up to 3, groups same titles, counts from 4', async () => {
     await ownRun([textNode('n5', 'Brief'), textNode('n6', 'Note'), textNode('n7', 'Text'), textNode('n8', 'Text')]);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete “Brief” and “Note” when the run finishes.");
     useGraphStore.getState().onNodesChange(['n5', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete “Brief” and 2 “Text” nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete “Brief” and 2 “Text” nodes when the run finishes.");
     useGraphStore.getState().onNodesChange(['n5', 'n6', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete 4 nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete 4 nodes when the run finishes.");
     expect(notice()).not.toMatch(/n\d/);
   });
 
@@ -595,12 +598,36 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
 });
 
 describe('N1: a wire-only Delete during the tab\'s run says why', () => {
-  it('"Couldn’t delete the connection. Wait for the active run to finish."', async () => {
+  it('"You can delete the connection when the run finishes."', async () => {
     await ownRun([textNode('n5', 'Brief')]);
     useGraphStore.setState({ edges: [{ id: 'e9', source: 'n4', sourceHandle: 'shot_s1', target: 'n5', targetHandle: 'text', selected: true }],
       nodes: useGraphStore.getState().nodes.map((node) => ({ ...node, selected: false })) } as never);
     useGraphStore.getState().deleteSelected();
-    expect(notice()).toBe("Couldn’t delete the connection. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete the connection when the run finishes.");
     expect(useGraphStore.getState().edges).toHaveLength(1);
+  });
+});
+
+// PR #221 review 1 MEDIUM-1: a save answered 404 keeps the scene's unsaved
+// edits for a delete undone (GM r20 answer 3), with no delete in sight. Every
+// test here reuses n1 on one canvas, so without the afterEach reset the next
+// test's fresh n1 took A's typing back and PUT it (["s1:gone","s2:b"]).
+// A runs before B (shuffle off); B fails with the reset removed.
+describe('a 404’s kept edits stay in their own test', { shuffle: false }, () => {
+  it('A: a save answered 404 keeps the typing for n1', async () => {
+    const h = harness({ first: () => json({ detail: "That node isn't on the canvas anymore." }, 404) });
+    typeIn('s1', 'gone');
+    await sleep(20);
+    h.release();
+    await vi.waitFor(() => expect(said).toEqual(["“Opening” was deleted, so your changes to it can’t be saved."]), { timeout: 3000, interval: 5 });
+    expect(h.puts).toEqual([['s1:gone', 's2:b']]);
+  });
+
+  it('B: the next test’s n1 takes nothing back and sends nothing', async () => {
+    const h = harness();
+    await sleep(300);
+    expect(h.puts).toEqual([]);
+    expect(brief()).toEqual(['s1:a', 's2:b']);
+    expect(unsaved()).toBeNull();
   });
 });

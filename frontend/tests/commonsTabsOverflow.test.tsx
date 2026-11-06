@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { withFocusFixup } from './helpers/focusFixup';
 
 /**
  * GM review of Q107 a (2026-10-21): with the Updates chip in the Commons
@@ -22,6 +23,8 @@ vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => n
 const { CommonsView } = await import('../src/components/commons/CommonsView');
 const { useUIStore } = await import('../src/store/uiStore');
 
+// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+withFocusFixup();
 beforeEach(() => {
   useUIStore.setState({ viewMode: 'commons', commonsEnabled: true, commonsReturnView: 'canvas' });
   commons.collections.mockResolvedValue([]);

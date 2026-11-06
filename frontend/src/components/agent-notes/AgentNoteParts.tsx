@@ -1,5 +1,9 @@
 import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { LeaveBusyContext } from './leaveBusy';
+import { HELD_OPS, useNoteLock } from './heldLock';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { useLineLock } from '../../hooks/usePersonLock';
+import { COMMONS_OFF_REVIEW_LINE, useCommonsOff } from '../../lib/commonsOff';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
 import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
@@ -23,6 +27,8 @@ export interface AgentNotesAdapter {
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
+  /** An action button's accessible name, when its visible word alone doesn't say enough (GM r108 c). */
+  actionLabel?: (note: AgentNote, action: AgentNoteAction) => string | undefined;
   /** A board image's number now (the Studio's board), to draw `#n` in the text. */
   numberFor?: (ref: string) => number | null;
   /** Whether hovering an entry or a card outlines its refs (the canvas's
@@ -111,22 +117,31 @@ export function RunOutcomeIcon({ run }: { run: AgentNoteRun | null | undefined }
  * A corner button that reads "Saving…" while the Commons' save in progress
  * holds the leave it asked for (commons-leave, LeaveBusyContext).
  */
-export function BusyButton({ className, onClick, children, op }: {
+export function BusyButton({ className, onClick, children, op, lock, label }: {
   className: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
   /** The action's kind, for the corner to find this button again (focus after a popover). */
   op?: string;
+  /** Why it can't act yet (heldLock useNoteLock, components/PersonLock): aria-disabled, still
+   * focusable, pointing at the line under the buttons; no tooltip (PR #204 round 10). */
+  lock?: PersonLock | null;
+  /** An accessible name that starts with the visible word (WCAG 2.5.3). */
+  label?: string;
 }) {
   const [element, setElement] = useState<HTMLButtonElement | null>(null);
   const busy = useContext(LeaveBusyContext) === element && element !== null;
+  const locked = Boolean(lock?.locked);
   return (
-    <button ref={setElement} type="button" className={className} aria-busy={busy || undefined} data-op={op}
-      onClick={onClick}>
+    <button ref={setElement} type="button" className={locked ? `${className} agent-notes-btn--held` : className}
+      aria-busy={busy || undefined} data-op={op} {...lock?.control()} aria-label={busy ? undefined : label} onClick={onClick}>
       {busy ? 'Saving…' : children}
     </button>
   );
 }
+
+/** An action that opens a Commons proposal (Review). */
+const reviewsCommons = (action: AgentNoteAction) => action.op.kind === 'proposal.review' && action.op.target === 'commons';
 
 /** The update's own buttons (edit actions first, then Show) or its greyed state. */
 export function NoteButtons({
@@ -134,15 +149,31 @@ export function NoteButtons({
   adapter,
   onAction,
   onShow,
+  sharedLock = null,
 }: {
   note: AgentNote;
   adapter: AgentNotesAdapter;
   /** `anchor`: the clicked button, where the Commons asks before leaving. */
   onAction: (action: AgentNoteAction, anchor: HTMLElement) => void;
   onShow: (anchor: HTMLElement) => void;
+  /** PR #204 round 11 (GM r19 item 3): the arrival card's one lock for its ask and its ×; the
+   * card renders that line, so these buttons render none of their own. */
+  sharedLock?: PersonLock | null;
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
+  // GM, #204 r3 item 2: an ask this tab doesn't hold yet keeps its Review or Answer, locked.
+  const ownLock = useNoteLock(note);
+  const lock = sharedLock ?? ownLock;
+  const held = lock.locked;
+  // Round 18i (GM r39 Fix E): a Commons proposal's Review while the Commons is off stays where it
+  // is, locked, with the reason under it; it is the lock that says why, before the person clicks.
+  const commonsOff = useCommonsOff();
+  const offLock = useLineLock(COMMONS_OFF_REVIEW_LINE, commonsOff && note.actions.some(reviewsCommons));
   if (controls.buttons.length === 0 && !controls.state) return null;
+  const holds = controls.buttons.some((button) => button.kind === 'action' && HELD_OPS.has(button.action.op.kind));
+  const offLocked = (button: NoteButton) => offLock.locked && button.kind === 'action' && reviewsCommons(button.action);
+  const ariaLabel = (button: NoteButton) =>
+    (button.kind === 'action' ? adapter.actionLabel?.(note, button.action) : undefined);
   return (
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
@@ -151,15 +182,20 @@ export function NoteButtons({
           key={button.kind === 'show' ? 'show' : button.label}
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
           op={button.kind === 'action' ? button.action.op.kind : undefined}
+          lock={offLocked(button) ? offLock : button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? lock : null}
+          label={ariaLabel(button)}
           onClick={(event) => {
             event.stopPropagation();
             if (button.kind === 'show') onShow(event.currentTarget);
-            else onAction(button.action, event.currentTarget);
+            else if (offLocked(button)) return;
+            else if (!(held && HELD_OPS.has(button.action.op.kind))) onAction(button.action, event.currentTarget);
           }}
         >
           {button.label}
         </BusyButton>
       ))}
+      {offLock.locked ? <PersonLockLine lock={offLock} place="control" className="agent-notes-acts__held-line" />
+        : holds && !sharedLock && <PersonLockLine lock={lock} place="control" className="agent-notes-acts__held-line" />}
     </div>
   );
 }

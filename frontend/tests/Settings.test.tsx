@@ -1860,6 +1860,20 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     expect(await screen.findByText("Couldn't load the connected apps. Only the person can do this from the Nebula canvas.")).toBeInTheDocument();
   });
+
+  it('PR #204 r6 (GM r6 2): refused as not connected, the because line, and the read runs again on the promote', async () => {
+    const session = await import('../src/lib/personSession');
+    session.resetPersonSessionForTests();
+    getOutsideSpendMock.mockRejectedValueOnce(new RequestFailedError("Couldn't load the connected apps.", 403,
+      { reason: 'Only the person can do this.', code: 'person_required' }));
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
+    openTab('Preferences');
+    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started.')).toBeInTheDocument();
+    const calls = getOutsideSpendMock.mock.calls.length;
+    act(() => { session.notePersonPromoted(); });
+    await waitFor(() => expect(getOutsideSpendMock.mock.calls.length).toBe(calls + 1));
+    await waitFor(() => expect(screen.queryByText(/load the connected apps because/)).not.toBeInTheDocument());
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1933,6 +1947,50 @@ describe('Settings — storage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show onboarding again/ }));
     expect(useUIStore.getState().panels.settings.visible).toBe(false);
     expect(useUIStore.getState().onboardingActive).toBe(true);
+  });
+
+  // GM, PR #205 r1 answer 6: a switch saving its own change follows the held
+  // rule: its new position at once, the enabled look for 150 ms, then the
+  // locked look with the thumb where the person put it; a quick save never
+  // greys; a failed save puts back the saved position.
+  it('demo telemetry while its save is out: the new position at once, held, then locked after 150 ms', async () => {
+    let answer!: (value: unknown) => void;
+    updateSettingsMock.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    await renderSettings({ apiKeys: {}, zoomTelemetryEnabled: false });
+    openTab('Storage');
+    await screen.findByRole('switch', { name: /Demo zoom telemetry/ });
+    const toggle = () => screen.getByRole('switch', { name: /Demo zoom telemetry/ });
+    fireEvent.click(toggle());
+    expect(toggle()).toBeChecked();
+    expect(toggle()).toBeEnabled();
+    expect(toggle()).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle()).toHaveAttribute('data-held-pending');
+    await waitFor(() => expect(toggle()).toHaveAttribute('data-held-look'));
+    expect(toggle()).toBeChecked();
+    await act(async () => { answer({ status: 'ok' }); });
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
+  });
+
+  it('demo telemetry: a quick save never greys, and a failed one puts the switch back', async () => {
+    await renderSettings({ apiKeys: {}, zoomTelemetryEnabled: false });
+    openTab('Storage');
+    await screen.findByRole('switch', { name: /Demo zoom telemetry/ });
+    const toggle = () => screen.getByRole('switch', { name: /Demo zoom telemetry/ });
+    const greyed: string[] = [];
+    const watch = new MutationObserver(() => { if (toggle().hasAttribute('data-held-look')) greyed.push('grey'); });
+    watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-held-look'] });
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    watch.disconnect();
+    expect(greyed).toEqual([]);
+    expect(toggle()).toBeChecked();
+    updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.click(toggle());
+    expect(toggle()).not.toBeChecked();
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
   });
 });
 

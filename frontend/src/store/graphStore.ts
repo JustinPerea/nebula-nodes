@@ -1,4 +1,6 @@
 import { create, type StateCreator } from 'zustand';
+import type { SaveUndoStep } from '../lib/graphFileShared';
+import type { SaveUndoWalk, UndoWalkStep } from '../lib/saveFixStep';
 import {
   applyNodeChanges,
   applyEdgeChanges,
@@ -13,7 +15,9 @@ import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefi
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
+import { isCanvasSelectionDragging, onCanvasSelectionDragEnd } from '../lib/canvasSelectionDrag';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { forgetPersonPlaced, notePersonPlaced } from '../lib/personNodeMoves';
 import { useArrangeStore } from './arrangeStore';
 import {
   clearPersistedRunHistory,
@@ -90,9 +94,11 @@ import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, held
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
-  failureMessage, headedLine, isNamedLine, readRefusal, requestError,
-  warnFailure, nodeNameList,
+  PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, refusalError, requestError,
+  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
+import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
+import { sentUnderPromote } from '../lib/personSession';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStopCause, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, sceneRunLockLine, sceneOtherStopLine, sceneClashLine,
@@ -100,7 +106,7 @@ import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStop
 import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
-import { cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { bringBackFailedText, cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, stableJson, editArrivedText, foldArrange, forgetClearedPlaceholders,
@@ -141,6 +147,7 @@ import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplace
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
+import { addNodeLine, lockLine, runFinishesLine } from '../lib/runLock';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -338,17 +345,21 @@ function clearReplacedCanvasFocus(): void {
   const request = ui.canvasFocusRequest;
   if (!request) return;
   ui.clearCanvasNodeFocus(request.requestId);
-  if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+  if (ui.selectedNodeId === request.nodeId) ui.selectNode(null, { keepPin: true });
 }
 
 function markExecutionScopeQueued(
   nodes: Node<NodeData>[],
   edges: Edge[],
   targetNodeId?: string,
+  queued?: Set<string>,
 ): Node<NodeData>[] {
   const scopeIds = new Set(nodesInExecutionScope(nodes, edges, targetNodeId).map((node) => node.id));
+  // Review 5 NIT-5 (round 7): the scope this start queued, which its refusal marks and puts back.
+  if (queued) { queued.clear(); for (const id of scopeIds) queued.add(id); }
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -373,8 +384,20 @@ function markNodesErrored(
   nodeIds: Set<string>,
   message: string,
   failure?: unknown,
+  /** `message` is the whole line (GM r13's Generate line): the refusal's own words stay out. */
+  ownLine = false,
 ): Node<NodeData>[] {
-  const hidden = failure === undefined ? null : failureDetails(failure);
+  const hidden = failure === undefined || ownLine ? null : failureDetails(failure);
+  // PR #204 round 4: a start the gate refused only for this tab (a spend approval, a billing
+  // switch: main._person_only_refusal) leaves these nodes' line until the promote, while it is
+  // still theirs. Every refused start comes through here with its failure.
+  const line = hidden ?? message;
+  // Review 3 NIT-2 (#204 r5): what the refusal covered, so the promote puts each node back as
+  // it was (a complete node shows its image again), not idle.
+  const before = new Map(nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id,
+    beforeQueued.get(node.id) ?? (UNSETTLED.has(node.data.state) ? IDLE_FIELDS : settledFields(node))]));
+  for (const id of nodeIds) beforeQueued.delete(id);
+  clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, before, line) }))); // clears-on-promote: graph.run-start
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -591,6 +614,23 @@ function withLiveNotice(state: GraphState, patch: GraphState | Partial<GraphStat
   return offerApplies(notice, stacks) ? patch : { ...patch, undoNotice: null };
 }
 
+/** Review 2 of PR #205 (undo LOW-1): the give-up line ("Try Undo again")
+ * is true only while its Delete's step is next in line. A newer step landing
+ * above it makes it false (Undo would undo that step instead), so the line
+ * goes with it. The Delete's own answer does this itself (giveUpTakeover). */
+function giveUpStaysTrue(state: GraphState, patch: GraphState | Partial<GraphState>): GraphState | Partial<GraphState> {
+  const shown = giveUpShown;
+  if (!shown || answeringDeletes > 0 || !patch.undoStack || patch.undoStack === state.undoStack) return patch;
+  if (patch.undoStack.at(-1) === successorOf(shown.step)) return patch;
+  giveUpShown = null;
+  const out: Partial<GraphState> = { ...patch };
+  for (const key of ['undoNotice', 'messageNotice'] as const) {
+    const now = key in patch ? patch[key] : state[key];
+    if (now?.id === shown.id) out[key] = null;
+  }
+  return out;
+}
+
 /**
  * Every undo or redo step, numbered in the order it first landed on either
  * stack (PR #198 review 5, H1). A refused scene write rewrites the steps
@@ -619,7 +659,7 @@ function noticeFollowsStacks(config: StateCreator<GraphState>): StateCreator<Gra
     const guarded = ((partial: GraphState | Partial<GraphState> | ((state: GraphState) => GraphState | Partial<GraphState>),
       replace?: boolean) => {
       set((state) => {
-        const patch = withLiveNotice(state, typeof partial === 'function' ? partial(state) : partial);
+        const patch = giveUpStaysTrue(state, withLiveNotice(state, typeof partial === 'function' ? partial(state) : partial));
         numberSteps(patch);
         return patch as GraphState;
       }, replace as false);
@@ -704,9 +744,9 @@ function pushUndo(
  * known; a later step depends on nothing it holds, so it may land above
  * steps taken while the add was out. */
 function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
-  params: OwnParamChange[] = [], accepted?: Node<NodeData>[]): OwnAdd | null {
-  const step = ownAddStep(nodeIds, params, accepted);
-  if (step.nodeIds.length === 0 && !step.params) return null;
+  params: OwnParamChange[] = [], accepted?: Node<NodeData>[], unwired: Edge[] = []): OwnAdd | null {
+  const step = ownAddStep(nodeIds, params, accepted, unwired);
+  if (step.nodeIds.length === 0 && !step.params && !step.unwired) return null;
   breakUndoDebounce();
   const undoStack = [...get().undoStack, step];
   if (undoStack.length > UNDO_CAP) undoStack.shift();
@@ -1034,7 +1074,12 @@ interface GraphState {
    * instead of replacing it (review 7, L3). `mono`: a part of the line shown
    * in mono (a model id, GM round 15 of PR #114). An empty line says nothing
    * (a write refused while offline). */
-  notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string }) => void;
+  /** A written line. Given the `error` it reports, a refusal only because this
+   * tab isn't connected as the person goes when the tab is promoted (GM, #204 r3). */
+  notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string; error?: unknown }) => void;
+  /** A run-locked key press or drop: its lock line, where Delete's, Undo's
+   * and Redo's show (GM PR #205 r1 answer 2, r2 items 4 and 5). */
+  sayRunLocked: (text: string) => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -1176,7 +1221,9 @@ interface GraphState {
     nodes: Node<NodeData>[];
     edges: Edge[];
     updatedNodes: Node<NodeData>[];
-  }, options?: { undoStep?: object; synced?: ReadonlySet<string> }) => void;
+  }, options?: { undoStep?: object; synced?: ReadonlySet<string>;
+    /** The wires Accept removed (the view's removedEdges), for its Undo. */
+    unwired?: ReadonlyArray<Pick<Edge, 'source' | 'sourceHandle' | 'target' | 'targetHandle'>> }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -1358,14 +1405,21 @@ async function backendDetail(response: Response): Promise<string> {
 class UniversalModelError extends Error {
   /** The backend's failure kind (MODEL_SETTINGS_FAILURE_HEADER), or null. */
   readonly kind: string | null;
-  constructor(message: string, kind: string | null) {
+  /** The answer's structured reason (`person_required` from the person gate), or null. */
+  readonly code: string | null;
+  constructor(message: string, kind: string | null, code: string | null = null) {
     super(message);
     this.kind = kind;
+    this.code = code;
   }
 }
 
 async function universalModelError(response: Response): Promise<UniversalModelError> {
-  return new UniversalModelError(await backendDetail(response), response.headers.get(MODEL_SETTINGS_FAILURE_HEADER));
+  const code = typeof response.clone === 'function'
+    ? await response.clone().json().then((body: { code?: unknown } | null) =>
+      (typeof body?.code === 'string' ? body.code : null)).catch(() => null)
+    : null;
+  return new UniversalModelError(await backendDetail(response), response.headers.get(MODEL_SETTINGS_FAILURE_HEADER), code);
 }
 
 /** GM - Design's line for a model picker that failed (round 13), naming the
@@ -1387,10 +1441,10 @@ function modelPickerFailure(err: unknown, name: string, definitionId: string): s
 function reportModelPickerFailure(err: unknown, nodeId: string, name: string, still: string, definitionId: string): void {
   const kind = err instanceof UniversalModelError ? err.kind : null;
   if (kind === MODEL_SETTINGS_FAILURE || kind === MISSING_KEY_FAILURE) {
-    useGraphStore.getState().notify(modelPickerFailure(err, name, definitionId));
+    useGraphStore.getState().notify(modelPickerFailure(err, name, definitionId), 'error', { error: err });
     return;
   }
-  reportModelChangeFailed(nodeId, still);
+  reportModelChangeFailed(nodeId, still, err);
 }
 
 /** The node's name as its card shows it. */
@@ -1481,12 +1535,11 @@ function configuredModel(node: Node<NodeData> | undefined): string {
 }
 
 /** Create's heading and its cluster line (GM, round 3f and round 15 of PR
- * #114): "Couldn't start the generation. Its nodes weren't added to the
- * canvas." then the backend's reason where it gave a person line (a World
+ * #114; GM r12 (2) of #204: "Nebula couldn’t start the generation."): "Nebula
+ * couldn’t start the generation. Its nodes weren’t added to the canvas." then the backend's reason where it gave a person line (a World
  * Labs state, a run, an access refusal), the connection line when Nebula
  * didn't answer, and "Try again." for a bare HTTP failure. */
-export const GENERATE_HEADING = "Couldn't start the generation.";
-export const CLUSTER_NOT_ADDED = "Its nodes weren't added to the canvas.";
+export { CLUSTER_NOT_ADDED, GENERATE_HEADING } from '../lib/errorCopy';
 export function clusterFailureReason(error: unknown): string {
   // GM, round 16: the unified line wherever #114 owns it.
   if (error instanceof ConnectionLostError) return NEBULA_NOT_ANSWERING_COPY;
@@ -1500,11 +1553,11 @@ export function clusterFailureReason(error: unknown): string {
  * round 15: the line shows what the model picker shows. The picker's own
  * label for it isn't kept outside the Inspector, and the card's badge shows
  * the id, so it is the id, in mono. The reason stays in the console. */
-function reportModelChangeFailed(nodeId: string, still: string): void {
+function reportModelChangeFailed(nodeId: string, still: string, error?: unknown): void {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!node) return;
   useGraphStore.getState().notify(modelChangeFailedLine(node.data.label, still), 'error',
-    still ? { mono: still } : undefined);
+    { ...(still ? { mono: still } : {}), error });
 }
 
 /** Whether a wire keeps its ends on the node's new ports (a wire leaving the
@@ -1589,6 +1642,29 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
 /** A shot's output without its status or the last failure's fields (error
  *  copy round 3c-2): a new run, or a failure Nebula wrote itself, must not
  *  show an earlier failure's person line or Details. */
+/** A shot a refused start marked, back to how it was (its image, or idle), if it still says that line. */
+/** A refused shot start's line gone on the promote: the shot back to the state it last settled
+ * in before the start (review 5 LOW-3, round 7, the same rule as a refused run's nodes): done,
+ * error (an older failure keeps its line) or idle, or no output at all. A shot that read running
+ * then takes the look its result gives (done with an image, else idle). */
+function clearShotRefusal(nodeId: string, shotId: string, line: string, before: CinemaShot['output'] | undefined,
+  set: GraphSet, get: GraphGet): void {
+  const scene = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+  const shot = scene?.shots.find((s) => s.id === shotId);
+  if (!scene || shot?.output?.status !== 'error' || shot.output.error !== line) return;
+  const rest = withoutShotError(shot.output);
+  const settled = before && before.status !== 'running';
+  const output: CinemaShot['output'] = !before ? undefined
+    : settled ? before
+      : rest.imageUrl ? { ...rest, status: 'done' } : { ...rest, status: 'idle' };
+  applySceneToNode(set, nodeId, { ...scene, shots: scene.shots.map((s) => {
+    if (s.id !== shotId) return s;
+    const back: CinemaShot = { ...s, output };
+    if (!output) delete back.output;
+    return back;
+  }) });
+}
+
 function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
   const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
   for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorRaw'] as const) delete rest[key];
@@ -1944,6 +2020,13 @@ async function trackGraphMutation<T>(operation: () => Promise<T>, options: { res
   }
 }
 
+/** The graph on the canvas now: the count every replacement bumps (a
+ * switch, an import, Load graph). #208 round 8e keys a palette extract on it
+ * (with the project), so one can't land on a replaced graph. */
+export function canvasGeneration(): number {
+  return canvasReplacementRevision;
+}
+
 function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) {
   return (...args: Args): Promise<Result> => trackGraphMutation(() => operation(...args));
 }
@@ -2032,6 +2115,25 @@ class RestoreTimeout extends Error {}
  * line names it (read at admission, while its node is on the canvas). */
 interface TrackedWrite { graph: number; seq: number; restore: boolean; saves: CutOffSave[]; counted: boolean }
 const liveWrites = new Set<TrackedWrite>();
+/** When each live write is answered (or fails): a restore waits for those
+ * made before it (sendRestore). */
+const writeAnswered = new WeakMap<TrackedWrite, { promise: Promise<void>; resolve: () => void }>();
+
+/** Review 6 of PR #205 (held-undo-order item 6): the person's writes on this
+ * canvas still unanswered now, answered or HOLD_LIMIT_MS gone. A write that
+ * waited behind a restore was only sent when the next restore went too:
+ * typing queued behind an Undo's restore, then undone, raced that Undo's
+ * own restore, and the answer that landed last won (Nebula kept the undone
+ * typing, or the typing came back out of date and read as a failed save). */
+function writesAnsweredNow(): Promise<void> {
+  // A restore never has an answer entry (writeAnswered), so none is waited on here.
+  const unanswered = [...liveWrites].filter((write) => write.graph === canvasReplacementRevision)
+    .map((write) => writeAnswered.get(write)?.promise).filter((promise): promise is Promise<void> => promise !== undefined);
+  if (unanswered.length === 0) return Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<void>((resolve) => { timer = setTimeout(resolve, HOLD_LIMIT_MS); });
+  return Promise.race([Promise.all(unanswered).then(() => {}), limit]).finally(() => clearTimeout(timer));
+}
 
 /** New writes wait here while a switch or an import drains (writeGate). */
 interface WriteGate { fromSeq: number; opened: Promise<void>; open: () => void }
@@ -2082,6 +2184,7 @@ function renameSave(node: Node<NodeData>, previous: string | undefined): CutOffS
 
 function settleTracked(write: TrackedWrite, ok: boolean): void {
   liveWrites.delete(write);
+  writeAnswered.get(write)?.resolve();
   if (write.graph !== canvasReplacementRevision) lastCutOffAt = Date.now();
   for (const drain of drains) {
     if (!drain.watching.has(write)) continue;
@@ -2294,10 +2397,31 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
         unanswered = unlanded.length === pending.length ? pending : [];
         return prepared();
       });
+  // Review 6 of PR #205 (P-B): another agent's edit to a node a restore
+  // holds was Nebula's before this clear, as every other sync's is: it is
+  // its own step now, in Nebula's order, so the clear's Undo brings it back
+  // and its own Undo takes it off. Only for a node on the canvas (one whose
+  // Delete is on its way carries its copy into that Delete's step).
+  if (agentClear) {
+    const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
+    const held = [...heldCopies.keys()].filter((id) => onCanvas.has(id) && heldCopies.get(id)?.links?.length);
+    if (held.length > 0) applyHeldCopies(held, { evenIfHeld: true });
+    // GM PR #205 r16 item 4 (review 7, X2): a node whose Delete is on its
+    // way was still Nebula's when the clear took it, with the edits other
+    // agents made to it meanwhile. The clear's Undo brings it back as Nebula
+    // had it (its newest synced copy), with its connections to nodes the
+    // clear also took.
+    const off = [...heldCopies.entries()]
+      .filter(([id, copy]) => !onCanvas.has(id) && copy.node !== null && deletesInFlight.has(id))
+      .map(([, copy]) => copy);
+    clearedHeldOff = off.length === 0 ? null
+      : { nodes: off.map((copy) => copy.node!), edges: off.flatMap((copy) => copy.edges) };
+  }
   // GM (review 21, G-a): Undo on an agent's clear line puts the canvas back
   // as Nebula last saved it, never with the typing the line says wasn't saved.
   clearedAsSaved = agentClear ? lastSavedView() : null;
   canvasReplacementRevision += 1;
+  forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
   // Round 23 (review 22, M-1): what still holds an id of this canvas (the
   // note dialog) lets it go. A reconnect's sync found another canvas; any
   // other path here is a clear (fix round 1 of PR #200: the chat's Apply says which).
@@ -2317,6 +2441,7 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   deferredParamPushes.clear();
   deletesInFlight.clear();
   heldCopies.clear();
+  forgetHoldsOfReplacedCanvas();
   renameDrafts.clear();
   labelsInFlight.clear();
   labelsSavedBefore.clear();
@@ -2369,6 +2494,9 @@ export function setReplacedCanvasKeeper(keeper: typeof keepReplacedCanvas): void
  * keys put back to their last saved values, a rename on its way to the name
  * before it). Read before a clear forgets them. */
 let clearedAsSaved: LastSavedView | null = null;
+/** The nodes an agent's clear took while their Delete was on its way, as
+ * Nebula had them (GM PR #205 r16 item 4): the clear's step brings them back. */
+let clearedHeldOff: { nodes: Node<NodeData>[]; edges: Edge[] } | null = null;
 
 /**
  * Round 23 (review 22, L-1): a write of the person's on its way (a param
@@ -2491,9 +2619,25 @@ function asLastSaved(state: GraphState): GraphState {
   const saved = clearedAsSaved;
   clearedAsSaved = null;
   landingsForNextStep = saved && saved.pending.length > 0 ? saved.pending : null;
+  const off = clearedHeldOff;
+  clearedHeldOff = null;
   const view = saved?.nodes;
-  if (!view || view.size === 0) return state;
-  return { ...state, nodes: state.nodes.map((node) => {
+  let shown = state;
+  if (off) {
+    const ids = new Set(state.nodes.map((node) => node.id));
+    const nodes = [...state.nodes, ...off.nodes.filter((node) => !ids.has(node.id))];
+    const ends = new Set(nodes.map((node) => node.id));
+    const edgeIds = new Set(state.edges.map((edge) => edge.id));
+    const edges = [...state.edges];
+    for (const edge of off.edges) {
+      if (edgeIds.has(edge.id) || !ends.has(edge.source) || !ends.has(edge.target)) continue;
+      edgeIds.add(edge.id);
+      edges.push(edge);
+    }
+    shown = { ...state, nodes, edges };
+  }
+  if (!view || view.size === 0) return shown;
+  return { ...shown, nodes: shown.nodes.map((node) => {
     const kept = view.get(node.id);
     return kept ? { ...node, data: { ...node.data, params: kept.params, label: kept.label ?? node.data.label } } : node;
   }) };
@@ -2639,6 +2783,11 @@ function graphMutationFetch(path: string, init?: RequestInit,
   const tracked: TrackedWrite = { graph: admission.graph, seq: admission.seq, restore: path === '/api/graph/restore',
     saves, counted: false };
   liveWrites.add(tracked);
+  if (!tracked.restore) {
+    let resolve = () => {};
+    const promise = new Promise<void>((done) => { resolve = done; });
+    writeAnswered.set(tracked, { promise, resolve });
+  }
   // Every drain under way waits for it (review 19, L4: two at once).
   if (writeGate && admission.seq < writeGate.fromSeq) for (const drain of drains) drain.watching.add(tracked);
   // A write sent in the turn it was admitted reads the same project as
@@ -3310,6 +3459,60 @@ interface DeletedSceneStop { refused: 'server' | 'bad-save' | 'too-big' | 'other
  * off (`said`: the save's 404 said it first). */
 interface DeletedSceneLine { nodeId: string; line: string; scene: string; said: boolean }
 const DELETED_SCENES_KEPT = 32;
+
+/**
+ * Tests only, never called from app code. Tests reuse node ids (n1) on one
+ * canvas, so nothing bumps canvasReplacementRevision between them, and what
+ * one test leaves keyed by a node id is the next test's n1's. A deleted
+ * scene's kept edits (deletedSceneEdits, GM r20 answer 3: filled by the
+ * person's delete, a sync that takes the card off, and a save answered 404)
+ * were taken back as a delete undone and saved (fix/ci-flakes-rename-fix16:
+ * a leaked "s2: mine on s2" save took graphStore.fix16's queued 400; PR #221
+ * review 1 MEDIUM-1: graphStore.fix5's 404 test PUT its typing from the next
+ * test's n1). So this clears every piece of per-node state that a canvas
+ * replacement (replaceCanvasByClear) clears or retires, the same way:
+ * - the kept deleted-scene edits (retired there by the revision);
+ * - the parked param saves, the param push timers and the typing deferred
+ *   behind a delete;
+ * - the scenes' own persistence (clearCinemaScenePersistence, which also
+ *   retires the scenes a reload suspended);
+ * - the node and wire writes still out, the deletes still on their way, the
+ *   copies held through a delete, rename drafts, and the labels in flight
+ *   with what they were saved over (PR #221 review 1 LOW-1: fix17's Redo
+ *   test left its restore's hold on n1 to the next test).
+ * - the person's saves still on their way (landingsOut): each names a node
+ *   and carries an `apply` that puts its edit on that node, which an agent
+ *   clear's Undo (lastSavedView) and the reconnect copy would otherwise take
+ *   for the next test's node of the same id (PR #221 review 2 NIT-1);
+ * - which run is this canvas's current run, the node marks of other tabs'
+ *   runs (forgetRunsOfReplacedGraph), and which positions the person placed
+ *   (forgetPersonPlaced), all keyed by node id.
+ * A late answer to a request the test left unanswered can still arrive in the
+ * next test; its write is no longer tracked, so it changes nothing there.
+ * Not cleared: the store's own state and undo history (each test's
+ * beforeEach sets them), and the canvas-wide records a replacement renews
+ * rather than clears by node (the write queue, the replacement report, the
+ * steps in flight).
+ * tests/sceneEditsResetRatchet.test.ts keeps every test file that uses
+ * Cinema scenes with this store calling it in afterEach.
+ */
+export function resetDeletedSceneEditsForTests(): void {
+  deletedSceneEdits.clear();
+  takeParkedParamSaves();
+  nodeWrites.clear();
+  wireWrites.clear();
+  clearAllParamPushTimers();
+  clearCinemaScenePersistence();
+  deferredParamPushes.clear();
+  deletesInFlight.clear();
+  heldCopies.clear();
+  renameDrafts.clear();
+  labelsInFlight.clear();
+  labelsSavedBefore.clear();
+  landingsOut.clear();
+  forgetRunsOfReplacedGraph();
+  forgetPersonPlaced();
+}
 
 /** Nebula's scene for a node, as the last sync (or save answer) had it. */
 function heldSceneOf(nodeId: string): CinemaSceneSpec | null {
@@ -4589,7 +4792,9 @@ type SceneAnswer =
   | { kind: 'rendering'; shotIds: string[]; line: string }
   | { kind: 'gone'; line: string }
   | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; rev: number | null; by: SceneWriter }
-  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string; reason?: OtherReason | null };
+  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string; reason?: OtherReason | null;
+    /** The person gate's refusal, with this answer's stamp (review 5 MEDIUM-1, round 7). */
+    error?: unknown };
 
 /** GM r32, r34: why an "other" refusal stopped a save, as data, so its line
  * reads the scene's name live: `text` follows GM's heading ("Nebula
@@ -4664,14 +4869,18 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   // GM r34 Q3: a whole line the backend wrote stays as it is; a reason it
   // wrote goes after GM's heading, one line per scene; only Nebula's own
   // reason (no detail came) merges.
-  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false } };
+  const error = refusalError({ code, sentAt: sentUnderPromote(response) });
+  // Review 5 MEDIUM-1 (round 7): refused only because this tab isn't connected as the person,
+  // the line says so in the because form (GM r6 2): the save goes again on the promote.
+  if (error) return { kind: 'kept', refused: 'other', line: notConnectedBecause(`save your changes to “${label}”`), reason: { text: null, nebula: false }, error };
+  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false }, error };
   const reason = copyForAnswer(status, body.detail, code);
   const headed = headedLine(heading, reason);
   // headedLine puts the heading first unless one side is empty or the reason
   // already says it whole; only a reason under the heading is kept as data.
   const underHeading = Boolean(heading && reason) && headed !== reason;
   return { kind: 'kept', refused: 'other', line: headed,
-    reason: underHeading ? { text: reason, nebula: reason !== detail } : { text: null, nebula: false } };
+    reason: underHeading ? { text: reason, nebula: reason !== detail } : { text: null, nebula: false }, error };
 }
 
 async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePersistence): Promise<void> {
@@ -4778,6 +4987,13 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
         entry.inFlight = null;
         settleSceneAnswer(nodeId, entry, answer.kind === 'ok' ? { kind: 'ok', rev: answerRev } : answer);
         if (entry.answering === sendSeq) endClashAnswer(nodeId, entry);
+        // Review 5 MEDIUM-1 (round 7): refused only because this tab isn't connected as the
+        // person, the save goes again on the promote, as [Try again] does (after this answer is
+        // settled, so a promote already past sends it now); landing clears its line.
+        // because-line: sceneRefusal
+        if (answer.kind === 'kept') retryOnPromote(answer.error, `cinema.scene-save:${nodeId}`, () => { // clears-on-promote: cinema.scene-save-retry
+          if (cinemaScenePersistence.get(nodeId) === entry && entry.refused === 'other') retrySceneSave(nodeId);
+        });
       }
     }
   }
@@ -5776,6 +5992,55 @@ const nodeWrites = new Map<string, WireWrite>();
  * plain line goes through here: notify, a refused wire, a held delete
  * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
  */
+/** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
+/** What markNodesErrored writes over: a refused start's clear puts these back. */
+const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
+  'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
+
+/** Each node as it last settled before a start queued it (review 3 NIT-2): what a refused start
+ * puts back, since by the refusal the node reads 'queued'. Review 4 LOW-4 (round 6): only a
+ * settled state (idle, complete, error, skipped) is kept; a node queued again while queued or
+ * running keeps the settled one it had, and one with none goes back idle, never to 'queued' or
+ * 'executing'. A refusal takes its nodes' entries, and the map stays bounded. */
+const beforeQueued = new Map<string, Partial<NodeData>>();
+const BEFORE_QUEUED_MAX = 500;
+const UNSETTLED: ReadonlySet<string> = new Set(['queued', 'executing']);
+function queuedFrom(node: Node<NodeData>): Node<NodeData> {
+  if (UNSETTLED.has(node.data.state)) {
+    if (!beforeQueued.has(node.id)) beforeQueued.set(node.id, IDLE_FIELDS);
+    return node;
+  }
+  beforeQueued.delete(node.id);
+  beforeQueued.set(node.id, settledFields(node));
+  if (beforeQueued.size > BEFORE_QUEUED_MAX) beforeQueued.delete(beforeQueued.keys().next().value!);
+  return node;
+}
+/** Idle, with none of a run's readings (its outputs stay: they aren't run fields). */
+const IDLE_FIELDS: Partial<NodeData> = { ...Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, undefined])), state: 'idle' };
+function settledFields(node: Node<NodeData>): Partial<NodeData> {
+  return Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]])) as Partial<NodeData>;
+}
+/** Review 5 NIT-5 (round 7): a start Nebula took leaves nothing for a refusal to put back, so a
+ * node it covered that a later start queues again reads its own state then, not this one's. */
+function startTaken(ids: Iterable<string>): void {
+  for (const id of ids) beforeQueued.delete(id);
+}
+/** Tests: how many nodes have a settled state kept for a refused start. */
+export function beforeQueuedSizeForTests(): number { return beforeQueued.size; }
+
+/** The nodes a refused start marked, back as they were before it (review 3 NIT-2): only those
+ * still showing its line, so a node that ran again and failed otherwise keeps its new line. */
+function withoutRefusedStart(nodes: Node<NodeData>[], before: Map<string, Partial<NodeData>>, line: string): Node<NodeData>[] {
+  return nodes.map((node) => {
+    const was = before.get(node.id);
+    return was && node.data.state === 'error' && node.data.error === line ? { ...node, data: { ...node.data, ...was } } : node;
+  });
+}
+
+function clearsOnPromoteIf(error: unknown, clear: () => void): void {
+  clearRefusedOnPromote(error, clear); // clears-on-promote: graph.refusal
+}
+
 function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info',
   mono?: string): Partial<GraphState> {
   // Round 19 (GM): a write made for a canvas replaced since says nothing of
@@ -5818,30 +6083,65 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
     done(response.ok);
     if (response.ok) return;
     const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
-    const text = headedLine(heading, await backendRejectionReason(response, heading));
+    const { reason, error } = await backendRejectionReason(response, heading);
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
-      // Beside an agent's Undo, never over it (review 8, L-d: through notify's rule).
-      ...noticeLine(state, text),
     }));
+    // Beside an agent's Undo, never over it (review 8, L-d), through notify, which registers a
+    // refusal's line on the promote by the answer's own stamp (review 5 MEDIUM-1, round 7).
+    useGraphStore.getState().notify(headedLine(heading, reason), 'error', { error });
   }, (err) => {
     done(false);
     console.warn('[nebula] Wire sync failed:', err);
   });
 }
 
-/** Hold a wire write; call the result with whether the backend took it. */
+/** Hold a wire write; call the result with whether the backend took it.
+ * `synced`: it took it, and the sync its answer names has been applied
+ * (whenSynced): that sync, or a later one, is Nebula's word on the wire, so
+ * the hold ends and the canvas takes the newest sync's wire (PR #205
+ * review 8, held-undo MEDIUM-2). Without it (an answer that names no sync)
+ * the hold waits for a sync that agrees, or one more (heldWrites). */
 function holdWire(edge: Edge | { source: string; sourceHandle: string; target: string; targetHandle: string },
-  want: boolean): (took: boolean) => void {
+  want: boolean): (took: boolean, synced?: boolean) => void {
   const key = edgeKey(edge);
   const write = wireWrites.get(key) ?? { want, sending: 0 };
   Object.assign(write, { want, sending: write.sending + 1, agreed: false, grace: false });
   wireWrites.set(key, write);
-  return (took) => {
+  let done = false;
+  return (took, synced = false) => {
+    // Once: a replaced canvas ends it first (whenSynced's drop), and the
+    // answer's run still comes; a second end would take another restore's
+    // share of the same connection.
+    if (done) return;
+    done = true;
     write.sending -= 1;
-    if (wireWrites.get(key) === write && !write.sending && (!took || write.agreed)) wireWrites.delete(key);
+    if (wireWrites.get(key) !== write || write.sending) return;
+    if (!took || write.agreed) wireWrites.delete(key);
+    else if (synced) {
+      wireWrites.delete(key);
+      takeSyncedWire(key);
+    }
   };
+}
+
+/** The connections of the newest sync applied (applyGraphSyncNow), by
+ * connection: what Nebula has, for a held wire whose hold ends after it. */
+let newestSyncEdges: ReadonlyMap<string, Edge> = new Map();
+/** A wire held through the sync that ended its hold (a restore's, between
+ * backend nodes): the canvas takes that sync's way, or a later one's, when
+ * both ends are on the canvas. */
+function takeSyncedWire(key: string): void {
+  const edge = newestSyncEdges.get(key);
+  useGraphStore.setState((state) => {
+    const shown = state.edges.some((each) => edgeKey(each) === key);
+    if (edge && !shown) {
+      const ends = new Set(state.nodes.map((node) => node.id));
+      return ends.has(edge.source) && ends.has(edge.target) ? { edges: [...state.edges, { ...edge, selected: false }] } : {};
+    }
+    return !edge && shown ? { edges: state.edges.filter((each) => edgeKey(each) !== key) } : {};
+  });
 }
 
 /** What this sync must leave as this tab has it: connection -> want. */
@@ -5849,13 +6149,25 @@ function heldWires(cliEdges: Edge[]): Map<string, boolean> {
   return heldWrites(wireWrites, new Set(cliEdges.map(edgeKey)));
 }
 
-/** Hold a node an undo or redo puts back (`want`) or takes off, until its
- * restore answers. Nebula sends the restore's own echo before that answer,
- * and the stale echoes before it, so unlike a wire the hold ends there. */
-function holdNode(id: string, want: boolean): (took: boolean) => boolean {
+/** Hold a node an undo or redo puts back (`want`) or takes off, or the
+ * person's Delete takes off, until its answer is handled: a refusal at once,
+ * an OK once the sync it names has been applied (whenSynced). Every sync
+ * before then leaves the node as the canvas has it and is kept as a copy
+ * (noteHeldCopies), so the newest copy when the hold ends is that sync or a
+ * later one, never one older than the edit (PR #205 review 8, held undo).
+ * Each write keeps its own count: two restores of one node each end their
+ * own share, and the node stays held until the last (MEDIUM-1). */
+function holdNode(id: string, want: boolean, nebulaHas = !want): (took: boolean) => boolean {
+  const fresh = !nodeWrites.has(id);
   const write = nodeWrites.get(id) ?? { want, sending: 0 };
   Object.assign(write, { want, sending: write.sending + 1 });
   nodeWrites.set(id, write);
+  // Whether Nebula had the node when the hold began, for its first copy's
+  // link (a removal, or a sync that never had it: noteHeldCopies).
+  if (fresh && !heldCopies.has(id)) {
+    heldStartedWith.set(id, nebulaHas);
+    heldStartedEdges.set(id, useGraphStore.getState().edges.filter((edge) => edge.source === id || edge.target === id));
+  }
   let done = false;
   // True when this ended the hold (no other write holds the node).
   return () => {
@@ -5868,6 +6180,96 @@ function holdNode(id: string, want: boolean): (took: boolean) => boolean {
   };
 }
 
+/** Whether Nebula had each held node when its hold began (holdNode). */
+const heldStartedWith = new Map<string, boolean>();
+/** Its connections then, as the canvas had them (the restore's own, for a
+ * node it brings back): its first copy's link's `edgesBefore`. */
+const heldStartedEdges = new Map<string, Edge[]>();
+
+/**
+ * PR #205 review 8 (held undo): no sync older than an edit Nebula answered
+ * OK may undo that edit. Nebula numbers every graphSync (`syncSeq`, in the
+ * order each read the graph; main.py sends them to each socket in that
+ * order), and its answer to a restore or a node delete carries the number of
+ * the sync that sent it. Over the socket, apart from the answer, a sync read
+ * before Nebula applied the edit (an agent's edit made while it waited) can
+ * still arrive after the answer: it lacks a node the restore brought back,
+ * has one it or a Delete took off, or lacks a restored connection. So the
+ * answer is handled (its holds end, its Delete's copies are carried) only
+ * once the sync it names, or a later one, has been applied: as if the sync
+ * had come first. Every sync before it counts, in Nebula's order, for all
+ * but what the edit holds.
+ *
+ * There is no cap: that sync always comes, on this socket or as a
+ * reconnect's first sync (numbered too, and read after Nebula applied the
+ * edit unless the edit's own sync reaches the new socket after it), or from a
+ * restarted backend (numbered from a later start, and a new process besides).
+ * Until it does, the canvas keeps the edit as Nebula answered it.
+ */
+let newestSyncSeq: number | null = null;
+/** `drop` ends the answer's holds when its canvas is replaced first. */
+const syncWaits: Array<{ seq: number; run: () => void; drop: () => void }> = [];
+
+/** The sync an OK answer names (main.py's `syncSeq`), or null for one that
+ * names none (a delete of a node already gone, or an older backend). */
+function answeredSyncSeq(answer: unknown): number | null {
+  const seq = (answer as { syncSeq?: unknown } | null)?.syncSeq;
+  return typeof seq === 'number' ? seq : null;
+}
+
+/** `run` once the sync numbered `seq` (or a later one) has been applied:
+ * now when it has, at once when the answer names none. `drop` ends what it
+ * holds if another canvas replaces this one first (its nodes aren't the new
+ * canvas's, though the ids repeat); `run` still comes, and finds it gone. */
+function whenSynced(seq: number | null, run: () => void, drop: () => void): void {
+  if (seq === null || (newestSyncSeq !== null && newestSyncSeq >= seq)) {
+    run();
+    return;
+  }
+  syncWaits.push({ seq, run, drop });
+}
+
+/** Set by a restart (a new boot id): the next sync is another process's. */
+let syncProcessChanged = false;
+subscribeBackendRestart(() => { syncProcessChanged = true; });
+
+/** A graphSync was applied (applyGraphSync): the answers waiting for it, or
+ * for an earlier one, are handled now, in the order they came. A sync with
+ * no number (an export read into an empty tab) is Nebula as it is now; so is
+ * a restarted backend's, whatever its number. */
+function noteAppliedSync(event: unknown): void {
+  const numbered = answeredSyncSeq(event);
+  const restarted = syncProcessChanged;
+  syncProcessChanged = false;
+  // The socket brings them in order (main.py), and a restart starts over.
+  if (numbered !== null) newestSyncSeq = numbered;
+  const due = syncWaits.filter((wait) => numbered === null || restarted || numbered >= wait.seq);
+  if (due.length === 0) return;
+  for (const wait of due) syncWaits.splice(syncWaits.indexOf(wait), 1);
+  for (const wait of due) wait.run();
+}
+
+/** A replaced canvas: no hold's start presence, or refused rename, is its,
+ * and an answer still waiting for its sync holds nothing now. It is handled
+ * when that sync (or the replacement's own, which is later) comes, and finds
+ * its canvas gone, as a late answer does. */
+function forgetHoldsOfReplacedCanvas(): void {
+  for (const wait of syncWaits) wait.drop();
+  heldStartedWith.clear();
+  heldStartedEdges.clear();
+  refusedRenames.clear();
+}
+// Tests: one test's answer still waiting for its sync (a harness that never
+// sends it) never holds a node of the next one (ids repeat), and its
+// numbers never mark the next test's syncs as seen. tests/setup.ts runs these
+// after every test; the app never sets the hook.
+(globalThis as { __nebulaTestResets?: Set<() => void> }).__nebulaTestResets?.add(() => {
+  forgetHoldsOfReplacedCanvas();
+  syncWaits.length = 0;
+  newestSyncSeq = null;
+  syncProcessChanged = false;
+});
+
 /**
  * Review 17, M-2: a held node isn't frozen for good. Each sync that arrives
  * while a node is held (an undo's restore on its way, a delete on its way)
@@ -5879,36 +6281,300 @@ function holdNode(id: string, want: boolean): (took: boolean) => boolean {
  * next PUT carries them instead of writing over them (W3). The agent's
  * change gets its own undo step then.
  */
-interface HeldCopy { node: Node<NodeData> | null; edges: Edge[]; foreign?: EditOrigin; moved: boolean }
+interface HeldCopy {
+  node: Node<NodeData> | null; edges: Edge[]; moved: boolean;
+  /** The person's rename still on its way when the copy was synced (review
+   * 2 of PR #205, undo MEDIUM-1): a sync can't have it yet, so the copy
+   * carried into a Delete's step keeps the person's name. */
+  renaming?: string;
+  /** The nodes that sync had: a connection of this node's it lacks was taken
+   * off only when both its ends were there (else the other end's own Delete
+   * took it off with that node, which is no edit of this one's). */
+  there?: ReadonlySet<string>;
+  /** Each edit someone else made to it while it was held, in Nebula's order
+   * (GM PR #205 r6 item 1): one per edit, never merged across edits (the
+   * app makes one step per edit everywhere else too). Syncs of one edit
+   * fold into its link. A sync with no origin (a reconnect's) is a link of
+   * its own with none (GM r7 item 1): as outside a hold, it makes no step
+   * and its changes are someone's, never folded into an agent's step. */
+  links?: HeldLink[];
+}
+interface HeldLink {
+  origin: EditOrigin | undefined; node: Node<NodeData> | null; edges: Edge[]; moved: boolean;
+  there: ReadonlySet<string>; seq: number;
+  /** The node's connections just before this edit's first sync (the copy
+   * before it, else as the hold began): what Nebula had before the edit
+   * (placeEarlierLink; review 8 of PR #205, held-undo LOW-2). */
+  edgesBefore: Edge[];
+  /** A run's own param write-back (no origin): as foreignEditStep's `runParams`. */
+  runParams?: boolean;
+  /** This edit took the node off (Nebula had it just before its sync):
+   * the node and its connections come off in this edit's step (review 7 of
+   * PR #205, held-undo MEDIUM-2). */
+  removes?: boolean;
+  /** The person's rename on its way at this sync (HeldCopy.renaming): the
+   * sync's label is older than it, not anyone's change. */
+  renaming?: string;
+  /** The step its own sync made for what wasn't held (an agent's connection
+   * to a node a restore holds; review 4 of PR #205, MEDIUM-1): the node's
+   * change joins that step when the hold ends, so the edit stays one step
+   * in Nebula's order. */
+  step?: UndoEntry;
+}
 const heldCopies = new Map<string, HeldCopy>();
+let heldLinkSeq = 0;
+/** The links the sync being handled made or extended (bindHeldLinks). */
+let heldLinksThisSync: HeldLink[] = [];
 
+/** Where each step an edit someone else made sits in Nebula's order
+ * (heldLinkSeq): a sync's own step takes its held links' place, else the
+ * next; a held change placed when its hold ends takes its link's (review 5
+ * of PR #205, LOW-3). Only these steps, and a step of the person's whose
+ * Undo leaves the node alone (a Paste), can sit above a held change placed
+ * under them: a step of the person's that holds the node can't (MEDIUM-1). */
+const editStepSeq = new WeakMap<UndoEntry, number>();
+
+/** A step the sync just made (on top now, not before) is its links' step. */
+function bindHeldLinks(topBefore: UndoEntry | undefined): void {
+  const links = heldLinksThisSync;
+  heldLinksThisSync = [];
+  const top = useGraphStore.getState().undoStack.at(-1);
+  if (!top || top === topBefore || !isForeignEdit(top)) return;
+  editStepSeq.set(top, links.length > 0 ? Math.min(...links.map((link) => link.seq)) : ++heldLinkSeq);
+  for (const link of links) link.step ??= top;
+}
+
+/** Sets `made` (a foreignEditStep for `link`'s edit to held node `nodeId`)
+ * with the canvas, in Nebula's order: into the step the link's own sync
+ * made when it is still on the stack, else under the lowest step a later
+ * edit made (any node's), else on top. Only where every step above it is a
+ * later edit's, or one whose Undo leaves this node alone (review 5 of PR
+ * #205, MEDIUM-1, GM r10 item 1): a step the person took during the hold
+ * holds this node as it was without this change, so its Undo would take
+ * this change off too, and this change's Undo would bring the person's
+ * undone change back. Then it goes on top, its own step, and every Undo
+ * takes back only what it names. */
+function setLinkStep(link: HeldLink, nodeId: string, state: GraphState, nodes: Node<NodeData>[], edges: Edge[],
+  made: Partial<GraphState>, set: GraphSet): UndoEntry | undefined {
+  const entry = made.undoStack?.at(-1);
+  const step = link.step;
+  if (!entry || entry === state.undoStack.at(-1) || !isForeignEdit(entry)) {
+    set({ nodes, edges, ...made });
+    return undefined;
+  }
+  const stack = state.undoStack;
+  const later = (each: UndoEntry) => (editStepSeq.get(each) ?? -Infinity) > link.seq;
+  // The person's typing is a snapshot of the whole canvas, so it holds
+  // every node; a slice step holds only what it names.
+  const leavesNode = (each: UndoEntry) => isSliceStep(each) && !(nodeId in each.before.nodes) && !(nodeId in each.after.nodes)
+    && !(isOwnAdd(each) && each.params?.some((change) => change.nodeId === nodeId));
+  const clearFrom = (from: number) => stack.slice(from).every((each) => later(each) || leavesNode(each));
+  const own = step ? stack.indexOf(step) : -1;
+  if (step && isForeignEdit(step) && own >= 0 && clearFrom(own + 1)) {
+    for (const [id, node] of Object.entries(entry.before.nodes)) if (!(id in step.before.nodes)) step.before.nodes[id] = node;
+    for (const [id, node] of Object.entries(entry.after.nodes)) step.after.nodes[id] = node;
+    for (const [key, edge] of Object.entries(entry.before.edges)) if (!(key in step.before.edges)) step.before.edges[key] = edge;
+    for (const [key, edge] of Object.entries(entry.after.edges)) step.after.edges[key] = edge;
+    // A landed change of someone else's drops the person's Redo, as every
+    // other landing does (review 6 of PR #205, held-undo MEDIUM-2): a Redo
+    // taken while the node was held lacks this change and would take it off.
+    set({ nodes, edges, redoStack: [] });
+    return step;
+  }
+  editStepSeq.set(entry, link.seq);
+  const at = stack.findIndex((each, index) => later(each) && clearFrom(index));
+  if (at < 0) {
+    set({ nodes, edges, ...made });
+    return entry;
+  }
+  set({ nodes, edges, ...made, undoStack: [...stack.slice(0, at), entry, ...stack.slice(at)] });
+  return entry;
+}
+
+/** The label a held node's synced copy takes (review 5 of PR #205, LOW-1;
+ * one rule for the newest copy, the earlier links and a Delete's chain):
+ * the person's rename still on its way, else the one on its way at that
+ * copy's sync (`renaming`). A sync can't have it yet, so its older label
+ * is nobody's change. */
+function heldLabel(nodeId: string, node: Node<NodeData>, renaming: string | undefined): Node<NodeData> {
+  const name = labelsInFlight.get(nodeId) ?? renaming;
+  return name !== undefined && node.data.label !== name ? { ...node, data: { ...node.data, label: name } } : node;
+}
+
+/** A rename Nebula refused was never anyone's name: the held copy of its
+ * node and that copy's links stop carrying it as on its way. */
+/** Each node's refused rename (the name, and the one Nebula has), until it
+ * is renamed again: a node a refused Delete puts back as it was when Delete
+ * was pressed takes Nebula's name (putBackFailedDeletes). */
+const refusedRenames = new Map<string, { refused: string; saved: string }>();
+/** Review 8 of PR #205 (held-undo LOW-4): the newest name a sync had for a
+ * held node since the person's latest rename of it was sent (an agent's
+ * rename meanwhile): what Nebula has if that rename is refused, after the
+ * hold too. A sync of a node not held shows its name on the card itself. */
+const heldSyncedLabels = new Map<string, string>();
+function withoutRefusedName(node: Node<NodeData>): Node<NodeData> {
+  const refused = refusedRenames.get(node.id);
+  return refused && node.data.label === refused.refused ? { ...node, data: { ...node.data, label: refused.saved } } : node;
+}
+
+function forgetRefusedRename(nodeId: string, refusedName: string, savedName?: string): void {
+  const copy = heldCopies.get(nodeId);
+  // In place: a sync's step is bound to these very links (bindHeldLinks).
+  if (copy) for (const each of [copy, ...(copy.links ?? [])]) if (each.renaming === refusedName) delete each.renaming;
+  // Review 7 of PR #205 (held-undo NIT-2, the coordinator's item 7): it
+  // never reached Nebula, so no Undo or Redo may write it back. Every step
+  // that captured it as the node's name (a Delete's snapshot, an agent's
+  // before or after slice, an accepted add) takes the name Nebula has, in
+  // whichever order the answers came.
+  if (savedName === undefined) return;
+  refusedRenames.set(nodeId, { refused: refusedName, saved: savedName });
+  const unnamed = (node: Node<NodeData> | null | undefined) => (node && node.id === nodeId && node.data.label === refusedName
+    ? { ...node, data: { ...node.data, label: savedName } } : node);
+  const { undoStack, redoStack } = useGraphStore.getState();
+  for (const step of [...undoStack, ...redoStack]) {
+    if (isSliceStep(step)) {
+      for (const slice of [step.before, step.after]) {
+        if (slice.nodes[nodeId]) slice.nodes[nodeId] = unnamed(slice.nodes[nodeId])!;
+      }
+      if (isOwnAdd(step) && step.accepted?.[nodeId]) step.accepted[nodeId] = unnamed(step.accepted[nodeId])!;
+    } else {
+      // A new array: the old one may be a canvas the store held.
+      if (step.nodes.some((node) => node.id === nodeId && node.data.label === refusedName)) {
+        step.nodes = step.nodes.map((node) => unnamed(node)!);
+      }
+    }
+  }
+}
+
+/** The same edit (its id), so its syncs fold into one link. Syncs with no
+ * origin are nobody's to tell apart: back-to-back ones fold too (they make
+ * no step either way), but never a run's write-back with another's
+ * (nextLinks). */
+function sameEdit(a: EditOrigin | undefined, b: EditOrigin | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return a.id !== undefined && a.id === b.id;
+}
+
+/** The next links of a held copy after a sync from `origin`: someone
+ * else's, or one with no origin (GM r7 item 1). The person's own echoes
+ * make none. */
+function nextLinks(prior: readonly HeldLink[], origin: EditOrigin | undefined, own: boolean, node: Node<NodeData> | null,
+  edges: Edge[], moved: boolean, there: ReadonlySet<string>, runParams: boolean, renaming: string | undefined,
+  removes: boolean, edgesBefore: Edge[]): HeldLink[] {
+  if (own) return [...prior];
+  const last = prior.at(-1);
+  const named = renaming !== undefined ? { renaming } : {};
+  // A run's write-back is its output, rebased under the person's steps; a
+  // sourceless sync next to it is someone's: each keeps its own link
+  // (review 5 of PR #205, LOW-2), so a fold keeps what both were. Folded
+  // into the same edit's link, its removal stays its removal.
+  if (last && sameEdit(last.origin, origin) && Boolean(last.runParams) === runParams) {
+    return [...prior.slice(0, -1), { origin, node, edges, moved: moved || last.moved, there, seq: last.seq, edgesBefore: last.edgesBefore,
+      ...(runParams ? { runParams } : {}), ...named, ...(last.step ? { step: last.step } : {}),
+      ...(node === null && (removes || last.removes || last.node !== null) ? { removes: true } : {}) }];
+  }
+  return [...prior, { origin, node, edges, moved, there, seq: ++heldLinkSeq, edgesBefore, ...(runParams ? { runParams } : {}), ...named,
+    ...(removes ? { removes: true } : {}) }];
+}
 function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], edges: Edge[],
-  origin: EditOrigin | undefined, moved: readonly string[]): void {
+  origin: EditOrigin | undefined, moved: readonly string[], runParams = false): void {
+  heldLinksThisSync = [];
   if (held.size === 0) return;
   const byId = new Map(incoming.map((node) => [node.id, node]));
-  const someoneElse = origin && !isOwnEcho(origin, TAB_ID) ? origin : undefined;
+  const present: ReadonlySet<string> = new Set(byId.keys());
+  const own = Boolean(origin && isOwnEcho(origin, TAB_ID));
   for (const id of held.keys()) {
     const node = byId.get(id) ?? null;
     const before = heldCopies.get(id);
+    // Nebula had the node just before this sync (the copy before it, else
+    // as the hold began): a sync without it is that edit's removal (review
+    // 7 of PR #205, held-undo MEDIUM-2).
+    const had = before ? before.node !== null : (heldStartedWith.get(id) ?? true);
+    // GM PR #205 r2 item 2: Nebula's sync without a node whose Delete is on
+    // its way says the Delete is done there; the copy synced before it (an
+    // agent's edit) is what the Delete's step brings back, so it goes into
+    // the step now, before this sync's "gone" replaces it.
+    const deleting = node ? undefined : deletesInFlight.get(id);
+    if (deleting && before?.node) carrySyncedCopy(deleting, id, before);
+    // Only while the person's rename is on its way (review 3 of PR #205,
+    // MEDIUM-1): a sync after its answer was sent after its echo, so its
+    // label (an agent's rename since, say) is newer and stays.
+    const renaming = labelsInFlight.get(id);
+    if (renaming !== undefined && node && typeof node.data.label === 'string') heldSyncedLabels.set(id, node.data.label);
+    const nodeEdges = node ? edges.filter((edge) => edge.source === id || edge.target === id) : [];
+    const links = nextLinks(before?.links ?? [], origin, own, node, nodeEdges, moved.includes(id), present, runParams, renaming,
+      node === null && had, before ? before.edges : (heldStartedEdges.get(id) ?? []));
+    if (!own && links.length > 0) heldLinksThisSync.push(links.at(-1)!);
     heldCopies.set(id, {
+      there: present,
       node,
-      edges: node ? edges.filter((edge) => edge.source === id || edge.target === id) : [],
-      foreign: someoneElse ?? before?.foreign,
+      edges: nodeEdges,
       moved: moved.includes(id) || Boolean(before?.moved),
+      ...(renaming !== undefined ? { renaming } : {}),
+      ...(links.length > 0 ? { links } : {}),
     });
   }
 }
 
 /** The canvas takes the newest copy synced for each node whose hold ended
- * (`ids`), unless another write still holds it. */
-function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {}): void {
+ * (`ids`), unless another write still holds it. Every ended node's edits
+ * are placed in one pass, in Nebula's order across all of them (review 6
+ * of PR #205, held-undo MEDIUM-1): node by node, an earlier edit of the
+ * second node would land after the first node's newest copy, and take off
+ * a connection between them that a later edit made. One edit's changes to
+ * several of them are one step. */
+function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean; evenIfHeld?: boolean } = {}): void {
   const set = useGraphStore.setState as GraphSet;
   const get = useGraphStore.getState;
+  const wires = Boolean(options.wires);
+  interface Placement { id: string; seq: number; order: number; link?: HeldLink; copy?: HeldCopy }
+  const placements: Placement[] = [];
   for (const id of ids) {
-    if (nodeWrites.has(id)) continue;
+    if (nodeWrites.has(id) && !options.evenIfHeld) continue;
     const copy = heldCopies.get(id);
     heldCopies.delete(id);
     if (!copy) continue;
+    // GM PR #205 r6 item 1: each earlier edit someone else made while it was
+    // held is its own step, in Nebula's order; the newest is the step below.
+    // Each takes its connections by the same rule as the newest (review 4,
+    // MEDIUM-1): its own only when the hold kept them off (`wires`).
+    // Before a newest copy without the node too (an agent's clear, review
+    // 6 of PR #205 P-B): the clear's Undo brings back the edit before it.
+    // An edit that took the node off (review 7 of PR #205, MEDIUM-2) is
+    // placed too, as that edit's removal; a later edit without it changes
+    // nothing of the node's.
+    for (const link of (copy.links ?? []).slice(0, -1).filter((each) => each.node || each.removes)) {
+      placements.push({ id, seq: link.seq, order: placements.length, link });
+    }
+    // A copy with no edit of anyone else's (the person's own echoes) goes last.
+    placements.push({ id, seq: copy.links?.at(-1)?.seq ?? Number.POSITIVE_INFINITY, order: placements.length, copy });
+  }
+  placements.sort((a, b) => (a.seq === b.seq ? a.order - b.order : a.seq - b.seq));
+  // The step each edit made here: its next node's change joins it.
+  const stepOfEdit = new Map<string, UndoEntry>();
+  const joined = (link: HeldLink) => {
+    const id = link.origin?.id;
+    if (!link.step && id !== undefined && stepOfEdit.has(id)) link.step = stepOfEdit.get(id);
+  };
+  const note = (link: HeldLink, step: UndoEntry | undefined) => {
+    const id = link.origin?.id;
+    if (!step || id === undefined) return;
+    stepOfEdit.set(id, step);
+    // The same edit's links on nodes still held (another hold, ending in
+    // another call: a restore's and a refused Delete's) join this step when
+    // theirs ends: one edit, one step (review 7 of PR #205, LOW-1).
+    for (const other of heldCopies.values()) {
+      for (const each of other.links ?? []) if (each.origin?.id === id) each.step ??= step;
+    }
+  };
+  for (const placement of placements) {
+    if (placement.link) {
+      joined(placement.link);
+      note(placement.link, placeEarlierLink(placement.id, placement.link, set, get, wires));
+      continue;
+    }
+    const { id } = placement;
+    const copy = placement.copy!;
     const state = get();
     const existing = state.nodes.find((node) => node.id === id);
     let nodes: Node<NodeData>[];
@@ -5918,31 +6584,109 @@ function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {
       nodes = state.nodes.filter((node) => node.id !== id);
       edges = state.edges.filter((edge) => edge.source !== id && edge.target !== id);
     } else {
-      const merged = mergeSyncedNode(copy.node, existing, copy.moved ? [id] : [], useUIStore.getState().settingsCache);
+      const merged = heldLabel(id, mergeSyncedNode(copy.node, existing, copy.moved ? [id] : [], useUIStore.getState().settingsCache), copy.renaming);
       nodes = existing ? state.nodes.map((node) => (node.id === id ? merged : node)) : [...state.nodes, merged];
       const present = new Set(nodes.map((node) => node.id));
-      if (existing && options.wires) {
+      if (existing && wires) {
         // Review 18, M-B: a node a failed delete put back takes the wires
         // Nebula has for it (the newest sync while it was off), not the
         // ones it had when Delete was pressed. A wire this tab is still
-        // writing keeps its way (heldWires).
-        const synced = new Set(copy.edges.map(edgeKey));
-        const kept = state.edges.filter((edge) => !(edge.source === id || edge.target === id)
-          || !CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)
-          || synced.has(edgeKey(edge)) || wireWrites.get(edgeKey(edge))?.want === true);
-        const wired = new Set(kept.map(edgeKey));
-        edges = [...kept, ...copy.edges.filter((edge) => present.has(edge.source) && present.has(edge.target)
-          && !wired.has(edgeKey(edge)) && wireWrites.get(edgeKey(edge))?.want !== false)];
+        // writing keeps its way. One rule with the earlier links'
+        // (carriedEdges; review 4 of PR #205).
+        edges = carriedEdges(state.edges, id, copy.edges, copy.there)
+          .filter((edge) => present.has(edge.source) && present.has(edge.target));
       } else {
         const wired = new Set(state.edges.map(edgeKey));
         edges = existing ? state.edges : [...state.edges, ...copy.edges.filter((edge) => present.has(edge.source)
           && present.has(edge.target) && !wired.has(edgeKey(edge)))];
       }
     }
-    // An agent's change to it is its own step (outputs and run state alone are none).
-    set({ nodes, edges, ...(copy.foreign ? foreignEditStep(state, nodes, edges, copy.foreign, false, copy.moved ? [id] : []) : {}) });
+    // An agent's change to it is its own step (outputs and run state alone
+    // are none); one with no origin is someone's, and makes none (GM r7
+    // item 1), as foreignEditStep does outside a hold.
+    const last = copy.links?.at(-1);
+    if (last) {
+      joined(last);
+      note(last, setLinkStep(last, id, state, nodes, edges, foreignEditStep(state, nodes, edges, last.origin, false, copy.moved ? [id] : [], Boolean(last.runParams)), set));
+    } else set({ nodes, edges });
     noteSyncArrivals(state.nodes, nodes, set, get);
   }
+}
+
+/** Review 7 of PR #205 (held-undo LOW-2): a refused Delete's node comes back
+ * (`ids`). An edit synced while it was off the canvas that deleted a node it
+ * was connected to took that connection off too, in Nebula, but its step was
+ * made without it (the held node was off the canvas then): its Undo would
+ * bring the other node back without it, for good. The step, one its sync's
+ * links name, gets the connection as Nebula had it just before that sync.
+ * Review 8 of PR #205 (held-undo LOW-1): only one Nebula still had then
+ * (`edgesBefore`: the copy before it, else the canvas when Delete was
+ * pressed): one an earlier edit took off isn't this edit's to put back. */
+function giveBackLostConnections(deleteStep: UndoEntry, ids: readonly string[]): void {
+  if (isSliceStep(deleteStep)) return;
+  for (const id of ids) {
+    const links = heldCopies.get(id)?.links ?? [];
+    for (const link of links) {
+      const step = link.step;
+      if (!step || !isForeignEdit(step)) continue;
+      for (const edge of link.edgesBefore) {
+        if (edge.source !== id && edge.target !== id) continue;
+        const other = edge.source === id ? edge.target : edge.source;
+        if (step.before.nodes[other] && step.after.nodes[other] === null) {
+          step.before.edges[edgeKey(edge)] = { ...edge, selected: false };
+        }
+      }
+    }
+  }
+}
+
+/** An edit before the newest, its own step on the canvas, for a held node
+ * that stayed on it (applyHeldCopies): the node as that edit left it, with
+ * its connections when they are this node's (as the newest takes them). */
+function placeEarlierLink(id: string, link: HeldLink, set: GraphSet, get: GraphGet, wires: boolean): UndoEntry | undefined {
+  const state = get();
+  const existing = state.nodes.find((node) => node.id === id);
+  if (!existing) return undefined;
+  if (!link.node) {
+    // The edit that took it off: the node and its connections come off in
+    // its step, at its place in Nebula's order (review 7 of PR #205, MEDIUM-2).
+    const nodes = state.nodes.filter((node) => node.id !== id);
+    const edges = state.edges.filter((edge) => edge.source !== id && edge.target !== id);
+    return setLinkStep(link, id, state, nodes, edges, foreignEditStep(state, nodes, edges, link.origin, false, [], false), set);
+  }
+  // A rename of the person's on its way at this sync stays theirs.
+  const merged = heldLabel(id, mergeSyncedNode(link.node!, existing, link.moved ? [id] : [], useUIStore.getState().settingsCache), link.renaming);
+  const nodes = state.nodes.map((node) => (node.id === id ? merged : node));
+  const present = new Set(nodes.map((node) => node.id));
+  // As the newest copy (applyHeldCopies): on a restore's hold the syncs
+  // already put the node's connections on the canvas.
+  const carried = wires ? carriedEdges(state.edges, id, link.edges, link.there) : state.edges;
+  const edges = carried.filter((edge) => present.has(edge.source) && present.has(edge.target));
+  // Review 8 of PR #205 (held-undo LOW-2): a connection this edit made to a
+  // node a later edit took off (Nebula had it at this sync, not before) is
+  // still this edit's: its step carries it, though the canvas can't show it
+  // now. That later edit's step takes it off with its node
+  // (giveBackLostConnections). One Nebula had before is no change of this one's.
+  const synced = new Set(link.edges.map(edgeKey));
+  const had = new Set(link.edgesBefore.map(edgeKey));
+  const gone = carried.filter((edge) => synced.has(edgeKey(edge)) && !had.has(edgeKey(edge))
+    && !(present.has(edge.source) && present.has(edge.target)));
+  return setLinkStep(link, id, state, nodes, edges, foreignEditStep(state, nodes, [...edges, ...gone], link.origin, false, link.moved ? [id] : [], Boolean(link.runParams)), set);
+}
+
+/** A node's connections as a sync from someone else left them, over `edges`
+ * (GM r3 item 4): a local node's, one this tab is still writing, and one
+ * whose other end wasn't in that sync keep this tab's way. */
+function carriedEdges(edges: readonly Edge[], nodeId: string, synced: readonly Edge[], there: ReadonlySet<string> | undefined): Edge[] {
+  const touches = (edge: Edge) => edge.source === nodeId || edge.target === nodeId;
+  const keys = new Set(synced.map(edgeKey));
+  const kept = edges.filter((edge) => !touches(edge)
+    || !CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)
+    || keys.has(edgeKey(edge)) || wireWrites.get(edgeKey(edge))?.want === true
+    || !there?.has(edge.source) || !there?.has(edge.target));
+  const have = new Set(kept.map(edgeKey));
+  return [...kept, ...synced.filter((edge) => !have.has(edgeKey(edge))
+    && wireWrites.get(edgeKey(edge))?.want !== false).map((edge) => ({ ...edge, selected: false }))];
 }
 
 /** What this sync must leave as this tab has it: node id -> want. Until
@@ -5975,7 +6719,23 @@ export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void
   return { seen, stop: () => syncWatchers.delete(seen) };
 }
 
+/** The nodes `after` has somewhere else than `before`: each id with its new
+ *  position object (lib/personNodeMoves.ts records that very object). */
+function movedBy(before: Node<NodeData>[], after: Node<NodeData>[]): Record<string, { x: number; y: number }> {
+  const was = new Map(before.map((node) => [node.id, node.position]));
+  const moved: Record<string, { x: number; y: number }> = {};
+  for (const node of after) {
+    const old = was.get(node.id);
+    if (old && (old.x !== node.position.x || old.y !== node.position.y)) moved[node.id] = node.position;
+  }
+  return moved;
+}
+
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
+  // Every person move of a node but undo and redo comes through here (a
+  // drop, a nudge, an Arrange): an agent cursor resting on it rides it,
+  // never flies (lib/personNodeMoves.ts records each move's own position).
+  notePersonPlaced(positions);
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
   );
@@ -6091,13 +6851,19 @@ function changeCanvasNodes(
   // go through the same path." (Before: the node stayed until Nebula
   // answered, so it could be typed into while its delete was on its way,
   // and those writes reached Nebula after it: round 17's open class.)
+  // GM r39 item 3 (r40 items 1 and 2) reverses the Cmd+Z part: the press is
+  // held for the delete's answer with nothing said, then restores as any
+  // Undo ("Restored the node."); a refused delete drops it silently; a
+  // refused or failed restore, or no answer in 15 s, says "Nebula couldn’t
+  // bring back “X”. Try Undo again." (holdsHistory, runHeldPresses,
+  // giveUpHeld, sendRestore).
   breakUndoDebounce();
   const undoStep = shared?.step ?? pushUndo(set, get);
   const shownBefore = new Set(get().nodes.map((node) => node.id));
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
   const replacementRevision = canvasReplacementRevision;
-  // A Cmd+Z pressed before the answers is dropped with GM's line (stepHistory).
+  // A Cmd+Z pressed before the answers waits for them, then restores (GM r39 item 3).
   holdStep(undoStep);
   removedBy.set(undoStep, new Set([...(removedBy.get(undoStep) ?? []), ...cliRemovedIds]));
   markDeleteStep(undoStep);
@@ -6105,7 +6871,8 @@ function changeCanvasNodes(
   // The node leaves the canvas now: the UI's selection doesn't keep naming it
   // (review 19, L1), so a failed delete never brings it back selected.
   const selectedInUi = useUIStore.getState().selectedNodeId;
-  if (selectedInUi && removedIds.includes(selectedInUi)) useUIStore.getState().selectNode(null);
+  // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+  if (selectedInUi && removedIds.includes(selectedInUi)) useUIStore.getState().selectNode(null, { keepPin: true });
   // Syncs leave them off until their delete answers (heldNodes); the newest
   // copy one carries is what comes back if the delete fails (M-2).
   const holds = new Map(cliRemovedIds.map((nodeId) => [nodeId, holdNode(nodeId, false)]));
@@ -6113,14 +6880,26 @@ function changeCanvasNodes(
   const onCanvas = get().nodes;
   applyCanvasNodeChanges(changes, set, get, undoStep);
   const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
-    try {
-      applyDeleteAnswers(results);
-    } finally {
-      for (const nodeId of cliRemovedIds) if (deletesInFlight.get(nodeId) === undoStep) deletesInFlight.delete(nodeId);
-      settleStep(undoStep, set, get);
-    }
+    // PR #205 review 8 (held-undo MEDIUM-3): the answers are handled once
+    // the sync the newest OK one names has been applied (whenSynced), as if
+    // it had come first: a sync read before Nebula applied the Delete (an
+    // agent's edit of the node) is then a copy the Delete's step carries,
+    // never the node back as that agent's step. The queue behind it moves on
+    // at the answer.
+    const seqs = results.map((result) => (result.status === 'fulfilled' ? result.value.syncSeq : null))
+      .filter((seq): seq is number => seq !== null);
+    whenSynced(seqs.length > 0 ? Math.max(...seqs) : null, () => {
+      try {
+        answeringDeletes += 1;
+        applyDeleteAnswers(results);
+      } finally {
+        answeringDeletes -= 1;
+        for (const nodeId of cliRemovedIds) if (deletesInFlight.get(nodeId) === undoStep) deletesInFlight.delete(nodeId);
+        settleStep(undoStep, set, get);
+      }
+    }, () => { for (const done of holds.values()) done(false); });
   });
-  function applyDeleteAnswers(results: PromiseSettledResult<RemovalRecord | null>[]): void {
+  function applyDeleteAnswers(results: PromiseSettledResult<DeleteAnswer>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
     // The ids that failed with no answer from Nebula (GM, round 20, item 1).
@@ -6139,7 +6918,7 @@ function changeCanvasNodes(
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         confirmed.add(cliRemovedIds[index]);
-        if (result.value) removals.push(result.value);
+        if (result.value.removal) removals.push(result.value.removal);
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
       } else {
@@ -6174,10 +6953,21 @@ function changeCanvasNodes(
     }
     // The writes still waiting for a deleted node are dropped (option (c)).
     for (const nodeId of confirmed) {
+      // GM PR #205 r2 item 2: Undo brings back what the person deleted, as
+      // Nebula last had it: an agent's edit synced while the Delete was on
+      // its way goes into the step, for the held Undo and a later one alike.
+      // Review 2 (undo MEDIUM-1): before the typing never sent is dropped
+      // below, so the merge keeps the person's typed keys (withUnsavedParams).
+      carrySyncedCopy(undoStep, nodeId, heldCopies.get(nodeId));
+      heldCopies.delete(nodeId);
       deferredParamPushes.delete(nodeId);
       unsavedParamEdits.delete(nodeId);
-      heldCopies.delete(nodeId);
     }
+    // GM PR #205 r4 item 1: an agent's edit carried into the step is its
+    // own step under the Delete, as Nebula has them (its edit, then the
+    // Delete): the Undo after the restore undoes only that edit, with the
+    // agent-edit line, and no older step of the person's reverts it.
+    placeForeignUnder(undoStep, set, get);
     if (removals.length > 0) {
       set((state) => {
         renewStackedRemovals(state, removals);
@@ -6186,6 +6976,18 @@ function changeCanvasNodes(
     }
     if (failed.length > 0) putBackFailedDeletes(failed);
     for (const done of holds.values()) done(false);
+    // GM PR #205 r2 item 1: a give-up line said for this step ("Try Undo
+    // again") is no longer true once the Delete answers; the Delete's own
+    // line takes its place (giveUpTakeover, after the lines below). A late
+    // ok leaves it while the step is on top: the node is still off, and Undo
+    // again does bring it back.
+    // Review 2 (undo LOW-1): a step landing above it before the answer has
+    // already taken the line off (giveUpStaysTrue).
+    const takeover = failed.length > 0 ? giveUpTakeover(undoStep, get) : null;
+    // A connection a node had when Delete was pressed, whose other end an
+    // edit synced meanwhile deleted: that edit took it off with its node, in
+    // Nebula, so its Undo puts it back (review 7 of PR #205, LOW-2).
+    giveBackLostConnections(undoStep, failed);
     // What Nebula synced of a node that came back while it was held (M-2),
     // with its wires as Nebula has them (review 18, M-B).
     applyHeldCopies(failed, { wires: true });
@@ -6250,6 +7052,7 @@ function changeCanvasNodes(
       reportNodeDeletionFailure(unsaid, unsaid.length, failed.length === 1 && unsaid.length === failures.length
         ? namedOnCanvas(onCanvas, failed[0]) : undefined);
     }
+    takeover?.(set, get);
   }
   /** The nodes whose delete failed come back where they were, with their
    * wires, unselected; the steps taken since hold them again. Nothing was
@@ -6257,15 +7060,19 @@ function changeCanvasNodes(
    * happen is no step), unless it also took wires (deleteCanvasElements). */
   function putBackFailedDeletes(failed: string[]): void {
     const back = new Set(failed);
+    // Review 1 of PR #205 (LOW-1): what stays on the canvas isn't brought
+    // back by this step's Undo, and its lines never name it.
+    forgetRemoved(undoStep, back);
     // GM (round 20, B): the node comes back unselected, in the UI's
     // selection too (the ring and the settings pill read selectedNodeId).
     const selectedInUi = useUIStore.getState().selectedNodeId;
-    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null);
+    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null, { keepPin: true });
     set((state) => {
       const present = new Set(state.nodes.map((node) => node.id));
       // Where it was, as it was; never selected (GM: "Don't select it").
+      // A rename of it Nebula refused meanwhile isn't its name (review 7 of PR #205).
       const returning = onCanvas.filter((node) => back.has(node.id) && !present.has(node.id))
-        .map((node) => (node.selected ? { ...node, selected: false } : node));
+        .map((node) => withoutRefusedName(node.selected ? { ...node, selected: false } : node));
       const nodes = [...state.nodes];
       for (const node of returning) {
         const after = onCanvas.slice(onCanvas.findIndex((candidate) => candidate.id === node.id) + 1)
@@ -6439,9 +7246,14 @@ function applyCanvasNodeChanges(
  * wanted it gone, as restore treats an already-gone node); else rejects
  * with the reason the person reads (GM's line for the status, or the
  * backend's written reason). */
-async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null> {
+/** A node delete Nebula took: what it removed, and the sync that sent it
+ * (none for a node already gone). */
+interface DeleteAnswer { removal: RemovalRecord | null; syncSeq: number | null }
+
+async function deleteCLIOriginNode(nodeId: string): Promise<DeleteAnswer> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
-  if (response.status === 404) return null;
+  // Already gone: no sync of this delete's to wait for.
+  if (response.status === 404) return { removal: null, syncSeq: null };
   if (!response.ok) {
     const rendering = response.status === 409 ? await renderingOf(response) : null;
     const error = await requestError("Couldn’t delete the node.", response);
@@ -6450,8 +7262,8 @@ async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null
   }
   // What the delete removed (the pins it detached, the proposals it closed),
   // kept in the undo step so undo puts them back.
-  const body = await response.json().catch(() => ({})) as { removal?: unknown };
-  return cleanRemovals([body.removal])[0] ?? null;
+  const body = await response.json().catch(() => ({})) as { removal?: unknown; syncSeq?: unknown };
+  return { removal: cleanRemovals([body.removal])[0] ?? null, syncSeq: answeredSyncSeq(body) };
 }
 
 /** Scene deletes the backend refused because a shot renders (its 409's
@@ -7031,9 +7843,10 @@ function withoutRenderingScenes(state: GraphState, changes: NodeChange[], set: G
  * (isExecuting: a run of the graph, a Cinema shot run, a Create launch), no
  * node is deleted, and never silently (GM r5 item 2). When every node asked
  * for is a scene with a shot rendering, GM's scene line says why (r3 item 1,
- * r4 item 2); otherwise what failed, then the lock's reason: "Couldn't delete
- * “Brief”. Wait for the active run to finish." / "Couldn't delete 4 nodes.
- * …". True when it refused; nothing is sent.
+ * r4 item 2); otherwise the lock's line alone (GM PR #205 r1 answer 2):
+ * "You can delete “Brief” when the run finishes." / "You can delete 4 nodes
+ * when the run finishes.". True when it refused;
+ * nothing is sent.
  */
 function refuseRunLockedDelete(state: GraphState, ids: readonly string[], set: GraphSet): boolean {
   if (!state.isExecuting) return false;
@@ -7261,6 +8074,7 @@ function markSnapshotScopeQueued(
 ): Node<NodeData>[] {
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -7564,10 +8378,11 @@ function notStartedMessage(heading: string, status: string | undefined): string 
  * itself goes to the console under `heading`, once per call site. A
  * person-only refusal says GM's line for it, by its code (Q116 a); its own
  * words, written for agents, go to the console only. */
-async function backendRejectionReason(response: Response, heading: string): Promise<string> {
-  const { detail, code } = await readRefusal(response);
-  warnFailure(heading, response.status, detail);
-  return copyForAnswer(response.status, detail, code);
+async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown }> {
+  const read = await readRefusal(response);
+  warnFailure(heading, response.status, read.detail);
+  // Review 5 LOW-4 (round 7): the line carries this answer's own refusal and stamp.
+  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read) };
 }
 
 type NodeCreationAttempt = {
@@ -7653,13 +8468,15 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
     useGraphStore.getState().notify(heading);
     return null;
   }
-  return reportNodeCreationFailure(displayName, failureCopy(err).reason);
+  // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
+  return reportNodeCreationFailure(displayName, failureCopy(err).reason, err);
 }
 
-function reportNodeCreationFailure(displayName: string, reason: string): null {
+function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown): null {
   const message = headedLine(addHeading(displayName), reason);
   console.warn(`[nebula] ${message}`);
-  useGraphStore.getState().notify(message);
+  // A refusal's line carries the refusal (review 5 LOW-4): it clears by its own stamp.
+  useGraphStore.getState().notify(message, 'error', { error });
   return null;
 }
 
@@ -7779,10 +8596,8 @@ async function createNodeOnBackend(
 
     if (!res.ok) {
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      return reportNodeCreationFailure(
-        definition.displayName,
-        await backendRejectionReason(res, addHeading(definition.displayName)),
-      );
+      const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+      return reportNodeCreationFailure(definition.displayName, reason, error);
     }
 
     let node: { id?: unknown };
@@ -8023,7 +8838,10 @@ function foreignEditStep(
     // A run's param write-back is its output; any other change with no
     // source (the sync a reconnect starts with) is nobody's this tab can name.
     if (runParams) rebaseAcceptedSteps(state, nextNodes);
-    else noteForeignTouches(state.nodes, nextNodes, { kind: 'unknown' });
+    else {
+      noteForeignTouches(state.nodes, nextNodes, { kind: 'unknown' });
+      if (diffCanvas(state.nodes, state.edges, nextNodes, nextEdges)) changeNoUndoReaches = new WeakSet(state.undoStack);
+    }
     return {};
   }
   noteForeignTouches(state.nodes, nextNodes, sourceOf(origin));
@@ -8153,6 +8971,59 @@ function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): 
 const stepsInFlight = new Set<UndoEntry>();
 const HOLD_LIMIT_MS = 15_000;
 
+/** Tests: whether `step` (an undo stack entry) still waits for its request's
+ * answer. A test that acts once the backend has recorded a request (rather
+ * than once this tab has its answer) races the answer; this is what to wait
+ * for instead (graphStore.fix16). */
+export function stepInFlightForTests(step: unknown): boolean {
+  return stepsInFlight.has(step as UndoEntry);
+}
+
+/** Tests: forget every held press, step in flight and held copy, as a new
+ * canvas does, so one test's leftovers (a press it timed out holding) never
+ * reach the next (review 1 of PR #205, NIT-2). */
+export function forgetHeldHistoryForTests(): void {
+  forgetStepsInFlight();
+  changeNoUndoReaches = null;
+}
+
+/** The steps that were on the stack when a change nobody named (a sync with
+ * no origin) last changed the canvas without making a step: Undo can't reach
+ * that change while the newest step is one of these. */
+let changeNoUndoReaches: WeakSet<UndoEntry> | null = null;
+
+/** The step Save's shape line offers (GM PR #205 r13 item 1, r14 items 1–2):
+ * an agent's newest step by the name "Undid Claude’s edit." uses; the
+ * person's own, or another window's of theirs, as "your"; a change from an
+ * origin Nebula doesn't know as "the last change" when it is the newest
+ * step; none when nothing is on the stack, or when a change Undo can't reach
+ * is newer than every step on it. Never "your" for a change that isn't the
+ * person's. */
+export function saveUndoStep(stack: readonly UndoEntry[] = useGraphStore.getState().undoStack): SaveUndoStep {
+  const top = stack.at(-1);
+  if (!top || changeNoUndoReaches?.has(top)) return { kind: 'none' };
+  if (isForeignEdit(top)) {
+    if (top.source === 'agent' && top.agentName) return { kind: 'agent', name: top.agentName };
+    if (top.source !== 'window') return { kind: 'unknown' };
+  }
+  return { kind: 'person' };
+}
+
+/** Save's shape line's walk (GM PR #205 r16 item 1): the newest step's owner,
+ * and the steps Undo can reach, newest first. A step from before a change
+ * nobody named (one no Undo reaches) ends the walk: undoing past it never
+ * takes that change back. */
+export function saveUndoWalk(stack: readonly UndoEntry[] = useGraphStore.getState().undoStack): SaveUndoWalk {
+  const steps: UndoWalkStep[] = [];
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const step = stack[index];
+    if (changeNoUndoReaches?.has(step)) break;
+    steps.push(isSliceStep(step) ? { before: step.before, params: isOwnAdd(step) ? step.params : undefined }
+      : { nodes: step.nodes, edges: step.edges });
+  }
+  return { top: saveUndoStep(stack), steps };
+}
+
 /*
  * Review 11, M-1 (round 12), and review 12 (round 13): a held press is bound
  * to the step it was pressed for. The old queue replayed its presses against
@@ -8179,12 +9050,28 @@ const HOLD_LIMIT_MS = 15_000;
  * line followed by "1 undo was skipped while a change was saving." So do the
  * 15 s limit (a press is never applied late, L-3) and a project switch (L-4).
  * A target that was taken off (its request failed: cancelUndoStep, a refused
- * delete) drops that press quietly: its failure has its own line (a refused
- * delete's, the model pickers' and chat /clear's, review 12 L-4).
+ * delete) drops that press: its failure has its own line (a refused
+ * delete's, the model pickers' and chat /clear's, review 12 L-4), and the
+ * press counts in the skipped line beside it (review 15, L-2), except an
+ * Undo held on a refused Delete, which says nothing (GM r39 item 3).
+ *
+ * GM r39 item 3 (reversing r18's option (c) refusal): an Undo pressed while
+ * its Delete is on its way is held like any other (`onDelete`). The 15 s
+ * limit on it says "Nebula couldn’t bring back “X”. Try Undo again." with the
+ * names read when it gives up (giveUpHeld), and a refused or failed restore
+ * says the same (sendRestore). A press behind it bound to a step above its
+ * target lets it apply beneath that step (undoneLater): both were asked for.
  */
 type PressTarget = { entry: UndoEntry } | { inverseOf: number };
 /** `order`: when it was pressed, against when each clear was issued (clearSteps). */
-interface HeldPress { id: number; action: 'undo' | 'redo'; target: PressTarget | null; order: number }
+interface HeldPress {
+  id: number; action: 'undo' | 'redo'; target: PressTarget | null; order: number;
+  /** GM r39 item 3: an Undo pressed while its Delete was still on its way.
+   * It waits silently; a refused Delete drops it with no line of its own;
+   * a refused or failed restore, or no answer in 15 s, says
+   * bringBackFailedText. */
+  onDelete?: boolean;
+}
 /** The order presses and clears were issued in (review 13, L-2). */
 let historyOrder = 0;
 /** The clears' steps (the toolbar's, chat /clear's), by when each was issued.
@@ -8803,10 +9690,15 @@ function besideFailure(state: Pick<GraphState, 'undoNotice'>, text: string): Par
  * line isn't cleared or covered by that graph's own notice (review 12, L-2). */
 function forgetStepsInFlight(): DroppedPresses {
   const dropped = dropHeldPresses();
+  // A give-up line ("Try Undo again") stays marked: the new canvas's stacks
+  // replace the old ones in the same set, and giveUpStaysTrue takes the line
+  // off then (its step is no longer next in line), so it never stands over
+  // another graph (review 2 of PR #205, undo NIT-2, M14).
   stepsInFlight.clear();
   deletesInFlight.clear();
   deferredParamPushes.clear();
   heldCopies.clear();
+  forgetHoldsOfReplacedCanvas();
   for (const { timer } of awaitingArrival.values()) clearTimeout(timer);
   awaitingArrival.clear();
   return dropped;
@@ -8866,8 +9758,196 @@ function waitFor(step: UndoEntry, set: GraphSet): void {
   // The limit drops the presses (L-3): a late answer is then an ordinary step.
   heldTimer = setTimeout(() => {
     heldTimer = null;
-    if (heldFor === step) announceDrop(set, dropHeldPresses());
+    if (heldFor === step) giveUpHeld(step, set);
   }, HOLD_LIMIT_MS);
+}
+
+/** The 15 s limit on the step the front press waits for (L-3). An Undo held
+ * on a Delete that never answered says GM's r40 line, naming what it couldn't
+ * bring back as the canvas reads it now; the others say announceDrop's. A
+ * late answer to that Delete is then an ordinary step: it never restores by
+ * itself, and the next Undo press does (GM r40 item 2). */
+function giveUpHeld(step: UndoEntry, set: GraphSet): void {
+  const front = heldPresses[0];
+  const onDelete = Boolean(front?.onDelete && batchLastApplied === null && pressTarget(front) === step);
+  const dropped = dropHeldPresses();
+  if (!onDelete) {
+    announceDrop(set, dropped);
+    return;
+  }
+  set((state) => {
+    const patch = besideFailure(state, bringBackFailedText(namesBroughtBack(step, state.nodes)));
+    const id = patch.undoNotice?.id ?? patch.messageNotice?.id;
+    if (id !== undefined) giveUpShown = { step, id };
+    return patch;
+  });
+}
+
+/** The give-up line on show for a Delete step (GM PR #205 r2 item 1). */
+let giveUpShown: { step: UndoEntry; id: number } | null = null;
+/** A Delete's answer being applied: its own lines settle the give-up line. */
+let answeringDeletes = 0;
+
+/** When `step`'s Delete answers after its give-up line: a function that,
+ * once that answer's own lines are written, puts the newest of them in the
+ * give-up line's place (same notice, same spot) and leaves the other place
+ * as it was; with no line of its own, the give-up line just goes. A line
+ * whose statement became false is replaced or removed, never left standing. */
+function giveUpTakeover(step: UndoEntry, get: GraphGet): ((set: GraphSet, get: GraphGet) => void) | null {
+  const shown = giveUpShown;
+  if (!shown || successorOf(shown.step) !== successorOf(step)) return null;
+  giveUpShown = null;
+  const before = get();
+  const field = before.undoNotice?.id === shown.id ? 'undoNotice' : before.messageNotice?.id === shown.id ? 'messageNotice' : null;
+  if (!field) return null;
+  const was = { undoNotice: before.undoNotice, messageNotice: before.messageNotice };
+  return (set) => set((state) => {
+    const fresh = (['undoNotice', 'messageNotice'] as const).filter((key) => state[key] && state[key] !== was[key])
+      .sort((a, b) => (state[b]?.id ?? 0) - (state[a]?.id ?? 0))[0];
+    if (!fresh) return state[field]?.id === shown.id ? { [field]: null } : {};
+    const line = { ...state[fresh]!, id: shown.id };
+    return fresh === field ? { [field]: line } : { [field]: line, [fresh]: was[fresh] };
+  });
+}
+
+/** GM PR #205 r6 item 2: there is one selection. What a Paste, Duplicate,
+ * Undo or Redo selects replaces the UI's selected node too (the ring and the
+ * "…" pill read selectedNodeId): the one node it brings, or none when it
+ * brings several (each of those draws its own ring and pill from its
+ * canvas selection, main's multi-selection look; GM r8 item 2). */
+function selectionFollows(ids: readonly string[]): void {
+  const ui = useUIStore.getState();
+  const next = ids.length === 1 ? ids[0] : null;
+  // A pinned Inspector stays pinned, showing its empty state when several
+  // come back (GM r8 item 1).
+  if (ui.selectedNodeId !== next) ui.selectNode(next, { keepPin: true });
+}
+
+/** The nodes a failed Delete left on the canvas are no longer what its step
+ * (or a step re-pushed in its place) brings back (review 1 of PR #205, LOW-1). */
+function forgetRemoved(step: UndoEntry, kept: ReadonlySet<string>): void {
+  for (let at: UndoEntry | undefined = step; at; ) {
+    const removed = removedBy.get(at);
+    if (removed) for (const id of kept) removed.delete(id);
+    const next = stepSuccessors.get(at);
+    at = next && next !== at ? next : undefined;
+  }
+}
+
+/** GM PR #205 r2 item 2: the copy Nebula synced while `nodeId`'s Delete was
+ * on its way (an agent's edit) replaces the delete-time copy in its step and
+ * the steps re-pushed in its place, so an Undo restores it, not the older one.
+ * GM r3 item 4: with its connections as Nebula had them (a connection whose
+ * other end is gone by then isn't restored: snapshotNext). The person's own
+ * typing and rename still on their way stay theirs (review 2, undo
+ * MEDIUM-1); the Undo selects what it brings back (GM r4 item 2). An
+ * agent's change becomes its own step under the Delete (GM r4 item 1,
+ * placeForeignUnder). */
+function carrySyncedCopy(step: UndoEntry, nodeId: string, copy: HeldCopy | undefined): void {
+  if (!copy?.node) return;
+  const touches = (edge: Edge) => edge.source === nodeId || edge.target === nodeId;
+  const settings = useUIStore.getState().settingsCache;
+  const named = (node: Node<NodeData>, was: Node<NodeData>, moved: boolean, renaming = copy.renaming): Node<NodeData> =>
+    createSnapshot([heldLabel(nodeId, mergeSyncedNode(node, was, moved ? [nodeId] : [], settings), renaming)], []).nodes[0];
+  let chain: Omit<ForeignUnder, 'nodeId'>[] | null = null;
+  for (let at: UndoEntry | undefined = step; at; ) {
+    if (!isSliceStep(at)) {
+      const index = at.nodes.findIndex((node) => node.id === nodeId);
+      if (index >= 0) {
+        const was = at.nodes[index];
+        const taken = named(copy.node, was, copy.moved);
+        at.nodes = at.nodes.map((node, i) => (i === index ? taken : node));
+        const edgesAll = at.edges;
+        // Its connections as Nebula synced them, when someone else changed
+        // it meanwhile (GM r3 item 4: an agent's connections); a local
+        // node's, and one this tab is still writing, keep this tab's way (as
+        // applyHeldCopies). The person's own syncs change none of them.
+        if (copy.links?.length) at.edges = carriedEdges(at.edges, nodeId, copy.edges, copy.there);
+        const edgesNow = at.edges;
+        // GM PR #205 r6 item 1: one step per edit someone else made, each
+        // from the one before it (the first from the delete-time copy), the
+        // newest ending at what the step now brings back. Taken from the
+        // Delete's own step, not one re-pushed in its place.
+        if (!chain) {
+          const links = (copy.links ?? []).filter((link) => link.node);
+          let before = was;
+          let edgesBefore = edgesAll.filter(touches);
+          chain = links.map((link, k) => {
+            const newest = k === links.length - 1;
+            const after = newest ? taken : named(link.node!, was, link.moved, link.renaming);
+            const edgesAfter = (newest ? edgesNow : carriedEdges(edgesAll, nodeId, link.edges, link.there)).filter(touches);
+            const one = { origin: link.origin, ...(link.runParams ? { runParams: true } : {}), moved: link.moved, seq: link.seq, before, after, edgesBefore, edgesAfter };
+            before = after;
+            edgesBefore = edgesAfter;
+            return one;
+          });
+        }
+      }
+    }
+    const next = stepSuccessors.get(at);
+    at = next && next !== at ? next : undefined;
+  }
+  if (chain?.length) {
+    const list = foreignUnder.get(step) ?? [];
+    foreignUnder.set(step, [...list.filter((each) => each.nodeId !== nodeId), ...chain.map((one) => ({ nodeId, ...one }))]);
+  }
+}
+
+/** The agent's edits carried into a Delete's step (carrySyncedCopy), each
+ * waiting for the Delete's answer to become a step of its own under it. */
+interface ForeignUnder {
+  nodeId: string; origin: EditOrigin | undefined; runParams?: boolean; moved: boolean; seq: number;
+  before: Node<NodeData>; after: Node<NodeData>; edgesBefore: Edge[]; edgesAfter: Edge[];
+}
+const foreignUnder = new WeakMap<UndoEntry, ForeignUnder[]>();
+
+/** GM PR #205 r4 item 1: each agent's edit carried into `step` becomes its own
+ * step directly under it (under the step re-pushed in its place), made by
+ * foreignEditStep as applyHeldCopies makes one: before, the delete-time copy;
+ * after, the synced copy. Nothing is said when it is made (the node is off
+ * the canvas); its Undo says the agent-edit line, as anywhere else. */
+function placeForeignUnder(step: UndoEntry, set: GraphSet, get: GraphGet): void {
+  const waiting = foreignUnder.get(step);
+  foreignUnder.delete(step);
+  if (!waiting?.length) return;
+  // foreignEditStep reads what a sync left for its own step: not this one's.
+  const landings = landingsForNextStep;
+  const sceneLines = sceneLinesBeforeSync;
+  const entries: UndoEntry[] = [];
+  try {
+    // In Nebula's order across nodes too, so Undo takes the newest first.
+    for (const each of [...waiting].sort((a, b) => a.seq - b.seq)) {
+      landingsForNextStep = null;
+      sceneLinesBeforeSync = null;
+      const alone = { ...get(), nodes: [each.before], edges: each.edgesBefore, undoStack: [], redoStack: [] } as GraphState;
+      const made = foreignEditStep(alone, [each.after], each.edgesAfter, each.origin, false, each.moved ? [each.nodeId] : [], Boolean(each.runParams));
+      const entry = made.undoStack?.at(-1);
+      if (entry) {
+        editStepSeq.set(entry, each.seq);
+        entries.push(entry);
+      }
+    }
+  } finally {
+    landingsForNextStep = landings;
+    sceneLinesBeforeSync = sceneLines;
+  }
+  if (entries.length === 0) return;
+  set((state) => {
+    const at = state.undoStack.indexOf(successorOf(step));
+    if (at < 0) return {};
+    return { undoStack: [...state.undoStack.slice(0, at), ...entries, ...state.undoStack.slice(at)].slice(-UNDO_CAP) };
+  });
+}
+
+/** What a delete step brings back, named as the canvas shows each node now
+ * (its card title; the step's copy for one off the canvas), by the shared
+ * name-list rule (GM r39 item 3: "with X read live from cardTitle"). */
+function namesBroughtBack(step: UndoEntry, nodes: readonly Node<NodeData>[]): string {
+  const removed = [...(removedBy.get(step) ?? [])];
+  const ids = removed.length > 0 ? removed : isSliceStep(step) ? [] : step.nodes.map((node) => node.id);
+  const copies = isSliceStep(step) ? [] : step.nodes;
+  const ordered = [...ids].sort((a, b) => copies.findIndex((node) => node.id === a) - copies.findIndex((node) => node.id === b));
+  return nodeNameList(ordered.map((id) => listedNodeTitle(nodes.some((node) => node.id === id) ? nodes : copies, id)));
 }
 
 /** Runs the held presses whose step has settled, in order (see above). */
@@ -8913,7 +9993,10 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     // change lands after this one: review 12 probe H4, delete, Cmd+Z, delete
     // again before the first answer), or under the person's own older delete
     // re-pushed by its late answer (L-1): it applies beneath them (applyHistory).
-    if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry))) {
+    // GM r39 item 3: or under a step a later held press of this batch undoes
+    // (delete n1, Cmd+Z, delete n3, Cmd+Z, n3 answering first): the person
+    // asked for both, so each press undoes its own step, in order.
+    if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry) || undoneLater(above))) {
       if (changesNothing(entry, state.nodes, state.edges)) {
         // Nothing it changed is left to change (review 15, L-2): the step
         // goes, and the press goes to the step below it, unless a later
@@ -8927,6 +10010,8 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
           && sameTarget(held.target, { entry: below }));
         if (below && !taken) {
           press.target = { entry: below };
+          // Review 1 of PR #205 (NIT-1): the step below is not the Delete it was held on.
+          press.onDelete = isDeleteInFlight(below);
           continue;
         }
         heldPresses.shift();
@@ -8934,7 +10019,7 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
         continue;
       }
       heldPresses.shift();
-      const done = applyHistory(press.action, set, get, entry);
+      const done = applyHistory(press.action, set, get, entry, { heldOnDelete: press.onDelete });
       if (done) {
         heldInverses.set(press.id, done.inverse);
         batchLastApplied = { action: press.action, noticeId: done.noticeId, inverse: done.inverse };
@@ -8948,13 +10033,21 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     }
     // Its step was taken off (the request failed, and said so): this press
     // goes to nothing, the presses after it still count. It counts in the
-    // skipped line, beside the failure's own (review 15, L-2: C7).
+    // skipped line, beside the failure's own (review 15, L-2: C7), except an
+    // Undo held on a refused Delete: the node is back with the Delete's own
+    // failure line, and nothing else is said (GM r39 item 3).
     heldPresses.shift();
-    skipPress(press);
+    if (!press.onDelete) skipPress(press);
   }
   // Presses a clear superseded while later ones waited: the line says so (L-B).
   if (batchSkipped.undos + batchSkipped.redos > 0) announceDrop(set, { ...batchSkipped, applied: batchLastApplied });
   endHeldBatch();
+}
+
+/** Whether a press still held behind the front one is bound to `step`. */
+function undoneLater(step: UndoEntry): boolean {
+  return heldPresses.slice(1).some((held) => held.action === 'undo' && held.target !== null
+    && sameTarget(held.target, { entry: step }));
 }
 
 /** A held press that did nothing: counted into the line its batch ends with. */
@@ -8963,28 +10056,43 @@ function skipPress(press: HeldPress): void {
     ? { ...batchSkipped, undos: batchSkipped.undos + 1 } : { ...batchSkipped, redos: batchSkipped.redos + 1 };
 }
 
-/** Whether an undo pressed now would go to a delete still on its way (the
- * step on top, or the one the held presses leave on top). */
-function pressHitsDeleteInFlight(state: GraphState): boolean {
+/** A delete still on its way (not a clear): an Undo bound to it waits for its
+ * answer, then restores (GM r39 item 3, reversing r18's option (c) refusal). */
+function isDeleteInFlight(entry: UndoEntry): boolean {
+  return stepsInFlight.has(entry) && Boolean(removedBy.get(entry)?.size) && !clearSteps.has(entry);
+}
+
+/**
+ * Tests only, never called from app code (tests/helpers/deleteLanded.ts):
+ * whether a delete is still on its way. Either a node's backend delete hasn't
+ * answered (deletesInFlight), or an Undo pressed now would be dropped for the
+ * delete step on top (isDeleteInFlight: held on it, GM r39 item 3). Read
+ * directly, so the helper never depends on the delete's notice being set in
+ * the same tick as its hold ends (PR #221 review 1 NIT-3).
+ */
+export function deleteInFlightForTests(): boolean {
+  if (deletesInFlight.size > 0) return true;
+  // What a press now would bind to: the next queued target while presses are held, else the step on top.
+  const state = useGraphStore.getState();
   const target = heldPresses.length > 0 ? nextPressTarget('undo', state) : (() => {
     const top = state.undoStack[state.undoStack.length - 1];
     return top ? { entry: top } : null;
   })();
-  if (!target || !('entry' in target)) return false;
-  const entry = target.entry;
-  return stepsInFlight.has(entry) && Boolean(removedBy.get(entry)?.size) && !clearSteps.has(entry);
+  return Boolean(target && 'entry' in target && isDeleteInFlight(target.entry));
 }
 
 /** Whether this press waits for a step's answer (and is queued, bound to its target). */
 function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet): boolean {
   if (heldPresses.length > 0) {
-    heldPresses.push({ id: ++heldPressSeq, action, target: nextPressTarget(action, state), order: ++historyOrder });
+    const target = nextPressTarget(action, state);
+    heldPresses.push({ id: ++heldPressSeq, action, target, order: ++historyOrder,
+      onDelete: action === 'undo' && Boolean(target && 'entry' in target && isDeleteInFlight(target.entry)) });
     return true;
   }
   const top = state.undoStack[state.undoStack.length - 1];
   if (action !== 'undo' || !top || !stepsInFlight.has(top)) return false;
   endHeldBatch();
-  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top }, order: ++historyOrder }];
+  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top }, order: ++historyOrder, onDelete: isDeleteInFlight(top) }];
   waitFor(top, set);
   return true;
 }
@@ -8997,7 +10105,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   const state = get();
   // The run lock keeps every step where it is, and says why (PR #198 review
   // 4, M1; GM r5 item 2): GM's shot line when the step would take away a shot
-  // that is rendering, else "Couldn't undo. Wait for the active run to finish."
+  // that is rendering, else "Couldn't undo. You can undo when the run finishes."
   if (state.isExecuting) {
     refuseRunLockedStep(action, state, set);
     return;
@@ -9005,13 +10113,6 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   if (state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
   // Review 15, L-2: a step with nothing left to change never takes a press.
   dropDeadSteps(action, set, get);
-  // GM r18, item 2 (option (c)): "Cmd+Z while the delete is in flight shows
-  // the existing "Nothing was undone. Your last change was still saving.""
-  // The press isn't held for the delete's answer, and is never applied late.
-  if (action === 'undo' && pressHitsDeleteInFlight(get())) {
-    set((now) => besideFailure(now, DROPPED_UNDO_TEXT));
-    return;
-  }
   if (holdsHistory(action, get(), set)) return;
   applyHistory(action, set, get);
   // And none is left on top of it for the next one (the Undo control greys out).
@@ -9026,7 +10127,8 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
  * inverse and the id of the notice it shows (or will show, once the restore
  * answers), or null when nothing was there to undo or redo.
  */
-function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, target?: UndoEntry): { inverse: UndoEntry; noticeId: number } | null {
+function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, target?: UndoEntry,
+  options: { heldOnDelete?: boolean } = {}): { inverse: UndoEntry; noticeId: number } | null {
   const state = get();
   if (state.isExecuting) {
     // A held press that comes due while this tab runs something: never
@@ -9083,7 +10185,7 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
     set({ undoNotice: { id: ++undoNoticeSeq, text: renderingRemovalLine(action, rendering), offer: null } });
     return null;
   }
-  const nextNodes = withFreshKeyStatus(next.nodes, nodes);
+  let nextNodes = withFreshKeyStatus(next.nodes, nodes);
   // A param this puts back while an earlier write's echo is on its way (L-3).
   for (const id of unsavedParamEdits.keys()) {
     const now = nextNodes.find((node) => node.id === id);
@@ -9099,7 +10201,7 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   // since it counts the proposals that couldn't be reopened.
   const before = new Set(nodes.map((node) => node.id));
   const after = new Set(nextNodes.map((node) => node.id));
-  const back = nextNodes.filter((node) => !before.has(node.id));
+  let back = nextNodes.filter((node) => !before.has(node.id));
   // What this undo or redo added is what its inverse takes off again; for
   // every other step those nodes came from elsewhere (review 15).
   if (!isForeignEdit(entry)) stepAdds.set(inverse, new Set(back.map((node) => node.id)));
@@ -9107,6 +10209,15 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   const ownLine: OwnStepLine | null = isForeignEdit(entry) ? null
     : back.length > 0 ? { kind: 'restored', count: back.length }
       : gone > 0 ? { kind: 'deleted', count: gone } : null;
+  // GM PR #205 r4 item 2, r6 item 3: what an Undo or Redo brings back
+  // comes back selected, replacing the selection, as a paste does, whoever's
+  // step it was (an agent's included) and whatever the step's copy held.
+  if (back.length > 0) {
+    const restored = new Set(back.map((node) => node.id));
+    nextNodes = nextNodes.map((node) => (restored.has(node.id) ? (node.selected ? node : { ...node, selected: true })
+      : node.selected ? { ...node, selected: false } : node));
+    back = nextNodes.filter((node) => restored.has(node.id));
+  }
   const waitsForBackend = back.some((node) => CLI_ID_RE.test(node.id));
   const noticeId = ++undoNoticeSeq;
   if (ownLine?.kind === 'restored' && waitsForBackend) ownLinesWaiting.add(noticeId);
@@ -9152,6 +10263,10 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
       : { redoStack: rest, undoStack: [...state.undoStack, inverse] }),
     ...(stepNotice ? { undoNotice: stepNotice } : {}),
   });
+  if (back.length > 0) selectionFollows(back.map((node) => node.id));
+  // The person's own undo or redo moved these nodes: an agent cursor resting
+  // on one rides it (GM - Design, PR #211 review 5, item 5).
+  notePersonPlaced(movedBy(nodes, nextNodes));
   // GM r27 answer 2: an undo or redo that left a stopped scene with nothing
   // unsaved (the person's own Undo took their edits back) ends its stop.
   for (const [nodeId, scene] of [...cinemaScenePersistence]) {
@@ -9163,14 +10278,14 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   // older step keeps owning what it added (review 16, H1).
   noteArrivedElsewhere(back.map((node) => node.id), get, [...above, ...(jumpedOver.get(entry) ?? [])]);
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
-    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
+    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null, heldOnDelete: options.heldOnDelete });
   return { inverse, noticeId };
 }
 
 /** An undo or redo pressed (or coming due) while this tab runs something:
  * nothing moves, and the line says why (PR #198 review 4, M1; GM r5 item 2):
  * GM's shot line when the step would take away a shot that is rendering,
- * else the run lock's ("Couldn't undo. Wait for the active run to finish.").
+ * else the run lock's ("You can undo when the run finishes.", GM PR #205 r1).
  * Nothing is read off the canvas into the step (no captureOwnAdd). */
 function refuseRunLockedStep(action: 'undo' | 'redo', state: GraphState, set: GraphSet, target?: UndoEntry): void {
   const from = action === 'undo' ? state.undoStack : state.redoStack;
@@ -9188,7 +10303,13 @@ function refuseRunLockedStep(action: 'undo' | 'redo', state: GraphState, set: Gr
  * kept), with every node it didn't add left as it is (takenOffBy). */
 function snapshotNext(entry: UndoSnapshot, nodes: Node<NodeData>[], edges: Edge[]): { nodes: Node<NodeData>[]; edges: Edge[] } {
   const next = { nodes: restoreWithOutputs(entry, nodes), edges: entry.edges.map((edge) => ({ ...edge })) };
-  return keepingOthers(next, nodes, edges, takenOffBy(entry, nodes));
+  const whole = keepingOthers(next, nodes, edges, takenOffBy(entry, nodes));
+  // GM PR #205 r3 item 4: a connection the step holds (one an agent made
+  // while its Delete was on its way, carrySyncedCopy) comes back only while
+  // the node at its other end is there.
+  const there = new Set(whole.nodes.map((node) => node.id));
+  const ends = whole.edges.filter((edge) => there.has(edge.source) && there.has(edge.target));
+  return ends.length === whole.edges.length ? whole : { nodes: whole.nodes, edges: ends };
 }
 
 /** What a node is on the canvas, for "does this change anything": all of it
@@ -9390,7 +10511,7 @@ function sendRestore(
   entry: UndoEntry,
   inverse: UndoEntry,
   set: GraphSet,
-  notice: { noticeId: number; ownLine: OwnStepLine | null },
+  notice: { noticeId: number; ownLine: OwnStepLine | null; heldOnDelete?: boolean },
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) {
@@ -9402,8 +10523,9 @@ function sendRestore(
   // The wires and nodes it puts back or takes off stay so until it lands
   // (heldWires, heldNodes).
   const wireHolds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
-  const nodeHolds = [...body.nodes.filter((item) => CLI_ID_RE.test(item.id)).map((item) => [item.id, holdNode(item.id, true)] as const),
-    ...body.remove.map((id) => [id, holdNode(id, false)] as const)];
+  const nodeHolds = [...body.nodes.filter((item) => CLI_ID_RE.test(item.id))
+    .map((item) => [item.id, holdNode(item.id, true, prevNodes.some((node) => node.id === item.id))] as const),
+  ...body.remove.map((id) => [id, holdNode(id, false)] as const)];
   // Review 17, H-1: admitted now, when the person pressed it. A restore
   // queued behind another is never sent once another project or graph is
   // open, and is sent with this revision.
@@ -9448,7 +10570,12 @@ function sendRestore(
   /** Review 17, W5 and L-2: Nebula refused it, or it never answered within
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
-  const refused = (reason: string, how: { text?: string; quiet?: boolean } = {}) => {
+  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown } = {}) => {
+    // An Undo held on a Delete (GM r39 item 3, r40 item 2): one neutral line
+    // for a refused or failed restore, naming what it couldn't bring back as
+    // the cards read now, in place of "Couldn't undo that." or the timeout's.
+    const heldLine = notice.heldOnDelete && action === 'undo' && !how.quiet
+      ? (state: GraphState) => bringBackFailedText(namesBroughtBack(entry, state.nodes)) : null;
     ownLinesWaiting.delete(notice.noticeId);
     skippedAfter.delete(notice.noticeId);
     // Another graph is open now: nothing here is that graph's (as before).
@@ -9456,7 +10583,7 @@ function sendRestore(
     set((state) => {
       // A refusal written for the person already says what couldn't be
       // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
-      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
+      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -9498,12 +10625,20 @@ function sendRestore(
       return { nodes: withFreshKeyStatus(withLiveRenders(canvas.nodes, prevNodes, state.nodes, state.activeRuns), state.nodes),
         edges: canvas.edges, ...stacks, ...line };
     });
+    // Review 5 MEDIUM-1 (round 7): a refusal only for this tab goes on the promote, while it is
+    // still the line on screen.
+    if (how.quiet || admission.graph !== canvasReplacementRevision) return;
+    const shown = undoNoticeSeq;
+    clearsOnPromoteIf(how.error, () => set((state) => (state.undoNotice?.id === shown ? { undoNotice: null } : {}))); // clears-on-promote: graph.undo-refusal
   };
   // Behind the person's writes already waiting their turn too, in the order
   // made (round 18's property test, seed 55: typing flushed by this Cmd+Z
   // waited behind an earlier restore, this restore went out first, and
   // Nebula kept the typing the canvas had undone).
   const writesBefore = waitingTail;
+  // And until they are answered: one sent as this restore is (it waited
+  // behind an earlier restore) could otherwise land after it.
+  const answersBefore = writesAnsweredNow();
   // Round 19: an agent's switch drops it (beginAgentSwitch): its change
   // comes back off the canvas, quietly, and its answer changes nothing.
   let abandoned = false;
@@ -9514,6 +10649,15 @@ function sendRestore(
   });
   /** Which line the timeout showed, so a late landing can take it back. */
   let timeoutNoticeId: number | null = null;
+  const broughtBack = new Set(body.nodes.filter((item) => CLI_ID_RE.test(item.id)
+    && !prevNodes.some((node) => node.id === item.id)).map((item) => item.id));
+  const takenOff = new Set(body.remove.filter((id) => prevNodes.some((node) => node.id === id)));
+  /** A sync while it was held had a node it brings back, or lacked one it
+   * takes off, and none says otherwise: Nebula applied it. */
+  const appliedPerSyncs = () => {
+    const seen = [...broughtBack, ...takenOff].filter((id) => heldCopies.has(id));
+    return seen.length > 0 && seen.every((id) => (heldCopies.get(id)!.node !== null) === broughtBack.has(id));
+  };
   /** Review 18, L-B: Nebula applied it after the limit. The step follows
    * Nebula: it counts as done, so the next Cmd+Z is never a silent no-op;
    * GM's "Nothing was undone" line, no longer true, goes. */
@@ -9531,7 +10675,7 @@ function sendRestore(
       };
     });
   };
-  const task = Promise.all([restoreQueue, writesBefore]).then(async () => {
+  const task = Promise.all([restoreQueue, writesBefore.then(() => answersBefore)]).then(async () => {
     // Read now, not when the step was taken: the answer to the delete (or to
     // the redo before this undo) may have landed since.
     const removals = removalsFor(entry, body);
@@ -9549,11 +10693,40 @@ function sendRestore(
       // No answer: it may have landed. The next graphSync shows which.
       else console.warn(`[nebula] ${action} didn't reach the backend:`, err);
     }
-    for (const done of wireHolds) done(Boolean(response?.ok));
-    const ended = nodeHolds.filter(([, done]) => done(Boolean(response?.ok))).map(([id]) => id);
+    const ok = Boolean(response?.ok);
+    const answer = ok ? await response!.json().catch(() => ({})) as {
+      removals?: unknown; notReopened?: unknown; pinsLeft?: unknown; syncSeq?: unknown;
+    } : {};
+    // What it holds stays held until its answer is handled: a refusal, or
+    // no answer, now; an OK once the sync it names has been applied
+    // (whenSynced; PR #205 review 8, held-undo MEDIUM-1 and -2): any sync
+    // before that one is older than this restore, so it never decides what
+    // this restore put back or took off.
+    const endNodeHolds = (took: boolean) => nodeHolds.filter(([, done]) => done(took)).map(([id]) => id);
+    const endWireHolds = (took: boolean, synced: boolean) => { for (const done of wireHolds) done(took, synced); };
+    const placeCopies = (ended: string[], took: boolean) => {
+      // The newest copy Nebula synced of each node it held (M-2).
+      if (admission.graph !== canvasReplacementRevision) return;
+      applyHeldCopies(ended);
+      // Review 13 LOW-1: a deleted scene it brought back takes the
+      // person's kept edits now (its echo came while it was held).
+      if (took) restoreDeletedScenes(new Set(ended), heldNodes());
+    };
+    if (!ok) endWireHolds(false, false);
+    const ended = ok ? [] : endNodeHolds(false);
     try {
       if (abandoned) return;
       if (timedOut) {
+        // Review 6 of PR #205 (P-A): Nebula's syncs while it was held say it
+        // applied it (a node it brings back was there, one it takes off was
+        // gone): the step is done, as a late answer would say (landedLate),
+        // and what the syncs carried lands on it. Taking it back here would
+        // make an agent's change to a node it brought back that node's add,
+        // whose Undo deletes a node Nebula has.
+        if (appliedPerSyncs()) {
+          console.warn(`[nebula] ${action} had no answer in ${HOLD_LIMIT_MS / 1000} s; Nebula's syncs show it applied`);
+          return;
+        }
         // Review 17, L-2: the same bound as a held Cmd+Z (HOLD_LIMIT_MS).
         // The writes waiting behind it go out now, in order, each under
         // its own admission check. GM, round 19: "Nothing was undone.
@@ -9567,9 +10740,6 @@ function sendRestore(
         return;
       }
       if (response.ok) {
-        const answer = await response.json().catch(() => ({})) as {
-          removals?: unknown; notReopened?: unknown; pinsLeft?: unknown;
-        };
         // This restore deleted nodes (a redo of a delete): the step that
         // brings them back names these records.
         const fresh = cleanRemovals(answer.removals);
@@ -9590,17 +10760,26 @@ function sendRestore(
         });
         return;
       }
-      const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);
+      const { reason, error } = await backendRejectionReason(response, `Couldn't ${action} that.`);
       console.warn(`[nebula] ${action} refused: ${reason}`);
-      refused(reason);
+      refused(reason, { error });
     } finally {
-      // The newest copy Nebula synced of each node it held (M-2).
-      if (admission.graph === canvasReplacementRevision) {
-        applyHeldCopies(ended);
-        // Review 13 LOW-1: a deleted scene it brought back takes the
-        // person's kept edits now (its echo came while it was held).
-        if (response?.ok) restoreDeletedScenes(new Set(ended), heldNodes());
-      }
+      // After its line, as before: a held change landing first would be a
+      // newer step, and keep the line away (answerNotice).
+      if (ok) {
+        const seq = answeredSyncSeq(answer);
+        // The nodes' edits first (an agent's delete of a node it brought
+        // back, synced while held: its step takes the node's restored
+        // connections off with it), then the connections take the newest
+        // sync's way (holdWire).
+        whenSynced(seq, () => {
+          placeCopies(endNodeHolds(true), true);
+          endWireHolds(true, seq !== null);
+        }, () => {
+          endWireHolds(false, false);
+          endNodeHolds(false);
+        });
+      } else placeCopies(ended, false);
     }
   });
   restoreQueue = task.catch(() => {}).finally(() => {
@@ -9853,11 +11032,22 @@ wsClient.subscribe((event) => {
  * clear. It only adopts the revision: the tab is empty, nothing is held for
  * its canvas, and no line is said. */
 function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
+  const applied = applyGraphSyncNow(event, options);
+  // The answers waiting for this sync (or an earlier one) are handled now,
+  // after it, as if it had come before them (whenSynced).
+  if (applied) noteAppliedSync(event);
+  return applied;
+}
+
+function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
   if (graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
     return false;
   }
   appliedGraphSyncs += 1;
+  // Nebula's connections now, for a wire hold this sync ends (takeSyncedWire).
+  newestSyncEdges = new Map((((event as { edges?: Edge[] }).edges) ?? []).map((edge) => [edgeKey(edge), edge]));
   clearedAsSaved = null;
+  clearedHeldOff = null;
   useCinemaMotionStore.getState().observeGraphSync();
   // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
   // nodes (library drags, undo'd results, etc.) must survive graphSync — only
@@ -9966,6 +11156,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   }
   if (graphReplaced) {
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     noteCanvasReplaced(replacementWhileFollowing() ?? { kind: 'changed' });
     forgetLandingsOfReplacedCanvas();
     forgetRunsOfReplacedGraph();
@@ -9984,7 +11175,8 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     pendingConnectedNodeCreationAttempt = null;
     wireWrites.clear();
     nodeWrites.clear();
-    heldCopies.clear();
+    // (forgetStepsInFlight above already cleared heldCopies and forgot the
+    // holds of the replaced canvas; nothing between fills them again.)
     clearUnsavedParamEdits();
     // The committed import can arrive before, or instead of, its HTTP ack.
     // Revoke old same-ID uploads/writes and suspended drafts before merging.
@@ -10036,7 +11228,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   if (!graphReplaced) {
     // Review 17, M-2: what this sync says of each held node is kept, the
     // newest, for when its hold ends (applyHeldCopies).
-    noteHeldCopies(heldNodeIds, cliNodes as Node<NodeData>[], (cliEdges ?? []) as Edge[], origin, moved);
+    noteHeldCopies(heldNodeIds, cliNodes as Node<NodeData>[], (cliEdges ?? []) as Edge[], origin, moved, Boolean(runParams));
     // A delete on its way whose node this sync no longer has is done in
     // Nebula, whatever its answer says (review 14, L-E; the node is off
     // the canvas already: GM r18, option (c)).
@@ -10056,12 +11248,16 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     if (!graphReplaced && (!origin || isOwnEcho(origin, TAB_ID))) {
       placeEchoedDeletes(state, remainingIds, useGraphStore.setState as GraphSet, useGraphStore.getState);
     }
+    const topBefore = useGraphStore.getState().undoStack.at(-1);
     useGraphStore.setState({
       nodes: remainingNodes,
       edges: remainingEdges,
       backendFreshStartPending: false,
       ...foreignEditStep(asLastSaved(state), remainingNodes, remainingEdges, origin, graphReplaced, moved, Boolean(runParams)),
     });
+    // A clear's held links take its step and its place in Nebula's order,
+    // as any other sync's (review 6 of PR #205, P-B).
+    bindHeldLinks(topBefore);
     noteSyncArrivals(state.nodes, remainingNodes, useGraphStore.setState as GraphSet, useGraphStore.getState);
     if (replacedPresses) announceDrop(useGraphStore.setState as GraphSet, replacedPresses);
     showClearReport();
@@ -10169,12 +11365,14 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   if (!graphReplaced && (!origin || isOwnEcho(origin, TAB_ID))) {
     placeEchoedDeletes(state, mergedIds, useGraphStore.setState as GraphSet, useGraphStore.getState);
   }
+  const topBefore = useGraphStore.getState().undoStack.at(-1);
   useGraphStore.setState({
     nodes: merged,
     edges: mergedEdges,
     backendFreshStartPending: false,
     ...foreignEditStep(asLastSaved(state), merged, mergedEdges, origin, graphReplaced, moved, Boolean(runParams)),
   });
+  bindHeldLinks(topBefore);
   // What it brought arrived after any step in flight; an upload waiting for its node settles (review 11, L-2, L-6).
   noteSyncArrivals(graphReplaced ? [] : state.nodes, merged, useGraphStore.setState as GraphSet, useGraphStore.getState);
   if (replacedPresses) announceDrop(useGraphStore.setState as GraphSet, replacedPresses);
@@ -11035,7 +12233,27 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // Empty: a write refused while offline says nothing (round 15 of PR #114).
   notify: (text, tone = 'error', options) => {
     if (!text) return;
-    set((state) => noticeLine(state, text, tone, options?.mono));
+    let shownId: number | null = null;
+    set((state) => {
+      const shown = noticeLine(state, text, tone, options?.mono);
+      shownId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
+      return shown;
+    });
+    if (shownId === null) return;
+    const id = shownId;
+    // Review 4 LOW-2, review 5 LOW-4 (round 7): the refusal itself, so its own send-time
+    // stamp comes with it (a line built from a refusal's words passes refusalError of its
+    // answer). A line that says the gate held with no error gets a bare code: it waits for the
+    // next promote, never another request's stamp.
+    const refusal = isPersonRefusal(options?.error) ? options?.error
+      : saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE }
+        : options?.error;
+    clearsOnPromoteIf(refusal, () => useGraphStore.setState((state) => (state.undoNotice?.id === id // clears-on-promote: graph.notify
+      ? { undoNotice: null } : state.messageNotice?.id === id ? { messageNotice: null } : {})));
+  },
+
+  sayRunLocked: (text) => {
+    set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
   },
 
   // ---------------------------------------------------------------------------
@@ -11064,7 +12282,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   pasteClipboard: (target) => {
     const state = get();
     const { clipboard, isExecuting } = state;
-    if (isExecuting) return [];
+    // GM PR #205 r2 item 4: never silently, where Delete's and Undo's lines show.
+    if (isExecuting) {
+      if (clipboard && clipboard.nodes.length > 0) set({ undoNotice: { id: ++undoNoticeSeq, text: runLockedLine('paste'), offer: null } });
+      return [];
+    }
     if (!clipboard || clipboard.nodes.length === 0) return [];
 
     const safeParams = clipboardPasteParams(state, clipboard);
@@ -11117,6 +12339,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    selectionFollows(newNodes.map((node) => node.id));
     // The step owns the copies it made (round 14 of PR #114).
     pushOwnAdd(set, get, newNodes.map((node) => node.id));
     return newNodes.map((node) => node.id);
@@ -11136,8 +12359,18 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   duplicateSelected: () => {
     const state = get();
     const { nodes, edges, isExecuting } = state;
-    if (isExecuting) return;
     const selected = nodes.filter((n) => n.selected);
+    if (isExecuting) {
+      // GM PR #205 r2 item 4: "You can duplicate “X” when the run finishes.",
+      // where Delete's and Undo's lines show, named as Delete names them.
+      if (selected.length > 0) {
+        const ids = selected.map((node) => node.id);
+        set({ undoNotice: { id: ++undoNoticeSeq, offer: null, text: runLockedLine('duplicate', ids.length,
+          ids.length === 1 ? namedOnCanvas(nodes, ids[0]) : undefined,
+          inCanvasOrder(ids, nodes).map((id) => listedNodeTitle(nodes, id))) } });
+      }
+      return;
+    }
     if (selected.length === 0) return;
 
     const safeParams = new Map<string, Record<string, unknown>>();
@@ -11194,6 +12427,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    selectionFollows(newNodes.map((node) => node.id));
     pushOwnAdd(set, get, newNodes.map((node) => node.id));
   },
 
@@ -11287,10 +12521,13 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   addNodeAndConnect: async (definitionId, position, connect) => {
     const definition = NODE_DEFINITIONS[definitionId];
-    const fail = (reason: string) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason);
+    const fail = (reason: string, error?: unknown) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
-    if (before.isExecuting || before.isImportingGraph) return fail('Wait for the current run or graph import to finish.');
+    // GM PR #205 r4 item 3: a run going doesn't lock it (the add and the
+    // connect are each allowed during a run). An import does, with its line
+    // alone (r1 answer 2): "You can add “X” when the import finishes."
+    if (before.isImportingGraph) return refuseAdd(addNodeLine(definition.displayName, 'import'));
     if (pendingConnectedNodeCreationAttempt || pendingNodeCreationAttempt) return fail('Another node-create request is still unresolved. Wait for the exact connected pair to sync, or reload the canvas before trying again.');
     if (connect.newNodeIs !== 'source' && connect.newNodeIs !== 'target') return fail('The connection direction is invalid.');
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return fail('The canvas position is invalid.');
@@ -11347,7 +12584,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        return fail(await backendRejectionReason(res, addHeading(definition.displayName)));
+        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+        return fail(reason, error);
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -11360,7 +12598,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         // Nebula said what it made: nothing is left unresolved (a later
         // add-and-connect isn't refused for it: round 17's P-2).
         definiteOutcome = true;
-        return fail('The canvas changed while this request was pending. Check the current graph before trying again.');
+        return fail('The canvas changed before this could finish. Check it, then try again.');
       }
 
       const nodeId = node.id;
@@ -11498,9 +12736,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
       }
       if (!res.ok) {
-        const reason = await backendRejectionReason(res, addHeading(definition.displayName));
+        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
         takeBack();
-        return reportNodeCreationFailure(definition.displayName, reason);
+        return reportNodeCreationFailure(definition.displayName, reason, error);
       }
       let body: { id?: unknown };
       try {
@@ -11775,6 +13013,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Until Nebula answers, an agent's switch carries it in the handoff (round 20, H1).
     if (!labelsInFlight.has(nodeId) && typeof previous === 'string') labelsSavedBefore.set(nodeId, previous);
     labelsInFlight.set(nodeId, next);
+    refusedRenames.delete(nodeId);
+    heldSyncedLabels.delete(nodeId);
     // Round 23 (L-1): as a param save, for an agent's clear read before the answer.
     const landed = watchLanding(nodeId, (was) => ({ ...was, data: { ...was.data, label: next } }), renameSave(node, previous));
     graphMutationFetch(`/api/graph/node/${nodeId}/label`, {
@@ -11795,8 +13035,17 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
     }).catch((err) => {
       console.warn(`[nebula] Rename of ${nodeId} failed:`, err);
+      // A refused rename leaves no trace on a held copy either (review 6 of
+      // PR #205, held-undo LOW-1): the copy's sync took it as on its way,
+      // so the hold's end would put it back, and an agent's Redo write it.
+      // Review 8 of PR #205 (held-undo LOW-4): the name Nebula has is the
+      // newest one synced for the node while it was held and a rename on its
+      // way (an agent's rename), else the one before the person's: the
+      // canvas shows that one.
+      const saved = heldSyncedLabels.get(nodeId) ?? previous;
+      forgetRefusedRename(nodeId, next, typeof saved === 'string' ? saved : undefined);
       const current = get().nodes.find((candidate) => candidate.id === nodeId);
-      if (current?.data.label === next) get().updateNodeData(nodeId, { label: previous });
+      if (current?.data.label === next) get().updateNodeData(nodeId, { label: saved });
     });
   },
 
@@ -12384,9 +13633,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const runId = uuidv4();
     currentRunId = runId;
     registerRun(runId, snapshot);
+    const queuedScope = new Set<string>();
     set((state) => ({
       activeRuns: ownershipState().activeRuns,
-      nodes: markExecutionScopeQueued(state.nodes, state.edges),
+      nodes: markExecutionScopeQueued(state.nodes, state.edges, undefined, queuedScope),
       isExecuting: true,
       isCancelling: false,
       runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
@@ -12409,6 +13659,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
+      startTaken(queuedScope);
       if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
         const onItsCanvas = runOnItsCanvas(runId);
         closeTrackedRun(set, runId, { status: 'failed' });
@@ -12432,9 +13683,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
+        // Review 5 NIT-5: the scope this start queued, not one read again at the refusal.
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
-          new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
+          queuedScope,
           failureMessage(err, "Couldn't start the run."),
           err,
         ),
@@ -12494,6 +13746,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     let trimmed: RunRecord[] = [];
     // Registers the run: its Run history record, its nodes Queued, Stop. Again
     // after Nebula's refusal and a yes, unless another run started meanwhile.
+    const queuedScope = new Set<string>();
     const begin = (again = false) => {
       if (again && (get().isExecuting || get().isImportingGraph)) return false;
       const state = get();
@@ -12503,7 +13756,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       registerRun(runId, snapshot, nodeId);
       set((current) => ({
         activeRuns: ownershipState().activeRuns,
-        nodes: markExecutionScopeQueued(current.nodes, current.edges, nodeId),
+        nodes: markExecutionScopeQueued(current.nodes, current.edges, nodeId, queuedScope),
         isExecuting: true,
         isCancelling: false,
         runHistory: persistedRunHistory(openRunRecord(current.runHistory, {
@@ -12540,6 +13793,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
+      startTaken(queuedScope);
       if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
         const onItsCanvas = runOnItsCanvas(runId);
         closeTrackedRun(set, runId, { status: 'failed' });
@@ -12565,7 +13819,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set((state) => ({
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
-          new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
+          queuedScope,
           failureMessage(err, "Couldn't run the node."),
           err,
         ),
@@ -12732,7 +13986,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        failShot(failureMessage(err, "Couldn't start the shot."));
+        const line = failureMessage(err, "Couldn't start the shot.");
+        failShot(line);
+        // PR #204 round 4: refused only for this tab, the shot's line goes on the promote while it is still there.
+        const settledBefore = shotBefore;
+        clearsOnPromoteIf(err, () => clearShotRefusal(nodeId, shotId, line, settledBefore, set, get)); // clears-on-promote: graph.shot-start
         settleTrackedExecutionStatus('failed', runId, set, get);
       } else await reconcileWorldLabsExecutionStatus(runId, set, get, err);
     }
@@ -12809,7 +14067,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       nodes: state.nodes.map((n) =>
         idSet.has(n.id)
           ? {
-              ...n,
+              ...queuedFrom(n),
               data: {
                 ...n.data,
                 state: 'queued' as const,
@@ -12922,6 +14180,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status === 'started') {
+        // Gates NIT-3 (round 7): this path queues with no resetExecution, so a taken start's
+        // kept states go here too.
+        startTaken(idSet);
         updateRunPhase(runId, 'running', set);
         scheduleWorldLabsStatusReconciliation(runId, set, get);
         return;
@@ -12943,13 +14204,21 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
+      // GM r13 (1), PR #204 round 9: Generate's nodes were added and only their start was refused
+      // for this tab. Its result cards say so in GM's words: the nodes are there, run them from
+      // the canvas, never "try again" (a second Generate would add them again).
+      const generateRefused = Boolean(createOrigin) && isPersonRefusal(error);
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
-        failureMessage(error, "Couldn't start the run."), error) }));
+        // GM r16 Q3 (round 10): any other reason says the nodes are there too, never "try again".
+        generateRefused ? generateRefusedCopy(true) : createOrigin ? generateStartFailedCopy(error)
+          : failureMessage(error, "Couldn't start the run."), error, Boolean(createOrigin)) }));
     }
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
+    // GM, PR #205 r1: a thrown refusal with no single control says the
+    // refused action, as a line of its own.
+    if (get().isImportingGraph) throw new FailureNotice(GENERATE_HEADING, lockLine('start the generation', 'import'), { standalone: true });
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -13028,7 +14297,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         console.error('[nebula] authorGenerationCluster persist failed:', err);
         // Refused while offline: nothing was sent, and Create says nothing.
         if (isOfflineRefusal(err)) throw err;
-        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`);
+        // Review 3 MEDIUM-1 (#204 r5): the refusal's code (and when it was sent) go with it, so
+        // Create's line clears on the promote when its only reason was this tab.
+        const refused = err instanceof RequestFailedError ? err : null;
+        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`,
+          { code: refused?.code ?? null, sentAt: refused?.sentAt ?? null });
       } finally {
         synced.stop();
       }
@@ -13106,7 +14379,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // and is dropped).
     const stack = get().undoStack;
     const onTop = step !== undefined && stack.indexOf(step) === stack.length - 1;
-    const own = pushOwnAdd(set, get, incoming.map((node) => node.id), changes, rewriteBackendAssetUrls(incoming));
+    // The wires its model changes removed, as the canvas had them before, so
+    // its Undo puts them back (PR #216 r3).
+    const removedKeys = new Set((options?.unwired ?? []).map((edge) => edgeKey(edge)));
+    const beforeEdges = (snapshot && 'edges' in snapshot && Array.isArray(snapshot.edges) ? snapshot.edges : get().edges) as Edge[];
+    const unwired = removedKeys.size === 0 ? []
+      : (options?.unwired ?? []).map((ends) => beforeEdges.find((edge) => edgeKey(edge) === edgeKey(ends))
+        ?? ({ id: `e-${edgeKey(ends)}`, type: 'typed-edge', ...ends } as Edge));
+    const own = pushOwnAdd(set, get, incoming.map((node) => node.id), changes, rewriteBackendAssetUrls(incoming), unwired);
     if (step) {
       if (own && onTop) stepSuccessors.set(step, own);
       set((state) => (state.undoStack.includes(step)
@@ -13133,7 +14413,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const synced = options?.synced ?? new Set<string>();
       return {
         nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id))],
-        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
+        edges: [...state.edges.filter((edge) => !removedKeys.has(edgeKey(edge))),
+          ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
       };
     });
   },
@@ -13475,6 +14756,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     canvasLoadedOverHttp();
     noteCanvasReplaced({ kind: 'changed' });
     forgetLandingsOfReplacedCanvas();
@@ -13600,6 +14882,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
     canvasLoadedOverHttp();
     // Another project's canvas: the agent's while following, else one with
@@ -13657,7 +14940,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     currentRunId = restoredHistory.find((record) => record.status === 'running'
       && !record.createOrigin && !record.cinemaShot)?.id ?? null;
     useUIStore.setState({
-      selectedNodeId: null, inspectorPinned: false, canvasFocusRequest: null,
+      // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+      selectedNodeId: null, canvasFocusRequest: null,
       editorTargetNodeId: null, remotionEditorTargetNodeId: null, cinemaEditorNodeId: null,
       characterEditorId: null, moodboardEditorId: null, selectedClipId: null,
       selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,
@@ -14208,7 +15492,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Round 3b: the person reads these (Run History alerts them), so they are
     // written lines under the button's heading, not developer text.
     if (get().isExecuting) {
-      throw new FailureNotice(FORGET_RECOVERY_HEADING, 'Let the run finish, then try again.');
+      // GM, PR #205 r1: the refused action's lock line, standing alone.
+      throw new FailureNotice(FORGET_RECOVERY_HEADING, runFinishesLine('forget the recovery safeguard'), { standalone: true });
     }
     const expected = get().providerRecoveries.find(
       (checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId,
@@ -14352,7 +15637,7 @@ useGraphStore.subscribe(fixAddsBelowNewSteps);
 if (typeof window !== 'undefined') {
   window.addEventListener(CANVAS_NOTICE_EVENT, (event) => {
     const detail = (event as CustomEvent<CanvasNoticeDetail>).detail;
-    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone);
+    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone, { error: detail.error });
   });
 }
 
@@ -14495,7 +15780,7 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   // Undo bookkeeping (the edits they bracket are gated themselves).
   'beginUndoStep', 'cancelUndoStep', 'endUndoStep', 'noteOwnAdd', 'noteRenameDraft',
   // Notices.
-  'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'dismissProviderRecoveryWarning',
+  'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'sayRunLocked', 'dismissProviderRecoveryWarning',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.
@@ -14678,6 +15963,67 @@ subscribeBackendConnection(() => {
   };
   useGraphStore.setState(gated);
 }
+
+// GM PR #205 r12: one selected node is the node the Inspector shows, however
+// it was selected (a click, a Shift-click, a drag-select of one, Select all on
+// a canvas of one, a Paste of one), so the Inspector and the rings agree. A
+// card's ring is its canvas selection or the Inspector's node; these two keep
+// them one set. The canvas selection changed: one node, the Inspector shows
+// it; several, the Inspector's node is one of them or none; the clear (every
+// selected node still on the canvas, none selected now), none. (The other
+// way, uiStore.selectNode: a node named for the Inspector is selected.)
+const canvasSelectedIds = (nodes: Node<NodeData>[]) => nodes.filter((node) => node.selected).map((node) => node.id);
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes) return;
+  const now = canvasSelectedIds(state.nodes);
+  const ui = useUIStore.getState();
+  const shown = ui.selectedNodeId;
+  // GM PR #205 r10 items 2-3 and r16 item 5: the node the Inspector shows
+  // left the canvas (an Undo, a Redo, a Delete, an agent's delete, a reopen).
+  // One rule for every way, decided here from the selection as it is now
+  // (review 8, lines-inspector MEDIUM-1: a rule of its own ran first and
+  // closed an unpinned Inspector before this one saw what stayed selected).
+  // One node left selected: it shows that one. Several: unpinned, it stays on
+  // one of them, reading "N nodes selected"; pinned, it names none and says
+  // so. None: pinned, its empty state, its pin kept; unpinned, it closes.
+  if (shown && !state.nodes.some((node) => node.id === shown) && previous.nodes.some((node) => node.id === shown)) {
+    ui.selectNode(now.length === 1 || (now.length > 1 && !ui.inspectorPinned) ? now[0] : null, { keepPin: true });
+    return;
+  }
+  const before = canvasSelectedIds(previous.nodes);
+  if (now.length === before.length && now.every((id, index) => id === before[index])) return;
+  if (now.length === 1) {
+    if (shown !== now[0]) ui.selectNode(now[0], { keepPin: true });
+    return;
+  }
+  if (now.length > 1) {
+    // Pinned, the Inspector's node is one of them or none. Unpinned, it
+    // follows the selection: it stays on one of them, reading "N nodes
+    // selected", whether or not its old node is in it (GM PR #205 r16 item 5).
+    if (!shown || now.includes(shown)) return;
+    ui.selectNode(ui.inspectorPinned ? null : now[0], { keepPin: true });
+    return;
+  }
+  const cleared = before.length > 0 && before.every((id) => state.nodes.some((node) => node.id === id));
+  if (!cleared || !shown) return;
+  if (ui.inspectorPinned) {
+    ui.selectNode(null, { keepPin: true });
+    return;
+  }
+  // Unpinned, it closes at none, but not while a drag-select is starting:
+  // React Flow clears the selection, then starts the drag, in one handler.
+  queueMicrotask(() => { if (!isCanvasSelectionDragging()) closeUnpinnedInspectorAtNone(); });
+});
+
+// The unpinned Inspector closes when nothing is selected, once no drag-select
+// is on (lib/canvasSelectionDrag; GM PR #205 r16 item 5).
+function closeUnpinnedInspectorAtNone(): void {
+  const ui = useUIStore.getState();
+  if (!ui.selectedNodeId || ui.inspectorPinned) return;
+  if (useGraphStore.getState().nodes.some((node) => node.selected)) return;
+  ui.selectNode(null, { keepPin: true });
+}
+onCanvasSelectionDragEnd(closeUnpinnedInspectorAtNone);
 
 // Every card title this tab shows is remembered past its node's removal, so
 // a World Labs record whose node left the canvas is still named by it (GM,

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { stopWatchingBareLines, takeBareLines, watchBareLines } from './helpers/bareLines';
 
 // JSDOM does not implement document.elementsFromPoint. Define a no-op stub so
 // vi.spyOn can intercept it in tests that mock the return value. Guarded so
@@ -40,6 +41,15 @@ class MockWebSocket extends EventTarget {
 }
 
 globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+
+// Module state a store keeps between tests that its harness can't end (the
+// graph store's holds waiting on an echo no fake backend sends): the store
+// adds its reset here when it loads, and it runs after every test.
+{
+  const resets = new Set<() => void>();
+  (globalThis as { __nebulaTestResets?: Set<() => void> }).__nebulaTestResets = resets;
+  afterEach(() => { for (const reset of resets) reset(); });
+}
 
 // In test mode lib/backend.ts sends every request to http://localhost:8000,
 // where a developer's own Nebula may be running. A request a test forgot to
@@ -106,4 +116,21 @@ globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     for (let turn = 0; turn < 3; turn += 1) await settle();
     failOnUnmocked('after the last test in this file');
   });
+}
+
+// PR #204 round 10 (review 8 LOW-1): a runtime ratchet for the one-notice rule
+// (tests/helpers/bareLines.ts): after each test, a "connected as you" line the page showed outside
+// a registered element fails it, naming the line.
+if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
+  watchBareLines();
+  afterEach(() => {
+    const found = takeBareLines();
+    if (found.length === 0) return;
+    throw new Error(`${found.length} "connected as you" line${found.length === 1 ? '' : 's'} rendered without registering `
+      + '(render it through <LineText>, components/LineText.tsx; review 8 LOW-1):\n'
+      + found.map((text) => `  ${text}`).join('\n'));
+  });
+  // Round 18h (review 16 NIT-2): disconnected before jsdom's teardown, so no change after it runs
+  // the walk on a document that is gone.
+  afterAll(() => stopWatchingBareLines());
 }

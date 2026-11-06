@@ -2,9 +2,15 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
-import { failureMessage } from '../../lib/errorCopy';
+import { linkedFolderNotice } from '../../lib/commonsFormat';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
+import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { COMMONS_OFF_COPY, loadFailedCause, savedReadBackLine } from '../../lib/errorCopy';
+import { isPersonRefusal } from '../../lib/clearsOnPromote';
 
 interface Props {
   status: CommonsStatus | null;
@@ -57,7 +63,7 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
             <li key={d.path} className="commons-list__item">
               <span className={`commons-badge commons-badge--${d.state}`}>{d.state}</span>
               <span className="commons-list__text">{d.path.split('/').pop()}</span>
-              {d.error && <span className="commons-meta">{d.error}</span>}
+              {d.error && <span className="commons-meta"><LineText text={d.error} /></span>}
             </li>
           ))}
         </ul>
@@ -74,13 +80,35 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [linking, setLinking] = useState(false);
   const linkingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** The message's tooltip: a linked folder's full path (GM r33). */
+  const [messageTitle, setMessageTitle] = useState<string | undefined>(undefined);
+  // Round 18h (review 16 LOW-1): each notice shown is numbered, so a late read-back renames only
+  // the notice it wrote, never a newer one (a Re-analyze's count shown meanwhile).
+  const messageSeq = useRef(0);
+  const showMessage = useCallback((text: string, title?: string) => {
+    messageSeq.current += 1;
+    setMessage(text);
+    setMessageTitle(title);
+    return messageSeq.current;
+  }, []);
   const [error, setError] = useState<string | null>(null);
+  // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
+  // yet.") only once they were read: before that, or when the load failed, nothing was. Round 18b
+  // (GM r29): the whole form waits for it too (see the early return below).
+  const [loaded, setLoaded] = useState(false);
+  // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
+  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<FolderLink[]> => {
     const [f, s, c] = await Promise.all([commonsApi.folders(), commonsApi.settings(), commonsApi.candidates()]);
     setFolders(f);
     setSettings(s);
     setCandidates(c);
+    setLoaded(true);
+    return f;
   }, []);
 
   useEffect(() => {
@@ -91,38 +119,52 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setFolders(f);
         setSettings(s);
         setCandidates(c);
+        setLoaded(true);
+        // Round 18f (GM r35 4): read again by its "Try again": the line goes with the failure.
+        setError(null);
       },
-      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the Commons settings.")); },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Commons settings.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, []);
+  }, [loadEpoch, line]);
 
-  const run = useCallback(async (work: () => Promise<unknown>, done?: string) => {
-    let committed = false;
+  /** `readBack` words the message again from what the write answered and the folders read back
+   * (round 18f: a linked folder's own name). */
+  const run = useCallback(async <T,>(work: () => Promise<T>, done?: string, doneTitle?: string,
+    readBack?: (result: T, read: FolderLink[]) => void) => {
+    let result: T;
     try {
-      await work();
-      committed = true;
-      setError(null);
-      if (done) setMessage(done);
-      await load();
-      onChanged();
-      return true;
+      result = await work();
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the settings."));
-      // The write may have committed even if its read-back failed. Preserve
-      // the error without inviting the user to submit that write again.
-      if (committed) onChanged();
-      return committed;
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the settings.");
+      return false;
     }
-  }, [load, onChanged]);
+    setError(null);
+    const shown = done ? showMessage(done, doneTitle) : null;
+    try {
+      const read = await load();
+      if (shown === messageSeq.current) readBack?.(result, read);
+    } catch (e) {
+      // Round 18d (review 14 LOW-1, GM r32 3): the write landed and only reading it back failed.
+      // A load's failure, neutral, in GM's words, with no "Try again" that would send the write
+      // again; never the backend's words. Refused because this tab isn't connected as you: the
+      // settings load's own because line, which loads them again on the promote.
+      const cause = isPersonRefusal(e) ? null : loadFailedCause('load the settings back', e);
+      if (isPersonRefusal(e)) line.show(e, "Couldn’t load Commons settings.", { reload: true });
+      else if (cause && cause !== COMMONS_OFF_COPY) line.keep(e, savedReadBackLine(cause));
+    }
+    // The write committed even if its read-back failed.
+    onChanged();
+    return true;
+  }, [load, onChanged, line, showMessage]);
 
   const exportZip = async () => {
     try {
       const blob = await commonsApi.exportZip();
       await saveBlob(blob, `commons-export-${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      setError(failureMessage(e, "Couldn't export the Commons."));
+      line.show(e, "Couldn’t export Commons.");
     }
   };
 
@@ -132,11 +174,21 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   // Round 16 (L4): offline the Commons is read-only like the canvas. Its
   // writes sit in disabled fieldsets; reading and Export zip stay.
   const readOnly = useBackendOffline();
+  // Round 18b (GM r29): until the settings read answers, or after it failed, only the heading and
+  // the line, as Agent review and Blind labeling do. No field or action shows over values nothing
+  // read: a Save there could overwrite the person's limits.
+  if (!loaded) return (
+    <section className="commons-settings" aria-labelledby={headingId}>
+      <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
+      {/* Round 18d (GM r32 5): the one loading look, under the heading. */}
+      {error ? <CommonsErrorLine line={error} onRetry={loadAgain} /> : <CommonsLoadingLine text="Loading settings…" />}
+    </section>
+  );
   return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
-      {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
-      {message && <p className="commons-notice" role="status">{message}</p>}
+      <CommonsErrorLine line={error} onRetry={loadAgain} />
+      {message && <p className="commons-notice" role="status" title={messageTitle}>{message}</p>}
 
       <section className="commons-detail__section" aria-label="Linked folders">
         <h3 className="commons-heading">Linked folders</h3>
@@ -154,7 +206,13 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             const submittedPath = linkPath;
             linkingRef.current = true;
             setLinking(true);
-            void run(() => commonsApi.linkFolder(path), `Linked ${path}; scanning.`).then((saved) => {
+            // Round 18f (GM r35 3): the typed text until the read-back has the folder, then the
+            // folder's own name (the backend resolves "~" or ".."); a failed read-back keeps it.
+            void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path, (link, read) => {
+              const row = read.find((folder) => folder.id === link?.id);
+              if (!row) return;
+              showMessage(linkedFolderNotice(row.path), row.path);
+            }).then((saved) => {
               if (saved) setLinkPath((current) => current === submittedPath ? '' : current);
             }).finally(() => {
               linkingRef.current = false;
@@ -234,7 +292,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
-              setMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
+              showMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
             })}
           >
             Re-analyze stale
@@ -243,7 +301,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
-              setMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
+              showMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
             })}
           >
             Import moodboards

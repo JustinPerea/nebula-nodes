@@ -762,6 +762,7 @@ def test_a_proposals_missing_node_has_a_line_in_words(monkeypatch) -> None:
     # Agents keep find_nodes' words.
     assert "OPENAI_API_KEY" in row["missing"]
     # The name in curly quotes (GM, PR #203 r20 item 3).
+    # The card names the node in curly quotes (GM - Design on #216 round 1).
     assert row["person"] == "“GPT Image 2” needs your OpenAI API key. Add it in Settings."
     assert not re.search(r"[A-Z]{2,}_[A-Z_]+|\(|\)|>", row["person"])
 

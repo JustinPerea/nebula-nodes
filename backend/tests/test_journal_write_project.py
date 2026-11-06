@@ -581,14 +581,14 @@ def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, mon
             assert time.monotonic() < deadline, what
             await asyncio.sleep(0.01)
 
-    async def slow_reopen_update(ref, proposal_id):
+    async def slow_reopen_update(ref, proposal_id, *args, **kwargs):
         # p2's Update write is slow (disk I/O under load): p1's timer, armed
         # in the undo, fires while the undo is still inside its link.
         if proposal_id == p2:
             clock["now"] += 1.0
             await until(lambda: {e["data"]["proposalId"] for e in expired()} >= {p1},
                         "p1's timer never expired it")
-        return await real(ref, proposal_id)
+        return await real(ref, proposal_id, *args, **kwargs)
 
     monkeypatch.setattr(main, "_reopen_update", slow_reopen_update)
 

@@ -6,6 +6,8 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
 
@@ -20,6 +22,32 @@ def _positive_int(text: str) -> int:
     return value
 
 
+# `nebula --help`'s closing section: how an orchestrator gives each lane its
+# own cursor (GM - Design, PR #211 r1). The same text is in skills/nebula and
+# docs/MCP-SETUP.md, "Agent cursors".
+CURSOR_ENV_HELP = """\
+your cursor on the person's canvas:
+  NEBULA_AGENT_NAME     the name it shows (in-app agents are named for you)
+  NEBULA_AGENT_SESSION  which of your sessions this is, up to 64 of A-Z a-z 0-9 _ . : -
+                        Each session gets its own cursor: "Claude Code", then
+                        "Claude Code · 2". Unset under Claude Code, the CLI uses
+                        your Claude Code session, which subagents share, so
+                        every subagent moves its parent's cursor. To give each
+                        subagent its own, set a value per lane, the same on every
+                        call it makes: NEBULA_AGENT_SESSION=lane-a nebula point n2
+                        It also keys your scene reads, so read and write with it.
+                        Only the person's canvas shows sessions; nebula look and
+                        nebula agents list one cursor per agent."""
+
+
+def _cursor_action(value: str) -> str:
+    """`nebula point --action`: one of the ten, else the same line the
+    backend and MCP give (GM - Design, PR #211 r2)."""
+    if value not in CURSOR_ACTIONS:
+        raise argparse.ArgumentTypeError(cursor_action_refusal(value))
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     # NebulaArgumentParser (cli/parser.py): errors say "Did you mean ...?" and
     # print only that command's usage; `describe` and `find` are hidden
@@ -28,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="nebula",
         usage="nebula [--url URL] <command> [options]",
         description="Nebula Nodes CLI — build and run media generation pipelines",
+        epilog=CURSOR_ENV_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         start_hint=True,
     )
     parser.add_argument("--url", default=None,
@@ -189,7 +219,9 @@ def build_parser() -> argparse.ArgumentParser:
         "point", help="Move your cursor on the canvas so the user sees where you are working",
         description="Point at a node, a port or a spot. With only --say (no target) the line shows where your "
                     "cursor already is, and it doesn't move; with no cursor yet it starts at the middle of the "
-                    "person's view, or at 0,0 when no canvas has reported its view.")
+                    "person's view, or at 0,0 when no canvas has reported its view. Each session of yours has its "
+                    "own cursor: give each lane its own $NEBULA_AGENT_SESSION, or a subagent moves its parent's "
+                    "cursor (see `nebula --help`).")
     point_p.add_argument("target", nargs="?", default=None,
                          help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "
                               "something where your cursor is")
@@ -197,8 +229,20 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
     point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
-    point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
-                         help="Gesture to show (default: move, or drag with --from)")
+    point_p.add_argument("--action", type=_cursor_action, metavar="{" + ",".join(CURSOR_ACTIONS) + "}", default=None,
+                         help="What you are doing there, and how the cursor shows it (with no --say it "
+                              "shows a line of its own; see docs/MCP-SETUP.md): move (going there; no "
+                              "gesture), look (reading; an arc sweeps once: \"Looking at “Brief”\"), think "
+                              "(its glow breathes: \"Thinking\"), type (a prompt or field; a caret, or an "
+                              "underline at a port: \"Writing the prompt for “FLUX.2”\"), click (a press and "
+                              "a ring), drag (connecting, with --from; a connection is pulled: \"Connecting "
+                              "“Brief” to “FLUX.2”\"), run (an arc circles once: \"Started “FLUX.2”\"), "
+                              "propose (waiting for the person's OK; a dashed glow and a ghost card: "
+                              "\"Waiting for your OK\", until that proposal is decided or expires), wait "
+                              "(for their answer to a question you asked; a dashed glow and a pin: "
+                              "\"Waiting for your answer\", until they answer or dismiss it), error (something failed; a shake and a red "
+                              "flash: \"Couldn’t run “FLUX.2”\" or \"Couldn’t do that\"). "
+                              "Default: move, or drag with --from")
     point_p.add_argument("--as", dest="agent_name",
                          help="Cursor name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
@@ -271,7 +315,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--rename +up=\"Hero, upscaled\" --run +up --wait --timeout 100. "
             "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
             "with {note, nodes, edges, params, run, rename}. A proposal can't move, remove, unwire or "
-            "arrange nodes, or rename existing ones: `nebula apply` does that directly. Each proposal also "
+            "arrange nodes, or rename existing ones: `nebula apply` does that directly. A --set of a "
+            "node's model whose new ports it knows drops the connections the new model can't take when "
+            "the person accepts, and lists them (`removes` lines, removedEdges in --json); a --set that "
+            "clears the model is refused, and `nebula apply` "
+            "still refuses that change until you --unwire them. Each proposal also "
             "posts an Update (\"Codex proposes 3 changes on the canvas\", with Review) that the person sees "
             "on every screen, so don't also send a `nebula note` about it; `nebula notes` shows how it ended."
         ),
@@ -420,8 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     save_p.add_argument("file", help="Output file path (JSON)")
 
     load_p = sub.add_parser(
-        "load", help="Open a graph file (.nebula, .json or .nebula.zip) as Load graph does",
-        description="Open a graph file as the canvas's Load graph does: a .nebula.zip's files are restored. "
+        "load", help="Open a graph file (.nebula, .json or .nebula.zip) as Load canvas does",
+        description="Open a graph file as the canvas's Load canvas does: a .nebula.zip's files are restored. "
                     "Under the 16 MB save limit it replaces the open project's canvas (make a new project first "
                     "to keep it); over the limit it opens as a new project named after the file (MCP: "
                     "load_graph_file).")
@@ -485,8 +533,46 @@ def build_parser() -> argparse.ArgumentParser:
         "agents", help="The agents working in the open project: status, last action, what waits for the person",
         description=("The roster the person's Agents panel shows (MCP list_agents): each agent's status line, its "
                      "cursor's last action, and how many of its questions and proposals wait for the person "
-                     "(counts only). Needs you first, then Working."))
+                     "(counts only). Needs you first, then Working. One row per agent: the sessions "
+                     "$NEBULA_AGENT_SESSION separates show as their own cursors on the person's canvas only."))
     agents_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_agents returns it")
+
+    reply_p = sub.add_parser(
+        "reply", help="Answer the person in the canvas's Message box (MCP reply_to_person)",
+        description=("Answer a message the person sent you from the canvas's Message box (the thread in the Agent "
+                     "log). They read the thread, not your terminal. --node flies your cursor to a node and shows "
+                     "the reply's first sentence there. 2,000 characters at most. Every connected agent can read "
+                     "the thread, as pins. Replying takes an agent token from Settings > Connect your agent: the "
+                     "CLI reads NEBULA_APP_TOKEN_FILE, which the launch command nebula mcp connect claude-code "
+                     "--channel prints sets for the session. From that session's shell it is the same reply as "
+                     "MCP reply_to_person, and it ends the turn's protection from gated pushes the same way, so "
+                     "reply when you're done."))
+    reply_p.add_argument("text", help="Your answer (line breaks are kept)")
+    reply_p.add_argument("--node", default=None, metavar="nX", help="A node the answer is about (on the open canvas)")
+    reply_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    reply_p.add_argument("--as", dest="agent_name",
+                         help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    thread_p = sub.add_parser(
+        "thread", help="The canvas's Message box thread (MCP read_thread)",
+        description=("The person's messages from the canvas, with the nodes they had selected and the agent each "
+                     "was for, agents' replies, and the questions, proposals, Updates and pins that crossed the "
+                     "channel, oldest first. Every connected agent reads it, as pins."))
+    thread_p.add_argument("--limit", type=int, default=20, help="How many of the newest rows (1-300, default 20)")
+    thread_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP read_thread returns it")
+    thread_p.add_argument("--as", dest="agent_name",
+                          help="Your agent name (default: $NEBULA_AGENT_NAME)")
+
+    channel_p = sub.add_parser(
+        "channel", help="Whether the person's canvas can reach you through the Nebula channel (MCP channel_status)",
+        description=("Your channel listeners as Nebula sees them, one per session of yours: listening (Nebula "
+                     "pushes the person's messages, pins and answers to it), or stopped (2 hours with nothing from "
+                     "the person, or a failure; /mcp > nebula-listen > Reconnect starts it again). None means "
+                     "Nebula doesn't count you as connected. Nebula can't tell whether Claude Code delivers a "
+                     "push, so listening means Nebula pushes, not that the session took it."))
+    channel_p.add_argument("--json", action="store_true", help="Print it as JSON (MCP channel_status's listeners)")
+    channel_p.add_argument("--as", dest="agent_name",
+                           help="Your agent name (default: $NEBULA_AGENT_NAME)")
 
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
@@ -593,9 +679,16 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_connect_p.add_argument("--print", dest="print_only", action="store_true",
                                help="Only print the config; change nothing")
     mcp_connect_p.add_argument("--yes", action="store_true", help="Apply without asking")
+    mcp_connect_p.add_argument("--channel", action="store_true",
+                               help="Claude Code only: write the session-only nebula-listen config "
+                                    "(~/.nebula-listen.mcp.json) for the Nebula channel, with the agent token file a "
+                                    "listener needs (Nebula refuses a listener with no token), and print the "
+                                    "command that starts Claude Code with it")
     mcp_disconnect_p = mcp_sub.add_parser("disconnect", help="Remove Nebula's MCP server from an app")
     mcp_disconnect_p.add_argument("client", choices=list(CLIENTS))
     mcp_disconnect_p.add_argument("--yes", action="store_true", help="Apply without asking")
+    mcp_disconnect_p.add_argument("--channel", action="store_true",
+                                  help="Claude Code only: remove the nebula-listen config --channel wrote")
 
     return parser
 
@@ -710,6 +803,7 @@ def main() -> None:
     from .commands import notes as notes_cmd
     from .commands import questions as questions_cmd
     from .commands import agents as agents_cmd
+    from .commands import thread as thread_cmd
     from .commands import style
 
     dispatch = {
@@ -746,6 +840,9 @@ def main() -> None:
         ),
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
+        "reply": lambda: thread_cmd.run_reply(client, args),
+        "thread": lambda: thread_cmd.run_thread(client, args),
+        "channel": lambda: thread_cmd.run_channel(client, args),
         "note": lambda: notes_cmd.run_note(client, args),
         "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),

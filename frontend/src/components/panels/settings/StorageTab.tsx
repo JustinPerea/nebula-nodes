@@ -6,6 +6,8 @@ import { saveField } from '../../../lib/settingsWrites';
 import { isBackendOffline } from '../../../lib/backendConnection';
 import { SwitchRow } from './Switch';
 import { SettingsRowError } from './SettingsRowError';
+import { PersonLockLine, type PersonLock } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 
 type FolderField = 'outputPath' | 'exportFolder';
 
@@ -14,7 +16,8 @@ type FolderField = 'outputPath' | 'exportFolder';
  * folder; Escape puts back what was saved. In the desktop app Choose… opens
  * the system folder picker.
  */
-function FolderField({ field, label, saved, placeholder, hint }: {
+function FolderField({ field, label, saved, placeholder, hint, lock }: {
+  lock: PersonLock;
   field: FolderField;
   label: string;
   saved: string;
@@ -39,7 +42,7 @@ function FolderField({ field, label, saved, placeholder, hint }: {
     return { fieldDrafts, errors };
   });
   const commit = () => {
-    if (draft === undefined) return;
+    if (draft === undefined || lock.locked) return;
     // Round 16 (L3): going offline disables the field, which blurs it. That
     // blur isn't the person leaving the field, so nothing is sent and the
     // draft stays for when Nebula answers again.
@@ -49,7 +52,7 @@ function FolderField({ field, label, saved, placeholder, hint }: {
   };
 
   async function choose() {
-    if (!picker) return;
+    if (!picker || lock.locked) return;
     setChooseError(null);
     try {
       const result = await picker.choose(value.trim() || undefined);
@@ -73,7 +76,8 @@ function FolderField({ field, label, saved, placeholder, hint }: {
           type="text"
           value={value}
           placeholder={placeholder}
-          aria-describedby={hintId}
+          readOnly={lock.locked}
+          {...lock.control(hintId)}
           aria-invalid={!!error || undefined}
           spellCheck={false}
           autoComplete="off"
@@ -86,7 +90,7 @@ function FolderField({ field, label, saved, placeholder, hint }: {
           }}
         />
         {picker && (
-          <button type="button" className="settings__button" disabled={pending} onClick={() => void choose()}
+          <button type="button" className="settings__button" disabled={pending} {...lock.control()} onClick={() => void choose()}
             aria-label={`Choose ${label.toLowerCase()} folder`}>Choose…</button>
         )}
       </div>
@@ -98,16 +102,24 @@ function FolderField({ field, label, saved, placeholder, hint }: {
 
 export function StorageTab({ saved }: { saved: SettingsDraft }) {
   const telemetryPending = useSettingsDraftStore((s) => !!s.pending.zoomTelemetryEnabled);
+  // GM, PR #205 r1 answer 6: the switch shows the person's new position at
+  // once while it saves (held, then locked after 150 ms); a failed save puts
+  // back the saved value.
+  const [telemetryTo, setTelemetryTo] = useState<boolean | null>(null);
   const telemetryError = useSettingsDraftStore((s) => s.errors.zoomTelemetryEnabled);
   const desktop = typeof window !== 'undefined' && !!window.nebulaDesktop?.folders;
+  // PR #204 round 10 (GM r15, r17 item 4): every setting here is PUT /api/settings, the person's
+  // alone, so the folders and the telemetry switch lock as one group with one line at the top.
+  const lock = usePersonLock('change storage settings');
 
   return (
     <div className="settings-storage">
+      <PersonLockLine lock={lock} place="tab" />
       <FolderField field="outputPath" label="Generated files" saved={saved.outputPath}
         placeholder={desktop ? 'Default folder' : 'Default: ./output'}
-        hint={`Every run saves here.${desktop ? '' : ' Use an absolute path.'} A new folder takes effect after Nebula restarts.`} />
+        hint={`Every run saves here.${desktop ? '' : ' Use an absolute path.'} A new folder takes effect after Nebula restarts.`} lock={lock} />
       <FolderField field="exportFolder" label="Exports" saved={saved.exportFolder} placeholder="Default: ~/Downloads"
-        hint="Where Save and Export start." />
+        hint="Where Save and Export start." lock={lock} />
 
       <section aria-labelledby="settings-help-heading">
         <div className="settings-label"><h3 id="settings-help-heading">Help &amp; advanced</h3></div>
@@ -121,8 +133,9 @@ export function StorageTab({ saved }: { saved: SettingsDraft }) {
             <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
           </button>
           <SwitchRow title="Demo zoom telemetry" description="Records canvas bounds for demo-video editing, saved under the generated-files folder"
-            checked={saved.zoomTelemetryEnabled} disabled={telemetryPending}
-            onChange={(enabled) => void saveField('zoomTelemetryEnabled', enabled)} />
+            checked={telemetryPending && telemetryTo !== null ? telemetryTo : saved.zoomTelemetryEnabled} saving={telemetryPending}
+            lock={lock.control()}
+            onChange={(enabled) => { setTelemetryTo(enabled); void saveField('zoomTelemetryEnabled', enabled); }} />
         </div>
         <SettingsRowError id="zoomTelemetryEnabled" message={telemetryError} />
       </section>

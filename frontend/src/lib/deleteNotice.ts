@@ -36,6 +36,17 @@ export interface RemovalRecord {
  * project switch). No button, and no promise that a retry works. */
 export const DROPPED_UNDO_TEXT = 'Nothing was undone. Your last change was still saving.';
 
+/** GM, PR #198 r39 item 3 and r40 item 2, verbatim: an Undo pressed while a
+ * Delete was still on its way waits for the Delete's answer, then restores.
+ * When that restore is refused or fails, or the Delete gives no answer in
+ * 15 s, one neutral line names what didn't come back, read live (the card
+ * title when the answer arrives): "Nebula couldn’t bring back “X”. Try Undo
+ * again." Several nodes by the shared name-list rule ("“A” and “B”", from 4
+ * "4 nodes"); `names` is that list already joined (errorCopy.nodeNameList). */
+export function bringBackFailedText(names: string): string {
+  return `Nebula couldn\u2019t bring back ${names}. Try Undo again.`;
+}
+
 /** GM - Design, round 13, verbatim: several Cmd+Z held together, some of
  * which went through and some of which were dropped (review 12, L-1). The
  * restore's own line comes first ("Restored the node."), then this; Redo

@@ -3,6 +3,7 @@ import { restoreTrashed } from '../../lib/trash';
 import { useStoredAssetsStore, type StoredAssetKind } from '../../store/storedAssetsStore';
 import '../../styles/asset-trash.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { LineText } from '../LineText';
 
 /** Restore button for a Moodboard or Character card whose asset is in
  * Recently deleted. Agents may restore too; this is the person's way. */
@@ -26,7 +27,7 @@ export function RestoreTrashedAsset({ kind, id, className }: { kind: StoredAsset
       >
         {busy ? 'Restoring…' : 'Restore'}
       </button>
-      {error && <div className={`${className}-error`} role="alert">{error}</div>}
+      {error && <div className={`${className}-error`} role="alert"><LineText text={error} /></div>}
     </>
   );
 }

@@ -9,11 +9,14 @@ vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof
   apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: (listener: (event: unknown) => void) => { mocks.listeners.push(listener); } } }));
 import { CinemaShotPanel } from '../../src/components/cinema-studio/CinemaShotPanel';
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { useCinemaMotionStore } from '../../src/store/cinemaMotionStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../src/lib/cinemaMotion';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const initial = { ...useGraphStore.getState() };
 const uiInitial = { ...useUIStore.getState() };
@@ -232,13 +235,26 @@ describe('Cinema motion handoff', () => {
     expect(useGraphStore.getState().runHistory).toEqual([]); expect(useGraphStore.getState().activeRuns).toEqual([]);
   });
 
+  it('"View video node" during an import says its own line (GM PR #205 r5 item 3)', async () => {
+    mocks.fetch.mockResolvedValueOnce(response()); const view = render(panel());
+    fireEvent.click(screen.getByRole('button', { name: 'Send to motion' }));
+    await screen.findByRole('button', { name: 'View video node' });
+    act(() => useGraphStore.setState({ isImportingGraph: true })); view.rerender(panel());
+    const button = screen.getByRole('button', { name: 'View video node' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', 'You can view the video node when the import finishes.');
+  });
+
   it('requires a settled image and blocks handoff during import', async () => {
     useGraphStore.setState({ nodes: [{ ...source(), data: { ...source().data, params: { scene: { ...scene(), shots: [
       { id: 'a', prompt: 'Waiting', output: { status: 'idle' } }] } } } }] });
     const view = render(panel()); expect(screen.getByRole('button', { name: 'Send to motion' })).toBeDisabled();
     await sendCinemaShotToMotion('n1', 'a'); expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send to motion' })).not.toHaveAttribute('title');
     act(() => useGraphStore.setState({ nodes: [source()], isImportingGraph: true })); view.rerender(panel());
     expect(screen.getByRole('button', { name: 'Send to motion' })).toBeDisabled();
+    // GM PR #205 r4 item 5: the import's line.
+    expect(screen.getByRole('button', { name: 'Send to motion' })).toHaveAttribute('title', 'You can send it to motion when the import finishes.');
     await sendCinemaShotToMotion('n1', 'a'); expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

@@ -188,6 +188,21 @@ class AgentWorkspaceContext:
                 # An outside app's token (services/app_tokens.py) names its
                 # spending line only; it has no workspace to confine.
                 if app_tokens.lookup(auth[6:].strip()) is None:
+                    from services import channel_listeners, person_thread
+                    path = scope.get("path") or ""
+                    if path == channel_listeners.CHANNEL_PATH or path.startswith(person_thread.AGENT_THREAD_PREFIX):
+                        # A channel listener's token (registering, its inbox,
+                        # accepted and held): GM r81's line, with its code.
+                        await JSONResponse({"detail": channel_listeners.BAD_TOKEN_LINE}, status_code=401,
+                                           headers={"X-Nebula-Code": channel_listeners.BAD_TOKEN_CODE})(
+                            scope, receive, send)
+                        return
+                    if path == person_thread.REPLIES_PATH:
+                        # A reply's (J1): what to do, with its code.
+                        await JSONResponse({"detail": person_thread.REPLY_BAD_TOKEN_LINE}, status_code=401,
+                                           headers={"X-Nebula-Code": person_thread.REPLY_BAD_TOKEN_CODE})(
+                            scope, receive, send)
+                        return
                     await JSONResponse({"detail": "invalid or expired agent token"}, status_code=401)(scope, receive, send)
                     return
                 record = {}

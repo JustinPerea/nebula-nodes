@@ -190,7 +190,7 @@ async def test_canvas_stop_syncs_recovery_params_before_cancelled_event(
 
     sequence: list[str] = []
 
-    async def capture_raw(payload) -> None:
+    async def capture_raw(payload, **_kw) -> None:
         sequence.append(str(payload.get("type")))
 
     async def capture_event(event) -> None:

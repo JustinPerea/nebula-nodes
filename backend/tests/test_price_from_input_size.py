@@ -347,6 +347,7 @@ def test_nebula_info_and_context_show_the_size_price(client, capsys):
     nodes.run_info(cli, "text-input")
     assert "PRICE: free" in capsys.readouterr().out
     assert _price("by input size") == "by input size"
+    assert _price("by audio length") == "by audio length"
 
 
 @pytest.mark.skipif(not (__import__("shutil").which("ffmpeg") and __import__("shutil").which("ffprobe")),

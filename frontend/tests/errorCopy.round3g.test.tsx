@@ -39,12 +39,15 @@ import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel
 import { ProviderSwitcher } from '../src/components/nodes/ProviderSwitcher';
 import { CHIP_ROOM, CHIP_ROOM_BLOCKED, chipText, providerSwitchState, type SwitchContext } from '../src/lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { usePricingStore } from '../src/store/pricingStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import type { PricingTable } from '../src/lib/pricing';
 import { ConnectionLostError } from '../src/lib/errorCopy';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUi = { ...useUIStore.getState() };

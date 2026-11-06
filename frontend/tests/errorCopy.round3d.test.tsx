@@ -26,11 +26,14 @@ import { NodeError } from '../src/components/nodes/NodeError';
 import { BatchNode } from '../src/components/nodes/BatchNode';
 import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { RUNTIME_FIELDS } from '../src/lib/canvasUndo';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const HEADING = "Couldn't run the node.";
 const BUSY = 'Meshy is busy. Wait a moment, then run the node again.';

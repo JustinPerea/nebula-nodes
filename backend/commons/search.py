@@ -234,6 +234,8 @@ def search(store, *, query: str = "", filters: Filters | None = None, brand: str
         row = {"id": hit["asset"], "membership_id": membership["id"], "collection_id": membership["collection"],
                "collection": hit["collection"], "summary": hit["summary"] or None, "role": membership["role"],
                "media": asset["media"], "made_by": asset["made_by"], "analysis_state": asset["analysis_state"],
+               # Why a failed analysis failed, so the grid can say a neutral kind neutrally (GM r6 on #208).
+               "last_error_kind": asset.get("last_error_kind"),
                "in_inbox": bool(membership["in_inbox"]), "comment_count": comments, "matched": matched,
                "score": round(score, 4), "blob_key": asset["blob_key"], "also_in": []}
         best = results.get(hit["asset"])

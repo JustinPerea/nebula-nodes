@@ -7,11 +7,12 @@ import {
   DeferredRegionNotices,
 } from '../../lib/deferredChunks';
 import { deferredAtOnce } from '../deferredAtOnce';
-// The agent cursors' store subscribes to the socket at import; it stays in
-// the startup entry so presence that arrives before the layer is not missed.
-// (The proposals and pins stores are imported eagerly by useFitCanvasView and
-// ContextMenu; tests/entrySplit.test.ts checks all three.)
-import '../../store/agentPresenceStore';
+// The agent cursors' socket feed subscribes at import; it stays in the
+// startup entry and holds presence that arrives before the cursor chunk, whose
+// store takes it on load (review 3 of PR #211, N3). (The proposals and pins
+// stores are imported eagerly by useFitCanvasView and ContextMenu;
+// tests/entrySplit.test.ts checks all three.)
+import '../../store/agentPresenceFeed';
 
 /**
  * Canvas overlays that draw only what the socket or a fetch brings in: an

@@ -1,4 +1,5 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
+import { clearLineOnPromote } from './clearsOnPromote';
 import { deleteSettingsApiKey, getSettings, updateCredential, updateSettings } from './api';
 import { RequestFailedError } from './errorCopy';
 import { keyPhrase, keyText } from './directRoute';
@@ -51,6 +52,15 @@ function fail(id: string, message: string, error?: unknown) {
     const neutral = { ...state.neutral };
     if (waits) neutral[id] = true; else delete neutral[id];
     return { errors: { ...state.errors, [id]: message }, neutral };
+  });
+  // GM, #204 r3: refused only because this tab isn't connected as the person
+  // (the banner says so): the row's line goes on the promote.
+  clearLineOnPromote(error, () => useSettingsDraftStore.getState().errors[id], message, () => { // clears-on-promote: settings.write
+    useSettingsDraftStore.setState((state) => {
+      const errors = { ...state.errors };
+      delete errors[id];
+      return { errors };
+    });
   });
 }
 

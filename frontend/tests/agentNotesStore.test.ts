@@ -113,32 +113,37 @@ describe('agent notes store (Updates)', () => {
     expect(useAgentNotesStore.getState().lists['board:b1'].notes.map((n) => n.id)).toEqual(['an_b']);
   });
 
-  it('marks read up to an update optimistically and takes the server count back', async () => {
+  // GM, #204 r3 item 1: an Update is read once the server says so, never ahead of it, so a
+  // refused read never shows as done.
+  it('marks read up to an update once the server has, and takes its count', async () => {
     sync('p1', [note('an_3'), note('an_2'), note('an_1', { readAt: '2026-10-20T11:00:00.000Z' })], 2);
     api.markAgentNotesRead.mockResolvedValue({ ids: ['an_3', 'an_2'], unread: 0, projectId: 'p1' });
     const done = useAgentNotesStore.getState().markRead({ kind: 'canvas' }, 'an_3');
+    expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(2);
+    await done;
     const list = selectCanvasList(useAgentNotesStore.getState());
     expect(list.unread).toBe(0);
     expect(list.notes.every((n) => n.readAt)).toBe(true);
     // An older read time is kept.
     expect(list.notes[2].readAt).toBe('2026-10-20T11:00:00.000Z');
-    await done;
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_3');
   });
 
-  it('marks read only up to the given update (older ones), not newer arrivals', () => {
+  it('marks read only what the server read (up to the given update), not newer arrivals', async () => {
     sync('p1', [note('an_3'), note('an_2'), note('an_1')], 3);
     api.markAgentNotesRead.mockResolvedValue({ ids: ['an_2', 'an_1'], unread: 1 });
-    void useAgentNotesStore.getState().markRead({ kind: 'canvas' }, 'an_2');
+    await useAgentNotesStore.getState().markRead({ kind: 'canvas' }, 'an_2');
     const list = selectCanvasList(useAgentNotesStore.getState());
     expect(list.notes.map((n) => Boolean(n.readAt))).toEqual([false, true, true]);
     expect(list.unread).toBe(1);
   });
 
-  it('marks just the given updates read (a clicked card)', () => {
+  it('marks just the given updates read (a clicked card), once the server has', async () => {
     sync('p1', [note('an_2'), note('an_1')], 2);
     api.markAgentNotesRead.mockResolvedValue({ ids: ['an_2'], unread: 1 });
-    void useAgentNotesStore.getState().markReadIds({ kind: 'canvas' }, ['an_2']);
+    const done = useAgentNotesStore.getState().markReadIds({ kind: 'canvas' }, ['an_2']);
+    expect(selectCanvasList(useAgentNotesStore.getState()).notes.map((n) => Boolean(n.readAt))).toEqual([false, false]);
+    await done;
     const list = selectCanvasList(useAgentNotesStore.getState());
     expect(list.notes.map((n) => Boolean(n.readAt))).toEqual([true, false]);
     expect(list.unread).toBe(1);
@@ -152,7 +157,8 @@ describe('agent notes store (Updates)', () => {
     api.dismissAgentNote.mockRejectedValue(new RequestFailedError("Couldn't dismiss the update.", 404, { reason: 'That update is no longer in the list.' }));
     const done = useAgentNotesStore.getState().dismiss({ kind: 'canvas' }, 'an_1');
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeTruthy();
-    expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(0);
+    // #204 round 7 (review 5 LOW-8): the count is the server's, so it waits for the answer.
+    expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);
     await done;
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeNull();
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);

@@ -2,7 +2,7 @@ import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
-import { countsInstead, nodeNameList, RequestFailedError } from './errorCopy';
+import { countsInstead, nodeNameList, RequestFailedError, copyForAnswer, warnFailure } from './errorCopy';
 import { formatChipEstimate } from './pricing';
 import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
@@ -37,14 +37,38 @@ export interface AcceptedProposal {
 /** A refused accept or reject: heading + reason like every request's error
  * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
 export class ProposalRequestError extends RequestFailedError {
-  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
+  /** Which of Save's limits a refused Accept hit (the answer's `limit.kind`
+   * beside `code: "proposal_too_complex"`): 'size' for the project's size
+   * limit, else the shape limits ('depth', 'values'). Null otherwise. Read
+   * from the answer, never its words (review 8 of PR #205, limits MEDIUM-1). */
+  readonly limitKind: string | null;
+
+  constructor(status: number, reason: string, options: {
+    heading?: string; detail?: unknown; code?: string | null; limitKind?: string | null; sentAt?: number | null;
+    sentBeforePromote?: boolean;
+  } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code,
+      sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'ProposalRequestError';
+    this.limitKind = options.limitKind ?? null;
   }
 }
 
 const asProposalError = (error: RequestFailedError) =>
-  new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code });
+  new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code,
+    sentAt: error.sentAt });
+
+/** A refused Accept's answer (409), read once: its line (copyForAnswer, as
+ * every request's error), its code, and the limit it hit. */
+async function acceptConflict(heading: string, response: Response): Promise<ProposalRequestError> {
+  type Answer = { detail?: unknown; code?: unknown; limit?: unknown } | null;
+  const body = await response.json().then((value: unknown) => value as Answer, () => null as Answer);
+  const code = typeof body?.code === 'string' ? body.code : null;
+  const limit = body?.limit && typeof body.limit === 'object' ? (body.limit as { kind?: unknown }).kind : null;
+  warnFailure(heading, response.status, body?.detail);
+  return new ProposalRequestError(response.status, copyForAnswer(response.status, body?.detail, code),
+    { heading, detail: body?.detail, code, limitKind: typeof limit === 'string' ? limit : null });
+}
 
 /**
  * Accept a proposal. The key came only over this canvas's WebSocket; the
@@ -56,11 +80,16 @@ export async function acceptProposal(
   acceptKey: string,
   positions: Record<string, Point>,
 ): Promise<AcceptedProposal> {
-  const response = await apiRequest("Couldn't accept the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
+  const heading = "Couldn't accept the proposal.";
+  const response = await apiRequest(heading, `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(Object.keys(positions).length > 0 ? { positions } : {}),
-  }, { as: asProposalError });
+  }, { as: asProposalError, allow: [409] });
+  if (response.status === 409) {
+    // A 409 is read here, for its limit too (a refused Accept: which line).
+    throw await acceptConflict(heading, response);
+  }
   const body = (await response.json()) as Partial<AcceptedProposal>;
   return {
     status: 'accepted',
@@ -397,74 +426,13 @@ export function liveKeyBilling(
     freeRuns: entries.filter((entry) => entry.kind === 'free').length } };
 }
 
-/** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
-export function proposalSummary(view: ProposalView): string {
-  const parts: string[] = [];
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
-  if (view.nodes.length) parts.push(`Adds ${plural(view.nodes.length, 'node')}`);
-  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'connection')}`);
-  if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
-  if (view.run.length) {
-    const { paidRuns, freeRuns, upTo, providers } = view.cost;
-    // GM, PR #203 r11 item 2: a run that may bill the person's own account
-    // gets its own clause, and "paid model" counts only list-priced ones:
-    // "Runs Idol · may use your Hugging Face credits", "Runs 2 paid models
-    // and Idol · Idol may use your Hugging Face credits".
-    const mayCost = mayCostRows(view);
-    const mayNames = joinNames(mayCost.map((row) => row.name));
-    // GM, PR #203 r19 item 1: a run on the Krea plan is counted outside
-    // "paid", as the count chip counts it ("2 paid · 1 on Krea plan").
-    const planRuns = view.cost.planRuns ?? 0;
-    const plan = planRuns > 0 ? [`${planRuns} on Krea plan`] : [];
-    if (paidRuns > 0 && mayNames) {
-      // GM, PR #203 r14 item 2, verbatim: "Runs 2 paid models and Idol ·
-      // Idol may use your Hugging Face credits", no provider tag; the amount
-      // leads the line under it (proposalMetaLine).
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')} and ${mayNames}`, ...plan,
-        mayCostClauses(mayCost, true));
-    } else if (paidRuns > 0) {
-      const who = providers.length ? ` (${providers.join(', ')})` : '';
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
-      // The amount covers the paid models only, so it sits beside them.
-      const amount = proposalEstimateLabel(view);
-      if (amount) parts.push(amount);
-      parts.push(...plan);
-    } else if (mayNames) {
-      // A named node takes no "up to" (GM: "Runs Idol").
-      parts.push(`runs ${mayNames}`, ...plan, mayCostClauses(mayCost, plan.length > 0));
-    } else if (planRuns > 0) {
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(planRuns, 'node')} on your Krea plan`);
-    } else if (runsNothing(view)) {
-      // Its whole run waits on agents' placeholders, which it skips (GM - Design,
-      // round 4, verbatim), counting the placeholders themselves (review 4, M2).
-      const { count, placeholders, agents } = view.cost.pendingSkipped!;
-      const who = agents.length === 1 && agents[0] ? `${agents[0]} finishes` : 'agents finish';
-      parts.push(`runs nothing until ${who} ${plural(placeholders ?? count, 'node')}`);
-    } else {
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
-    }
-  } else {
-    parts.push('nothing runs until you choose');
-  }
-  const text = parts.join(' · ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/** The bar's line under the summary: "List prices, not a quote · expires
- * in 3:05", "No list price · …", or "expires in 3:05" for a free run. With
- * paid models and a may-cost node the amount leads it (GM, PR #203 r14 item
- * 2, verbatim): "~$0.13 · List prices, not a quote · expires in 14:59". */
-export function proposalMetaLine(view: ProposalView, countdownText: string): string {
-  const parts: string[] = [];
-  if (view.run.length > 0 && view.cost.paidRuns > 0) {
-    if (mayCostRows(view).length > 0) {
-      const amount = proposalEstimateLabel(view);
-      if (amount) parts.push(amount);
-    }
-    parts.push(view.cost.estimate ? 'List prices, not a quote' : 'No list price');
-  }
-  parts.push(`expires in ${countdownText}`);
-  return parts.join(' · ');
+/** The card's plan line under the note (GM - Design, 2026-11-01): what
+ * Accept changes and runs, by node name; the model and who pays for a single
+ * paid run; the run chip's price. The backend writes it (services/
+ * canvas_proposals.plan_line), so agents read the same words in `nebula
+ * proposal` and MCP. */
+export function proposalPlan(view: ProposalView): string {
+  return view.plan ?? '';
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing
@@ -493,24 +461,11 @@ function mayCostRows(view: ProposalView): Array<{ name: string; account: string 
   return (view.cost.mayCostRuns ?? 0) > 0 ? (view.cost.mayCost ?? []) : [];
 }
 
-function joinNames(names: string[]): string {
-  const unique = [...new Set(names.filter(Boolean))];
-  return unique.length <= 1 ? (unique[0] ?? '') : `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`;
-}
-
-/** "may use your Hugging Face credits", or with paid models beside it, named:
- * "Idol may use your Hugging Face credits". */
-function mayCostClauses(rows: Array<{ name: string; account: string }>, named: boolean): string {
-  const byAccount = new Map<string, string[]>();
-  for (const { name, account } of rows) byAccount.set(account, [...(byAccount.get(account) ?? []), name]);
-  return [...byAccount].map(([account, names]) => (named || byAccount.size > 1 ? `${joinNames(names)} ` : '')
-    + `may use your ${account} credits`).join(' · ');
-}
-
 /** The primary button's words. "Accept" when accepting runs nothing (GM -
  * Design, round 5, item 3): Accept starts no run for it (it would skip every
  * node: backend main._skip_placeholders), and nothing is queued for when the
- * agent finishes. */
+ * agent finishes. The paid count left the label (GM - Design, 2026-11-01):
+ * the plan line right above it says what's paid. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
   return 'Accept and run';
@@ -638,11 +593,47 @@ export interface ChangeLine {
   to: string;
 }
 
+/** One wire in the panel: “Prompt” → “Second take” · Prompt, the target's
+ * port muted (GM - Design, PR #216 r2-r3). */
+export interface WireLine {
+  id: string;
+  from: string;
+  to: string;
+  port: string;
+}
+
 export interface ChangeGroup {
   id: string;
   title: string;
-  kind: 'new' | 'edit';
+  /** `wires`: "New connections"; `unwired`: "Removed connections", struck through. */
+  kind: 'new' | 'edit' | 'wires' | 'unwired';
   lines: ChangeLine[];
+  wires?: WireLine[];
+}
+
+const QUOTE_MARKS = '“”"\'‘’';
+
+/** A node's name on the card, in curly quotes once: quotes the name carries
+ * itself come off first (review 2 L4; the plan line's rule, backend
+ * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
+export function cardQuoted(name: string): string {
+  let text = name.trim();
+  // Only quotes that wrap it, at both ends: an apostrophe the name ends in
+  // stays ("Artists'", review 3 NIT-3), as the backend's plan_name.
+  while (text.length >= 2 && QUOTE_MARKS.includes(text[0]) && QUOTE_MARKS.includes(text[text.length - 1])) {
+    text = text.slice(1, -1).trim();
+  }
+  return `“${text || name}”`;
+}
+
+function wireLines(edges: ProposalView['edges'] | undefined, names: Record<string, string>,
+  ports: Record<string, string> = {}): WireLine[] {
+  return (edges ?? []).map((edge) => ({
+    id: `${edge.source}.${edge.sourceHandle}>${edge.target}.${edge.targetHandle}`,
+    from: cardQuoted(edge.sourceName ?? names[edge.source] ?? edge.source),
+    to: cardQuoted(edge.targetName ?? names[edge.target] ?? edge.target),
+    port: edge.targetLabel ?? ports[`${edge.target}.${edge.targetHandle}`] ?? edge.targetHandle,
+  }));
 }
 
 /**
@@ -656,8 +647,9 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const params = values?.nodes[node.ref] ?? node.params ?? {};
     groups.push({
       id: node.ref,
-      // A name the agent gave it (`rename`) shows with the model it is.
-      title: `New ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref})`,
+      // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
+      // the agent gave it (`rename`) shows with the model it is.
+      title: `New ${cardQuoted(node.name)}${node.model ? ` · ${node.model}` : ''}`,
       kind: 'new',
       lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });
@@ -667,12 +659,51 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const entries = Object.entries(exact ?? change.changes);
     groups.push({
       id: change.nodeId,
-      title: change.name,
+      // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
+      // node's id for agents; a backend without `title` falls back to it.
+      title: change.title
+        ? `${cardQuoted(change.title)}${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
+        : change.name,
       kind: 'edit',
-      lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
+      // The same model set again: its inputs are read again, never "X → X"
+      // (GM - Design, PR #216 r4 8: "Krea 2 · inputs updated").
+      lines: entries.map(([key, diff]) => (change.inputsUpdated?.key === key
+        ? { key, to: `${change.inputsUpdated.name} · inputs updated` }
+        : changeLine(key, diff.to, diff.from, true))),
     });
   }
+  // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).
+  // The backend names both ends on each wire; an older view's own names fill in.
+  const names: Record<string, string> = {
+    ...Object.fromEntries(view.params.filter((change) => change.title).map((change) => [change.nodeId, change.title!])),
+    ...Object.fromEntries(view.nodes.map((node) => [node.ref, node.name])),
+    ...view.names,
+  };
+  const ports = Object.fromEntries(view.nodes.flatMap((node) =>
+    (node.ports?.inputs ?? []).map((port) => [`${node.ref}.${port.id}`, port.label])));
+  const made = wireLines(view.edges, names, ports);
+  if (made.length > 0) groups.push({ id: 'wires', title: 'New connections', kind: 'wires', lines: [], wires: made });
+  const removed = wireLines(view.removedEdges, names);
+  if (removed.length > 0) {
+    groups.push({ id: 'unwired', title: 'Removed connections', kind: 'unwired', lines: [], wires: removed });
+  }
   return groups;
+}
+
+/**
+ * How many changes Accept makes: the backend's `changeCount`, the one number
+ * the card, the Update and MCP read (GM - Design, PR #216 r3): each new node,
+ * changed node, new wire and removed wire. An older backend's view without it
+ * counts the panel the same way: one per node group, one per wire line.
+ */
+export function proposalChangeCount(view: ProposalView, groups: ChangeGroup[]): number {
+  if (typeof view.changeCount === 'number') return view.changeCount;
+  return groups.reduce((sum, group) => sum + (group.wires ? group.wires.length : 1), 0);
+}
+
+/** "2 changes", "1 change", for the disclosure row. */
+export function changeCountLabel(count: number): string {
+  return `${count} change${count === 1 ? '' : 's'}`;
 }
 
 /** "value: a → b; seed: 1 → 2" for the ring around a changed node. */
@@ -701,10 +732,9 @@ export function withAncestors(targets: string[], edges: Array<{ source: string; 
   return [...seen];
 }
 
-/** GM r30 item 7 (PR #200 fix round 20): Accept's and Reject's reasons while
- * the person gate is held (lib/personSession). Both are person-only on the
- * server (main._decidable_proposal: require_person, then the proposal's key). */
-export const PROPOSAL_GATE_COPY = {
-  accept: 'You can accept proposals when this tab is connected as you.',
-  reject: 'You can reject proposals when this tab is connected as you.',
-} as const;
+/** What the notice region's polite line says once a keyboard Accept or
+ * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
+ * is (ProposalBar). */
+export function decisionLine(kind: 'accept' | 'reject', agent: string): string {
+  return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agent}.`;
+}

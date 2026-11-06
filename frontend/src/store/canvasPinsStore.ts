@@ -5,7 +5,7 @@ import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine,
 import { currentProject } from '../lib/currentProject';
 import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
-import { onPersonPromoted } from '../lib/personSession';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
 import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
 import { getProjectContext, STALE_CANVAS_DETAIL, type ProjectContext } from '../lib/projectContext';
@@ -139,6 +139,38 @@ function sanitizeAll(raw: unknown): Pin[] {
   return Array.isArray(raw) ? raw.map(sanitize).filter((pin): pin is Pin => pin !== null) : [];
 }
 
+// PR #218 review 1 MEDIUM-1: one order for every whole-set listing, pushes
+// and hydrates alike. A push takes its number as it arrives, a hydrate as its
+// fetch starts; a listing is applied only if nothing later in the order has
+// been applied already. Without it, a hydrate's older listing that resolved
+// while the Unicode chunk was pending landed after a push that arrived later
+// (both waited on the chunk; the push's wait settled first) and hid its pins.
+let listingOrder = 0;
+let appliedOrder = 0;
+const nextListingOrder = () => { listingOrder += 1; return listingOrder; };
+
+function applyListing(event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>, order: number): void {
+  // Review 13 L-2: a listing that comes before the Unicode data waits for it,
+  // and is never shown unsanitized. It keeps the number it was given, so the
+  // order between listings holds whichever wait settles first; one overtaken
+  // by a later listing is dropped, never applied over it.
+  // Review 14 MEDIUM-1: it waits only while the import is pending. After a
+  // failed import it applies at once in the strict fallback form, and the
+  // chunk is tried once more.
+  retryPinText();
+  if (!pinTextSettled()) {
+    void pinTextSettling().then(() => applyListing(event, order));
+    return;
+  }
+  if (order < appliedOrder) return;
+  appliedOrder = order;
+  rawTexts.clear();  // the listing is the whole set: forget pins no longer in it
+  useCanvasPinsStore.setState((state) => ({
+    projectId: typeof event.projectId === 'string' ? event.projectId : null,
+    pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
+  }));
+}
+
 export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   projectId: null,
   pins: [],
@@ -158,30 +190,29 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     // Review 14 MEDIUM-1: a failed chunk is tried once more (here, or on the
     // next pins push, which every reconnect starts with).
     retryPinText();
+    // PR #218 review 1 MEDIUM-1: the listing takes its place in the order as
+    // the fetch starts, and is dropped if a push numbered after it was
+    // applied first. That push alone can be older than this answer: it may
+    // have been built before the fetch started and just arrived late. The
+    // drop is still safe because of the backend's invariant. Every pin change
+    // is followed by a whole-set push built after it, by reading the set
+    // after the commit, and each socket gets pushes in the order they were
+    // built. So any change this answer holds that the applied push lacks
+    // has a push of its own still coming, and it outranks both. The last
+    // push applied is never older than an answer that was dropped, once the
+    // pushes in flight land. That ordering per socket is the backend's to
+    // keep: see main.py ConnectionManager.broadcast_raw (#220 review 1 LOW-2).
+    const order = nextListingOrder();
     try {
       // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.
       const [listing] = await Promise.all([fetchPins(), pinTextSettling()]);
-      get().apply(listing);
+      applyListing(listing, order);
     } catch {
       // The canvasPins push after graphSync heals this on the next connect.
     }
   },
-  apply: (event) => {
-    // Review 13 L-2: a listing pushed before the Unicode data is in waits for
-    // it (in arrival order), never dropped and never shown unsanitized.
-    // Review 14 MEDIUM-1: only while the import is pending; a failed one
-    // applies at once in the strict fallback form (and is tried once more).
-    retryPinText();
-    if (!pinTextSettled()) {
-      void pinTextSettling().then(() => get().apply(event));
-      return;
-    }
-    rawTexts.clear();  // the listing is the whole set: forget pins no longer in it
-    set((state) => ({
-      projectId: typeof event.projectId === 'string' ? event.projectId : null,
-      pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
-    }));
-  },
+  // A pushed listing (the canvasPins event): its place in the order is its arrival.
+  apply: (event) => applyListing(event, nextListingOrder()),
   // Round 23 (review 22, M-1): the dialog is part of the canvas's read-only
   // state (lib/canvasLock, the one source every surface reads): opening it,
   // sending it and deleting a note are refused while following an agent's
@@ -246,10 +277,12 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // what happened and what to do. (Not a draft yet: the dialog holds it,
       // and × or Esc keeps it as one.)
       const code = error instanceof RequestFailedError ? error.code : null;
-      set((state) => ({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project,
+      const line = pinRefusalLine(error, 'add');
+      set((state) => ({ draft: text, error: line, errorProject: project,
         errorPersonGate: code === PERSON_REQUIRED_CODE ? 'add' : false,
         targetGone: state.targetGone || code === NODE_GONE_CODE,
         tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.add
       return false;
     }
   },
@@ -265,17 +298,19 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     } catch (error) {
       // Put it back: the backend still has it.
       const restored = previous.find((pin) => pin.id === id);
+      const line = pinDeleteLine(error);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
         // GM r20 Q1: the pin stays, and the line says so in its own words.
         // Review 16 LOW-1 / GM r29 (fix round 19): refused because this tab
         // isn't connected as the person, it's the Q116a line (how to fix it),
         // never "try again in a moment", which can't work from this tab.
-        error: pinDeleteLine(error),
+        error: line,
         errorPersonGate: error instanceof RequestFailedError && error.code === PERSON_REQUIRED_CODE
           && error.status >= 400 && error.status < 500 ? 'delete' : false,
         errorProject: null,
       }));
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.remove
     } finally {
       set((state) => {
         const removing = { ...state.removing };
@@ -367,14 +402,15 @@ wsClient.subscribe((event) => {
   }
 });
 
-// Review 17 LOW-1 (fix round 20): the server promoted this tab (lib/wsClient
-// saw the person-only proposalSync): a refusal for not being connected as the
-// person is no longer true, so its toast goes, never turning into the full
-// "isn’t connected as you" line as the banner leaves. Registered as the module
-// loads, before the banner's own listener, so both change in one render.
-onPersonPromoted(() => {
-  if (useCanvasPinsStore.getState().errorPersonGate) useCanvasPinsStore.getState().clearError();
-});
+// Review 17 LOW-1 (fix round 20), through GM's #204 round 3 mechanism: the
+// server promoted this tab (lib/wsClient saw the person-only proposalSync): a
+// refusal for not being connected as the person is no longer true, so its
+// toast goes, never turning into the full "isn’t connected as you" line as
+// the banner leaves. Swept in the same tick as the banner.
+function clearPinRefusalOnPromote(error: unknown, line: string | null): void {
+  clearLineOnPromote(error, () => useCanvasPinsStore.getState().error, line, // clears-on-promote: pins.refusal
+    () => useCanvasPinsStore.getState().clearError());
+}
 
 // Review 16 NIT 2 (fix round 19): the Unicode data loaded (by the dialog
 // opening, a hydrate or a push): the pins on screen are fitted again from

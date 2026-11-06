@@ -34,8 +34,11 @@ import { ContextMenu } from '../src/components/ContextMenu';
 import { nodeCardBoundaryLine } from '../src/lib/studioBoundary';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { useOfflineHiddenNotice } from '../src/hooks/useOfflineHiddenNotice';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;
@@ -177,8 +180,8 @@ describe('GM r3 (a): Composition\'s offline row sits under the top header, above
     const view = source('components/video-editor/RemotionEditorView.tsx');
     expect(view).toMatch(/<WorkspaceHeader[^>]*\/>\s*\{\/\*[^]*?\*\/\}\s*<div className="remotion-editor-view__toolbar"/);
     expect(view).not.toMatch(/<WorkspaceHeader[^/]*>\s*<RemotionEditorToolbar/);
-    const rule = css('styles/workspace-header.css');
-    expect(rule).toMatch(/\.remotion-editor-view\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
+    const rule = css('styles/remotion-editor.css');
+    expect(rule).toMatch(/\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
     expect(rule).toMatch(/\.remotion-editor-view__toolbar\s*\{[^}]*grid-area:\s*toolbar/);
   });
 });
@@ -199,12 +202,12 @@ describe('G1 / GM 1: Delete is disabled while the scene has a shot rendering', (
     expect(remove).toHaveAttribute('title', 'Stop the run first.');
   });
 
-  it('rendering with no Stop here: "Wait for “Opening” to finish."', () => {
+  it('rendering with no Stop here: "You can delete “Opening” when it finishes."', () => {
     useGraphStore.setState({ nodes: [cinemaNode(scene([{ id: 's1', prompt: 'a', output: { status: 'running' } }]), 'n4')],
       activeRuns: [] } as never);
     open();
     render(<ContextMenu />);
-    expect(screen.getByRole('button', { name: /Delete/ })).toHaveAttribute('title', 'Wait for “Opening” to finish.');
+    expect(screen.getByRole('button', { name: /Delete/ })).toHaveAttribute('title', 'You can delete “Opening” when it finishes.');
   });
 
   it('nothing rendering: Delete is enabled', () => {
@@ -228,7 +231,7 @@ describe('N1: a load-failure notice doesn\'t flash back on reconnect', () => {
   it('the first render back online shows nothing; the check clears it, so it never shows', () => {
     const shown: string[] = [];
     function Probe() {
-      const [notice, setNotice] = useState<string | null>("Couldn't check the Commons status. Commons is disabled.");
+      const [notice, setNotice] = useState<string | null>("Couldn't check Commons status. Commons is disabled.");
       const visible = useOfflineHiddenNotice(notice, () => setNotice(null));
       shown.push(visible ?? 'none');
       return <p>{visible ?? 'none'}</p>;

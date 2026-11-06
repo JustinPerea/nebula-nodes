@@ -651,7 +651,7 @@ def live_cost(proposal: "Proposal", definitions: Mapping[str, Mapping[str, Any]]
         if params is None or not _key_billing(definition, params, api_keys):
             continue
         fresh = cost_for(definition, params, definitions, api_keys)
-        entries[index] = {**entry, **fresh}
+        entries[index] = {**entry, **fresh, **({"name": entry["name"]} if entry.get("name") else {})}
         changed = True
     if changed:
         paid, plan, may_cost, free = class_counts(entries)
@@ -738,6 +738,334 @@ def summarize_cost(
         "notReady": list(not_ready or []),
         "note": COST_NOTE,
     }
+
+
+# -- the plan line (GM - Design, 2026-11-01, the proposal card redesign) ------
+# One line under the agent's note saying what Accept changes and costs, with
+# node names, never ids: "Changes and runs “Hero shot” · Krea 2 on your Krea
+# plan · no list price". The view carries it as `plan`, so the card, the CLI
+# and MCP read the same words.
+
+# Up to this many nodes named in a group; from one more, a count ("Changes 4 nodes").
+PLAN_NAMES = 3
+NOTHING_RUNS = "nothing runs until you choose"
+PLAN_NO_PRICE = "no list price"
+
+
+def billed_to(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+              cost: Mapping[str, Any], *, wired: Any = ()) -> str | None:
+    """Who pays for a paid run, in the person's words: "your Krea plan",
+    "your Krea API key", "your OpenAI key", "your Nous account". It names
+    the provider the node is routed to even when that provider's key or
+    sign-in is missing (the not-ready line says so). None for a free run, or
+    when the route names no provider the person could hold a key or account
+    for (a utility node, an unknown provider)."""
+    from services import node_route
+
+    if cost.get("kind") not in ("paid", "plan") or not definition:
+        return None
+    if node_route.uses_krea_plan(definition, node_route.with_wired_blockers(definition, params or {}, wired or ())):
+        return "your Krea plan"
+    provider = str(cost.get("provider") or "")
+    if not provider or provider == "utility" or provider not in node_route.PROVIDER_LABELS:
+        return None
+    if provider == "krea":
+        return "your Krea API key"
+    label = node_route.provider_label(provider)
+    keyed = provider in set(node_route.KEY_PROVIDERS.values())
+    return f"your {label} {'key' if keyed else 'account'}"
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+_QUOTES = "“”\"'‘’"
+
+
+def _plan_name(name: Any) -> str | None:
+    """A node's name for the line, without quotes of its own (review 1 N1:
+    “Hero” never reads ““Hero””). Only quotes that wrap it, at both ends: an
+    apostrophe the name ends in stays ("Artists'", review 3 NIT-3). None
+    when it has none."""
+    text = str(name).strip() if isinstance(name, str) else ""
+    while len(text) >= 2 and text[0] in _QUOTES and text[-1] in _QUOTES:
+        text = text[1:-1].strip()
+    return text or None
+
+
+plan_name = _plan_name
+
+
+def model_label(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                models: Mapping[tuple[str, str], Any] | None = None) -> str:
+    """The model a node runs, as the card, the plan line, get_proposal, MCP
+    and the CLI name it: the canvas title ("Krea 2"), or for a universal node
+    the model it is set to, by its catalog name (GM - Design, PR #216 r4-r5:
+    "Claude Sonnet 4.5 on your OpenRouter key", "“Second look” · GPT-4o",
+    never "OpenRouter"). ``models`` is _look_up_models' data; without it the
+    pickers' cache, else the model id."""
+    from services import node_route, universal_ports
+
+    definition = definition or {}
+    definition_id = str(definition.get("id") or "")
+    model = universal_ports.model_of(definition_id, params) if universal_ports.is_universal(definition_id) else ""
+    if model:
+        return universal_ports.model_name(definition_id, model, (models or {}).get((definition_id, model)))
+    return node_route.canvas_title(definition) or definition_id
+
+
+def _and_list(words: list[str]) -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C”: no serial comma."""
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+
+def _group_words(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> list[str]:
+    """One group's nodes (GM - Design, PR #216 r3), as list items: up to
+    PLAN_NAMES by name, from one more a count. Nodes are told apart by id,
+    never by name: two in the group with one name read "2 “Image” nodes", and
+    a name an earlier group already said, on another node, reads "another
+    “Image”" (GM r4: also after that group's count of them)."""
+    if len(keys) > PLAN_NAMES:
+        return [_plural(len(keys), "node")]
+    counts: dict[str | None, int] = {}
+    for key in keys:
+        name = names.get(key)
+        counts[name] = counts.get(name, 0) + 1
+    words: list[str] = []
+    unnamed = counts.pop(None, 0)
+    for name, count in counts.items():
+        if name in said:
+            words.append(f"another “{name}”" if count == 1 else f"{count} other “{name}” nodes")
+        else:
+            words.append(f"“{name}”" if count == 1 else f"{count} “{name}” nodes")
+    if unnamed:
+        # Every node the view names has a name; this is the last resort (review 1 L3:
+        # one without never turns the others into a count).
+        words.append(_plural(unnamed, "more node") if words else _plural(unnamed, "node"))
+    return words
+
+
+def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> str:
+    return _and_list(_group_words(keys, names, said))
+
+
+def _spoke(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> None:
+    """The names a group said aloud join `said` (review 2 L2): a group that
+    counted its nodes ("4 nodes") said none, so a later "another" has
+    nothing to point back to."""
+    if len(keys) <= PLAN_NAMES:
+        said.update(name for name in (names.get(key) for key in keys) if name)
+
+
+def _runs_of(group: list[str], running: list[str], names: Mapping[str, str | None]) -> str:
+    """Which of a group's nodes it runs, after its verb (GM - Design, PR #216
+    r4): "both", "all 3", or, when only some run, those by name ("“A”"); "1
+    of them" when a name doesn't tell them apart."""
+    if len(running) == len(group):
+        return "both" if len(group) == 2 else f"all {len(group)}"
+    run_names = [names.get(key) for key in running]
+    group_names = [names.get(key) for key in group]
+    if (len(running) > PLAN_NAMES or None in run_names
+            or any(group_names.count(name) > run_names.count(name) for name in run_names)):
+        return f"{len(running)} of them"
+    return _group_names(running, names, set())
+
+
+def _plan_names(view: Mapping[str, Any]) -> dict[str, str | None]:
+    """Every node the proposal touches, by id or ref, with its name: a new
+    node's, a changed node's title, then the view's `names` (each node it
+    references, by its canvas name), then the run's price items."""
+    names: dict[str, str | None] = {}
+    cost = view.get("cost") or {}
+    for entry in cost.get("nodes") or []:
+        if isinstance(entry, Mapping) and _plan_name(entry.get("name")):
+            names[str(entry.get("ref"))] = _plan_name(entry.get("name"))
+    for key, name in (view.get("names") or {}).items():
+        if _plan_name(name):
+            names[str(key)] = _plan_name(name)
+    for change in view.get("params") or []:
+        if isinstance(change, Mapping) and _plan_name(change.get("title")):
+            names[str(change.get("nodeId"))] = _plan_name(change.get("title"))
+    for node in view.get("nodes") or []:
+        if isinstance(node, Mapping):
+            names[str(node.get("ref"))] = _plan_name(node.get("name"))
+    return names
+
+
+def _runs_nothing(view: Mapping[str, Any]) -> bool:
+    cost = view.get("cost") or {}
+    pending = cost.get("pendingSkipped") or None
+    return (bool(view.get("run")) and int(cost.get("paidRuns") or 0) == 0 and int(cost.get("freeRuns") or 0) == 0
+            and int(cost.get("planRuns") or 0) == 0 and int(cost.get("mayCostRuns") or 0) == 0
+            and bool(pending and pending.get("count")))
+
+
+def plan_groups(view: Mapping[str, Any]) -> list[str]:
+    """What Accept does, one group per kind of change (GM - Design, PR #216
+    r3-r4): the nodes it adds, then the nodes it changes, each followed by
+    which of them it runs, then the other nodes it runs, then the wires a
+    model change removes.
+
+    - One node keeps its verbs merged: "Adds and runs “A” plus 1
+      connection", "Changes and runs “K”".
+    - More than one names them, and the run follows: "Adds “A”, “B” and 1
+      connection, runs both" ("runs all 3", "runs all 4" after "Adds 4 nodes
+      and 1 connection"); only some running are named: "runs “A”".
+    - New connections close the list of the nodes added ("“A”, “B” and 1
+      connection"; "plus 1 connection" after a merged verb, so no group says
+      "and" twice), or make their own group with no node added.
+    - The other runs join the last run named ("runs both plus “C”"), else
+      make their own group ("runs “C”", "another “Image”" after a group that
+      said "Image").
+    - Wires a model change drops close the line ("removes 2 connections").
+
+    A run that waits on placeholders runs nothing yet, so it adds no run."""
+    names = _plan_names(view)
+    verbs: dict[str, list[str]] = {}
+
+    def mark(key: str, verb: str) -> None:
+        verbs.setdefault(key, [])
+        if verb not in verbs[key]:
+            verbs[key].append(verb)
+
+    for node in view.get("nodes") or []:
+        if isinstance(node, Mapping):
+            mark(str(node.get("ref")), "adds")
+    for change in view.get("params") or []:
+        if isinstance(change, Mapping):
+            mark(str(change.get("nodeId")), "changes")
+    if not _runs_nothing(view):
+        for target in view.get("run") or []:
+            mark(str(target), "runs")
+
+    edges = len(view.get("edges") or [])
+    removed = len(view.get("removedEdges") or [])
+    connections = _plural(edges, "connection") if edges else ""
+    said: set[str] = set()
+    groups: list[str] = []
+    # The last group's run clause, while it is the line's last words: the
+    # other runs join it. ("both"/"all N"/"N of them" join with "plus".)
+    last_run: tuple[list[str], str] | None = None
+    for verb in ("adds", "changes"):
+        keys = [key for key, done in verbs.items() if done[0] == verb]
+        if not keys:
+            if verb == "adds" and connections:
+                groups.append(f"adds {connections}")
+            continue
+        running = [key for key in keys if "runs" in verbs[key]]
+        extra = connections if verb == "adds" else ""
+        if len(keys) == 1:
+            words = _group_names(keys, names, said)
+            if running:
+                groups.append(f"{verb} and runs {words}" + (f" plus {extra}" if extra else ""))
+            else:
+                groups.append(f"{verb} {words}" + (f" and {extra}" if extra else ""))
+            last_run = None
+        else:
+            items = _group_words(keys, names, said)
+            groups.append(f"{verb} {_and_list([*items, *([extra] if extra else [])])}")
+            last_run = None
+            if running:
+                which = _runs_of(keys, running, names)
+                groups.append(f"runs {which}")
+                last_run = (running, which)
+        _spoke(keys, names, said)
+    others = [key for key, done in verbs.items() if done == ["runs"]]
+    if others:
+        if last_run is not None:
+            running, which = last_run
+            if which.startswith(("both", "all ")) or which.endswith(" of them"):
+                groups[-1] = f"runs {which} plus {_group_names(others, names, said)}"
+            else:
+                groups[-1] = f"runs {_and_list([*_group_words(running, names, set()), *_group_words(others, names, said)])}"
+        else:
+            groups.append(f"runs {_group_names(others, names, said)}")
+    if removed:
+        groups.append(f"removes {_plural(removed, 'connection')}")
+    return groups
+
+
+def _may_cost_clauses(rows: list[Mapping[str, Any]], *, named: bool) -> str:
+    """"may use your Hugging Face credits", or named when other classes run
+    beside it, or for several accounts: "Idol may use your Hugging Face
+    credits" (GM, PR #203 r14 item 2). Frontend mayCostSentence's twin for the
+    plan line."""
+    by_account: dict[str, list[str]] = {}
+    for row in rows:
+        names = by_account.setdefault(str(row.get("account") or ""), [])
+        name = str(row.get("name") or "")
+        if name and name not in names:
+            names.append(name)
+    clauses = []
+    for account, names in by_account.items():
+        who = f"{_and_list(names)} " if names and (named or len(by_account) > 1) else ""
+        clauses.append(f"{who}may use your {account} credits")
+    return " · ".join(clauses)
+
+
+def plan_line(view: Mapping[str, Any]) -> str:
+    """What Accept changes and costs, in one line of segments joined by " · ":
+    what happens, with node names (plan_groups, joined by ", "); for exactly
+    one paid run its model and who pays ("Krea 2 on your Krea plan"), for
+    more the count ("3 paid runs"), for free runs "free"; then the run
+    chip's price ("~$0.03", "Up to $0.43", "$0.07 + unpriced") or "no list
+    price". The chip's "Up to" covers a paid run that may be skipped (GM -
+    Design, PR #216 r3). With no run it says nothing runs until the person
+    chooses; a run that waits on agents' placeholders says so, as before."""
+    from services import money
+
+    run = list(view.get("run") or [])
+    cost = view.get("cost") or {}
+    entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, Mapping)]
+    paid = int(cost.get("paidRuns") or 0)
+    pending = cost.get("pendingSkipped") or None
+
+    groups = plan_groups(view)
+    segments = [", ".join(groups)] if groups else []
+    if not run:
+        segments.append(NOTHING_RUNS)
+    elif _runs_nothing(view):
+        # Its whole run waits on agents' placeholders, which it skips (GM -
+        # Design, round 4), counting the placeholders themselves (review 4, M2).
+        count = int(pending.get("placeholders") or pending.get("count") or 0)
+        agents = [str(agent) for agent in pending.get("agents") or []]
+        who = f"{agents[0]} finishes" if len(agents) == 1 and agents[0] else "agents finish"
+        segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
+    else:
+        # Runs by cost class (GM, PR #203 r11 item 2, r19 item 1): paid ones,
+        # ones on the person's Krea plan, and ones that may bill their own
+        # account (Idol with a Hugging Face token) are each said, never
+        # "free". A node's own name leads a may-cost clause only beside other
+        # classes, or when several accounts are named ("Idol may use your
+        # Hugging Face credits").
+        plan_runs = int(cost.get("planRuns") or 0)
+        may_rows = [row for row in (cost.get("mayCost") or []) if isinstance(row, Mapping)] \
+            if int(cost.get("mayCostRuns") or 0) > 0 else []
+        billed_entries = [entry for entry in entries if entry.get("kind") not in ("free", "mayCost")]
+        if paid + plan_runs == 1 and len(billed_entries) == 1:
+            entry = billed_entries[0]
+            model = str(entry.get("model") or entry.get("name") or "1 paid run")
+            segments.append(f"{model} on {entry['billedTo']}" if entry.get("billedTo") else model)
+        else:
+            if paid > 0:
+                segments.append(_plural(paid, "paid run"))
+            if plan_runs > 0:
+                segments.append(f"{plan_runs} on your Krea plan")
+        if may_rows:
+            segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs)))
+        if not paid and not plan_runs and not may_rows:
+            segments.append("free")
+        if paid > 0 or plan_runs > 0:
+            # A run on the Krea plan has no list price (GM - Design, PR #216
+            # r3: "Krea 2 on your Krea plan · no list price").
+            estimate = cost.get("estimate")
+            if estimate and estimate.get("high") is not None:
+                segments.append(money.chip_label(estimate.get("low"), estimate.get("high"), bool(estimate.get("open"))))
+            else:
+                segments.append(PLAN_NO_PRICE)
+    text = " · ".join(segment for segment in segments if segment)
+    return text[:1].upper() + text[1:]
 
 
 # Where each surface's agent finds a node that runs here, the MCP and CLI
@@ -955,10 +1283,44 @@ class Proposal:
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.
     lineage: dict[str, str] = field(default_factory=dict)
+    # The card's words for each wire it makes, one per spec edge, in order:
+    # {sourceName, targetName, targetLabel} (main writes them when it is made).
+    wires: list[dict[str, str]] = field(default_factory=list)
+    # The wires Accept removes: a model change drops the ones on ports the new
+    # model doesn't have, as the picker does for the person (GM - Design,
+    # PR #216 r3). Each is {source, sourceHandle, target, targetHandle,
+    # sourceName, targetName, targetLabel}; Accept refuses when the live
+    # graph would drop any others.
+    removed_edges: list[dict[str, str]] = field(default_factory=list)
+    # The proposing request's raw presence session (agent_presence.
+    # presence_session; None for the agent's plain cursor), so the person's
+    # tabs show "Accepted" on that session's cursor (PR #211 r4). Person
+    # side only: never in view(), brief(), REST, the journal or logs.
+    presence_session: str | None = field(default=None, repr=False)
 
     @property
     def references(self) -> set[str]:
         return self.spec.references
+
+    @property
+    def touched(self) -> set[str]:
+        """The existing nodes the card names: those it references, and the far
+        end of each connection Accept removes (review 3 LOW-2: a rename of the
+        photo connected to a swapped node follows on the card too)."""
+        ends = {str(edge.get(key)) for edge in self.removed_edges for key in ("source", "target") if edge.get(key)}
+        return set(self.existing) | ends
+
+    def shown_names(self) -> dict[str, str]:
+        """Each touched node's name as the proposal was made: its title, or
+        the name a removed connection carried for it."""
+        names: dict[str, str] = {}
+        for edge in self.removed_edges:
+            for end, word in (("source", "sourceName"), ("target", "targetName")):
+                if edge.get(end) and edge.get(word):
+                    names[str(edge[end])] = str(edge[word])
+        names.update({node_id: str(row.get("title") or "") for node_id, row in self.existing.items()
+                      if isinstance(row, Mapping)})
+        return names
 
     @property
     def is_open(self) -> bool:
@@ -1058,7 +1420,9 @@ class ProposalBook:
         return self._items.get(proposal_id)
 
     def open_list(self) -> list[Proposal]:
-        return [p for p in self._items.values() if p.is_open]
+        # A snapshot first: the asset Update's share fields are read on a notes
+        # worker thread while the loop may add or close an ask (PR #204 round 3).
+        return [p for p in list(self._items.values()) if p.is_open]
 
     def open_unrunnable(self, proposal: Proposal) -> list[Proposal]:
         """The same agent's other open proposals on this canvas (project) whose
@@ -1196,21 +1560,34 @@ class ProposalBook:
             self._items.pop(proposal.id, None)
 
     # -- what agents and the canvas see (never the accept key) ---------------
-    def view(self, proposal: Proposal, *, registry: Any, api_keys: Mapping[str, Any]) -> dict[str, Any]:
-        """``api_keys``: the person's keys as set now. The ghost cards' costs
-        and the run's key-billing classes are read with them (GM, PR #203
-        r15 items 1 and 2), so a token added or removed after the proposal
-        changes "free" and "may cost" in every listing."""
+    def view(self, proposal: Proposal, *, registry: Any, api_keys: Mapping[str, Any],
+             live: Mapping[str, str] | None = None) -> dict[str, Any]:
+        """What agents and the canvas read. ``api_keys``: the person's keys as
+        set now. The ghost cards' costs and the run's key-billing classes are
+        read with them (GM, PR #203 r15 items 1 and 2), so a token added or
+        removed after the proposal changes "free" and "may cost" in every
+        listing. ``live`` maps the existing nodes it touches to their names on
+        the canvas now: names follow a rename while the proposal is open (GM -
+        Design, PR #216 r4 4: ids are what's applied; the agent's note stays
+        as written)."""
         from services import node_route
 
         definitions = registry.get_all() if registry is not None else {}
         spec = proposal.spec
+        touched = proposal.touched
+        live = {key: value for key, value in (live or {}).items() if key in touched and value}
+
+        def existing_row(node_id: str) -> dict[str, Any]:
+            row = dict(proposal.existing.get(node_id) or {})
+            if node_id in live:
+                row.update(title=live[node_id], name=f"{live[node_id]} ({node_id})")
+            return row
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
         nodes: list[dict[str, Any]] = []
         names = spec.names
         for node in spec.nodes:
             definition = definitions.get(node.definition_id, {}) if isinstance(definitions, dict) else {}
-            model = str(definition.get("displayName") or node.definition_id)
+            model = model_label(definition, node.params) or node.definition_id
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,
@@ -1229,10 +1606,16 @@ class ProposalBook:
             })
         params: list[dict[str, Any]] = []
         for change in spec.params:
-            before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
+            row = existing_row(change.node_id)
+            before = row.get("params") or {}
             params.append({
                 "nodeId": change.node_id,
-                "name": (proposal.existing.get(change.node_id) or {}).get("name") or change.node_id,
+                "name": row.get("name") or change.node_id,
+                # The card's words: the node's name and model, never its id.
+                **({"title": row["title"]} if row.get("title") else {}),
+                **({"model": row["model"]} if row.get("model") else {}),
+                # The same model set again, its ports read again (GM - Design, PR #216 r4 8).
+                **({"inputsUpdated": dict(row["inputsUpdated"])} if row.get("inputsUpdated") else {}),
                 "changes": {
                     key: {
                         "from": safe_value(before.get(key), key=key),
@@ -1241,7 +1624,27 @@ class ProposalBook:
                     for key, value in change.params.items()
                 },
             })
-        return {
+        # Each node it touches by its canvas name, by id or ref: the plan line's
+        # and the panel's words (review 1 L3: a run-only node keeps its name).
+        node_names: dict[str, str] = {
+            node_id: str(existing_row(node_id)["title"]) for node_id, row in sorted(proposal.existing.items())
+            if isinstance(row, Mapping) and existing_row(node_id).get("title")}
+        node_names.update({node["ref"]: node["name"] for node in nodes if node.get("name")})
+        # The far end of a connection Accept removes, by its name now (review 3 LOW-2).
+        node_names.update({node_id: name for node_id, name in sorted(live.items()) if node_id not in node_names})
+        new_ports = {node["ref"]: {port["id"]: port["label"] for port in node["ports"]["inputs"]} for node in nodes}
+        edges: list[dict[str, Any]] = []
+        for index, edge in enumerate(spec.edges):
+            words = proposal.wires[index] if index < len(proposal.wires) else {}
+            edges.append({
+                **edge.as_dict(),
+                # “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3).
+                "sourceName": live.get(edge.source) or words.get("sourceName") or node_names.get(edge.source) or edge.source,
+                "targetName": live.get(edge.target) or words.get("targetName") or node_names.get(edge.target) or edge.target,
+                "targetLabel": (words.get("targetLabel") or new_ports.get(edge.target, {}).get(edge.target_handle)
+                                or edge.target_handle),
+            })
+        view = {
             "id": proposal.id,
             "status": proposal.status,
             "agent": proposal.agent.as_dict(),
@@ -1250,16 +1653,25 @@ class ProposalBook:
             "createdAt": int(proposal.created_at * 1000),
             "expiresAt": int(proposal.expires_at * 1000),
             "nodes": nodes,
-            "edges": [edge.as_dict() for edge in spec.edges],
+            "edges": edges,
+            "removedEdges": [{**edge, **({"sourceName": live[edge["source"]]} if edge.get("source") in live else {}),
+                              **({"targetName": live[edge["target"]]} if edge.get("target") in live else {})}
+                             for edge in copy.deepcopy(proposal.removed_edges)],
+            "names": node_names,
             "params": params,
             "run": list(spec.run),
-            "cost": live_cost(proposal, definitions if isinstance(definitions, dict) else {}, api_keys),
+            "cost": _cost_with_names(
+                live_cost(proposal, definitions if isinstance(definitions, dict) else {}, api_keys), live),
             "references": sorted(proposal.references, key=_node_sort_key),
             "reason": proposal.reason,
             "idMap": dict(proposal.id_map) if proposal.id_map else None,
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
             "update": dict(proposal.update) if proposal.update else None,
         }
+        # One count for the card, the Update and MCP (GM - Design, PR #216 r3).
+        view["changeCount"] = change_count(spec, removed=len(proposal.removed_edges))
+        view["plan"] = plan_line(view)
+        return view
 
     def person_values(self, proposal: Proposal) -> dict[str, Any]:
         """The values Accept will apply, for the person's canvas only.
@@ -1293,6 +1705,25 @@ class ProposalBook:
             "expiresInSeconds": max(0, int(proposal.expires_at - self._clock())),
             **({"cantRun": missing} if missing else {}),
         }
+
+
+def _cost_with_names(cost: Mapping[str, Any], live: Mapping[str, str]) -> dict[str, Any]:
+    """The proposal's cost with each existing node under its name now: its
+    price item, and its not-ready row (the person's line names it first)."""
+    cost = copy.deepcopy(dict(cost))
+    for entry in cost.get("nodes") or []:
+        if isinstance(entry, dict) and entry.get("nodeId") in live:
+            entry["name"] = live[entry["nodeId"]]
+    for row in cost.get("notReady") or []:
+        if not isinstance(row, dict) or row.get("nodeId") not in live:
+            continue
+        old, new = str(row.get("name") or ""), live[row["nodeId"]]
+        person = row.get("person")
+        quoted = f"“{_plan_name(old) or old}”"
+        if isinstance(person, str) and person.startswith(quoted):
+            row["person"] = f"“{_plan_name(new) or new}”{person[len(quoted):]}"
+        row["name"] = new
+    return cost
 
 
 def _node_sort_key(node_id: str) -> tuple[int, str]:
@@ -1333,18 +1764,20 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
 # (Accepted, Rejected, Expired, Closed: Nebula restarted)." main posts it on
 # the project's Updates when the proposal opens and settles it when it ends.
 
-def change_count(spec: ProposalSpec) -> int:
-    """What the Update counts as a change: each new node, each wire and each
-    existing node whose params change (the bar's own groups). A run changes
-    nothing on the canvas, and a name belongs to its new node."""
-    return len(spec.nodes) + len(spec.edges) + len(spec.params)
+def change_count(spec: ProposalSpec, *, removed: int = 0) -> int:
+    """What the Update, the card and MCP count as a change (GM - Design, PR
+    #216 r2-r3: one unit, the operation): each new node, each new wire, each
+    existing node whose params change and each wire Accept removes (the
+    panel's groups and connection lines). A run changes nothing on the
+    canvas, and a name belongs to its new node."""
+    return len(spec.nodes) + len(spec.edges) + len(spec.params) + removed
 
 
 def update_text(proposal: Proposal) -> str:
     """The Update's line, from a fixed template: never the agent's note
     (that is the bar's), as an asset proposal's never is."""
     agent = proposal.agent.name
-    count = change_count(proposal.spec)
+    count = change_count(proposal.spec, removed=len(proposal.removed_edges))
     if count == 0:
         return f"{agent} proposes a run on the canvas"
     return f"{agent} proposes {count} change{'' if count == 1 else 's'} on the canvas"

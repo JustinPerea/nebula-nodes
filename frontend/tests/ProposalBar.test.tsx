@@ -30,7 +30,9 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: net.apiFetch }));
 vi.mock('../src/store/graphStore', () => {
   const useGraphStore = (selector: (state: typeof graph.state) => unknown) => selector(graph.state);
   useGraphStore.getState = () => graph.state;
-  return { useGraphStore, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
+  // DeferredRunNotice reads its nodes' names live (GM r40 item 3).
+  const nodeCardTitle = (node: { data?: { label?: string } } | undefined) => node?.data?.label ?? '';
+  return { useGraphStore, nodeCardTitle, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
@@ -99,33 +101,137 @@ describe('ProposalBar', () => {
     try {
       const { container } = render(<ProposalBar />);
       expect(container.innerHTML).toBe('');
-      expect(screen.queryByText(/Run them when the current run finishes/)).toBeNull();
+      expect(screen.queryByText(/^You can run .+ (?:now|when the current run finishes)\.$/)).toBeNull();
       expect(screen.queryByText('Imported. One note.')).toBeNull();
     } finally {
       delete state.undoNotice;
     }
   });
 
-  it('shows who, what and the paid run label', () => {
-    open(proposal('p_a'));
+  // GM - Design, 2026-11-01 (the card redesign): one header line (the name
+  // truncates, its full form in `title`), the note, the backend's plan line,
+  // then a footer; the countdown moved up to the header.
+  it('shows who, the note, the plan line and the countdown in the header', () => {
+    const plan = 'Changes “Text” and runs “Nano Banana” · Nano Banana on your Google key · no list price';
+    open(proposal('p_a', { plan, agent: { id: 'pa', name: 'Portable Agent - Brand', color: '#d4ff7a', verified: true } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Codex')).toBeTruthy();
+    const name = screen.getByText('Portable Agent - Brand');
+    expect(name.getAttribute('title')).toBe('Portable Agent - Brand');
+    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+:\d\d$/);
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
-    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
-    expect(screen.getByText(/No list price ·/)).toBeTruthy();
+    expect(screen.getByText(plan).className).toBe('proposal-bar__plan');
+    // Nothing above the disclosure names a node by id (the details fall back
+    // to `name` only for a backend without `title`).
+    for (const part of ['.proposal-bar__head', '.proposal-bar__plan', '.proposal-bar__footer']) {
+      expect(document.querySelector(part)?.textContent).not.toMatch(/\bn1\b|\+up/);
+    }
     expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeTruthy();
   });
 
-  it('adds the list-price estimate to the summary when the run has one', () => {
-    open(proposal('p_a', { cost: { paidRuns: 1, freeRuns: 0, upTo: true, providers: ['google'], nodes: [], note: '',
+  it('keeps "List prices, not a quote" for the first line of the details when the run is priced', () => {
+    open(proposal('p_a', { plan: 'Runs “Nano Banana” · ~$0.07', cost: { paidRuns: 1, freeRuns: 0, upTo: true,
+      providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.07')).toBeTruthy();
-    expect(screen.getByText(/List prices, not a quote ·/)).toBeTruthy();
+    // Only on the price segment (GM - Design, PR #216 r1), with the words as
+    // text for screen readers, since a title shows only on hover.
+    const line = document.querySelector('.proposal-bar__plan')!;
+    expect(line.hasAttribute('title')).toBe(false);
+    const price = line.querySelector('.proposal-bar__price')!;
+    expect(price.textContent).toBe('~$0.07');
+    expect(price.getAttribute('title')).toBe('List prices, not a quote');
+    expect(line.querySelector('.proposal-bar__sr-only')?.textContent).toBe(' (list prices, not a quote)');
+    expect(line.textContent).toBe('Runs “Nano Banana” · ~$0.07 (list prices, not a quote)');
+    const details = screen.getByLabelText('What Accept writes');
+    expect(details.firstElementChild?.textContent).toBe('List prices, not a quote');
   });
 
-  it('says nothing runs and offers a plain Accept when no run is requested', () => {
-    open(proposal('p_a', { run: [], cost: { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '' } }));
+  it('marks no price on a line with no list price', () => {
+    open(proposal('p_a', { plan: 'Runs “Nano Banana” · Nano Banana on your Google key · no list price' }));
+    render(<ProposalBar />);
+    expect(document.querySelector('.proposal-bar__price')).toBeNull();
+    expect(document.querySelector('.proposal-bar__sr-only')).toBeNull();
+  });
+
+  // GM - Design, PR #216 r3: the region places the stack; the card marks
+  // itself as the one item that shrinks, and its body as what gives way.
+  it('marks itself as the stack item that shrinks, its body between a fixed header and footer', () => {
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    const card = document.querySelector<HTMLElement>('.proposal-bar')!;
+    expect(card.hasAttribute('data-notice-shrinks')).toBe(true);
+    const parts = [...card.children].map((child) => child.className);
+    expect(parts).toEqual(['proposal-bar__head', 'proposal-bar__scroll', 'proposal-bar__footer']);
+    const scroll = card.querySelector('.proposal-bar__scroll')!;
+    expect(scroll.hasAttribute('data-notice-shrink-body')).toBe(true);
+    // The disclosure and its panel scroll with the note, never over the footer.
+    const body = scroll.querySelector('.proposal-bar__body')!;
+    expect(body.querySelector('.proposal-bar__note')).toBeTruthy();
+    expect(body.querySelector('.proposal-bar__disclosure')).toBeTruthy();
+    expect(body.querySelector('.proposal-bar__details')).toBeTruthy();
+  });
+
+  it('fades the edge that hides content, and is a named tab stop only while it scrolls', () => {
+    const sizes = { scroll: 400, client: 200, top: 0 };
+    const scrollH = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__body') ? sizes.scroll : 0;
+    });
+    const clientH = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__body') ? sizes.client : 0;
+    });
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    const body = document.querySelector<HTMLElement>('.proposal-bar__body')!;
+    // At the top: only the bottom hides content.
+    expect(body.dataset.fadeTop).toBeUndefined();
+    expect(body.dataset.fadeBottom).toBe('true');
+    expect(body.getAttribute('tabindex')).toBe('0');
+    expect(body.getAttribute('role')).toBe('region');
+    expect(body.getAttribute('aria-label')).toBe('Proposal details');
+    // Mid-scroll: both.
+    body.scrollTop = 100;
+    act(() => { body.dispatchEvent(new Event('scroll')); });
+    expect(body.dataset.fadeTop).toBe('true');
+    expect(body.dataset.fadeBottom).toBe('true');
+    // At the end: only the top.
+    body.scrollTop = 200;
+    act(() => { body.dispatchEvent(new Event('scroll')); });
+    expect(body.dataset.fadeTop).toBe('true');
+    expect(body.dataset.fadeBottom).toBeUndefined();
+    scrollH.mockRestore();
+    clientH.mockRestore();
+  });
+
+  it('is no tab stop and has no fades when it all fits', () => {
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    const body = document.querySelector<HTMLElement>('.proposal-bar__body')!;
+    expect(body.hasAttribute('tabindex')).toBe(false);
+    expect(body.hasAttribute('role')).toBe(false);
+    expect(body.dataset.fadeTop).toBeUndefined();
+    expect(body.dataset.fadeBottom).toBeUndefined();
+  });
+
+  it('counts with the backend and lists removed connections struck through', () => {
+    open(proposal('p_a', {
+      nodes: [], edges: [], run: [], changeCount: 3,
+      params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', changes: { model: { from: 'a', to: 'b' } } }],
+      removedEdges: [1, 2].map((i) => ({ source: `n${i}`, sourceHandle: 'image', target: 'n4', targetHandle: 'images',
+        sourceName: `Photo ${i}`, targetName: 'Second take', targetLabel: 'Images' })),
+    }));
+    render(<ProposalBar />);
+    const row = screen.getByRole('button', { name: /^What Accept writes/ });
+    expect(row.textContent).toBe('What Accept writes3 changes');
+    fireEvent.click(row);
+    const removed = document.querySelector('.proposal-bar__wires[data-kind="unwired"]')!;
+    expect(removed.previousElementSibling?.textContent).toBe('Removed connections');
+    expect([...removed.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Removed: “Photo 1” → “Second take” · Images', 'Removed: “Photo 2” → “Second take” · Images']);
+  });
+
+  it('offers a plain Accept when no run is requested', () => {
+    open(proposal('p_a', { plan: 'Changes “Text” · nothing runs until you choose', run: [],
+      cost: { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '' } }));
     render(<ProposalBar />);
     expect(screen.getByText(/nothing runs until you choose/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
@@ -176,7 +282,7 @@ describe('ProposalBar', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
-    expect(screen.getByText(/Run them when the current run finishes/)).toBeTruthy();
+    expect(screen.getByText(/^You can run .+ when the current run finishes\.$/)).toBeTruthy();
   });
 
   it('locks the held "Run" while its nodes need the token, focusable, and runDeferred refuses too (GM r8 item 3)', async () => {
@@ -240,6 +346,40 @@ describe('ProposalBar', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
+  });
+
+  // GM PR #205 r16 item 2: the too-complex refusal sits in the bar's line
+  // spot, neutral (a status, not an alert), and Accept stays live.
+  it('an Accept the canvas couldn\'t save: GM\'s line, neutral, and Accept stays live', async () => {
+    open(proposal('p_a'));
+    net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'refused', code: 'proposal_too_complex', agent: 'Codex',
+      limit: { kind: 'depth', max: 64 } }));
+    render(<ProposalBar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    const line = document.querySelector('.proposal-bar__error');
+    expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
+      `Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+  });
+
+  // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
+  // same spot and style, with the size line (by the answer's limit.kind).
+  it('an Accept that would make the canvas too large to save: the size line, neutral, and Accept stays live', async () => {
+    open(proposal('p_a'));
+    net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'refused', code: 'proposal_too_complex', agent: 'Codex',
+      limit: { kind: 'size', max: 16_777_216 } }));
+    render(<ProposalBar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    const line = document.querySelector('.proposal-bar__error');
+    expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
+      `Nebula couldn’t accept this because the canvas would be too large to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
   });
 
   it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
@@ -315,13 +455,49 @@ describe('ProposalBar', () => {
       params: { n1: { value: { from: 'a', to: 'b' } } },
     });
     render(<ProposalBar />);
-    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
-    const details = screen.getByRole('region', { name: 'Details' });
-    expect(details.textContent).toContain('New Nano Banana (+up)');
+    const row = screen.getByRole('button', { name: /^What Accept writes/ });
+    // A real disclosure: its label never changes; aria-expanded and the
+    // chevron carry the state, and it names the panel it controls.
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    // One unit, the operation (GM - Design, PR #216 r2): the new node, the
+    // changed node and the wire, never their field lines.
+    expect(row.textContent).toBe('What Accept writes3 changes');
+    const panel = document.getElementById(row.getAttribute('aria-controls')!)!;
+    expect(panel.getAttribute('data-open')).toBe('false');
+    expect(panel.hasAttribute('inert')).toBe(true);
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(row.textContent).toBe('What Accept writes3 changes');
+    expect(panel.getAttribute('data-open')).toBe('true');
+    expect(panel.hasAttribute('inert')).toBe(false);
+    const details = screen.getByLabelText('What Accept writes');
+    expect(details.textContent).toContain('New “Nano Banana”');
     expect(details.textContent).toContain('num_images8');
     expect(details.textContent).toContain(long);
     expect(details.textContent).toContain('Text (n1)');
     expect(details.textContent).toContain('a → b');
+    // Every wire it makes, by name, the target's port muted.
+    expect(details.textContent).toContain('New connections“n1” → “Nano Banana” · Prompt');
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('titles a changed node by its name and model once the backend sends them', () => {
+    open(proposal('p_a', { params: [{ nodeId: 'n1', name: 'Hero shot (n1)', title: 'Hero shot', model: 'Krea 2',
+      changes: { aspect_ratio: { from: '16:9', to: '1:1' } } }] }));
+    render(<ProposalBar />);
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    const titles = [...document.querySelectorAll('.proposal-bar__group-title')].map((el) => el.textContent);
+    expect(titles).toEqual(['New “Nano Banana”', '“Hero shot” · Krea 2', 'New connections']);
+  });
+
+  it('closes the disclosure when the person pages to another proposal', () => {
+    open(proposal('p_a', { createdAt: 1 }));
+    open(proposal('p_b', { createdAt: 2 }));
+    render(<ProposalBar />);
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next proposal' }));
+    expect(screen.getByRole('button', { name: /^What Accept writes/ }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it("names the run's nodes that can't run here, and leaves Accept as the Run button is", () => {
@@ -552,25 +728,30 @@ describe('ProposalBar', () => {
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const toggle = screen.getByRole('button', { name: 'Show the list' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    toggle.focus();
-    fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Hide the list' })).toBe(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(toggle).toHaveFocus();
-    const details = screen.getByLabelText('Details');
-    expect(details.textContent).toContain('(+d)');
-    expect(details.querySelector('h3')?.textContent).toBe('Can’t run here');
-    fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Show the list' })).toBe(toggle);
-    expect(toggle).toHaveFocus();
-    expect(screen.queryByLabelText('Details')).toBeNull();
-    expect(document.body.textContent).not.toContain('See every node');
+    const list = screen.getByRole('list', { name: "Can't run here" });
+    expect(list.querySelectorAll('li')).toHaveLength(4);
+    expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
+    // The first ⚠ line is kept in view with the plan line (GM r6); the rest scroll.
+    const kept = [...list.querySelectorAll('li')].map((li) => li.hasAttribute('data-notice-keep'));
+    expect(kept).toEqual([true, false, false, false]);
+    expect(list.textContent).toContain('and 1 more in the details');
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
   });
 
-  it("wraps the agent's note and offers the rest in the details", () => {
-    // jsdom lays nothing out: the note reports more height than its three lines show.
+  it('with no changes, the row reads "Every node that can’t run" with the count', () => {
+    const many = proposal('p_a', { params: [], nodes: [], edges: [], run: ['n1'] });
+    many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
+      ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const row = screen.getByRole('button', { name: /^Every node that can’t run/ });
+    expect(row.textContent).toBe('Every node that can’t run4 nodes');
+  });
+
+  it('reads the whole note first: past six lines it clamps, and "Show all" opens it in place', () => {
+    // jsdom lays nothing out: the note reports more height than its six lines show.
     vi.stubGlobal('ResizeObserver', class {
       constructor(private readonly report: () => void) {}
       observe() { this.report(); }
@@ -587,9 +768,17 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     const shown = document.querySelector('.proposal-bar__note')!;
     expect(shown.textContent).toBe(note);
-    fireEvent.click(screen.getByRole('button', { name: 'Read the whole note' }));
-    expect(screen.getByLabelText('Details').textContent).toContain(note);
-    expect(screen.getByRole('button', { name: 'Hide the note' })).toBeTruthy();
+    expect(shown.getAttribute('data-long')).toBe('true');
+    const more = screen.getByRole('button', { name: 'Show all' });
+    expect(more.getAttribute('aria-controls')).toBe(shown.id);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    expect(shown.getAttribute('data-open')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
+    // The note never goes into the details again.
+    expect(screen.queryByRole('button', { name: /What Accept writes|Read the whole note/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(shown.hasAttribute('data-open')).toBe(false);
     heights.mockRestore();
     client.mockRestore();
   });

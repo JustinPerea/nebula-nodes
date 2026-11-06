@@ -138,7 +138,8 @@ describe('the list (GM\'s still)', () => {
     fireEvent.click(chip());
     const list = screen.getByRole('dialog', { name: 'Updates' });
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_3');
-    expect(within(list).getByText('3 · all read')).toBeTruthy();
+    // GM, #204 r3 item 1: "all read" once the server has read them, not before.
+    expect(await within(list).findByText('3 · all read')).toBeTruthy();
     expect(within(list).getByText('kept with this project')).toBeTruthy();
     // The chip's count is a muted 0 while the list is open.
     expect(chip().querySelector('.agent-notes-chip__count')!.textContent).toBe('0');
@@ -216,7 +217,7 @@ describe('the list (GM\'s still)', () => {
     expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull();
   });
 
-  it('takes a new update on top while open, marks it read and drops no card', () => {
+  it('takes a new update on top while open, marks it read and drops no card', async () => {
     render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
@@ -224,7 +225,7 @@ describe('the list (GM\'s still)', () => {
     added(note('an_2'), 1);
     const list = screen.getByRole('dialog', { name: 'Updates' });
     expect(within(list).getAllByRole('listitem')[0].querySelector('.agent-notes-entry__text')!.textContent).toBe('update an_2');
-    expect(within(list).getByText('2 · 1 new')).toBeTruthy();
+    expect(await within(list).findByText('2 · 1 new')).toBeTruthy();
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_2');
     expect(document.querySelector('.agent-note-card')).toBeNull();
     // "1 new" is this list's own state: it clears when the list closes.
@@ -460,6 +461,37 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     reviewIn(openEntry());
     await vi.waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Commons'));
     expect(useAssetProposalsStore.getState().review).toBeNull();
+  });
+
+  it('while the Commons is off, a Commons ask\'s Review stays, locked, with the reason under it (round 18i)', async () => {
+    const { noteCommonsOff, noteCommonsAnswered, COMMONS_OFF_REVIEW_LINE } = await import('../src/lib/commonsOff');
+    const enterCommons = vi.fn();
+    useUIStore.setState({ enterCommons, commonsEnabled: false });
+    act(() => noteCommonsOff());
+    try {
+      render(<AppAgentNotes />);
+      sync([ask('commons', 'ast_1'), ask('project', 'dusk')]);
+      fireEvent.click(chip());
+      const [commons, project] = within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem');
+      const review = within(commons).getByRole('button', { name: 'Review' });
+      expect(review.getAttribute('aria-disabled')).toBe('true');
+      const reason = document.getElementById(review.getAttribute('aria-describedby')!.split(' ').at(-1)!)!;
+      expect(reason.textContent).toBe(COMMONS_OFF_REVIEW_LINE);
+      expect(commons.contains(reason)).toBe(true);
+      fireEvent.click(review);
+      await act(async () => { await Promise.resolve(); });
+      expect(enterCommons).not.toHaveBeenCalled();
+      expect(useAssetProposalsStore.getState().review).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+      // A project's ask is not the Commons: its Review stays live.
+      expect(within(project).getByRole('button', { name: 'Review' }).getAttribute('aria-disabled')).toBeNull();
+      // The Commons answers on again: the lock and its line go.
+      act(() => noteCommonsAnswered());
+      expect(review.getAttribute('aria-disabled')).toBeNull();
+      expect(document.getElementById(reason.id)).toBeNull();
+    } finally {
+      act(() => noteCommonsAnswered());
+    }
   });
 
   it('once the proposal closed, says how in place of Review, greyed', () => {

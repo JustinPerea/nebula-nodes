@@ -242,6 +242,10 @@ interface UIState {
   // Editor view state — Phase 1 video-editor pivot
   viewMode: ViewMode;
   commonsEnabled: boolean;
+  /** PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend runs without
+   * it shows the Commons-off view (components/commons/CommonsView CommonsOffView) over any
+   * screen, until the person leaves it. The Commons stays unavailable (commonsEnabled). */
+  commonsOffShown: boolean;
   commonsReturnView: Exclude<ViewMode, 'commons'>;
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
@@ -318,6 +322,12 @@ interface UIState {
   /** The Agent log is expanded (not saved; it starts collapsed). The Updates
    * list's "See all actions →" opens it (PR9a). */
   agentLogOpen: boolean;
+  /** GM - Design, PR #216 r7, step 4: the proposal card collapsed the log
+   * to its header ('card'; it reopens when the card leaves), or the person
+   * reopened it over that while the card shows ('refused'; the card never
+   * collapses it again until it leaves). A collapse the person makes is
+   * theirs and is never undone. */
+  agentLogCardHold: 'none' | 'card' | 'refused';
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   /** Zoomed out past the level-of-detail cutoff (lib/canvasOverview.ts); set by the canvas. */
@@ -354,6 +364,7 @@ interface UIState {
   enterMoodboardEditor: (moodboardId: string, scope?: AssetScope) => void;
   exitMoodboardEditor: () => void;
   setCommonsEnabled: (enabled: boolean) => void;
+  setCommonsOffShown: (shown: boolean) => void;
   enterCommons: () => void;
   exitCommons: () => void;
   enterCreateView: () => void;
@@ -376,7 +387,9 @@ interface UIState {
   zoomTimelineOut: () => void;
   resetTimelineZoom: () => void;
 
-  selectNode: (nodeId: string | null) => void;
+  /** `keepPin`: what Paste, Undo or Redo selects (GM PR #205 r8 item 1):
+   * bringing nodes back never unpins the Inspector the person pinned. */
+  selectNode: (nodeId: string | null, options?: { keepPin?: boolean }) => void;
   requestCanvasNodeFocus: (nodeId: string) => void;
   clearCanvasNodeFocus: (requestId: string) => void;
   setInspectorVisible: (visible: boolean) => void;
@@ -403,6 +416,10 @@ interface UIState {
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
   setAgentLogOpen: (open: boolean) => void;
+  /** The notice region's ask (step 4): `want` the log collapsed for the
+   * card, while `card` shows one. With no card, it reopens a log the card
+   * collapsed, and forgets the person's refusal. */
+  holdAgentLogForCard: (want: boolean, card: boolean) => void;
   /** Expand the Agent log ("See all actions →"). Does nothing while it is switched off. */
   openAgentLog: () => void;
   setCanvasPerfMode: (enabled: boolean) => void;
@@ -456,6 +473,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   canvasFocusRevision: 0,
   viewMode: 'canvas',
   commonsEnabled: false,
+  commonsOffShown: false,
   commonsReturnView: 'canvas',
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
@@ -497,6 +515,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
   agentLogOpen: false,
+  agentLogCardHold: 'none',
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   canvasZoomedOut: false,
@@ -640,13 +659,14 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     commonsEnabled: enabled,
     ...(!enabled && state.viewMode === 'commons' ? { viewMode: state.commonsReturnView } : {}),
   })),
+  setCommonsOffShown: (shown) => set((state) => (state.commonsOffShown === shown ? {} : { commonsOffShown: shown })),
   enterCommons: () => set((state) => {
     if (!state.commonsEnabled || state.viewMode === 'commons') return {};
     return { viewMode: 'commons', commonsReturnView: state.viewMode };
   }),
   exitCommons: () => set((state) => state.viewMode === 'commons'
-    ? { viewMode: state.commonsReturnView }
-    : {}),
+    ? { viewMode: state.commonsReturnView, commonsOffShown: false }
+    : state.commonsOffShown ? { commonsOffShown: false } : {}),
 
   enterCreateView: () => {
     const restoredSession = useGraphStore.getState().runHistory.find((run) => run.createOrigin)?.createOrigin?.sessionId;
@@ -724,19 +744,43 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   zoomTimelineOut: () => set((s) => ({ timelineZoom: Math.max(1, s.timelineZoom / 2) })),
   resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
-  selectNode: (nodeId) =>
-    set((state) => ({
-      selectedNodeId: nodeId,
-      inspectorPinned: nodeId === null ? false : state.inspectorPinned,
-      panels: {
-        ...state.panels,
-        library: state.panels.library,
-        inspector: {
-          ...state.panels.inspector,
-          visible: nodeId !== null && state.inspectorPinned ? state.panels.inspector.visible : false,
+  selectNode: (nodeId, options) => {
+    // GM PR #205 r12: the Inspector and the rings agree. A node named for the
+    // Inspector (the command palette, a focus request) while the canvas has
+    // others selected is selected alone, as a click on it would. Checked once
+    // the event is done: a card's own click names it before the canvas has
+    // added it to the selection (a Shift-click keeps the others).
+    if (nodeId !== null) {
+      queueMicrotask(() => {
+        if (get().selectedNodeId !== nodeId) return;
+        const { nodes } = useGraphStore.getState();
+        if (!nodes.some((node) => node.selected && node.id !== nodeId) || !nodes.some((node) => node.id === nodeId)
+          || nodes.some((node) => node.id === nodeId && node.selected)) return;
+        useGraphStore.setState({ nodes: nodes.map((node) => {
+          const want = node.id === nodeId;
+          return Boolean(node.selected) === want ? node : { ...node, selected: want };
+        }) });
+      });
+    }
+    set((state) => {
+      const keep = state.inspectorPinned && (nodeId !== null || options?.keepPin === true);
+      return {
+        selectedNodeId: nodeId,
+        inspectorPinned: keep,
+        panels: {
+          ...state.panels,
+          library: state.panels.library,
+          inspector: {
+            ...state.panels.inspector,
+            // GM PR #205 r16 item 5: an unpinned Inspector follows the
+            // selection too (one node shows it, several read "N nodes
+            // selected"), and closes only at none, as on main.
+            visible: keep || nodeId !== null ? state.panels.inspector.visible : false,
+          },
         },
-      },
-    })),
+      };
+    });
+  },
 
   requestCanvasNodeFocus: (nodeId) => {
     const targetId = nodeId.trim();
@@ -784,7 +828,10 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
       inspectorPinned: pinned,
       panels: {
         ...state.panels,
-        inspector: { ...state.panels.inspector, visible: pinned ? true : state.panels.inspector.visible },
+        // Unpinning the empty Inspector closes it, as the screen does: the
+        // store and the screen agree (review 6 inspector-pin NIT-1).
+        inspector: { ...state.panels.inspector,
+          visible: pinned ? true : state.selectedNodeId === null ? false : state.panels.inspector.visible },
       },
     })),
 
@@ -916,10 +963,25 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     set({ agentLogEnabled: enabled });
   },
 
-  setAgentLogOpen: (open) => set({ agentLogOpen: open }),
+  setAgentLogOpen: (open) => {
+    // Opened by anyone over the card's collapse: the card leaves it open.
+    // Collapsed by anyone: it is theirs, never reopened for the card.
+    const hold = get().agentLogCardHold;
+    set({ agentLogOpen: open, agentLogCardHold: hold === 'card' ? (open ? 'refused' : 'none') : hold });
+  },
+
+  holdAgentLogForCard: (want, card) => {
+    const { agentLogOpen, agentLogCardHold: hold, agentLogEnabled } = get();
+    if (!card || !want) {
+      if (hold === 'card') set({ agentLogOpen: agentLogEnabled, agentLogCardHold: 'none' });
+      else if (!card && hold === 'refused') set({ agentLogCardHold: 'none' });
+      return;
+    }
+    if (hold === 'none' && agentLogOpen) set({ agentLogOpen: false, agentLogCardHold: 'card' });
+  },
 
   openAgentLog: () => {
-    if (get().agentLogEnabled) set({ agentLogOpen: true });
+    if (get().agentLogEnabled) get().setAgentLogOpen(true);
   },
 
   setCanvasPerfMode: (enabled) => {

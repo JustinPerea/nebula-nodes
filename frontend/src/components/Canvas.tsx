@@ -19,6 +19,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
+import { noteCanvasSelectionDrag } from '../lib/canvasSelectionDrag';
+import { RUN_LOCK_VERBS, canvasWaitLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -40,6 +42,7 @@ import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } fr
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
+import { NodeRemeasureContext, useFlowNodeRemeasure } from '../lib/cardWidthSpring';
 import { isCanvasShortcutTarget, isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { visibleFlowRect } from '../lib/visibleFlowRect';
@@ -223,7 +226,14 @@ export function CanvasFocusController() {
     const graph = useGraphStore.getState();
     if (!graph.nodes.some((node) => node.id === request.nodeId)) {
       clearRequest(request.requestId);
-      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+      // The UI store names what the canvas still has selected, as when the
+      // shown node leaves (graphStore): its one node; over several, one of
+      // them unpinned ("N nodes selected"), none pinned; else none (review 7
+      // of PR #205, inspector NIT-2; review 8, lines-inspector MEDIUM-1).
+      if (ui.selectedNodeId === request.nodeId) {
+        const ringed = graph.nodes.filter((node) => node.selected);
+        ui.selectNode(ringed.length === 1 || (ringed.length > 1 && !ui.inspectorPinned) ? ringed[0].id : null, { keepPin: true });
+      }
       return;
     }
     if (!viewportInitialized || !internalNode?.measured.width || !internalNode.measured.height) return;
@@ -490,6 +500,8 @@ export function Canvas() {
     return { nodes: doomed, edges: wiresDeletedWith(doomed.map((node) => node.id), edges) };
   }, []);
   const flowStore = useStoreApi();
+  // A card springing its width has React Flow measure its node at once (lib/cardWidthSpring.ts, GM r107).
+  const remeasureNode = useFlowNodeRemeasure();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
@@ -522,6 +534,9 @@ export function Canvas() {
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
     const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
     if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
+    // GM PR #205 r4 item 3: the picker opens during a run too. Adding a node
+    // and connecting two are each allowed while a run goes, so the connected
+    // add is as well (no lock, no line).
 
     showConnectionPopup({
       position: point,
@@ -627,6 +642,13 @@ export function Canvas() {
     hideContextMenu();
   }, [hideContextMenu]);
 
+  // A drag-select: the unpinned Inspector follows it, and closes only if it
+  // ends with none selected (GM PR #205 r16 item 5).
+  const onSelectionStart = useCallback(() => noteCanvasSelectionDrag(true), []);
+  const onSelectionEnd = useCallback(() => noteCanvasSelectionDrag(false), []);
+  // A drag the canvas started ends with it (review 8, lines-inspector NIT-2).
+  useEffect(() => () => noteCanvasSelectionDrag(false), []);
+
   // Right-click on empty canvas offers "Leave a note for agents here…".
   const onPaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
@@ -669,10 +691,15 @@ export function Canvas() {
         return;
       }
 
-      // Ctrl+Enter — Run graph
-      if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
+      // Ctrl+Enter: Run canvas. GM PR #205 r4 item 4: while a wait holds
+      // it (this tab's run or its start, Create's launch, an import), the
+      // press says the palette's line in the key presses' place.
+      if (isCtrlOrCmd && event.key === 'Enter') {
         event.preventDefault();
-        executeGraph();
+        const graph = useGraphStore.getState();
+        const line = canvasWaitLine(RUN_LOCK_VERBS.runCanvas, { ...graph, createLaunchingIds: [] });
+        if (line) graph.sayRunLocked(line);
+        else executeGraph();
         return;
       }
 
@@ -793,69 +820,75 @@ export function Canvas() {
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={renderedEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={handleConnect}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
-        isValidConnection={isValidConnection}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneClick={onPaneClick}
-        onPaneContextMenu={onPaneContextMenu}
-        fitView={fitFirstNodes}
-        defaultViewport={initialCanvasState.viewport ?? undefined}
-        onInit={onViewportInitialized}
-        onMoveStart={cameraMoveStarted}
-        onMove={onViewportMove}
-        fitViewOptions={{ padding: computeCanvasFitPadding() }}
-        minZoom={0.1}
-        maxZoom={4}
-        defaultEdgeOptions={{ type: 'typed-edge' }}
-        proOptions={{ hideAttribution: true }}
-        // The Delete key is the canvas's own (onKeyDown): React Flow's never
-        // asked whether a modal dialog is open (review 8, M-1).
-        deleteKeyCode={null}
-        onBeforeDelete={onBeforeDelete}
-        {...CANVAS_INTERACTION_PROPS}
-        nodesDraggable={!readOnly}
-        nodesConnectable={!readOnly}
-        onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
-      >
-        <Background
-          variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
-          gap={isSlavaSkin ? 16 : 32}
-          size={isSlavaSkin ? 1.2 : 1}
-          color={isSlavaSkin ? 'var(--sr-canvas-dot-color)' : 'rgba(255, 255, 255, 0.04)'}
-          className={isSlavaSkin ? 'slava-canvas-background' : undefined}
-          patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
-        />
-        <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
-        <CanvasFocusController />
-        {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
-            floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
-            panel, the toolbar's layout box: the toolbar's entry animation
-            transforms it, and a measured line would ease down with it. With
-            nothing selected the panel is empty, 0 px wide but still one
-            toolbar tall (canvas.css), so an open Inspector holds its place
-            (GM, round 3: "A panel shouldn't move unless someone moves it"). */}
-        <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
-          <SelectionToolbar />
-        </Panel>
-        <CanvasNavigation />
-        <CanvasViewReporter />
-        <ArrangeController />
-        <AgentNodeMarks />
-        <AgentCursorLayer />
-        <AgentNoteOutlines />
-        <PinLayer />
-        <ProposalLayer />
-        <ProposalBar />
-      </ReactFlow>
+      <NodeRemeasureContext.Provider value={remeasureNode}>
+        <ReactFlow
+          nodes={nodes}
+          edges={renderedEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={handleConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodeContextMenu={onNodeContextMenu}
+          onPaneClick={onPaneClick}
+          onSelectionStart={onSelectionStart}
+          onSelectionEnd={onSelectionEnd}
+          onPaneContextMenu={onPaneContextMenu}
+          fitView={fitFirstNodes}
+          defaultViewport={initialCanvasState.viewport ?? undefined}
+          onInit={onViewportInitialized}
+          onMoveStart={cameraMoveStarted}
+          onMove={onViewportMove}
+          fitViewOptions={{ padding: computeCanvasFitPadding() }}
+          minZoom={0.1}
+          maxZoom={4}
+          defaultEdgeOptions={{ type: 'typed-edge' }}
+          proOptions={{ hideAttribution: true }}
+          // The Delete key is the canvas's own (onKeyDown): React Flow's never
+          // asked whether a modal dialog is open (review 8, M-1).
+          deleteKeyCode={null}
+          onBeforeDelete={onBeforeDelete}
+          {...CANVAS_INTERACTION_PROPS}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
+        >
+          <Background
+            variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+            gap={isSlavaSkin ? 16 : 32}
+            size={isSlavaSkin ? 1.2 : 1}
+            color={isSlavaSkin ? 'var(--sr-canvas-dot-color)' : 'rgba(255, 255, 255, 0.04)'}
+            className={isSlavaSkin ? 'slava-canvas-background' : undefined}
+            patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
+          />
+          <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
+          <CanvasFocusController />
+          {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
+              floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
+              panel, the toolbar's layout box: the toolbar's entry animation
+              transforms it, and a measured line would ease down with it. With
+              nothing selected the panel is empty, 0 px wide but still one
+              toolbar tall (canvas.css), so an open Inspector holds its place
+              (GM, round 3: "A panel shouldn't move unless someone moves it").
+              data-toolbar-slot: the Agent log's ceiling counts the slot only
+              where it overlaps the slot's reserved width (GM r70). */}
+          <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="" data-toolbar-slot="">
+            <SelectionToolbar />
+          </Panel>
+          <CanvasNavigation />
+          <CanvasViewReporter />
+          <ArrangeController />
+          <AgentNodeMarks />
+          <AgentCursorLayer />
+          <AgentNoteOutlines />
+          <PinLayer />
+          <ProposalLayer />
+          <ProposalBar />
+        </ReactFlow>
+      </NodeRemeasureContext.Provider>
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
           <CrabMarkAnimated

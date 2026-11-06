@@ -3,7 +3,9 @@
 Anyone may restore, agents included: a restore undoes a delete. Deleting for
 good can't be undone, so it is the person's alone and has no CLI command; the
 person does it in Nebula (Moodboard Studio, Character Studio, the Assets
-panel's Styles tab or Projects).
+panel's Styles tab or Projects). A project deleted for good (by the person,
+or after its 30 days) takes its moodboards, characters and styles with it,
+trashed ones too.
 
 `list` is MCP list_trash, through project_client.py: `--kind`, `--scope` and
 `--project` (`--project-id`, the tool's name, works too) are its kind, scope
@@ -56,6 +58,20 @@ def _where(client: NebulaClient, scope: str | None, project: str | None) -> str:
     return f"in project {name} ({project_id})" if name else f"in project {project_id}"
 
 
+def _goes_with(item: dict[str, Any]) -> str:
+    """The list line's ``with its moodboards and styles``: only the kinds a trashed project
+    holds (its ``goesWith``), in the order moodboards, characters, styles;
+    nothing when it holds none (or an older backend sent no ``goesWith``)."""
+    goes = item.get("goesWith")
+    if not isinstance(goes, dict):
+        return ""
+    kinds = [kind for kind in ("moodboards", "characters", "styles") if goes.get(kind)]
+    if not kinds:
+        return ""
+    listed = kinds[0] if len(kinds) == 1 else f"{', '.join(kinds[:-1])} and {kinds[-1]}"
+    return f" with its {listed}"
+
+
 def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None = None,
              project: str | None = None, as_json: bool = False, out: TextIO | None = None) -> int:
     out = out or sys.stdout
@@ -69,11 +85,21 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
         print(f"Nothing in Recently deleted {where}." if where else "Recently deleted is empty.", file=out)
         return 0
     print(f"RECENTLY DELETED {where} ({len(items)}):" if where else f"RECENTLY DELETED ({len(items)}):", file=out)
+    # A trashed project's date, for the boards, characters and styles that go with it.
+    project_purge = {item.get("id"): item.get("purgeAt") for item in items
+                     if item.get("kind") == "project" and item.get("purgeAt")}
     for item in items:
         scope = ""
+        expiry = ""
         if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
-        expiry = f", removed for good after {str(item['purgeAt'])[:10]}" if item.get("purgeAt") else ""
+            if item.get("goesWithProject") is True:
+                # It goes when its project is deleted for good (GET /api/trash says so only when
+                # it would: deleted from that project's folder, in a store beside the catalog).
+                when = project_purge.get(item["projectId"])
+                expiry = f", removed for good with its project{f' after {str(when)[:10]}' if when else ''}"
+        elif item.get("purgeAt"):
+            expiry = f", removed for good{_goes_with(item)} after {str(item['purgeAt'])[:10]}"
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
               f"  (deleted {_when(item)} by {_who(item)}{expiry})", file=out)
     first = items[0]

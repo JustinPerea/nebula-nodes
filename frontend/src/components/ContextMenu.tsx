@@ -8,6 +8,8 @@ import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 import { runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
+import { RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
+import { useCappedPopover } from '../lib/noticeWaiting';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -19,8 +21,9 @@ interface MenuItem {
   disabled?: boolean;
   /** Why it is disabled, when that isn't offline; e.g. why Run is disabled. */
   title?: string;
-  /** This tab's run locks it now: the run's line wins (lib/canvasLock). */
-  run?: boolean;
+  /** This tab's run locks it now: the run's line wins (lib/canvasLock),
+   * by the row's verb plus "it" (GM r39 item 2, lib/runLock). */
+  run?: { held: boolean; verb: RunLockVerb };
   /** Locked by a missing key, when nothing else holds it (withKeyLock). */
   keyLock?: string | null;
   action: () => void;
@@ -28,6 +31,8 @@ interface MenuItem {
 
 export function ContextMenu() {
   const { visible, position, nodeId, flowPosition } = useUIStore((s) => s.contextMenu);
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  useCappedPopover(visible);
   const composeNote = useCanvasPinsStore((s) => s.compose);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const executeNode = useGraphStore((s) => s.executeNode);
@@ -125,9 +130,9 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
-      run: isExecuting || runStarting,
+      // The missing key first, then the run lock's line (M2): run, follow, offline: withKeyLock.
       keyLock,
+      run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
         if (keyLock) return;
         executeNode(nodeId);
@@ -146,7 +151,7 @@ export function ContextMenu() {
     {
       label: 'Duplicate',
       shortcut: 'Ctrl+D',
-      run: isExecuting,
+      run: { held: isExecuting, verb: RUN_LOCK_VERBS.duplicateIt },
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -156,7 +161,7 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
-      run: isExecuting,
+      run: { held: isExecuting, verb: RUN_LOCK_VERBS.deleteIt },
       disabled: sceneHeld !== null,
       title: sceneHeld ?? undefined,
       action: () => {
@@ -179,7 +184,8 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...withKeyLock(lock.act({ disabled: item.disabled, title: item.title }, { run: item.run }), item.keyLock, keyLockId)}
+          {...withKeyLock(lock.act({ disabled: item.disabled, title: item.title },
+            item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {}), item.keyLock, keyLockId)}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

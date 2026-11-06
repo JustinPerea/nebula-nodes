@@ -14,7 +14,7 @@ import tempfile
 from commons import media
 from commons.db import now_iso
 from commons.icloud import DatalessDownloader, is_dataless
-from commons.measure import CODE_VERSION, measure_image, phash, phash_distance
+from commons.measure import measure_image, phash, phash_distance
 from commons.reader import TYPE_STYLES, SPACING, LAYOUTS, MEDIA, ROLES
 from commons.search import AXES
 from commons.vocab import load_vocabulary
@@ -208,13 +208,20 @@ async def prepare(store, path, *, downloader=None):
     return await asyncio.to_thread(_persist, store, root, rows, excluded)
 
 
+# The version that measures a held-out snapshot's palette. The snapshot is
+# the image as an RGB PNG (media.load_image drops alpha, onto black), and an
+# image with no transparency measures exactly as measure-1 did, so that is
+# what measured it, whatever CODE_VERSION is now.
+SNAPSHOT_MEASUREMENT = "measure-1"
+
+
 def _persist(store, root, rows, excluded):
     heldout, tuning = select(rows)
     public_rows = [{k:v for k,v in row.items() if k != '_png'} for row in rows]
     def entries(selection):
         return [{**public_rows[n], 'cluster': sha(canonical([public_rows[i] for i in component]).encode()),
                  'members': component} for n, component in selection]
-    manifest = dict(version=VERSION, measurement_version=CODE_VERSION, vocabulary_version=load_vocabulary().version,
+    manifest = dict(version=VERSION, measurement_version=SNAPSHOT_MEASUREMENT, vocabulary_version=load_vocabulary().version,
                     vocabulary_terms=list(load_vocabulary().terms), source_root=str(root), inventory=public_rows, excluded=excluded,
                     heldout=entries(heldout), tuning=entries(tuning), created_at=now_iso())
     snapshots = []

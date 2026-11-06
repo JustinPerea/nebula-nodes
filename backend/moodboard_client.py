@@ -518,9 +518,19 @@ def _unique_new(existing: list[dict[str, Any]], urls: list[str]) -> tuple[list[s
 
 def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, project: str | None = None,
                  mode: str = "look", strength: float = 0.7, notes: str = "",
+                 request_id: str | None = None,
                  headers: dict[str, str] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None) -> tuple[dict[str, Any], int]:
-    """A new board with `sources`; returns (board, duplicates skipped)."""
+    """A new board with `sources`; returns (board, duplicates skipped).
+
+    `request_id` (optional, 8 to 128 letters, digits, '-' or '_') makes the
+    create safe to send again: a second create with the same id returns the
+    board the first one made, as it is now, instead of a second board, also
+    after Nebula restarts. Use a new id for each board: a reused id returns
+    the board it first made whatever the other arguments say (name, sources,
+    settings), with `repeated: true` on it (see `repeated_line`), and an id
+    already used in another project (or in Global) is refused. Left out,
+    every call makes a board."""
     name = str(name or "").strip()
     if not name:
         raise MoodboardError("a board needs a name")
@@ -531,12 +541,21 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
     urls, skipped = _unique_new([], source_urls(api, sources, headers=headers, transport=transport))
     body = {"name": name, "images": [_image_entry(url) for url in urls], "notes": notes, "mode": mode,
             "strength": strength, "projectId": project_id}
+    if request_id is not None:
+        body["requestId"] = request_id
     board = api.request("POST", "/api/moodboards", json=body, headers=headers)
-    if len(board.get("images") or []) != len(urls):
+    # A repeat returns the board the first call made, as it is now: its
+    # images are whatever it holds, not this call's sources.
+    if not board.get("repeated") and len(board.get("images") or []) != len(urls):
         # Gap 7: a board once came back empty. Say so instead of reporting success.
         raise MoodboardError(f"Nebula saved {len(board.get('images') or [])} of {len(urls)} images on board "
                              f"{board.get('id')}; run `nebula moodboard add {board.get('id')} ...` again")
     return board, skipped
+
+
+def repeated_line(board: dict[str, Any]) -> str:
+    """What a create says when its request id had already made the board."""
+    return f"Board \u201c{board.get('name')}\u201d was already made by an earlier call with this request id."
 
 
 EDITS_UNSUPPORTED = ("this version of Nebula has no board edits (POST /api/moodboards/{id}/edits), so nothing "
@@ -1863,6 +1882,8 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
            if (chosen := cover_of(board)) and chosen["chosen"] else {}),
         "analysis": analysis,
         "updatedAt": board.get("updatedAt"),
+        # A create whose request id had already made this board (only then).
+        **({"repeated": True} if board.get("repeated") is True else {}),
     }
     if layout:
         # The write counter: moodboard_edit's base_version (`--base-version`)

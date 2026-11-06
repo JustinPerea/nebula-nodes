@@ -218,8 +218,9 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
     # The local Batch source extends the current 288-node catalog (Krea gateway now covers every generation route).
     # +3 Jev nodes; Sora 2 and Sora 2 I2V retired 2026-10-14; +7 route-table
     # nodes, 3 Krea FLUX copies folded into them (routing series PR 3); +1
-    # ElevenLabs Text to Dialogue 2026-10-16; +1 Idol 2026-10-29.
-    assert len(definitions) == 309
+    # ElevenLabs Text to Dialogue 2026-10-16.
+    # +3 talking heads (PR #231): OmniHuman 1.5, OmniHuman 2.0 and Kling AI Avatar v2. +1 Idol 2026-10-29.
+    assert len(definitions) == 312
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]

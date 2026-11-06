@@ -1,14 +1,24 @@
 @import './moodboard-swatches.css';
 
-body.app-slava-restraint .moodboard-studio-view {
+/* The List view: its frame, paint and grid, in this one place, the offline
+   row included (right under the top header, 0 tall until it opens: GM, PR
+   #198 r2; StudioOfflineRow). The Board view writes all of its own in
+   moodboard-board.css; the :not() keeps the two from ever matching the same
+   element, so neither has to outrank the other (fix/moodboard-board-layout:
+   a generic template that did outrank the Board view's dropped its canvas
+   and panel into implicit tracks, and review 1 LOW-2: a shared frame rule
+   here painted the Board root under the skin, so its --mb-board-* tokens
+   did nothing; tests/studioGridAreas.test.ts). */
+body.app-slava-restraint .moodboard-studio-view:not(.moodboard-studio-view--board) {
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-columns: 250px 1fr;
   grid-template-areas:
     "toolbar toolbar"
+    "offline offline"
     "rail main";
   background: var(--sr-canvas);
   color: var(--sr-ink);
@@ -116,7 +126,7 @@ body.app-slava-restraint .moodboard-studio-toolbar__state--error,
 body.app-slava-restraint .moodboard-studio__notice--error,
 body.app-slava-restraint .moodboard-palette__empty--error,
 body.app-slava-restraint .moodboard-rail__empty--error {
-  color: #e0796b;
+  color: var(--line-warning, #e0796b);
 }
 
 /* The open board is another project's: say where, above the list. */
@@ -146,22 +156,96 @@ body.app-slava-restraint .moodboard-studio-view__main {
   gap: 16px;
 }
 
+/* The bottom spacer that holds a panel scrolled to the bottom in place when
+   Analyze clears the "old colors" lines (GM r6 on #208, item 4;
+   useHoldBottom.ts). Hidden, so it takes no gap, until it holds. Not visual,
+   so it is unscoped: the board panel and the list both have it. */
+.moodboard-hold-spacer {
+  display: none;
+  flex: none;
+}
+
+.moodboard-hold-spacer[data-holding] {
+  display: block;
+  height: var(--moodboard-hold-h, 0px);
+}
+
 body.app-slava-restraint .moodboard-studio-view__loading,
 body.app-slava-restraint .moodboard-analysis__empty {
   color: var(--sr-ink-meta);
   font-size: 12px;
 }
 
+/* A line's fill is a tint (--mb-notice-fill, each kind sets its own), drawn
+   over what is behind it. In the List that is the panel. On the board it is
+   the canvas, and a line there can sit over cards (#210 round 6s, GM r105 3),
+   so the board's lines lay the same tint over the canvas colour: one solid
+   surface, the colour the line has over the empty canvas (the rule below;
+   tests/moodboardNoticeSurface.test.ts). */
 body.app-slava-restraint .moodboard-studio__notice {
+  --mb-notice-fill: rgba(255, 255, 255, 0.035);
   text-wrap: pretty;
   border-left: 2px solid currentColor;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--mb-notice-fill);
   font-size: 12px;
 }
 
+body.app-slava-restraint .moodboard-studio-view__board-notices > .moodboard-studio__notice {
+  background: linear-gradient(var(--mb-notice-fill), var(--mb-notice-fill)), var(--mb-board-bg);
+}
+
 body.app-slava-restraint .moodboard-studio__notice--warn {
-  color: #d9a441;
+  color: var(--line-warning, #d9a441);
+}
+
+/* GM r12 1 (PR #210): a board's send that failed on reconnect lost nothing
+   (it waits in the draft), so its line is neutral, colour included: PR #204's
+   because-line look (neutral ink, control fill, strong edge). The header chip
+   reads "Not saved" in the same neutral ink. */
+body.app-slava-restraint .moodboard-studio__notice--neutral {
+  --mb-notice-fill: var(--sr-surface-control);
+  color: var(--sr-ink-light);
+  border-left-color: var(--sr-edge-strong);
+}
+
+/* Round 6j (GM r18): a line with its own action (Restore for a deleted
+   board's kept edit) keeps the button at the line's end. */
+body.app-slava-restraint .moodboard-studio__notice--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Its resting ink and edge said here too (they are the toolbar button's), so the
+   shared paused look's contrast check (disabled-buttons.css, round 6q) reads them. */
+body.app-slava-restraint .moodboard-studio__notice-action {
+  flex: none;
+  border-color: var(--sr-edge);
+  color: var(--sr-ink);
+}
+
+/* Round 6k (GM r19 1): the red line for a board deleted for good closes by
+   its × (its edit is already gone). As the trash toast's ×, in the line's ink. */
+body.app-slava-restraint .moodboard-studio__notice-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-studio__notice-close:hover { background: var(--sr-pending-soft); }
+body.app-slava-restraint .moodboard-studio__notice-close svg { width: 14px; height: 14px; }
+
+body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved {
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .moodboard-def {
@@ -305,6 +389,37 @@ body.app-slava-restraint .moodboard-tile__image {
   position: relative;
   aspect-ratio: 4 / 3;
   background: rgba(0, 0, 0, 0.22);
+}
+
+/* A file still uploading (GM, #210): its row is its own status, its thumb
+   the board's placeholder look (white 0.06, a 1 px dashed edge at 0.28, the
+   file's name top-left at 12 px), and "Uploading" where the controls go. */
+body.app-slava-restraint .moodboard-tile__upload {
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.28);
+}
+
+body.app-slava-restraint .moodboard-tile--uploading {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+body.app-slava-restraint .moodboard-tile__upload-name {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .moodboard-tile__upload-state {
+  font-size: 12px;
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .moodboard-tile__remove {
@@ -498,11 +613,12 @@ body.app-slava-restraint .panel--moodboard-library {
 }
 
 @media (max-width: 760px) {
-  body.app-slava-restraint .moodboard-studio-view {
+  body.app-slava-restraint .moodboard-studio-view:not(.moodboard-studio-view--board) {
     grid-template-columns: 1fr;
-    grid-template-rows: 44px auto 1fr;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     grid-template-areas:
       "toolbar"
+      "offline"
       "rail"
       "main";
   }

@@ -54,9 +54,12 @@ import { buildCommands } from '../src/lib/commandPalette';
 import { COMMAND_PALETTE_OPEN_EVENT } from '../src/lib/commandPaletteKeys';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
-import { gatedGraphActions, useGraphStore } from '../src/store/graphStore';
+import { gatedGraphActions, useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 import { useUIStore } from '../src/store/uiStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const INITIAL_GRAPH = { ...useGraphStore.getState() };
 const INITIAL_UI = { ...useUIStore.getState() };
@@ -236,7 +239,7 @@ const SURFACES: Record<string, Surface> = {
     },
     // The search field; Save exports a file; Fit view, the views and the
     // panels only look.
-    looks: [/^Search commands and nodes/, /^Save graph/, /^Fit view/, /^Open Creator Studio/, /^Keyboard shortcuts/, /^Toggle /],
+    looks: [/^Search commands and nodes/, /^Save canvas/, /^Fit view/, /^Open Creator Studio/, /^Keyboard shortcuts/, /^Toggle /],
   },
   CreateComposer: {
     mount: () => at(<CreateComposer modelDef={NODE_DEFINITIONS['nano-banana'] as never} prompt="Synthetic prompt" params={{}}

@@ -52,6 +52,15 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
     expect(two(unpriced.SIZE_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, which Nebula couldn’t read.');
   });
 
+  it('GM r118: an audio-priced node has its own wording for both reasons', () => {
+    expect(one(unpriced.AWAITING_AUDIO))
+      .toBe('“X” isn’t priced yet because its audio hasn’t been made. Run the node that makes it, then run this one.');
+    expect(one(unpriced.AUDIO_UNREADABLE)).toBe('“X” isn’t priced because Nebula couldn’t read its audio’s length.');
+    expect(two(unpriced.AWAITING_AUDIO))
+      .toBe('“A” and “B” aren’t priced yet because their audio hasn’t been made. Run the nodes that make it, then run these.');
+    expect(two(unpriced.AUDIO_UNREADABLE)).toBe('“A” and “B” aren’t priced because Nebula couldn’t read the length of their audio.');
+  });
+
   it('each cost the estimate leaves out, by name', () => {
     expect(one(unpriced.LEFT_OUT['input images'])).toBe('“X” may cost more for its input images, which the estimate leaves out.');
     expect(one(unpriced.LEFT_OUT['thinking tokens'])).toBe('“X” may cost more for the model’s thinking, which the estimate leaves out.');
@@ -125,6 +134,11 @@ describe('GM r8: no toast cuts a sentence', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
       .map((rule) => `${rule.file}: ${rule.selector}`);
-    expect(cut).toEqual([]);
+    // The exceptions, GM - Design, PR #216: an Undo notice carrying the
+    // fold's count ("Moved “Hero shot” · Undo · 3 more", r8) cuts its name
+    // so Undo and "3 more" fit on one line; and one kept to one line where
+    // its full height leaves the proposal card short of Accept and Reject
+    // (r76, its full text in its aria-label).
+    expect(cut).toEqual(['styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,\n.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text']);
   });
 });

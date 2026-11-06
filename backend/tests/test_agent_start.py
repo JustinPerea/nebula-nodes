@@ -61,7 +61,7 @@ def start(tmp_path, monkeypatch, person):
     boards = tmp_path / "moodboards"
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(boards))
 
-    async def ignore(data):
+    async def ignore(data, **_kw):
         return None
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

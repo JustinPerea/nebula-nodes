@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, 
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import { actorLabel } from '../../lib/trash';
+import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } from '../../lib/projectPurgeCopy';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
@@ -15,6 +16,11 @@ import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
   id: string;
@@ -39,6 +45,8 @@ export interface TrashedProject extends ProjectSummary {
   purgeAt: string;
   /** Who deleted it: you, an agent by name, or an unnamed client. Missing on older entries. */
   deletedBy?: { kind: string; name: string };
+  /** What deleting it for good also deletes (its moodboards, characters and styles). Missing from an older backend. */
+  goesWith?: GoesWith;
 }
 
 export interface ProjectHomeProps {
@@ -59,6 +67,10 @@ export interface ProjectHomeProps {
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'none' hides Try again (the whole line). */
   retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
+  /** PR #204 round 11: Try again redoes a "Delete forever" or "Empty" (DELETE
+   * /api/projects/trash/{id}, POST /api/projects/trash/empty: require_person), so on a tab that
+   * isn't connected as the person it locks as those buttons do. */
+  retryPersonOnly?: boolean;
   /** GM r12 item 5: where an update's recovered copy went, when the reload
    * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
    * [Restore] while it is in Recently deleted. */
@@ -68,6 +80,10 @@ export interface ProjectHomeProps {
   /** GM #198 r22 Q2: [Open] on the notice saying where a stale tab's edits
    * were saved (a recovered project); opens it. */
   onOpenCopy?: () => void;
+  /** PR #204 round 11 (GM r18): whether this tab loaded the work. A card's node and connection
+   * counts come with it: while it couldn't (a tab that isn't connected as you), they show
+   * nothing rather than a 0 nobody counted. */
+  workLoaded?: boolean;
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -158,7 +174,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
       </div>
       {choices?.lostPin && <p className="project-home__cover-note">
         {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
-      {failed ? <p className="project-home__cover-note">{failed}</p>
+      {failed ? <p className="project-home__cover-note"><LineText text={failed} /></p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
             : (
@@ -194,7 +210,7 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean }) {
+function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean }) {
   // GM r18: the icons disabled offline carry the offline mark (the
   // not-allowed cursor, and a press pulses the banner).
   const off = offlineMark(offline);
@@ -218,7 +234,9 @@ function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelet
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
-        <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+        {counts
+          ? <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+          : <span data-testid="project-card-no-counts" />}
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
@@ -282,25 +300,102 @@ function deletedByNote(entry: TrashedProject): string {
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
-  label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
+function ConfirmInline({ label, confirmLabel, prompt, detail, busy, onConfirm, className, lock }: {
+  label: string; confirmLabel: string; prompt: string;
+  /** A line after the prompt saying what else goes. */
+  detail?: string | null;
+  busy: boolean; onConfirm: () => void; className?: string;
+  /** A person-only action's lock (components/PersonLock): it never arms while locked. */
+  lock?: PersonLock;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
+  const text = [prompt, detail].filter(Boolean).join(' ');
   if (!armed) {
     // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
     return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
-      onClick={() => setArmed(true)}>{label}</button>;
+      {...lock?.control()} onClick={() => { if (!lock?.locked) setArmed(true); }}>{label}</button>;
   }
   return (
-    <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
+    <span className="project-home__confirm" role="group" aria-label={text} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      <span className="project-home__confirm-prompt">{prompt}</span>
+      {/* One text, one space between the question and the line (GM r102). */}
+      <span className="project-home__confirm-prompt">{text}</span>
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
-      <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
+      <button type="button" className="project-home__danger" disabled={busy} {...lock?.control()}
+        onClick={() => { setArmed(false); if (!lock?.locked) onConfirm(); }}>{confirmLabel}</button>
     </span>
+  );
+}
+
+const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** The confirm row's spring (project-home.css), plus a margin: after it, a closing row unmounts even without transitionend. */
+const TRASH_CONFIRM_CLOSE_MS = 360 + 120;
+
+/**
+ * One project in Recently deleted. Delete forever arms a confirm on its own
+ * full-width row under the name, the date line and Restore: the line saying
+ * what else goes, wrapping as needed, then "This can’t be undone." with
+ * Cancel and Delete forever after it (on their own line when the text needs
+ * the width). It opens on the layout spring and closes back on Cancel.
+ */
+function TrashRow({ entry, now, busy, onRestore, onPurge, lock }: {
+  entry: TrashedProject; now: number; busy: boolean;
+  onRestore: (id: string) => void; onPurge: (id: string) => void;
+  /** The one lock for deleting for good (components/PersonLock): it never arms while locked. */
+  lock: PersonLock;
+}) {
+  const [armed, setArmed] = useState(false);
+  // Mounted while armed, and while it shrinks back after Cancel.
+  const [shown, setShown] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const line = deleteForeverLine(entry.goesWith);
+  const prompt = 'This can’t be undone.';
+  // Arming puts focus on Cancel; Cancel or Escape puts it back on the trigger.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (armed) cancel.current?.focus();
+    else if (refocus.current) trigger.current?.focus();
+    refocus.current = false;
+  }, [armed]);
+  useEffect(() => {
+    if (armed || !shown) return;
+    const timer = window.setTimeout(() => setShown(false), TRASH_CONFIRM_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [armed, shown]);
+  const disarm = () => {
+    refocus.current = true;
+    setArmed(false);
+    if (prefersReducedMotion()) setShown(false);
+  };
+  return (
+    <li className="project-home__trash-row" data-project-id={entry.id} aria-label={entry.name}>
+      <span className="project-home__trash-name">{entry.name}</span>
+      <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
+      <span className="project-home__trash-actions">
+        <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
+        {/* It arms a Delete forever: red on hover (GM r13), neutral at rest. */}
+        {!armed && <button type="button" ref={trigger} className="project-home__trigger--danger" disabled={busy}
+          {...lock.control()} onClick={() => { if (!lock.locked) { setArmed(true); setShown(true); } }}>Delete forever</button>}
+      </span>
+      {shown && <div className="project-home__trash-confirm" data-open={armed} aria-hidden={armed ? undefined : true} inert={!armed}
+        onTransitionEnd={(event) => { if (!armed && event.target === event.currentTarget) setShown(false); }}>
+        <div className="project-home__confirm project-home__trash-confirm-body" role={armed ? 'group' : undefined}
+          aria-label={armed ? [line, prompt].filter(Boolean).join(' ') : undefined} onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.preventDefault(); disarm(); }
+          }}>
+          <p className="project-home__trash-confirm-text">{line && <>{line} </>}{prompt}</p>
+          <span className="project-home__trash-confirm-buttons">
+            <button type="button" ref={cancel} disabled={busy} onClick={disarm}>Cancel</button>
+            <button type="button" className="project-home__danger" disabled={busy} {...lock.control()}
+              onClick={() => { setArmed(false); setShown(false); if (!lock.locked) onPurge(entry.id); }}>Delete forever</button>
+          </span>
+        </div>
+      </div>}
+    </li>
   );
 }
 
@@ -311,6 +406,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
   const [now, setNow] = useState(() => Date.now());
+  // PR #204 round 10 (GM r15, r17 item 1): deleting for good is the person's alone (DELETE
+  // /api/projects/trash/{id}, POST .../trash/empty: require_person). Empty and every Delete
+  // forever lock as one group with one line under the heading.
+  const purgeLock = usePersonLock('delete projects for good');
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
@@ -323,24 +422,15 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
             <span className="project-home__sr-only">, {trash.length} {trash.length === 1 ? 'project' : 'projects'}</span>
           </button>
         </h2>
-        {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
-          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
+        {open && <ConfirmInline label="Empty" confirmLabel={trash.length === 1 ? 'Delete forever' : 'Delete all'} prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
+          detail={emptyTrashLine(trash)} busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" lock={purgeLock} />}
       </div>
+      {open && <PersonLockLine lock={purgeLock} place="control" />}
       {open && (
         <div id="recently-deleted-list">
-          <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
+          <p className="project-home__trash-note">{PROJECT_TRASH_NOTE}</p>
           <ul className="project-home__trash-list">
-            {trash.map((entry) => (
-              <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
-                <span className="project-home__trash-name">{entry.name}</span>
-                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
-                <span className="project-home__trash-actions">
-                  <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
-                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
-                    onConfirm={() => onPurge(entry.id)} />
-                </span>
-              </li>
-            ))}
+            {trash.map((entry) => <TrashRow key={entry.id} entry={entry} now={now} busy={busy} onRestore={onRestore} onPurge={onPurge} lock={purgeLock} />)}
           </ul>
         </div>
       )}
@@ -352,11 +442,13 @@ function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
   project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
 }) {
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('project-home');
   useEffect(() => {
-    if (paused) return;
+    if (paused || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id]);
+  }, [paused, waiting, onDismiss, project.id]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
@@ -381,7 +473,7 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 }) {
   return (
     <div className="project-home__notice project-home__notice--copy" role="status" data-copy-notice="">
-      <span className="project-home__notice-text">{notice.line}</span>
+      <span className="project-home__notice-text"><LineText text={notice.line} /></span>
       <span className="project-home__notice-actions">
         {notice.restore && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onRestore}>Restore</button>}
         {notice.open && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onOpen}>Open</button>}
@@ -452,7 +544,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
+  const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
   // delete, restore and covers are disabled as while busy; search and
@@ -461,7 +554,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const locked = busy || offline;
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
-  const showError = !unsavedEdits && Boolean(error);
+  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  const errorKept = useOfflineFirstBecause(error ?? null);
+  const showError = !unsavedEdits && Boolean(errorKept);
   const noticeKeys: NoticeKey[] = [
     ...(copyNotice ? ['copy' as const] : []),
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
@@ -481,6 +576,43 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       && !stack.current?.contains(active)) return;
     stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
   }, [savedAsCopy]);
+  // After Delete forever or Empty, focus goes to the next row's Restore (the
+  // row before when it was the last), else to the Recently deleted heading,
+  // else to "Recent projects": never left on the page once the row is gone.
+  const afterPurge = useRef<{ gone: string[]; next: string | null; started?: boolean } | null>(null);
+  const purge = (id: string) => {
+    const at = trash.findIndex((entry) => entry.id === id);
+    afterPurge.current = { gone: [id], next: trash[at + 1]?.id ?? trash[at - 1]?.id ?? null };
+    onPurge(id);
+  };
+  const emptyTrash = () => {
+    afterPurge.current = { gone: trash.map((entry) => entry.id), next: null };
+    onEmptyTrash();
+  };
+  useEffect(() => {
+    const pending = afterPurge.current;
+    if (!pending) return;
+    const left = new Set(trash.map((entry) => entry.id));
+    if (pending.gone.some((id) => left.has(id))) return; // not gone (yet)
+    afterPurge.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return; // the person has moved on
+    const row = pending.next && left.has(pending.next)
+      ? Array.from(document.querySelectorAll<HTMLElement>('.project-home__trash-row')).find((item) => item.dataset.projectId === pending.next)
+      : undefined;
+    const target = row?.querySelector<HTMLElement>('button')
+      ?? document.querySelector<HTMLElement>('#recently-deleted-title button')
+      ?? recentHeading.current;
+    target?.focus();
+  }, [trash]);
+  // A purge that failed (busy came and went, the rows are still there) drops
+  // its target, so a later expiry or another tab doesn't move focus.
+  useEffect(() => {
+    const pending = afterPurge.current;
+    if (!pending) return;
+    if (busy) { pending.started = true; return; }
+    if (pending.started) afterPurge.current = null;
+  }, [busy]);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -517,13 +649,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
-            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error!) : error}</span>
+          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-              : <span>{retry === 'redo' ? shortLine(error!) : error}</span>}
+              : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
-            {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div></div>}
+            {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
+              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}
+            <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
@@ -532,11 +665,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} />}
       </main>
       {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}

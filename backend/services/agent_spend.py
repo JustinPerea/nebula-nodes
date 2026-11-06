@@ -663,19 +663,32 @@ def _awaiting_reasons(
     upload's limits instead."""
     from services import input_sizes
 
-    groups: dict[str, list[str]] = {}
-    for node_id in awaiting:
-        groups.setdefault(why.get(node_id) or input_sizes.PENDING, []).append(node_id)
-    upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
-              "Image Input or Video Input holding the copy on the canvas; connect that to the node and run it")
-    sentences = []
-    for reason, ids in groups.items():
-        first = definition_of.get(ids[0], "")
-        port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(first)))), "image")
-        port_type = next((str(spec.get("dataType") or "") for spec in ((definitions or {}).get(first) or {})
+    def port_of(node_id: str) -> tuple[str, str]:
+        definition_id = definition_of.get(node_id, "")
+        port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(definition_id)))), "image")
+        port_type = next((str(spec.get("dataType") or "") for spec in ((definitions or {}).get(definition_id) or {})
                           .get("inputPorts") or [] if isinstance(spec, Mapping) and spec.get("id") == port), "")
-        image_port = port_type != "Video"
-        names = f"Nebula prices {_names(ids, labels)} from the size of its input"
+        return port, port_type
+
+    # One sentence per reason and measured port type: an audio node and a
+    # video node refused for the same reason each get their own wording.
+    groups: dict[tuple[str, str], list[str]] = {}
+    for node_id in awaiting:
+        key = (why.get(node_id) or input_sizes.PENDING, port_of(node_id)[1])
+        groups.setdefault(key, []).append(node_id)
+    base_upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
+                   "Image Input or Video Input holding the copy on the canvas; connect that to the node and run it")
+    audio_upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
+                    "Audio Input holding the copy on the canvas; connect that to the node and run it")
+    sentences = []
+    for (reason, port_type), ids in groups.items():
+        first = definition_of.get(ids[0], "")
+        port, _ = port_of(ids[0])
+        image_port = port_type not in ("Video", "Audio")
+        audio_port = port_type == "Audio"
+        names = f"Nebula prices {_names(ids, labels)} from the length of its audio" if audio_port else (
+            f"Nebula prices {_names(ids, labels)} from the size of its input")
+        upload = audio_upload if audio_port else base_upload
         if reason == input_sizes.REMOTE:
             quick = (f", or run `nebula quick {first} --input {port}=<local file path>`" if image_port else "")
             sentences.append(
@@ -690,12 +703,20 @@ def _awaiting_reasons(
             limit = (" An image over 20 MB, or one Nebula can't recognise as an image, can't be added this way: "
                      "the upload refuses it, and the run already tried to copy it in."
                      if image_port else
+                     "" if audio_port else
                      " A clip over 500 MB can't be added this way: the upload refuses it.")
             sentences.append(
                 f"{names}, and that input is a local file outside Nebula's output folder, which could change "
                 f"after the check: Nebula doesn't price a run from such a file, {_NO_LIMIT_CHECK} To run it within "
                 f"the limits, add it to Nebula first: {upload}.{limit} Otherwise propose it.")
         elif reason == input_sizes.UNREADABLE:
+            if audio_port:
+                sentences.append(
+                    f"{names}, and Nebula couldn't read that file's length (it is missing, isn't an audio file "
+                    "Nebula can measure, such as one with a video stream or more than one audio stream, or is "
+                    f"outside the folders Nebula may read), {_NO_LIMIT_CHECK} Point the input at a readable audio "
+                    "file and run it again, or propose it.")
+                continue
             sentences.append(
                 f"{names}, and Nebula couldn't read that file's size (it is missing, isn't an image or video Nebula "
                 "can measure, such as one with more than one frame, size or video stream, or is outside the "
@@ -707,16 +728,19 @@ def _awaiting_reasons(
                 f"file it sends; {_NO_LIMIT_CHECK} {_connected_now(ids, size_inputs)}"
                 "Disconnect all but one, or propose it.")
         elif reason == input_sizes.UNWIRED:
+            holder = "an Audio Input" if audio_port else "an Image Input (or Video Input)"
             sentences.append(
-                f"{names}, and nothing connected to its {port} port gives it a file, {_NO_LIMIT_CHECK} Connect an "
-                "Image Input (or Video Input) holding the file to it, or propose it.")
+                f"{names}, and nothing connected to its {port} port gives it a file, {_NO_LIMIT_CHECK} Connect "
+                f"{holder} holding the file to it, or propose it.")
         else:
             quick = (f", or run it on the file with `nebula quick {first} --input {port}=<file>`"
                      if image_port else "")
+            what = "audio" if audio_port else "image or video"
+            holder = "an Audio Input" if audio_port else "an Image Input (or Video Input)"
             sentences.append(
-                f"{names}, and that image or video doesn't exist yet (the node that makes it runs in this same "
+                f"{names}, and that {what} doesn't exist yet (the node that makes it runs in this same "
                 f"run or hasn't run, or Nebula is still writing it), {_NO_LIMIT_CHECK} To run it within the "
-                f"limits, connect an Image Input (or Video Input) holding the file to it: {upload}{quick}; "
+                f"limits, connect {holder} holding the file to it: {upload}{quick}; "
                 "otherwise propose it (once the node that makes the input has run, a proposal is priced from "
                 "that output).")
     return sentences

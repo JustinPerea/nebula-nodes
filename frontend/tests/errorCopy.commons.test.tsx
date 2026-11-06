@@ -21,8 +21,8 @@ const NO_ANSWER = "Nebula didn't respond. Try again.";
 // popover offers Save and leave, so it says these.
 const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
 const NO_ANSWER_SHORT = "Nebula didn't respond.";
-// Round 2: the banner is a one-line surface: "Couldn't {verb} {object}. {reason}".
-const LABELS = "Couldn't save your labels.";
+// Round 2: the banner is a one-line surface: "Couldn’t {verb} {object}. {reason}".
+const LABELS = "Couldn’t save your labels.";
 const CONFLICT = 'Labels changed in another window. Reload before saving.';
 
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
@@ -127,14 +127,14 @@ describe('the leave popover\'s reason line', () => {
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     return popover();
   }
 
   it.each(cases)('after %s reads GM\'s short line under the heading, and Save and leave is offered again', async (_name, failure, _line, short) => {
     state.labels = failure;
     const shown = await failSaveAndLeave();
-    expect(shown.querySelector('.commons-leave__line')).toHaveTextContent("Couldn't save your labels.");
+    expect(shown.querySelector('.commons-leave__line')).toHaveTextContent("Couldn’t save your labels.");
     expect(shown.querySelector('.commons-leave__reason')?.textContent).toBe(short);
     expect(shown).not.toHaveTextContent('Failed to fetch');
     expect(within(shown).getByRole('button', { name: 'Save and leave' })).toBeTruthy();

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
@@ -43,6 +43,10 @@ import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { useUIStore } from '../src/store/uiStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const SLOW = 20_000;
@@ -125,7 +129,7 @@ describe('the proposal bar in the region (GM 2)', () => {
     useGraphStore.getState().notify('Imported. One note.', 'info');
     withRegion('canvas', <ProposalBar />);
     const bar = await screen.findByRole('region', { name: 'Proposal from Codex' }, LAZY);
-    const later = (await screen.findByText(/Run them when the current run finishes/, {}, LAZY)).closest('.proposal-bar')!;
+    const later = (await screen.findByText(/^You can run .+ (?:now|when the current run finishes)\.$/, {}, LAZY)).closest('.proposal-bar')!;
     const notice = await screen.findByText('Imported. One note.', {}, LAZY);
     expect(above(bar, later)).toBe(true);
     expect(above(later, notice)).toBe(true);
@@ -211,7 +215,7 @@ describe('every toast joins the region (GM 3)', () => {
     act(() => reportPersonRequired());
     await screen.findByRole('region', { name: 'Proposal from Codex' }, LAZY);
     await screen.findByText('Imported. One note.', {}, LAZY);
-    await screen.findByText(/Run them when the current run finishes/, {}, LAZY);
+    await screen.findByText(/^You can run .+ (?:now|when the current run finishes)\.$/, {}, LAZY);
     const shown = [...document.querySelectorAll<HTMLElement>('[data-notice-slot]')]
       .filter((slot) => slot.childElementCount > 0)
       .map((slot) => slot.dataset.noticeSlot);

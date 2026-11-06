@@ -26507,6 +26507,315 @@
       }
     ]
   },
+  "omnihuman-1-5": {
+    "id": "omnihuman-1-5",
+    "displayName": "OmniHuman 1.5",
+    "description": "Turns a portrait and an audio track into a talking video. Audio can run up to 30 s at 1080p or 60 s at 720p on fal.ai, and up to 35 s on Replicate.",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/bytedance/omnihuman/v1.5",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "FAL_KEY",
+      "REPLICATE_API_TOKEN"
+    ],
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "replicate",
+            "value": "replicate"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "fast_mode",
+        "label": "Fast mode",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      }
+    ],
+    "routes": [
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "fal-ai/bytedance/omnihuman/v1.5",
+        "rename": {
+          "fast_mode": "turbo_mode"
+        },
+        "params": [
+          {
+            "key": "resolution",
+            "label": "Resolution",
+            "type": "enum",
+            "required": false,
+            "default": "1080p",
+            "options": [
+              {
+                "label": "1080p, audio up to 30 s",
+                "value": "1080p"
+              },
+              {
+                "label": "720p, audio up to 60 s",
+                "value": "720p"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "replicate",
+        "provider": "replicate",
+        "keys": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "handler": "replicate-model",
+        "endpoint": "bytedance/omni-human-1.5",
+        "params": [
+          {
+            "key": "seed",
+            "label": "Seed",
+            "type": "integer",
+            "required": false,
+            "placeholder": "Random"
+          }
+        ]
+      }
+    ]
+  },
+  "omnihuman-2": {
+    "id": "omnihuman-2",
+    "displayName": "OmniHuman 2.0",
+    "description": "Turns a portrait and an audio track into a talking video. It takes WAV or MP3 audio from 4 to 300 s, and runs on fal.ai only for now.",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/bytedance/omnihuman/v2",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "FAL_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [],
+    "routes": [
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "fal-ai/bytedance/omnihuman/v2"
+      }
+    ]
+  },
+  "kling-ai-avatar-v2": {
+    "id": "kling-ai-avatar-v2",
+    "displayName": "Kling AI Avatar v2",
+    "description": "Turns a portrait and an audio track into a talking video. On Replicate, audio can be up to 5 MB and images up to 10 MB.",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/kling-video/ai-avatar/v2/standard",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "FAL_KEY",
+      "REPLICATE_API_TOKEN"
+    ],
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "replicate",
+            "value": "replicate"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "mode",
+        "label": "Mode",
+        "type": "enum",
+        "required": false,
+        "default": "std",
+        "options": [
+          {
+            "label": "Standard",
+            "value": "std"
+          },
+          {
+            "label": "Pro",
+            "value": "pro"
+          }
+        ]
+      }
+    ],
+    "routes": [
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "fal-ai/kling-video/ai-avatar/v2/standard",
+        "endpointWhen": [
+          {
+            "when": {
+              "mode": "pro"
+            },
+            "endpoint": "fal-ai/kling-video/ai-avatar/v2/pro"
+          }
+        ]
+      },
+      {
+        "id": "replicate",
+        "provider": "replicate",
+        "keys": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "handler": "replicate-model",
+        "endpoint": "kwaivgi/kling-avatar-v2"
+      }
+    ]
+  },
   "krea-3": {
     "id": "krea-3",
     "displayName": "Krea 3",

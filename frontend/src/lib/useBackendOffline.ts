@@ -18,6 +18,26 @@ export function useBackendOffline(): boolean {
  * banner (BackendConnectionStatus). */
 export const OFFLINE_MARK = 'data-offline-disabled';
 
+/** PR #204 round 18k (GM r41): the studio offline row's line id (components/StudioOfflineRow), a
+ * control's reason while it is locked offline (aria-describedby: the Commons close-batch button).
+ * One row per screen. */
+export const STUDIO_OFFLINE_LINE_ID = 'studio-offline-line';
+
+/** PR #204 round 18l (review 17 LOW-1): whether the studio offline row shows its line now (it opens
+ * STUDIO_BANNER_DELAY_MS after going offline), so a control points at that id only once it exists. */
+let offlineRowShown = false;
+const offlineRowListeners = new Set<() => void>();
+export function noteOfflineRowShown(shown: boolean): void {
+  if (offlineRowShown === shown) return;
+  offlineRowShown = shown;
+  for (const listener of [...offlineRowListeners]) listener();
+}
+const subscribeOfflineRow = (listener: () => void) => { offlineRowListeners.add(listener); return () => { offlineRowListeners.delete(listener); }; };
+const offlineRowNow = () => offlineRowShown;
+export function useOfflineRowShown(): boolean {
+  return useSyncExternalStore(subscribeOfflineRow, offlineRowNow, offlineRowNow);
+}
+
 /** Spread on a control that edits: the offline mark while offline. */
 export function offlineMark(offline: boolean): { 'data-offline-disabled'?: '' } {
   return offline ? { [OFFLINE_MARK]: '' } as { 'data-offline-disabled': '' } : {};
@@ -97,13 +117,6 @@ export function offlineReason(verb?: OfflineVerb): string {
  * verbs #200 shipped ("add swatches", "send notes"). */
 export function reconnectsLine(verb?: string): string {
   return verb ? `You can ${verb} when Nebula reconnects.` : OFFLINE_RECONNECT_FALLBACK;
-}
-
-/** GM r37: a lock reason says what unlocks it, "You can … when …": a
- * control a run holds, by the verb of what it does ("You can rerun it when
- * the run finishes."). */
-export function runFinishesLine(verb: string): string {
-  return `You can ${verb} when the run finishes.`;
 }
 
 /** A control's title: the offline reason while offline, else its own. */

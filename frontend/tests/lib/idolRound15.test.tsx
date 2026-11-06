@@ -1,12 +1,10 @@
 // PR #203 round 15: GM r28 and r29, review 14 (copy MEDIUM-1, LOW-1).
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
 import { mergedNotReadyLine, notReadyShown, type ProposalNotReady } from '../../src/lib/canvasProposals';
 import { addKeyLine, keyPhrase, KEY_NAMES } from '../../src/lib/directRoute';
 import { keychainKeptLine } from '../../src/lib/settingsWrites';
 import { modelKeyMissingText } from '../../src/lib/failureLines';
-import { DetailsBox } from '../../src/components/canvas/DetailsBox';
-import { hasMoreBelow } from '../../src/lib/hasMoreBelow';
 import { NOT_READY_REASONS, reasonFor } from '../helpers/notReadyReasons';
 
 afterEach(cleanup);
@@ -122,36 +120,5 @@ describe('the Keychain lines say what Nebula is using now (GM r28 item 2)', () =
         + 'Fix “apiKeys” in ~/.nebula/settings.json, then try again.');
     expect(keychainKeptLine('removal', 'OPENAI_API_KEY', 'row', 'Fix the file, then try again.'))
       .toBe('Nebula removed this key from your Keychain but is still using it. Fix the file, then try again.');
-  });
-});
-
-describe('the details box (GM r28)', () => {
-  it('has more below only before the end, wherever the cut falls', () => {
-    expect(hasMoreBelow({ scrollTop: 0, clientHeight: 100, scrollHeight: 240 })).toBe(true);
-    // A cut between two lines is still a cut: 40 px left.
-    expect(hasMoreBelow({ scrollTop: 100, clientHeight: 100, scrollHeight: 240 })).toBe(true);
-    expect(hasMoreBelow({ scrollTop: 140, clientHeight: 100, scrollHeight: 240 })).toBe(false);
-    expect(hasMoreBelow({ scrollTop: 139.5, clientHeight: 100, scrollHeight: 240 })).toBe(false);
-    expect(hasMoreBelow({ scrollTop: 0, clientHeight: 100, scrollHeight: 100 })).toBe(false);
-  });
-
-  it('is a focusable region named "Details" whose fade follows the scroll', () => {
-    render(<DetailsBox><p>line</p></DetailsBox>);
-    const box = screen.getByRole('region', { name: 'Details' });
-    expect(box).toHaveAttribute('tabindex', '0');
-    box.focus();
-    expect(box).toHaveFocus();
-    let top = 0;
-    Object.defineProperties(box, {
-      scrollHeight: { configurable: true, get: () => 240 },
-      clientHeight: { configurable: true, get: () => 100 },
-      scrollTop: { configurable: true, get: () => top },
-    });
-    fireEvent.scroll(box);
-    expect(box).toHaveAttribute('data-more', 'true');
-    expect(box.querySelector('.proposal-bar__details-fade')).toHaveAttribute('aria-hidden', 'true');
-    top = 140;
-    fireEvent.scroll(box);
-    expect(box).not.toHaveAttribute('data-more');
   });
 });

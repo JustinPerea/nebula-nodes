@@ -370,6 +370,8 @@ MULTI_ROUTED: set[str] = {
     "flux-2-pro",
     # Idol on its maker's Hugging Face Space (a keyed route).
     "speridlabs-idol",
+    # Talking heads: a still image and an audio track become a video.
+    "omnihuman-1-5", "omnihuman-2", "kling-ai-avatar-v2",
 }
 
 

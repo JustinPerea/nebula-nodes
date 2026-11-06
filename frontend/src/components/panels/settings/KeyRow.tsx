@@ -11,18 +11,19 @@ import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
 import { cancelRowFocus, focusRowIfItMoves, keyStatus, readServiceAccount, settleRowFocus, takeRowFocus } from './rowHelpers';
 import { SettingsRowError } from './SettingsRowError';
+import type { PersonLock } from '../../PersonLock';
 
 
 
 /** Removing deletes the key right away, so it takes two presses; Keep gets focus first. */
-function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removing: boolean; onConfirm: () => void }) {
+function RemoveKeyButton({ label, removing, onConfirm, lock }: { label: string; removing: boolean; onConfirm: () => void; lock: PersonLock }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
     return (
       <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key settings__button--danger"
-        aria-label={`Remove ${label}`} disabled={removing} onClick={() => setArmed(true)}>
+        aria-label={`Remove ${label}`} disabled={removing} {...lock.control()} onClick={lock.guard(() => setArmed(true))}>
         {removing ? 'Removing…' : 'Remove'}
       </button>
     );
@@ -34,14 +35,17 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
       onKeyDownCapture={(event) => { if (event.key === 'Escape') { event.preventDefault(); disarm(); } }}>
       <button type="button" className="settings__button" autoFocus onClick={disarm}>Keep</button>
       <button type="button" className="settings__button settings__confirm--danger"
-        aria-label={`Confirm removing the ${label}`} onClick={() => { setArmed(false); onConfirm(); }}>Remove</button>
+        aria-label={`Confirm removing the ${label}`} {...lock.control()}
+        onClick={lock.guard(() => { setArmed(false); onConfirm(); })}>Remove</button>
     </span>
   );
 }
 
 /** `moved`: it changed section since the panel last drew (a key set or
- * removed elsewhere): it springs in where it lands (GM, PR #203 r19 item 6). */
-export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeySpec; configured: boolean; moved?: boolean }) {
+ * removed elsewhere): it springs in where it lands (GM, PR #203 r19 item 6).
+ * `lock`: the Providers tab's one lock (PR #204 round 10, GM r17 item 1): a key is PUT
+ * /api/settings and the Keychain's credentials/update, the person's alone; its line is the tab's. */
+export function KeyRow({ spec, configured, moved = false, lock }: { spec: ProviderKeySpec; configured: boolean; moved?: boolean; lock: PersonLock }) {
   const stored = useSettingsDraftStore((s) => (s.openRow?.id === spec.key ? s.openRow.mode : null));
   // GM, PR #203 r21 item 2: a key removed elsewhere while its manage view is
   // open turns the view into the edit view, in this render (never a manage
@@ -119,7 +123,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   };
   const canSave = !pending && (serviceAccount ? readServiceAccount(draft).ok : keyText(draft) !== '');
   const submit = () => {
-    if (!canSave) return;
+    if (!canSave || lock.locked) return;
     focusRowIfItMoves(spec.key, shownConnected(), true);
     void saveKey(spec.key, draft).then((ok) => { if (!ok) cancelRowFocus(spec.key); settleRowFocus(spec.key); });
   };
@@ -146,7 +150,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
     <button ref={trigger} type="button" className="settings__button settings__button--ghost" onClick={cancelEdit}>Cancel</button>
   ) : (
     <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${credentialName}`}
-      aria-expanded={open !== null} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add {noun}</button>
+      aria-expanded={open !== null} aria-controls={bodyId} {...lock.control()} onClick={lock.guard(() => setOpen('edit'))}>Add {noun}</button>
   );
 
   return (
@@ -159,8 +163,9 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
             <div className="settings-row__buttons">
               {/* GM, PR #203 r16 item 5: the actions on the key, together on
                   one row; the key's page is a reference, on its own line below. */}
-              <button ref={firstAction} type="button" className="settings__button" onClick={() => setOpen('edit')}>Replace {noun}</button>
-              <RemoveKeyButton label={credentialName} removing={pending} onConfirm={() => {
+              <button ref={firstAction} type="button" className="settings__button" {...lock.control()}
+                onClick={lock.guard(() => setOpen('edit'))}>Replace {noun}</button>
+              <RemoveKeyButton label={credentialName} removing={pending} lock={lock} onConfirm={() => {
                 focusRowIfItMoves(spec.key, shownConnected(), false);
                 void removeKey(spec.key).then((ok) => { if (!ok) cancelRowFocus(spec.key); settleRowFocus(spec.key); });
               }} />
@@ -217,7 +222,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
             <SettingsRowError id={spec.key} message={error} />
             <div className="settings-row__foot">
               <span />
-              <button type="submit" className="settings__button settings__button--primary" disabled={!canSave}>
+              <button type="submit" className="settings__button settings__button--primary" disabled={!canSave} {...lock.control()}>
                 {pending ? 'Saving…' : `Save ${noun}`}
               </button>
             </div>

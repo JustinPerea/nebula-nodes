@@ -294,3 +294,26 @@ async def test_close_api_is_human_only_and_status_reports_state(store, source, m
 
     status = client.get('/api/commons/status').json()
     assert (status['evaluation_state'], status['evaluation_waiting']) == ('closed', False)
+
+
+@pytest.mark.asyncio
+async def test_close_retry_after_a_lost_answer_succeeds(store, source, monkeypatch, fresh_person_session):
+    """PR #204 round 18l (GM r43 Q1): the window gives up on a close after 30 s and may send it
+    again, with the revision it had. If the first one landed, the retry gets the same closed
+    record (200), never a 409. Who may call the route is unchanged (human_dep)."""
+    from routes import commons as routes
+    app = FastAPI(); app.include_router(routes.router); app.dependency_overrides[routes.store_dep] = lambda: store
+    monkeypatch.setattr(routes, '_worker_status', lambda: {'state': 'idle', 'running': False})
+    token = secrets.token_urlsafe(32); person_session.current().set(token)
+    human = {'Authorization': f'Bearer {token}'}
+    client = TestClient(app)
+    await evaluation.prepare(store, str(source))
+    body = {'revision': evaluation.view(store)['revision'], 'acknowledge_not_blind': True}
+    first = client.post('/api/commons/evaluation/close', json=body, headers=human)
+    # The answer was lost; the window sends the same close again.
+    again = client.post('/api/commons/evaluation/close', json=body, headers=human)
+    assert first.status_code == again.status_code == 200
+    assert again.json()['state'] == 'closed' and again.json()['close_hash'] == first.json()['close_hash']
+    assert again.json()['revision'] == first.json()['revision']
+    # Still the person's alone.
+    assert client.post('/api/commons/evaluation/close', json=body).status_code == 403

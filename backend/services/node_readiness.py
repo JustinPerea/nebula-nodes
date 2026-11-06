@@ -287,7 +287,12 @@ def instance_missing_line(
     reason = instance_missing_reason(definition, params, configured_keys, krea_signed_in, definitions, wired)
     if reason is None:
         return None
-    named = name or node_route.node_name(definition, None, "")
+    from services.canvas_proposals import plan_name
+
+    # Quoted once: quotes the name carries itself come off first (the plan
+    # line's rule, canvas_proposals.plan_name: “Hero” never reads ““Hero””).
+    named = plan_name(name) if name else None
+    named = named or node_route.node_name(definition, None, "")
     return reason.line(f"“{named}”" if named else "This node")
 
 

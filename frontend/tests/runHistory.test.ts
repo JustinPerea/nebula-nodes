@@ -646,7 +646,7 @@ describe('formatRunAge', () => {
 
 describe('runTriggerLabel', () => {
   it('maps triggers to human labels', () => {
-    expect(runTriggerLabel('graph')).toBe('Full graph');
+    expect(runTriggerLabel('graph')).toBe('Full canvas');
     expect(runTriggerLabel('node')).toBe('Single node');
     expect(runTriggerLabel('cluster')).toBe('Selection');
   });

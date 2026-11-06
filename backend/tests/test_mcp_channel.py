@@ -221,33 +221,35 @@ def test_a_run_it_is_collecting_does_not_wake_it():
 
 # -- Q41 a limits: they hold events back, never drop them ---------------------------
 
-def test_pushes_are_30_seconds_apart_and_what_waits_is_held_not_lost():
+def test_passive_pushes_are_30_seconds_apart_and_what_waits_is_held_not_lost():
+    # Passive wakes only (2026-11-03): a pin, an answer or a message skips
+    # the spacing (tests/test_mcp_channel_deliberate.py).
     state = ChannelState(now=0.0)
-    state.observe(resp(pin(1)), now=0.0)
-    first = take(state, 1.0)
-    assert first is not None
-    state.observe(resp(pin(2, "cooler")), now=10.0)
-    assert drain(state, 10.0, 30.5) == []
-    second = take(state, 31.0)  # 30 s after the first push started
-    assert second is not None and "cooler" in second.content
+    state.observe(resp(edit(1)), now=0.0)
+    first = take(state, 8.0)
+    assert first is not None and first.wake == "change"
+    state.observe(resp(edit(2, node="n8")), now=10.0)
+    assert drain(state, 10.0, 37.5) == []
+    second = take(state, 38.0)  # 30 s after the first push started
+    assert second is not None and "(n8)" in second.content
     assert second.meta["held"] == "1"
 
 
 def test_a_push_that_waited_for_the_limit_says_held_when_the_listener_sleeps_until_it():
     # The listener doesn't poll take_push every second: it sleeps for
-    # next_check. Found in the live check (2026-10-20): a pin that waited 30 s
+    # next_check. Found in the live check (2026-10-20): a push that waited 30 s
     # for the spacing arrived without held.
     state = ChannelState(now=0.0)
-    state.observe(resp(pin(1)), now=0.0)
-    assert take(state, 1.0) is not None
-    state.observe(resp(pin(2, "cooler")), now=10.0)
-    assert take(state, 10.0) is None  # inside the 1 s pin merge
-    assert state.next_check(10.0) == pytest.approx(21.0)
-    push = take(state, 31.0)
+    state.observe(resp(edit(1)), now=0.0)
+    assert take(state, 8.0) is not None
+    state.observe(resp(edit(2, node="n8")), now=10.0)
+    assert take(state, 10.0) is None  # inside the 8 s quiet time
+    assert state.next_check(10.0) == pytest.approx(28.0)
+    push = take(state, 38.0)
     assert push is not None and push.meta["held"] == "1"
 
 
-def test_at_most_20_pushes_an_hour_and_every_pin_still_arrives():
+def test_at_most_20_passive_pushes_an_hour_and_every_edit_still_arrives():
     state = ChannelState(now=0.0)
     pushes: list[tuple[float, mcp_channel.Push]] = []
     seq = 0
@@ -255,7 +257,7 @@ def test_at_most_20_pushes_an_hour_and_every_pin_still_arrives():
     while t < 7200.0:
         if seq < 25 and t >= seq * 31.0:
             seq += 1
-            state.observe(resp(pin(seq, f"note {seq}")), now=t)
+            state.observe(resp(edit(seq, node=f"n{seq}")), now=t)
         push = take(state, t)
         if push is not None:
             pushes.append((t, push))
@@ -266,7 +268,7 @@ def test_at_most_20_pushes_an_hour_and_every_pin_still_arrives():
     assert all(b - a >= 30 for a, b in zip(times, times[1:]))
     assert sum(int(p.meta["count"]) for _, p in pushes) == 25
     delivered = "".join(p.content for _, p in pushes)
-    assert all(f"note {n}<" in delivered for n in range(1, 26))
+    assert all(f"(n{n})" in delivered for n in range(1, 26))
     twentieth = pushes[19][1]
     assert "20th" in twentieth.content and "next" in twentieth.content
     assert any("held" in p.meta for _, p in pushes[20:])
@@ -671,11 +673,15 @@ def test_a_batch_holding_a_pin_is_a_pin_wake():
 def test_a_mixed_batch_of_the_persons_change_and_an_accept_is_gated_as_a_change():
     # The decision written here (2026-10-26): the change is the person's
     # hands on the canvas, so the batch is gated whatever else it carries.
-    state = ChannelState(now=0.0)
-    # They meet when both wait for the 30 s spacing after a pin's push.
+    # A short turn heuristic: the run's push starts an ungated turn that no
+    # gated push may gate (review 1 of #225, HIGH-1), over by 105 here.
+    state = ChannelState(limits=Limits(window_min=10.0, window_idle=10.0), now=0.0)
+    # They meet when both wait for the 30 s spacing after a passive push (its
+    # own run's end: a pin's push no longer counts toward the spacing).
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_m"}}, now=1.0)
-    state.observe(resp(pin(1)), now=94.0)
-    assert take(state, 95.0).wake == "pin"
+    state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_m"})], now=1.0)
+    state.run_ended({"runId": "run_m", "status": "finished", "nodesExecuted": 1}, now=93.0)
+    assert take(state, 95.0).wake == "run"
     state.observe(resp(edit(2)), now=100.0)
     state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_m", "idMap": {}})), now=103.0)
     assert drain(state, 103.0, 124.5) == []
@@ -696,11 +702,15 @@ def test_a_board_line_riding_on_an_accept_gates_it_too():
     assert push is not None and push.wake == "proposal" and push.gate and "note changed on Moods" in push.content
 
 
-# -- Review 1 of PR #114 (2026-10-26): no push ever closes or shortens a gated window --
+# -- Review 1 of PR #114 (2026-10-26): no passive push ever closes or shortens a gated window --
 # Claude Code queues pushes that arrive while Claude is busy and hands them
 # over together on the next turn (channels reference), so a push sent while a
 # gated turn is still running never reaches that turn. Lifting the gate when
 # it is sent only freed the running change turn to edit (probes A, A2, B, B2, G).
+# 2026-11-03 (Justin): a deliberate send (a pin, an answer, a message) is the
+# exception: it goes at once and ends the window, so the turn it starts is
+# never refused for pacing. Freeing a change turn still running is the
+# accepted cost.
 
 def _young_window(state: ChannelState) -> None:
     """A change push at 108: its window lasts until 168 at least."""
@@ -709,23 +719,23 @@ def _young_window(state: ChannelState) -> None:
     assert push is not None and push.gate
 
 
-def test_a_pin_never_lifts_the_gate_of_a_change_turn_still_running():
-    # Probe A: the change turn looks at 110 and edits at 139; a pin at 120.
+def test_a_pin_ends_the_gate_of_a_change_turn_at_once():
+    # Probe A, turned round by Justin's 2026-11-03 decision: the change turn
+    # looks at 110; a pin at 120 goes at 121 (its 1 s merge), not at the
+    # window's end, and the turn it starts is never refused.
     state = ChannelState(now=0.0)
     _young_window(state)
     assert state.tool_started("look_at_canvas", {}, 110.0) is None
     state.tool_finished("look_at_canvas", {}, {}, 110.5)
     state.observe(resp(pin(2)), now=120.0)
-    assert drain(state, 120.0, 138.5) == []
-    # The listener sleeps until the window ends on its own (60 s after the push).
-    assert state.next_check(121.0) == pytest.approx(168.0 - 121.0, abs=0.01)
-    assert state.tool_started("edit_canvas", {}, 139.0) is not None
-    pushes = drain(state, 139.0, 200.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
-    assert state.tool_started("edit_canvas", {}, 169.0) is None  # the pin's own turn acts as any turn
+    assert state.tool_started("edit_canvas", {}, 120.5) is not None  # the window still holds until it goes
+    assert state.next_check(120.5) == pytest.approx(0.5, abs=0.01)
+    pushes = drain(state, 120.5, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(121.0, "pin", False)]
+    assert state.tool_started("edit_canvas", {}, 122.0) is None  # the pin's own turn acts as any turn
 
 
-def test_a_pin_during_a_wait_in_a_change_turn_never_lifts_its_gate():
+def test_a_pin_during_a_wait_in_a_change_turn_goes_at_once():
     # Probe A2: the change turn proposes and waits in get_proposal; a pin comes meanwhile.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_x"}}, now=1.0)
@@ -734,11 +744,10 @@ def test_a_pin_during_a_wait_in_a_change_turn_never_lifts_its_gate():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_y"}}, 110.5)
     assert state.tool_started("get_proposal", {"proposal_id": "prop_y", "wait_seconds": 120}, 111.0) is None
     state.observe(resp(pin(2)), now=120.0)
-    assert drain(state, 120.0, 149.5) == []
+    pushes = drain(state, 120.0, 250.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(121.0, "pin", False)]
     state.tool_finished("get_proposal", {"proposal_id": "prop_y"}, {"proposal": {"status": "rejected"}}, 150.0)
-    assert state.tool_started("edit_canvas", {}, 151.0) is not None
-    pushes = drain(state, 151.0, 250.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(171.5, "pin", False)]  # 20 s after the last call
+    assert state.tool_started("edit_canvas", {}, 151.0) is None
 
 
 def test_an_accept_never_closes_a_young_change_window():
@@ -783,7 +792,7 @@ def test_an_accept_after_a_rejection_push_waits_for_that_turn():
 # Every push kind against every window state: when it goes, and whether it is gated.
 _KIND_TIMES = {
     # kind:            (no window, young window, a call at 113, a call in flight 113-150)
-    "pin":             ((116.0, False), (168.5, False), (168.5, False), (170.5, False)),
+    "pin":             ((116.0, False), (116.0, False), (116.0, False), (116.0, False)),  # deliberate
     "accept":          ((115.0, False), (168.5, False), (168.5, False), (170.5, False)),
     "asset_accept":    ((115.0, False), (168.5, False), (168.5, False), (170.5, False)),
     "own_run_end":     ((117.0, False), (168.5, False), (168.5, False), (170.5, False)),
@@ -1014,6 +1023,7 @@ def _listener_rig(limits: Limits):
 
     async def fetch_events(params):
         record["polls"] += 1
+        record["params"] = dict(params)
         record["open"] += 1
         record["most_open"] = max(record["most_open"], record["open"])
         try:
@@ -1039,6 +1049,21 @@ def _listener_rig(limits: Limits):
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
                                     clock=time.monotonic, log=lambda line: None, fetch_pins=fetch_pins)
     return listener, record, ends
+
+
+def test_the_events_poll_asks_for_its_own_replies():
+    # Its reply under its token by any route (`nebula reply` in its shell)
+    # must reach its feed: ownReplies=1 (J4, Justin 2026-11-04).
+    listener, record, _ends = _listener_rig(Limits())
+
+    async def main():
+        async with anyio.create_task_group() as group:
+            group.start_soon(listener.run)
+            await _until(lambda: record["polls"] == 1)
+            group.cancel_scope.cancel()
+
+    anyio.run(main)
+    assert record["params"]["ownReplies"] == 1 and "self" not in record["params"]
 
 
 def test_a_run_end_never_abandons_the_events_long_poll():
@@ -1106,8 +1131,9 @@ def test_a_pin_never_waits_behind_the_persons_continued_edits():
     # Probe P1: a pin during a change turn's window, then an edit every 5 s
     # and no Nebula call. Each gated change push restarted the window and
     # left the pin behind: it first went 650 s later, after 17 of them. While
-    # a pin waits, gated pushes now wait too; the pin goes when the window
-    # ends, as a pin wake (never gated) carrying the edits.
+    # a pin waits, gated pushes now wait too. Since 2026-11-03 the pin no
+    # longer waits for the window: it goes after its 1 s merge, as a pin
+    # wake (never gated) carrying the edits waiting, however recent.
     state = ChannelState(now=0.0)
     _young_window(state)  # a gated change push at 108: the window runs to 168
     state.observe(resp(pin(2)), now=110.0)
@@ -1116,21 +1142,21 @@ def test_a_pin_never_waits_behind_the_persons_continued_edits():
         if t < 700.0 and t % 5 == 0:
             state.observe(resp(edit(seq)), now=t)
             seq += 1
-        if t == 121.0:
-            # The listener sleeps until the window's end, not until the edits are due.
-            assert state.next_check(t) == pytest.approx(168.0 - 121.0, abs=0.01)
         push = take(state, t)
         if push is not None:
             pushes.append((t, push))
         t = round(t + 0.5, 3)
     at, first = pushes[0]
-    assert (at, first.wake, first.gate) == (168.5, "pin", False)
-    # The pin and the 12 edits made meanwhile (110 to 165), in one ungated push.
-    assert first.count == 13 and "pinned a note" in first.content and "changed the canvas (12 changes)" in first.content
+    assert (at, first.wake, first.gate) == (111.0, "pin", False)
+    # The pin and the edit made with it, in one ungated push.
+    assert first.count == 2 and "pinned a note" in first.content and "changed the canvas (1 change)" in first.content
     assert "refused" not in first.content
-    # After it, the edits wake as before: gated, 30 s after the first of
-    # each batch (they never go 8 s quiet).
-    assert [(at, p.wake, p.gate) for at, p in pushes[1:3]] == [(200.0, "change", True), (235.0, "change", True)]
+    # After it, the edits wake gated, but only once the span the pin opened
+    # has ended. With no answer on the pin that is its cap (J4, 2026-11-04:
+    # 600 s after the push at 111), when every edit made meanwhile goes in
+    # one gated push (they stop at 695). The pin's push never moved the
+    # passive spacing.
+    assert [(at, p.wake, p.gate) for at, p in pushes[1:]] == [(711.5, "change", True)]
 
 
 def test_a_rejection_while_a_pin_waits_goes_with_the_pin():
@@ -1138,14 +1164,15 @@ def test_a_rejection_while_a_pin_waits_goes_with_the_pin():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_r"}}, now=1.0)
     _young_window(state)
     state.observe(resp(pin(2)), now=110.0)
-    state.observe(resp(ev(3, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=112.0)
-    pushes = drain(state, 110.0, 300.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    state.observe(resp(ev(3, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=110.5)
+    pushes = drain(state, 110.5, 300.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(111.0, "pin", False)]
     assert "prop_r" in pushes[0][1].content and "was rejected" in pushes[0][1].content
 
 
-# A pin at 114, then a gated kind at 115, against the windows a pin waits for.
-_PIN_WAIT_TIMES = {"young": 168.5, "calling": 168.5, "in_flight": 170.5}
+# A pin at 114, then a gated kind at 115, against the windows a pin once
+# waited for: since 2026-11-03 it goes at 115 (its 1 s merge) in every one.
+_PIN_WAIT_TIMES = {"young": 115.0, "calling": 115.0, "in_flight": 115.0}
 
 
 @pytest.mark.parametrize("window", sorted(_PIN_WAIT_TIMES))
@@ -1363,7 +1390,7 @@ def test_a_resolve_pin_call_that_failed_leaves_the_pin_waiting():
     assert state.tool_started("resolve_pin", {"pin_id": "pin_00000002", "reply": "x"}, 112.0) is None
     state.tool_finished("resolve_pin", {"pin_id": "pin_00000002", "reply": "x"}, None, 112.5)
     pushes = drain(state, 115.0, 400.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(115.0, "pin", False)]
     assert _pins_shown(pushes[0][1]) == {"pin_00000002"}
 
 
@@ -1430,7 +1457,7 @@ def test_an_event_about_a_project_closed_since_never_drops_the_open_projects_pin
     state.observe(answer, now=111.0)
     assert "pin_00000003" in state._pins
     pushes = drain(state, 111.0, 400.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(111.0, "pin", False)]
     assert _pins_shown(pushes[0][1]) == {"pin_00000003"}
 
 
@@ -1441,7 +1468,7 @@ def test_an_import_into_the_same_project_keeps_the_pin():
     state.observe(resp(ev(3, "canvas.replaced", data={"reason": "import"}, summary="replaced the canvas (import)")),
                   now=115.0)
     pushes = drain(state, 115.0, 400.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(115.0, "pin", False)]
     assert _pins_shown(pushes[0][1]) == {"pin_00000002"}
 
 
@@ -1456,7 +1483,7 @@ def test_a_pin_that_lost_its_node_still_waits_and_says_where_it_is():
                                                              "anchor": {"x": 10.0, "y": 20.0}, "reason": "deleted"})),
                   now=112.0)
     pushes = drain(state, 112.0, 400.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(112.0, "pin", False)]
     assert '<pin id="pin_00000002">warmer</pin>' in pushes[0][1].content
     state = ChannelState(now=0.0)
     _young_window(state)
@@ -1557,7 +1584,8 @@ def _pin_fuzz(seed: int) -> tuple[list, int]:
         push = take(state, t)
         if push is not None:
             shown = _pins_shown(push)
-            if not push.gate and window_before:
+            if not push.gate and window_before and push.wake not in mcp_channel.DELIBERATE_WAKES:
+                # Only a deliberate send (2026-11-03) may go into a gated window.
                 violations.append((seed, t, "ungated push into an open window", push.wake))
             if shown - live:
                 violations.append((seed, t, "a pin no longer live in a push", sorted(shown - live), push.gate))
@@ -1642,21 +1670,21 @@ def test_a_reopened_proposals_waiting_invalidation_is_not_pushed():
     assert "prop_other" not in state.own_proposals
 
 
-def test_an_edit_in_the_last_8_s_before_a_pin_goes_follows_in_a_gated_push():
-    # Probe Q11: the docs said every edit made while a pin waits goes with
-    # it. One the person makes in the quiet time before the pin goes (8 s)
-    # isn't quiet yet: it follows on its own, gated, at the 30 s spacing.
+def test_an_edit_made_just_before_a_pin_goes_rides_with_it():
+    # Probe Q11 turned round (2026-11-03): every passive item waiting when a
+    # deliberate send goes rides along, however recent, so the person's last
+    # edit is never left behind the pin it explains.
     state = ChannelState(now=0.0)
     _young_window(state)
     state.observe(resp(pin(2)), now=110.0)
-    state.observe(resp(edit(3, node="n8")), now=165.0)
-    pushes = drain(state, 110.0, 400.0)
-    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(168.5, "pin", False, 1), (198.5, "change", True, 1)]
+    state.observe(resp(edit(3, node="n8")), now=110.5)
+    pushes = drain(state, 110.5, 400.0)
+    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(111.0, "pin", False, 2)]
     repo = Path(__file__).resolve().parents[2]
     setup = (repo / "docs" / "MCP-SETUP.md").read_text(encoding="utf-8")
     for text in (" ".join(mcp_channel.__doc__.split()), " ".join(setup.split())):
-        assert "last 8 s before it goes" in text
-        assert "longer while that turn keeps calling Nebula" in text
+        assert "rides along" in text or "ride along" in text
+        assert "last 8 s before it goes" not in text
     plan = " ".join((repo / "docs" / "moodboard-canvas-plan.md").read_text(encoding="utf-8").split())
     assert "an ungated pin wake, about a minute after the last gated push" not in plan
 
@@ -1847,7 +1875,7 @@ def test_a_pin_that_arrives_during_a_check_still_holds_the_gated_pushes():
     assert (push.wake, push.gate) == ("proposal", False) and "set prompt" not in push.content
     assert "<pin" not in push.content
     pushes = drain(state, 102.0, 300.0)
-    assert [(at, p.wake, p.gate) for at, p in pushes] == [(131.5, "pin", False)]
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(103.0, "pin", False)]
     assert _pins_shown(pushes[0][1]) == {"pin_00000004"} and "set prompt" in pushes[0][1].content
 
 
@@ -1935,8 +1963,9 @@ def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
     anyio.run(main)
     assert pushes, "no push at all"
     before = [(at, meta.get("wake"), "gate" in meta) for at, meta, content in pushes if at < 200.0]
-    # The accept at once (ungated, no window open), the edit at the 30 s spacing (gated).
-    assert before == [(100.0, "proposal", False), (130.0, "change", True)], before
+    # The accept at once (ungated, no window open); the edit once the turn the
+    # accept started has ended (window_min, 60 s, with no Nebula call: HIGH-1).
+    assert before == [(100.0, "proposal", False), (160.001, "change", True)], before
     assert all("<pin" not in content for at, _, content in pushes if at < 200.0)
     at, meta, content = pushes[-1]
     assert at >= 200.0 and meta["wake"] == "pin" and "gate" not in meta and 'pin id="pin_00000001"' in content
@@ -2074,7 +2103,7 @@ def _stale_check_fuzz(seed: int) -> tuple[list, int, int]:
         if push is not None:
             pushes += 1
             shown = _pins_shown(push)
-            if not push.gate and window_before:
+            if not push.gate and window_before and push.wake not in mcp_channel.DELIBERATE_WAKES:
                 violations.append((seed, t, "ungated into an open window"))
             dead = [p for p in shown if truth[open_project].get(p) != "open"]
             if dead:
@@ -2156,14 +2185,18 @@ def test_a_pin_check_that_hangs_never_holds_an_accept():
     listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
                                     log=lambda line: None, sleep=sleep, fetch_pins=fetch_pins)
     _until_done(listener)
-    assert checks and checks[0] == 100.0
+    assert checks and checks[0] == 100.0 + state.limits.pin_merge  # after the pin's merge
     accepts = [(at, meta.get("wake"), "gate" in meta) for at, meta, _ in pushes if meta.get("wake") == "proposal"]
     # The accept goes while the check hangs (it waits only for the check's
     # grace, as for any check), not when the check gives up at 115.
     assert accepts and accepts[0][0] <= 100.0 + mcp_channel.PIN_CHECK_GRACE + 1.0 and not accepts[0][2], pushes
     assert all("<pin" not in content for _, _, content in pushes)
-    # The next check counts its wait from when this one failed, not from when it started.
-    assert len(checks) >= 2 and checks[1] >= checks[0] + 15.0 + mcp_channel.PIN_RETRY_MIN, checks
+    # The next check counts its wait from when this one failed (the listener
+    # gives up on it at its deadline), not from when it started. Before
+    # 2026-11-03 the accept's 30 s spacing also held the pin's next check;
+    # a pin no longer waits for it.
+    assert len(checks) >= 2 and checks[1] >= checks[0] + mcp_channel.PIN_CHECK_TIMEOUT + mcp_channel.PIN_RETRY_MIN, \
+        checks
 
 
 def test_a_failed_pin_check_is_tried_again_counting_from_its_failure():
@@ -2619,9 +2652,10 @@ def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     allowed = mcp_channel.CHANGE_TURN_TOOLS
     assert allowed <= set(tools)
     writes = {name for name in allowed if not tools[name].annotations.readOnlyHint}
-    # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose.
+    # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose;
+    # and answer the person in the Message box (reply_to_person, PR C), as a pin is answered.
     assert writes == {"point_at", "post_note", "resolve_pin", "propose_change", "propose_asset_change",
-                      "withdraw_proposal"}
+                      "withdraw_proposal", "reply_to_person"}
     for name in ("start_here", "look_at_canvas", "describe_node", "view_output", "get_run", "list_notes"):
         assert name in allowed, name
     for name in ("edit_canvas", "run_nodes", "open_project", "moodboard_edit", "moodboard_update",
@@ -2655,6 +2689,14 @@ class _Journal:
         self.pin_checks = 0  # GET /api/canvas/pins: the listener's check before a push that holds pins
         self.pins_hang = threading.Event()  # set: the pins listing hangs until pins_released
         self.pins_released = threading.Event()
+        self.beats: list[dict] = []  # POST /api/agent/channel: the listener's readiness beats
+        self.goodbyes = 0  # DELETE /api/agent/channel: its session ended
+        self.questions: dict[str, dict] = {}  # GET /api/canvas/questions/{id}: an answered set, by id
+        # GET /api/agent/thread/inbox: the person's messages to this session, not pushed yet;
+        # POST /api/agent/thread/accepted: the ids the listener said it pushed.
+        self.inbox: list[dict] = []
+        self.inbox_reads = 0
+        self.accepted: list[str] = []
 
     def add(self, kind: str, actor=None, **kwargs) -> None:
         with self.cond:
@@ -2722,12 +2764,37 @@ def _fake_nebula(journal: _Journal):
                             status.pop(pin_id, None)
                 self._send({"projectId": "proj_1", "pins": [{"id": k, "status": v} for k, v in status.items()]})
                 return
+            if url.path == "/api/agent/thread/inbox":
+                journal.inbox_reads += 1
+                self._send({"messages": [m for m in journal.inbox if m["messageId"] not in journal.accepted]})
+                return
+            if url.path.startswith("/api/canvas/questions/") and url.path.rsplit("/", 1)[-1] in journal.questions:
+                self._send({"questions": journal.questions[url.path.rsplit("/", 1)[-1]]})
+                return
             journal.tool_agents.append(self.headers.get("X-Nebula-Agent") or "")
             self._send({"ok": True, "path": url.path})
 
         def do_POST(self) -> None:  # noqa: N802
+            if urlsplit(self.path).path == "/api/agent/channel":
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                journal.beats.append({**body, "agent": self.headers.get("X-Nebula-Agent")})
+                self._send({"listener": {"listenerId": "ch_fake0123456789", "state": body.get("state")}})
+                return
+            if urlsplit(self.path).path == "/api/agent/thread/accepted":
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                journal.accepted.extend(body.get("messageIds") or [])
+                self._send({"accepted": body.get("messageIds") or []})
+                return
             journal.tool_agents.append(self.headers.get("X-Nebula-Agent") or "")
             self._send({"ok": True, "path": urlsplit(self.path).path})
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            if urlsplit(self.path).path == "/api/agent/channel":
+                journal.goodbyes += 1
+                self._send({"listener": None})
+                return
+            self.send_response(404)
+            self.end_headers()
 
         def log_message(self, *args) -> None:
             pass
@@ -2829,32 +2896,38 @@ def test_the_capability_and_its_instructions_come_only_with_the_flag(nebula):
 
 
 def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
+    # The person's edit first: a gated change push, and its turn's edit is
+    # refused. Then a pin: never gated, it ends the window, so its turn may
+    # edit. (A pin first would start an ungated turn no gated push may gate
+    # for window_min, 30 s here: review 1 of #225, HIGH-1.)
     pushes: list[dict] = []
 
     async def main():
         async with _connected(channel=True, pushes=pushes) as (session, _, _done):
             await _until(lambda: nebula.polls)  # listening, from now
-            nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
-            await _until(lambda: len(pushes) == 1)
             # Its own edit (same name as its tools) and another agent's never push.
             nebula.add("node.params", actor={"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}, node="n7")
             nebula.add("node.params", actor=OTHER_AGENT, node="n7")
             await anyio.sleep(0.8)
-            assert len(pushes) == 1
+            assert pushes == []
             nebula.add("node.params", node="n7", data={"keys": ["prompt"]}, summary="set prompt on Hero (n7)")
-            await _until(lambda: len(pushes) == 2)
+            await _until(lambda: len(pushes) == 1)
             refused = await session.call_tool("edit_canvas", {"params": [{"nodeId": "n7", "params": {"prompt": "x"}}]})
             allowed = await session.call_tool("look_at_canvas", {})
             proposed = await session.call_tool("propose_change", {"note": "warmer"})
-            return refused, allowed, proposed
+            nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
+            await _until(lambda: len(pushes) == 2)
+            freed = await session.call_tool("edit_canvas", {"params": [{"nodeId": "n7", "params": {"prompt": "x"}}]})
+            return refused, allowed, proposed, freed
 
-    refused, allowed, proposed = anyio.run(main)
-    assert pushes[0]["meta"]["wake"] == "pin" and "warmer" in pushes[0]["content"]
-    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
-    assert pushes[1]["meta"]["wake"] == "change" and pushes[1]["meta"]["gate"] == "change"
-    assert "set prompt on Hero (n7)" in pushes[1]["content"]
+    refused, allowed, proposed, freed = anyio.run(main)
+    assert pushes[0]["meta"]["wake"] == "change" and pushes[0]["meta"]["gate"] == "change"
+    assert "set prompt on Hero (n7)" in pushes[0]["content"]
     assert refused.isError and "propose_change" in refused.content[0].text
     assert not allowed.isError and not proposed.isError
+    assert pushes[1]["meta"]["wake"] == "pin" and "gate" not in pushes[1]["meta"] and "warmer" in pushes[1]["content"]
+    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
+    assert not (freed.isError and "propose_change" in freed.content[0].text)
     # The listener long-polls as the tools' own identity, without self=1, so
     # Nebula leaves this agent's own edits out.
     assert {p["agent"] for p in nebula.polls} == {"Claude Code"}

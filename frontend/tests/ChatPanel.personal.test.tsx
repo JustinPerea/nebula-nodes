@@ -22,6 +22,7 @@ import { ChatPanel } from '../src/components/panels/ChatPanel';
 import { PersonalAgentsSection } from '../src/components/panels/settings/PersonalAgentsSection';
 import { normalizeAgentEventSource } from '../src/lib/agentEvents';
 import { useUIStore } from '../src/store/uiStore';
+import { notePersonPromoted, reportPersonRequired } from '../src/lib/personSession';
 const initialUI = useUIStore.getState();
 const TOKEN = 'person-token-for-tests';
 
@@ -107,6 +108,24 @@ describe('Personal agents in the chat panel', () => {
     expect(screen.getByText(/Fake Agent · your agent/)).toBeInTheDocument();
   });
 
+  it('PR #204 round 14 (GM r23 answer 6): a demoted tab lists no personal agents and says why under the heading', async () => {
+    await connected();
+    act(() => reportPersonRequired());
+    try {
+      await act(() => new Promise<void>((resolve) => { setTimeout(resolve, 200); }));
+      fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Chat model settings' });
+      expect(within(dialog).queryByRole('button', { name: /Fake Agent/ })).toBeNull();
+      expect(within(dialog).getByText('You can pick your agents when this tab is connected as you.')).toBeInTheDocument();
+      act(() => notePersonPromoted());
+      await waitFor(() => expect(within(dialog).getByRole('button', { name: /Fake Agent/ })).toBeInTheDocument());
+      expect(within(dialog).queryByText('You can pick your agents when this tab is connected as you.')).toBeNull();
+    } finally {
+      // A failure above must not leave the next tests on a held tab.
+      act(() => notePersonPromoted());
+    }
+  });
+
   it('sends a personal turn without model or effort, then reuses the session', async () => {
     const socket = await connected();
     await pickFake();
@@ -169,7 +188,7 @@ describe('Personal agents in the chat panel', () => {
     expect(within(card).getByText(/No answer in \d+s denies it/)).toBeInTheDocument();
     fireEvent.click(within(card).getByRole('button', { name: 'Allow once' }));
     await waitFor(() => expect(socket.sent).toHaveLength(2));
-    expect(socket.sent[1]).toEqual({ type: 'permission', requestId: 'r-1', decision: 'allow', personToken: TOKEN });
+    expect(socket.sent[1]).toEqual({ type: 'permission', requestId: 'r-1', decision: 'allow', personToken: TOKEN, ref: expect.any(String) });
     await act(async () => {
       socket.receive({ type: 'permission_resolved', requestId: 'r-1', outcome: 'allowed', source: 'personal' });
     });
@@ -203,7 +222,7 @@ describe('Personal agents in the chat panel', () => {
     });
     await sendText('/clear');
     await waitFor(() => expect(socket.sent).toHaveLength(3));
-    expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN });
+    expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN, ref: expect.any(String) });
     // Typing /clear is the person's confirmation, so it sends force (the
     // backend refuses to clear a project with nodes without it).
     expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true',
@@ -235,7 +254,7 @@ describe('A personal agent that offers models', () => {
     fireEvent.change(select, { target: { value: 'argon-low' } });
     await waitFor(() => expect(socket.sent).toHaveLength(2));
     expect(socket.sent[1]).toEqual({ type: 'personal_option', sessionId: 'host-1', configId: 'model', value: 'argon-low',
-      personToken: TOKEN });
+      personToken: TOKEN, ref: expect.any(String) });
     await act(async () => {
       socket.receive({ type: 'personal_options', sessionId: 'host-1', source: 'personal', error: 'Fake Agent didn\'t switch: busy.',
         options: [{ id: 'model', name: 'Model', category: 'model', current: 'argon-medium',
@@ -247,6 +266,47 @@ describe('A personal agent that offers models', () => {
 });
 
 describe('Settings > Personal agents', () => {
+  // GM, PR #205 r1 answer 6: the switch saving its own change shows the new
+  // position at once, keeps the enabled look for 150 ms, then the locked look
+  // with the thumb where it was put, until the save and the reload answer.
+  it('a switch saving its own change: the new position at once, held, then locked after 150 ms', async () => {
+    let answer!: (value: unknown) => void;
+    apiMocks.updatePersonalAgent.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    render(<PersonalAgentsSection />);
+    await screen.findAllByTestId('personal-agent-row');
+    const toggle = () => screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' });
+    expect(toggle()).not.toBeChecked();
+    fireEvent.click(toggle());
+    expect(toggle()).toBeChecked();
+    expect(toggle()).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle()).toHaveAttribute('data-held-pending');
+    await waitFor(() => expect(toggle()).toHaveAttribute('data-held-look'));
+    expect(toggle()).toBeChecked();
+    fireEvent.click(toggle());
+    expect(apiMocks.updatePersonalAgent).toHaveBeenCalledTimes(1);
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [FAKE, { ...OFF, enabled: true }] });
+    await act(async () => { answer({ agent: { ...OFF, enabled: true } }); });
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
+  });
+
+  it('the hold lasts until the reload answers: the switch never goes back to the old position in between', async () => {
+    apiMocks.updatePersonalAgent.mockResolvedValueOnce({ agent: { ...OFF, enabled: true } });
+    render(<PersonalAgentsSection />);
+    await screen.findAllByTestId('personal-agent-row');
+    const toggle = () => screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' });
+    let reloaded!: (value: unknown) => void;
+    apiMocks.fetchPersonalAgents.mockImplementationOnce(() => new Promise((resolve) => { reloaded = resolve; }));
+    await act(async () => { fireEvent.click(toggle()); });
+    // The save answered; its reload hasn't: still the new position, still held.
+    await waitFor(() => expect(reloaded).toBeTypeOf('function'));
+    expect(toggle()).toBeChecked();
+    expect(toggle()).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => { reloaded({ warningAcknowledged: true, agents: [FAKE, { ...OFF, enabled: true }] }); });
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
+  });
+
   it('lists agents, switches one on and adds a custom one', async () => {
     apiMocks.updatePersonalAgent.mockResolvedValue({ agent: { ...OFF, enabled: true } });
     apiMocks.createPersonalAgent.mockResolvedValue({ agent: FAKE });

@@ -66,6 +66,9 @@ describe('the shipped price table', () => {
     expect(routed.filter(([, , , , priced]) => runTime(priced)).map(([, , , label]) => label)).toEqual([
       'flux-video-edit (bfl)', 'flux-video-edit (fal)',
       'flux-video-upscale (bfl)', 'flux-video-upscale (fal)', 'flux-video-upscale (replicate)',
+      // Talking heads: priced from the audio track's length.
+      'kling-ai-avatar-v2 (fal)', 'kling-ai-avatar-v2 (replicate)',
+      'omnihuman-1-5 (fal)', 'omnihuman-1-5 (replicate)', 'omnihuman-2 (fal)',
       'seedvr-video-upscale', 'seedvr2-upscale',
     ]);
     expect(routed.filter(([, , , , priced]) => runTime(priced) && !awaitsInput(priced)).map(([, , , label]) => label))
@@ -181,6 +184,15 @@ describe('a price measured from the input', () => {
       + "priced from your image's size when you run it");
     expect(sizeNote(nodes['seedvr-video-upscale'], catalog['seedvr-video-upscale'])).toContain("priced from your video's size");
     expect(sizeNote(nodes['gpt-image-2-generate'], catalog['gpt-image-2-generate'])).toBeNull();
+  });
+
+  it('words the size note as the backend does (cases shared with test_talking_head_nodes.py)', () => {
+    const cases = (shared as unknown as { sizeNoteCases: Array<{ name: string; nodeId: string; route: string | null; note: string }> }).sizeNoteCases;
+    expect(cases.length).toBeGreaterThan(1);
+    for (const item of cases) {
+      const entry = item.route ? nodes[item.nodeId].routes![item.route] : nodes[item.nodeId];
+      expect(sizeNote(entry, catalog[item.nodeId]), item.name).toBe(item.note);
+    }
   });
 
   it('is unpriced without a size and priced with one', () => {
