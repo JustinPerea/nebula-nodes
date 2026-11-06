@@ -31,6 +31,9 @@ export interface SwitchContext {
   pricing?: PricingTable | null;
   /** Wired input ports, with how many edges reach each (runScope.nodeWiredCounts). */
   wired?: ReadonlyMap<string, number>;
+  /** The person's name for a renamed node (renamedLabel): the stop line names
+   * it, as its card and the agent's bubble do (GM, PR #203 r39 item 8). */
+  name?: string;
 }
 
 /** 'connected': a Space route's Hugging Face token is set (Idol's, GM PR #203
@@ -241,7 +244,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const choice = providerChoice(saved);
   const estimates = estimateRoutes(definition, saved, wired, context.pricing);
   const wiredPorts = [...wired.keys()];
-  const unavailable = routeUnavailable(definition, routed, context.apiKeys);
+  const unavailable = routeUnavailable(definition, routed, context.apiKeys, context.name);
   const route = selectRoute(definition, routed, context.apiKeys);
   const autoRoute = selectRoute(definition, { ...routed, [PROVIDER_PARAM]: AUTO }, context.apiKeys);
   const autoUnavailable = routeUnavailable(definition, { ...routed, [PROVIDER_PARAM]: AUTO }, context.apiKeys);

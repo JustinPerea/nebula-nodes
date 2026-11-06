@@ -677,7 +677,10 @@ def _node_lines(node: dict[str, Any], *, open_on_canvas: bool = True) -> list[st
     if node.get("error"):
         # Why its last run failed, as the card says it.
         hint = f" ({node['errorHint']})" if node.get("errorHint") else ""
-        lines.append(f"        error: {_brief(node['error'], 300)}{hint}")
+        # A stop at a call only the person may make says how to propose it in
+        # its last sentence: whole (review 19 of PR #203, NIT-5).
+        error = node["error"] if node.get("stopped") else _brief(node["error"], 300)
+        lines.append(f"        error: {error}{hint}")
     if node.get("fileName"):
         # The name its file was uploaded with (filePath is the stored copy).
         lines.append(f"        file: {json.dumps(str(node['fileName']), ensure_ascii=False)}")
@@ -873,7 +876,10 @@ def format_event(event: dict[str, Any]) -> str:
         )
         summary = f"{summary}: {shown}"
     elif kind == "run.failed" and data.get("error"):
-        summary = f"{summary}: {_brief(data['error'], 100)}"
+        # A stop at a call only the person may make says how to propose: whole
+        # (review 19 of PR #203, LOW-2).
+        error = data["error"] if data.get("proposalNeeded") is True else _brief(data["error"], 100)
+        summary = f"{summary}: {error}"
     elif kind == "run.skipped" and data.get("reason"):
         summary = f"{summary}: {_brief(data['reason'], 100)}"
     elif kind == "pin.added" and data.get("pinId"):

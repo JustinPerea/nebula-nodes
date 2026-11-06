@@ -41,6 +41,13 @@ export const RUN_NODE_HEADING = "Couldn't run the node.";
  * another status (busy, say): markNodesErrored leaves `errorNotStarted` unset
  * there, and its toast keeps its own heading. */
 export const RUN_NOT_STARTED_HEADING = 'Nebula couldn’t start the run.';
+/** An agent's run stopped at a node only the person may run (the run's error
+ * category "waiting": Idol's Hugging Face call with the person's token set).
+ * A stop by design, not a failure: its own heading, in the notice style
+ * (GM, PR #203 r39 item 1, verbatim). */
+export const WAITING_HEADING = 'Waiting for you to run it';
+/** The run's error category for that stop (backend engine, ProposalNeeded). */
+export const WAITING_CATEGORY = 'waiting';
 /** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
 export const GENERATE_SHOT_HEADING = "Couldn't generate the shot.";
 
@@ -88,7 +95,8 @@ export interface NodeErrorCopy {
 }
 
 export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface = 'node', notStarted = false,
-  heading = surface === 'shot' ? GENERATE_SHOT_HEADING : notStarted ? RUN_NOT_STARTED_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
+  heading = category === WAITING_CATEGORY ? WAITING_HEADING
+    : surface === 'shot' ? GENERATE_SHOT_HEADING : notStarted ? RUN_NOT_STARTED_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
   const text = raw?.trim() ?? '';
   const line = person?.trim();
   if (line) {

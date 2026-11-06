@@ -16,8 +16,11 @@ export async function getSettingsNotice(): Promise<SettingsNotice | null> {
 /** The person read the line: it isn't shown again (POST
  * /api/settings/notice/dismiss). */
 export async function dismissSettingsNotice(): Promise<void> {
-  await apiRequest('Couldn’t dismiss the line.', '/api/settings/notice/dismiss', { method: 'POST' });
+  await apiRequest(DISMISS_FAILED.heading, '/api/settings/notice/dismiss', { method: 'POST' });
 }
+
+/** A dismiss that didn't land (GM, PR #203 r40 item 4, verbatim). */
+export const DISMISS_FAILED = { heading: 'Nebula couldn’t dismiss this notice', reason: 'Try again.' } as const;
 
 /** The line's text around its path, which Settings shows in mono and
  * selectable (GM, PR #203 r38 item 5); no path in the line, no split. */

@@ -1233,10 +1233,11 @@ export function routeMissingKeyLine(definition: ModelNodeDefinition, route: Node
 }
 
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
-  params: Record<string, unknown> = {}): string {
+  params: Record<string, unknown> = {}, own?: string): string {
   // Quoted, as the bar and the Agent log quote every name (GM, PR #203 r32;
-  // node_route.card_subject).
-  const name = definition.displayName ? `“${definition.displayName}”` : 'This node';
+  // node_route.card_subject). `own`: the person's name for a renamed node,
+  // so its card and its bubble agree (GM, PR #203 r39 item 8).
+  const name = own ? `“${own}”` : definition.displayName ? `“${definition.displayName}”` : 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
@@ -1255,8 +1256,8 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
   }
   const missing = route.missing ?? [];
   // The route's own words (Idol's token), the backend's too.
-  const own = routeMissingKeyLine(definition, route);
-  if (own) return own;
+  const keyLine = routeMissingKeyLine(definition, route);
+  if (keyLine) return keyLine;
   if (spec) {
     const phrase = missing.length ? keyPhrase(missing) : null;
     const needed = phrase ? `your ${phrase}` : 'a provider key';
@@ -1284,6 +1285,13 @@ export function blockFields(block: DirectBlock | null | undefined): Partial<Dire
   return Object.fromEntries(Object.entries(block).filter(([, value]) => value !== null && value !== undefined)) as Partial<DirectBlock>;
 }
 
+/** A node's own name when the person renamed it, else undefined: a line
+ * then names it by its type, as before (GM, PR #203 r39 item 8). */
+export function renamedLabel(definition: ModelNodeDefinition | undefined, label: string | undefined): string | undefined {
+  const own = label?.trim();
+  return own && !isDefaultTitle(definition, own) ? own : undefined;
+}
+
 /** Why a route-table node can't run with these params and keys, or null when
  * it can and for every node without `routes` (node_route.route_unavailable).
  * `params` are routed (withWiredBlockers). */
@@ -1291,6 +1299,8 @@ export function routeUnavailable(
   definition: ModelNodeDefinition,
   params: Record<string, unknown> | undefined,
   apiKeys: ApiKeys,
+  /** The person's name for a renamed node (renamedLabel), quoted in the line. */
+  name?: string,
 ): RouteUnavailable | null {
   if (!hasRoutes(definition)) return null;
   const values = params ?? {};
@@ -1308,7 +1318,7 @@ export function routeUnavailable(
     block: blockFields(route.block),
     alternatives,
     fixes: hidden ? [hiddenFix(definition, route.block?.param ?? '')] : [],
-    message: routeUnavailableMessage(definition, route, alternatives, keyless, values),
+    message: routeUnavailableMessage(definition, route, alternatives, keyless, values, name),
   };
 }
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Callable, Iterator
 
 
 @dataclass(frozen=True)
@@ -24,12 +24,29 @@ class RunOrigin:
     Accept approved, which only the person's tab can start). ``surface``: the
     agent's surface for the proposal it is pointed at (agent_words: "mcp" or
     "cli"). ``ask``: how the agent proposes this run instead, when it has no
-    canvas node to name (a quick run's: main._quick_propose_hint); None
-    points at the stopped node's own id."""
+    canvas node to name (a quick run's: main._quick_propose_hint), added
+    after the stop's text; None for a canvas run."""
 
     person: bool
     surface: str = "mcp"
     ask: str | None = None
+    # The run's node names as the canvas shows them (main._run_names: the
+    # person's label when renamed, else the type's name), for what a stop
+    # tells agents (GM, PR #203 r39 item 1). None: the stop names the type.
+    names: Callable[[str], str] | None = None
+    # A canvas tab that isn't connected as the person started it (no agent
+    # marker, but no person token either): an agent's run for the gate,
+    # unchanged; only the card's words differ (GM, PR #203 r40 item 5).
+    tab: bool = False
+
+    def node_name(self, node_id: str) -> str | None:
+        """``node_id``'s name in this run, or None when the run has no names."""
+        if self.names is None:
+            return None
+        try:
+            return self.names(node_id) or None
+        except Exception:  # noqa: BLE001 - a name never turns a stop into another error
+            return None
 
 
 _origin: ContextVar[RunOrigin | None] = ContextVar("run_origin", default=None)

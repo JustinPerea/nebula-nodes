@@ -368,28 +368,43 @@ class IdolProposalNeeded(run_origin.ProposalNeeded):
     (its person line)."""
 
 
-# DRAFT (round 19): both lines go to GM through the coordinator before they
-# are final; the tests pin them as written here.
-AGENT_STOP_PERSON = ("An agent’s run stopped here before calling Hugging Face, because your Hugging Face token is "
-                     "set and this run could bill your account. Run it yourself to go ahead.")
+# GM, PR #203 r39 item 1, verbatim: the stop is by design, not a failure.
+# The card shows WAITING under its own neutral heading ("Waiting for you to
+# run it", frontend nodeErrorCopy, by the event's category "waiting").
+AGENT_STOP_PERSON = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only "
+                     "you can start that. Run the node yourself to go ahead.")
+
+
+# GM, PR #203 r40 item 5, verbatim: Run clicked in a canvas tab that isn't
+# connected as the person, with the token set (the same stop, under the same
+# heading; only the body differs).
+TAB_STOP_PERSON = ("This node could bill your Hugging Face account, so only you can run it. You can run it when this "
+                   "tab is connected as you.")
+
+
+def agent_stop_text(name: str) -> str:
+    """What agents read (MCP, the CLI, the run's result, the events) when
+    their run stopped at ``name``, the node's name as the canvas shows it
+    (GM, PR #203 r39 item 1, verbatim)."""
+    return (f"“{name}” wasn’t run. Nodes that call Hugging Face with the person’s token can bill their account, "
+            f"so only the person can run them. Ask them to run “{name}”, or carry on without it.")
 
 
 def agent_call_stop(node: GraphNode) -> IdolProposalNeeded:
-    """The stop at the call (run_idol): the agent is told to propose the run."""
+    """The stop at the call (run_idol), named as the canvas names the node
+    (run_origin.RunOrigin.node_name: its label when renamed, else its
+    type's). GM's words, then how the agent asks: the agent is told to
+    propose the run (Justin decided, 2026-10-31), in its reader's words with
+    the node's id; a quick run, which has no canvas node, says how to add one
+    and propose it (main._quick_propose_hint)."""
     from services import agent_spend
 
-    key, account = agent_spend.MAY_BILL_WHO["Hugging Face"]
     origin = run_origin.current()
+    name = origin.node_name(node.id) if origin is not None else None
     surface = origin.surface if origin is not None else "mcp"
-    if origin is not None and origin.ask:
-        # A quick run: no canvas node to name, and nothing after it.
-        return with_person_line(IdolProposalNeeded(
-            f"Idol stopped before calling Hugging Face: {key}, so this call can bill {account}. "
-            f"Nothing was sent. An agent can't make this call. {origin.ask}"), AGENT_STOP_PERSON)
-    return with_person_line(IdolProposalNeeded(
-        f"{node.id} (Idol) stopped before calling Hugging Face: {key}, so this call can bill {account}. "
-        "Nothing was sent, and the nodes after it didn't run. An agent can't make this call. "
-        f"{agent_spend.propose_hint([node.id], surface)}"), AGENT_STOP_PERSON)
+    ask = origin.ask if origin is not None and origin.ask else agent_spend.propose_hint([node.id], surface)
+    person = TAB_STOP_PERSON if origin is not None and origin.tab else AGENT_STOP_PERSON
+    return with_person_line(IdolProposalNeeded(f"{agent_stop_text(name or 'Idol')} {ask}"), person)
 
 
 def token_refused(*, status: int = 401) -> IdolSpaceError:

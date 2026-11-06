@@ -66,6 +66,11 @@ interface SettingsState {
   pending: Record<string, true>;
   /** The last failed write per key or field. Cleared when that one is retried or edited. */
   errors: Record<string, string>;
+  /** Of those, the ones that lost nothing: another Nebula was saving the
+   * settings, so the change waits (code settings_busy). The row says them
+   * in its normal muted colour, not the error colour (GM, PR #203 r39). Set
+   * with each failed write, so it always matches errors[id]. */
+  neutral: Record<string, true>;
   /** The field that just saved, for its brief "Saved" mark. */
   justSaved: string | null;
   notice: SettingsNotice | null;
@@ -83,6 +88,7 @@ export const useSettingsDraftStore = create<SettingsState>(() => ({
   tab: 'providers',
   pending: {},
   errors: {},
+  neutral: {},
   justSaved: null,
   notice: null,
 }));

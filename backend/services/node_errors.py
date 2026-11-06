@@ -220,9 +220,16 @@ class NodeErrors:
             self._save()
 
     def get(self, node_id: str) -> dict[str, str] | None:
-        """{error, hint?}: what agents read."""
+        """{error, hint?, stopped?}: what agents read. ``stopped``:
+        "proposal_needed" for a stop at a call only the person may make (the
+        run's category "waiting"), whose error is the agents' whole text."""
         entry = self._errors.get(node_id)
-        return {key: value for key, value in entry.items() if key in {"error", "hint"}} if entry else None
+        if not entry:
+            return None
+        read = {key: value for key, value in entry.items() if key in {"error", "hint"}}
+        if entry.get("category") == "waiting":
+            read["stopped"] = "proposal_needed"
+        return read
 
     def card(self, node_id: str) -> dict[str, Any] | None:
         """The node data fields the canvas card shows a failure with (NodeError)."""

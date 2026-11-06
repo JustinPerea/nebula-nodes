@@ -230,5 +230,7 @@ def test_a_size_reads_the_same_on_the_card_the_bubble_and_every_log(monkeypatch,
     body = _run(monkeypatch, [("text-input", {"value": "a fox"}), r18.FLUX3_AT_1_5K], _headers(who, chat_turn),
                 agent_log, bubbles, wires=((0, "text", 1, "prompt"),))
     assert body.get("status") == "failed", body
-    assert bubbles == [line]
+    # The bubble says the first sentence, what's wrong; the action is on the
+    # card and in the log (GM, PR #203 r39 item 5).
+    assert bubbles == ["“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K."]
     assert agent_log == [f"{HEADING} {line[:-1]}. Then run the node again."]

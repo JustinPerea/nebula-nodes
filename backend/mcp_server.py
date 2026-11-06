@@ -1622,6 +1622,10 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
         shown["errors"] = payload["errors"]
+    if payload.get("stopped"):
+        # Node id -> "proposal_needed": stopped at a call only the person may
+        # make; its errors entry says how to propose the run.
+        shown["stopped"] = payload["stopped"]
     if payload.get("skipped"):
         # Node id -> why: a gate upstream (Jev Decide) withheld their input.
         shown["skipped"] = payload["skipped"]

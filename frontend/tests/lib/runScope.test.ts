@@ -394,7 +394,8 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
       if (testCase.expected.unavailable) {
         const definition = fixture.definitions.table;
         const routed = withWiredBlockers(definition, testCase.params, new Map(Object.entries(testCase.wiredCounts ?? {})));
-        expect(cost!.unavailable!.Node).toBe(routeUnavailable(definition, routed, testCase.apiKeys)!.message);
+        // The node is titled 'Node', not the type's name: a rename, which the line quotes (GM, PR #203 r39 item 8).
+        expect(cost!.unavailable!.Node).toBe(routeUnavailable(definition, routed, testCase.apiKeys, 'Node')!.message);
         expect(cost!.unpriced).toContain('Node');
         expect(describeRunScope({ total: 1, paid: ['Node'], cost })).toContain(runChipTitle({ total: 1, paid: ['Node'], cost })!);
         expect(describeRunScope({ total: 1, paid: ['Node'], cost })).not.toContain('no listed price');

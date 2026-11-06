@@ -22,7 +22,7 @@ from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env
 from services.agent_profiles import (
     GrantOverlapsProtectedDir, agent_workspace, agent_workspace_env,
     claude_profile_args, claude_profile_env, default_secret_paths,
-    normalize_claude_model, normalize_effort, protected_agent_dirs,
+    normalize_claude_model, normalize_effort, protected_agent_dirs, secret_dirs,
     validate_agent_read_grants,
 )
 
@@ -271,7 +271,7 @@ async def run_claude(
     args = ["claude", "-p",
             *claude_profile_args(extra_dirs=list(extra_dirs or []),
                                  secret_paths=default_secret_paths(),
-                                 deny_read_dirs=[*protected, *denied_workspaces],
+                                 deny_read_dirs=[*protected, *secret_dirs(), *denied_workspaces],
                                  backend_url=backend_url, with_servers=True),
             "--output-format", "stream-json", "--verbose",
             "--model", requested_model]

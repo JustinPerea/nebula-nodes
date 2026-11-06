@@ -312,7 +312,7 @@ def test_two_restores_whose_write_fails_keep_the_file_aside_once(home_state, key
 
 
 NOT_RESTORED = ("Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed to "
-                "change {path}. It tries again at the next start.")
+                "change {path}. It’ll try again the next time Nebula starts.")
 
 
 @pytest.fixture
@@ -509,12 +509,12 @@ def test_a_nodes_needs_are_one_card_line_ending_once(definition, keys, line):
 def test_gms_card_and_bubble_forms_word_for_word():
     assert person_line.needs_card_line(["Prompt", "Image"]) == (
         "Connect a prompt and an image to this node, then run it again.")
-    assert person_line.needs_card_line(["Prompt"], "Anthropic API key") == (
+    assert person_line.needs_card_line(["Prompt"], "your Anthropic API key") == (
         "Connect the prompt and add your Anthropic API key in Settings, then run it again.")
     assert person_line.needs_bubble(["Prompt", "Image"]) == "needs a prompt and an image. Connect both."
-    assert person_line.needs_bubble(["Prompt"], "Anthropic API key") == (
+    assert person_line.needs_bubble(["Prompt"], "your Anthropic API key") == (
         "needs a prompt and your Anthropic API key. Connect the prompt and add the key in Settings.")
-    assert person_line.needs_bubble(["Prompt", "Base Image", "Mask (white = edit)"], "fal.ai API key") == (
+    assert person_line.needs_bubble(["Prompt", "Base Image", "Mask (white = edit)"], "your fal.ai API key") == (
         "needs a prompt, a base image, a mask and your fal.ai API key. Connect the prompt, the base image and the "
         "mask, and add the key in Settings.")
     assert person_line.needs_card_line(["Prompt"]) is None and person_line.needs_card_line([]) is None
@@ -570,15 +570,16 @@ def _headers(who: str, chat_turn: dict[str, str]) -> dict[str, str]:
 
 @WHO
 @pytest.mark.parametrize("definition,label,keys,bubble", [
-    ("flux-kontext", "Hero shot", {"FAL_KEY": "fal-test-fake"}, "“Hero shot” needs a prompt and an image. Connect both."),
-    ("claude-chat", "Hero shot", {},
-     "“Hero shot” needs messages and your Anthropic API key. Connect the messages and add the key in Settings."),
+    # Its first sentence: what's needed. The action is on the card and in the
+    # log (GM, PR #203 r39 item 5).
+    ("flux-kontext", "Hero shot", {"FAL_KEY": "fal-test-fake"}, "“Hero shot” needs a prompt and an image."),
+    ("claude-chat", "Hero shot", {}, "“Hero shot” needs messages and your Anthropic API key."),
     # Longer than the bubble holds (MAX_SAY_CHARS): its whole first sentence,
     # never cut inside the second; the Agent log has the line whole.
     ("flux-fill-inpaint", None, {},
      "“FLUX Fill (Inpaint)” needs a prompt, a base image, a mask and your fal.ai API key."),
     ("gpt-image-2-generate", None, {"OPENAI_API_KEY": "sk-test-fake"},
-     "“GPT Image 2” needs a prompt. Connect one."),
+     "“GPT Image 2” needs a prompt."),
 ])
 def test_the_bubble_says_a_nodes_needs_once_by_its_name(monkeypatch, bubbles, chat_turn, person, who, definition,
                                                         label, keys, bubble):
@@ -599,7 +600,7 @@ def test_a_renamed_nodes_route_line_names_it_once_by_its_label(monkeypatch, bubb
                 _headers(who, chat_turn), keys, wires=((0, "text", 1, "prompt"),))
     assert body["status"] == "failed"
     [said] = bubbles
-    assert said.startswith("“Hero shot” can’t run on fal.ai with “Resolution” set to 1.5K. "), said
+    assert said == "“Hero shot” can’t run on fal.ai with “Resolution” set to 1.5K.", said
     assert "FLUX 3" not in said and said.count("“Hero shot”") == 1
 
 

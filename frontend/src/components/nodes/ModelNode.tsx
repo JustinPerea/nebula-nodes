@@ -471,7 +471,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
         {switchable && (
           <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"
-            wired={wiredCounts} onPick={onProviderPick} />
+            wired={wiredCounts} label={nodeData.label} onPick={onProviderPick} />
         )}
         {isSlavaSkin && downloadableOutput && (
           <button

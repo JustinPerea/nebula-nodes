@@ -72,7 +72,7 @@ def require_allowed_path(value: str | Path) -> Path:
     or file contents are read to make this decision. Copy a normal reference to
     a standalone file before importing it if it has multiple hard links.
     """
-    from services.agent_profiles import default_secret_paths, protected_agent_dirs
+    from services.agent_profiles import default_secret_paths, protected_agent_dirs, secret_dirs
     from services.agent_workspaces import active_workspace, workspace_deny_roots
 
     raw = str(value)
@@ -88,7 +88,7 @@ def require_allowed_path(value: str | Path) -> Path:
         if any(candidate == root or candidate.is_relative_to(root)
                for root in (Path("/dev"), Path("/proc"), Path("/sys"), Path("/.vol"))):
             raise ProtectedPathError("Protected file aliases and device paths cannot be used through graph or media operations")
-    for protected in [*protected_agent_dirs(), *default_secret_paths()]:
+    for protected in [*protected_agent_dirs(), *secret_dirs(), *default_secret_paths()]:
         roots = (Path(os.path.abspath(protected.expanduser())), protected.expanduser().resolve())
         if any(candidate == root or candidate.is_relative_to(root)
                for candidate in map(_comparison_path, (lexical, resolved))

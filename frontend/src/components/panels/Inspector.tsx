@@ -1005,6 +1005,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
       {definition && switchable && (
         <ProviderSwitcher definition={definition} params={activeNodeData.params} variant="inspector" wired={wiredCounts}
+          label={activeNodeData.label}
           onPick={(next, notes) => {
             updateNodeData(activeNode.id, { params: next });
             useProviderNoteStore.getState().show(activeNode.id, notes);

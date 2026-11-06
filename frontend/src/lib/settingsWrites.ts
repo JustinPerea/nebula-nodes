@@ -45,7 +45,13 @@ function fail(id: string, message: string, error?: unknown) {
   // Round 16 (L3): a write the offline gate refused was never sent, and the
   // banner already says why, so it gets no line of its own. The draft stays.
   if (isOfflineRefusal(error)) return;
-  useSettingsDraftStore.setState((state) => ({ errors: { ...state.errors, [id]: message } }));
+  // The lock-wait line is neutral, colour too: nothing was lost (GM, PR #203 r39).
+  const waits = error instanceof RequestFailedError && error.code === SETTINGS_BUSY_CODE;
+  useSettingsDraftStore.setState((state) => {
+    const neutral = { ...state.neutral };
+    if (waits) neutral[id] = true; else delete neutral[id];
+    return { errors: { ...state.errors, [id]: message }, neutral };
+  });
 }
 
 function markSaved(id: string) {
@@ -75,6 +81,7 @@ function confirm(update: Partial<SettingsDraft>) {
  * its keys can't, Nebula isn't allowed to change it or its folder (GM, PR
  * #203 r28 item 4, r31 item 1), a file is where its folder must be (r31
  * item 2), or another Nebula is saving the settings (r38 item 3). */
+export const SETTINGS_BUSY_CODE = 'settings_busy';
 export const SETTINGS_REFUSAL_CODES: readonly string[] = [
   'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder', 'settings_busy',
 ];

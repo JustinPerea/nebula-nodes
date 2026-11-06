@@ -118,11 +118,27 @@ The server exposes these tools for building and running (see
   before Idol run, and an Idol node whose last result is reused passes, but
   an Idol node that must call Hugging Face stops there, before anything is
   sent, and the nodes after it don't run (Justin decided, 2026-10-31: only
-  the call is gated). Its error event on the canvas has `proposalNeeded: true`,
-  and the error text in the run result says why and names the reader's own way to propose, worded
-  where it is written: over MCP "Propose it instead: propose_change (run:
-  n2). The person accepts on the canvas, and the canvas runs it.", from the
-  CLI `` `nebula propose --note "<why>" --run n2` ``. A run whose origin
+  the call is gated). The error text says why, by the node's name as the
+  canvas shows it, then names the reader's own way to propose, worded where
+  it is written: "“Idol” wasn’t run. Nodes that call Hugging Face with the
+  person’s token can bill their account, so only the person can run them.
+  Ask them to run “Idol”, or carry on without it." then, over MCP, "Propose
+  it instead: propose_change (run: n2). The person accepts on the canvas,
+  and the canvas runs it.", from the CLI `` `nebula propose --note "<why>"
+  --run n2` ``. Every place an agent reads the stop marks it as a stop, not
+  a failure, with that text whole: the canvas's error event has
+  `proposalNeeded: true` and category `waiting`; the run's result
+  (`run_nodes`, `get_run`, `POST /api/graph/run`, `GET
+  /api/graph/runs/{id}`) has `stopped` (`{"n2": "proposal_needed"}`) beside
+  `errors`, and its one-line `error` is the node's text, never "n2 failed:
+  …"; the `run.failed` journal entry (`/api/canvas/events`,
+  `wait_for_canvas_change`, `nebula watch`) has `proposalNeeded: true` and
+  the text whole (up to 600 characters, where other errors are cut at 160);
+  `look_at_canvas` and `nebula look` show the node with `stopped` and the
+  text whole. The person's card says "Waiting for you to run it" in the
+  notice style, and Claude Code's done line says the node is waiting
+  ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it
+  because it could bill your Hugging Face account."). A run whose origin
   Nebula can't tell stops there too.
   The CLI sends `X-Nebula-Surface: cli` on every request and prints a
   refusal exactly as it came; any other caller reads MCP words. The header
@@ -572,8 +588,13 @@ The server exposes these tools for building and running (see
   settings hold it from their read to their save. Where the filesystem takes
   no flock (some network mounts), a save that finds another save's temp file
   waits for it and then answers `settings_busy`; it never replaces a temp
-  file another save may still be writing. No agent can read the temp file or the `settings-copy`
-  folder: both are on every agent deny list. The last three codes are for writes only, and
+  file another save may still be writing. One that a save cut short left
+  (older than a minute on the folder's own clock, or dated more than 5
+  seconds ahead of it) is removed only while it is still that file: it is
+  moved into `.settings-nebula-judging` beside it, checked by inode there,
+  and removed, or put back if it is another save's since. No agent can read
+  the temp file, the judging folder or the `settings-copy` folder: all are
+  on every agent deny list. The last three codes are for writes only, and
   only the person writes; a desktop Keychain save (`credentials/update`)
   never writes the file, so it gets only the read codes. `fix` is the sentence
   that says what to do, worded for the reader: an agent's says to ask the
@@ -601,7 +622,10 @@ And these canvas tools:
   An input holding an uploaded file has `fileName`, the name it was uploaded
   with (`nebula look` prints it as `file:`).
   A node whose last run failed has `state: "error"` with the message in
-  `error` (and the plain-language `errorHint`, when there is one). Where a
+  `error` (and the plain-language `errorHint`, when there is one). A node
+  that stopped at a call only the person may make (Idol with `HF_TOKEN`
+  set) has `stopped: "proposal_needed"` too, and its `error` is the whole
+  text, never cut (other errors are cut at 300 in `nebula look`). Where a
   provider quoted a key in that message (OpenAI's 401 shows its first and
   last characters), the key is `<key hidden>`; `get_project` and `get_run`
   errors are cleaned the same way (`services/key_echoes.py`).
@@ -821,7 +845,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal connected it |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
-| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal; on `run.failed`, `proposalNeeded: true` when the node stopped at a call only the person may make (Idol with `HF_TOKEN` set): its `error` is then the whole text saying so and how to propose, and its `summary` ends "stopped" |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
@@ -841,8 +865,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
-| `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read); never a key or a setting |
-| `settings.not_restored` | at start, Nebula found the copy it keeps for an in-place save that was cut short but couldn't put it back, because it isn't allowed to change the file (or its folder); the copy is kept and tried again at the next start, and nothing is kept aside. Attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line: "Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed to change <path>. It tries again at the next start." Tell the person; only they can change the file's permissions | `file` (the settings file's path as the person sees it); never a key or a setting |
+| `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read; named by the time and a random suffix, `settings-replaced-<UTC time>-<8 hex>.json`, never by what is in it); never a key or a setting. The person's line about it stays at the top of Settings until they dismiss it, across restarts (it is kept in that same folder); no agent route returns it |
+| `settings.not_restored` | at start, Nebula found the copy it keeps for an in-place save that was cut short but couldn't put it back; the copy is kept and tried again at the next start. When Nebula isn't allowed to change the file (or its folder), nothing is kept aside; when the copy folder takes no file for the one it would replace, nothing is kept aside either; when the write itself fails after the replaced file was kept, that file stays kept, once however many starts meet it. Attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, by cause: "Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed to change <path>. It’ll try again the next time Nebula starts." when Nebula isn't allowed (<path> is the file, its folder or the copy folder, whichever refuses), else "Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again the next time Nebula starts." (a full disk, an I/O error). Tell the person; only they can change the file's permissions or free the space | `file` (the settings file's path as the person sees it); never a key or a setting |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
@@ -1428,7 +1452,15 @@ The card's route lines now quote the node's name ("“FLUX 3 Image” is set to
 Replicate, …"), and a fix that lists choices takes a comma before the
 switch ("Pick 1K, 2K or 4K, or switch to fal.ai."). Those are the person's
 words, in `person` and `reason` too; you read `error` and `missing` as
-before.
+before. In your `error` a value is the one you send back, and one whose
+option is labelled with a size it doesn't spell has the size after it:
+"Pick 768sq (768 × 768), 1k, 2k or 4k, or switch provider." A renamed
+node's card line and cursor bubble name it by its name ("“Hero shot” can’t
+run on fal.ai with “Resolution” set to 1.5K."), never by its type as
+well. A node whose only needs are inputs to connect and a key says them in
+one line; for a node with several providers the key is "your Black Forest
+Labs API key or fal.ai API key" (two or three) or "a key for one of its 4
+providers" (four or more).
 
 The status is the one the provider's API answered, attached where Nebula
 raised the error, never a number read out of the text (round 3d, part 2): a

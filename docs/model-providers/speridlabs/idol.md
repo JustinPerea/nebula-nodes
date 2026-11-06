@@ -128,6 +128,23 @@ $0 and spend tracking never counts it as paid.
   route from the request, as every person-only check reads it; an unknown
   origin counts as an agent's), it raises before any request, the nodes
   after it don't run, and the canvas's error event carries `proposalNeeded: true`.
+  It is a stop, not a failure, wherever it is read (round 20): the error
+  category is `waiting` (the card's heading "Waiting for you to run it", in
+  the notice style, not the error colour); the run's result has `stopped`
+  and a one-line `error` that is the node's own text; the `run.failed`
+  journal entry has `proposalNeeded: true` and the text whole; `nebula
+  look` and `look_at_canvas` show `stopped` and the text whole; and the
+  done line says the node is waiting. The card's body is GM's (r39 item 1):
+  "An agent’s run stopped here because this node could bill your Hugging
+  Face account, and only you can start that. Run the node yourself to go
+  ahead.", or, when the Run came from a canvas tab not connected as the
+  person (GM r40 item 5; the gate is the same, only the words differ),
+  "This node could bill your Hugging Face account, so only you can run it.
+  You can run it when this tab is connected as you." Agents read "“Idol”
+  wasn’t run. Nodes that call Hugging Face with the person’s token can bill
+  their account, so only the person can run them. Ask them to run “Idol”,
+  or carry on without it." (the node's name as the canvas shows it) and
+  then the hint below.
   A result reused from the run cache never reaches it. The person's own Run
   and an accepted proposal (the person's tab starts it) go through. The
   agent's text says why and how to propose, in its reader's words. Each is

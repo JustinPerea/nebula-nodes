@@ -4,7 +4,7 @@ import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
 import { classCounts, costChip, costClass } from './costClass';
 import {
-  envKeyNames, hasRoutes, isDefaultTitle, keyBillingAccount, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable,
+  envKeyNames, hasRoutes, isDefaultTitle, keyBillingAccount, keyPhrase, nameOnRoute, renamedLabel, routePriceKey, routeUnavailable,
   selectRoute, withWiredBlockers,
 } from './directRoute';
 import { namesSeveral, nodeNameList } from './errorCopy';
@@ -436,7 +436,7 @@ export function summarizeRunScope(
     // priced on BytePlus only, fell back to fal.ai with no key at all).
     let keyUnset = false;
     if (hasRoutes(definition)) {
-      const missing = routeUnavailable(definition, routed, costContext.apiKeys);
+      const missing = routeUnavailable(definition, routed, costContext.apiKeys, renamedLabel(definition, node.data?.label));
       if (missing) {
         cost.unpriced.push(name);
         ids.unpriced.push(node.id);

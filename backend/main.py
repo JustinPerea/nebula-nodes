@@ -103,6 +103,8 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services.run_reports import STOPPED_FOR_PROPOSAL, one_line_error
+from services import settings as settings_notice_store
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
 from services import agent_words
@@ -2302,28 +2304,46 @@ def _normalize_output_value_for_storage(port_val: Any) -> Any:
         return port_val
 
     value = port_val.get("value")
-    normalized = _normalize_nested_output_refs_for_storage(value)
-    normalized_port = port_val if normalized == value else {**port_val, "value": normalized}
-    port_type = normalized_port.get("type")
+    port_type = port_val.get("type")
     if port_type in SPATIAL_VALUE_MODELS:
-        if normalized is None:
+        # A spatial value holds paths only in its asset references' ``uri``.
+        # Every other string is metadata ("source": "generated", a provider
+        # or model name, a tag), and must not become an /api/outputs URL just
+        # because a folder of that name exists under OUTPUT_ROOT: that broke
+        # validation (WorldValueV2 session.source) whenever one did.
+        if value is None:
             raise ValueError(f"{port_type} output cannot be null")
         if (
             port_type == "World"
-            and isinstance(normalized, dict)
-            and normalized.get("schemaVersion", normalized.get("schema_version")) == 1
+            and isinstance(value, dict)
+            and value.get("schemaVersion", value.get("schema_version")) == 1
         ):
-            normalized_port = {
-                **normalized_port,
-                "value": canonicalize_world_value_v1(normalized),
+            return {
+                **port_val,
+                "value": canonicalize_world_value_v1(
+                    value, asset_uri_normalizer=lambda uri: _output_url_from_ref(uri) or uri),
             }
-        else:
-            parsed = parse_spatial_value(str(port_type), normalized)
-            normalized_port = {
-                **normalized_port,
-                "value": dump_spatial_value(parsed),
-            }
-    return normalized_port
+        parsed = parse_spatial_value(str(port_type), _normalize_spatial_asset_uris_for_storage(value))
+        return {**port_val, "value": dump_spatial_value(parsed)}
+    normalized = _normalize_nested_output_refs_for_storage(value)
+    return port_val if normalized == value else {**port_val, "value": normalized}
+
+
+def _normalize_spatial_asset_uris_for_storage(value: Any) -> Any:
+    """A spatial value's asset references (``{"id", "uri", "mediaType"}``,
+    models/spatial.py LocalAssetReference) made portable: only each ``uri``
+    string is rewritten; every other string is left exactly as sent."""
+    if isinstance(value, list):
+        return [_normalize_spatial_asset_uris_for_storage(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_spatial_asset_uris_for_storage(item) for item in value)
+    if isinstance(value, dict):
+        return {
+            key: (_output_url_from_ref(item) or item) if key == "uri" and isinstance(item, str)
+            else _normalize_spatial_asset_uris_for_storage(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _normalize_nested_output_refs_for_storage(value: Any) -> Any:
@@ -2687,14 +2707,17 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
-def _run_origin_now(ask: str | None = None) -> run_origin.RunOrigin:
+def _run_origin_now(ask: str | None = None, nodes: list[GraphNode] | None = None) -> run_origin.RunOrigin:
     """Who is starting this run, read as every person-only check reads it
     (_is_person_request): the person's own Run, or the run an Accept
     approved (_check_run_approval: only the person's tab starts it), is the
     person's; anything else is an agent's. The surface names the proposal
     the agent is pointed at; ``ask`` replaces it for a run with no canvas
     node (a quick run)."""
-    return run_origin.RunOrigin(person=_is_person_request(), surface=_surface(), ask=ask)
+    person = _is_person_request()
+    return run_origin.RunOrigin(person=person, surface=_surface(), ask=ask,
+                                names=_run_names(nodes) if nodes is not None else None,
+                                tab=not person and refusal_copy.person_reads())
 
 
 async def _run_graph(*, ask: str | None = None, **kwargs: Any) -> None:
@@ -2702,7 +2725,7 @@ async def _run_graph(*, ask: str | None = None, **kwargs: Any) -> None:
     a call (execution/run_origin.py: an agent's run stops at an Idol node that
     would call Hugging Face with the person's token set; Justin decided,
     2026-10-31). Every run route starts its graph here."""
-    with run_origin.running(_run_origin_now(ask)):
+    with run_origin.running(_run_origin_now(ask, kwargs.get("nodes"))):
         await execute_graph(**kwargs)
 
 
@@ -3349,6 +3372,10 @@ async def _sweep_settings_temp_files() -> None:
         # (GM, PR #203 r38 item 5's fallback: Updates holds agents' notes,
         # which agents list, so it takes no system card yet).
         _settings_notice = {"kind": "restored", "line": line, "path": shown_path(restored.kept)}
+        settings_notice_store.save_notice(_settings_notice)
+    else:
+        # One from an earlier start the person hasn't dismissed (GM r40 item 6).
+        _settings_notice = settings_notice_store.load_notice()
     sweep_stale_temp_files()
 
 
@@ -3368,17 +3395,31 @@ def settings_restored_line(restored: Any) -> str:
     return line.format(kept=shown_path(restored.kept))
 
 
-# DRAFT (round 19, for GM): a verified copy Nebula couldn't put back at start
-# (services/settings.NotRestored; review 18 of PR #203, settings LOW-2), for
-# the server log and the journal (settings.not_restored).
+# A verified copy Nebula couldn't put back at start (services/settings.
+# NotRestored; review 18 of PR #203, settings LOW-2), for the server log and
+# the journal (settings.not_restored). GM, PR #203 r39 item 3, verbatim.
 SETTINGS_NOT_RESTORED = ("Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed "
-                         "to change {path}. It tries again at the next start.")
+                         "to change {path}. It’ll try again the next time Nebula starts.")
+
+
+# GM, PR #203 r40 item 3, verbatim: a copy not put back for any cause other
+# than not being allowed (a full disk, an I/O error, another save).
+SETTINGS_NOT_RESTORED_OTHER = ("Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again "
+                               "the next time Nebula starts.")
 
 
 def settings_not_restored_line(result: Any) -> str:
-    """The settings.not_restored line for a NotRestored: the path that
-    refuses (what settings_write_block found), else the settings file."""
-    where = getattr(result.why, "where", None) or result.path
+    """The settings.not_restored line for a NotRestored, by its cause
+    (review 19 of PR #203, settings LOW-4): "isn’t allowed to change" with
+    the path that refuses (what settings_write_block found, the copy folder,
+    else the settings file) only when Nebula isn't allowed; else the line
+    with no cause."""
+    from services.settings import SettingsUnwritable, _NOT_ALLOWED_ERRNOS
+
+    why = result.why
+    if not isinstance(why, SettingsUnwritable) and getattr(why, "errno", None) not in _NOT_ALLOWED_ERRNOS:
+        return SETTINGS_NOT_RESTORED_OTHER
+    where = getattr(why, "where", None) or result.path
     return SETTINGS_NOT_RESTORED.format(path=shown_path(where))
 
 
@@ -3403,6 +3444,7 @@ async def dismiss_settings_notice() -> dict[str, Any]:
     global _settings_notice
     require_person(current_request_headers())
     _settings_notice = None
+    settings_notice_store.clear_notice()
     return {"notice": None}
 
 
@@ -4150,12 +4192,23 @@ async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
     # The cursor quotes the node like every other bubble; the log has the
     # run's line, whole: Nebula's own line is never cut (GM, PR #203 r33 item 2).
     # Needs say r34's form (GM r38 item 1); any other line is named once by
-    # the node's own name (_bubble_line, GM r38 item 2).
+    # the node's own name (_bubble_line, GM r38 item 2). A needs or route
+    # bubble is its first sentence, which names what's needed or wrong; the
+    # action sentence is on the card and in the log (GM, PR #203 r39 item 5).
     needs = _bubble_needs(first, errors)
-    bubble = f"{_quoted(_node_label(first))} {needs}" if needs else _bubble_line(first, person.get(first) or "")
+    bubble = (_first_sentence(f"{_quoted(_node_label(first))} {needs}") if needs
+              else _bubble_line(first, person.get(first) or ""))
     await _show_agent({"nodeId": first}, say=_whole_sentences(bubble), did=_did("Tried to run", first), log=line,
                       log_whole=True)
     return None
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[“A-Z])")
+
+
+def _first_sentence(line: str) -> str:
+    """A line's first sentence (a size's dot or a quoted name never ends one)."""
+    return _SENTENCE_END.split(line, maxsplit=1)[0]
 
 
 def _whole_sentences(line: str) -> str:
@@ -4168,7 +4221,7 @@ def _whole_sentences(line: str) -> str:
     if len(line) <= MAX_SAY_CHARS:
         return line
     kept = ""
-    for sentence in re.split(r"(?<=[.!?])\s+(?=[“A-Z])", line):
+    for sentence in _SENTENCE_END.split(line):
         joined = f"{kept} {sentence}" if kept else sentence
         if len(joined) > MAX_SAY_CHARS:
             break
@@ -4176,13 +4229,11 @@ def _whole_sentences(line: str) -> str:
     return kept or line
 
 
-def _bubble_line(node_id: str, line: str) -> str:
-    """A card line in the cursor bubble, named once by the node's name
-    (_node_label: the person's label when it was renamed, else its type's
-    name; never both; GM, PR #203 r38 item 2): a line that opens with the
-    quoted label or type name says the predicate after the node's name
-    ("“Hero shot” can’t run on fal.ai with “Resolution” set to 1.5K. …");
-    any other line follows "“Hero shot” can’t run."."""
+def _named_line(node_id: str, line: str) -> str:
+    """A line that opens with the node's quoted type name, opening with its
+    own name instead (_node_label: the person's label when it was renamed,
+    else its type's name; never both; GM, PR #203 r38 item 2, r39 item 8).
+    Any other line is returned as it is."""
     named = _quoted(_node_label(node_id))
     node = cli_graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
@@ -4191,6 +4242,19 @@ def _bubble_line(node_id: str, line: str) -> str:
     for opening in (named, _quoted(type_name)):
         if line.startswith(opening):
             return named + line[len(opening):]
+    return line
+
+
+def _bubble_line(node_id: str, line: str) -> str:
+    """A card line in the cursor bubble, named once by the node's name
+    (_named_line): a line that opens with the name is its first sentence,
+    which says what's wrong ("“Hero shot” can’t run on fal.ai with
+    “Resolution” set to 1.5K."; GM, PR #203 r39 item 5); any other line
+    follows "“Hero shot” can’t run."."""
+    named = _quoted(_node_label(node_id))
+    own = _named_line(node_id, line)
+    if own.startswith(named):
+        return _first_sentence(own)
     return f"{named} can’t run." + (f" {line}" if line else "")
 
 
@@ -4198,23 +4262,19 @@ def _bubble_needs(node_id: str, errors: list[ValidationErrorDetail]) -> str | No
     """The bubble's words after the node's name when all it needs is inputs
     connected and maybe its key (person_line.needs_bubble, GM r38 item 1),
     its inputs in the node's input order; None for any other stop."""
-    from execution.person_line import key_phrase, needs_bubble
+    from execution.person_line import needs_bubble
 
     own = [error for error in errors if error.node_id == node_id]
     unwired = [error for error in own if error._stop == "input"]
-    keyed = [error for error in own if error.message.startswith(_MISSING_KEY)]
+    # A stop that is only its key (a plain key check, or a routed node's
+    # route with no key set; review 19 of PR #203, MEDIUM-1), its words set
+    # where the check is made (ValidationErrorDetail._key).
+    keyed = [error for error in own if error._key]
     if not unwired or len(unwired) + len(keyed) != len(own) or len(keyed) > 1:
         return None
     order = _input_order(node_id)
     unwired.sort(key=lambda error: order.get(error.port_id, len(order)))
-    key = key_phrase(keyed[0].message[len(_MISSING_KEY):].split(" or ")) if keyed else None
-    if keyed and key is None:
-        return None
-    return needs_bubble([error._need or "" for error in unwired], key)
-
-
-# The pre-run check's missing-key message (engine.validate_graph), before its key names.
-_MISSING_KEY = "Missing API key: "
+    return needs_bubble([error._need or "" for error in unwired], keyed[0]._key if keyed else None)
 
 
 # ---------- WebSocket endpoint ----------
@@ -6140,7 +6200,15 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
         # a provider quoted (services/key_echoes.py) before cutting to 200, so
         # a key cut short can't slip under the 8-character run check.
-        if isinstance(event, ErrorEvent):
+        stopped = isinstance(event, ErrorEvent) and event.proposal_needed
+        if stopped:
+            # A stop at a call only the person may make (Idol's Hugging Face
+            # call with their token): marked, with the agent's words whole, so
+            # an agent reading later learns to propose (review 19 of PR #203,
+            # LOW-2). Nebula wrote them; they carry no key.
+            data["proposalNeeded"] = True
+            data["error"] = str(_journal_safe_value(event.error or "", key="error"))[:600]
+        elif isinstance(event, ErrorEvent):
             error = _hide_key_echoes(event.friendly or event.error or "", _agent_key_secrets())
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
         if isinstance(event, SkippedEvent):
@@ -6152,7 +6220,7 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
             kind,
             node_id=node_id,
             data=data,
-            summary=f"{_node_label(node_id)} ({node_id}) {_RUN_EVENT_VERBS[kind]}",
+            summary=f"{_node_label(node_id)} ({node_id}) {'stopped' if stopped else _RUN_EVENT_VERBS[kind]}",
             actor=canvas_events.run_actor(run_id),
             project_id=_run_project(),
         )
@@ -6533,6 +6601,8 @@ async def get_canvas_snapshot() -> dict[str, Any]:
             node["error"] = _hide_key_echoes(failed["error"], key_words)
             if failed.get("hint"):
                 node["errorHint"] = failed["hint"]
+            if failed.get("stopped"):
+                node["stopped"] = failed["stopped"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
     snapshot["events"] = {"journal": canvas_events.journal_id, "cursor": canvas_events.latest}
     # The person's notes for agents: open pins first, plus recent replies.
@@ -10323,7 +10393,7 @@ SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE = {
 SETTINGS_BUSY = "Nothing was saved because another Nebula is saving your settings. Try again in a moment."
 SETTINGS_BUSY_CODE = "settings_busy"
 SETTINGS_BUSY_FIX = {"person": "Try again in a moment.", "agent": "Try again in a moment."}
-# DRAFT (round 19, for GM): a folder at one of the save's fixed file names
+# GM, PR #203 r39 item 2, as drafted: a folder at one of the save's fixed file names
 # (the temp file beside settings.json, the copy or its temp; review 18 of PR
 # #203, settings NIT-1), named by its path.
 SETTINGS_IN_THE_WAY = {
@@ -12927,9 +12997,11 @@ async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> N
         # GM: "A failed run gets a card, plus the Agent log line."
         try:
             # A stop for a proposal: the Agent log keeps the whole line, the
-            # bubble the first MAX_SAY_CHARS (round 19, Justin's Idol gate).
-            whole = {"log": text, "log_whole": True} if run.stopped else {}
-            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=text, **whole))
+            # bubble its whole sentences that fit, never a cut word (GM, PR
+            # #203 r39 item 5; review 19, LOW-2).
+            whole = {"log": text, "log_whole": True} if run.stopped else {"log": text}
+            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=_whole_sentences(text),
+                                               **whole))
         except Exception:  # noqa: BLE001 - decoration must not break the run
             pass
 
@@ -19127,6 +19199,8 @@ async def _execute_cli_run(
                 outcome.setdefault("notes", {})[event.node_id] = list(event.notes)
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+            if event.proposal_needed:
+                outcome.setdefault("stopped", {})[event.node_id] = STOPPED_FOR_PROPOSAL
         elif isinstance(event, SkippedEvent):
             skipped[event.node_id] = event.reason
             gated.add(event.node_id)
@@ -19193,6 +19267,9 @@ async def _execute_cli_run(
         "skipped": skipped,
         # Per node, what each run said beside its outputs (the size a maker made).
         **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
+        # A node stopped at a call only the person may make, marked so an
+        # agent reads it as "propose", not a failure (review 19, NIT-4).
+        **({"stopped": outcome["stopped"]} if outcome.get("stopped") else {}),
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
     }
@@ -19253,9 +19330,7 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     if result.get("errors"):
         # As the canvas's run status says (execution_runs: a node error makes
         # the run "failed"). Outputs of the nodes that finished are still here.
-        failed = list(result["errors"])
-        error = (f"{failed[0]} failed: {result['errors'][failed[0]]}" if len(failed) == 1
-                 else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+        error = one_line_error(result["errors"], result.get("stopped"))
         return {**head, "status": "failed", "error": error, **result}
     return {**head, "status": "finished", **result}
 
@@ -19347,9 +19422,7 @@ async def _canvas_run_response(run_id: str, wait: float) -> dict[str, Any]:
             status = "failed"
     response = {**head, "status": status, **made, "nodesExecuted": nodes_executed}
     if status == "failed" and made["errors"]:
-        failed = list(made["errors"])
-        response["error"] = (f"{failed[0]} failed: {made['errors'][failed[0]]}" if len(failed) == 1
-                             else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+        response["error"] = one_line_error(made["errors"], made.get("stopped"))
     elif status == "failed":
         # The run raised before any node reported. Its exception stays in
         # Nebula's log: its text can be anything, a provider's reply included.

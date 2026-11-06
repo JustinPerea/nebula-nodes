@@ -155,10 +155,20 @@ class ValidationErrorDetail(BaseModel):
     # label). None for any other stop: the log says its card line.
     _stop: str | None = PrivateAttr(default=None)
     _need: str | None = PrivateAttr(default=None)
+    # A stop that is only a missing key: the key as a need, with its
+    # determiner ("your fal.ai API key", "a key for one of its 4 providers";
+    # person_line.needs_key), so a node's inputs and its key say one line
+    # (GM, PR #203 r38 item 1, r40 item 1). Set where the check is made.
+    _key: str | None = PrivateAttr(default=None)
 
     def marked(self, stop: str, need: str | None = None) -> "ValidationErrorDetail":
         """This check, marked with its kind of stop (``_stop``)."""
         self._stop, self._need = stop, need
+        return self
+
+    def keyed(self, key: str | None) -> "ValidationErrorDetail":
+        """This check, a stop for its missing key only (``_key``)."""
+        self._key = key
         return self
 
 

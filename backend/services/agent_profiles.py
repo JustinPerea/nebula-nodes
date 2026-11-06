@@ -196,6 +196,18 @@ def protected_agent_dirs() -> list[Path]:
             app_token_file.root(state_root), agent_token_file.root(state_root), settings_copy_folder()]
 
 
+def secret_dirs() -> list[Path]:
+    """Folders no agent may read, beside the settings file and in the state
+    folder, that are no grant's concern (never in protected_agent_dirs, so a
+    grant of the folder holding settings.json works as before): the judging
+    folders, where a save without the lock moves another save's temp file
+    for a moment to check it before removing it, keys included
+    (services/settings.judging_folders; round 20 of PR #203)."""
+    from services.settings import judging_folders
+
+    return judging_folders()
+
+
 def agent_read_grants(*, output_root: Path, workdir: Path, protected: list[Path]) -> list[Path]:
     """The extra directories (`--add-dir`) for one agent turn.
 

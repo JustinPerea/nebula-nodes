@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { FailureLines } from '../../failure/FailureLines';
 import { PERSON_PROMOTED_EVENT } from '../../../lib/personSession';
-import { dismissSettingsNotice, getSettingsNotice, noticeParts, type SettingsNotice } from '../../../lib/settingsNotice';
+import { DISMISS_FAILED, dismissSettingsNotice, getSettingsNotice, noticeParts, type SettingsNotice } from '../../../lib/settingsNotice';
 
 /**
  * Nebula restored the settings at start: the person sees B6b's line once, at
@@ -9,6 +10,7 @@ import { dismissSettingsNotice, getSettingsNotice, noticeParts, type SettingsNot
  */
 export function SettingsTopNotice({ visible }: { visible: boolean }) {
   const [notice, setNotice] = useState<SettingsNotice | null>(null);
+  const [dismissFailed, setDismissFailed] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -25,12 +27,20 @@ export function SettingsTopNotice({ visible }: { visible: boolean }) {
   const { before, path, after } = noticeParts(notice);
   return (
     <div className="settings-top-notice" role="status">
-      <p className="settings-top-notice__line">
-        {before}{path && <code className="settings-top-notice__path">{path}</code>}{after}
-      </p>
+      <div className="settings-top-notice__body">
+        <p className="settings-top-notice__line">
+          {before}{path && <code className="settings-top-notice__path">{path}</code>}{after}
+        </p>
+        {dismissFailed && (
+          <p className="settings-row__error settings-top-notice__error" role="alert"><FailureLines failure={DISMISS_FAILED} /></p>
+        )}
+      </div>
       <button type="button" className="settings-top-notice__dismiss" onClick={() => {
+        const shown = notice;
         setNotice(null);
-        void dismissSettingsNotice().catch(() => {});
+        setDismissFailed(false);
+        // Not dismissed: the line comes back with why (GM, PR #203 r40 item 4).
+        void dismissSettingsNotice().catch(() => { setNotice(shown); setDismissFailed(true); });
       }}>Dismiss</button>
     </div>
   );

@@ -270,6 +270,35 @@ def key_phrase(keys: Iterable[str]) -> str | None:
     return _or_list([f"{provider} {kind}" for provider, kind in names])  # type: ignore[misc]
 
 
+def needs_key(keys: Iterable[str], *, routed: bool = False) -> str | None:
+    """A missing key as one need among a node's needs, with its determiner:
+    "your Anthropic API key". A routed node's key names each route's key
+    the way its route line does, "your Black Forest Labs API key or fal.ai
+    API key", and from 4 providers counts them, "a key for one of its 4
+    providers" (GM, PR #203 r40 item 1). None when a name isn't a key
+    Settings stores."""
+    keys = list(dict.fromkeys(keys))
+    names = [KEY_NAMES.get(key) for key in keys]
+    if not names or any(name is None for name in names):
+        return None
+    if not routed:
+        return f"your {key_phrase(keys)}"
+    if len(names) >= 4:
+        return f"a key for one of its {len(names)} providers"
+    return "your " + _or_list([f"{provider} {kind}" for provider, kind in names])  # type: ignore[misc]
+
+
+# A Krea sign-in as one need among a node's needs (a draft for GM, PR #203
+# round 20): the card says "sign in to Krea", the bubble "a Krea sign-in".
+KREA_SIGN_IN_NEED = "a Krea sign-in"
+
+
+def _add_need(key: str) -> str:
+    """The card's verb for a key need: "add your fal.ai API key"; "sign in
+    to Krea" for the Krea sign-in."""
+    return "sign in to Krea" if key == KREA_SIGN_IN_NEED else f"add {key}"
+
+
 def key_line(keys: Iterable[str]) -> str | None:
     """The line for a run that stopped at its own key check."""
     phrase = key_phrase(keys)
@@ -736,7 +765,8 @@ def needs_card_line(labels: Iterable[object], key: str | None = None) -> str | N
       to “Text 1”, then run it again.");
     - an input and a key: "Connect the prompt and add your Anthropic API key
       in Settings, then run it again." (two or more inputs: "Connect the
-      prompt and the image, and add …").
+      prompt and the image, and add …"; ``key`` is needs_key's words, so a
+      routed node's reads "add a key for one of its 4 providers").
 
     None when there is only one need: its own line stands."""
     labels = list(labels)
@@ -750,7 +780,7 @@ def needs_card_line(labels: Iterable[object], key: str | None = None) -> str | N
         return f"Connect {and_list(items)}{where}, then run it again."
     items = _once(_connect_item(label, definite=True) for label in labels)
     joined = and_list(items) + ("," if len(items) > 1 else "")
-    return f"Connect {joined} and add your {key} in Settings, then run it again."
+    return f"Connect {joined} and {_add_need(key)} in Settings, then run it again."
 
 
 def needs_bubble(labels: Iterable[object], key: str | None = None) -> str | None:
@@ -766,7 +796,8 @@ def needs_bubble(labels: Iterable[object], key: str | None = None) -> str | None
         return input_needs(labels).one
     items = _once(_connect_item(label, definite=True) for label in labels)
     joined = and_list(items) + ("," if len(items) > 1 else "")
-    return f"needs {and_list([*need_words(labels), f'your {key}'])}. Connect {joined} and add the key in Settings."
+    then = "sign in to Krea" if key == KREA_SIGN_IN_NEED else "add the key"
+    return f"needs {and_list([*need_words(labels), key])}. Connect {joined} and {then} in Settings."
 
 
 def _need_words(label: object) -> str:

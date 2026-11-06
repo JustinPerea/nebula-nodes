@@ -461,6 +461,12 @@ body.app-slava-restraint .settings-row__error {
   font-size: var(--sr-type-label);
 }
 
+/* A line that lost nothing (another Nebula is saving the settings): the
+   row's normal muted text, not the error colour (GM, PR #203 r39). */
+body.app-slava-restraint .settings-row__error--neutral {
+  color: var(--sr-ink-meta);
+}
+
 /* Key field */
 body.app-slava-restraint .settings-key {
   display: flex;
@@ -895,6 +901,10 @@ body.app-slava-restraint .settings-top-notice {
 }
 
 body.app-slava-restraint .settings-top-notice__line { margin: 0; }
+
+/* The line, and under it why a Dismiss didn't land (GM, PR #203 r40 item 4). */
+body.app-slava-restraint .settings-top-notice__body { min-width: 0; }
+body.app-slava-restraint .settings-top-notice__error { margin: var(--sr-space-2) 0 0; }
 
 body.app-slava-restraint .settings-top-notice__path {
   font-family: var(--sr-mono);

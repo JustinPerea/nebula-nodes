@@ -358,8 +358,9 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     # The agent's cursor on the canvas says the person's line, not the keys.
     [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "needs" in str(m.get("say"))]
     assert "OPENAI_API_KEY" not in said and "'prompt'" not in said
-    # GM, PR #203 r38 item 1: the needs in r34's form, the bubble with no "then run it again".
-    assert said.endswith("needs a prompt and your OpenAI API key. Connect the prompt and add the key in Settings.")
+    # GM, PR #203 r39 item 5: the bubble says the needs sentence only (r38 kept the "Connect ..." second sentence).
+    assert said.endswith("needs a prompt and your OpenAI API key.")
+    assert "Connect the prompt" not in said
 
 
 def test_a_validation_event_serializes_its_person_line():

@@ -5,6 +5,7 @@ import { useUIStore } from '../../../store/uiStore';
 import { saveField } from '../../../lib/settingsWrites';
 import { isBackendOffline } from '../../../lib/backendConnection';
 import { SwitchRow } from './Switch';
+import { SettingsRowError } from './SettingsRowError';
 
 type FolderField = 'outputPath' | 'exportFolder';
 
@@ -89,7 +90,7 @@ function FolderField({ field, label, saved, placeholder, hint }: {
             aria-label={`Choose ${label.toLowerCase()} folder`}>Choose…</button>
         )}
       </div>
-      {(error || chooseError) && <p className="settings-row__error" role="alert">{error ?? chooseError}</p>}
+      <SettingsRowError id={field} message={error ?? chooseError} />
       <p className="settings-hint settings-folder__hint" id={hintId}>{hint}</p>
     </div>
   );
@@ -123,7 +124,7 @@ export function StorageTab({ saved }: { saved: SettingsDraft }) {
             checked={saved.zoomTelemetryEnabled} disabled={telemetryPending}
             onChange={(enabled) => void saveField('zoomTelemetryEnabled', enabled)} />
         </div>
-        {telemetryError && <p className="settings-row__error" role="alert">{telemetryError}</p>}
+        <SettingsRowError id="zoomTelemetryEnabled" message={telemetryError} />
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
-import { nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
+import { WAITING_CATEGORY, nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
 import type { NodeData } from '../../types';
 
 interface NodeErrorProps {
@@ -39,9 +39,11 @@ interface NodeErrorProps {
 export function NodeError({ category, friendly, person, providerText, provider, surface, heading, notStarted, raw, className = 'model-node__error' }: NodeErrorProps) {
   const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading, notStarted });
   const blocked = category === 'blocked' && !person;
-  const modifier = `${className.split(' ').at(-1)}--blocked`;
+  // A stop that waits for the person is a notice, not an error (GM, PR #203 r39 item 1).
+  const tone = category === WAITING_CATEGORY ? 'waiting' : blocked ? 'blocked' : null;
+  const modifier = `${className.split(' ').at(-1)}--${tone}`;
   return (
-    <div className={blocked ? `${className} ${modifier}` : className}>
+    <div className={tone ? `${className} ${modifier}` : className}>
       <span className="model-node__error-message">
         {copy.heading ? <FailureLines failure={copy} /> : copy.reason}
       </span>

@@ -66,7 +66,8 @@ from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
 from execution.run_origin import ProposalNeeded
-from execution.person_line import (carries_provider_text, is_job_failure, missing_file_line, missing_key_line,
+from execution.person_line import (KREA_SIGN_IN_NEED, carries_provider_text, is_job_failure, missing_file_line,
+                                   missing_key_line, needs_key,
                                    person_line, port_line, with_person_line)
 from execution.provider_status import card_line
 
@@ -854,6 +855,21 @@ def _krea_plan_ready() -> bool:
         return False
 
 
+def _renamed(node: GraphNode, definition: Mapping[str, Any], name_of: Callable[[str], str] | None) -> str | None:
+    """The node's own name when the person renamed it (``name_of``: the
+    run's names, main._run_names), else None: a card line then names it by
+    its type, as before (GM, PR #203 r39 item 8)."""
+    from services import node_route
+
+    if name_of is None:
+        return None
+    try:
+        own = name_of(node.id)
+    except Exception:  # noqa: BLE001 - a name never turns a refusal into another error
+        return None
+    return own if own and own != node_route.node_name(definition, None, node.id) else None
+
+
 def validate_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
@@ -866,7 +882,6 @@ def validate_graph(
     errors: list[ValidationErrorDetail] = []
     # Each node's missing key (key names), for its one combined card line
     # (_combine_needs; GM, PR #203 r38 item 1).
-    missing_keys: dict[str, tuple[ValidationErrorDetail, list[str]]] = {}
     errors.extend(unchosen_model_errors(nodes, edges, api_keys, name_of=name_of))
     errors.extend(_iterator_validation_errors(nodes, edges))
 
@@ -925,9 +940,8 @@ def validate_graph(
                     port_id="",
                     message=f"Missing API key: {env_key}",
                     person=missing_key_line([env_key]),
-                ).marked("reason")
+                ).marked("reason").keyed(needs_key([env_key]))
                 errors.append(missing)
-                missing_keys[node.id] = (missing, [env_key])
             continue
 
         for port in node_def["inputPorts"]:
@@ -967,7 +981,8 @@ def validate_graph(
                     node_id=node.id, port_id="",
                     message="Sign in to Krea in Settings before running this recipe",
                     # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
-                    person="Sign in to Krea in Settings, then run the node again.").marked("reason"))
+                    person="Sign in to Krea in Settings, then run the node again.").marked("reason")
+                    .keyed(KREA_SIGN_IN_NEED))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never
@@ -976,9 +991,16 @@ def validate_graph(
             routed = node_route.with_wired_blockers(node_def, node.params, wired)
             unavailable = node_route.route_unavailable(node_def, routed, api_keys)
             if unavailable is not None:
+                # Only a key, with nothing else to switch to: a need like any
+                # other key's, so the node's inputs and it say one line (GM,
+                # PR #203 r38 item 1; review 19 of the PR, MEDIUM-1).
+                key_only = (unavailable["block"] is None and unavailable["missing"] and not unavailable["alternatives"]
+                            and node_route.own_missing_key_line(node_def, routed, api_keys) is None)
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="", message=unavailable["message"],
-                    person=node_route.route_unavailable_line(node_def, routed, api_keys)).marked("reason"))
+                    person=node_route.route_unavailable_line(node_def, routed, api_keys,
+                                                             name=_renamed(node, node_def, name_of))).marked("reason")
+                    .keyed(needs_key(unavailable["missing"], routed=True) if key_only else None))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             missing = ValidationErrorDetail(
@@ -986,9 +1008,8 @@ def validate_graph(
                 port_id="",
                 message=f"Missing API key: {key_display}",
                 person=missing_key_line(key_names),
-            ).marked("reason")
+            ).marked("reason").keyed(needs_key(key_names))
             errors.append(missing)
-            missing_keys[node.id] = (missing, list(key_names))
 
         if node.definition_id == "gemini-omni-flash":
             prompt = ""
@@ -1031,29 +1052,30 @@ def validate_graph(
                     )
                 )
 
-    _combine_needs(errors, missing_keys)
+    _combine_needs(errors)
     return errors
 
 
-def _combine_needs(errors: list[ValidationErrorDetail],
-                   missing_keys: Mapping[str, tuple[ValidationErrorDetail, list[str]]]) -> None:
+def _combine_needs(errors: list[ValidationErrorDetail]) -> None:
     """A node with several needs (inputs with no wire, and its missing key)
     says them in one card line, ending once (GM, PR #203 r38 item 1;
     person_line.needs_card_line): each of those checks carries that line,
     so the card (each line once) reads it once. One need keeps its own."""
-    from execution.person_line import key_phrase, needs_card_line
+    from execution.person_line import needs_card_line
 
     inputs: dict[str, list[ValidationErrorDetail]] = {}
+    keyed: dict[str, ValidationErrorDetail] = {}
     for error in errors:
         if error._stop == "input":
             inputs.setdefault(error.node_id, []).append(error)
+        elif error._key:
+            keyed.setdefault(error.node_id, error)
     for node_id, unwired in inputs.items():
-        missing = missing_keys.get(node_id)
-        key = key_phrase(missing[1]) if missing is not None else None
-        line = needs_card_line([error._need or "" for error in unwired], key)
+        missing = keyed.get(node_id)
+        line = needs_card_line([error._need or "" for error in unwired], missing._key if missing else None)
         if line is None:
             continue
-        for error in [*unwired, *([missing[0]] if missing is not None and key else [])]:
+        for error in [*unwired, *([missing] if missing is not None else [])]:
             error.person = line
 
 
@@ -1709,6 +1731,11 @@ async def _execute_graph(
             # the shared table, naming the provider this run called (error
             # copy round 3d, execution/provider_status.py).
             card = card_line(exc, node.definition_id, node.params, api_keys)
+            if isinstance(exc, ProposalNeeded):
+                # A stop by design, not a failure (GM, PR #203 r39 item 1): the
+                # style, over the person's line. No classifier line: every
+                # agent reader (run records, the journal) reads the agent's words.
+                category, friendly, retryable = "waiting", None, False
             await emit(
                 ErrorEvent(
                     node_id=nid,

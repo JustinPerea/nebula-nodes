@@ -252,9 +252,19 @@ def _size(data: Any) -> int:
     return len(json.dumps(data, ensure_ascii=False, default=str))
 
 
+# A run.failed entry for a stop at a call only the person may make carries
+# Nebula's own words to the agent whole, so it learns to propose (review 19
+# of PR #203, LOW-2): those run past MAX_VALUE_CHARS.
+MAX_STOP_ERROR_CHARS = 600
+
+
 def _bound_data(data: Mapping[str, Any] | None) -> dict[str, Any]:
     """Cap strings, then shrink anything still over MAX_EVENT_BYTES."""
-    bounded = _cap_strings(dict(data or {}))
+    data = dict(data or {})
+    stop_error = data.pop("error", None) if data.get("proposalNeeded") is True else None
+    bounded = _cap_strings(data)
+    if isinstance(stop_error, str):
+        bounded["error"] = stop_error[:MAX_STOP_ERROR_CHARS]
     if _size(bounded) <= MAX_EVENT_BYTES:
         return bounded
     if "values" in bounded:

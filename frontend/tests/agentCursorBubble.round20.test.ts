@@ -15,12 +15,21 @@ const value = (body: string, property: string) => new RegExp(`(?:^|[;\\s])${prop
 describe("the cursor bubble's pill", () => {
   const tag = rule('.agent-cursor__name');
   const pill = rule('.agent-cursor__say');
-  it('the same height as the name tag (line height and vertical padding) and the same radius', () => {
+  it("one line is the name tag's pill: its line height and vertical padding, a radius of half that height", () => {
     expect(value(pill, 'line-height')).toBe(value(tag, 'line-height'));
     expect(value(pill, 'padding')?.split(/\s+/)[0]).toBe(value(tag, 'padding')?.split(/\s+/)[0]);
-    expect(value(pill, 'border-radius')).toBe(value(tag, 'border-radius'));
-    // One line: a second would make it taller than the tag.
-    expect(value(pill, 'white-space')).toBe('nowrap');
+    const height = Number.parseFloat(value(tag, 'line-height') ?? '') + 2 * Number.parseFloat(value(tag, 'padding') ?? '');
+    expect(value(pill, 'border-radius')).toBe(`${height / 2}px`);
+  });
+  it('GM, PR #203 r39 item 5: it wraps to two lines at its max width before any ellipsis', () => {
+    expect(value(pill, 'white-space')).toBe('normal');
+    expect(value(pill, '-webkit-line-clamp')).toBe('2');
+    expect(value(pill, 'line-clamp')).toBe('2');
+    expect(value(pill, 'display')).toBe('-webkit-box');
+    expect(value(pill, '-webkit-box-orient')).toBe('vertical');
+    expect(value(pill, 'max-width')).toBe('260px');
+    // Its own width up to that, never the cursor's narrow box (found live, round 20).
+    expect(value(pill, 'width')).toBe('max-content');
   });
   it('a solid dark neutral background: no transparency, no agent colour', () => {
     const background = value(pill, 'background') ?? '';

@@ -35,9 +35,10 @@ from tests.test_canvas_proposals import CLAUDE, KEY, _key, _propose, api  # noqa
 TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
 SIGNED_IN = {"HF_TOKEN": TOKEN}
 CLI = {**CLAUDE, "X-Nebula-Surface": "cli"}
-STOP = "(Idol) stopped before calling Hugging Face: the person's Hugging Face token is set"
-PERSON_LINE = ("An agent’s run stopped here before calling Hugging Face, because your Hugging Face token is set and "
-               "this run could bill your account. Run it yourself to go ahead.")
+# GM, PR #203 r39 item 1 (round 20): the agent's words, then how it asks.
+STOP = speridlabs_idol.agent_stop_text("Idol")
+PERSON_LINE = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only you "
+               "can start that. Run the node yourself to go ahead.")
 
 
 def _space_calls(hosts) -> list[str]:
@@ -92,15 +93,16 @@ def test_an_agents_run_that_must_call_stops_before_any_request(world, headers, p
     assert world.after not in body["results"] and world.after not in body["errors"]
     assert body["status"] == "failed"
     error = body["errors"][world.idol]
-    assert error == (f"{world.idol} {STOP}, so this call can bill their Hugging Face account: a PRO, Team or "
-                     "Enterprise account's prepaid credits are billed past its daily ZeroGPU allowance ($1 per 10 "
-                     "GPU-minutes), a cost Nebula can't see or limit. Nothing was sent, and the nodes after it didn't "
-                     "run. An agent can't make this call. " + propose.format(idol=world.idol))
+    assert error == ("“Idol” wasn’t run. Nodes that call Hugging Face with the person’s token can bill their "
+                     "account, so only the person can run them. Ask them to run “Idol”, or carry on without it. "
+                     + propose.format(idol=world.idol))
     [event] = _errors(world)
     assert event["proposalNeeded"] is True and event["person"] == PERSON_LINE and event["nodeId"] == world.idol
 
 
-DONE = "Claude Code finished 1 of 3 nodes. “Idol” stopped before calling Hugging Face: your token is set, so it waits for you to run it."
+# GM, PR #203 r40 item 7, verbatim (no comma before "because").
+DONE = ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it because it could bill your Hugging "
+        "Face account.")
 
 
 def test_the_runs_other_branches_finish(world):
@@ -115,7 +117,7 @@ def test_the_runs_other_branches_finish(world):
 
 def test_the_agents_done_card_and_agent_log_say_it_stopped(world):
     _run(world, CLAUDE)
-    [line] = [m for m in world.sent if m.get("type") == "agentPresence" and "stopped before" in (m.get("say") or "")]
+    [line] = [m for m in world.sent if m.get("type") == "agentPresence" and "is waiting for you" in (m.get("say") or "")]
     # The bubble fits it whole, and the Agent log keeps it whole for any agent's name.
     assert line["say"] == DONE and line["log"] == DONE
 
@@ -123,13 +125,13 @@ def test_the_agents_done_card_and_agent_log_say_it_stopped(world):
 def test_the_done_card_line_for_a_run_of_idol_alone():
     labels = {"n1": "Idol"}
     assert run_done_cards.done_text("Codex", labels, ["n1"], succeeded=[], failed=["n1"], stopped=["n1"]) == (
-        "Codex's run of “Idol” stopped before calling Hugging Face: your token is set, so it waits for you to run "
-        "it.", "failure")
+        "Codex's run didn’t finish. “Idol” is waiting for you to run it because it could bill your Hugging Face "
+        "account.", "failure")
     three = {"n1": "Idol", "n2": "Reroute", "n3": "Reroute"}
     assert run_done_cards.done_text("Codex", three, ["n1", "n2", "n3"], succeeded=[], failed=["n1"],
                                     stopped=["n1"]) == (
-        "Codex's run of 3 nodes didn't finish. “Idol” stopped before calling Hugging Face: your token is set, so it "
-        "waits for you to run it.", "failure")
+        "Codex's run of 3 nodes didn’t finish. “Idol” is waiting for you to run it because it could bill your "
+        "Hugging Face account.", "failure")
     assert run_done_cards.done_text("Codex", labels, ["n1"], succeeded=[], failed=["n1"]) == (
         "Codex's run of “Idol” failed.", "failure")
 
@@ -205,11 +207,7 @@ def test_an_agents_quick_run_stops_and_points_at_a_canvas_node(world, headers, a
     add one, in the reader's own words; a 403, before any request."""
     response = _quick(world, headers)
     assert response.status_code == 403, response.text
-    assert response.json()["detail"] == (
-        "Idol stopped before calling Hugging Face: the person's Hugging Face token is set, so this call can bill "
-        "their Hugging Face account: a PRO, Team or Enterprise account's prepaid credits are billed past its daily "
-        "ZeroGPU allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit. Nothing was sent. An agent "
-        "can't make this call. " + ask)
+    assert response.json()["detail"] == f"{STOP} {ask}"
     assert _space_calls(world.hosts) == []
 
 

@@ -1631,6 +1631,19 @@ def _accepted_values(route: Mapping[str, Any], block: DirectBlock) -> list[str]:
     return [match_value(v) for v in rule.get("values") or []] if isinstance(rule, Mapping) else []
 
 
+_SIZE_LABEL = re.compile(r"\d × \d")
+
+
+def _agent_value(param: Mapping[str, Any] | None, value: str) -> str:
+    """A value as an agent sends it back, with its size after it when its
+    option's label is a size the value doesn't spell: "768sq (768 × 768)"
+    (GM, PR #203 r39: agents get the value they send back; the size label in
+    parens is fine in agent text). Any other value is sent as it is ("1k",
+    "hd")."""
+    label = _option_label(param, value)
+    return f"{value} ({label})" if _SIZE_LABEL.search(label) and label != value else value
+
+
 def _hidden_fix_sentence(definition: Mapping[str, Any], param: str) -> str:
     """How a HIDDEN stop is fixed without a switch: the setting back to its
     default ("Set Safety back to 2", "Turn Draft (fast preview) off"), or
@@ -1678,7 +1691,8 @@ def route_unavailable_message(
         ids = [AUTO] + [str(r.get("id")) for r in routes_of(definition)]
         return f"{name} is set to provider '{block.detail}', which it doesn't have. Choose {_or_list(ids)}."
     if block is not None and spec is not None:
-        values = _accepted_values(spec, block)
+        param = param_definition(definition, str(block.param)) if block.param else None
+        values = [_agent_value(param, value) for value in _accepted_values(spec, block)]
         fix = (_hidden_fix_sentence(definition, str(block.param)) if block.reason == HIDDEN
                else f"Pick {_or_list(values)}, or switch provider." if values
                else "Disconnect the extra inputs, or switch provider." if block.reason == PORTS
@@ -1693,6 +1707,14 @@ def route_unavailable_message(
         return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
                 f"Add it in Settings > Providers, or choose another provider.{also}")
     return f"{name} needs {needed} in Settings > Providers."
+
+
+def own_missing_key_line(definition: Mapping[str, Any], params: Mapping[str, Any] | None,
+                         api_keys: Mapping[str, Any]) -> str | None:
+    """The stopped route's own line for its missing key (missing_key_line_for:
+    Idol's token), or None, for these params and keys."""
+    found = _unavailable_route(definition, params, api_keys)
+    return missing_key_line_for(definition, found[0]) if found is not None else None
 
 
 def _unavailable_route(
@@ -1856,7 +1878,7 @@ def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 
 def route_unavailable_line(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
-    *, title: str | None = None,
+    *, title: str | None = None, name: str | None = None,
 ) -> str | None:
     """route_unavailable's message as the canvas card says it (error copy
     round 3e, GM: no keys, ids or env-var names in what the person reads; a
@@ -1865,7 +1887,9 @@ def route_unavailable_line(
     the run can start. ``title`` names the node as the line's reader sees it
     (the proposal bar's “Name”, node_readiness.instance_missing_line); the
     card names it by its type, in quotes (card_subject), and on Auto with no key set keeps its run
-    line, ", then run the node again" (GM, PR #203 r29 item 1)."""
+    line, ", then run the node again" (GM, PR #203 r29 item 1). ``name``:
+    the node's own name when the person renamed it, quoted in place of its
+    type's (GM, PR #203 r39 item 8: the card and the bubble agree)."""
     from execution.person_line import missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
@@ -1874,7 +1898,7 @@ def route_unavailable_line(
     reason = _route_reason(definition, params, found)
     if reason is None:
         return missing_key_line(found[0].missing) if title is None else None
-    return reason.line(title or card_subject(definition))
+    return reason.line(title or (f"“{name}”" if name else card_subject(definition)))
 
 
 def card_subject(definition: Mapping[str, Any]) -> str:

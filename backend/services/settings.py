@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 import threading
@@ -467,7 +468,8 @@ def save_settings(settings: dict[str, Any]) -> None:
         # The file changed under the save (a symlink swapped in, another
         # file put in its place): decided again, as a new save would be.
         path = settings_file()
-    raise OSError(errno.EAGAIN, "the settings file kept changing during the save", str(path))
+    # Busy, a 409, never a bare 500 (review 19 of PR #203, settings NIT-2).
+    raise SettingsBusy("the settings file kept changing during the save", path)
 
 
 class _InPlaceInstead(Exception):
@@ -720,11 +722,13 @@ def _open_temp(temp: str, *, locked: bool) -> int:
 
     - with the lock (``locked``), a save cut short: removed, then made again;
     - without it (a filesystem that takes no flock), another save in flight
-      while it is younger than STALE_TEMP_SECONDS: never removed. This save
-      waits for it to go, up to LOCK_TIMEOUT_SECONDS, then refuses
+      while it is fresh on the folder's own clock (_stale): never removed.
+      This save waits for it to go, up to LOCK_TIMEOUT_SECONDS, then refuses
       (SettingsBusy), so two saves never share the one name and a rename
-      never puts another save's half-written file in place. An older one
-      is a save cut short, removed as with the lock.
+      never puts another save's half-written file in place. A stale one is
+      a save cut short, removed only while it is still the file judged
+      stale (_remove_judged; review 19 of PR #203, settings LOW-1): a save
+      that made its own temp there since keeps it, and this one waits.
 
     A folder there raises FileExistsError (the caller's 409)."""
     flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
@@ -741,13 +745,13 @@ def _open_temp(temp: str, *, locked: bool) -> int:
             continue  # gone since: make it now
         if stat.S_ISDIR(info.st_mode):
             raise FileExistsError(errno.EEXIST, "a folder is where the temp file goes", temp)
-        if locked or time.time() - info.st_mtime > STALE_TEMP_SECONDS:
+        if locked:
             try:
                 os.unlink(temp)
             except FileNotFoundError:
                 pass
-            if locked:
-                return os.open(temp, flags, 0o600)
+            return os.open(temp, flags, 0o600)
+        if _stale(info, _folder_now(Path(temp).parent)) and _remove_judged(temp, info):
             continue
         if not waited:
             waited = True
@@ -755,6 +759,132 @@ def _open_temp(temp: str, *, locked: bool) -> int:
         if time.monotonic() > deadline:
             raise SettingsBusy("another save's temp file is still being written", temp)
         time.sleep(0.02)
+
+
+# How far ahead of the folder's clock a temp file's time may be before it
+# counts as stale (a clock stepped back, or a server's ahead of ours).
+CLOCK_SLACK_SECONDS = 5.0
+
+
+def _folder_now(folder: Path) -> float:
+    """Now on ``folder``'s own clock (review 19 of PR #203, settings LOW-1):
+    the time a file just made there is stamped with, which on a network
+    mount is the server's, not this machine's. A probe under a temp file's
+    name (agents can't read it; a start sweeps one a kill left), made and
+    removed at once. This machine's clock when the folder takes no file."""
+    probe = folder / f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(probe, flags, 0o600)
+    except OSError:
+        return time.time()
+    try:
+        return os.fstat(fd).st_mtime
+    except OSError:
+        return time.time()
+    finally:
+        os.close(fd)
+        try:
+            os.unlink(probe)
+        except OSError:
+            pass
+
+
+def _stale(info: os.stat_result, now: float) -> bool:
+    """A temp file a save cut short left, judged on its folder's clock
+    (``now``): older than STALE_TEMP_SECONDS, or ahead of it by more than
+    CLOCK_SLACK_SECONDS (review 19 of PR #203, settings LOW-2), which no
+    save in flight can be."""
+    age = now - info.st_mtime
+    return age > STALE_TEMP_SECONDS or age < -CLOCK_SLACK_SECONDS
+
+
+# Where a temp file judged stale is moved to be checked before it is removed
+# (_remove_judged): a folder of Nebula's own beside it, on every agent deny
+# list (judging_folders), since for that moment it may hold another save's
+# whole settings, keys included.
+JUDGING_FOLDER = ".settings-nebula-judging"
+
+
+def judging_folder_for(folder: Path) -> Path:
+    """The judging folder beside the temp files in ``folder``."""
+    return folder / JUDGING_FOLDER
+
+
+def judging_folders() -> list[Path]:
+    """Every judging folder a save or the start sweep may use, as
+    configured and resolved: agents may never read them
+    (agent_profiles.protected_agent_dirs). Never raises."""
+    folders: list[Path] = []
+    for where in (settings_path, _state_dir, settings_file):
+        try:
+            folders.append(where().parent if where is not _state_dir else where())
+        except Exception:  # noqa: BLE001 - a folder that can't be read is listed by the others
+            continue
+    return list(dict.fromkeys(judging_folder_for(folder) for folder in folders))
+
+
+def _judging_folder_fd(parent: Path) -> int | None:
+    """The judging folder beside ``parent``'s temp files, open (made 0700
+    when it isn't there), or None when it can't be had as this user's own
+    folder: the temp then isn't taken, and the save waits (busy)."""
+    folder = judging_folder_for(parent)
+    try:
+        os.mkdir(folder, 0o700)
+    except FileExistsError:
+        pass
+    except OSError:
+        return None
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(folder, flags)
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+    except OSError:
+        info = None
+    if info is None or not stat.S_ISDIR(info.st_mode) or not _owned(info) or info.st_mode & 0o077:
+        os.close(fd)
+        return None
+    return fd
+
+
+def _remove_judged(temp: str | Path, judged: os.stat_result) -> bool:
+    """Remove the temp file judged stale, only while it is still that file
+    (review 19 of PR #203, settings LOW-1): moved to a name of its own in
+    the judging folder beside it (out of agents' reach, on the same
+    filesystem so the move is a rename), checked there by device and inode,
+    then removed. Another file found there (a save that made its own since)
+    is put back under the name, never over a newer one (link, which doesn't
+    replace). True when the judged file is gone."""
+    temp = str(temp)
+    fd = _judging_folder_fd(Path(os.path.dirname(temp) or "."))
+    if fd is None:
+        return False
+    name = f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
+    try:
+        try:
+            os.rename(temp, name, dst_dir_fd=fd)
+        except FileNotFoundError:
+            # Gone since, or the judging folder was swept away under the
+            # move: only the first means the judged file is gone.
+            return not os.path.lexists(temp)
+        try:
+            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return True  # a start sweep took it: it was stale
+        if (info.st_dev, info.st_ino) == (judged.st_dev, judged.st_ino):
+            os.unlink(name, dir_fd=fd)
+            return True
+        try:
+            os.link(name, temp, src_dir_fd=fd, follow_symlinks=False)
+        except OSError:
+            return False  # another is at the name now: this one waits in the judging folder, swept once stale
+        os.unlink(name, dir_fd=fd)
+        return False
+    finally:
+        os.close(fd)
 
 
 def _temp_waiting() -> None:
@@ -1093,9 +1223,12 @@ def _drop_backup(path: Path) -> None:
 class NotRestored(NamedTuple):
     """A verified copy restore_settings_from_backup couldn't put back: the
     settings file (``path``) and why (``why``: what settings_write_block
-    found, or the write's own error). The copy is left for the next start,
-    and nothing is kept aside first (review 18 of PR #203, settings LOW-2);
-    the caller logs and journals it."""
+    found, the copy folder refusing the replaced file, or the write's own
+    error). The copy is left for the next start. A file Nebula isn't
+    allowed to change keeps nothing aside (review 18 of PR #203, settings
+    LOW-2); a write that fails after the replaced file was kept aside keeps
+    it, once however many starts meet it (review 19, settings LOW-4). The
+    caller logs and journals it."""
 
     path: Path
     why: OSError
@@ -1181,13 +1314,27 @@ def _restore(path: Path, locked: bool = True) -> Restored | NotRestored | None:
     block = settings_write_block()
     if block is not None:
         return NotRestored(path, block)
-    aside = _keep_aside(current)
+    try:
+        aside = _keep_aside(current)
+    except OSError as exc:
+        # The copy folder takes no file (review 19 of PR #203, settings
+        # LOW-3): not put back, said like any other, naming that folder.
+        return NotRestored(path, _copy_folder_refusal(exc))
     try:
         _write(path, old, os.lstat(path), backup=False, locked=locked)
     except OSError as exc:
         return NotRestored(path, exc)
     _drop_backup(path)
     return Restored(path, aside, unfinished)
+
+
+def _copy_folder_refusal(exc: OSError) -> OSError:
+    """Why the replaced file couldn't be kept: as it is when it names its
+    place (SettingsUnwritable), else as the copy folder refusing."""
+    if isinstance(exc, SettingsUnwritable) or exc.errno not in _NOT_ALLOWED_ERRNOS:
+        return exc
+    return SettingsUnwritable(exc.errno or errno.EACCES, "the copy folder takes no file", settings_copy_folder(),
+                              "copy_folder")
 
 
 def _cut_short(current: bytes, old: bytes, new: bytes) -> bool:
@@ -1206,24 +1353,25 @@ def _cut_short(current: bytes, old: bytes, new: bytes) -> bool:
 
 def _keep_aside(current: bytes) -> Path:
     """The file a restore replaces, kept in the copy folder (0600, synced)
-    so nothing in it is lost (review 17, settings LOW-2), named by a hash of
-    its bytes (review 18, settings LOW-2): the same file is kept once,
-    however many starts meet it. One already kept under that name is used
-    when it is Nebula's own file with these bytes; anything else there is
-    left, and this one goes under a numbered name."""
+    so nothing in it is lost (review 17, settings LOW-2), once however many
+    starts meet it (review 18, settings LOW-2): a file of Nebula's already
+    kept there with these bytes is used. A new one is named by the time and
+    a random suffix, never by its bytes (review 19 of PR #203, settings
+    NIT-1: the name agents see in ``keptAt`` says nothing about what's in it)."""
     folder = _make_copy_folder()
-    digest = hashlib.sha256(current).hexdigest()[:16]
+    for kept in sorted(folder.glob(f"{REPLACED_PREFIX}*.json")):
+        try:
+            if _read_ours(kept) == current:
+                return kept
+        except OSError:
+            continue
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
-    for n in range(1000):
-        target = folder / f"{REPLACED_PREFIX}{digest}{f'-{n}' if n else ''}.json"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for _ in range(100):
+        target = folder / f"{REPLACED_PREFIX}{stamp}-{secrets.token_hex(4)}.json"
         try:
             fd = os.open(target, flags, 0o600)
         except FileExistsError:
-            try:
-                if _read_ours(target) == current:
-                    return target
-            except OSError:
-                pass
             continue
         try:
             _write_all(fd, current)
@@ -1236,6 +1384,51 @@ def _keep_aside(current: bytes) -> Path:
         _sync_folder(folder)
         return target
     raise OSError(errno.EEXIST, "no free name to keep the replaced settings file", str(folder))
+
+
+# -- the person's Settings notice ---------------------------------------------------------
+
+# The line Settings shows at its top until the person dismisses it (GM, PR
+# #203 r38 item 5, r40 item 6: it lasts across restarts). Kept in the copy
+# folder, out of agents' reach (agent_profiles denies it), never journaled.
+NOTICE_FILE = "settings-notice.json"
+
+
+def save_notice(notice: dict[str, str]) -> None:
+    """Keep ``notice`` until dismissed. Never raises: memory still holds it
+    for this launch."""
+    try:
+        folder = _make_copy_folder()
+        temp = folder / f"{TEMP_PREFIX}{os.getpid()}-{secrets.token_hex(4)}{TEMP_SUFFIX}"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        fd = os.open(temp, flags, 0o600)
+        try:
+            _write_all(fd, json.dumps(notice, ensure_ascii=False).encode("utf-8"))
+            _sync(fd)
+        finally:
+            os.close(fd)
+        os.replace(temp, folder / NOTICE_FILE)
+        _sync_folder(folder)
+    except Exception:  # noqa: BLE001 - this launch still shows it
+        pass
+
+
+def load_notice() -> dict[str, str] | None:
+    """The notice kept until dismissed, or None."""
+    try:
+        raw = json.loads(_read_ours(settings_copy_folder() / NOTICE_FILE))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict) or not all(isinstance(raw.get(key), str) for key in ("kind", "line", "path")):
+        return None
+    return {key: raw[key] for key in ("kind", "line", "path")}
+
+
+def clear_notice() -> None:
+    try:
+        (settings_copy_folder() / NOTICE_FILE).unlink()
+    except OSError:
+        pass
 
 
 # -- one save at a time -------------------------------------------------------------------
@@ -1470,18 +1663,51 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
             continue
     if path is not None:
         candidates += [temp_path_for(path), temp_path_for(backup_path(path))]
-    cutoff = None if locked else (time.time() if now is None else now) - STALE_TEMP_SECONDS
+    # What a judge left in a judging folder (a kill part way): its own
+    # names only, removed where they are once stale, then the folder if empty.
+    judged: list[Path] = []
+    for folder in folders:
+        try:
+            judged += [entry for entry in judging_folder_for(folder).iterdir() if _TEMP_NAME.fullmatch(entry.name)]
+        except OSError:
+            continue
+    # Without the lock, only files stale on their folder's own clock (or
+    # ``now``, a test's), each removed only while it is the file judged.
+    clocks: dict[Path, float] = {}
     for entry in dict.fromkeys(candidates):
         try:
             info = entry.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not _owned(info):
                 continue
-            if cutoff is not None and info.st_mtime > cutoff:
+            if locked:
+                entry.unlink()
+            else:
+                if entry.parent not in clocks:
+                    clocks[entry.parent] = _folder_now(entry.parent) if now is None else now
+                if not _stale(info, clocks[entry.parent]) or not _remove_judged(entry, info):
+                    continue
+            removed.append(entry)
+        except OSError:
+            continue
+    for entry in judged:
+        try:
+            info = entry.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not _owned(info):
                 continue
+            if not locked:
+                if entry.parent not in clocks:
+                    clocks[entry.parent] = _folder_now(entry.parent.parent) if now is None else now
+                if not _stale(info, clocks[entry.parent]):
+                    continue
             entry.unlink()
             removed.append(entry)
         except OSError:
             continue
+    for folder in folders:
+        try:
+            judging_folder_for(folder).rmdir()
+        except OSError:
+            pass
     _move_legacy_copies(state)
     return removed
 

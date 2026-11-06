@@ -8,6 +8,7 @@ import { KREA_ROW, type RowTone } from './rowHelpers';
 import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { SettingsRowError } from './SettingsRowError';
 
 const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTone }> = {
   disconnected: { label: 'Not signed in', tone: 'idle' },
@@ -87,7 +88,7 @@ function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      <SettingsRowError id="kreaConnectionMode" message={error} />
       <p className="settings-hint">Nodes you already placed keep their connection.</p>
     </div>
   );

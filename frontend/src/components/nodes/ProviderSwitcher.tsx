@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
-import { routeSwitch } from '../../lib/directRoute';
+import { renamedLabel, routeSwitch } from '../../lib/directRoute';
 import { applyFix, applyProviderPick, providerSwitchState, setupButtonWords, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
 import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
@@ -43,12 +43,16 @@ interface ProviderSwitcherProps {
   onPick: PickHandler;
   /** Wired input ports and how many edges reach each (runScope.nodeWiredCounts). */
   wired?: ReadonlyMap<string, number>;
+  /** The node's label: a renamed node's stop line names it (renamedLabel). */
+  label?: string;
 }
 
 const NO_WIRES: ReadonlyMap<string, number> = new Map();
 
-export function ProviderSwitcher({ definition, params, variant, onPick, wired = NO_WIRES }: ProviderSwitcherProps) {
-  const context = useSwitchContext(wired);
+export function ProviderSwitcher({ definition, params, variant, onPick, wired = NO_WIRES, label }: ProviderSwitcherProps) {
+  const shared = useSwitchContext(wired);
+  const name = renamedLabel(definition, label);
+  const context = useMemo(() => (name ? { ...shared, name } : shared), [shared, name]);
   const state = useMemo(() => providerSwitchState(definition, params, context), [definition, params, context]);
   const pick = useCallback((row: Pick<ProviderRow, 'writes' | 'routeId'>) => {
     const result = applyProviderPick(definition, params, row, context);

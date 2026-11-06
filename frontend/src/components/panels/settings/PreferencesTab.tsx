@@ -4,6 +4,7 @@ import { RUN_COST_CONFIRM_CHOICES, useUIStore } from '../../../store/uiStore';
 import { AgentSpendSection } from './AgentSpendSection';
 import { PersonalAgentsSection } from './PersonalAgentsSection';
 import { SwitchRow } from './Switch';
+import { SettingsRowError } from './SettingsRowError';
 
 function usd(value: number) {
   return value < 1 ? `$${value.toFixed(2)}` : `$${value}`;
@@ -52,7 +53,7 @@ export function PreferencesTab() {
               <option value="off">Never</option>
             </select>
           </div>
-          {costError && <p className="settings-row__error" role="alert">{costError}</p>}
+          <SettingsRowError id="runCostConfirmUsd" message={costError} />
           <SwitchRow title="Job notifications" description="When a run finishes in a background tab, or after a long run"
             checked={ui.notificationPrefs.enabled} onChange={(enabled) => ui.setNotificationPrefs({ enabled })} />
           {ui.notificationPrefs.enabled && (

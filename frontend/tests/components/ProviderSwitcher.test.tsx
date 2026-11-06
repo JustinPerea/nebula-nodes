@@ -417,6 +417,8 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     // there; a Krea token now moves Auto to Krea, which doesn't offer it.
     withKeys({ FAL_KEY: KEY, KREA_API_TOKEN: KEY });
     selectNode('krea-3', { reasoning_level: 'medium' });
+    // selectNode titles the card by its id (a rename, which a line would quote, r39 item 8); this one is untitled.
+    useGraphStore.setState({ nodes: [{ ...useGraphStore.getState().nodes[0], data: { ...useGraphStore.getState().nodes[0].data, label: 'Krea 3' } }] });
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
     expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · Krea doesn’t take “Reasoning level”");

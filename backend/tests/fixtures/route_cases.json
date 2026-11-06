@@ -7590,7 +7590,7 @@
           "replicate"
         ],
         "fixes": [],
-        "message": "FLUX 3 Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it."
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq (768 × 768), 1k, 2k or 4k, or switch provider. Replicate can take it."
       },
       "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate.",
       "paramKeys": [

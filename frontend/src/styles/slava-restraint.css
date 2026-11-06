@@ -4200,6 +4200,17 @@ body.app-slava-restraint .model-node__error-details summary {
   color: var(--sr-ink-light);
 }
 
+/* An agent's run stopped at a node only the person may run: a stop by
+   design, not a failure (GM, PR #203 r39 item 1). The notice style: the
+   card's muted text on a neutral rail, never the error or warning colour. */
+body.app-slava-restraint .model-node__error--waiting {
+  color: var(--sr-ink-light);
+  border-left-color: var(--sr-edge-strong);
+}
+body.app-slava-restraint .model-node__error--waiting .failure-lines__heading {
+  color: var(--sr-ink);
+}
+
 /* ─────────────────────────────────────────────────────────────────────
  * View switcher + editor workspace
  * ───────────────────────────────────────────────────────────────────── */

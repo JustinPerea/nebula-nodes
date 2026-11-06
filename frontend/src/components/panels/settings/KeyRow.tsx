@@ -10,6 +10,7 @@ import { removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
 import { cancelRowFocus, focusRowIfItMoves, keyStatus, readServiceAccount, settleRowFocus, takeRowFocus } from './rowHelpers';
+import { SettingsRowError } from './SettingsRowError';
 
 
 
@@ -177,7 +178,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
               </a>
             </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
-            {error && <p className="settings-row__error" role="alert">{error}</p>}
+            <SettingsRowError id={spec.key} message={error} />
           </div>
         )}
         {open === 'edit' && (
@@ -213,7 +214,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
               </a>
             </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
-            {error && <p className="settings-row__error" role="alert">{error}</p>}
+            <SettingsRowError id={spec.key} message={error} />
             <div className="settings-row__foot">
               <span />
               <button type="submit" className="settings__button settings__button--primary" disabled={!canSave}>

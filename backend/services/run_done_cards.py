@@ -40,13 +40,38 @@ def _quoted(labels: Mapping[str, str], node_id: str) -> str:
     return f"“{labels.get(node_id) or node_id}”"
 
 
-# DRAFT (round 19, for GM): a node that stopped at its call because an
-# agent's run may not make it (execution/run_origin.ProposalNeeded). The only
-# such stop is Idol's Hugging Face call with the person's token set (Justin
-# decided, 2026-10-31); tests/test_idol_round19_gate.py pins that. Short
-# enough that the done line fits the cursor bubble (agent_presence
-# MAX_SAY_CHARS) for the usual agent names; the Agent log gets it whole.
-STOPPED = "stopped before calling Hugging Face: your token is set, so it waits for you to run it."
+# A node that stopped at its call because an agent's run may not make it
+# (execution/run_origin.ProposalNeeded). The only such stop is Idol's Hugging
+# Face call with the person's token set (Justin decided, 2026-10-31). GM, PR
+# #203 r40 items 2 and 7, verbatim: "Claude Code finished 1 of 3 nodes.
+# “Idol” is waiting for you to run it because it could bill your Hugging Face
+# account." (no comma before "because"); beside a failure, "Claude Code
+# finished 1 of 4 nodes. “Idol” is waiting for you to run it, and “Writer”
+# failed."; from 4 nodes, counts: "… 4 nodes are waiting for you to run them,
+# and 2 failed." The Agent log gets it whole.
+WAITING_BECAUSE = "because it could bill your Hugging Face account."
+# Names up to this many nodes; from one more, counts (GM r40 item 2).
+MAX_NAMED = 3
+
+
+def _and_list(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _waiting(labels: Mapping[str, str], waiting: list[str], failed: list[str]) -> str:
+    """What stopped and what failed, after the run's count (GM r40)."""
+    named = len(waiting) + len(failed) <= MAX_NAMED
+    if named:
+        who = _and_list([_quoted(labels, node_id) for node_id in waiting])
+    else:
+        who = f"{len(waiting)} node" if len(waiting) == 1 else f"{len(waiting)} nodes"
+    one = len(waiting) == 1
+    wait = f"{who} {'is' if one else 'are'} waiting for you to run {'it' if one else 'them'}"
+    if not failed:
+        because = WAITING_BECAUSE if one else WAITING_BECAUSE.replace("because it could", "because they could")
+        return f"{wait} {because}"
+    broke = _and_list([_quoted(labels, node_id) for node_id in failed]) if named else str(len(failed))
+    return f"{wait}, and {broke} failed."
 
 
 def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
@@ -59,26 +84,25 @@ def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
       one failed: Codex finished 2 of 5 nodes. 3 failed.
     - Failure: Codex's run of “Hero shots” failed. / Codex's run of 3 nodes failed.
 
-    A failed node in ``stopped`` (the only one that broke) says STOPPED
-    instead of "failed.": "Codex finished 1 of 3 nodes. “Idol” stopped before
-    calling Hugging Face: …"; a run of that node alone, "Codex's run of
-    “Idol” stopped before calling Hugging Face: …"; with nothing done,
-    "Codex's run of 3 nodes didn't finish. “Idol” stopped before …" (drafts
-    for GM)."""
+    Nodes in ``stopped`` wait for the person (GM r40): "Claude Code finished
+    1 of 3 nodes. “Idol” is waiting for you to run it because it could bill
+    your Hugging Face account."; with a failure beside it, "… “Idol” is
+    waiting for you to run it, and “Writer” failed."; from 4 nodes, counts.
+    With nothing done (a draft for GM): "Codex's run didn’t finish. “Idol” is
+    waiting …" for one node, "Codex's run of 3 nodes didn’t finish. …"."""
     done = [node_id for node_id in planned if node_id in set(succeeded)]
     broke = [node_id for node_id in planned if node_id in set(failed)]
+    waiting = [node_id for node_id in broke if node_id in set(stopped)]
+    others = [node_id for node_id in broke if node_id not in set(waiting)]
     total = len(planned)
-    halt = broke[0] if len(broke) == 1 and broke[0] in set(stopped) else None
     if not done:
         what = _quoted(labels, planned[0]) if total == 1 else f"{total} nodes"
-        if halt is not None and total == 1:
-            return f"{possessive(agent_name)} run of {what} {STOPPED}", "failure"
-        if halt is not None:
-            return (f"{possessive(agent_name)} run of {what} didn't finish. {_quoted(labels, halt)} {STOPPED}",
-                    "failure")
+        if waiting:
+            run = "run" if total == 1 else f"run of {what}"
+            return f"{possessive(agent_name)} {run} didn’t finish. {_waiting(labels, waiting, others)}", "failure"
         return f"{possessive(agent_name)} run of {what} failed.", "failure"
     if broke:
-        failures = (f"{_quoted(labels, halt)} {STOPPED}" if halt is not None
+        failures = (_waiting(labels, waiting, others) if waiting
                     else f"{_quoted(labels, broke[0])} failed." if len(broke) == 1 else f"{len(broke)} failed.")
         return f"{agent_name} finished {len(done)} of {total} nodes. {failures}", "partial"
     what = _quoted(labels, done[0]) if len(done) == 1 else f"{len(done)} nodes"
@@ -221,4 +245,4 @@ class AgentRunBook:
                 "secondsAgo": round(max(0.0, self._clock() - since), 1)}
 
 
-__all__ = ["STOPPED", "AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for"]
+__all__ = ["WAITING_BECAUSE", "AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for"]

@@ -323,7 +323,9 @@ def test_a_restore_that_cant_keep_the_file_aside_changes_nothing(home_state, key
         raise OSError(errno.ENOSPC, "full")
 
     monkeypatch.setattr(settings, "_keep_aside", refuse)
-    assert settings.restore_settings_from_backup() is None
+    # Said, not silent (review 19 of PR #203, settings LOW-3): NotRestored.
+    result = settings.restore_settings_from_backup()
+    assert isinstance(result, settings.NotRestored) and result.why.errno == errno.ENOSPC
     assert keyed.read_bytes() == mixed and settings.backup_path(keyed).exists()
 
 

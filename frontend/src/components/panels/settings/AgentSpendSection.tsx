@@ -10,6 +10,7 @@ import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
 import { failureMessage } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
+import { SettingsRowError } from './SettingsRowError';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -198,7 +199,7 @@ export function AgentSpendSection() {
           </select>
         </div>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      <SettingsRowError id="agentSpend" message={error} />
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
   );

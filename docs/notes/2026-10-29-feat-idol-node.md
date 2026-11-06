@@ -3688,3 +3688,243 @@ New this round, not asked:
   (`PERSON_READ_PATHS` didn't list it), so it was refused (403) and the
   line never showed. It is listed now (`lib/backend.test.ts` pins it), and
   the line asks again when the server promotes the tab.
+
+## Round 20 (GM r39, GM r40, CI on 81bb9b41, review 19)
+
+### Section 2a: CI on 81bb9b41, root causes
+
+Fifteen tests failed across the three backend shards. Each was traced to
+its cause before anything was changed:
+
+- **`test_idol_round19_gate` (6 tests).** Storing a World ran a blanket
+  walk over every string in the value and rewrote any string that named an
+  existing path under OUTPUT_ROOT into an `/api/outputs` URL. In CI,
+  `test_chat_uploads` runs earlier and leaves `OUTPUT_ROOT/generated`
+  behind. So `session.source: "generated"` became `/api/outputs/generated`,
+  and the World failed its own validation. A spatial value now rewrites
+  only asset `uri` keys (`_normalize_spatial_asset_uris_for_storage`; v1
+  World uses `canonicalize_world_value_v1` with the URI normalizer).
+  `test_idol_round20_ci.py` makes folders named like the metadata and
+  shows the World keeps its words.
+- **`test_reference_roles` (2 tests).** Round 19's × size labels (GM r37
+  item 3, approved app-wide and pinned by `test_idol_round19_copy`)
+  changed the fingerprints of 16 nodes (seedream-4-5 among them). The
+  change follows the file's own documented process rather than staying
+  inside Idol. GM's ruling is app-wide, so keeping it inside Idol would
+  undo an approved decision. `APPROVED_SIZE_LABEL_SPACING` lists each node
+  and its spelling ("×" for 3 nodes, "x" for 13), and
+  `_unspace_size_labels` normalises them before the approved-pattern
+  step. A listed node whose label no longer matches fails loudly
+  (`test_a_size_label_approval_goes_stale_loudly`).
+- **`test_route_schema_coverage[speridlabs-idol]`.** The harness called
+  the handler with no run origin. An unknown origin counts as an agent's,
+  so the gate stopped Idol with its token set. The harness checks what a
+  route sends, not who sends it, so it now runs as the person
+  (`run_origin.running(RunOrigin(person=True))`). The gate is unchanged.
+- **`test_run_billing_params` (5 tests).** `/api/quick`'s own
+  route-readiness check (Idol round 4, f9124269, on this branch only) sits
+  outside `validate_graph`. With the test's fake routes it refused before
+  the billing assertions. The fixture stubs `node_route.route_unavailable`
+  as it already stubs the validator. These tests already failed at
+  7e998982.
+- **`test_connected_copy` (1 test).** It expected round 18's bubble, but
+  round 19 changed it on purpose (GM r38 item 1). It now expects "“GPT
+  Image 2.5” needs a prompt and your OpenAI API key."
+
+### Section 1 (GM r39) and section E (GM r40), as built
+
+- **The Idol agent stop is a stop, not a failure.** It has its own error
+  category, `waiting`, and the card's heading is "Waiting for you to run
+  it" in the notice style (muted ink, neutral edge, no error colour). The
+  body is GM r39's. When the Run came from a canvas tab not connected as
+  the person, the body is r40 item 5's instead. `RunOrigin.tab` chooses
+  the words only: the gate rule (`_run_origin_now`'s `person`) is
+  unchanged.
+- **Agent text.** It is GM r39's text, followed by the reader's propose
+  hint (MCP or CLI words), so the agent is still told how to propose
+  (Justin decided). See the flag below.
+- **The single-stop log line** is E.7's. The mixed line is E.2's: up to 3
+  names, then counts.
+- **Bubbles keep whole sentences.** A needs or route bubble says its first
+  sentence. The pill wraps to two lines at its 260px max width before any
+  ellipsis. The done bubble goes through `_whole_sentences`, and the log
+  keeps the whole line.
+- **Agents read a size as they send it back,** with its size after it:
+  "768sq (768 × 768)". This applies only where the option's label is a
+  size the value doesn't spell.
+- **A renamed node's own card line** names it by its name, in
+  `validate_graph` (`name_of`) and in the frontend (`renamedLabel`).
+- **SETTINGS_IN_THE_WAY and SETTINGS_NOT_RESTORED** use r39's words.
+  `settings.not_restored` is worded by cause, with E.3's line for any cause
+  but not being allowed.
+- **A dismiss that fails** puts the notice back with E.4's heading and
+  "Try again." under the line.
+
+#### Every line called neutral (r39: neutral in colour too)
+
+- The Idol stop card, both bodies: `model-node__error--waiting`. It uses
+  `--sr-ink-light` with an `--sr-edge-strong` edge, its heading in
+  `--sr-ink`, and #a3a3a3 outside the Slava skin.
+- The Settings lock-wait line ("Nothing was saved because another Nebula
+  is saving your settings. Try again in a moment.") in every row that
+  shows a write's failure: KeyRow (2 places), StorageTab (2), the agent
+  spend row, the Krea sign-in row and Preferences. It uses
+  `SettingsRowError`'s `settings-row__error--neutral` (`--sr-ink-meta`)
+  with `role="status"`. Any other failure on those rows stays an alert in
+  the error colour.
+- The restored notice at the top of Settings, which was already neutral.
+- The waiting tone is styled only on the canvas card. The Create Studio
+  and Cinema shot surfaces get the waiting heading in their usual error
+  styling. Idol never runs there, so no case reaches them today.
+
+### Section 2b (review 19): each item
+
+- **A (MEDIUM).** A routed node whose only stop is its key records that
+  key in the shared need list (`ValidationErrorDetail.keyed`). This is
+  generic: any routed node with no switch and no route line of its own.
+  The card and bubble have one ending each. `needs_key` gives the count
+  form at 4 or more providers and names 2–3 (E.1).
+  - A registry walk test covers every node with a required input and a
+    key or routes: no card has two endings, and the bubble names the key.
+    On 81bb9b41 that file fails (158 failed when it was written; it now
+    imports names base doesn't have).
+  - A Krea sign-in counts as a need too ("sign in to Krea" / "a Krea
+    sign-in"). That wording is a draft for GM.
+- **B1.** Origin tests (tests only): the person's `/api/execute` calls; an
+  agent's stops; the person token plus each marker stops on both routes; a
+  Cinema shot with Idol upstream through a reroute stops with zero
+  requests; and an AST check that every `execute_graph(` in main.py sits
+  in `_run_graph`. G11, G15 and G21 are killed.
+- **B2.** The `run.failed` journal entry has `proposalNeeded: true` and
+  the whole agent text, up to 600 characters. `canvas_events._bound_data`
+  keeps a stop's error past the 160 cap. Its summary ends "stopped", and
+  `nebula watch` prints the text whole.
+- **B3.** `/api/graph/run`, `get_run` (both paths) and MCP `_run_result`
+  carry `stopped: {id: "proposal_needed"}`.
+- **B4.** The snapshot node has `stopped` and the whole error, and `nebula
+  look` prints it uncut.
+- **B5.** The one-line `error` for a stop is the node's text, not "n2
+  failed: …".
+- **B6.** Mixed done line (E.2), live and in tests. The done bubble keeps
+  whole sentences.
+- **C1. No flock:**
+  - A stale temp is renamed into `.settings-nebula-judging` (0700, this
+    user's, opened with O_NOFOLLOW, every step through its fd). It is
+    checked by device and inode there, then removed, or linked back if it
+    is another save's.
+  - Staleness is judged on the folder's own clock (a probe file's mtime).
+    A temp dated more than 5 s ahead of that clock is stale, in
+    `_open_temp` and in the sweep.
+  - q1 and q2 run as two real processes, and q3 is a future mtime.
+  - The PR body's "younger than a minute" sentence now says what the code
+    guarantees.
+- **C1, found while building.** The first version moved the temp to a
+  random name beside settings.json. When the link back fails, that file
+  holds another save's whole settings, keys included, at a name no agent
+  deny list covers. The judging folder fixes this:
+  - it is on every agent deny list (`agent_profiles.secret_dirs`: the
+    Claude deny dirs, Codex deny paths and `file_access`);
+  - it is kept out of `protected_agent_dirs`, so granting the folder that
+    holds settings.json works as before;
+  - the start sweep removes what a killed judge left, then the folder.
+- **C2.** A copy folder that refuses the replaced file is
+  `settings.not_restored` (logged and journaled), naming that folder.
+- **C3.** The line is worded by cause. MCP-SETUP's row, the `NotRestored`
+  docstring and the body now agree: a blocked file keeps nothing aside,
+  nor does a refusing copy folder, and a write that fails keeps the
+  replaced file once.
+- **C5.** The replaced file is named
+  `settings-replaced-<UTC time>-<8 hex>.json`.
+- **C6.** Tests reach R1, R8, R9, F4 and the read-only folder.
+- **C7.** The notice is kept in the copy folder until the person dismisses
+  it, and it survives a restart. Agents get 403, and it is in no journal
+  entry.
+- **D.** "didn’t finish" uses a curly apostrophe. "could bill your
+  account" keeps r39's words.
+
+### Drafts and flags for GM / Justin
+
+- **The agent text.** r39's words are followed by the propose hint ("…, or
+  carry on without it. Propose it instead: propose_change (run: n2). …").
+  The hint keeps Justin's decision that agents are told to propose. GM to
+  rule whether it stays.
+- **Drafts:**
+  - Krea sign-in as a need ("sign in to Krea", "a Krea sign-in").
+  - A run where nothing finished: "Codex's run didn’t finish. “Idol” is
+    waiting …", or "Codex's run of 3 nodes didn’t finish. …".
+  - Several waiting nodes only: "“Idol” and “Idol 2” are waiting for you
+    to run them because they could bill your Hugging Face account."
+  - The possessive "Codex's" uses a straight apostrophe (the existing
+    `possessive` helper).
+- **The provider switcher's accessible name** on a renamed node still says
+  "Provider for “FLUX 3 Image”" (the model type). The visible card and the
+  bubble say "Hero shot".
+- **Residual no-flock windows.** Without flock there is no full mutual
+  exclusion. A writer whose rename lands in the moment its temp sits in
+  the judging folder gets ENOENT and its save fails cleanly. A failed save
+  still unlinks the temp name, which in a three-process race could be
+  another's. Neither leaves a torn settings.json.
+- **`test_chat_uploads` leaves `OUTPUT_ROOT/generated` behind** for later
+  tests. Its own cleanup is out of scope here.
+
+### Tests and checks (round 20)
+
+- **New test files:**
+  - `test_idol_round20_ci.py` (2);
+  - `test_idol_round20_review19.py` (313);
+  - `test_idol_round20_settings.py` (24);
+  - `test_idol_round20_copy.py` (8);
+  - frontend `tests/lib/idolRound20.test.tsx` (11).
+  Each fails on 81bb9b41 (review19 and the frontend file don't import
+  there; settings 18 failed, copy 7, ci 2).
+- **Mutants:** 37 for sections 1, 2b and E, plus 2a's M1–M7, all killed
+  (`scratchpad/idol/mut20/table20.py`). Three survived at first and gained
+  tests:
+  - B4a: the look test now uses a name long enough to pass 300
+    characters;
+  - J3 and J5: a judging folder others can read, and a folder swept away
+    under the move.
+- **Live, 1440 × 900.** The backend ran only through
+  `harness/serve_isolated.py` on 8793 (asyncio + h11), with Vite on 5793
+  and fake keys only. `blocked.log` holds only canary lines and "canary
+  ok", for three backend starts. The browser canaries blocked 12 of 12
+  per phase. Shots are in `scratchpad/idol/shots20`, md5 distinct:
+  - 1: the agent stop card, waiting tone;
+  - 2: the stop log line (E.7);
+  - 3: the mixed done line (E.2), from a real run: “Writer” is a
+    validator refusing a text, a local failure that calls nothing;
+  - 4: shot 6 redone, a two-line bubble with its first sentence;
+  - 5: shot 8 redone, the renamed bubble and card agreeing;
+  - 6: FLUX 3 Image with no prompt and no keys (E.1);
+  - 7: the neutral lock-wait line;
+  - 8: the unconnected tab's card (E.5). The tab was connected, then
+    Nebula restarted with a new person token; its Run reached the
+    backend, which stopped Idol with no request.
+- **Found live and fixed:**
+  - The bubble, now free to wrap, took the cursor's narrow width and
+    wrapped every word. It has `width: max-content` up to 260px.
+  - `routeUnavailableMessage` declared `own` twice (a parse error that
+    only vitest's transform caught).
+- **Final gates (round 21 restart, on the uncommitted tree over 81bb9b41):**
+  - Backend, focused (361 files: the changed and new tests plus the tests
+    importing a changed backend module), isolated HOME, settings, state
+    and output dirs, `-u NEBULA_TEST_SHARD`: **12037 passed, 2 skipped**.
+    The first run, with `-x`, stopped on one failure:
+    `test_error_copy_round3e.py::test_an_agents_refused_run_keeps_its_text_word_for_word`
+    pinned r38's two-sentence bubble ("... API key. Connect the prompt and
+    add the key in Settings."). Round 20 item 5 (GM r39) makes the bubble
+    its first sentence on purpose, so the test now pins the first sentence
+    and that "Connect the prompt" is absent.
+  - Frontend, `pr_tests.sh` (606 files): 6 failed in 3 files, 603 files
+    and 8471 tests passed. Fixed two tests that pinned the type's name
+    for a card the test had titled by hand (a rename, quoted by GM r39
+    item 8): `runScope.test.ts` now passes the title `'Node'` to
+    `routeUnavailable`, and the ProviderSwitcher stop test gives its
+    node the type's own title. Both files rerun green (109 tests).
+    `graphStore.fix17.test.ts` ("Restored the node." then Redo) timed out
+    in `vi.waitFor` under a loaded machine and passes alone (11 of 11);
+    no source it exercises changed.
+  - `npx tsc -b --noEmit` clean; `npm run lint` (inline-styles, slava CSS
+    scope, eslint) clean; `npm run build` passed the budget (464290 bytes
+    raw / 142656 gzip); `frontend/dist` removed. `npm run check:ratchets`
+    does not exist on this branch.
