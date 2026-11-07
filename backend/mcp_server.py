@@ -23,6 +23,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
                         offline_read_only, unanswered, with_identity)
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
+from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
 from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
 from mcp.server.fastmcp import Context, FastMCP, Image
@@ -179,6 +180,11 @@ class _NebulaMCP(FastMCP):
         except ToolError as exc:
             if _never_reached_in(exc) and OFFLINE_NOTE not in str(exc):
                 raise ToolError(f"{exc} {OFFLINE_NOTE}") from exc
+            # A spend refusal's "propose it instead" names this surface's call
+            # only (propose_change), not the CLI's.
+            worded = _agent_spend.propose_hint_for_mcp(str(exc))
+            if worded != str(exc):
+                raise ToolError(worded) from exc
             raise
 
 
@@ -380,10 +386,23 @@ def _agent_headers(ctx: Context | None) -> dict[str, str]:
     return {"X-Nebula-Agent": _cursor_name(ctx), **_session_headers()}
 
 
+def _worded_for_this_surface(exc: NebulaAPIError) -> NebulaAPIError:
+    """A refusal that points at a proposal ("Propose it instead: `nebula
+    propose ...`"), with the call this surface has: propose_change (GM -
+    Design, PR #212 round 2). Anything else is returned as it came."""
+    worded = _agent_spend.propose_hint_for_mcp(exc.detail)
+    if worded == exc.detail:
+        return exc
+    return NebulaAPIError(worded, status=exc.status, kind=exc.kind, headers=exc.headers, payload=exc.payload)
+
+
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
     """A request as this agent. Errors carry Nebula's own detail, which says what to do next."""
     headers = _agent_headers(ctx)
-    payload = _api().request(method, path, headers=headers, timeout=timeout, **kwargs)
+    try:
+        payload = _api().request(method, path, headers=headers, timeout=timeout, **kwargs)
+    except NebulaAPIError as exc:
+        raise _worded_for_this_surface(exc) from exc.__cause__
     if not isinstance(payload, dict):
         raise RuntimeError("Nebula canvas endpoint returned an invalid response")
     return payload
@@ -417,8 +436,11 @@ def start_here(ctx: Context | None = None) -> str:
       what a price can't say. Past its budget `rest` counts what's left per
       category; find_nodes(category=...) lists them.
     - `spend`: the per-run limit, this budget's kind, limit and use (for
-      outside agents, what all of them used together), and Krea plan runs
-      (get_spend_limits has per-model limits).
+      outside agents, what all of them used together), Krea plan runs, and
+      `daily`: the daily total over everything that isn't the person
+      (`limitUsd`, null for no limit, `usedUsd` and `leftUsd`, the last 24
+      hours), which holds on top of the budget (get_spend_limits has
+      per-model limits).
     - `next`: `events` (cursor and journal for wait_for_canvas_change), then
       the exact calls, arguments named as each tool takes them: `describe`,
       `build` (a whole edit_canvas plan), `propose`, `point` (with or
@@ -1785,6 +1807,15 @@ def run_no_record_next(run_id: Any) -> str:
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     """The run as agents need it: status, outputs per node, errors, and previews."""
     status = payload.get("status")
+    if status == "waiting":
+        # Over the person's daily total: nothing ran, and it waits for their
+        # OK as a proposal (GM's line in `message`, the numbers exact).
+        # The check-it hint in MCP's words: get_proposal("<id>") (GM - Design, 2026-10-31).
+        shown = {key: payload[key] for key in ("status", "proposalId", "message", "dailyTotal", "alsoNeeds")
+                 if key in payload}
+        if isinstance(shown.get("message"), str) and isinstance(shown.get("proposalId"), str):
+            shown["message"] = _agent_spend.for_mcp(shown["message"], shown["proposalId"])
+        return [_json.dumps(shown, ensure_ascii=False)]
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
                                                             "source", "startedBy", "nodes", "neverStarted", "noRecord",
@@ -1836,7 +1867,15 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A node priced
+    usually send the same nodes as propose_change with `run`. One that would
+    pass the person's daily total (everything that isn't them shares it, over
+    the last 24 hours), or has a node with no list price while that total is
+    on (Nebula can't count it toward the total), isn't refused: Nebula sends it as a proposal and
+    answers status "waiting" with `proposalId`, `message` (say it to the
+    person as it is), `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd: the
+    total, used, left and this run's estimate) and, when it also needs their
+    OK for another reason, `alsoNeeds` (perRun, modelPerRun, unpriced, limit
+    or planRuns). Nothing ran; get_proposal tells you when they decide. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this
@@ -1958,7 +1997,13 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     also counts inside "shared"). `kreaPlanRuns` counts runs billed to the
     Krea plan (its limit is 10 until the person sets one; 0 means every plan
     run needs a proposal). Runs over a limit must go through propose_change,
-    and so does billing any Krea node differently from the canvas."""
+    and so does billing any Krea node differently from the canvas.
+    `dailyTotal` is the daily total everything that isn't the person shares
+    over the last 24 hours (agent chats, agents outside Nebula, scripts, tabs
+    not opened from the link): `limitUsd` ($5 until the person picks another,
+    null for no limit), `usedUsd` and `leftUsd`, exact. A run that would pass
+    it, or has a node with no list price while it is on, waits for their OK
+    as a proposal. Only the person changes it."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

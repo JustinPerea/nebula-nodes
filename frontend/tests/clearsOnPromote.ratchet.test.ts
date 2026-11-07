@@ -203,6 +203,8 @@ const GATED: Record<string, Surface> = {
   // _person_only_refusal: person_required for a tab that isn't the person.
   _check_run_approval: ['graph.run-start', 'graph.refusal'],
   _require_spend_approval: ['graph.run-start', 'graph.shot-start', 'graph.refusal'],
+  // A run the daily total holds is sent as a proposal; a tab that isn't the person gets person_required from it (PR #212).
+  _propose_waiting_run: ['graph.run-start', 'graph.refusal'],
   // Create's Save style (POST /api/presets, _check_style_write) and Generate (POST
   // /api/graph/cluster) answer with it too (review 3 MEDIUM-1, round 5).
   _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.load-retry', 'project.error', 'graph.notify', 'graph.run-start',

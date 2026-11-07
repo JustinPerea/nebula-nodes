@@ -21,3 +21,21 @@ def quoted(label: str) -> str:
             and not any(mark in inner for mark in _QUOTES):
         text = inner
     return f"“{text}”"
+
+
+def _joined(parts: list[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + f" and {parts[-1]}" if parts else ""
+
+
+def node_name_list(names: list[str]) -> str:
+    """Nodes by name in a line, the shared name-list helper's rule (frontend
+    lib/errorCopy.ts nodeNameList, the same cases): up to 3 by name,
+    "“A”", "“A” and “B”", "“A”, “B” and “C”", a repeated name counted ("2
+    “Writer” nodes"); from 4, a count ("4 nodes")."""
+    if len(names) >= 4:
+        return f"{len(names)} nodes"
+    groups: dict[str, int] = {}
+    for name in names:
+        groups[name] = groups.get(name, 0) + 1
+    return _joined([f"\u201c{name}\u201d" if count == 1 else f"{count} \u201c{name}\u201d nodes"
+                    for name, count in groups.items()])

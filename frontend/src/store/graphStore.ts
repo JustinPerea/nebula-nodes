@@ -8212,6 +8212,7 @@ async function executeHistoricalRun(
     pendingStartRunIds.delete(runId);
     announcePendingSkips(result);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+    if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
     if (result.status === 'started' && ownsRun(runId)) {
       updateRunPhase(runId, 'running', set);
       if (source.cinemaShot) scheduleWorldLabsStatusReconciliation(runId, set, get);
@@ -12058,6 +12059,24 @@ function withdrawRunStart(runId: string, set: GraphSet, before: ReadonlyMap<stri
   });
 }
 
+/**
+ * A start the backend made a proposal of instead (status "waiting": a run
+ * that isn't the person's would pass the daily total). Only a caller that
+ * names itself gets one, so a tab, which never does, is refused instead and
+ * shows the not-connected line from the person gate's code (round 2 of PR
+ * #212); this keeps a "waiting" answer from ever reading as a started run.
+ * Nothing ran: the run leaves Run history and its queued nodes go back to
+ * how they were.
+ */
+function settleWaitingStart(runId: string, set: GraphSet): void {
+  withdrawRunStart(runId, set, new Map(), []);
+  set((state) => ({
+    nodes: replaceChanged(state.nodes, (node) => (node.data.state === 'queued' && !scopeOverlaps([node.id])
+      ? { ...node, data: { ...node.data, state: 'idle' as const, progress: undefined } }
+      : node)),
+  }));
+}
+
 /** A shot's name as the Cinema panel shows it: "Shot 2" for the second. */
 function shotName(scene: CinemaSceneSpec | undefined, shotId: string): string {
   const index = scene?.shots?.findIndex((shot) => shot.id === shotId) ?? -1;
@@ -13632,6 +13651,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       pendingStartRunIds.delete(runId);
       announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
           notStartedMessage("Couldn't start the run.", result.status),
@@ -13766,6 +13786,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       pendingStartRunIds.delete(runId);
       announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
           notStartedMessage("Couldn't run the node.", result.status),
@@ -14158,6 +14179,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       announcePendingSkips(result);
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
       if (result.status === 'started') {
         // Gates NIT-3 (round 7): this path queues with no resetExecution, so a taken start's
         // kept states go here too.

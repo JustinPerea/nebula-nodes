@@ -16,6 +16,8 @@ export interface AgentLogEntry {
    *  the dot) and that shade's readable tone (`ink`, the name text). Absent on the chat's thinking lines. */
   agent?: { id: string; name: string; color: string; ink?: string };
   message: string;
+  /** Shown neutral, in the muted colour (an event's `tone`). */
+  tone?: 'muted';
 }
 
 interface AgentLogState {
@@ -64,6 +66,7 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
     // the log (GM - Design, PR #211 r20).
     agent: { id: agent.id, name: cursorLabel(agent.name, session), color: tones.dot, ink: tones.name },
     message,
+    ...(event.tone === 'muted' ? { tone: 'muted' as const } : {}),
   };
 }
 

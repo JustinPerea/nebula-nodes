@@ -477,6 +477,9 @@ export function withAncestors(targets: string[], edges: Array<{ source: string; 
   return [...seen];
 }
 
+/** GM - Design (2026-10-31): the status on each node a held run waits on. */
+export const WAITING_FOR_OK = 'Waiting for your OK';
+
 /** What the notice region's polite line says once a keyboard Accept or
  * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
  * is (ProposalBar). */
