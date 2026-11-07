@@ -49,7 +49,8 @@ def _person_line():
 
 def _route(route: dict) -> dict:
     """One route as the snapshot keeps it: its fields, with params as keys."""
-    shown = {key: route[key] for key in ("id", "provider", "maker", "keys", "plan", "handler", "pricing")
+    shown = {key: route[key]
+             for key in ("id", "provider", "maker", "keys", "optionalKeys", "plan", "handler", "pricing")
              if key in route}
     shown["paramKeys"] = [param["key"] for param in route.get("params") or []]
     if route.get("rules"):

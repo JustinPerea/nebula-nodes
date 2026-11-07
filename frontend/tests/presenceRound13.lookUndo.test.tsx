@@ -163,6 +163,6 @@ describe('a click on the locked Undo removes nothing (review 10 LOW-4, mutant L1
     act(() => session.notePersonPromoted());
     await flush();
     fireEvent.click(undo());
-    expect(writes.undoAddedKey).toHaveBeenCalledWith(7);
+    await vi.waitFor(() => expect(writes.undoAddedKey).toHaveBeenCalledWith(7));
   });
 });

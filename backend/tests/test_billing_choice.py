@@ -108,6 +108,7 @@ def test_cost_for_names_the_route_the_run_takes(agent):
     assert cost_for(TABLE, {"_provider": "replicate"}, None, {"REPLICATE_API_TOKEN": "s"})["provider"] == "replicate"
     blocked = cost_for(TABLE, {"_provider": "replicate"}, None, {"FAL_KEY": "set"})
     assert blocked["provider"] is None and "REPLICATE_API_TOKEN" in blocked["unavailable"]
-    # Without keys: the explicit route, or the maker under Auto.
-    assert cost_for(TABLE, {"_provider": "krea"})["provider"] == "krea"
-    assert cost_for(TABLE, {})["provider"] == "bfl"
+    # Keys are required (GM, PR #203 r15 item 1): the explicit route, or
+    # the maker under Auto, with their keys set.
+    assert cost_for(TABLE, {"_provider": "krea"}, None, {"KREA_API_TOKEN": "k"})["provider"] == "krea"
+    assert cost_for(TABLE, {}, None, {"BFL_API_KEY": "b"})["provider"] == "bfl"

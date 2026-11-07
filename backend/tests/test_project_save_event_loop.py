@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-import time
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -69,8 +69,12 @@ def workspace(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_an_autosave_does_not_hold_up_other_requests(workspace, person, monkeypatch):
-    """While the save checks its snapshot, the loop keeps serving (a stand-in
-    check that takes 0.6 s of blocking work, as the real one did with more)."""
+    """While the save checks its snapshot, the loop keeps serving. Driven by
+    events, never a time budget (review 17 of PR #203, tests LOW-1: a
+    starved runner's pause failed the old 0.3 s gap check while the code was
+    right): the stand-in check blocks until a task on the loop has run while
+    it is in progress, which it can only see if the check runs off the loop.
+    The 10 s wait is a hang guard only."""
     graph, _store = workspace
     transport = httpx.ASGITransport(app=main_module.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
@@ -79,32 +83,33 @@ async def test_an_autosave_does_not_hold_up_other_requests(workspace, person, mo
         snapshot = (await client.get(f"/api/projects/{made['project']['id']}")).json()["snapshot"]
 
         real = main_module.validate_file_references
+        loop_thread = threading.get_ident()
+        in_check, loop_ran = threading.Event(), threading.Event()
+        seen: list[object] = []
 
         def slow(value):
             if isinstance(value, dict) and "runHistory" in value:
-                time.sleep(0.6)
+                seen.append(threading.get_ident())
+                in_check.set()
+                seen.append(loop_ran.wait(timeout=10))
             return real(value)
 
         monkeypatch.setattr(main_module, "validate_file_references", slow)
-        gaps: list[float] = []
-        stop = asyncio.Event()
 
-        async def ticker():
-            last = time.monotonic()
-            while not stop.is_set():
+        async def watcher():
+            while not in_check.is_set():
                 await asyncio.sleep(0.01)
-                now = time.monotonic()
-                gaps.append(now - last)
-                last = now
+            loop_ran.set()  # the loop ran while the check was in progress
 
-        ticking = asyncio.create_task(ticker())
+        watching = asyncio.create_task(watcher())
         saved = await client.put(f"/api/projects/{made['project']['id']}",
                                  json={"snapshot": snapshot, "workspaceRevision": made["workspaceRevision"]},
                                  headers=person.headers)
-        stop.set()
-        await ticking
+        in_check.set()
+        await watching
     assert saved.status_code == 200, saved.text
-    assert max(gaps) < 0.3, f"the event loop stalled {max(gaps):.2f}s during the save"
+    assert seen and seen[0] != loop_thread, "the snapshot check ran on the event loop"
+    assert seen[1] is True, "the event loop never ran while the snapshot check was in progress"
 
 
 def test_the_open_project_and_revision_are_read_without_copying_the_catalog(tmp_path, monkeypatch):

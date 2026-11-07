@@ -17,8 +17,8 @@ vi.mock('../src/lib/backend', async (original) => ({
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 // The mask painter's canvas needs a real 2D context; its Save is one button
 // that hands the Inspector a mask, as the modal's saveMask does.
-vi.mock('../src/components/DeferredPanels', async (original) => ({
-  ...await original<typeof import('../src/components/DeferredPanels')>(),
+vi.mock('../src/components/panels/DeferredMaskPainter', async (original) => ({
+  ...await original<typeof import('../src/components/panels/DeferredMaskPainter')>(),
   MaskPainterModal: ({ onSave }: { onSave: (dataUri: string) => void }) => (
     <button type="button" data-testid="mask-save" onClick={() => onSave('data:image/png;base64,AAAA')}>Save</button>
   ),

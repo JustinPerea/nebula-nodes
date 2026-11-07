@@ -32,8 +32,9 @@ const lottieLightPath = fileURLToPath(
 
 /** Spark's generic PLY reader probes and optionally builds a parser with
  * `new Function`; it already falls back to its ordinary dynamic parser when
- * CSP blocks that optimization. Nebula loads only preflighted SPZ files in the
- * World viewer, and its production policy forbids runtime code generation in
+ * CSP blocks that optimization. Nebula loads only preflighted SPZ and 3DGS
+ * PLY files in the World viewer (lib/worldSplat.ts, lib/splatPly.ts; World v2
+ * PLY splats take that fallback parser), and its production policy forbids runtime code generation in
  * every chunk. Replace both the main-thread probe and Spark's embedded worker
  * source with a throwing call so the library deterministically selects its
  * documented fallback path. Keep the post-build scanner as the proof boundary. */
@@ -141,9 +142,16 @@ export default defineConfig(({ mode }) => {
               {
                 // Spark's renderer/worker payload is only needed after a user
                 // expands a World. Keep it isolated from both the startup entry
-                // and the reusable React Three Fiber chunk.
+                // and the reusable React Three Fiber chunk. Spark builds a
+                // FullScreenQuad (three's postprocessing Pass.js) at module top
+                // level, so Pass.js must live in this chunk too: left alone,
+                // rolldown put it in the WorldEnvironmentViewer chunk, which
+                // imports spark-vendor, and the cycle ran Spark first ("FullScreenQuad
+                // is not a constructor"; every World viewer failed in a production
+                // build, found 2026-10-29). check-build-budget.mjs fails a
+                // build with that cycle.
                 name: 'spark-vendor',
-                test: /node_modules[\\/]@sparkjsdev[\\/]spark[\\/]/,
+                test: /node_modules[\\/](?:@sparkjsdev[\\/]spark[\\/]|three[\\/]examples[\\/]jsm[\\/]postprocessing[\\/]Pass\.js)/,
                 priority: 30,
                 maxSize: 450_000,
               },

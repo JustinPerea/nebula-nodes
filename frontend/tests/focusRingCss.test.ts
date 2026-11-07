@@ -447,6 +447,7 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
     'components/nodes/SceneUnsavedMark.tsx': { count: 1, why: 'a popover focused on open: a ring only from the keyboard (GM r37)' },
     'components/nodes/ProviderSwitcher.tsx': { count: 3, why: 'menu items, moved through with the arrow keys' },
     'components/nodes/MeshPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/WorldSplatPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37), as WorldPreview' },
     'components/nodes/WorldPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
     'components/commons/CommonsLeavePopover.tsx': { count: 1, why: 'an alertdialog focused on open: a ring only from the keyboard (GM r37)' },
     'components/commons/CommonsView.tsx': { count: 1, why: 'a section tab folded into More: a control keeps its ring' },

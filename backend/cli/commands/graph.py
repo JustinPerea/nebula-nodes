@@ -102,9 +102,11 @@ def run_load(client: NebulaClient, filepath: str) -> None:
     import graph_file_client
 
     try:
-        # The module adds this agent's name ($NEBULA_AGENT_NAME) as the
-        # client does; nothing is sent before the file and its path are checked.
-        result = graph_file_client.load(client.api, filepath, via="cli")
+        # This client's identity headers: the agent's name and the CLI's
+        # X-Nebula-Surface, so the backend's refusals and the load notes
+        # name `nebula` commands (review 11 of PR #203, NIT-3). Nothing is
+        # sent before the file and its path are checked.
+        result = graph_file_client.load(client.api, filepath, headers=client._identity_headers())
     except graph_file_client.GraphFileError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)

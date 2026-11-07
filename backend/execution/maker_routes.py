@@ -91,7 +91,7 @@ def _blocked_key_line(definition: Mapping[str, Any], direct_key: str,
     phrase = key_phrase(keys)
     if phrase is None:
         return "These settings need another provider's key. Add it in Settings, then run the node again."
-    it = "one" if len(keys) > 1 else "them" if phrase.endswith("credentials") else "it"
+    it = "one" if len(keys) > 1 else "it"
     return f"These settings need your {phrase}. Add {it} in Settings, then run the node again."
 
 
@@ -173,7 +173,8 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
             # The chosen route needs a key that isn't saved: GM's key line
             # (error copy round 3d). A route its params block keeps the
             # pre-run check's own words.
-            line = key_line(route.missing) if route.missing and route.block is None else None
+            line = (node_route.missing_key_line_for(definition, route)
+                    or (key_line(route.missing) if route.missing and route.block is None else None))
             if line:
                 raise with_person_line(MissingCredentialError(message), line)
             raise MissingCredentialError(message)

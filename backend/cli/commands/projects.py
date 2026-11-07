@@ -75,7 +75,7 @@ def run_rename(client: NebulaClient, project_id: str, name: str, *, as_json: boo
     """Rename a saved project ("current" is the open one) through the canvas
     header's route: it journals `project.renamed` as this agent
     ($NEBULA_AGENT_NAME) and the person's canvas shows the name at once."""
-    result = client.shared(project_client.rename_project, project_id, name, via="cli")
+    result = client.shared(project_client.rename_project, project_id, name)
     if as_json:
         _print_json(result)
         return
@@ -92,7 +92,7 @@ def run_rename(client: NebulaClient, project_id: str, name: str, *, as_json: boo
 
 def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) -> None:
     """A saved project without opening it: MCP get_project."""
-    view = client.shared(project_client.get_project, project_id, via="cli")
+    view = client.shared(project_client.get_project, project_id)
     if as_json:
         _print_json(view)
         return
@@ -102,7 +102,7 @@ def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) ->
 def run_size(client: NebulaClient, project_id: str = "current", *, as_json: bool = False) -> None:
     """A project's size against the save limit and what takes the space: MCP
     project_size (Q118)."""
-    result = client.shared(project_client.project_size, project_id, via="cli")
+    result = client.shared(project_client.project_size, project_id)
     if as_json:
         _print_json(result)
         return

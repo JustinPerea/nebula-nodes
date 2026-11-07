@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { historyRunKeyLock, placeholderKey } from '../../lib/historyRunKeyLock';
+import { withKeyLock } from '../../lib/runKeyLock';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
@@ -58,6 +60,22 @@ export function RunHistoryPanel() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
+  // GM, PR #203 r8 item 3: a replay that would run a node that can't start
+  // without its key (a keyed route's missing key) is locked as the
+  // other Runs are (aria-disabled, focusable, its line as the reason). The
+  // store's refusal stays behind it.
+  // Read again only when a record, the keys or the canvas's placeholders
+  // change, never on a drag (review r5 NIT-1).
+  const settingsCache = useUIStore((s) => s.settingsCache);
+  const placeholders = useMemo(() => placeholderKey(nodes), [nodes]);
+  const keyLocks = useMemo(() => {
+    const live = useGraphStore.getState().nodes;
+    return new Map(runHistory.map((record) => [record.id,
+      record.status === 'running' ? null : historyRunKeyLock(record, live, settingsCache)]));
+    // `placeholders` stands for the live canvas: the only part of it the lock reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runHistory, placeholders, settingsCache]);
+  const keyLockIdBase = useId();
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -202,6 +220,8 @@ export function RunHistoryPanel() {
               const executedUnit = r.batchOutputs ? 'step' : 'node';
               const recoveryReplayBlocked = isWorldLabsRecoveryReplayBlocked(r);
               const recoveryReplayReady = isWorldLabsRecoveryReplayReady(r);
+              const keyLock = keyLocks.get(r.id) ?? null;
+              const keyLockId = `${keyLockIdBase}-${r.id}`;
               const latestSourceReady = r.paperInputs?.every((input) => {
                 const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
                 return source?.state === 'current' && Boolean(source.snapshot);
@@ -258,19 +278,22 @@ export function RunHistoryPanel() {
                         type="button"
                         className="run-history__replay"
                         onClick={() => {
+                          if (keyLock) return;
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
                         // L6 (GM r9 answer 3): one order, as the toolbar's:
-                        // the run, then following, then offline (lib/canvasLock).
+                        // the missing key first (withKeyLock, GM PR #203 r11
+                        // item 3), then the run, following, offline (lib/canvasLock).
                         // Offline, its own verb (PR #200 review 3 LOW-1; GM
                         // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
-                        {...lockedAction(lock, { title: recoveryReplayReady
+                        {...withKeyLock(lockedAction(lock, { title: recoveryReplayReady
                           ? 'Resume this run from its saved checkpoint'
                           : 'Run this again with the same nodes and settings',
                         offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
                         // GM r37: while a run goes, what unlocks it, by its own verb.
-                        { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) })}
+                        { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) }),
+                        keyLock, keyLockId)}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -284,13 +307,15 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
+                          {...withKeyLock(lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
-                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) })}
-                          onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
+                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) }),
+                          keyLock, keyLockId)}
+                          onClick={() => { if (!keyLock) void rerunHistoryWithLatestPaperSource(r.id); }}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>
                       )}
+                      {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
                     </span>
                   )}
                   {recoveryReplayBlocked && (

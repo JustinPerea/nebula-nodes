@@ -47,6 +47,12 @@ MAX_EVENT_BYTES = 4096
 MOVE_THRESHOLD_PX = 8.0
 MAX_VALUE_CHARS = 160
 MAX_SUMMARY_CHARS = 200
+# A summary Nebula words itself around a path the person must find, cut
+# nowhere: settings.restored names where the replaced settings file is kept
+# (GM, PR #203 r36 item B6b), and the desktop app's state folder alone runs
+# past 200 characters with the line. settings.not_restored names the path
+# that refuses the same way (review 18 of PR #203, settings LOW-2).
+SUMMARY_CHARS_BY_KIND = {"settings.restored": 1200, "settings.not_restored": 1200}
 MAX_LISTED_IDS = 50
 MAX_TRACKED_RUNS = 256
 
@@ -147,6 +153,15 @@ EVENT_KINDS = frozenset({
     "project.renamed",
     "project.deleted",
     "project.restored",
+    # Nebula put settings.json back from the copy it kept for an in-place
+    # save that was cut short and left the file unreadable (at start;
+    # services/settings.restore_settings_from_backup): data {file}, the
+    # file's shown path. Never a key or a setting.
+    "settings.restored",
+    # A verified copy Nebula couldn't put back at start (the file or its
+    # folder refuses; services/settings.NotRestored): data {file}. The copy
+    # is left for the next start.
+    "settings.not_restored",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",
@@ -249,9 +264,19 @@ def _size(data: Any) -> int:
     return len(json.dumps(data, ensure_ascii=False, default=str))
 
 
+# A run.failed entry for a stop at a call only the person may make carries
+# Nebula's own words to the agent whole, so it learns to propose (review 19
+# of PR #203, LOW-2): those run past MAX_VALUE_CHARS.
+MAX_STOP_ERROR_CHARS = 600
+
+
 def _bound_data(data: Mapping[str, Any] | None) -> dict[str, Any]:
     """Cap strings, then shrink anything still over MAX_EVENT_BYTES."""
-    bounded = _cap_strings(dict(data or {}))
+    data = dict(data or {})
+    stop_error = data.pop("error", None) if data.get("proposalNeeded") is True else None
+    bounded = _cap_strings(data)
+    if isinstance(stop_error, str):
+        bounded["error"] = stop_error[:MAX_STOP_ERROR_CHARS]
     if _size(bounded) <= MAX_EVENT_BYTES:
         return bounded
     if "values" in bounded:
@@ -432,7 +457,7 @@ class CanvasEventJournal:
             "actor": dict(actor or ANONYMOUS),
             "projectId": tag,
             "data": _bound_data(data),
-            "summary": " ".join(str(summary or "").split())[:MAX_SUMMARY_CHARS],
+            "summary": " ".join(str(summary or "").split())[:SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)],
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]

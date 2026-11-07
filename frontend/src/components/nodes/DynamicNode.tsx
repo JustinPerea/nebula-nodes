@@ -275,6 +275,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           person={nodeData.errorPerson}
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
+          notStarted={nodeData.errorNotStarted}
           raw={nodeData.error}
         />
       )}

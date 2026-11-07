@@ -34,7 +34,9 @@ export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLine
   // Round 12 (GM r20 1): the Commons' page-lines row, which hands its line to CommonsErrorLine.
   CommonsPageLines: 'line',
   // The Moodboard Studio's own wrapper (MoodboardStudioView FailureLine): a div around FailureLines.
-  FailureLine: 'failure' };
+  FailureLine: 'failure',
+  // PR #203's Settings row line (a neutral status or an alert), through LineText.
+  SettingsRowError: 'message' };
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
@@ -156,6 +158,8 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'settings.agents-load-retry': { none: 'a retry: its line is settings.agents-load' },
   'settings.agents': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
   // useSettingsDraftStore errors[id], by the row that wrote it.
+  // PR #203: the restored-settings notice's failed dismissal.
+  'settings.notice': [{ file: 'components/panels/settings/SettingsTopNotice.tsx', expr: 'DISMISS_FAILED' }],
   'settings.write': [
     { file: 'components/panels/settings/KeyRow.tsx', expr: 'error' },
     { file: 'components/panels/settings/StorageTab.tsx', expr: 'telemetryError' },

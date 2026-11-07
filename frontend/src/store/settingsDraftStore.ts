@@ -51,11 +51,26 @@ interface SettingsState {
   fieldDrafts: Partial<Record<'outputPath' | 'exportFolder', string>>;
   /** The provider row that's open, and whether it's open to manage or to enter a key. */
   openRow: { id: string; mode: 'manage' | 'edit' } | null;
+  /** Rows the person is in when a change made elsewhere lands, by id: the
+   * section each stays shown in (true: Connected) until they leave it (GM,
+   * PR #203 r19 item 6). ProvidersTab keeps it; the tab badge counts by it
+   * too, so the two agree while a row is held (r21 item 3). */
+  heldRows: Record<string, boolean>;
+  /** How many reads of the saved settings (GET /api/settings) have landed in
+   * the panel. A change made elsewhere is said once the read it asked for
+   * lands, never on a write of this tab's that lands first (ProvidersTab;
+   * review 11 of PR #203, copy MEDIUM-1). */
+  reads: number;
   tab: SettingsTab;
   /** Fields and keys with a write in flight, by key name or field name. */
   pending: Record<string, true>;
   /** The last failed write per key or field. Cleared when that one is retried or edited. */
   errors: Record<string, string>;
+  /** Of those, the ones that lost nothing: another Nebula was saving the
+   * settings, so the change waits (code settings_busy). The row says them
+   * in its normal muted colour, not the error colour (GM, PR #203 r39). Set
+   * with each failed write, so it always matches errors[id]. */
+  neutral: Record<string, true>;
   /** The field that just saved, for its brief "Saved" mark. */
   justSaved: string | null;
   notice: SettingsNotice | null;
@@ -68,9 +83,12 @@ export const useSettingsDraftStore = create<SettingsState>(() => ({
   keyDrafts: {},
   fieldDrafts: {},
   openRow: null,
+  heldRows: {},
+  reads: 0,
   tab: 'providers',
   pending: {},
   errors: {},
+  neutral: {},
   justSaved: null,
   notice: null,
 }));

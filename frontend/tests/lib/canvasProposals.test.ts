@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardQuoted, changeCountLabel, proposalChangeCount, proposalChanges } from '../../src/lib/canvasProposals';
+import { cardQuoted, changeCountLabel, proposalChangeCount, proposalChanges, proposalEstimateLabel } from '../../src/lib/canvasProposalsBar';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {
@@ -25,10 +25,10 @@ describe('proposalChanges', () => {
       params: { n1: { _kreaAuth: { from: 'api-token', to: 'mcp' } } },
     });
     expect(groups[0].lines).toEqual([{ key: 'Billed to', to: 'Krea plan' }, { key: 'seed', to: '7' }]);
-    expect(groups[1].lines).toEqual([{ key: 'Billed to', from: 'API token balance', to: 'Krea plan' }]);
+    expect(groups[1].lines).toEqual([{ key: 'Billed to', from: 'API balance', to: 'Krea plan' }]);
     // A node that never set it is on the API token, not "(empty)".
     const unset = proposalChanges(view(), { nodes: {}, params: { n1: { _kreaAuth: { from: null, to: 'mcp' } } } });
-    expect(unset[1].lines).toEqual([{ key: 'Billed to', from: 'API token balance', to: 'Krea plan' }]);
+    expect(unset[1].lines).toEqual([{ key: 'Billed to', from: 'API balance', to: 'Krea plan' }]);
   });
 
   it('names a provider switch plainly, with Auto for a node that never set it', () => {
@@ -134,5 +134,18 @@ describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
     const swap = { ...again, params: [{ ...again.params[0], inputsUpdated: undefined }] };
     expect(proposalChanges(swap).find((group) => group.kind === 'edit')!.lines[0])
       .toEqual({ key: 'model', from: 'openai/gpt-4o', to: 'openai/gpt-4o' });
+  });
+});
+
+describe('proposalEstimateLabel', () => {
+  const priced = (low: number, high: number, open = false) => ({
+    ...view(), run: ['+k'], cost: { ...view().cost, estimate: { low, high, open } },
+  }) as unknown as ProposalView;
+
+  it('an estimate is the paid part only: one that rounds to zero is "~$0" (round 6 review NIT-1; a sourced $0 is free, never priced: GM, PR #203 r18 item 1)', () => {
+    expect(proposalEstimateLabel(priced(0, 0))).toBe('~$0');
+    expect(proposalEstimateLabel(priced(0.07, 0.07))).toBe('~$0.07');
+    // An open run is an estimate: the shared formatter's form (PR #198).
+    expect(proposalEstimateLabel(priced(0, 0, true))).toBe('$0 + unpriced');
   });
 });

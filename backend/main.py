@@ -76,15 +76,28 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError, unchosen_model_errors
 from execution.sync_runner import get_handler_registry
-from execution import provider_calls
+from execution import provider_calls, run_origin
 from services.settings import (
     load_settings,
+    load_saved_settings,
+    saved_keys_writable,
+    settings_file_shown,
+    SettingsBusy,
+    SettingsUnreadable,
+    SettingsUnwritable,
+    NotRestored,
     save_settings,
+    settings_write_block,
+    shown_path,
+    restore_settings_from_backup,
+    settings_transaction,
+    sweep_stale_temp_files,
     get_api_key,
     validate_provider_keys,
     clear_provider_validation_cache,
     is_injected_mode,
     update_injected_keys,
+    hf_token_character_line,
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
@@ -93,8 +106,11 @@ from services.file_param_preview import NO_PREVIEW_DEFINITIONS, follow_file_para
 from services import upload_names
 from services.preview_size import preview_size
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services.run_reports import STOPPED_FOR_PROPOSAL, one_line_error
+from services import settings as settings_notice_store
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
+from services import agent_words
 from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
@@ -147,7 +163,9 @@ from services.agent_presence import (
     AgentIdentity,
     PresenceError,
     RequestHeadersContext,
+    MAX_LOG_CHARS,
     agent_presence,
+    clean_log,
     clean_say,
     current_request_headers,
     identify as identify_agent,
@@ -2378,28 +2396,46 @@ def _normalize_output_value_for_storage(port_val: Any) -> Any:
         return port_val
 
     value = port_val.get("value")
-    normalized = _normalize_nested_output_refs_for_storage(value)
-    normalized_port = port_val if normalized == value else {**port_val, "value": normalized}
-    port_type = normalized_port.get("type")
+    port_type = port_val.get("type")
     if port_type in SPATIAL_VALUE_MODELS:
-        if normalized is None:
+        # A spatial value holds paths only in its asset references' ``uri``.
+        # Every other string is metadata ("source": "generated", a provider
+        # or model name, a tag), and must not become an /api/outputs URL just
+        # because a folder of that name exists under OUTPUT_ROOT: that broke
+        # validation (WorldValueV2 session.source) whenever one did.
+        if value is None:
             raise ValueError(f"{port_type} output cannot be null")
         if (
             port_type == "World"
-            and isinstance(normalized, dict)
-            and normalized.get("schemaVersion", normalized.get("schema_version")) == 1
+            and isinstance(value, dict)
+            and value.get("schemaVersion", value.get("schema_version")) == 1
         ):
-            normalized_port = {
-                **normalized_port,
-                "value": canonicalize_world_value_v1(normalized),
+            return {
+                **port_val,
+                "value": canonicalize_world_value_v1(
+                    value, asset_uri_normalizer=lambda uri: _output_url_from_ref(uri) or uri),
             }
-        else:
-            parsed = parse_spatial_value(str(port_type), normalized)
-            normalized_port = {
-                **normalized_port,
-                "value": dump_spatial_value(parsed),
-            }
-    return normalized_port
+        parsed = parse_spatial_value(str(port_type), _normalize_spatial_asset_uris_for_storage(value))
+        return {**port_val, "value": dump_spatial_value(parsed)}
+    normalized = _normalize_nested_output_refs_for_storage(value)
+    return port_val if normalized == value else {**port_val, "value": normalized}
+
+
+def _normalize_spatial_asset_uris_for_storage(value: Any) -> Any:
+    """A spatial value's asset references (``{"id", "uri", "mediaType"}``,
+    models/spatial.py LocalAssetReference) made portable: only each ``uri``
+    string is rewritten; every other string is left exactly as sent."""
+    if isinstance(value, list):
+        return [_normalize_spatial_asset_uris_for_storage(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_spatial_asset_uris_for_storage(item) for item in value)
+    if isinstance(value, dict):
+        return {
+            key: (_output_url_from_ref(item) or item) if key == "uri" and isinstance(item, str)
+            else _normalize_spatial_asset_uris_for_storage(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _normalize_nested_output_refs_for_storage(value: Any) -> Any:
@@ -2906,6 +2942,28 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
+def _run_origin_now(ask: str | None = None, nodes: list[GraphNode] | None = None) -> run_origin.RunOrigin:
+    """Who is starting this run, read as every person-only check reads it
+    (_is_person_request): the person's own Run, or the run an Accept
+    approved (_check_run_approval: only the person's tab starts it), is the
+    person's; anything else is an agent's. The surface names the proposal
+    the agent is pointed at; ``ask`` replaces it for a run with no canvas
+    node (a quick run)."""
+    person = _is_person_request()
+    return run_origin.RunOrigin(person=person, surface=_surface(), ask=ask,
+                                names=_run_names(nodes) if nodes is not None else None,
+                                tab=not person and refusal_copy.person_reads())
+
+
+async def _run_graph(*, ask: str | None = None, **kwargs: Any) -> None:
+    """execute_graph, with the run's origin recorded for the one check made at
+    a call (execution/run_origin.py: an agent's run stops at an Idol node that
+    would call Hugging Face with the person's token set; Justin decided,
+    2026-10-31). Every run route starts its graph here."""
+    with run_origin.running(_run_origin_now(ask, kwargs.get("nodes"))):
+        await execute_graph(**kwargs)
+
+
 def _scene_writes_strict() -> bool:
     """Whether this request's Cinema scene is refused when it can't be filled
     in (services/cinema_scene_spec.py): an agent-authored write (an agent's
@@ -3229,7 +3287,7 @@ def _require_spend_approval(
     if _is_person_request():
         return
     _refuse_agent_billing_in_run(nodes, on_canvas=on_canvas)
-    ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
+    ask = how_to_ask or agent_spend.propose_hint(run_ids or [], _surface())
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError) as exc:
@@ -3269,7 +3327,7 @@ def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = Tr
     way the canvas node it names does (_billing_choice: a route-table node's
     provider, a dual-mode Krea node's billing mode). A node that isn't on the
     canvas, or is there as another definition, starts on the defaults (Auto,
-    the API token).
+    the API key connection).
 
     It reads the params the run runs with: the engine migrates retired params
     before a node runs (execution/engine.py _with_current_params), and not
@@ -3519,6 +3577,110 @@ async def _person_startup() -> None:
     person_session.initialize()
     from services import launch_secrets
     launch_secrets.initialize()
+
+
+@app.on_event("startup")
+async def _sweep_settings_temp_files() -> None:
+    """A save cut short between its temp file and the rename leaves a full
+    copy of settings.json beside it, keys included: removed at each start
+    (services/settings.sweep_stale_temp_files; review 15 of PR #203,
+    settings-keychain LOW-2). First, an in-place write cut short that left
+    settings.json unparseable is put back from the copy kept for it
+    (services/settings.restore_settings_from_backup; review 16, settings
+    MEDIUM-1 d), journaled as settings.restored and logged, both with
+    settings_restored_line."""
+    global _settings_notice
+    restored = restore_settings_from_backup()
+    if isinstance(restored, NotRestored):
+        # Review 18 of PR #203, settings LOW-2: a verified copy Nebula can't
+        # put back is said, never left silent.
+        line = settings_not_restored_line(restored)
+        logging.getLogger("nebula.settings").warning("%s", line)
+        _journal("settings.not_restored", data={"file": shown_path(restored.path)}, summary=line,
+                 actor={"kind": "system"})
+    elif restored is not None:
+        line = settings_restored_line(restored)
+        logging.getLogger("nebula.settings").warning("%s", line)
+        _journal("settings.restored", data={"file": shown_path(restored.path), "keptAt": shown_path(restored.kept)},
+                 summary=line, actor={"kind": "system"})
+        # The person sees it once, at the top of Settings until dismissed
+        # (GM, PR #203 r38 item 5's fallback: Updates holds agents' notes,
+        # which agents list, so it takes no system card yet).
+        _settings_notice = {"kind": "restored", "line": line, "path": shown_path(restored.kept)}
+        settings_notice_store.save_notice(_settings_notice)
+    else:
+        # One from an earlier start the person hasn't dismissed (GM r40 item 6).
+        _settings_notice = settings_notice_store.load_notice()
+    sweep_stale_temp_files()
+
+
+# GM, PR #203 r36 item B6b: why the settings were put back, when that is
+# known, and where the file the restore replaced is kept. The copy is only
+# ever left by an in-place save that didn't finish; a file that isn't that
+# save's mix of old and new text was changed since, for a reason Nebula
+# can't know, so the line drops the "because" clause.
+SETTINGS_RESTORED_BECAUSE = ("Nebula restored your settings from its saved copy because the last save didn’t finish. "
+                             "The file it replaced is kept at {kept}.")
+SETTINGS_RESTORED = "Nebula restored your settings from its saved copy. The file it replaced is kept at {kept}."
+
+
+def settings_restored_line(restored: Any) -> str:
+    """The settings.restored line for a Restored (services/settings)."""
+    line = SETTINGS_RESTORED_BECAUSE if restored.unfinished else SETTINGS_RESTORED
+    return line.format(kept=shown_path(restored.kept))
+
+
+# A verified copy Nebula couldn't put back at start (services/settings.
+# NotRestored; review 18 of PR #203, settings LOW-2), for the server log and
+# the journal (settings.not_restored). GM, PR #203 r39 item 3, verbatim.
+SETTINGS_NOT_RESTORED = ("Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed "
+                         "to change {path}. It’ll try again the next time Nebula starts.")
+
+
+# GM, PR #203 r40 item 3, verbatim: a copy not put back for any cause other
+# than not being allowed (a full disk, an I/O error, another save).
+SETTINGS_NOT_RESTORED_OTHER = ("Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again "
+                               "the next time Nebula starts.")
+
+
+def settings_not_restored_line(result: Any) -> str:
+    """The settings.not_restored line for a NotRestored, by its cause
+    (review 19 of PR #203, settings LOW-4): "isn’t allowed to change" with
+    the path that refuses (what settings_write_block found, the copy folder,
+    else the settings file) only when Nebula isn't allowed; else the line
+    with no cause."""
+    from services.settings import SettingsUnwritable, _NOT_ALLOWED_ERRNOS
+
+    why = result.why
+    if not isinstance(why, SettingsUnwritable) and getattr(why, "errno", None) not in _NOT_ALLOWED_ERRNOS:
+        return SETTINGS_NOT_RESTORED_OTHER
+    where = getattr(why, "where", None) or result.path
+    return SETTINGS_NOT_RESTORED.format(path=shown_path(where))
+
+
+# The settings line the person sees once (settings.restored's, GM r38 item
+# 5): set at start, shown at the top of Settings until the person dismisses
+# it, for this launch. Never in what agents read: its routes are the
+# person's only.
+_settings_notice: dict[str, str] | None = None
+
+
+@app.get("/api/settings/notice")
+async def get_settings_notice() -> dict[str, Any]:
+    """The line Settings shows at its top until dismissed: {notice: {kind,
+    line, path} | null}. ``path`` is the part of ``line`` shown in mono."""
+    require_person(current_request_headers())
+    return {"notice": dict(_settings_notice) if _settings_notice else None}
+
+
+@app.post("/api/settings/notice/dismiss")
+async def dismiss_settings_notice() -> dict[str, Any]:
+    """The person read the line: it isn't shown again."""
+    global _settings_notice
+    require_person(current_request_headers())
+    _settings_notice = None
+    settings_notice_store.clear_notice()
+    return {"notice": None}
 
 
 @app.on_event("startup")
@@ -4391,7 +4553,7 @@ def _validation_messages(errors: list[ValidationErrorDetail]) -> dict[str, str]:
     return {node_id: "; ".join(messages) for node_id, messages in by_node.items()}
 
 
-async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_id: str) -> None:
+async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_id: str) -> str | None:
     """Every run path's pre-call refusal, told the same way.
 
     Each node it names shows the message on its card (validationError, which
@@ -4399,7 +4561,13 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
     (node_errors: look_at_canvas, view_output), and the journal says which
     nodes failed and for whom (run.failed). So an agent's refused run_nodes
     looks on the canvas like the person's refused click on Run.
-    """
+
+    An agent's refused run (MCP, the CLI, an in-app chat turn, any route)
+    reaches the person's Agent log as one merged line, whoever asked (GM, PR
+    #203 r30 item 1): its cursor's event carries it as the log line
+    (_say_refused_run). Returns the line when no cursor carried it (the
+    browser's own request, or a refusal with no node to point at), so
+    /api/graph/run can still give it to an in-app chat turn."""
     node_errors.record_validation(errors)
     # Journaled before the broadcast's await (round 8 of PR #114).
     for node_id, message in _validation_messages(errors).items():
@@ -4407,6 +4575,110 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
             _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
     canvas_events.forget_run(run_id)
     await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+    return await _say_refused_run(errors)
+
+
+async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
+    """The Agent log's line for a refused run, by the bar's merge rule
+    (_refused_run_log_line): "Nebula couldn’t start the run. 2 “GPT Image 2”
+    nodes need your OpenAI API key. Add it in Settings, then run the nodes
+    again." For an agent's request its cursor points at the first node it
+    names, the bubble keeping that node's own line, and the event's `log` is
+    the merged line, so the log lists the run once in the merged words. None
+    when the cursor carried it; the line otherwise. Agents' own text (`error`,
+    `errors`) keeps every node by id."""
+    node_ids = [node_id for node_id in _validation_messages(errors) if node_id]
+    person = _validation_person_lines(errors)
+    line = _refused_run_log_line(errors)
+    first = node_ids[0] if node_ids else None
+    if first is None or identify_agent(current_request_headers()) is None:
+        return line
+    # The cursor quotes the node like every other bubble; the log has the
+    # run's line, whole: Nebula's own line is never cut (GM, PR #203 r33 item 2).
+    # Needs say r34's form (GM r38 item 1); any other line is named once by
+    # the node's own name (_bubble_line, GM r38 item 2). A needs or route
+    # bubble is its first sentence, which names what's needed or wrong; the
+    # action sentence is on the card and in the log (GM, PR #203 r39 item 5).
+    needs = _bubble_needs(first, errors)
+    bubble = (_first_sentence(f"{_quoted(_node_label(first))} {needs}") if needs
+              else _bubble_line(first, person.get(first) or ""))
+    await _show_agent({"nodeId": first}, shows="error", say=_whole_sentences(bubble), did=_did("Tried to run", first),
+                      log=line, log_whole=True)
+    return None
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[“A-Z])")
+
+
+def _first_sentence(line: str) -> str:
+    """A line's first sentence (a size's dot or a quoted name never ends one)."""
+    return _SENTENCE_END.split(line, maxsplit=1)[0]
+
+
+def _whole_sentences(line: str) -> str:
+    """A bubble line longer than the bubble holds (agent_presence.
+    MAX_SAY_CHARS) as its whole sentences that fit, never cut inside one
+    ("…, and add"): the Agent log has the line whole. A first sentence
+    longer than the bubble is left to the bubble's own cut."""
+    from services.agent_presence import MAX_SAY_CHARS
+
+    if len(line) <= MAX_SAY_CHARS:
+        return line
+    kept = ""
+    for sentence in _SENTENCE_END.split(line):
+        joined = f"{kept} {sentence}" if kept else sentence
+        if len(joined) > MAX_SAY_CHARS:
+            break
+        kept = joined
+    return kept or line
+
+
+def _named_line(node_id: str, line: str) -> str:
+    """A line that opens with the node's quoted type name, opening with its
+    own name instead (_node_label: the person's label when it was renamed,
+    else its type's name; never both; GM, PR #203 r38 item 2, r39 item 8).
+    Any other line is returned as it is."""
+    named = _quoted(_node_label(node_id))
+    node = cli_graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    definition = node_registry.get_all().get(definition_id, {})
+    type_name = node_route.node_name(definition, None, definition_id or node_id)
+    for opening in (named, _quoted(type_name)):
+        if line.startswith(opening):
+            return named + line[len(opening):]
+    return line
+
+
+def _bubble_line(node_id: str, line: str) -> str:
+    """A card line in the cursor bubble, named once by the node's name
+    (_named_line): a line that opens with the name is its first sentence,
+    which says what's wrong ("“Hero shot” can’t run on fal.ai with
+    “Resolution” set to 1.5K."; GM, PR #203 r39 item 5); any other line
+    follows "“Hero shot” can’t run."."""
+    named = _quoted(_node_label(node_id))
+    own = _named_line(node_id, line)
+    if own.startswith(named):
+        return _first_sentence(own)
+    return f"{named} can’t run." + (f" {line}" if line else "")
+
+
+def _bubble_needs(node_id: str, errors: list[ValidationErrorDetail]) -> str | None:
+    """The bubble's words after the node's name when all it needs is inputs
+    connected and maybe its key (person_line.needs_bubble, GM r38 item 1),
+    its inputs in the node's input order; None for any other stop."""
+    from execution.person_line import needs_bubble
+
+    own = [error for error in errors if error.node_id == node_id]
+    unwired = [error for error in own if error._stop == "input"]
+    # A stop that is only its key (a plain key check, or a routed node's
+    # route with no key set; review 19 of PR #203, MEDIUM-1), its words set
+    # where the check is made (ValidationErrorDetail._key).
+    keyed = [error for error in own if error._key]
+    if not unwired or len(unwired) + len(keyed) != len(own) or len(keyed) > 1:
+        return None
+    order = _input_order(node_id)
+    unwired.sort(key=lambda error: order.get(error.port_id, len(order)))
+    return needs_bubble([error._need or "" for error in unwired], keyed[0]._key if keyed else None)
 
 
 # ---------- WebSocket endpoint ----------
@@ -5146,7 +5418,14 @@ async def agent_context(request: Request) -> dict[str, Any]:
 @app.get("/api/agent/spend")
 async def agent_spend_status(request: Request) -> dict[str, Any]:
     """The spending limits and what the calling agent's session has used, so an
-    agent can plan before it runs anything. The person's canvas isn't limited."""
+    agent can plan before it runs anything. The person's canvas isn't limited.
+    A settings file Nebula can't read answers as start_here's spend part
+    does, 200 with the read line and its code (review 14, settings-gate
+    LOW-2: a 500 before, or the default limits for a file that isn't an
+    object): MCP get_spend_limits and `nebula spend` say it."""
+    unreadable = _settings_read_refusal()
+    if unreadable is not None:
+        return {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
     settings = load_settings()
     caps = agent_spend.caps_from_settings(settings)
     limits = {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}
@@ -5419,6 +5698,13 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
         estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
+        if row["price"] == [0.0, 0.0]:
+            # A sourced $0 (a Hugging Face Space on the person's allowance)
+            # reads like every other free node, with who can bill past it.
+            row["price"] = "free"
+            billing = _space_billing(definition, settings.get("apiKeys") or {})
+            if billing:
+                row["billing"] = billing
         routed = model_pricing.entry_for_route(entry, provider)
         note = model_pricing.size_note(routed, definition)
         if row["price"] is None and note:
@@ -5474,7 +5760,7 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
 PROVIDER_CHOICE_NOTE = (
     "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
-    "whose key is set, in this order. A run never moves to another route by itself: when the "
+    "whose key is set, or a keyless route (optionalKeys, which needs none), in this order. A run never moves to another route by itself: when the "
     "chosen route can't take a setting, or its key isn't set, the run stops and says which "
     "routes could. Each route's params list what that provider offers, as the card shows it "
     "there: a setting it doesn't offer is absent (`hides` names it) or has `onlyWhen`. That "
@@ -5485,6 +5771,51 @@ PROVIDER_CHOICE_NOTE = (
     "person's call: propose a _provider change with propose_change; direct edits of _provider "
     "are refused."
 )
+
+
+# https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
+# credits". With the person's Hugging Face token set, an agent's run that
+# reaches an Idol node which must call the Space stops there, before anything
+# is sent, and the agent proposes the run instead; the rest of the run goes
+# ahead (Justin decided, 2026-10-31; handlers/speridlabs_idol.run_idol).
+# Without the token, agents run it as any free node. Every surface that lists
+# the node says so, as the token is set now (review 7 of PR #203, LOW-1):
+# describe_node's route `billing` (`nebula info`'s BILLING line), the
+# find_nodes row's `billing` where it runs free (`nebula nodes` prints it
+# under the table), and start_here's notes (`nebula context`). The notes name
+# the MCP tool; the CLI prints its own command for it (cli/formatter._cli_words).
+HF_SPACE_BILLING_FREE = (
+    "Free here: no HF_TOKEN is set, so it runs on Hugging Face's shared ZeroGPU and agents run it as any free "
+    "node. With the person's HF_TOKEN set it would run on their own ZeroGPU allowance, and past the daily quota "
+    "Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU time "
+    "(https://huggingface.co/docs/hub/spaces-zerogpu); then an agent's run that reaches it stops at it, before "
+    "anything is sent to Hugging Face, and the agent proposes the run instead (propose_change)."
+)
+HF_SPACE_BILLING_TOKEN = (
+    "May cost here: the person's HF_TOKEN is set, so it runs on their own ZeroGPU allowance, and past the daily "
+    "quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU "
+    "time (https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0. An agent's run goes ahead "
+    "up to it, and a result it reuses passes, but while the token is set the node stops before calling Hugging "
+    "Face and the nodes after it don't run (its error says so): propose the run (propose_change), and the "
+    "person accepts on the canvas."
+)
+
+
+def hf_space_billing_note(token_set: bool) -> str:
+    """Who can bill a Hugging Face Space run, as the token is set now."""
+    return HF_SPACE_BILLING_TOKEN if token_set else HF_SPACE_BILLING_FREE
+
+
+def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any],
+                   params: Mapping[str, Any] | None = None) -> str | None:
+    """The billing note for a node whose run may bill the person's own
+    account with their key (a Hugging Face Space: Idol), from its cost class
+    (model_pricing.cost_class, the one function every surface reads; review 8
+    of PR #203, LOW-3), else None. ``params`` picks the route ({} is Auto's)."""
+    cost_class = model_pricing.cost_class(definition, params or {}, api_keys)
+    if cost_class not in (model_pricing.MAY_COST, model_pricing.FREE):
+        return None
+    return hf_space_billing_note(cost_class == model_pricing.MAY_COST)
 
 
 def _describe_routes(
@@ -5517,7 +5848,7 @@ def _describe_routes(
             "id": spec["id"], "provider": spec.get("provider"),
             "name": node_route.provider_label(spec.get("provider")),
             "keys": list(spec.get("keys") or []),
-            "keySet": any(api_keys.get(key) for key in spec.get("keys") or []),
+            "keySet": any(node_route.key_set(api_keys, key) for key in spec.get("keys") or []),
             # What this route takes: the shared params and its own, each as
             # it offers them (enums cut, ranges narrowed), the list the
             # Inspector shows on this provider.
@@ -5536,6 +5867,18 @@ def _describe_routes(
         if row["price"] and model_pricing.route_price_unconfirmed(
                 (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
             row["priceUnconfirmed"] = True
+        if node_route.is_keyless(spec):
+            # Runs with no key (keys []); a key here is used when it is set,
+            # and then the run is on that person's own account and quota
+            # (a Hugging Face Space: their ZeroGPU time, which Hugging Face
+            # can bill a PRO account for past its free minutes).
+            row["optionalKeys"] = [{"key": key, "set": node_route.key_set(api_keys, key)}
+                                   for key in node_route.keys(spec.get("optionalKeys"))]
+        # A route that may bill the person's own account with their key:
+        # say who can bill, from its cost class on this route.
+        billing = _space_billing(definition, api_keys, {node_route.PROVIDER_PARAM: spec.get("id")})
+        if billing is not None:
+            row["billing"] = billing
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
@@ -5694,7 +6037,7 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if modes:
         result["kreaModes"] = modes
         if len(modes) > 1:
-            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API token. "
+            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API key connection. "
                                   'To bill the signed-in Krea plan instead, propose {"_kreaAuth": "mcp"} with '
                                   "propose_change; direct edits of _kreaAuth are refused.")
     if definition["id"] == model_pricing.CINEMA_SCENE:
@@ -5730,7 +6073,7 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
                 result["priceNote"] = ("Billed to the signed-in Krea plan. Agent runs count against the Krea plan-run "
                                        "limit set in Nebula Settings.")
             elif modes:
-                result["priceNote"] = ("On the API token it has no list price, so agent runs of it must be proposed "
+                result["priceNote"] = ("On the API key connection it has no list price, so agent runs of it must be proposed "
                                        "(propose_change). Switched to the Krea plan (the person's call), agent runs "
                                        "count against the Krea plan-run limit set in Nebula Settings.")
             else:
@@ -5910,6 +6253,7 @@ async def _show_agent(
     did: dict[str, Any] | None = None,
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
+    log_whole: bool = False,
     person_say: str | None = None,
     proposal_id: str | None = None,
 ) -> None:
@@ -5921,7 +6265,9 @@ async def _show_agent(
     bubble leaves it out: GM - Design, round 16 of PR #195); an action with
     neither is logged in the Agents panel's words ("Changed “Hero”"), so no
     action is left out of the log (MCP-SETUP.md, PR #198 r1). ``words``
-    computes (say, log) inside the guard (_set_params_bubble). Never fails
+    computes (say, log) inside the guard (_set_params_bubble). ``log_whole``:
+    ``log`` is Nebula's own whole line (a refused run's), never cut
+    (agent_presence.clean_log). Never fails
     the route that called it: presence is decoration on top of an edit that
     already succeeded.
 
@@ -5947,9 +6293,10 @@ async def _show_agent(
         if not say and not log and did is not None and did.get("verb"):
             log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
         # The event carries ``log`` only when it isn't the bubble's own words (PR #195).
-        if log is not None and clean_say(log) == clean_say(say):
+        if log is not None and clean_log(log, whole=log_whole) == clean_say(say):
             log = None
-        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log,
+                       log_whole=log_whole)
         if proposal_id:
             event["proposalId"] = proposal_id
         person = _person_form(event, identity, headers, shown=shows)
@@ -6397,7 +6744,15 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
         # a provider quoted (services/key_echoes.py) before cutting to 200, so
         # a key cut short can't slip under the 8-character run check.
-        if isinstance(event, ErrorEvent):
+        stopped = isinstance(event, ErrorEvent) and event.proposal_needed
+        if stopped:
+            # A stop at a call only the person may make (Idol's Hugging Face
+            # call with their token): marked, with the agent's words whole, so
+            # an agent reading later learns to propose (review 19 of PR #203,
+            # LOW-2). Nebula wrote them; they carry no key.
+            data["proposalNeeded"] = True
+            data["error"] = str(_journal_safe_value(event.error or "", key="error"))[:600]
+        elif isinstance(event, ErrorEvent):
             error = _hide_key_echoes(event.friendly or event.error or "", _agent_key_secrets())
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
         if isinstance(event, SkippedEvent):
@@ -6409,7 +6764,7 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
             kind,
             node_id=node_id,
             data=data,
-            summary=f"{_node_label(node_id)} ({node_id}) {_RUN_EVENT_VERBS[kind]}",
+            summary=f"{_node_label(node_id)} ({node_id}) {'stopped' if stopped else _RUN_EVENT_VERBS[kind]}",
             actor=canvas_events.run_actor(run_id),
             project_id=_run_project(),
         )
@@ -7431,6 +7786,8 @@ async def get_canvas_snapshot() -> dict[str, Any]:
             node["error"] = _hide_key_echoes(failed["error"], key_words)
             if failed.get("hint"):
                 node["errorHint"] = failed["hint"]
+            if failed.get("stopped"):
+                node["stopped"] = failed["stopped"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
     snapshot["events"] = {"journal": canvas_events.journal_id, "cursor": canvas_events.latest}
     # The person's notes for agents: open pins first, plus recent replies.
@@ -7512,37 +7869,63 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
             options = node_readiness.detail(definition, context["keys"], context["krea"], definitions) or {}
             if options.get("note"):
                 notes.append(f"{row['id']}: {options['note']}")
-    look = "`nebula info <id>`" if via == "cli" else "describe_node"
-    propose = "`nebula propose`" if via == "cli" else "propose_change"
+    if via == "cli":
+        # Data in MCP words (find_nodes' needsKeyFor, describe_node's note):
+        # a shell-only agent reads the `nebula` commands. The notes below are
+        # worded where they are written (review 11, NIT-7).
+        notes = [_cli_words(note) for note in notes]
+    look = agent_words.worded("{describe}", via)
+    propose = agent_words.worded("{propose}", via)
     if any(row.get("runsWith") == "krea" for row in ready):
         notes.append(f"runsWith krea: runs on the signed-in Krea account. Billing a node differently (_kreaAuth) "
                      f"is the person's call: {propose} it.")
     if any(row.get("providers") for row in ready):
         notes.append(f"A node with providers runs on one route (_provider; {look} lists them); switching it is "
                      f"the person's call: {propose} it.")
-    if via == "cli":
-        # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
-        notes = [_cli_words(note) for note in notes]
+    if any(row.get("billing") for row in ready):
+        # Each row's own note, as the token is set now (_space_billing).
+        for note, ids in _group_by_note(row for row in ready if row.get("billing")).items():
+            notes.append(f"{', '.join(ids)}: {_cli_words(note) if via == 'cli' else note}")
     return notes
 
 
-_CLI_WORDS = {"describe_node": "`nebula info <id>`", "propose_change": "`nebula propose`",
-              "find_nodes": "`nebula nodes`", "edit_canvas": "`nebula apply`"}
+def _group_by_note(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[str]]:
+    """Node ids by their `billing` note, in order: one line per distinct note."""
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["billing"]), []).append(str(row["id"]))
+    return grouped
 
 
 def _cli_words(text: str) -> str:
-    return re.sub(r"\b(" + "|".join(_CLI_WORDS) + r")\b", lambda match: _CLI_WORDS[match.group(1)], text)
+    """MCP-worded notes in CLI words (agent_words.cli_words, the one table)."""
+    return agent_words.cli_words(text)
+
+
+def _quick_propose_hint(definition_id: str, where: str) -> str:
+    """What a quick run an agent can't start points at instead, in its
+    reader's words: a node on the canvas, then a proposal to run it (the CLI
+    names `nebula create <id>`; review 9 of PR #203, keys NIT-3)."""
+    if where == agent_words.CLI:
+        add = f"`nebula create {definition_id}`"
+    else:
+        add = f"edit_canvas, a {definition_id} node"
+    return (f"Add it to the canvas instead ({add}), then propose the run: "
+            f"{agent_words.propose_run([], where)}. The person accepts on the canvas, and the canvas runs it.")
 
 
 @app.get("/api/agent/start")
-async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]:
+async def agent_start_here(request: Request) -> dict[str, Any]:
     """An agent's first call: the canvas, open pins and proposals, every board,
     the node types that run here with prices, and the spend limits, each in
     its own budget (services/agent_start.py). MCP `start_here` and `nebula
-    context` print it; `via=cli` words its hints as `nebula` commands."""
-    if via not in agent_start.VIAS:
-        raise HTTPException(status_code=422, detail="via must be mcp or cli")
+    context` print it; the CLI's ``X-Nebula-Surface: cli``, the one signal
+    every CLI request sends (services/agent_words; review 10 of PR #203,
+    NIT-4), words its hints as `nebula` commands. A CLI from before the
+    header sends ``?via=cli`` instead, read only when the header is missing
+    (review 11, LOW-1)."""
     headers = current_request_headers()
+    via = agent_words.surface(headers, request.query_params.get("via"))
     caller = identify_agent(headers)
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
@@ -7564,10 +7947,20 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
                if isinstance(p, AssetProposal) and await _commons_proposal_visible(p, headers)]
     # Reads every board file; off the event loop.
     summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
-    context = await asyncio.to_thread(_agent_node_context)
-    rows = await asyncio.to_thread(
-        lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
-    spend = await agent_spend_status(request)
+    unreadable = _settings_read_refusal()
+    if unreadable is None:
+        context = await asyncio.to_thread(_agent_node_context)
+        rows = await asyncio.to_thread(
+            lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
+        nodes = agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
+                                       krea="signed in" if context["krea"] else "not signed in", via=via)
+        spend = agent_start.spend_part(await agent_spend_status(request))
+    else:
+        # A settings file Nebula can't read: no node runs (each run fails
+        # closed on it) and the limits can't be read, so both parts carry
+        # the read line instead of a 500 (review 13 of PR #203, LOW-3).
+        nodes = agent_start.nodes_part([], total=len(node_registry.get_all()), notes=[unreadable], via=via)
+        spend = {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
     return agent_start.build(
         canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
         pins=agent_start.pins_part(pins, via=via),
@@ -7576,9 +7969,8 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
             summaries, active_project_id=active_id,
             project_names={str(pid): str(p.get("name") or pid) for pid, p in projects.items() if isinstance(p, dict)},
             via=via),
-        nodes=agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
-                                     krea="signed in" if context["krea"] else "not signed in", via=via),
-        spend=agent_start.spend_part(spend),
+        nodes=nodes,
+        spend=spend,
         next=agent_start.next_part({"journal": canvas_events.journal_id, "cursor": canvas_events.latest}, via=via),
     )
 
@@ -8693,7 +9085,10 @@ def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
 
 
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
-    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal))
+    # Priced with the keys set now (GM, PR #203 r15 item 1): who bills a
+    # node, and whether Idol is "free" or "may cost", follow them.
+    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
+                                 api_keys=load_settings().get("apiKeys", {}) or {})
 
 
 # What each open proposal's card last showed for its nodes' names: a rename
@@ -8725,6 +9120,24 @@ async def _follow_renamed_proposals() -> None:
         kept = canvas_proposals.get(proposal_id)
         if kept is None or not kept.is_open:
             _proposal_names_sent.pop(proposal_id, None)
+
+
+async def _resend_open_proposals() -> None:
+    """Send each open proposal of the open project to the person's canvases
+    again, read with the keys and names set now (the plan line and the cost
+    classes in it). A failed send is skipped: the next sync carries it."""
+    for proposal in canvas_proposals.open_list():
+        try:
+            if proposal.project_id != _workspace_context()["activeProjectId"]:
+                continue
+            await manager.broadcast_browser({
+                "type": "proposalOpened",
+                "proposal": _proposal_view(proposal),
+                "acceptKey": proposal.accept_key,
+                "personValues": canvas_proposals.person_values(proposal),
+            })
+        except Exception:  # noqa: BLE001 - the next sync carries it too
+            pass
 
 
 def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
@@ -9070,7 +9483,7 @@ def _proposal_run_scope(
     (``skips``, pending_nodes.run_skips). The run after Accept isn't the
     person's direct run, so it skips them (main._skip_placeholders) and
     nothing is spent on them: they are left out of ``chosen`` and ``scope``,
-    so the cost the person sees before Accept & run prices only what runs
+    so the cost the person sees before Accept and run prices only what runs
     (GM - Design, 2026-10-25)."""
     graph_nodes, graph_edges = candidate.to_execute_format()
     nodes = [GraphNode.model_validate(node) for node in graph_nodes]
@@ -9127,6 +9540,11 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
     return await input_sizes.measure_run(copy.deepcopy(items), wired, pricing, node_registry.get_all(), known)
 
 
+# The key under which _proposal_cost hands create_canvas_proposal the params
+# of its key-billing runs (popped before the cost is stored or shown).
+KEY_PARAMS = "_keyParams"
+
+
 def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
                    measured: input_sizes.Measured,
                    models: Mapping[tuple[str, str], Any] | None = None) -> dict[str, Any]:
@@ -9144,6 +9562,10 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     # Who would bill a route-table node depends on the keys set (cost_for).
     api_keys = load_settings().get("apiKeys", {}) or {}
     entries: list[dict[str, Any]] = []
+    # The params of each key-billing run (Idol), by ref, kept on the
+    # proposal and never shown: its class is re-read from them with the keys
+    # set at each view (canvas_proposals.live_cost).
+    key_params: dict[str, dict[str, Any]] = {}
     up_to = False
     if run_ids:
         graph_nodes, graph_edges, chosen, scope, up_to, items, skips = _proposal_run_scope(candidate, run_ids)
@@ -9155,18 +9577,36 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             wired = {str(edge.get("targetHandle")) for edge in graph_edges
                      if str(edge.get("target")) == node_id and edge.get("targetHandle")}
             params = candidate.nodes[node_id].get("params") or {}
-            entry = cost_for(definition, params, definitions, api_keys, wired=wired)
+            # The class the run's estimate gave it (model_pricing.cost_class,
+            # which knows its price: a sourced $0 is free; GM, PR #203 r18).
+            entry = cost_for(definition, params, definitions, api_keys, wired=wired,
+                             cost_class=(estimate or {}).get("classes", {}).get(node_id))
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
+                # Which node type, so a listing re-reads a key-billing node's
+                # class with the keys set then (canvas_proposals.live_cost).
+                "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
                 **entry,
-                "price": {"low": line["low"], "high": line["high"]} if line else None,
+                "price": ({"low": line["low"], "high": line["high"]} if line
+                          else {"low": 0.0, "high": 0.0} if node_id in (estimate or {}).get("free", []) else None),
                 # The plan line's words (canvas_proposals.plan_line): the node
                 # by its name, its model, and who pays for its run.
                 "name": _node_label(node_id, candidate),
                 "model": model_label(definition, params, models),
                 "billedTo": billed_to(definition, params, entry, wired=wired),
             })
+            # Why this node leaves the total open, or that it runs on the
+            # Krea plan, in the Run chip's kinds (model_pricing.estimate_run
+            # reasons), so the Accept chip writes the same reason lines (GM,
+            # PR #203 r17 item 4, r19 item 1).
+            reason = (estimate or {}).get("reasons", {}).get(node_id)
+            if reason and entries[-1].get("kind") in ("paid", "plan"):
+                entries[-1]["reason"] = reason
+            if entries[-1].get("kind") in ("free", "mayCost") and model_pricing.cost_class(
+                    definition, candidate.nodes[node_id].get("params") or {}, api_keys) in (
+                    model_pricing.MAY_COST, model_pricing.FREE):
+                key_params[entries[-1]["ref"]] = copy.deepcopy(candidate.nodes[node_id].get("params") or {})
         if estimate:
             estimate = {
                 **estimate,
@@ -9186,6 +9626,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             # Agents' placeholders (and what needs them) the run will skip,
             # left out of the cost above (Q125 item 3).
             cost["pendingSkipped"] = skipped
+        cost[KEY_PARAMS] = key_params
         return cost
     return summarize_cost(entries, up_to=up_to)
 
@@ -9246,8 +9687,17 @@ def _not_ready_nodes(
                 # keep `missing`, find_nodes' words, as before.
                 "person": _quoted_name_line(node_readiness.instance_missing_line(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
-                    wired.get(node_id, {}), name=_card_quoted(name)) or need, name, definition),
+                    wired.get(node_id, {}), name=name) or need, name, definition),
             })
+            # The reason for one node and for several (person_line
+            # NOT_READY_PREDICATES), so the bar merges nodes by it, never by
+            # the words (review 14 of PR #203, copy LOW-1). None for a
+            # route's own line, which stays a line per node.
+            reason = node_readiness.instance_missing_reason(
+                definition, node.get("params") or {}, keys, krea_signed_in, definitions, wired.get(node_id, {}))
+            view = reason.view() if reason is not None else None
+            if view is not None:
+                rows[-1]["reason"] = view
     return rows
 
 
@@ -9289,7 +9739,7 @@ def _card_quoted(name: str) -> str:
 
 def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
     """The card names nodes in curly quotes (GM - Design, PR #216 r1):
-    "“Hero shot” needs your Krea account. Connect it in Settings." A route's
+    "“Hero shot” needs your Krea plan. Sign in to Krea in Settings." A route's
     line (node_route.route_unavailable_line) starts with the model's name;
     it gets the node's, quoted, the same way."""
     if line.startswith("“"):
@@ -9324,6 +9774,8 @@ def _estimate_proposal_run(
     )
     wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
+    # A key-billing route (Idol) adds nothing: model_pricing.estimate_run
+    # leaves it out for every caller.
     # Measured from the file the run would get: an upload, or an ancestor's
     # output that already exists (it isn't in the run: see _proposal_cost).
     return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, measured.sizes)
@@ -9407,6 +9859,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     measured = await _measure_proposal_inputs(candidate, run_ids)
     _refuse_if_graph_moved(fence)
     cost = _proposal_cost(candidate, id_map, run_ids, measured=measured, models=models)
+    key_params = cost.pop(KEY_PARAMS, {})
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
@@ -9435,6 +9888,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             cost=cost,
             existing=existing,
             run_fingerprint=run_fingerprint,
+            key_params=key_params,
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
@@ -9463,6 +9917,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             "removes": len(proposal.removed_edges),
             "runs": len(spec.run),
             "paidRuns": cost["paidRuns"],
+            # Each class on its own, as the cost line counts them (review 10, MEDIUM-1).
+            "mayCostRuns": cost["mayCostRuns"],
+            "planRuns": cost["planRuns"],
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
@@ -11289,13 +11746,23 @@ async def zoom_manifest_entry(body: dict[str, Any]) -> dict:
 
 @app.get("/api/settings")
 async def get_settings() -> dict:
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except SettingsUnreadable:
+        settings = None
+    if not isinstance(settings, dict):
+        # Cut short, hand-edited or not an object: Settings says the file
+        # can't be read, never a 500 (review 12 of PR #203, LOW-3).
+        raise CodedRefusal(409, _unreadable_on_read(), {"code": SETTINGS_UNREADABLE_CODE})
     masked = dict(settings)
     if "apiKeys" in masked:
         # Justin, Q55 a: "Only the app (your person token) gets the endings.
         # Everything else learns which providers are set, and nothing more."
         # An agent's curl or `nebula keys` sees a bare "***" for a set key.
         person = _is_person_request()
+        # load_settings has read every key through node_route.key_text, the
+        # one key-state function: one that is empty once trimmed isn't in it,
+        # so the canvas reads it as unset, as the gate does (review 8, LOW-1).
         masked["apiKeys"] = {
             k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
@@ -11332,34 +11799,99 @@ async def update_settings(body: dict[str, Any]) -> dict:
             not isinstance(value, str) for value in body["apiKeys"].values()
         ):
             raise HTTPException(400, "apiKeys must be an object of string values")
-    # Do not mutate a loaded/shared object until the complete request is valid.
-    current = copy.deepcopy(load_settings())
-    if "apiKeys" in body and accepts_keys:
-        current_keys = current.get("apiKeys", {})
         for k, v in body["apiKeys"].items():
-            if v and not v.startswith("***"):
-                current_keys[k] = v
-        current["apiKeys"] = current_keys
-    for key in (
-        "routing",
-        "outputPath",
-        "executionMode",
-        "batchSizeCap",
-        "favorites",
-        "exportFolder",
-        "zoomTelemetryEnabled",
-        "kreaConnectionMode",
-        agent_spend.SETTING_KEY,
-        agent_spend.CAPS_KEY,
-    ):
-        if key in body:
-            current[key] = body[key]
-    save_settings(current)
+            refusal = _key_refusal(k, v)
+            if refusal is not None:
+                raise HTTPException(400, refusal)
+    # Do not mutate a loaded/shared object until the complete request is valid.
+    # The file as saved, not as read: a save writes back every entry it wasn't
+    # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
+    # The read, the change and the save hold the save's lock together, so a
+    # save from another Nebula or request in between is never lost (review 17
+    # of PR #203, settings LOW-3): nothing in it awaits.
+    with _settings_write():
+        current = _saved_settings_or_409()
+        before = dict(load_settings().get("apiKeys") or {})
+        writes_keys = "apiKeys" in body and accepts_keys and any(
+            node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
+        if writes_keys and not saved_keys_writable(current):
+            # Keys Nebula can't read stay as saved: a key added to them would be
+            # a guess at what they were (review 10 of PR #203, NIT-6). A value
+            # that holds nothing (null, [], "", false, 0) has no key to keep, so
+            # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
+            raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
+        if writes_keys:
+            current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
+            for k, v in body["apiKeys"].items():
+                # A pasted key's spaces, line breaks and invisible marks at its
+                # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
+                v = node_route.key_text(v)
+                if v and not v.startswith("***"):
+                    current_keys[k] = v
+            current["apiKeys"] = current_keys
+        for key in (
+            "routing",
+            "outputPath",
+            "executionMode",
+            "batchSizeCap",
+            "favorites",
+            "exportFolder",
+            "zoomTelemetryEnabled",
+            "kreaConnectionMode",
+            agent_spend.SETTING_KEY,
+            agent_spend.CAPS_KEY,
+        ):
+            if key in body:
+                current[key] = body[key]
+        _save_settings_or_409(current)
     # API keys may have changed — drop cached validation results so the next
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
     clear_provider_validation_cache()
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "saved"}
+
+
+def _changed_keys(before: Mapping[str, Any]) -> list[str]:
+    """The names of the keys whose value, as Nebula reads it (load_settings),
+    differs from ``before``: set, replaced or removed."""
+    after = load_settings().get("apiKeys") or {}
+    return sorted(name for name in {*before, *after} if before.get(name) != after.get(name))
+
+
+def _writing_tab() -> str | None:
+    """The person's tab that made this settings write, as it says: the
+    canvas's apiFetch sends its id (X-Nebula-Tab, frontend lib/tabId.ts) on
+    every write, as `_graph_edit_origin` reads it for a graphSync. The signal
+    carries it back as `origin`, so that tab knows its own write's echo by
+    name, whenever it arrives, and a change made anywhere else during its
+    write is still a change made elsewhere (review 11 of PR #203, copy
+    MEDIUM-1). Anything that isn't such an id, or doesn't come from the
+    person, is no origin at all."""
+    headers = current_request_headers() or {}
+    tab = next((value for key, value in headers.items() if str(key).lower() == "x-nebula-tab"), None)
+    return tab if _is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab) else None
+
+
+async def _broadcast_settings_changed(keys: Iterable[str] = (), origin: str | None = None) -> None:
+    """The person's tabs hear that the settings changed: each reads them
+    again (GET /api/settings, masked as ever), so a key added or removed in
+    another window, another tab, the desktop app or a script calling the API
+    reaches every cost class, chip, ghost card and lock on the canvas, and an
+    open Settings panel, without a reload (review 8 of PR #203, NIT-3 and
+    copy LOW-2). ``keys`` names the keys that changed (their names, never a
+    value or an ending), so a tab clears only those connection checks (GM,
+    PR #203 r19 item 7). Only the person's tabs (broadcast_browser): agents
+    re-read keys on every call, and the signal would tell them a key was
+    replaced (review 9, keys LOW-1). ``origin`` is the writing tab's own id
+    (_writing_tab), when it sent one."""
+    await manager.broadcast_browser({"type": "settingsChanged", "keys": sorted(set(keys)),
+                                     **({"origin": origin} if origin else {})})
+    # Each open proposal's cost classes and plan line follow the keys set now
+    # (GM, PR #203 r15 item 2): a token added or removed after it was made
+    # turns "free" into "may cost" and back, so the card's plan line, which
+    # the backend writes (canvas_proposals.plan_line), is sent again.
+    await _resend_open_proposals()
 
 
 # The credential-update allowlist (services/credential_catalog.py; the
@@ -11379,12 +11911,21 @@ async def remove_settings_api_key(provider: str) -> dict:
         raise HTTPException(400, "Unknown credential provider")
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
-    current = copy.deepcopy(load_settings())
-    current_keys = current.get("apiKeys", {})
-    current_keys.pop(provider, None)
-    current["apiKeys"] = current_keys
-    save_settings(current)
+    # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
+    # One lock from the read to the save (settings_transaction), as PUT holds it.
+    with _settings_write():
+        current = _saved_settings_or_409()
+        before = dict(load_settings().get("apiKeys") or {})
+        if not saved_keys_writable(current):
+            # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
+            # A value that holds nothing is replaced with no keys (LOW-3).
+            raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
+        current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
+        current_keys.pop(provider, None)
+        current["apiKeys"] = current_keys
+        _save_settings_or_409(current)
     clear_provider_validation_cache()
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "removed"}
 
 
@@ -11395,6 +11936,12 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     Called by the desktop Settings panel after it stores a provider key
     through the credential IPC. Person-only: an agent that could call this
     could swap or clear the person's injected keys. Never persists to disk.
+
+    With ``"check": true`` it refuses or accepts exactly as the write would
+    and changes nothing: the panel asks it before the Keychain write, so a
+    key the backend would refuse (a settings file it can't read) lands in
+    neither the Keychain nor the running backend (review 12 of PR #203,
+    LOW-3).
     """
     require_person(current_request_headers())
     provider = body.get("provider")
@@ -11415,9 +11962,278 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             status_code=400,
             detail=f"unknown provider: {provider}",
         )
+    # `check` asks only whether the write would be accepted. Anything but a
+    # boolean is refused, so a typo ("true", 1) never writes the key (review
+    # 13 of PR #203, NIT-2).
+    check = body.get("check", False)
+    if not isinstance(check, bool):
+        raise HTTPException(status_code=422, detail="check must be true or false")
 
-    update_injected_keys(provider, key)
+    refusal = _key_refusal(provider, key)
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
+    # The file holds this backend's other settings: one it can't read gets
+    # the 409 before any key changes, as PUT /api/settings does. Only the
+    # read check: this writes the backend's memory, never the file (review
+    # 15 of PR #203, settings-keychain MEDIUM-2).
+    _saved_settings_or_409(writes_file=False)
+    if check:
+        return {"status": "ok"}
+    before = dict(load_settings().get("apiKeys") or {})
+    update_injected_keys(provider, node_route.key_text(key))
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "updated"}
+
+
+# A settings.json whose `apiKeys` isn't an object, or that isn't an object at
+# all: Nebula reads no keys from it (services/settings.load_settings) and a
+# write never replaces what it holds with a guess (review 10 of PR #203,
+# NIT-6). GM's wording (PR #203 r22 item 3): each names the file by its full
+# path, the one this backend reads (NEBULA_SETTINGS_PATH when it is set).
+KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
+                   "Fix “apiKeys” in that file, then try again.")
+SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
+# A file Nebula can read but isn't allowed to change (GM, PR #203 r28 item
+# 4), by who asked, as SETTINGS_UNREADABLE_ON_READ: the agents' line says
+# the person must check it. Every settings write today is the person's
+# (require_person comes first), so no agent meets its line yet; it is here
+# so that one never reads the person's.
+SETTINGS_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {path}. "
+              "Check the file’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {path}. "
+             "Ask the person to check the file’s permissions.",
+}
+# The folder that holds the file takes no new file, and the file can't be
+# written where it is (it isn't there yet, or it is read-only too): the line
+# names the real folder (GM, PR #203 r31 item 1). The agents' form follows
+# SETTINGS_UNWRITABLE's.
+SETTINGS_FOLDER_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
+              "Check the folder’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
+             "Ask the person to check the folder’s permissions.",
+}
+# Nebula's own folder takes no copy for an in-place save (GM, PR #203 r36
+# item B6a): the line says why that folder matters to the settings. It names
+# the folder that refuses, as the person sees it (~/.nebula, or the desktop
+# app's state folder).
+SETTINGS_COPY_FOLDER_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
+              "saves. Check the folder’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
+             "saves. Ask the person to check the folder’s permissions.",
+}
+# A folder above Nebula's state folder refuses, so the state folder can't be
+# made (GM, PR #203 r38 item 4, verbatim: "Nothing was saved because Nebula
+# isn’t allowed to change ~/ro, so it can’t make ~/ro/deeper/state, where it
+# keeps a copy while it saves. Check the permissions of ~/ro, then try
+# again."). When the folder that refuses is the state folder or inside it,
+# SETTINGS_COPY_FOLDER_UNWRITABLE stands.
+SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {folder}, so it can’t make {creates}, where "
+              "it keeps a copy while it saves. Check the permissions of {folder}, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}, so it can’t make {creates}, where "
+             "it keeps a copy while it saves. Ask the person to check the permissions of {folder}.",
+}
+# Another Nebula's save holds the settings file past the wait (GM, PR #203
+# r38 item 3, verbatim; neutral: nothing was lost). The same for agents:
+# trying again is theirs to do too.
+SETTINGS_BUSY = "Nothing was saved because another Nebula is saving your settings. Try again in a moment."
+SETTINGS_BUSY_CODE = "settings_busy"
+SETTINGS_BUSY_FIX = {"person": "Try again in a moment.", "agent": "Try again in a moment."}
+# GM, PR #203 r39 item 2, as drafted: a folder at one of the save's fixed file names
+# (the temp file beside settings.json, the copy or its temp; review 18 of PR
+# #203, settings NIT-1), named by its path.
+SETTINGS_IN_THE_WAY = {
+    "person": "Nothing was saved because {folder} is a folder, and Nebula needs to put a file there. "
+              "Move or rename that folder, then try again.",
+    "agent": "Nothing was saved because {folder} is a folder, and Nebula needs to put a file there. "
+             "Ask the person to move or rename that folder.",
+}
+# A folder on the way to the file is a file (GM, PR #203 r31 item 2), named
+# by its real path.
+SETTINGS_NOT_A_FOLDER = {
+    "person": "Nothing was saved because {folder} is a file, and Nebula needs a folder there. "
+              "Move or rename that file, then try again.",
+    "agent": "Nothing was saved because {folder} is a file, and Nebula needs a folder there. "
+             "Ask the person to move or rename that file.",
+}
+# Each settings refusal's fix sentence on its own, by code and reader, naming
+# the file (GM, PR #203 r29 item 6: "… Fix “apiKeys” in ~/…/settings.json,
+# then try again.").
+SETTINGS_FIX = {
+    "settings_unreadable": {"person": "Fix {path}, then try again.",
+                            "agent": "Ask the person to fix {path}."},
+    "keys_unreadable": {"person": "Fix “apiKeys” in {path}, then try again.",
+                        "agent": "Ask the person to fix “apiKeys” in {path}."},
+    "settings_unwritable": {"person": "Check the permissions of {path}, then try again.",
+                            "agent": "Ask the person to check the permissions of {path}."},
+    "settings_not_a_folder": {"person": "Move or rename {folder}, then try again.",
+                              "agent": "Ask the person to move or rename {folder}."},
+}
+# The folder form of settings_unwritable's fix (SETTINGS_FOLDER_UNWRITABLE).
+SETTINGS_FOLDER_FIX = {"person": "Check the permissions of {folder}, then try again.",
+                       "agent": "Ask the person to check the permissions of {folder}."}
+# The codes beside each settings refusal's `detail` (the frontend's
+# settingsWrites.settingsRefusalLine picks by these, never by the words).
+SETTINGS_UNREADABLE_CODE = "settings_unreadable"
+KEYS_UNREADABLE_CODE = "keys_unreadable"
+SETTINGS_UNWRITABLE_CODE = "settings_unwritable"
+SETTINGS_NOT_A_FOLDER_CODE = "settings_not_a_folder"
+# A read (GET /api/settings, start_here), where nothing was being saved: GM's
+# line without its first clause, by who is reading. Agents can't read or fix
+# that file, so theirs says the person must (GM, PR #203 r27 item 2): MCP
+# get_settings, `nebula keys` and start_here's note read the agent's line.
+SETTINGS_UNREADABLE_ON_READ = {
+    "person": "Nebula can’t read {path}. Fix the file, then try again.",
+    "agent": "Nebula can’t read {path}. Ask the person to fix the file.",
+}
+
+
+def _settings_read_refusal() -> str | None:
+    """_unreadable_on_read when the settings file is there and Nebula can't
+    read it as settings (cut short, not text, no permission, a folder, or
+    not an object), else None."""
+    try:
+        readable = isinstance(load_settings(), dict)
+    except SettingsUnreadable:
+        readable = False
+    return None if readable else _unreadable_on_read()
+
+
+def _settings_audience() -> str:
+    """Who a settings line is worded for: "person" for any browser tab, with
+    or without this launch's person token (a tab whose token predates a
+    restart is still the person reading their own Settings), "agent" for an
+    agent caller. refusal_copy.person_reads decides, the one place that
+    picks words and never authority (GM, PR #203 r29 item 5; review 14,
+    settings-gate LOW-1 and copy NIT-2)."""
+    return "person" if refusal_copy.person_reads() else "agent"
+
+
+def _unreadable_on_read() -> str:
+    """SETTINGS_UNREADABLE_ON_READ for this request's reader (_settings_audience)."""
+    return _unreadable(SETTINGS_UNREADABLE_ON_READ[_settings_audience()])
+
+
+def _saved_settings_or_409(*, writes_file: bool = True) -> dict[str, Any]:
+    """The settings file as saved (load_saved_settings), copied for a write
+    to change; the 409 SETTINGS_UNREADABLE when it isn't JSON Nebula can
+    read or isn't an object (review 12 of PR #203, LOW-3: never a 500), and,
+    for a write that saves the file (``writes_file``), the 409 for what
+    stops the save (_unwritable_refusal; GM, PR #203 r28 item 4, r31 items 1
+    and 2). PUT and DELETE settings ask both. The desktop's
+    credentials/update asks only the read check: it writes the Keychain and
+    the backend's memory, never the file, so a read-only settings.json
+    doesn't stop a key save that never touches it (review 15,
+    settings-keychain MEDIUM-2)."""
+    try:
+        current = load_saved_settings()
+    except SettingsUnreadable:
+        current = None
+    if not isinstance(current, dict):
+        raise _settings_refusal(SETTINGS_UNREADABLE, SETTINGS_UNREADABLE_CODE)
+    if writes_file:
+        block = settings_write_block()
+        if block is not None:
+            raise _unwritable_refusal(block)
+    return copy.deepcopy(current)
+
+
+def _save_settings_or_409(current: dict[str, Any]) -> None:
+    """save_settings, with the 409 for a file that turned read-only after
+    _saved_settings_or_409 read it (its folder too), or another Nebula's
+    save that held it past the wait (SettingsBusy): the file is left as it
+    was."""
+    try:
+        save_settings(current)
+    except SettingsUnwritable as exc:
+        raise _unwritable_refusal(exc) from None
+    except SettingsBusy:
+        raise _busy_refusal() from None
+
+
+def _busy_refusal() -> CodedRefusal:
+    """The 409 for a save another Nebula held past the wait (SETTINGS_BUSY)."""
+    return _settings_refusal(SETTINGS_BUSY, SETTINGS_BUSY_CODE, fix=SETTINGS_BUSY_FIX)
+
+
+@contextmanager
+def _settings_write() -> Iterator[None]:
+    """settings_transaction for PUT /api/settings and the key DELETE, with
+    the 409 when another Nebula's save holds the file past the wait (review
+    18 of PR #203, copy-ui LOW-3: a bare 500 before)."""
+    try:
+        with settings_transaction():
+            yield
+    except SettingsBusy:
+        raise _busy_refusal() from None
+
+
+def _unwritable_refusal(block: SettingsUnwritable) -> CodedRefusal:
+    """The 409 for what stops a save (SettingsUnwritable.cause): the file's
+    permissions, its folder's (named), Nebula's own folder for the copy
+    (named), or a file where a folder must be (named)."""
+    folder = {"folder": shown_path(block.where)}
+    if block.cause == "not_a_folder":
+        return _settings_refusal(SETTINGS_NOT_A_FOLDER, SETTINGS_NOT_A_FOLDER_CODE, **folder)
+    if block.cause == "in_the_way":
+        return _settings_refusal(SETTINGS_IN_THE_WAY, SETTINGS_NOT_A_FOLDER_CODE, **folder)
+    if block.cause == "copy_folder" and block.creates is not None:
+        return _settings_refusal(SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE, SETTINGS_UNWRITABLE_CODE,
+                                 fix=SETTINGS_FOLDER_FIX, creates=shown_path(block.creates), **folder)
+    if block.cause == "folder":
+        return _settings_refusal(SETTINGS_FOLDER_UNWRITABLE, SETTINGS_UNWRITABLE_CODE, fix=SETTINGS_FOLDER_FIX, **folder)
+    if block.cause == "copy_folder":
+        return _settings_refusal(SETTINGS_COPY_FOLDER_UNWRITABLE, SETTINGS_UNWRITABLE_CODE, fix=SETTINGS_FOLDER_FIX,
+                                 **folder)
+    return _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE)
+
+
+def _settings_refusal(line: str | Mapping[str, str], code: str, *, fix: Mapping[str, str] | None = None,
+                      **names: str) -> CodedRefusal:
+    """A settings write's 409: ``line`` naming the file (one line, or a line
+    for each reader keyed "person" / "agent"), with ``code`` beside it, so a
+    client picks its line by the cause and never by the words, and ``fix``,
+    the line's fix sentence on its own (SETTINGS_FIX, or the one given),
+    which the desktop's Keychain line ends with when it still stands (GM,
+    PR #203 r29 item 6). ``names`` fill the line's other slots ({folder})."""
+    audience = _settings_audience()
+    if not isinstance(line, str):
+        line = line[audience]
+    fixes = fix if fix is not None else SETTINGS_FIX[code]
+    return CodedRefusal(409, _unreadable(line, **names), {"code": code, "fix": _unreadable(fixes[audience], **names)})
+
+
+def _unreadable(line: str, **names: str) -> str:
+    """``line`` naming the settings file this backend reads, resolved, with
+    the home folder as "~" (settings_file_shown; GM, PR #203 r24 item 7),
+    and any other path it names (``names``, shown the same way)."""
+    return line.format(path=settings_file_shown(), **names)
+
+
+# A key with something in it that is empty once trimmed: no key at all, so
+# it is refused rather than stored (GM, PR #203 r17 item 1), as the Settings
+# field refuses it (frontend settingsWrites: Save stays off).
+# The reader of PUT /api/settings and /api/credentials/update is a request,
+# so "paste it here" doesn't apply (GM, PR #203 r18 item 3, verbatim).
+KEY_ONLY_INVISIBLE = "Nothing was saved because the key is empty once spaces and invisible characters are removed."
+
+
+def _key_refusal(name: str, value: str) -> str | None:
+    """Why PUT /api/settings or /api/credentials/update refuses this key
+    value, or None: "" is no change (or, for the credential bridge, a
+    removal); something that is empty once trimmed (node_route.key_text) is
+    refused; a Hugging Face token with a character no token has is refused
+    with the Settings field's own line (settings.hf_token_character_line)."""
+    if value == "" or value.startswith("***"):
+        return None
+    if not node_route.key_text(value):
+        return KEY_ONLY_INVISIBLE
+    if name == "HF_TOKEN":
+        return hf_token_character_line(value)
+    return None
 
 
 def _execution_is_cancelling(run_id: str) -> bool:
@@ -11780,16 +12596,25 @@ async def _skip_placeholders(
             [edge for edge in edges if edge.source not in skips and edge.target not in skips], skips, ready)
 
 
-def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str]:
+def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: Mapping[str, Any]) -> list[str]:
     """The placeholders among ``ready`` that call a paid model with the params
-    this run sends (model_pricing.is_local; an unknown type counts as paid)."""
+    this run sends (model_pricing.is_local; an unknown type counts as paid).
+    A key-billing node is read with the keys set (model_pricing.cost_class,
+    the class every cost surface reads; GM, PR #203 r15 item 2): "free" (Idol
+    with no token) is not paid, and "may cost" (with one) still asks. A run on
+    the Krea plan still asks (it spends the plan's credits), and so does any
+    other provider call: the gate reads no prices, so a sourced $0 asks too
+    (lib/placeholderRunConfirm.ts isPaid is the twin)."""
     by_id = {node.id: node for node in nodes}
     paid = []
     for node_id in ready:
         node = by_id.get(node_id)
         if node is None:
             continue
-        if not model_pricing.is_local(node_registry.get(node.definition_id) or {}, node.params or {}):
+        definition = node_registry.get(node.definition_id) or {}
+        if model_pricing.cost_class(definition, node.params or {}, api_keys) == model_pricing.FREE:
+            continue
+        if not model_pricing.is_local(definition, node.params or {}):
             paid.append(node_id)
     return sorted(paid, key=_node_order)
 
@@ -11839,6 +12664,9 @@ def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int
         "nodes": lines,
         "unpriced": list(estimate.get("unpriced") or []),
         "plan": list(estimate.get("plan") or []),
+        # The sourced $0 nodes: free, by their own price (GM, PR #203 r18
+        # item 1), so the dialog's row says so (review 10, NIT-3).
+        "free": list(estimate.get("free") or []),
         "plus": list(estimate.get("plus") or []),
         "unavailable": dict(estimate.get("unavailable") or {}),
         "awaitingInput": list(estimate.get("awaitingInput") or []),
@@ -11855,7 +12683,7 @@ def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes
 
 
 def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping[str, Any] | None = None, *,
-                                 shot: bool = False) -> HTTPException:
+                                 shot: bool = False, may_cost: Iterable[str] = ()) -> HTTPException:
     """409 for the person's direct run of agents' paid placeholders without
     their confirmation (or at a higher cost than they confirmed): GM - Design's
     round-4 words, 2026-10-25, verbatim, which the node shows as its run error
@@ -11867,7 +12695,9 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     last reviewed it." and never shows this message): the paid placeholders,
     each one's agent (``agents``, for a tab that hasn't heard of the flag yet)
     and Nebula's own ``estimate`` of the run (_run_estimate), which a
-    confirmation of its ``high`` passes."""
+    confirmation of its ``high`` passes. ``may_cost``: those of ``paid``
+    whose class is "may cost" (node_route.key_billing; Idol with a token),
+    which the message counts as such, never as paid (GM, PR #203 r17 item 2)."""
     canvas_events.forget_run(run_id)
     owners: list[str] = []
     agents: dict[str, Any] = {}
@@ -11883,9 +12713,17 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
              else f"Click “Run” again to review {'it' if one else 'them'}.")
-    if paid:
+    may = [node_id for node_id in paid if node_id in set(may_cost)]
+    if paid and not may:
         message = (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
                    f"setting up, and Nebula asks before running those. {again}")
+    elif paid:
+        priced = len(paid) - len(may)
+        nodes = 'node' if len(may) == 1 else 'nodes'
+        what = (f"{len(may)} {nodes} that may cost" if priced == 0
+                else f"{priced} paid {'node' if priced == 1 else 'nodes'} and {len(may)} that may cost")
+        message = (f"Nothing ran. This run includes {what}, which {who} still setting up, and Nebula asks "
+                   f"before running those. {again}")
     else:
         # No placeholder left (their agents finished them while the dialog
         # was open), but the run now costs more than the person confirmed
@@ -11928,13 +12766,19 @@ async def _require_placeholder_confirmation(
     nothing is a placeholder any more."""
     if identify_agent(current_request_headers()) is not None or not _is_person_request():
         return
-    paid = _paid_placeholders(nodes, ready)
+    if api_keys is None:
+        api_keys = load_settings().get("apiKeys", {}) or {}
+    paid = _paid_placeholders(nodes, ready, api_keys)
     if not paid and confirmed_cost is None:
         return
+    by_id = {node.id: node for node in nodes}
+    may_cost = [node_id for node_id in paid if model_pricing.cost_class(
+        node_registry.get(by_id[node_id].definition_id) or {}, by_id[node_id].params or {}, api_keys)
+        == model_pricing.MAY_COST]
     sizes = await _measure_confirmed_run(nodes, edges)
     estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
     if paid and sorted(set(confirmed or [])) != sorted(paid):
-        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot, may_cost=may_cost)
     high = None if estimate is None else estimate["high"]
     if high is None:
         return  # nothing in it has a list price: the person confirmed the rows
@@ -11943,7 +12787,7 @@ async def _require_placeholder_confirmation(
     # roundUpToCent), so a run Nebula prices even a millionth higher than that
     # is refused and asked again at Nebula's numbers.
     if confirmed_cost is None or high > confirmed_cost:
-        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot, may_cost=may_cost)
 
 
 async def _measure_confirmed_run(nodes: list[GraphNode], edges: list[GraphEdge]) -> dict[str, dict[str, Any]]:
@@ -12172,7 +13016,7 @@ async def execute(request: ExecuteRequest) -> dict:
         import traceback, sys
         print("[exec] _run started", file=sys.stderr, flush=True)
         try:
-            await execute_graph(
+            await _run_graph(
                 nodes=nodes,
                 edges=edges,
                 api_keys=api_keys,
@@ -12354,7 +13198,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     async def _run() -> None:
         import traceback
         try:
-            await execute_graph(
+            await _run_graph(
                 nodes=sub_nodes,
                 edges=sub_edges,
                 api_keys=api_keys,
@@ -12764,7 +13608,7 @@ async def _execute_single_shot_pass(
                                        "raw": event.error}
         await _emit_and_sync(event)
 
-    await execute_graph(
+    await _run_graph(
         nodes=sub_nodes,
         edges=sub_edges,
         api_keys=api_keys,
@@ -13819,7 +14663,7 @@ async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
     elif isinstance(event, ExecutedEvent):
         change = agent_runs.node_ended(run_id, node_id, outputs=event.outputs)
     elif isinstance(event, ErrorEvent):
-        change = agent_runs.node_ended(run_id, node_id, failed=True)
+        change = agent_runs.node_ended(run_id, node_id, failed=True, stopped=event.proposal_needed)
     elif isinstance(event, SkippedEvent):
         change = agent_runs.node_ended(run_id, node_id, ran=False)
     else:
@@ -13849,7 +14693,8 @@ async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
 
 async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> None:
     labels = {node_id: _node_label(node_id) for node_id in run.planned}
-    text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed)
+    text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed,
+                              stopped=run.stopped)
     last = run.planned[-1]
     ref: dict[str, Any] = {"id": run.run_id, "nodeIds": list(run.planned), "lastNodeId": last, "outcome": outcome}
     if outcome != "failure" and succeeded:
@@ -13871,7 +14716,12 @@ async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> N
     if outcome != "success":
         # GM: "A failed run gets a card, plus the Agent log line."
         try:
-            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=text))
+            # A stop for a proposal: the Agent log keeps the whole line, the
+            # bubble its whole sentences that fit, never a cut word (GM, PR
+            # #203 r39 item 5; review 19, LOW-2).
+            whole = {"log": text, "log_whole": True} if run.stopped else {"log": text}
+            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=_whole_sentences(text),
+                                               **whole))
         except Exception:  # noqa: BLE001 - decoration must not break the run
             pass
 
@@ -15876,16 +16726,18 @@ def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str,
     return (provider, mode) if provider or mode else None
 
 
+# The billing refusals, each worded for its reader where it is raised
+# (agent_words.worded: {propose} is propose_change for MCP, `nebula propose`
+# for the CLI; review 9 of PR #203, keys MEDIUM-1).
 KREA_BILLING_REFUSAL = (
-    "Changing how a Krea node is billed (_kreaAuth: the API token's balance or the signed-in Krea "
+    "Changing how a Krea node is billed (_kreaAuth: the API key connection's balance or the signed-in Krea "
     "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
-    "change instead with propose_change (`nebula propose`); the person accepts it on the canvas."
+    "change instead with {propose}; the person accepts it on the canvas."
 )
 PROVIDER_CHOICE_REFUSAL = (
     "Changing which provider a node runs on (_provider: a route id, or auto) decides whose key "
     "pays for it, so it's the person's call and needs their OK. Leave _provider as it is, and "
-    "propose the change instead with propose_change (`nebula propose`); the person accepts it "
-    "on the canvas."
+    "propose the change instead with {propose}; the person accepts it on the canvas."
 )
 
 
@@ -15893,9 +16745,16 @@ NOTES_TO_GENERATORS_REFUSAL = (
     "Sending a board's notes to generators (send_notes on a Moodboard node) is the person's call: "
     "notes are their words about the board, for them, their team and agents. Leave send_notes as it "
     "is (an agent may set it to no), don't point a node that sends notes at another board (set "
-    "send_notes to board or no in the same edit), and propose the change instead with propose_change "
-    "(`nebula propose`); the person accepts it on the canvas."
+    "send_notes to board or no in the same edit), and propose the change instead with {propose}; "
+    "the person accepts it on the canvas."
 )
+
+
+def _surface() -> str:
+    """The surface the current request comes from (agent_words.surface)."""
+    return agent_words.surface(current_request_headers())
+
+
 # How far each send_notes value opens the notes: "board" follows the board's
 # own switch, so it may send them; "yes" always does.
 _SEND_NOTES_RANK = {"no": 0, "board": 1, "yes": 2}
@@ -15921,7 +16780,7 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
     node's run: a route-table node's ``_provider``, or a Krea node's billing
     mode (_billing_choice). ``changes`` are (label, definitionId, params
     before or None for a new node, params after). A new node counts as
-    changed unless it starts on Auto and the default mode (the API token).
+    changed unless it starts on Auto and the default mode (the API key connection).
     The person's own edits and accepted proposals always pass. The refusal
     is _person_only_refusal's: plain for an agent, ``person_required`` for a
     request with no agent marker (a canvas tab not connected as the person).
@@ -15947,12 +16806,15 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
             provider_switched.append(label)
         elif choice[1] != was[1]:
             mode_switched.append(label)
+    where = _surface()
     if provider_switched:
-        raise _person_only_refusal(f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
+        raise _person_only_refusal(
+            f"{_listed(provider_switched, 4)}: {agent_words.worded(PROVIDER_CHOICE_REFUSAL, where)}")
     if mode_switched:
-        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {agent_words.worded(KREA_BILLING_REFUSAL, where)}")
     if notes_opened:
-        raise _person_only_refusal(f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
+        raise _person_only_refusal(
+            f"{_listed(notes_opened, 4)}: {agent_words.worded(NOTES_TO_GENERATORS_REFUSAL, where)}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -17182,6 +18044,73 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
         raise HTTPException(status_code=422, detail=f"Couldn't preview {node_id}:{name}: {exc}") from exc
     return Response(content=data, media_type=mime,
                     headers={"X-Nebula-Preview-Port": name, **(_last_run_error_header(node_id) or {})})
+
+
+def world_splat_summaries(value: Any) -> dict[str, Any] | None:
+    """What an agent can know about a World v2 value's PLY splats without
+    seeing them (view_output): per splat its Gaussian count, bounding box and
+    file size (services/splat_ply.py), with the world's provider, model and
+    seed. None for a value that isn't a World v2 with a PLY splat (World v1
+    is Marble's SPZ; its preview is the panorama)."""
+    from models.spatial import parse_spatial_value
+    from services.splat_ply import SplatPlyError, summarize_splat_ply
+
+    if not isinstance(value, dict) or value.get("schemaVersion") != 2:
+        return None
+    try:
+        world = parse_spatial_value("World", value)
+    except (TypeError, ValueError):
+        return None
+    plys = [splat for splat in world.assets.splats if splat.format == "ply"]
+    if not plys:
+        return None
+    tags = dict(tag.split(":", 1) for tag in world.session.tags if ":" in tag)
+    seed = tags.get("seed")
+    summary: dict[str, Any] = {
+        "world": world.id,
+        "provider": world.session.provider,
+        "model": world.session.model,
+        "seed": int(seed) if seed is not None and seed.lstrip("-").isdigit() else None,
+        "coordinateSystem": {"handedness": world.coordinateSystem.handedness,
+                             "upAxis": world.coordinateSystem.upAxis,
+                             "forwardAxis": world.coordinateSystem.forwardAxis,
+                             "unit": world.coordinateSystem.unit},
+        "splats": [],
+    }
+    for splat in plys:
+        path = _output_path_from_ref(splat.asset.uri)
+        if path is None or not path.is_file():
+            summary["splats"].append({"id": splat.id, "error": "The splat file is missing from Nebula's outputs."})
+            continue
+        try:
+            summary["splats"].append({"id": splat.id, **summarize_splat_ply(path)})
+        except SplatPlyError as exc:
+            # The preflight's reason: Nebula's own words, never a path.
+            summary["splats"].append({"id": splat.id, "error": f"The splat file can't be read: {exc}"})
+        except OSError:
+            # An OSError's text names the file's absolute path.
+            summary["splats"].append({"id": splat.id, "error": "The splat file can't be read from Nebula's outputs."})
+    return summary
+
+
+@app.get("/api/graph/node/{node_id}/splat-summary")
+async def splat_summary_node_output(node_id: str, port: str | None = None) -> dict[str, Any]:
+    """A World v2 output's PLY splats as numbers for agents (view_output):
+    Gaussian count, bounding box, file size, seed, provider and model. Only
+    files in Nebula's outputs are read."""
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+    outputs = node.get("outputs") or {}
+    names = [port] if port is not None else [name for name, entry in outputs.items()
+                                              if isinstance(entry, dict) and entry.get("type") == "World"]
+    for name in names:
+        entry = outputs.get(name)
+        if isinstance(entry, dict) and entry.get("type") == "World":
+            summary = await asyncio.to_thread(world_splat_summaries, entry.get("value"))
+            if summary is not None:
+                return {"nodeId": node_id, "port": name, **summary}
+    raise HTTPException(status_code=404, detail=f"{node_id} has no World output with a PLY splat.")
 
 
 def _last_run_error_header(node_id: str) -> dict[str, str] | None:
@@ -20238,6 +21167,128 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     return _hide_run_key_echoes({**response, **synced})
 
 
+# The Agent Log's heading for a run its pre-call check stopped: the card's
+# (GM, PR #203 r29 item 3).
+REFUSED_RUN_HEADING = "Nebula couldn’t start the run."
+
+
+def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
+    """The Agent Log's line for a run the pre-call check stopped (GM, PR #203
+    r29 item 3): the card's heading, then each stop once, its nodes by
+    quoted name and merged by the r28 rule (person_line.merged_not_ready,
+    the bar's table), each action sentence ending ", then run the node
+    again" ("the nodes" for several; ". Then run the node again." after a
+    comma clause): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
+    your OpenAI API key. Add it in Settings, then run the nodes again."
+
+    - The not-ready reasons first (a key, a route, a Krea plan), then the
+      inputs with no wire, merged the same way from one table (GM r33 item
+      1, person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a
+      prompt. Connect a prompt to each, then run the nodes again.". A node
+      with several says them as one need, in its input order (GM r34 item
+      1): "“FLUX Kontext” needs a prompt and an image. Connect both, then
+      run the node again."; nodes with the same set merge, different sets
+      are separate sentences. A node with a reason and another stop keeps
+      both (review 16, L1).
+    - Any other stop says its card line after the node's name.
+    - Nodes that share a reason or a set of needs count from 4 inside their
+      own sentence, as the bar's list does (GM r35 item 1): "4 nodes need a
+      prompt and an image. Connect both to each, then run the nodes
+      again."; each other reason or set is its own sentence. The bar's
+      summary line above the list keeps r24's "N nodes can’t run here yet.".
+      Only a line longer than the log's room (agent_presence.MAX_LOG_CHARS)
+      says that count instead, so it stays whole and true; one node's line
+      has no shorter form and is said whole (GM r33 item 2). The line is
+      never cut.
+
+    Agents' text keeps ids (`error`, `errors`)."""
+    from execution.person_line import input_needs, joined_lines, merged_not_ready, need_words
+
+    by_node: dict[str, list[ValidationErrorDetail]] = {}
+    for error in errors:
+        by_node.setdefault(error.node_id, []).append(error)
+    node_ids = [node_id for node_id in by_node if node_id]
+    counted = f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
+    reasons: list[tuple[str, Any]] = []
+    needs: list[tuple[str, Any]] = []
+    # Nodes with the same set of needs say one need, in the first such
+    # node's input order, so they merge whatever order their inputs are in.
+    need_sets: dict[frozenset[str], Any] = {}
+    others: list[str] = []
+    for node_id in node_ids:
+        label = _node_label(node_id)
+        reason = _node_not_ready_reason(node_id)
+        if reason is not None:
+            reasons.append((label, reason))
+        unwired: list[ValidationErrorDetail] = []
+        rest: list[str | None] = []
+        for error in by_node[node_id]:
+            if reason is not None and error._stop == "reason":
+                continue  # the reason says it
+            if error._stop == "input":
+                unwired.append(error)
+                continue
+            rest.append(error.person)
+        if unwired:
+            # One need per node, its inputs in the node's input order (GM,
+            # PR #203 r34 item 1), so the same node always reads the same and
+            # nodes with the same set merge.
+            order = _input_order(node_id)
+            unwired.sort(key=lambda error: order.get(error.port_id, len(order)))
+            labels = [error._need for error in unwired]
+            need = need_sets.setdefault(frozenset(need_words(labels)), input_needs(labels))
+            needs.append((label, need))
+        if rest:
+            line = joined_lines(rest)
+            others.append(f"{_quoted(label)} can’t run." + (f" {line}" if line else ""))
+    # Each line's Agent Log form: its action sentence ends in the run-again
+    # ending, built in its end slot (person_line.NOT_READY_PREDICATES; GM, PR
+    # #203 r31 item 3), never appended to the last sentence.
+    told = [line for line, _count in merged_not_ready(reasons, again=True)]
+    told += [line for line, _count in merged_not_ready(needs, again=True)] + others
+    if not told and by_node.get(""):
+        graph_wide = joined_lines(error.person for error in by_node[""])
+        told = [graph_wide] if graph_wide else []
+    named = " ".join([REFUSED_RUN_HEADING, *told])
+    if len(named) > MAX_LOG_CHARS and len(node_ids) > 1:
+        return counted
+    return named
+
+
+def _input_order(node_id: str) -> dict[str, int]:
+    """A canvas node's input ports by their place on its definition, for
+    saying its needs in the order the card shows them."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId") or "")) or {}
+    return {str(port.get("id")): index for index, port in enumerate(definition.get("inputPorts") or [])}
+
+
+def _node_not_ready_reason(node_id: str) -> Any:
+    """Why a canvas node can't run here, as the proposal bar says it
+    (node_readiness.instance_missing_reason), or None when its stop is
+    something else."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definitions = node_registry.get_all()
+    definition = definitions.get(str(node.get("definitionId") or ""))
+    if not definition:
+        return None
+    try:
+        keys = node_readiness.configured_keys(load_settings())
+    except SettingsUnreadable:
+        return None
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
+        krea_signed_in = False
+    wired: dict[str, int] = {}
+    for edge in cli_graph.edges:
+        if str(edge.get("target")) == node_id:
+            handle = str(edge.get("targetHandle") or "")
+            wired[handle] = wired.get(handle, 0) + 1
+    return node_readiness.instance_missing_reason(definition, node.get("params") or {}, keys, krea_signed_in,
+                                                  definitions, wired)
+
+
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail],
                            pending_skips: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """A CLI run the pre-call check stopped: nothing ran and nothing was spent.
@@ -20248,24 +21299,19 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     _note_run(run_id)
     if pending_skips:
         await _announce_skips(run_id, pending_skips)
-    await _announce_validation_errors(errors, run_id)
+    # The Agent log and the cursor speak on the person's canvas: the card's
+    # lines, not the keys and ids agents read in `error` and `errors` (error
+    # copy round 3e). The agent's cursor carries the merged line; a line no
+    # cursor carried (a graph-wide refusal alone, such as a cycle, or a caller
+    # with no agent name) goes to an in-app chat turn's log, so it is listed
+    # once either way (GM, PR #203 r30 item 1).
+    unlogged = await _announce_validation_errors(errors, run_id)
+    if unlogged is not None:
+        publish_action(unlogged)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
     summary = "; ".join(f"{node_id} ({_node_label(node_id)}): {message}" if node_id else message
                         for node_id, message in messages.items())
-    # The Agent Log and the cursor speak on the person's canvas: the card's
-    # lines, not the keys and ids agents read in `error` and `errors` (error
-    # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
-    person = _validation_person_lines(errors)
-    said = {node_id: f"{_node_label(node_id)} can't run." + (f" {person[node_id]}" if person.get(node_id) else "")
-            for node_id in per_node}
-    publish_action("Run stopped before it started. "
-                   + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
-    first = next(iter(per_node), None)
-    if first is not None:
-        # The cursor quotes the node like every other bubble; the log keeps its line.
-        bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
-        await _show_agent({"nodeId": first}, shows="error", say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,
@@ -20305,6 +21351,8 @@ async def _execute_cli_run(
                 outcome.setdefault("notes", {})[event.node_id] = list(event.notes)
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+            if event.proposal_needed:
+                outcome.setdefault("stopped", {})[event.node_id] = STOPPED_FOR_PROPOSAL
         elif isinstance(event, SkippedEvent):
             skipped[event.node_id] = event.reason
             gated.add(event.node_id)
@@ -20318,7 +21366,7 @@ async def _execute_cli_run(
         _return_hold(run_id)
         raise
     try:
-        await execute_graph(
+        await _run_graph(
             nodes=sub_nodes,
             edges=sub_edges,
             api_keys=api_keys,
@@ -20371,6 +21419,9 @@ async def _execute_cli_run(
         "skipped": skipped,
         # Per node, what each run said beside its outputs (the size a maker made).
         **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
+        # A node stopped at a call only the person may make, marked so an
+        # agent reads it as "propose", not a failure (review 19, NIT-4).
+        **({"stopped": outcome["stopped"]} if outcome.get("stopped") else {}),
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
     }
@@ -20431,9 +21482,7 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     if result.get("errors"):
         # As the canvas's run status says (execution_runs: a node error makes
         # the run "failed"). Outputs of the nodes that finished are still here.
-        failed = list(result["errors"])
-        error = (f"{failed[0]} failed: {result['errors'][failed[0]]}" if len(failed) == 1
-                 else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+        error = one_line_error(result["errors"], result.get("stopped"))
         return {**head, "status": "failed", "error": error, **result}
     return {**head, "status": "finished", **result}
 
@@ -20525,9 +21574,7 @@ async def _canvas_run_response(run_id: str, wait: float) -> dict[str, Any]:
             status = "failed"
     response = {**head, "status": status, **made, "nodesExecuted": nodes_executed}
     if status == "failed" and made["errors"]:
-        failed = list(made["errors"])
-        response["error"] = (f"{failed[0]} failed: {made['errors'][failed[0]]}" if len(failed) == 1
-                             else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+        response["error"] = one_line_error(made["errors"], made.get("stopped"))
     elif status == "failed":
         # The run raised before any node reported. Its exception stays in
         # Nebula's log: its text can be anything, a provider's reply included.
@@ -20773,24 +21820,39 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     unchosen = unchosen_model_errors([temp_nodes[-1]], temp_edges, api_keys)
     if unchosen:
         raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
+    # A route-table node whose route can't start (Idol with no Hugging Face
+    # token) is refused the same way, before the spend check, in the router's
+    # own words (the engine's preflight says the same on every other path).
+    quick_main = temp_nodes[-1]
+    quick_definition = node_registry.get(definition_id) or {}
+    wired = {edge.target_handle for edge in temp_edges if edge.target == quick_main.id}
+    from services.krea_account import uses_account
+    if node_route.has_routes(quick_definition) and not uses_account(quick_main, quick_definition, wired):
+        routed = node_route.with_wired_blockers(quick_definition, quick_main.params, wired)
+        unavailable = node_route.route_unavailable(quick_definition, routed, api_keys)
+        if unavailable is not None:
+            raise HTTPException(status_code=400,
+                                detail=f"Nothing ran, so nothing was spent. {unavailable['message']}")
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
+    quick_ask = _quick_propose_hint(definition_id, _surface())
     measured = await _measure_run_inputs(temp_nodes, temp_edges)
     _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings,
-                            measured=measured, how_to_ask=(
-        f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
-        "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
-        "The person accepts on the canvas, and the canvas runs it."
-    ))
+                            measured=measured, how_to_ask=quick_ask)
 
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
+    # The nodes that stopped at their call for a proposal (Idol with the
+    # person's token set, an agent's run): a 403, as the spend check's.
+    stopped: set[str] = set()
 
     async def collect_events(event: ExecutionEvent) -> None:
         if isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+            if event.proposal_needed:
+                stopped.add(event.node_id)
             _release_unspent_hold(event, quick_run)
 
     handler_registry = get_handler_registry(emit=collect_events)
@@ -20801,7 +21863,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     import time
     start = time.time()
     try:
-        await execute_graph(
+        await _run_graph(
             nodes=temp_nodes,
             edges=temp_edges,
             api_keys=api_keys,
@@ -20809,11 +21871,14 @@ async def quick_execute(body: dict[str, Any]) -> dict:
             emit=collect_events,
             cache=execution_cache,
             run_id=quick_run,
+            ask=quick_ask,
         )
     finally:
         _settle_hold(quick_run)
     duration = time.time() - start
 
+    if "_quick_main" in stopped:
+        raise HTTPException(status_code=403, detail=errors["_quick_main"])
     if "_quick_main" in errors:
         raise HTTPException(status_code=500, detail=errors["_quick_main"])
 
@@ -22489,7 +23554,7 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
 
 
 _STYLE_PROPOSE_RE = re.compile(
-    r",? and propose the change instead with propose_change \(`nebula propose`\); "
+    r",? and propose the change instead with (?:propose_change|`nebula propose`); "
     r"the person accepts it on the canvas\.")
 _STYLE_BILLING_INSTEAD = (
     " (or leave it out: the model's default). A Style change can't be proposed: ask the person to "

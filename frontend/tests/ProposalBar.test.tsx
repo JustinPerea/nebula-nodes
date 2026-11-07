@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ProposalView } from '../src/lib/wsClient';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
+import { reasonFor } from './helpers/notReadyReasons';
 
 const flow = vi.hoisted(() => ({ fitBounds: vi.fn(), getInternalNode: vi.fn() }));
 const graph = vi.hoisted(() => ({
@@ -14,6 +16,7 @@ const graph = vi.hoisted(() => ({
     beginUndoStep: vi.fn(() => ({})),
     cancelUndoStep: vi.fn(),
     endUndoStep: vi.fn(),
+    notify: vi.fn(),
   },
 }));
 const net = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -64,7 +67,7 @@ beforeEach(() => {
   useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
   graph.state.isExecuting = false;
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
-    net.apiFetch, flow.fitBounds, flow.getInternalNode]) fn.mockReset();
+    net.apiFetch, flow.fitBounds, flow.getInternalNode, graph.state.notify]) fn.mockReset();
   // As the real store: once adopted, the run's nodes are on the canvas (the
   // accept's run is sent only while they are: review 11, L-5).
   graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
@@ -79,6 +82,10 @@ afterEach(() => {
 });
 
 describe('ProposalBar', () => {
+  // The lock tests below run on a keyed route: Idol made keyed for the test
+  // (tests/helpers/keyedSpace.ts). Idol itself is keyless from PR #203 round 7.
+  keyIdolInEachTest();
+
   it('renders nothing without proposals', () => {
     const { container } = render(<ProposalBar />);
     expect(container.innerHTML).toBe('');
@@ -118,7 +125,7 @@ describe('ProposalBar', () => {
     for (const part of ['.proposal-bar__head', '.proposal-bar__plan', '.proposal-bar__footer']) {
       expect(document.querySelector(part)?.textContent).not.toMatch(/\bn1\b|\+up/);
     }
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeTruthy();
   });
 
   it('keeps "List prices, not a quote" for the first line of the details when the run is priced', () => {
@@ -239,7 +246,7 @@ describe('ProposalBar', () => {
     }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     const [path, init] = net.apiFetch.mock.calls[0];
     expect(path).toBe('/api/canvas/proposals/p_a/accept');
@@ -259,7 +266,7 @@ describe('ProposalBar', () => {
     net.apiFetch.mockResolvedValue(respond(200, { idMap: {}, runNodeIds: ['n7', 'n8'], nodes: [], edges: [], updatedNodes: [] }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect([...graph.state.executeCluster.mock.calls[0][0]].sort()).toEqual(['n1', 'n7', 'n8']);
@@ -272,10 +279,43 @@ describe('ProposalBar', () => {
     // The offer is a notice in the app's notice region (NoticeRegion), beside the bar.
     render(<><ProposalBar /><DeferredRunNotice /></>);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect(screen.getByText(/^You can run .+ when the current run finishes\.$/)).toBeTruthy();
+  });
+
+  it('locks the held "Run" while its nodes need the token, focusable, and runDeferred refuses too (GM r8 item 3)', async () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const before = graph.state.nodes;
+    graph.state.nodes = [{ id: 'n9', data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {} } } as never];
+    try {
+      useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n9'], approvalId: 'ap-1' } });
+      useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+      render(<DeferredRunNotice />);
+      const run = screen.getByRole('button', { name: 'Run' });
+      expect(run).toHaveAttribute('aria-disabled', 'true');
+      expect(run).not.toBeDisabled();
+      expect(run).toHaveAttribute('data-key-locked', '');
+      expect(run).toHaveAttribute('title', LINE);
+      expect(run).toHaveAccessibleDescription(LINE);
+      run.focus();
+      expect(document.activeElement).toBe(run);
+      fireEvent.click(run);
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      // A locked button does nothing on a click, as the toolbar's Run: its reason is its description.
+      expect(graph.state.notify).not.toHaveBeenCalled();
+      // The store's backstop: the same refusal as a notice, nothing sent, the offer kept.
+      await useCanvasProposalsStore.getState().runDeferred();
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      expect(graph.state.notify).toHaveBeenCalledWith(LINE, 'info');
+      expect(useCanvasProposalsStore.getState().deferredRun?.nodeIds).toEqual(['n9']);
+      // With the token it is Run again.
+      act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+      expect(screen.getByRole('button', { name: 'Run' })).not.toHaveAttribute('aria-disabled');
+    } finally {
+      graph.state.nodes = before;
+    }
   });
 
   it('rejects with the key', async () => {
@@ -296,14 +336,14 @@ describe('ProposalBar', () => {
     net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'This proposal no longer fits the canvas: n1 is no longer on the canvas' }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.getByRole('alert').textContent).toContain('no longer fits the canvas');
     expect(graph.state.executeNode).not.toHaveBeenCalled();
 
     net.apiFetch.mockResolvedValueOnce(respond(403, { detail: 'nope' }));
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
   });
@@ -316,13 +356,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'depth', max: 64 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
   // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
@@ -333,13 +373,13 @@ describe('ProposalBar', () => {
       limit: { kind: 'size', max: 16_777_216 } }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     expect(screen.queryByRole('alert')).toBeNull();
     const line = document.querySelector('.proposal-bar__error');
     expect([line?.getAttribute('role'), line?.classList.contains('proposal-bar__error--neutral'), line?.textContent]).toEqual(['status', true,
       `Nebula couldn’t accept this because the canvas would be too large to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`]);
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
   it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
@@ -387,7 +427,7 @@ describe('ProposalBar', () => {
     expect(screen.getByText('from Codex')).toBeTruthy();
     expect(screen.getByText(/1 of 2/)).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     });
     const [path, init] = net.apiFetch.mock.calls[0];
     expect(path).toBe('/api/canvas/proposals/p_a/accept');
@@ -404,7 +444,7 @@ describe('ProposalBar', () => {
       useCanvasProposalsStore.getState().close({ proposalId: 'p_a', status: 'withdrawn' });
     });
     expect(screen.getByText('second')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept and run 1 paid' }));
     expect(net.apiFetch).not.toHaveBeenCalled();
   });
 
@@ -471,34 +511,235 @@ describe('ProposalBar', () => {
     open(keyless);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const list = screen.getByRole('list', { name: "Can't run here" });
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list.textContent).toContain('GPT Image 2 (+img) needs OPENAI_API_KEY in Settings > Providers');
     // The canvas Run button stays enabled for a node without its key: the
     // backend refuses that node before anything is spent. Accept does the same.
-    const accept = screen.getByRole('button', { name: 'Accept and run' }) as HTMLButtonElement;
+    const accept = screen.getByRole('button', { name: 'Accept and run 1 paid' }) as HTMLButtonElement;
     expect(accept.disabled).toBe(false);
 
     // The person adds the key while the proposal is open: the line goes.
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'set' }, loaded: true } }));
-    expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
   });
 
-  it('keeps a reason the canvas cannot re-check, and moves a long list into the details', () => {
+  it('locks Accept with GM\'s line while its run needs a Hugging Face token (PR #203 r6 item 1)', () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1, notReady: [
+      { ref: '+idol', nodeId: null, name: 'Idol', missing: 'needs HF_TOKEN in Settings > Providers',
+        person: 'You can run Idol after you add your Hugging Face token in Settings.' },
+    ] };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: /^Accept/ }) as HTMLButtonElement;
+    expect(accept).toHaveAttribute('aria-disabled', 'true');
+    expect(accept.disabled).toBe(false);
+    expect(accept).toHaveAttribute('title', LINE);
+    expect(accept).toHaveAccessibleDescription(LINE);
+    accept.focus();
+    expect(document.activeElement).toBe(accept);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    // Reject still works: only what would run is locked.
+    expect(screen.getByRole('button', { name: 'Reject' })).not.toHaveAttribute('aria-disabled');
+
+    // The person adds the token: Accept is Accept again.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    const ready = screen.getByRole('button', { name: /^Accept/ });
+    expect(ready).not.toHaveAttribute('aria-disabled');
+    expect(ready).not.toHaveAttribute('title', LINE);
+  });
+
+  it('the bar\'s "can\'t run here" line for a keyed route is the Accept line, and goes once the token is added (PR #203 rounds 6 and 7)', () => {
+    // The row as the backend sends it: Idol's route line is `missing` too
+    // (node_readiness.instance_missing), not find_nodes' "needs HF_TOKEN".
+    const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1, notReady: [
+      { ref: '+idol', nodeId: null, name: 'Idol', missing: ROW, person: ROW },
+    ] };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    // GM r11 item 5: inside the bar the control is Accept, so the line is
+    // the Accept line, said once, never the node's Run line.
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
+    expect(list).toHaveTextContent('You can accept this after you add your Hugging Face token in Settings.');
+    expect(screen.queryByText(ROW)).toBeNull();
+    expect(list.querySelectorAll('li')).toHaveLength(1);
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    // Made while the token was set: the backend listed nothing that can't run.
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1 };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } }));
+    const accept = screen.getByRole('button', { name: /^Accept/ });
+    expect(accept).toHaveAttribute('aria-disabled', 'true');
+    expect(accept).toHaveAccessibleDescription(LINE);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("locks Accept when its run pulls in an Idol already on the canvas (the run's plan)", () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const before = graph.state.nodes;
+    graph.state.nodes = [{ id: 'n1', data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {} } } as never];
+    try {
+      const fed = proposal('p_a', {
+        nodes: [{ ...proposal('p_a').nodes[0], ref: '+prev', definitionId: 'preview', name: 'Preview',
+          cost: { kind: 'free', provider: null, label: 'free' } } as never],
+        edges: [{ source: 'n1', sourceHandle: 'world', target: '+prev', targetHandle: 'input' }],
+        params: [], run: ['+prev'], references: ['n1'],
+      });
+      fed.cost = { ...fed.cost, paidRuns: 0, freeRuns: 1 };
+      open(fed);
+      useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+      render(<ProposalBar />);
+      expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAccessibleDescription(LINE);
+    } finally {
+      graph.state.nodes = before;
+    }
+  });
+
+  it("every way to accept refuses in the store with GM's line and sends nothing (review r4 LOW-2)", async () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    // Not the bar's button: the store's accept, which the layer's ghost
+    // card, the keyboard and agents' prompts all call.
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    expect(graph.state.notify).toHaveBeenCalledWith(LINE, 'info');
+    expect(useCanvasProposalsStore.getState().pending.p_a).toBeUndefined();
+    expect(graph.state.executeNode).not.toHaveBeenCalled();
+    // With the token, the same call is sent.
+    net.apiFetch.mockResolvedValue(respond(200, { status: 'accepted', idMap: { '+idol': 'n9' }, runNodeIds: ['n9'] }));
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(net.apiFetch).toHaveBeenCalled();
+  });
+
+  const notReadyOf = (count: number) => {
     const many = proposal('p_a');
+    many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d', '+e'].slice(0, count).map((ref) => ({
+      ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    return screen.getByRole('list', { name: 'Can’t run here' });
+  };
+
+  it('keeps a reason the canvas cannot re-check, a line for each of up to 3 nodes', () => {
+    const list = notReadyOf(3);
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['+a', '+b', '+c'].map((ref) =>
+      `⚠${ref}: FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})`));
+    expect(list.textContent).not.toContain('more');
+  });
+
+  // GM, PR #203 r24: the shared rule names up to 3 and counts from 4, so 4
+  // is never "3 and 1 more": one line, and every node in the details.
+  it.each([4, 5])('counts %i nodes in one line and lists every one in the details', (count) => {
+    const list = notReadyOf(count);
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([`⚠${count} nodes can’t run here yet.`]);
+    // The details hold the list and what Accept writes under one toggle,
+    // whose name never changes (GM - Design, 2026-11-01: the chevron and
+    // aria-expanded carry the state).
+    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list|Show the details/ })).toBeNull();
+    const details = screen.getByRole('group', { name: 'What Accept writes' });
+    for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
+  });
+
+  // GM, PR #203 r27 item 7: same-named nodes with the same reason say one
+  // line in the person's list, the count in front of the single line's
+  // sentence; another node keeps its own line.
+  const KREA_LINE = '“Krea 2” needs your Krea plan. Sign in to Krea in Settings.';
+  const sameNamed = (krea: number) => {
+    const many = proposal('p_a');
+    many.nodes = [];
+    many.params = [];
+    many.cost = { ...many.cost, notReady: [
+      ...Array.from({ length: krea }, (_, index) => ({ ref: `+k${index}`, nodeId: null, name: 'Krea 2',
+        missing: 'needs the Krea account signed in (Settings > Providers > Krea)', person: KREA_LINE,
+        reason: reasonFor(KREA_LINE) })),
+      { ref: '+c', nodeId: null, name: 'Claude', missing: 'needs ANTHROPIC_API_KEY in Settings > Providers',
+        person: '“Claude” needs your Anthropic API key. Add it in Settings.',
+        reason: reasonFor('“Claude” needs your Anthropic API key. Add it in Settings.') },
+    ] };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+  };
+
+  it('says two same-named nodes in one line, the count in front', () => {
+    sameNamed(2);
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      '⚠2 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
+      '⚠“Claude” needs your Anthropic API key. Add it in Settings.',
+    ]);
+  });
+
+  it('counts 4 nodes, and says three same-named ones in one line in the list', () => {
+    sameNamed(3);
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
+    expect(list.textContent).toBe('⚠4 nodes can’t run here yet.');
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    expect([...screen.getByRole('group', { name: 'What Accept writes' }).querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+      '3 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
+      '“Claude” needs your Anthropic API key. Add it in Settings.',
+    ]);
+  });
+
+  // GM - Design, 2026-11-01 (main) with GM, PR #203 r24: four not-ready nodes
+  // are one count line in the bar and every node's line in the details; the
+  // toggle's name never changes and focus stays on it.
+  it('four not-ready nodes: one count line, the list in the details, focus kept on the toggle', () => {
+    const many = proposal('p_a');
+    many.nodes = [];
+    many.params = [];
     many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
       ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const list = screen.getByRole('list', { name: "Can't run here" });
-    expect(list.querySelectorAll('li')).toHaveLength(4);
-    expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
-    // The first ⚠ line is kept in view with the plan line (GM r6); the rest scroll.
-    const kept = [...list.querySelectorAll('li')].map((li) => li.hasAttribute('data-notice-keep'));
-    expect(kept).toEqual([true, false, false, false]);
-    expect(list.textContent).toContain('and 1 more in the details');
-    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
-    expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
+    const list = screen.getByRole('list', { name: "Can’t run here" });
+    expect(list.querySelectorAll('li')).toHaveLength(1);
+    expect(list.textContent).toContain('4 nodes can’t run here yet.');
+    // The ⚠ line is kept in view with the plan line (GM r6).
+    expect(list.querySelector('li')!.hasAttribute('data-notice-keep')).toBe(true);
+    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.getByRole('group', { name: 'What Accept writes' }).textContent).toContain('(+d)');
   });
 
   it('with no changes, the row reads "Every node that can’t run" with the count', () => {
@@ -555,7 +796,7 @@ describe('ProposalBar while Nebula is offline', () => {
     open(proposal('p_a'));
     render(<ProposalBar />);
     act(() => noteBackendConnection('offline'));
-    const accept = screen.getByRole('button', { name: 'Accept and run' });
+    const accept = screen.getByRole('button', { name: 'Accept and run 1 paid' });
     const reject = screen.getByRole('button', { name: /^Reject/ });
     for (const button of [accept, reject]) {
       expect(button).toBeDisabled();
@@ -567,7 +808,160 @@ describe('ProposalBar while Nebula is offline', () => {
     });
     expect(net.apiFetch).not.toHaveBeenCalled();
     act(() => noteBackendConnection('online'));
-    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
     resetBackendConnectionForTests();
+  });
+});
+
+// GM, PR #203 r11 item 3, and the round 6 review's LOW-1: Accept goes through
+// withKeyLock like every Run surface, so a missing key comes first, ahead of
+// offline, and a key-locked Accept carries no offline mark.
+describe('ProposalBar Accept: the missing key leads the canvas lock (keyed route)', () => {
+  keyIdolInEachTest();
+
+  it('offline with the key missing: key-locked, focusable, the Accept line, no offline mark; online it stays key-locked', async () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    act(() => noteBackendConnection('offline'));
+    const accept = screen.getByRole('button', { name: /^Accept/ }) as HTMLButtonElement;
+    expect(accept.disabled).toBe(false);
+    expect(accept).toHaveAttribute('aria-disabled', 'true');
+    expect(accept).toHaveAttribute('data-key-locked', '');
+    expect(accept).not.toHaveAttribute('data-offline-disabled');
+    expect(accept).toHaveAttribute('title', LINE);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    // Reject has no key to wait for: offline holds it.
+    expect(screen.getByRole('button', { name: /^Reject/ })).toBeDisabled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAttribute('title', LINE);
+    resetBackendConnectionForTests();
+  });
+
+  it('following an agent\'s switch with the key missing: the key line, no following mark; with the key, the wait line', async () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const { setFollowingSwitch, resetCanvasFollowForTests } = await import('../src/lib/canvasFollow');
+    const { FOLLOWING_MARK } = await import('../src/lib/canvasLock');
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    act(() => setFollowingSwitch({ projectName: 'Second canvas', agent: 'Codex' }));
+    const accept = screen.getByRole('button', { name: /^Accept/ });
+    expect(accept).toHaveAttribute('title', LINE);
+    expect(accept).toHaveAttribute('data-key-locked', '');
+    expect(accept).not.toHaveAttribute(FOLLOWING_MARK);
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
+    const held = screen.getByRole('button', { name: /^Accept/ });
+    expect(held).not.toHaveAttribute('data-key-locked');
+    expect(held).toHaveAttribute('title', 'Wait for “Second canvas” to open.');
+    expect(held).toHaveAttribute(FOLLOWING_MARK);
+    act(() => { resetCanvasFollowForTests(); setFollowingSwitch(null); });
+  });
+});
+
+describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () => {
+  const idolNode = () => ({ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol',
+    cost: { kind: 'mayCost', provider: 'speridlabs', label: 'may cost · Hugging Face' } }) as never;
+
+  it('Idol alone with a token: "Accept and run" with "1 may cost", its own clause, and no estimate line', () => {
+    const view = proposal('p_a', { nodes: [idolNode()], edges: [], params: [], run: ['+idol'],
+      plan: 'Adds “Idol” · Runs “Idol” · may use your Hugging Face credits' });
+    view.cost = { ...view.cost, paidRuns: 0, freeRuns: 0, mayCostRuns: 1, providers: [], estimate: null,
+      mayCost: [{ name: 'Idol', account: 'Hugging Face' }] };
+    open(view);
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: 'Accept and run 1 may cost' });
+    expect(accept).not.toHaveAttribute('aria-disabled');
+    expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', 'Idol can use your Hugging Face credits.');
+    // The plan line is the backend's (services/canvas_proposals.plan_line, tested in
+    // test_proposal_plan_line.py: "may cost" clauses, no price); the bar shows it as written.
+    expect(document.querySelector('.proposal-bar__plan')).toHaveTextContent('Adds “Idol” · Runs “Idol” · may use your Hugging Face credits');
+    expect(screen.queryByText(/No list price|\$0/)).toBeNull();
+  });
+
+  const mixed = () => {
+    const view = proposal('p_a', { nodes: [idolNode(), proposal('p_a').nodes[0]], edges: [], params: [], run: ['+idol', '+up', 'n4'] });
+    view.cost = { ...view.cost, paidRuns: 2, freeRuns: 0, mayCostRuns: 1, upTo: false, providers: ['google'],
+      mayCost: [{ name: 'Idol', account: 'Hugging Face' }],
+      nodes: [
+        { ref: '+idol', nodeId: null, definitionId: 'speridlabs-idol', kind: 'mayCost', provider: 'speridlabs',
+          label: 'may cost · Hugging Face', name: 'Idol', account: 'Hugging Face' },
+        { ref: '+up', nodeId: null, definitionId: 'nano-banana', kind: 'paid', provider: 'google', label: 'paid · google' },
+        { ref: 'n4', nodeId: 'n4', definitionId: 'nano-banana', kind: 'paid', provider: 'google', label: 'paid · google' },
+      ],
+      estimate: { currency: 'usd', low: 0.13, high: 0.13, open: false, unpriced: [], plan: [], plus: [] } };
+    return view;
+  };
+
+  it('mixed: GM r14 items 2 and 3, verbatim: two lines, no provider tag, and the Accept chip\'s sentences', () => {
+    graph.state.nodes = [{ id: 'n4', data: { definitionId: 'nano-banana', label: 'Hero still', params: {} } }] as never;
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' });
+    expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title',
+      '“Nano Banana” and “Hero still” call paid providers. Estimated cost $0.13. Idol can use your Hugging Face credits.');
+    graph.state.nodes = [];
+  });
+
+  it('re-reads Idol from the keys set now, both ways (GM r15 item 2; review 7, NIT-5)', () => {
+    // Proposed with the token; the person removed it since.
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid' })).toBeTruthy();
+    // The chip still has its cost tooltip, by the Run chip's formatter (GM,
+    // PR #203 r17 item 4); n4 isn't on this canvas, so it goes by its id.
+    expect(document.querySelector('.proposal-bar__count')).toHaveAttribute('title',
+      '“Nano Banana” and “n4” call paid providers. Estimated cost $0.13.');
+    // And added again: "may cost" comes back without a new proposal.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
+    cleanup();
+    // Proposed without it (free), the token added since: "may cost".
+    const view = mixed();
+    view.cost = { ...view.cost, mayCostRuns: 0, mayCost: [], freeRuns: 1,
+      nodes: view.cost.nodes.map((entry) => (entry.ref === '+idol'
+        ? { ...entry, kind: 'free' as const, label: 'free · Hugging Face' } : entry)) };
+    view.nodes = view.nodes.map((node) => (node.ref === '+idol'
+      ? { ...node, cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } } : node));
+    useCanvasProposalsStore.setState({ proposals: {} });
+    open(view);
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
+  });
+
+  it('before this tab has read the keys, the backend\'s classes stand', () => {
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
+  });
+
+  it('without a token Idol is free: plain "Accept and run", nothing locked, no chip', () => {
+    const view = proposal('p_a', { nodes: [{ ...(idolNode() as object), cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } } as never],
+      edges: [], params: [], run: ['+idol'] });
+    view.cost = { ...view.cost, paidRuns: 0, freeRuns: 1, providers: [], estimate: null };
+    open(view);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: 'Accept and run' });
+    expect(accept).not.toHaveAttribute('aria-disabled');
+    expect(accept.querySelector('.proposal-bar__count')).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
   });
 });

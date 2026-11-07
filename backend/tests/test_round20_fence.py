@@ -395,6 +395,7 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/zoom-manifest/entry"): "dev zoom recorder file; no graph",
     ("PUT", "/api/settings"): "settings; no graph",
     ("DELETE", "/api/settings/api-keys/{provider}"): "settings; no graph",
+    ("POST", "/api/settings/notice/dismiss"): "the person read Settings' top line; no graph",
     ("POST", "/api/credentials/update"): "settings; no graph",
     # Runs already going: Stop must work while the tab follows an agent's switch.
     ("DELETE", "/api/executions/{run_id}"): "Stop: cancels a run by its id, works while following a switch",

@@ -5,7 +5,7 @@ import { useUIStore } from '../../../store/uiStore';
 import { saveField } from '../../../lib/settingsWrites';
 import { isBackendOffline } from '../../../lib/backendConnection';
 import { SwitchRow } from './Switch';
-import { LineText } from '../../LineText';
+import { SettingsRowError } from './SettingsRowError';
 import { PersonLockLine, type PersonLock } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 
@@ -94,7 +94,7 @@ function FolderField({ field, label, saved, placeholder, hint, lock }: {
             aria-label={`Choose ${label.toLowerCase()} folder`}>Choose…</button>
         )}
       </div>
-      {(error || chooseError) && <p className="settings-row__error" role="alert"><LineText text={error ?? chooseError} /></p>}
+      <SettingsRowError id={field} message={error ?? chooseError} />
       <p className="settings-hint settings-folder__hint" id={hintId}>{hint}</p>
     </div>
   );
@@ -137,7 +137,7 @@ export function StorageTab({ saved }: { saved: SettingsDraft }) {
             lock={lock.control()}
             onChange={(enabled) => { setTelemetryTo(enabled); void saveField('zoomTelemetryEnabled', enabled); }} />
         </div>
-        {telemetryError && <p className="settings-row__error" role="alert"><LineText text={telemetryError} /></p>}
+        <SettingsRowError id="zoomTelemetryEnabled" message={telemetryError} />
       </section>
     </div>
   );

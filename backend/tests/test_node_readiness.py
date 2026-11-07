@@ -172,8 +172,11 @@ NOT_PROVIDER_CALLS = {
                         "services.image_input", "services.media_input", "services.media_types"},
     # The settings store; its httpx use is Settings > Providers' key check, which
     # the person starts and which costs nothing (google_vertex and nous_auth are
-    # the credential checks for those two providers).
-    "services.settings": {"httpx", "services.google_vertex", "services.nous_auth"},
+    # the credential checks for those two providers). services.node_route gives
+    # it key_text, the one "token is set and usable" reading the run gate and
+    # the handlers share (the standard library, and execution.person_line's
+    # wording, itself re and typing only; no network), PR #203 round 8.
+    "services.settings": {"httpx", "services.google_vertex", "services.nous_auth", "services", "services.node_route"},
     # Path rules for local files; it imports the agent/workspace stack, never a provider.
     # services.input_file_name is the kept upload name's param key (re and typing
     # only; no network, no backend import), skipped by validate_file_references

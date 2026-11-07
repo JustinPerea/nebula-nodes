@@ -31,8 +31,8 @@ def test_cost_for_a_krea_copy_names_the_route_with_the_keys_set():
     # A Krea-only input that arrives by connection keeps it on Krea.
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"},
                     wired={"style_images"})["provider"] == "krea"
-    # Without keys it is the node's own provider, as before.
-    assert cost_for(grok, {})["provider"] == "krea"
+    # Keys are required (GM, PR #203 r15 item 1); on Krea's alone it is Krea.
+    assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["provider"] == "krea"
 
 
 def test_a_proposal_names_the_route_and_prices_it(api, monkeypatch):  # noqa: F811

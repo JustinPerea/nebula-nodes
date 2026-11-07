@@ -205,7 +205,7 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
     <>
       <AuthorDot author={{ kind: 'agent', name: row.agent.name, color: row.agent.color }} verified={row.agent.verified} />
       <span className="agent-roster__text">
-        <span className="agent-roster__name">{row.agent.name}</span>
+        <span className="agent-roster__name agent-name" title={row.agent.name} aria-label={row.agent.name}>{row.agent.name}</span>
         {needsYou && <span className="agent-roster__count">{row.countLine}</span>}
         {row.line && <span id={lineId} className="agent-roster__line" title={row.line}>{row.line}</span>}
         {/* PR #204 round 10: a locked row's reason is a line, not a tooltip (the one lock's form). */}

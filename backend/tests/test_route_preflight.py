@@ -108,4 +108,4 @@ def test_a_plan_route_a_wired_port_unblocks_needs_the_krea_sign_in(monkeypatch):
     params = {"_kreaAuth": "mcp", "resolution": "2K"}
     nodes, edges = _wired("routes-krea", params, "style_image", 1)
     messages = [e.message for e in engine.validate_graph(nodes, edges, {"FAL_KEY": "set"}) if e.node_id == "n"]
-    assert messages == ["Connect your Krea account in Settings before running this recipe"]
+    assert messages == ["Sign in to Krea in Settings before running this recipe"]

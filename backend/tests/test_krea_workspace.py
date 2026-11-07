@@ -163,7 +163,7 @@ async def test_account_job_history_fetches_one_job_by_id(session):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("params,match", [
-    ({"_kreaAuth": "mcp"}, "needs a Krea API token"),
+    ({"_kreaAuth": "mcp"}, "needs a Krea API key"),
     ({"job_id": "../usage"}, "valid Krea job ID"),
 ])
 async def test_job_history_refusals_send_nothing(session, params, match):

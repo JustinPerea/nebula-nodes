@@ -10,12 +10,14 @@ import type {
   SensorStream,
   SpatialContext,
   SpatialSessionMetadata,
+  WorldSplatRepresentation,
   WorldValueV2,
 } from '../../types/spatial';
 import type { PortDataType, PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
-import { WorldPreview } from './DeferredViewers';
+import { WorldPreview, WorldSplatPreview } from './DeferredViewers';
+import { previewSplat, splatAssetLabel, splatSourceLine, worldProviderName } from '../../lib/worldV2Splat';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {
@@ -28,8 +30,10 @@ interface SummaryMetric {
 }
 
 interface AssetSummary {
-  readonly links: readonly LocalAssetReference[];
+  readonly links: readonly (LocalAssetReference & { readonly label?: string })[];
   readonly total: number;
+  /** The row's heading; null for none (the World v2 splat card, which reads like World v1's). */
+  readonly heading?: string | null;
 }
 
 const MAX_VISIBLE_ASSET_LINKS = 3;
@@ -69,6 +73,7 @@ function SummaryCard({
   chips = [],
   assets,
   compact,
+  action,
 }: {
   readonly eyebrow: string;
   readonly title: string;
@@ -77,6 +82,8 @@ function SummaryCard({
   readonly chips?: readonly string[];
   readonly assets?: AssetSummary;
   readonly compact: boolean;
+  /** One control under the header (a World v2 splat's "Explore in 3D"). */
+  readonly action?: ReactNode;
 }) {
   return (
     <section
@@ -91,14 +98,17 @@ function SummaryCard({
         </span>
       </header>
       {subtitle && <p className="spatial-preview__subtitle">{subtitle}</p>}
-      <dl className="spatial-preview__metrics">
-        {metrics.slice(0, compact ? 3 : 4).map((metric) => (
-          <div className="spatial-preview__metric" key={metric.label}>
-            <dt>{metric.label}</dt>
-            <dd title={metric.value}>{metric.value}</dd>
-          </div>
-        ))}
-      </dl>
+      {action}
+      {metrics.length > 0 && (
+        <dl className="spatial-preview__metrics">
+          {metrics.slice(0, compact ? 3 : 4).map((metric) => (
+            <div className="spatial-preview__metric" key={metric.label}>
+              <dt>{metric.label}</dt>
+              <dd title={metric.value}>{metric.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {chips.length > 0 && (
         <div className="spatial-preview__chips" aria-label="Properties">
           {chips.slice(0, compact ? 3 : 5).map((chip) => (
@@ -108,7 +118,9 @@ function SummaryCard({
       )}
       {assets && assets.total > 0 && (
         <div className="spatial-preview__assets">
-          <span className="spatial-preview__assets-label">Local assets</span>
+          {assets.heading !== null && (
+            <span className="spatial-preview__assets-label">{assets.heading ?? 'Local assets'}</span>
+          )}
           {assets.links.map((asset) => (
             <a
               className="spatial-preview__asset nodrag nowheel"
@@ -117,10 +129,10 @@ function SummaryCard({
               key={asset.id}
               onClick={(event) => event.stopPropagation()}
               onMouseDown={(event) => event.stopPropagation()}
-              title={`Download ${asset.id}`}
+              title={`Download ${asset.label ?? asset.id}`}
             >
-              <span>{asset.id}</span>
-              <small>{asset.mediaType}</small>
+              <span>{asset.label ?? asset.id}</span>
+              {!asset.label && <small>{asset.mediaType}</small>}
             </a>
           ))}
           {assets.total > assets.links.length && (
@@ -356,7 +368,32 @@ function collectWorldAssets(value: WorldValueV2): AssetSummary {
   return { links, total };
 }
 
+/** A World v2 value with a splat the preview opens (Idol's object): read like
+ * the World v1 card, field for field (GM, PR #203 r1): kind, name, who made
+ * it, Explore, and the splat's download as "Splat · PLY". The contract, axes,
+ * session and MIME type stay off the card. */
+function worldV2SplatCard(value: WorldValueV2, splat: WorldSplatRepresentation, options: ViewerOptions): ReactNode {
+  return (
+    <SummaryCard
+      eyebrow="World"
+      title={value.displayName}
+      subtitle={splatSourceLine(value)}
+      compact={options.compact}
+      metrics={[]}
+      assets={{ links: [{ ...splat.asset, label: splatAssetLabel(splat) }], total: 1, heading: null }}
+      action={<WorldSplatPreview world={value} compact={options.compact} />}
+    />
+  );
+}
+
 function worldV2Summary(value: WorldValueV2, options: ViewerOptions): ReactNode {
+  const splat = previewSplat(value);
+  // Only a splat-only value (Idol's) reads like World v1; one that also
+  // carries a point cloud, depth, a panorama or a collider keeps the summary
+  // that lists them, with Explore on it.
+  const splatOnly = !value.assets.pointCloud && !value.assets.depthSequence
+    && !value.assets.panorama && !value.assets.colliderMesh;
+  if (splat && splatOnly) return worldV2SplatCard(value, splat, options);
   const representations = value.assets.splats.length
     + (value.assets.pointCloud ? 1 : 0)
     + (value.assets.depthSequence ? 1 : 0)
@@ -372,7 +409,7 @@ function worldV2Summary(value: WorldValueV2, options: ViewerOptions): ReactNode 
         { label: 'Representations', value: formatNumber(representations, 0) },
         { label: 'Splats', value: formatNumber(value.assets.splats.length, 0) },
         { label: 'Session', value: value.session.source },
-        { label: 'Provider', value: value.session.provider ?? 'Provider-neutral' },
+        { label: 'Provider', value: worldProviderName(value.session.provider) ?? 'Provider-neutral' },
       ]}
       chips={[
         ...(value.assets.pointCloud ? ['Point cloud'] : []),
@@ -381,6 +418,7 @@ function worldV2Summary(value: WorldValueV2, options: ViewerOptions): ReactNode 
         ...(value.defaultCamera ? ['Default camera'] : []),
       ]}
       assets={collectWorldAssets(value)}
+      action={splat ? <WorldSplatPreview world={value} compact={options.compact} /> : undefined}
     />
   );
 }

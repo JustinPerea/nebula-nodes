@@ -54,6 +54,7 @@ VALID_PROVIDERS = {
     "nous",
     "worldlabs",
     "typesafe",
+    "speridlabs",
     "utility",
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}
@@ -298,6 +299,10 @@ def _registry_api_keys(definitions: dict[str, dict[str, Any]]) -> set[str]:
             required_keys.add(env_key)
         elif isinstance(env_key, list):
             required_keys.update(key for key in env_key if key)
+        # A keyless route's optional key (HF_TOKEN) is a key Settings stores
+        # for a node, though no node needs it (node_route.is_keyless).
+        for route in definition.get("routes") or []:
+            required_keys.update(key for key in route.get("optionalKeys") or [] if key)
     return required_keys
 
 

@@ -4,7 +4,7 @@ import copy
 from contextvars import ContextVar
 from typing import Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 execution_run_id: ContextVar[str | None] = ContextVar(
@@ -110,6 +110,11 @@ class ErrorEvent(RunScopedEvent):
     # The handler stopped at its own key check, before any provider request
     # (execution.missing_credential), so the node cost nothing.
     missing_credential: bool = False
+    # The node stopped at its call, before any request, because an agent's
+    # run may not make it (execution/run_origin.ProposalNeeded: Idol with
+    # the person's Hugging Face token set, Justin decided 2026-10-31): the
+    # agent proposes the run instead. Additive.
+    proposal_needed: bool = False
     # The person's line for this failure, when the handler wrote one
     # (execution/person_line.py, error copy round 3c): what the canvas card
     # shows, with no ids or record names. `error` keeps the specific text
@@ -143,6 +148,28 @@ class ValidationErrorDetail(BaseModel):
     # only an agent or a damaged saved graph reaches; the card shows GM's
     # general line with `message` behind "Details".
     person: str | None = None
+    # What kind of stop this is, for the Agent log's merged line
+    # (main._refused_run_log_line), set where the check is made, never sent:
+    # "reason" for a stop the node's not-ready reason says (a key, a route,
+    # a Krea plan), "input" for a required input with no wire (``_need`` its
+    # label). None for any other stop: the log says its card line.
+    _stop: str | None = PrivateAttr(default=None)
+    _need: str | None = PrivateAttr(default=None)
+    # A stop that is only a missing key: the key as a need, with its
+    # determiner ("your fal.ai API key", "a key for one of its 4 providers";
+    # person_line.needs_key), so a node's inputs and its key say one line
+    # (GM, PR #203 r38 item 1, r40 item 1). Set where the check is made.
+    _key: str | None = PrivateAttr(default=None)
+
+    def marked(self, stop: str, need: str | None = None) -> "ValidationErrorDetail":
+        """This check, marked with its kind of stop (``_stop``)."""
+        self._stop, self._need = stop, need
+        return self
+
+    def keyed(self, key: str | None) -> "ValidationErrorDetail":
+        """This check, a stop for its missing key only (``_key``)."""
+        self._key = key
+        return self
 
 
 class ValidationErrorEvent(RunScopedEvent):

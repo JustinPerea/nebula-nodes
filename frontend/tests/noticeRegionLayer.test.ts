@@ -47,10 +47,14 @@ describe('the notice layer', () => {
     expect(Math.max(...raw)).toBeLessThan(notice);
   });
 
-  it('the region is fixed on that layer and takes no pointer events itself', () => {
+  it('each item is on that layer, the region takes no pointer events itself', () => {
+    // GM r7 (PR #203): the region takes no layer of its own, so the proposal
+    // bar can sit under every modal while the notices stay above them
+    // (tests/proposalBarStacking.test.ts); each item carries its layer.
     const region = rule(regionCss, '.notice-region');
-    expect(region).toMatch(/position:\s*fixed/);
-    expect(region).toMatch(/z-index:\s*var\(--sr-layer-notice/);
+    expect(region).toMatch(/position:\s*absolute/);
+    expect(region).toMatch(/z-index:\s*auto/);
+    expect(rule(regionCss, '.notice-region__slot > *')).toMatch(/z-index:\s*var\(--sr-layer-notice/);
     expect(region).toMatch(/pointer-events:\s*none/);
     // Just above the bottom bar, read from where the bar really starts.
     expect(region).toMatch(/bottom:[^;]*var\(--bottom-bar-clearance/);

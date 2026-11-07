@@ -13,6 +13,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError, personRequiredCopy } from '../src/lib/errorCopy';
 import corpus from '../../backend/tests/fixtures/pin_text_cases.json';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
@@ -21,6 +25,9 @@ vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOri
 const { MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinRefusalLine, pinTextReady } = await import('../src/lib/canvasPins');
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
+// The app draws its notices in the notice region, which stays usable beside
+// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
@@ -47,7 +54,7 @@ describe('GM r22 Q1: the person gate keeps its own line', () => {
   it('the composer shows it in the neutral status, the note still in the open dialog', async () => {
     api.createPin.mockRejectedValue(refused(403, 'agent_refused'));
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'warmer please' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send note' })); });
     const toast = screen.getByRole('status');

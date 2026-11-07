@@ -281,6 +281,13 @@ body:not(.app-slava-restraint) .model-node__error--blocked {
   background: rgba(224, 160, 48, 0.12);
 }
 
+/* A stop that waits for the person, not a failure (GM, PR #203 r39 item 1):
+   muted text on a neutral surface, never the error colour. */
+body:not(.app-slava-restraint) .model-node__error--waiting {
+  color: #a3a3a3;
+  background: rgba(255, 255, 255, 0.04);
+}
+
 /* Structural bits shared across skins (color comes from the skin rules above). */
 .model-node__error-message {
   display: block;

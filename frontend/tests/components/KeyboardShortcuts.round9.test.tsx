@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { KeyboardShortcuts } from '../../src/components/KeyboardShortcuts';
 import { useUIStore } from '../../src/store/uiStore';
+import { DeferredKeyboardShortcutsDialog } from '../../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 // Review 8, L-c: after a click on the dialog's text, focus fell to the page;
 // "?" no longer closed it (canvas keys yield to an open modal) and Escape
