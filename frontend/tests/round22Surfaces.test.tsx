@@ -216,6 +216,9 @@ describe('A: one source for the read-only state', () => {
   const OFFLINE_ONLY = new Set([
     'components/BackendConnectionStatus.tsx',
     'components/ProviderReadinessBadge.tsx',
+    // PR #199 round 23: reads it only to place the toolbar again when the
+    // offline banner joins the top stack; the lock's own state still gates Run.
+    'components/SelectionToolbar.tsx',
     'components/canvas/CanvasViewReporter.tsx',
     'components/commons/CommonsCloseBatch.tsx',
     'components/commons/CommonsDetail.tsx',

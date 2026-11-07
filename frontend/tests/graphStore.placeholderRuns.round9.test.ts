@@ -196,7 +196,9 @@ describe('review 8', () => {
 
     it('a held delete: the refusal shows beside the Undo too', () => {
       useGraphStore.setState({ nodes: [node('w', 'worldlabs-environment')] as never, edges: [],
-        providerRecoveries: [{ runId: 'r', nodeId: 'w', resumeOperationId: 'op', existingWorldId: null }] } as never);
+        providerRecoveries: [{ runId: 'r', nodeId: 'w', resumeOperationId: 'op', existingWorldId: null }],
+        // Run r is this project's (review 20 of PR #199, LOW-2).
+        runHistory: [{ id: 'r', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], } as never);
       agentUndo();
       expect(useGraphStore.getState().allowCanvasDelete(['w'])).toBe(false);
       expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas.', offer: 'undo' });

@@ -7,7 +7,7 @@ import type { ExecutionEvent } from '../src/lib/wsClient';
 // Harness from paramsVersionReload.test.ts.
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
-  connect: vi.fn(), disconnect: vi.fn(),
+  connect: vi.fn(), disconnect: vi.fn(), setViewing: vi.fn(), notePersonAct: vi.fn(), noteTabEdit: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);
   }; }),
@@ -109,7 +109,7 @@ describe('GM r7 (2): the load screens retry on the promote', () => {
     vi.mocked(projects.listProjects).mockRejectedValueOnce(
       new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading: "Couldn't load your projects." }));
     emit(SWITCH);
-    await vi.waitFor(() => expect(useProjectStore.getState().error).toContain("couldn't follow it"));
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toContain('couldn’t follow it'));
     expect(projectRetryOffer(useProjectStore.getState())).not.toBe('none');
   });
 

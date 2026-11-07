@@ -70,16 +70,97 @@ def cover_for_agents(api: NebulaAPI, cover: Any) -> dict[str, Any] | None:
     return shown
 
 
+def _held_node(hold: dict[str, Any], open_id: Any) -> str:
+    """The held node, as the note says it: “World” (n1), the project it is
+    in, or that the project can't be known."""
+    name, node_id = hold.get("nodeName"), hold.get("nodeId")
+    node = f"\u201c{name}\u201d" if isinstance(name, str) and name else "a World Labs node"
+    if isinstance(node_id, str) and node_id:
+        node += f" ({node_id})"
+    project = hold.get("projectName")
+    if not isinstance(project, str) or not project:
+        return f"{node}, in a project Nebula can\u2019t tell,"
+    if open_id is not None and hold.get("projectId") == open_id:
+        return f"{node} in the open project \u201c{project}\u201d"
+    return f"{node} from \u201c{project}\u201d"
+
+
+def open_hold_note(hold: dict[str, Any], open_id: Any = None) -> str:
+    """The agents' sentence for GET /api/projects ``openHold`` (PR #199
+    round 22, review 20 agents-docs LOW-5): which state holds, which node
+    and project, and what clears it, built from the hold's fields.
+    ``open_id``: the listing's activeProjectId."""
+    state = hold.get("state")
+    count = hold.get("count") if isinstance(hold.get("count"), int) else 1
+    more = f" ({count - 1} more {'record' if count == 2 else 'records'} after it)" if count > 1 else ""
+    if state == "recovery":
+        why = (f"{_held_node(hold, open_id)} has a saved World Labs recovery ID{more}; "
+               "the person forgets it in Run History.")
+    elif state == "ambiguity":
+        why = (f"a World Labs start on {_held_node(hold, open_id)} needs the person\u2019s check{more}; "
+               "they check it in Marble and press \u201cI\u2019ve checked Marble\u201d in the World Labs notice.")
+    elif state == "params":
+        fields = [field for field in hold.get("fields") or [] if isinstance(field, str)]
+        named = " and ".join(f"\u201c{field}\u201d" for field in fields) or "an ID field"
+        why = (f"{_held_node(hold, open_id)} has a World Labs ID in its settings ({named}); "
+               "the person checks it in Marble and clears it.")
+    elif state == "active":
+        why = "a World Labs paid start is settling; wait for it to end, then try again."
+    elif state == "bootstrap":
+        why = ("Nebula couldn\u2019t write its World Labs recovery journal; "
+               "the person restarts the Nebula backend.")
+    elif state == "run":
+        why = "a run is going; wait for it to finish, or stop it."
+    else:
+        why = str(hold.get("detail") or state)
+    return f"Opening or switching projects is held ({state}): {why}"
+
+
 def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """MCP list_projects: each project's id, name, `open`, node count, last
-    edit and cover, most recently edited first."""
+    edit and cover, most recently edited first, `catalogRestore` after
+    Nebula restored a damaged project list (until the person closes its
+    notice), `canvasNotFiled` while the live canvas couldn't be saved as
+    its own project because the list is at a limit (with the agents' `note`
+    and `roomNow`), `canvasSaved` for a while after such a canvas was saved,
+    and `projectLimit`. A recovered copy's row has `sourceName` and
+    `sourceProjectId`; `openHold` (with its `note`) says what holds opening
+    or switching projects now."""
     listing = _call(api, "GET", "/api/projects", headers)
     active = listing.get("activeProjectId")
     rows = [{"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
              "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt"),
-             "cover": cover_for_agents(api, project.get("cover"))}
+             "cover": cover_for_agents(api, project.get("cover")),
+             # A recovered copy: its source, never read from the copy's name.
+             **({key: project.get(key) for key in ("sourceName", "sourceProjectId")}
+                if "sourceName" in project else {})}
             for project in listing.get("projects") or []]
-    return {"projects": rows, "openProjectId": active}
+    reply: dict[str, Any] = {"projects": rows, "openProjectId": active}
+    # What holds opening or switching projects now (the open's own guards),
+    # with the agents' sentence; absent when nothing does.
+    if isinstance(listing.get("openHold"), dict):
+        reply["openHold"] = {**listing["openHold"], "note": open_hold_note(listing["openHold"], active)}
+    # Nebula restored a damaged project list and the person hasn't closed its
+    # notice yet: what came back, from where, and where the damaged file is kept.
+    if isinstance(listing.get("catalogRestore"), dict):
+        reply["catalogRestore"] = listing["catalogRestore"]
+    # The live canvas isn't a project and couldn't be filed as its own: the
+    # list is at a limit, so opening or making a project is refused until
+    # the person frees room (PR #199, review 2 L4).
+    # With its `note` (what frees room for which limit) and `projectLimit`.
+    if isinstance(listing.get("canvasNotFiled"), dict):
+        reply["canvasNotFiled"] = listing["canvasNotFiled"]
+    # A waiting canvas was saved as its own project (the person sees a toast).
+    if isinstance(listing.get("canvasSaved"), dict):
+        reply["canvasSaved"] = listing["canvasSaved"]
+    # A held canvas couldn't be read or saved and may be lost (L-1).
+    if isinstance(listing.get("canvasHeldUnreadable"), dict):
+        reply["canvasHeldUnreadable"] = listing["canvasHeldUnreadable"]
+    # The list's project limit (a create past it is refused; a restore from
+    # Recently deleted may pass it: Justin, 2026-10-29).
+    if isinstance(listing.get("projectLimit"), int):
+        reply["projectLimit"] = listing["projectLimit"]
+    return reply
 
 
 def undo_rename_hint(project_id: str, previous: str, via: str) -> str:

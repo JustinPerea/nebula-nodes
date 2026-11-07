@@ -85,8 +85,9 @@ function quotedList(items: string[]): string {
  *   Several settings use the undo counting: "Couldn't save 3 changes in
  *   “<old project>”…". One it can't name: "your last change" (as round 19).
  * The copy is a whole new project in Projects (POST /api/projects/recover),
- * "<old project> (recovered)", then "(recovered 2)", 3 and so on (GM round
- * 21, G5: Nebula names it); the line's "Open copy" opens it.
+ * "Recovered <old project>", then "Recovered <old project> 2", 3 and so on
+ * (GM round 21, G5: Nebula names it; GM r23 on PR #199, a: no parentheses);
+ * the line's "Open copy" opens it.
  * GM round 21 (polish): non-breaking spaces inside the quoted project names,
  * so a name wraps as one piece.
  */
@@ -179,7 +180,7 @@ export function settingsOnOneNode(settings: string[]): string {
  * agent, whose cut-off edits were saved as a copy. No "when <agent>
  * switched projects":
  *   "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a
- *    copy, “Round r20 (recovered)”."
+ *    copy, “Recovered Round r20”."
  * The head is the failed-save line above; the copy's name wraps as one piece.
  */
 export function changesSavedAsCopyLine(saves: CutOffSave[], copyName: string): string {

@@ -119,6 +119,92 @@ export function holdNoticeTabbing(): () => void {
   };
 }
 
+/**
+ * GM r25 (4) on PR #199: the notices already on the page when an aria-modal
+ * dialog opens go under its scrim with the rest of the page: inert, hidden
+ * from assistive technology, and dimmed as the scrim dims the page
+ * (UNDER_MODAL, styles/noticeRegion.css), so their buttons don't look live.
+ * A notice that arrives while the dialog is open isn't held: it lands above
+ * the scrim, live and in the dialog's focus trap (GM r25 of PR #200, the
+ * stacking rule). ModalPortal holds this for every aria-modal dialog, so no
+ * dialog does it on its own. Holds nest: a notice that arrived over one
+ * dialog goes under a second one opened over it, and comes back when that
+ * one closes. Returns the release.
+ */
+export const UNDER_MODAL = 'data-under-modal';
+/** The page's dim under the shared scrim (.prompt-dialog: black at 45%),
+ * for a dialog whose scrim can't be read. */
+const SHARED_SCRIM_ALPHA = 0.45;
+
+interface HeldNotice { inert: string | null; hidden: string | null; dims: number[] }
+const heldNotices = new Map<HTMLElement, HeldNotice>();
+
+/** Every item in the notice region: each slot's children and the region's own. */
+export function noticeItems(region: Element | null = document.querySelector(NOTICE_REGION)): HTMLElement[] {
+  if (!region) return [];
+  const own = [...region.children].filter((child) => !child.matches('[data-notice-band], .notice-region__stack'));
+  const slotted = [...region.querySelectorAll('[data-notice-slot]')].flatMap((slot) => [...slot.children]);
+  return [...slotted, ...own].filter((item): item is HTMLElement => item instanceof HTMLElement);
+}
+
+/** How much a dialog's scrim leaves of the page: 1 minus its alpha. The
+ * scrim is the outermost fixed box from the portal down to the dialog with
+ * a see-through fill (a card's own fill is opaque). */
+function scrimBrightness(host: Element, dialog: Element): number {
+  const path: Element[] = [];
+  for (let at: Element | null = dialog; at && at !== host; at = at.parentElement) path.unshift(at);
+  for (const element of path) {
+    const style = window.getComputedStyle(element);
+    if (style.position !== 'fixed') continue;
+    const alpha = /^rgba?\([^)]*?[,/]\s*([\d.]+%?)\s*\)$/.exec(style.backgroundColor)?.[1];
+    if (alpha === undefined) continue;
+    const value = alpha.endsWith('%') ? Number(alpha.slice(0, -1)) / 100 : Number(alpha);
+    if (value > 0 && value < 1) return 1 - value;
+  }
+  return 1 - SHARED_SCRIM_ALPHA;
+}
+
+function showDim(element: HTMLElement, held: HeldNotice): void {
+  element.style.setProperty('--notice-under-modal', String(held.dims.reduce((product, dim) => product * dim, 1)));
+}
+
+export function holdNoticesUnderModal(host: Element, dialog: Element): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const dim = scrimBrightness(host, dialog);
+  const items = noticeItems();
+  for (const item of items) {
+    let held = heldNotices.get(item);
+    if (!held) {
+      held = { inert: item.getAttribute('inert'), hidden: item.getAttribute('aria-hidden'), dims: [] };
+      heldNotices.set(item, held);
+      item.setAttribute('inert', '');
+      item.setAttribute('aria-hidden', 'true');
+      item.setAttribute(UNDER_MODAL, '');
+    }
+    held.dims.push(dim);
+    showDim(item, held);
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const item of items) {
+      const held = heldNotices.get(item);
+      if (!held) continue;
+      held.dims.splice(held.dims.indexOf(dim), 1);
+      if (held.dims.length) { showDim(item, held); continue; }
+      heldNotices.delete(item);
+      item.removeAttribute(UNDER_MODAL);
+      item.style.removeProperty('--notice-under-modal');
+      // A notice leaving meanwhile keeps the inert its leave gave it.
+      if (held.inert === null && !item.hasAttribute('data-leaving')) item.removeAttribute('inert');
+      else if (held.inert !== null) item.setAttribute('inert', held.inert);
+      if (held.hidden === null) item.removeAttribute('aria-hidden');
+      else item.setAttribute('aria-hidden', held.hidden);
+    }
+  };
+}
+
 /** A notice's own close control: every notice's × is a "Dismiss" button. */
 const NOTICE_DISMISS = 'button[aria-label="Dismiss"]';
 

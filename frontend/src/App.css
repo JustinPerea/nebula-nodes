@@ -6,6 +6,13 @@
   padding: 0;
 }
 
+/* The face notice text is drawn in (GM r24 d): the system face draws “ and ”
+   apart, where Inter draws both as slanted ticks, so every surface that says
+   the held-reopen line takes this one (tests/reopenQuotesFont.fix24). */
+:root {
+  --notice-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
 html,
 body,
 #root {
@@ -46,7 +53,9 @@ a {
 .backend-connection {
   position: fixed;
   z-index: 10000;
-  top: 150px;
+  /* Under the toolbar's line, which moves below the World Labs notice while
+     it shows (GM r34 A5): the notice's foot, 8px, the 50px toolbar, 8px. */
+  top: max(150px, calc(var(--top-notice-bottom, 0px) + 66px));
   left: 50%;
   max-width: min(92vw, 560px);
   transform: translateX(-50%);
@@ -170,14 +179,21 @@ a {
 }
 
 [data-offline-disabled],
-[data-following-disabled] {
+[data-following-disabled],
+[data-kept-disabled],
+[data-tab-local-disabled] {
   cursor: not-allowed !important;
 }
 
 /* Round 22 (GM A): following an agent's switch is the same read-only state
-   as offline (lib/canvasLock.ts), so it looks the same. */
+   as offline (lib/canvasLock.ts), so it looks the same; and so do the
+   controls disabled while the canvas is kept after a restore (GM r16 on
+   PR #199, 4), and Ask and Note on a node with a tab-local id (GM r26, 4,
+   lib/canvasLock TAB_LOCAL_MARK: a stopgap the bulk-create PR deletes). */
 [data-offline-disabled],
-[data-following-disabled] {
+[data-following-disabled],
+[data-kept-disabled],
+[data-tab-local-disabled] {
   opacity: 0.6;
 }
 
@@ -269,12 +285,96 @@ button[data-offline-neutral]:hover {
   box-shadow: 0 10px 34px rgb(0 0 0 / 52%);
   background: rgb(39 23 13 / 97%);
   color: #ffd2b3;
+  font-family: var(--notice-font);
   font-size: 12px;
   line-height: 1.35;
 }
 
 .provider-recovery-status span {
   flex: 1;
+}
+
+/* The held-reopen line is the notice's second line (GM r33, 6 on PR #199):
+   the row wraps, and the line takes the box's full width under the notice's
+   own text and button. */
+.provider-recovery-status:has(.provider-recovery-status__reopen) {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.provider-recovery-status .provider-recovery-status__reopen {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 210 180 / 16%);
+  color: #fff0e5;
+}
+
+.provider-recovery-status--reopen-only .provider-recovery-status__reopen {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.reopen-hold-callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px 9px 14px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  background: rgb(6 6 7 / 96%);
+  color: rgb(255 255 255 / 86%);
+  font-family: var(--notice-font);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.reopen-hold-callout span {
+  flex: 1;
+}
+
+.reopen-hold-callout__close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.reopen-hold-callout__close:hover,
+.reopen-hold-callout__close:focus-visible {
+  background: rgb(255 255 255 / 8%);
+}
+
+.reopen-hold-callout__close:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* Beside Run History in the rail. */
+.reopen-hold-callout--runHistory {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 16px);
+  width: max-content;
+  max-width: min(340px, calc(100vw - 96px));
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+/* The canvas takes focus after Projects > Open returns to it (it is not in
+   the Tab order), with no ring around the whole canvas. */
+.react-flow[tabindex='-1']:focus {
+  outline: none;
 }
 
 .provider-recovery-status .provider-recovery-status__error {

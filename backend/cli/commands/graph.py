@@ -8,9 +8,10 @@ from uuid import uuid4
 
 from services.file_access import ProtectedPathError, require_allowed_path
 from services.node_names import quoted
+from services.wording import counted
 
 from ..client import NebulaClient
-from ..formatter import format_graph
+from ..formatter import format_graph, saved_canvas_message, with_saved_canvas
 
 
 def run_create(client: NebulaClient, node_id: str, params: dict[str, Any]) -> None:
@@ -18,7 +19,7 @@ def run_create(client: NebulaClient, node_id: str, params: dict[str, Any]) -> No
     short_id = result["id"]
     node_def = client.get_node(node_id)
     name = node_def.get("displayName", node_id) if node_def else node_id
-    print(f"Created node {short_id} ({name})")
+    print(with_saved_canvas(f"Created node {short_id} ({name})", result))
 
 
 def run_connect(client: NebulaClient, src: str, dst: str) -> None:
@@ -33,13 +34,13 @@ def run_connect(client: NebulaClient, src: str, dst: str) -> None:
     dst_node, dst_port = dst.split(":", 1)
 
     result = client.connect(src_node, src_port, dst_node, dst_port)
-    print(f"Connected {result['connection']}")
+    print(with_saved_canvas(f"Connected {result['connection']}", result))
 
 
 def run_set(client: NebulaClient, node_ref: str, params: dict[str, Any]) -> None:
-    client.update_node(node_ref, params)
+    result = client.update_node(node_ref, params)
     params_str = ", ".join(f"{k}={v}" for k, v in params.items())
-    print(f"Updated {node_ref}: {params_str}")
+    print(with_saved_canvas(f"Updated {node_ref}: {params_str}", result))
 
 
 def run_show(client: NebulaClient) -> None:
@@ -91,7 +92,7 @@ def run_save(client: NebulaClient, filepath: str) -> None:
         temporary.unlink(missing_ok=True)
     node_count = len(state.get("nodes", []))
     edge_count = len(state.get("edges", []))
-    print(f"Saved graph ({node_count} nodes, {edge_count} connections) to {filepath}")
+    print(f"Saved graph ({counted(node_count, 'node')}, {counted(edge_count, 'connection')}) to {filepath}")
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:
@@ -124,8 +125,15 @@ def run_clear(client: NebulaClient, force: bool = False) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    client.clear_graph(force=force)
-    if count:
+    result = client.clear_graph(force=force)
+    message = saved_canvas_message(result)
+    if message:
+        # GM's rule (a): the person's canvas was saved untouched as its own
+        # project and the clear ran on a new canvas, so there is nothing of
+        # theirs to undo (review 9, M-2): GM's line in the Undo sentence's place.
+        print(f"Canvas cleared ({count} node{'s' if count != 1 else ''} removed).\n{message}" if count
+              else f"Canvas cleared (it was already empty).\n{message}")
+    elif count:
         print(f"Canvas cleared ({count} node{'s' if count != 1 else ''} removed). "
               "The person can undo it on an open canvas (Undo, or Cmd-Z).")
     else:
@@ -146,7 +154,8 @@ def run_delete(client: NebulaClient, node_refs: list[str]) -> None:
         # The id stays beside the name, so several deletes, or two nodes with
         # one name, still map back to ids.
         node_id = str(result.get("id") or node_ref)
-        print(f"Deleted {quoted(str(result.get('label') or node_id))} ({node_id}) and its connections")
+        print(with_saved_canvas(f"Deleted {quoted(str(result.get('label') or node_id))} ({node_id}) and its connections",
+                                result))
 
 
 def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
@@ -156,12 +165,12 @@ def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
     if result.get("status") != "deleted":
         print(f"error: no connection {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
         sys.exit(1)
-    print(f"Disconnected {src} → {dst}")
+    print(with_saved_canvas(f"Disconnected {src} → {dst}", result))
 
 
 def run_rename(client: NebulaClient, node_ref: str, label: str) -> None:
     result = client.rename_node(node_ref, label)
-    print(f"Renamed {node_ref} to {result.get('label', label)}")
+    print(with_saved_canvas(f"Renamed {node_ref} to {result.get('label', label)}", result))
 
 
 def run_move(client: NebulaClient, moves: list[str]) -> None:
@@ -175,5 +184,6 @@ def run_move(client: NebulaClient, moves: list[str]) -> None:
         except ValueError:
             print(f"error: a move is node=x,y (e.g. n2=400,120), got '{move}'", file=sys.stderr)
             sys.exit(1)
-    client.move_nodes(positions)
-    print("Moved " + ", ".join(f"{node} to {int(p['x'])},{int(p['y'])}" for node, p in positions.items()))
+    result = client.move_nodes(positions)
+    print(with_saved_canvas("Moved " + ", ".join(f"{node} to {int(p['x'])},{int(p['y'])}" for node, p in positions.items()),
+                            result))

@@ -110,6 +110,17 @@ body:not(.app-slava-restraint) .model-node__id-chip:hover {
 
 .model-node__id-chip:active { cursor: grabbing; }
 
+/* GM r23 (b) on PR #199: a node with a tab-local id (added while the canvas
+   is kept) shows no id, but its slot keeps the room of a short saved id, so
+   the header doesn't shift when the id arrives. The placeholder is never
+   seen or read (hidden; the slot is aria-hidden) and isn't in the text. */
+.model-node__id-chip--pending {
+  visibility: hidden;
+  cursor: default;
+}
+
+.model-node__id-chip--pending::before { content: 'n00'; }
+
 .model-node__ports { padding: 6px 0; }
 
 .model-node__port-row {

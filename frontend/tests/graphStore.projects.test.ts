@@ -221,9 +221,11 @@ function worldNode(id: string, params: Record<string, unknown>): Node<NodeData> 
   return { id, type: 'model-node', position: { x: 0, y: 0 }, selected: true,
     data: { label: 'World Labs Environment', definitionId: 'worldlabs-environment', params, state: 'idle', outputs: {} } };
 }
-function openProject(id: string, nodes: Node<NodeData>[]) {
+/** `runs`: the project's run history; a World Labs record of one of them is
+ * this project's (review 20 of PR #199, LOW-2). */
+function openProject(id: string, nodes: Node<NodeData>[], runs: RunRecord[] = []) {
   setProjectContext({ id, revision: id.toLowerCase() });
-  expect(useGraphStore.getState().loadProjectGraph(nodes, [], [])).toBe(true);
+  expect(useGraphStore.getState().loadProjectGraph(nodes, [], runs)).toBe(true);
 }
 
 describe('copy in one project, paste in another (Justin, P2: "copy the node moodboards live in to a different project")', () => {
@@ -252,7 +254,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
 
   it('a node with a provider-start ambiguity when copied still refuses after the switch, with the same warning', () => {
     const alert = noticeSpy();
-    openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })]);
+    openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })], [history('paid-A')]);
     useGraphStore.setState({ providerStartAmbiguities: [{ runId: 'paid-A', nodeId: 'n1', kind: 'worldlabs-environment',
       message: 'The paid start may have been accepted.', durable: true }] });
     useGraphStore.getState().copySelected();
@@ -280,7 +282,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
   });
 
   it("A's checkpoint at copy time travels with the node", () => {
-    openProject('A', [worldNode('n1', {})]);
+    openProject('A', [worldNode('n1', {})], [history('paid-A')]);
     useGraphStore.getState().hydrateProviderRecoveries([{ runId: 'paid-A', nodeId: 'n1', resumeOperationId: 'operation-A',
       existingWorldId: null, durable: true }]);
     useGraphStore.getState().copySelected();

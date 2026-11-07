@@ -16,13 +16,16 @@ import { useSyncExternalStore } from 'react';
  *   bar changing width.
  * - Run is disabled, with the tooltip "Wait for “<project>” to open."
  * - A run press that gets through anyway (a keyboard shortcut, a race):
- *   "Couldn't run “<node>”. <agent> is opening “<project>”." No next step.
+ *   "Nebula couldn’t run “<node>”. <agent> is opening “<project>”." No next step.
  */
 export interface FollowingSwitch {
   /** The project the agent opened (or made). */
   projectName: string;
   /** The agent's name as presence shows it; null when it isn't known. */
   agent: string | null;
+  /** Nebula's own switch (round 18 of PR #199: the boot's reload of the
+   * open project after it renumbered tab-local nodes): no agent is named. */
+  byNebula?: boolean;
 }
 
 let following: FollowingSwitch | null = null;
@@ -106,15 +109,20 @@ export function waitToOpenTooltip(project: string): string {
  * on its own). */
 export function followingReason(switching: FollowingSwitch | null): string {
   if (!switching) return 'Another project is opening.';
-  return `${switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
+  return `${switching.byNebula ? 'Nebula' : switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
 }
 
 /** GM's derived lines (round 21, confirmed): `node` names a one-node run;
- * `count` (2 or more) a run of several nodes ("Couldn't run <N> nodes.");
- * neither: a run of the whole canvas ("Couldn't run the canvas."). */
-export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number): string {
+ * `count` (2 or more) a run of several nodes ("Nebula couldn’t run <N> nodes.");
+ * neither: a run of the whole canvas ("Nebula couldn’t run the canvas.").
+ * Nebula's own reopen (the boot's) says the lock form instead, GM r27 (3)
+ * on PR #199, verbatim for the canvas: "You can run the canvas when “P”
+ * opens." */
+export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number,
+  byNebula = false): string {
   const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
-  return `Couldn't run ${what}. ${followingReason({ agent, projectName: project })}`;
+  if (byNebula) return `You can run ${what} when “${project}” opens.`;
+  return `Nebula couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`;
 }
 
 /** Create's line while following (G1), in its normal error style: its own

@@ -190,7 +190,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             type="button"
             className="canvas-pin__delete"
             aria-label="Delete note"
-            {...lock.act()}
+            {...lock.act({ kept: 'delete-note' })}
             {...deleteLock.control()}
             onClick={deleteLock.guard(() => remove(pin.id))}
           >

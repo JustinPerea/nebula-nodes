@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
+import { isTabLocalNode, sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
-import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
+import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 import { RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
@@ -15,6 +15,8 @@ const MENU_EDGE = 8;
 
 interface MenuItem {
   label: string;
+  /** Its line while the canvas is kept, or 'live' (GM r17 on PR #199). */
+  kept: KeptAction | 'live';
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
@@ -23,6 +25,9 @@ interface MenuItem {
   /** This tab's run locks it now: the run's line wins (lib/canvasLock),
    * by the row's verb plus "it" (GM r39 item 2, lib/runLock). */
   run?: { held: boolean; verb: RunLockVerb };
+  /** GM r26 (4), a stopgap the bulk-create PR deletes: it acts on a node
+   * with a tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
+  tabLocal?: 'note';
   action: () => void;
 }
 
@@ -105,7 +110,7 @@ export function ContextMenu() {
       <div ref={menuRef} className="context-menu" style={style}>
         <button
           className="context-menu__item"
-          {...lock.act()}
+          {...lock.act({ kept: 'note' })}
           onClick={() => {
             composeNote({ position: flowPosition });
             hideContextMenu();
@@ -120,7 +125,8 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      // The run lock's line wins (M2): run, follow, offline.
+      kept: 'run',
+      // The run lock's line wins (M2): run, follow, offline, kept.
       run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
         executeNode(nodeId);
@@ -129,8 +135,11 @@ export function ContextMenu() {
     },
     {
       label: 'Leave a note for agents…',
-      // Agents only see nodes the backend knows (ids like n4).
-      disabled: !isBackendNodeId(nodeId),
+      kept: 'note',
+      // Agents only see nodes the backend knows (ids like n4): a duplicated
+      // or pasted node waits for the project's next open (GM r26, 4; a
+      // stopgap the bulk-create PR deletes).
+      tabLocal: isTabLocalNode(nodeId) ? 'note' : undefined,
       action: () => {
         composeNote({ nodeId });
         hideContextMenu();
@@ -138,6 +147,8 @@ export function ContextMenu() {
     },
     {
       label: 'Duplicate',
+      // Its copy stays on this tab while the canvas is kept (GM r17).
+      kept: 'live',
       shortcut: 'Ctrl+D',
       run: { held: isExecuting, verb: RUN_LOCK_VERBS.duplicateIt },
       action: () => {
@@ -147,6 +158,8 @@ export function ContextMenu() {
     },
     {
       label: 'Delete',
+      // While kept, a delete on this tab that Undo brings back (GM r18).
+      kept: 'live',
       shortcut: 'Del',
       danger: true,
       run: { held: isExecuting, verb: RUN_LOCK_VERBS.deleteIt },
@@ -172,7 +185,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled, title: item.title }, item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {})}
+          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal }, item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {})}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

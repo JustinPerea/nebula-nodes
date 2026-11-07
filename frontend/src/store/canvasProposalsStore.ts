@@ -21,6 +21,7 @@ import { refuseEditWhileOffline } from '../lib/backendConnection';
 import { onPersonPromoted, personUnconfirmed } from '../lib/personSession';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
+import { refuseEditWhileKept } from '../lib/keptCanvas';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 /** The answer's code for an Accept refused because the canvas was cleared or
@@ -290,6 +291,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // store's gates ask it first. Offline is read-only (round 15 of PR
     // #114): nothing is sent or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
+    // Kept in this tab after a restore (GM r15 on PR #199): only typing.
+    if (refuseEditWhileKept()) return;
     if (refuseEditWhileOffline()) return;
     // Review 5 LOW-5 (round 7): a decision waits while this tab isn't connected as the person,
     // whatever button asked (the bar's lock is the same state): nothing is sent or marked.
@@ -407,12 +410,24 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   },
 }));
 
+/** The backend process the last graphSync came from (its `bootId`). */
+let lastSyncBoot: string | null = null;
+
 wsClient.subscribe((event) => {
   const store = useCanvasProposalsStore.getState();
   if (event.type === 'proposalSync') store.sync(event.proposals);
   else if (event.type === 'proposalOpened') store.open(event.proposal, event.acceptKey, event.personValues);
   else if (event.type === 'proposalClosed') store.close(event);
-  else if (event.type === 'graphSync' && event.graphReplaced) {
+  else if (event.type === 'graphSync') {
+    const boot = typeof event.bootId === 'string' && event.bootId ? event.bootId : null;
+    const restarted = boot !== null && lastSyncBoot !== null && boot !== lastSyncBoot;
+    if (boot !== null) lastSyncBoot = boot;
+    // A reopen of the same project keeps them (GM r29 on PR #199, 3): their
+    // nodes keep their ids, so nothing they were made against changed. Not
+    // across a restart: open proposals live in Nebula's memory, so the ones
+    // this tab holds from before it are gone (the boot's own reopen keeps
+    // whatever the new process has, which its proposalSync says).
+    if (!event.graphReplaced || (event.proposalsKept && !restarted)) return;
     // Another project or an import: the backend invalidated every proposal.
     store.clear();
     // Every held run goes, and every approval it held goes back (review 16, L-2).

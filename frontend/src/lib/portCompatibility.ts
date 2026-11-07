@@ -1,4 +1,5 @@
 import type { PortDataType } from '../types';
+import portRules from './portRules.json';
 
 export const PORT_COLORS: Record<PortDataType, string> = {
   Image: '#4CAF50',
@@ -26,40 +27,38 @@ export const PORT_COLORS: Record<PortDataType, string> = {
   Any: '#9E9E9E',
 };
 
-export const COMPATIBILITY: Record<PortDataType, PortDataType[]> = {
-  Text: ['Text', 'Any'],
-  Image: ['Image', 'Mask', 'Any'],
-  Video: ['Video', 'Any'],
-  Audio: ['Audio', 'Any'],
-  Mask: ['Mask', 'Image', 'Any'],
-  Array: ['Array', 'Any'],
-  SVG: ['SVG', 'Any'],
-  Mesh: ['Mesh', 'Any'],
-  World: ['World', 'Any'],
-  CameraPose: ['CameraPose', 'Any'],
-  CameraPath: ['CameraPath', 'Any'],
-  SpatialContext: ['SpatialContext', 'Any'],
-  DepthMap: ['DepthMap', 'Any'],
-  DepthSequence: ['DepthSequence', 'Any'],
-  PointCloud: ['PointCloud', 'Any'],
-  SensorRig: ['SensorRig', 'Any'],
-  SensorStream: ['SensorStream', 'Any'],
-  SpatialSession: ['SpatialSession', 'Any'],
-  Character: ['Character', 'Any'],
-  Moodboard: ['Moodboard', 'Any'],
-  CameraRig: ['CameraRig', 'Any'],
-  ReferenceSet: ['ReferenceSet', 'Any'],
-  Any: [
-    'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'World',
-    'CameraPose', 'CameraPath', 'SpatialContext', 'DepthMap', 'DepthSequence',
-    'PointCloud', 'SensorRig', 'SensorStream', 'SpatialSession', 'Character',
-    'Moodboard', 'CameraRig', 'ReferenceSet', 'Any',
-  ],
-};
+/**
+ * Which output types may feed which input types: one rule shared with the
+ * backend (backend/data/port_rules.json; the same bytes as ./portRules.json,
+ * pinned by a test on each side), so the tab's checks and the server's
+ * connect route can't differ (PR #199 round 17). An output fits an input when
+ * either is Any, they're the same type, or the pair is listed in
+ * alsoCompatible (either way round).
+ */
+export const PORT_RULES: {
+  types: string[];
+  any: string;
+  alsoCompatible: [string, string][];
+  droppedConnectionKinds: string[];
+} = portRules as never;
+
+export function portTypesCompatible(sourceType: string, targetType: string): boolean {
+  return sourceType === PORT_RULES.any || targetType === PORT_RULES.any || sourceType === targetType
+    || PORT_RULES.alsoCompatible.some(([a, b]) => (a === sourceType && b === targetType) || (a === targetType && b === sourceType));
+}
+
+/** Each type's inputs it can feed, from the shared rule: itself first, its
+ * listed partners, then Any (Any feeds every type). */
+export const COMPATIBILITY: Record<PortDataType, PortDataType[]> = Object.fromEntries(
+  (PORT_RULES.types as PortDataType[]).map((type) => [type, type === PORT_RULES.any
+    ? [...PORT_RULES.types] as PortDataType[]
+    : [type, ...(PORT_RULES.types as PortDataType[]).filter((other) => other !== type && other !== PORT_RULES.any
+      && portTypesCompatible(type, other)), PORT_RULES.any as PortDataType]]),
+) as Record<PortDataType, PortDataType[]>;
 
 export function isPortCompatible(
   sourceType: PortDataType,
   targetType: PortDataType
 ): boolean {
-  return COMPATIBILITY[sourceType]?.includes(targetType) ?? false;
+  return portTypesCompatible(sourceType, targetType);
 }
