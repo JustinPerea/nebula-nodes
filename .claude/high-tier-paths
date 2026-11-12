@@ -26,3 +26,15 @@ backend/services/project_store.py
 # Desktop packaging and migration
 desktop/packaging/*
 desktop/migration.mjs
+
+# Controls that enforce these tiers (a change here could weaken them)
+.claude/high-tier-paths
+.claude/settings.json
+.claude/hooks/*
+RISK-TIERS.md
+.github/workflows/*
+
+# Any token, secret or credential module
+backend/services/*token*
+backend/services/*secret*
+backend/services/credential*

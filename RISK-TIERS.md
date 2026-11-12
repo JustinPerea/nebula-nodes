@@ -24,13 +24,16 @@ before merge. The agent merges, and Justin checks the result afterwards.
 
 ## High
 
+The tier controls themselves are high tier: `RISK-TIERS.md`, `.claude/high-tier-paths`, `.claude/settings.json`, `.claude/hooks/` and `.github/workflows/`. A change to them can weaken every other gate.
+
 Needs: Justin's explicit OK, in his own words in his own message, before merge.
 Record the date and his words in the PR description.
 
 These paths are high tier:
 
-- Token and credential files: `backend/services/app_tokens.py`,
-  `backend/services/agent_token_file.py`, `desktop/credentials.mjs`,
+- Token, secret and credential files: any `backend/services/*token*`, `*secret*` or
+  `credential*` module (today `app_tokens.py`, `app_token_file.py`, `agent_token_file.py`,
+  `launch_secrets.py`, `credential_catalog.py`), plus `desktop/credentials.mjs`,
   `desktop/connector-vault.mjs`, `desktop/person-token.mjs`.
 - Agent spend and process control: `backend/services/agent_spend.py`,
   `backend/services/agent_process.py`, `backend/services/agent_guardian.py`.
