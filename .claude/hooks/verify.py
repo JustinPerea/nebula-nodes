@@ -12,6 +12,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import signal
@@ -94,9 +95,25 @@ def tail(text, n=TAIL_LINES):
     return "\n".join(out + lines[-keep:])
 
 
-def missing_module(out):
-    return ("ERR_MODULE_NOT_FOUND" in out or "Cannot find package" in out
-            or "Cannot find module" in out)
+TOOL_PACKAGES = ("eslint", "vitest", "vite", "@eslint/", "@vitest/", "@vitejs/", "typescript-eslint",
+                 "@typescript-eslint/", "eslint-plugin-", "eslint-config-", "globals", "typescript")
+TOOL_CONFIGS = ("eslint.config.", "vite.config.", "vitest.config.")
+_MISSING = re.compile(r"Cannot find (?:package|module) '([^']+)'(?: imported from ([^\s]+))?")
+
+
+def tool_unavailable(rc, out):
+    """True when the tool itself could not start: no node, a runner that is
+    not installed, or its own config importing a tool package that is absent.
+    A repo file's broken import is a real failure and is not matched here."""
+    if rc == 127 or "env: node: No such file or directory" in out:
+        return True
+    if "No module named pytest" in out:
+        return True
+    for name, importer in _MISSING.findall(out):
+        base = os.path.basename(importer or "")
+        if base.startswith(TOOL_CONFIGS) or name.startswith(TOOL_PACKAGES):
+            return True
+    return False
 
 
 def is_frontend(rel):
@@ -137,15 +154,40 @@ def save_state(gitdir, state):
         raise
 
 
+MAX_SESSIONS = 200
+
+
+def session_edits(state, sid):
+    entry = (state.get("edits") or {}).get(sid)
+    if isinstance(entry, dict):
+        return entry.get("files") or []
+    return entry or []
+
+
 def record_edit(gitdir, sid, rel):
     state = load_state(gitdir)
     edits = state.setdefault("edits", {})
-    mine = edits.setdefault(sid, [])
-    if rel not in mine:
-        mine.append(rel)
-    while len(edits) > 20:  # keep the state file small
-        edits.pop(next(iter(edits)))
+    entry = edits.get(sid)
+    if not isinstance(entry, dict):
+        entry = {"files": list(entry or [])}
+    if rel not in entry["files"]:
+        entry["files"].append(rel)
+    entry["t"] = time.time()
+    edits[sid] = entry
+    if len(edits) > MAX_SESSIONS:  # evict the least recently seen
+        order = sorted(edits, key=lambda k: (edits[k].get("t", 0) if isinstance(edits[k], dict) else 0))
+        for k in order[:len(edits) - MAX_SESSIONS]:
+            edits.pop(k)
     save_state(gitdir, state)
+
+
+def update_state(gitdir, mutate):
+    """Re-read the state and apply `mutate` to the fresh copy before saving,
+    so edits recorded while the checks ran are not overwritten."""
+    state = load_state(gitdir)
+    mutate(state)
+    save_state(gitdir, state)
+    return state
 
 
 # ---------------------------------------------------------------- edit mode
@@ -181,8 +223,14 @@ def edit_mode(payload):
             rc, out = run([ruff, "check", "--select", "E9,F63,F7,F82", real], top, EDIT_TIMEOUT)
             name = "ruff"
         else:
-            rc, out = run([sys.executable, "-m", "py_compile", real], top, EDIT_TIMEOUT)
             name = "py_compile"
+            try:
+                with open(real, "rb") as fh:
+                    compile(fh.read(), real, "exec")
+                rc, out = 0, ""
+            except (SyntaxError, ValueError) as e:
+                rc, out = 1, "%s: %s (line %s)" % (type(e).__name__, getattr(e, "msg", e),
+                                                   getattr(e, "lineno", "?"))
     else:
         return 0
 
@@ -191,8 +239,8 @@ def edit_mode(payload):
     if rc is None:
         print("verify: %s timed out on %s, skipping" % (name, rel), file=sys.stderr)
         return 0
-    if missing_module(out):
-        print("verify: %s could not load its dependencies, skipping %s" % (name, rel), file=sys.stderr)
+    if tool_unavailable(rc, out):
+        print("verify: %s is not runnable here, skipping %s" % (name, rel), file=sys.stderr)
         return 0
     print("verify: %s failed on %s\n%s" % (name, rel, tail(out)), file=sys.stderr)
     return 2
@@ -279,8 +327,8 @@ def stop_mode(payload):
             return
         if rc is None:
             skip("%s did not finish within the time budget, skipping" % name)
-        elif missing_module(out):
-            skip("%s could not load its dependencies, skipping" % name)
+        elif tool_unavailable(rc, out):
+            skip("%s is not runnable here, skipping" % name)
         else:
             failures.append((name, out, covered))
 
@@ -312,33 +360,45 @@ def stop_mode(payload):
             skip("node not found, skipping node contracts check")
 
     sid = str(payload.get("session_id") or "unknown")
-    counts = state.setdefault("failures", {})
+
+    def count_of(st):
+        entry = (st.get("failures") or {}).get(sid)
+        if isinstance(entry, dict) and entry.get("fp") == fp:
+            return entry.get("n", 0)
+        return 0  # no record, or the failing state changed: start over
+
     if not failures:
-        if not skipped:
-            state["last_pass"] = fp
-        counts.pop(sid, None)
-        save_state(gitdir, state)
+        if skipped:
+            return 0  # a skip is neither a pass nor a failure: touch nothing
+
+        def passed(st):
+            st["last_pass"] = fp
+            (st.setdefault("failures", {})).pop(sid, None)
+        update_state(gitdir, passed)
         return 0
 
-    mine = set((state.get("edits") or {}).get(sid) or [])
-    blocking = [(n, o, c) for n, o, c in failing_split(failures, mine)[0]]
-    foreign = failing_split(failures, mine)[1]
-    if foreign and not blocking:
+    fresh = load_state(gitdir)
+    mine = set(session_edits(fresh, sid))
+    blocking, foreign = failing_split(failures, mine)
+    if not blocking:
         names = ", ".join(n for n, _, _ in foreign)
         theirs = sorted(set(f for _, _, c in foreign for f in c))
         print(json.dumps({"systemMessage": "verify: %s failing on changes this session didn't make: %s"
                           % (names, ", ".join(theirs))}))
-        save_state(gitdir, state)
         return 0
 
-    counts[sid] = counts.get(sid, 0) + 1
-    save_state(gitdir, state)
+    attempt = [0]
+
+    def failed(st):
+        attempt[0] = count_of(st) + 1
+        (st.setdefault("failures", {}))[sid] = {"fp": fp, "n": attempt[0]}
+    update_state(gitdir, failed)
     names = ", ".join(n for n, _, _ in blocking)
-    if counts[sid] > MAX_ATTEMPTS:
+    if attempt[0] > MAX_ATTEMPTS:
         print(json.dumps({"systemMessage": "verify: %s still failing after %d attempts; report it"
                           % (names, MAX_ATTEMPTS)}))
         return 0
-    report = ["verify: %s failed (attempt %d of %d)" % (names, counts[sid], MAX_ATTEMPTS)]
+    report = ["verify: %s failed (attempt %d of %d)" % (names, attempt[0], MAX_ATTEMPTS)]
     for name, out, _ in blocking:
         report.append("--- %s ---\n%s" % (name, tail(out)))
     print("\n".join(report), file=sys.stderr)
