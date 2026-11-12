@@ -1,0 +1,28 @@
+# High-tier paths, one fnmatch glob per line, matched against repo-relative
+# paths. "*" also matches "/". A diff that touches any of these needs Justin's
+# own OK before merge; see RISK-TIERS.md.
+
+# Token and credential files
+backend/services/app_tokens.py
+backend/services/agent_token_file.py
+desktop/credentials.mjs
+desktop/connector-vault.mjs
+desktop/person-token.mjs
+
+# Agent spend and process control
+backend/services/agent_spend.py
+backend/services/agent_process.py
+backend/services/agent_guardian.py
+
+# Paid provider handlers and proxies
+backend/handlers/*
+backend/routes/*_proxy.py
+
+# Asset and project deletion
+backend/services/asset_trash.py
+backend/services/project_asset_purge.py
+backend/services/project_store.py
+
+# Desktop packaging and migration
+desktop/packaging/*
+desktop/migration.mjs
