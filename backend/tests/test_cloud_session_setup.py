@@ -151,7 +151,8 @@ def _pip_installs(made: list[str]) -> list[str]:
 
 def test_settings_run_the_script_on_every_session_start():
     hooks = json.loads(SETTINGS.read_text(encoding="utf-8"))["hooks"]
-    assert list(hooks) == ["SessionStart"]
+    # The verify hooks (.claude/hooks/verify.py) share this file.
+    assert list(hooks) == ["SessionStart", "PostToolUse", "Stop"]
     [entry] = hooks["SessionStart"]
     # No matcher: /clear and forks start a new session id with an empty env
     # file, so the PATH export has to be written again then too.
