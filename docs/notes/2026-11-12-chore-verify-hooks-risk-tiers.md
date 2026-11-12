@@ -33,3 +33,12 @@ Surprises
 - `vitest related` on a widely imported lib file (`agentCursorLabel.ts`) takes
   about 80 to 90 s on this Mac, so a stop run on a central file uses half the
   180 s cap.
+
+CI
+
+- `backend/tests/test_cloud_session_setup.py` asserted that settings.json holds
+  only a `SessionStart` hook; it now lists the two verify hooks too.
+- `ProjectHome.test.tsx` ("Delete forever confirms on its own row") failed in
+  CI on this branch with a date-dependent string ("Deleted Oct 10 ... Removed
+  for good within" instead of "in"). It does not touch files in this PR and is
+  not addressed here.
