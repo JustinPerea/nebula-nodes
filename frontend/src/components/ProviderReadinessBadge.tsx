@@ -30,7 +30,13 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
     // orange would say "set this up now" while nothing can be set up.
     <div className={`provider-readiness provider-readiness--${readiness.tone}${offline ? ' provider-readiness--offline' : ''}`}>
       <span className="provider-readiness__label" title={readiness.detail}>
-        {readiness.connectionLabel && <span className="provider-readiness__route">{readiness.connectionLabel} · </span>}
+        {readiness.connectionLabel && (
+          <span className="provider-readiness__route">
+            {readiness.connectionLabel}
+            {readiness.connectionNote && <> <span className="provider-readiness__note">{readiness.connectionNote}</span></>}
+            {' · '}
+          </span>
+        )}
         <span>{readiness.label}</span>
       </span>
       {readiness.setupTarget && <button type="button" className="provider-readiness__setup"

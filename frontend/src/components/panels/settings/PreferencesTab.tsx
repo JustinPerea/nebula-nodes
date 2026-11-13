@@ -4,7 +4,7 @@ import { RUN_COST_CONFIRM_CHOICES, useUIStore } from '../../../store/uiStore';
 import { AgentSpendSection } from './AgentSpendSection';
 import { PersonalAgentsSection } from './PersonalAgentsSection';
 import { SwitchRow } from './Switch';
-import { LineText } from '../../LineText';
+import { SettingsRowError } from './SettingsRowError';
 import { PersonLockLine } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 
@@ -60,7 +60,7 @@ export function PreferencesTab() {
             </select>
           </div>
           <PersonLockLine lock={costLock} place="control" />
-          {costError && <p className="settings-row__error" role="alert"><LineText text={costError} /></p>}
+          <SettingsRowError id="runCostConfirmUsd" message={costError} />
           <SwitchRow title="Job notifications" description="When a run finishes in a background tab, or after a long run"
             checked={ui.notificationPrefs.enabled} onChange={(enabled) => ui.setNotificationPrefs({ enabled })} />
           {ui.notificationPrefs.enabled && (

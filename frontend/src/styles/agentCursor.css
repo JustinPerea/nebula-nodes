@@ -338,20 +338,31 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
 
 .agent-cursor__say {
   /* GM - Design, round 20 (A): a solid dark neutral pill just under the name
-     tag, the same height (11px text on a 16px line, 2px above and below) and
-     radius, so it reads over any node title at any zoom (the layer
-     counter-scales it). One line; a long line ends in an ellipsis. The pill
-     and its text fade together: the in and out animations are on the pill. */
+     tag, the same line (11px text on a 16px line, 2px above and below), so it
+     reads over any node title at any zoom (the layer counter-scales it). The
+     pill and its text fade together: the in and out animations are on the
+     pill. GM, PR #203 r39 item 5: it wraps to two lines at its max width
+     before any ellipsis, never cutting a word. Its radius is half one line's
+     height (20px), so one line is the tag's pill and two keep its corners. */
+  box-sizing: border-box;
+  /* Its own width, up to 260px, then it wraps: never the narrow width of the
+     cursor beside it, which would wrap every word (round 20, found live). */
+  width: max-content;
   max-width: 260px;
   padding: 2px 9px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #18181b;
   color: #ececee;
   font-size: 11px;
   font-weight: 500;
   line-height: 16px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   text-overflow: ellipsis;
   /* GM round 21: a 1px hairline, white at about 12%, so the pill's edge
      shows against a dark node fill. Inset, so the pill keeps its height. */

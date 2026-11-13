@@ -193,7 +193,7 @@ def test_a_big_plain_file_opens_as_a_new_project_too(api, tmp_path):
     path = tmp_path / "Big campaign.nebula"
     path.write_text(json.dumps(_big_graph()), encoding="utf-8")
 
-    result = graph_file_client.load(api.http, str(path), headers=AGENT, via="cli")
+    result = graph_file_client.load(api.http, str(path), headers={**AGENT, "X-Nebula-Surface": "cli"})
 
     assert result["openedAsNewProject"] is True and result["project"]["name"] == "Big campaign"
     assert result["filesRestored"] == 0 and result["savingPaused"] is True
@@ -453,7 +453,7 @@ def test_nebula_load_says_what_happened(api, tmp_path, capsys, monkeypatch):
         base_url = "http://testserver"
 
         def _identity_headers(self, headers=None):
-            return {**(headers or {}), "X-Nebula-Agent": "Codex"}
+            return {**(headers or {}), "X-Nebula-Agent": "Codex", "X-Nebula-Surface": "cli"}
 
     client = Client()
     client.api = api.http

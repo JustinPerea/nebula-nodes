@@ -6,7 +6,7 @@ import type { ExecutionEvent } from '../src/lib/wsClient';
 // presenceRound6.stores.test.ts.
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
-  connect: vi.fn(), disconnect: vi.fn(),
+  connect: vi.fn(), disconnect: vi.fn(), setViewing: vi.fn(), notePersonAct: vi.fn(), noteTabEdit: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);
   }; }),

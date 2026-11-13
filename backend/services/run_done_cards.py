@@ -32,32 +32,79 @@ _THUMB_KINDS = {"image": "image", "video": "video"}
 
 
 def possessive(name: str) -> str:
-    """GM's pattern ("Codex's run of ..."): 's after any name, one ending in s too."""
-    return f"{name}'s"
+    """GM's pattern ("Codex’s run of ..."): ’s after any name, one ending in s too
+    (curly, app-wide: PR #203 r41 item 3)."""
+    return f"{name}’s"
 
 
 def _quoted(labels: Mapping[str, str], node_id: str) -> str:
     return f"“{labels.get(node_id) or node_id}”"
 
 
+# A node that stopped at its call because an agent's run may not make it
+# (execution/run_origin.ProposalNeeded). The only such stop is Idol's Hugging
+# Face call with the person's token set (Justin decided, 2026-10-31). GM, PR
+# #203 r40 items 2 and 7, verbatim: "Claude Code finished 1 of 3 nodes.
+# “Idol” is waiting for you to run it because it could bill your Hugging Face
+# account." (no comma before "because"); beside a failure, "Claude Code
+# finished 1 of 4 nodes. “Idol” is waiting for you to run it, and “Writer”
+# failed."; from 4 nodes, counts: "… 4 nodes are waiting for you to run them,
+# and 2 failed." The Agent log gets it whole.
+WAITING_BECAUSE = "because it could bill your Hugging Face account."
+# Names up to this many nodes; from one more, counts (GM r40 item 2).
+MAX_NAMED = 3
+
+
+def _and_list(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _waiting(labels: Mapping[str, str], waiting: list[str], failed: list[str]) -> str:
+    """What stopped and what failed, after the run's count (GM r40)."""
+    named = len(waiting) + len(failed) <= MAX_NAMED
+    if named:
+        who = _and_list([_quoted(labels, node_id) for node_id in waiting])
+    else:
+        who = f"{len(waiting)} node" if len(waiting) == 1 else f"{len(waiting)} nodes"
+    one = len(waiting) == 1
+    wait = f"{who} {'is' if one else 'are'} waiting for you to run {'it' if one else 'them'}"
+    if not failed:
+        because = WAITING_BECAUSE if one else WAITING_BECAUSE.replace("because it could", "because they could")
+        return f"{wait} {because}"
+    broke = _and_list([_quoted(labels, node_id) for node_id in failed]) if named else str(len(failed))
+    return f"{wait}, and {broke} failed."
+
+
 def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
-              succeeded: Iterable[str], failed: Iterable[str]) -> tuple[str, str]:
+              succeeded: Iterable[str], failed: Iterable[str], stopped: Iterable[str] = ()) -> tuple[str, str]:
     """(the card's line, its outcome: success | partial | failure). GM - Design,
     2026-10-25, verbatim:
 
     - Success: Codex finished “Hero shots”. / Codex finished 3 nodes.
     - Partial: Codex finished 2 of 3 nodes. “Upscale” failed. With more than
       one failed: Codex finished 2 of 5 nodes. 3 failed.
-    - Failure: Codex's run of “Hero shots” failed. / Codex's run of 3 nodes failed.
-    """
+    - Failure: Codex’s run of “Hero shots” failed. / Codex’s run of 3 nodes failed.
+
+    Nodes in ``stopped`` wait for the person (GM r40): "Claude Code finished
+    1 of 3 nodes. “Idol” is waiting for you to run it because it could bill
+    your Hugging Face account."; with a failure beside it, "… “Idol” is
+    waiting for you to run it, and “Writer” failed."; from 4 nodes, counts.
+    With nothing done (a draft for GM): "Codex’s run didn’t finish. “Idol” is
+    waiting …" for one node, "Codex’s run of 3 nodes didn’t finish. …"."""
     done = [node_id for node_id in planned if node_id in set(succeeded)]
     broke = [node_id for node_id in planned if node_id in set(failed)]
+    waiting = [node_id for node_id in broke if node_id in set(stopped)]
+    others = [node_id for node_id in broke if node_id not in set(waiting)]
     total = len(planned)
     if not done:
         what = _quoted(labels, planned[0]) if total == 1 else f"{total} nodes"
+        if waiting:
+            run = "run" if total == 1 else f"run of {what}"
+            return f"{possessive(agent_name)} {run} didn’t finish. {_waiting(labels, waiting, others)}", "failure"
         return f"{possessive(agent_name)} run of {what} failed.", "failure"
     if broke:
-        failures = f"{_quoted(labels, broke[0])} failed." if len(broke) == 1 else f"{len(broke)} failed."
+        failures = (_waiting(labels, waiting, others) if waiting
+                    else f"{_quoted(labels, broke[0])} failed." if len(broke) == 1 else f"{len(broke)} failed.")
         return f"{agent_name} finished {len(done)} of {total} nodes. {failures}", "partial"
     what = _quoted(labels, done[0]) if len(done) == 1 else f"{len(done)} nodes"
     return f"{agent_name} finished {what}.", "success"
@@ -102,6 +149,8 @@ class AgentRun:
     # How each node ended: its outputs when it ran, or that it failed.
     succeeded: dict[str, Any] = field(default_factory=dict)
     failed: list[str] = field(default_factory=list)
+    # The failed nodes that stopped at their call for a proposal (ErrorEvent.proposal_needed).
+    stopped: list[str] = field(default_factory=list)
 
 
 class AgentRunBook:
@@ -132,8 +181,10 @@ class AgentRunBook:
         return self._event(run, node_id, "started")
 
     def node_ended(self, run_id: str | None, node_id: str, *, failed: bool = False,
-                   outputs: Mapping[str, Any] | None = None, ran: bool = True) -> dict[str, Any] | None:
-        """The node ended (``ran``: it ran or failed; not for a skip). The
+                   outputs: Mapping[str, Any] | None = None, ran: bool = True,
+                   stopped: bool = False) -> dict[str, Any] | None:
+        """The node ended (``ran``: it ran or failed; not for a skip;
+        ``stopped``: it failed by stopping at its call for a proposal). The
         mark's end event, when it was marked running."""
         run = self.get(run_id)
         if run is None:
@@ -141,6 +192,8 @@ class AgentRunBook:
         if ran and failed and node_id not in run.failed:
             run.failed.append(node_id)
             run.succeeded.pop(node_id, None)
+            if stopped:
+                run.stopped.append(node_id)
         elif ran and not failed:
             run.succeeded[node_id] = dict(outputs or {})
         if node_id not in run.running:
@@ -193,4 +246,4 @@ class AgentRunBook:
                 "secondsAgo": round(max(0.0, self._clock() - since), 1)}
 
 
-__all__ = ["AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for"]
+__all__ = ["WAITING_BECAUSE", "AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for"]

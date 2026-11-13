@@ -25,7 +25,7 @@ function sources(dir: string): string[] {
 }
 // A modal whose markup lives in one file and whose portal is its caller's.
 const PORTALLED_BY: Record<string, string> = {
-  'components/panels/MaskPainterModal.tsx': 'components/DeferredPanels.tsx',
+  'components/panels/MaskPainterModal.tsx': 'components/panels/DeferredMaskPainter.tsx',
 };
 
 afterEach(() => {

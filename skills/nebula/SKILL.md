@@ -55,13 +55,163 @@ build: `nebula apply` with its flags, how to show a board in a Preview, and
 for a generator's own params and ports.
 
 Projects: `nebula projects` lists them; `*` is the one open on the canvas.
+If Nebula found its project list damaged and restored it, `nebula projects`
+(and `nebula context`) start with a note saying so: from which copy and how
+old it is, which projects it added back, which it left out because the list
+was at its project limit (still in the damaged file), which went back to the
+copy's version, came back after a delete, or are in Recently deleted again, whether
+the live canvas was saved as its own project ("Recovered <project>", or
+"Recovered canvas", "Recovered canvas 2" and on when which project it was is
+unknown; never a number read from a name), whether the
+damaged file was read whole (if not, newer changes may be missing unlisted),
+and where the damaged file is kept (MCP: `catalogRestore` in `start_here` and
+`list_projects`; `project.catalogRestored` and `project.canvasFiled` events).
+Only the lines that still hold are listed (a project restored or deleted
+since drops its row, as it drops from the person's notice).
+Project ids from before it may be stale: list them again. Only the person
+closes that notice; tell them before you delete a project that came back.
+If `nebula context` or `nebula projects` says the live canvas isn't saved as
+a project because the list is full (`canvasNotFiled`, with or without a
+restore), making a project is refused until the person frees room. Opening
+an existing project works: Nebula holds the waiting canvas aside first,
+whole, and saves that copy as its own project once there is room (`held`
+counts them). At the limit, every change to the waiting canvas is refused
+(409 `canvas_waiting`): `nebula clear` and `nebula load` with "The project
+limit is reached, so a new canvas can't be saved. Open an existing project to
+work in, or ask the person to delete a project.", and any other edit
+(`nebula apply`, adding or removing nodes, a run) with "The open canvas isn't
+saved as a project yet because the project limit is reached, so it can't be
+changed. …". Open an existing project to work in. Below the limit Nebula
+first saves the person's canvas, untouched, as its own project (not opened),
+and your change never touches it: `nebula clear` and `nebula load` then work
+on a new canvas ("Nebula saved the open canvas as its own project, “X”, and
+cleared a new canvas." / "…and loaded “file.json” into a new canvas."), and
+any other change works on a copy of it ("…and made your change on a copy of
+it."; for a project the person already had, which a restore protected
+again: "Nebula kept “My film” as it was and …"), saved as "X copy" ("X copy 2" when that name is taken) on the next
+listing or your next change, which then lands on it. When only the person's
+canvas fits, the reply adds "The copy isn’t saved as a project yet because the
+project limit is reached." (or "…because Nebula’s project list is full."):
+the copy waits, and the person sees it as your copy, not theirs. The CLI
+prints this reply under its own line (`nebula clear` prints it in place of
+the Undo sentence: the person's canvas wasn't cleared). The same holds right
+after a listing saved and opened the waiting canvas, until the person opens
+that project themselves or makes their own first edit there; opening it
+yourself doesn't end it, even when their tab follows you onto it, and after
+a restore of a damaged project list the project it reopens is protected
+again. A canvas bigger
+than a project can be saved is never held for you: that change is refused
+(409 `canvas_held_full`, "This canvas is too big for Nebula to keep aside, so
+nothing was changed. Work in an existing project, or make the canvas smaller
+first."). Right after a restore of the project list, your first change finds
+the same: Nebula reads whether the canvas waits from the canvas itself.
+While the person's tab keeps edits Nebula couldn't save after a restore of
+the project list (their tab shows "They’re kept in this tab." with Save as a
+project and Discard edits), every canvas change, run or project switch of yours is
+refused (409 `canvas_kept_in_tab`). Still allowed: reads, renaming a project,
+moving a project that isn't open to Recently deleted, and restoring one from
+Recently deleted. Tell the person, and try again after they save those edits
+as a project or discard them. Discarding is theirs alone: you have no way to
+do it (it opens the canvas's saved copy, the project it showed or one like
+“Recovered canvas”, or Projects when there is none). If their tab's
+connection drops, this holds for about 10 seconds more in case the tab comes
+back, for each tab on its own; after a Nebula restart it holds for about 15
+seconds, until the tab is back (only a tab that can reconnect as the person,
+as with the dev launcher, carries it on; after a plain backend launch your
+changes go through once the 15 seconds run out). While it holds,
+`nebula selection` and `nebula look` show no selection and no view. Nodes
+they added while kept get Nebula's ids (`nN`) when they save, and the copy is
+named "Recovered <project>" (then "Recovered <project> copy", "copy 2"): after the copy opens, read the canvas again and
+use the ids you see. Connections Nebula's rules refuse are left out of the copy
+and listed in the `project.created` event (`droppedWires`): each entry has
+the ends by the copy's ids (an end not in the copy is null, its tab id in
+`sourceWas` / `targetWas`), the nodes' names, the ports' labels and types,
+`kind` (`loop`, `duplicate`, `missing`, `port`, `type` or `limit`, with
+`limit` for the last) and `detail`, a sentence for you.
+**Node ids can change at an open.** The person's Duplicate and Paste make
+nodes only their tab knows; the next open of that project gives each a
+Nebula id (the open answers `renumbered`, `{old: new}`, and `nebula watch`
+shows "gave 1 node new ids"; the person can reopen it themselves from
+Projects, and you see the same `renumbered` in their name). When you reopen
+the project they have open, the node is never doubled and what their tab
+hadn't saved arrives on the new id. Of a renumbered node, their tab's
+handoff takes only what differs from the node as the open loaded it, so
+your later edit to another setting, its name or its place stands; if they
+changed the same setting, theirs wins. A node's run result (its output,
+failure, notes) is the product of a run, not a setting: of the result on
+their tab and the one on Nebula's node, the newer run's stands. Nebula
+stamps when a result lands (`resultLandedAt`, kept with the node, so it
+survives a restart): when Nebula saw both runs land since it started, their
+order decides, else the tab's time for the node (when its result landed
+in the tab, else its run's end) against that stamp.
+Equal times keep Nebula's result. A side with no time loses: the side with
+a time wins, and with neither, Nebula's result stands unless it has none.
+When the person's newer result replaces one on a node, `nebula watch` shows
+it in their name (`node.result`, with the run), and no Agent log line. A
+node one of their windows made is deleted only when that window says so;
+another window that never had it, or a save that leaves it out, keeps it
+and your edits (a delete from a window that never saved it is ignored and
+listed in the save's `deletesKept`).
+**Opening or switching projects can be held.** `nebula projects` (and
+`list_projects`' `openHold`, `GET /api/projects/open-hold`) says so, with
+the state, the node, its project and what clears it: "Opening or switching
+projects is held (recovery): “World” (n1) from “Alpha” has a saved World
+Labs recovery ID; the person forgets it in Run History." `--json` and
+`openHold` have the fields (`state`: `active`, `ambiguity`, `recovery`,
+`params`, `bootstrap` or `run`). Reading it changes no canvas or project;
+wait, or ask the person to clear it (Run History's Forget ID for
+`recovery`, the World Labs notice for `ambiguity`). It covers Nebula's own
+holds only: while the person's tab keeps edits of its own, an open answers
+`canvas_kept_in_tab`, which it doesn't show. A recovered copy's row says its source: `sourceName` (null when
+unknown or deleted for good) and `sourceProjectId` (while it is still in the
+list), also in its `project.created` event; never read it from the copy's name. When the person
+reopens the project they show from Projects, their other windows on it
+follow quietly and hand off what they hadn't saved, as after your reopen.
+Until that open, `nebula selection`,
+`nebula look` and `nebula context` never list such a node, not even as
+stale: they say how many there are (`tabOnlyCount`, "The person selected 1
+node only their tab has …", "also" when other nodes are selected too), and
+`nebula watch` shows "selected 1 node only their tab has". Don't ask about
+or change it.
+`nebula load` gives every node a new id too
+(`renumbered`). An id you read before may then be stale: an edit to it
+answers 404 "Node n7 not found. … read the canvas again for the current
+ids." Read the canvas again (`nebula graph`) and use the ids you see.
+Nothing in the canvas is lost, also across restarts, but the person can't
+see or open it until it is saved: never tell them it is open. Its
+note says what frees room: for the project limit, moving a project to
+Recently deleted (or, on a list past the limit, how many: "The project
+list has 4 projects, over the limit of 3. Move 2 to Recently deleted to
+make room.", `deletes`); for the size limit, only deleting one for good. Once room
+is free (`roomNow`) the next listing saves it. Tell them, and don't delete
+anything to make room yourself. Restoring a project from Recently deleted, and the person saving a kept
+tab's edits as a project, are never refused by the limit (they may pass
+it); making a new one past the
+limit still is (413 with `limit`, `projectLimit`, `projectCount` and
+`deletes`, how many to delete before a new one fits, which MCP's
+`new_project` prints too).
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
 What they had typed is saved into the project left (also when you reopen the
-project already open); if that fails it is kept as a new project, "<project
-left> (recovered)", then "(recovered 2)" and so on.
+project already open); if that fails it is kept as a new project, "Recovered
+<project left>", then "Recovered <project left> copy", "copy 2" and so on.
+Nebula never reads a number in a name: the next recovery of "Shot" is
+"Recovered Shot" even beside a "Recovered Shot 7", and "Shot 7" with
+"Recovered Shot 7" taken gives "Recovered Shot 7 copy". The only number it
+raises is its own "copy N": "X copy 2" gives "X copy 3", a recovered "Shot 7
+copy" is "Recovered Shot 7 copy", then "Recovered Shot 7 copy 2". A name that
+starts with "Recovered" never gets a second one: "Recovered Alpha" gives
+"Recovered Alpha copy", and "Recovered Alpha copy 2" gives
+"Recovered Alpha copy 3". Names in Recently deleted count as taken. A long
+name is cut short so the whole name, "Recovered " or " copy N" included,
+fits a project name's 120 characters.
+Reopening the project already open (yours, the person's, or Nebula's own at
+boot) keeps the open proposals: they stay open with the same ids in `nebula
+proposals` and `nebula context`, since their nodes keep their ids. An edit
+the person's save or tab made meanwhile is checked at Accept, as any edit is.
+Opening or making another project closes them.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
@@ -263,6 +413,7 @@ nebula run-all         # the whole canvas
 nebula result <run-id> --wait 100   # a run still going (exit 2 = still running)
 nebula cancel <run-id>
 nebula path n5         # the local file of a node's image
+nebula splat n7        # a World splat's numbers: Gaussians, bounding box, size, seed, axes
 nebula status
 ```
 
@@ -397,6 +548,11 @@ nebula propose --note "Upscale the wide take" \
   --add +up=seedvr2-upscale --wire n9:image +up:image --rename +up="Wide, upscaled" --run +up --wait
 ```
 
+Its `runs` line counts each cost class on its own: "up to 1 paid run
+(fal) and 1 on the person's Krea plan, $0.03 at list prices". A run on the
+person's Krea plan is never free and never in the figure; "may bill the
+person's own account" is Idol with their token set.
+
 If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to
@@ -415,7 +571,8 @@ back. A proposal invalidated because a node it needs was deleted opens again,
 with the same id and expiry, if the delete is undone and it still fits
 (`nebula watch` prints `proposal.reopened`; `pin.reattached` when a pin goes
 back on its node). That holds only for the very node that was deleted: after
-a clear, an import or a project switch, undoing an earlier delete prints
+a clear, an import or a switch to another project (a reopen of the open one
+keeps its ids, and its proposals), undoing an earlier delete prints
 "Couldn't reopen …" (the canvas was cleared or replaced since), and a pin goes
 back only onto the model it was on.
 
@@ -440,13 +597,14 @@ don't tell them it failed or offer to retry it.
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
 person's wording. That includes the World Labs holds: a run start, the
-person's "I've checked Marble" (the status bar) and "Forget ID" (Run History)
+person's "I’ve checked Marble" (the status bar) and "Forget ID" (Run History)
 refused while a job is still waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one, or a line for the
-provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
-you shouldn't parse. A failed Cinema shot's `output` works the same: read its
+provider's answer such as "Meshy is busy. ..." with `errorProviderText`, and
+`errorNotStarted` when Nebula refused the run before it started) that you
+shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
 `errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
 A new Cinema scene needs only `{"scene": {"shots": [{"id": "s1", "prompt": "…"}]}}`:
@@ -499,8 +657,9 @@ open. Each node that lost a connection that way is a line in `warnings`
 longer exists."; `nebula load` and `nebula project open` print them as
 `note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
-proposal's `cost.notReady` rows add a `person` line beside `missing`: read
-`missing`). A job the
+proposal's `cost.notReady` rows add a `person` line and a `reason`
+(`{one, many}`, the line without the name, which the bar merges by) beside
+`missing`: read `missing`). A job the
 provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
 the provider rather than the key. A run the pre-run check refuses (a missing
@@ -970,6 +1129,18 @@ keeps its shape, and an answer to it (`— resolved by …`) on its own line
 after the note (over MCP, `pins[].text` holds `\n`; a channel push prints it
 the same way inside `<pin>…</pin>`). `nebula watch`
 keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
+`settings.restored` (from `nebula watch` after a restart) means Nebula put
+settings.json back at start from the copy it keeps while it writes the file
+in place, after a save that was cut short; its `file` names the file and
+`keptAt` where the file it replaced is kept, never a key. You can't read
+either: tell the person, in the event's own words.
+
+A run Nebula refuses before it starts is one line in the person's Agent log,
+in their words and never cut ("Nebula couldn’t start the run. 2 “GPT Image
+2” nodes need a prompt. Connect a prompt to each, then run the nodes
+again."; a node with several says them once: "“FLUX Kontext” needs a
+prompt and an image. Connect both, then run the node again."). Read
+`errors` for each node's own text.
 
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run
@@ -1028,6 +1199,7 @@ Connections must match types; `Any` connects to anything.
 | Video | .mp4, .mov files |
 | Audio | .mp3, .wav files |
 | Mesh | .glb, .obj, .fbx files |
+| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output`, or `nebula splat <node>` from the CLI, gives its Gaussian count, bounding box, file size, seed and axes. Idol runs free on Hugging Face without a token. With the person's Hugging Face token set it uses their own allowance, and past it Hugging Face bills a PRO, Team or Enterprise account's prepaid credits ($1 per 10 GPU minutes), so with the token set a `nebula run` or `nebula quick` that reaches it stops at it before anything is sent to Hugging Face (the nodes before it run, a reused result passes, the nodes after it don't): `nebula propose --run <node>` instead (the error prints the exact command, `nebula propose --note "<why>" --run <node>`). That stop is not a failure: the run's result marks it in `stopped`, `nebula look` shows the node as `stopped` with the whole text, and `nebula watch` gets its `run.failed` entry with `proposalNeeded: true`. A token that is only spaces or invisible characters counts as not set. `nebula info speridlabs-idol` prints it as BILLING, worded for the token as set now ("Free here" or "May cost here"); a proposal's Idol cost ("may cost" or "free") follows the token too |
 | SVG | .svg files or SVG text |
 | Array | Lists of the above |
 | Moodboard | A saved moodboard |

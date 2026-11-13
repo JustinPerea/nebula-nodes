@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
-import { MaskPainterModal } from '../../src/components/DeferredPanels';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { MaskPainterModal } from '../../src/components/panels/DeferredMaskPainter';
 
 // Review 9, M-2: the mask painter rendered inside the Inspector popover. Under
 // the Slava restraint skin the popover's backdrop-filter makes it the
@@ -33,9 +33,10 @@ describe('the mask painter covers the window, not the popover it opens from', ()
 
   it('so is the painter', async () => {
     const { popover } = inPopover();
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    // The painter's own chunk, loaded by import() when the wrapper is the first thing to ask for it:
+    // wait for it rather than a fixed time (the wrapper no longer rides in a module that loads it early).
+    await waitFor(() => expect(document.querySelector('.mask-painter__hint')).not.toBeNull(), { timeout: 5000 });
     const dialog = await screen.findByRole('dialog', { name: 'Mask painter' });
-    expect(dialog.querySelector('.mask-painter__hint')).not.toBeNull();
     expect(popover.contains(dialog)).toBe(false);
     expect(layerOf(dialog)?.parentElement).toBe(document.body);
   });

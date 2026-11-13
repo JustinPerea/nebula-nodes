@@ -8,7 +8,7 @@ verbatim:
 - Success: Codex finished “Hero shots”. / Codex finished 3 nodes.
 - Partial: Codex finished 2 of 3 nodes. “Upscale” failed. With more than one
   failed: Codex finished 2 of 5 nodes. 3 failed.
-- Failure: Codex's run of “Hero shots” failed. / Codex's run of 3 nodes failed.
+- Failure: Codex’s run of “Hero shots” failed. / Codex’s run of 3 nodes failed.
 - One button on all of them: Show on canvas.
 - Thumbnail: the last node's first output ... Video: its first frame ... Text
   or audio output: no thumbnail. Partial: the last output that succeeded.
@@ -113,15 +113,15 @@ def test_the_copy():
     assert done_text("Codex", {}, five, succeeded=["n1", "n2"], failed=["n3", "n4", "n5"]) == (
         "Codex finished 2 of 5 nodes. 3 failed.", "partial")
     assert done_text("Codex", one, ["n1"], succeeded=[], failed=["n1"]) == (
-        "Codex's run of “Hero shots” failed.", "failure")
+        "Codex’s run of “Hero shots” failed.", "failure")
     assert done_text("Codex", three, list(three), succeeded=[], failed=["n2"]) == (
-        "Codex's run of 3 nodes failed.", "failure")
+        "Codex’s run of 3 nodes failed.", "failure")
 
 
 def test_the_possessive_always_adds_apostrophe_s():
-    assert possessive("Codex") == "Codex's"
-    assert possessive("Claude Code") == "Claude Code's"
-    assert possessive("Jules") == "Jules's"
+    assert possessive("Codex") == "Codex’s"
+    assert possessive("Claude Code") == "Claude Code’s"
+    assert possessive("Jules") == "Jules’s"
 
 
 # -- one card per run, from the routes -------------------------------------------------------
@@ -191,7 +191,7 @@ def test_a_failed_run_gets_a_card_with_no_thumbnail_and_an_agent_log_line(done):
     done.fail.add(node)
     _run(done, headers=CODEX, target=node)
     (card,) = _cards(done)
-    assert card["text"] == "Codex's run of “Hero shots” failed."
+    assert card["text"] == "Codex’s run of “Hero shots” failed."
     assert card["run"]["outcome"] == "failure"
     assert card["run"].get("thumbnail") is None
     lines = [m for m in done.sent if m.get("type") == "agentPresence" and m.get("say") == card["text"]]
@@ -203,7 +203,7 @@ def test_a_failed_run_of_several_nodes(done):
     done.fail.add(ids[0])
     _run(done, headers=CODEX)
     (card,) = _cards(done)
-    assert card["text"] == "Codex's run of 3 nodes failed."
+    assert card["text"] == "Codex’s run of 3 nodes failed."
 
 
 def test_runs_the_person_starts_post_no_card(done):

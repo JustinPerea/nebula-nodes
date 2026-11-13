@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MeshPreview } from '../../src/components/nodes/DeferredViewers';
-import { MaskPainterModal, RunHistoryPanel } from '../../src/components/DeferredPanels';
+import { RunHistoryPanel } from '../../src/components/DeferredPanels';
+import { MaskPainterModal } from '../../src/components/panels/DeferredMaskPainter';
 import { useUIStore } from '../../src/store/uiStore';
 
 // A deferred chunk can fail to load (the web build was replaced while a tab

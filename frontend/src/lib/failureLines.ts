@@ -1,4 +1,4 @@
-import { keyPhrase } from './directRoute';
+import { addKeyLine } from './directRoute';
 
 /**
  * Failure lines for steps whose request failed (review 12, L-4; GM - Design,
@@ -36,17 +36,16 @@ export function modelSetupFailedText(name: string): string {
   return `Couldn't set up “${name}”.`;
 }
 
-/** GM - Design, round 15, item 1, verbatim: the pickers' line calls
- * Replicate's an "API key" ("Add your Replicate API key in Settings."). */
-const PICKER_KEY_PHRASES: Readonly<Record<string, string>> = { REPLICATE_API_TOKEN: 'Replicate API key' };
-
 /** The model pickers, the provider's key isn't set (review 13, L-5; GM -
  * Design, round 15, item 1): GM's "Couldn't set up “X”." and the key to
  * add, by its provider's name (no env names: directRoute.keyPhrase). The
  * node keeps its settings. */
 export function modelKeyMissingText(name: string, keys: readonly string[]): string {
-  const phrase = keys.length === 1 && Object.hasOwn(PICKER_KEY_PHRASES, keys[0]) ? PICKER_KEY_PHRASES[keys[0]] : keyPhrase(keys);
-  return phrase ? `${modelSetupFailedText(name)} Add your ${phrase} in Settings.` : modelSetupFailedText(name);
+  // Each provider's own noun, as every run-failure line and its Settings
+  // row say it: "Add your Replicate token in Settings." (GM, PR #203 r26
+  // item 5; no picker-only wording).
+  const line = addKeyLine(keys);
+  return line ? `${modelSetupFailedText(name)} ${line}` : modelSetupFailedText(name);
 }
 
 /** backend main.MODEL_SETTINGS_FAILURE_HEADER and its values: reading the

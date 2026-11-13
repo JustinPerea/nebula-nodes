@@ -34,7 +34,9 @@ export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLine
   // Round 12 (GM r20 1): the Commons' page-lines row, which hands its line to CommonsErrorLine.
   CommonsPageLines: 'line',
   // The Moodboard Studio's own wrapper (MoodboardStudioView FailureLine): a div around FailureLines.
-  FailureLine: 'failure' };
+  FailureLine: 'failure',
+  // PR #203's Settings row line (a neutral status or an alert), through LineText.
+  SettingsRowError: 'message' };
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
@@ -156,6 +158,8 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'settings.agents-load-retry': { none: 'a retry: its line is settings.agents-load' },
   'settings.agents': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
   // useSettingsDraftStore errors[id], by the row that wrote it.
+  // PR #203: the restored-settings notice's failed dismissal.
+  'settings.notice': [{ file: 'components/panels/settings/SettingsTopNotice.tsx', expr: 'DISMISS_FAILED' }],
   'settings.write': [
     { file: 'components/panels/settings/KeyRow.tsx', expr: 'error' },
     { file: 'components/panels/settings/StorageTab.tsx', expr: 'telemetryError' },
@@ -196,6 +200,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
     { file: 'components/projects/ProjectHome.tsx', expr: 'error' },
   ],
   'project.load-retry': { none: 'a retry: its line is project.error' },
+  'project.kept-save': [{ file: 'components/projects/KeptEditsNotice.tsx', expr: 'refusal' }],
   'project.save': [{ file: 'components/create-studio/ResultCard.tsx', expr: 'saveError' }],
   'project.save-retry': { none: 'a retry: its line is project.save' },
   'graph.refusal': [
@@ -221,6 +226,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 
 /** Text children that read a failure-named value but can never hold a not-connected line. */
 const EXEMPT: Record<string, string> = {
+  'components/projects/ProjectHome.tsx: notice.text': 'the catalog restore notice\'s own status line (PR #199): what Nebula did, never a refusal of a request, so it can\'t be a not-connected line',
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
   'components/commons/CommonsDetail.tsx: analysisFailureReason(asset.last_error_kind)': 'a too-transparent reference\'s muted reason (#208): from the asset\'s own analysis, never a request\'s refusal',
 };

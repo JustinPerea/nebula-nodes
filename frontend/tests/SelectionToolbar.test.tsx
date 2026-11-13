@@ -193,13 +193,15 @@ describe('SelectionToolbar', () => {
     expect(useCanvasPinsStore.getState().composer).toEqual({ nodeId: 'n4' });
   });
 
-  it('hides the note button for several nodes or a node the backend has not saved yet', () => {
+  it('hides the note button for several nodes; a node the backend has not saved yet shows it locked (GM r26, 4)', () => {
     useGraphStore.setState({ nodes: [selectedNode('n1'), selectedNode('n2')] });
     const { unmount } = render(<SelectionToolbar />);
     expect(screen.queryByRole('button', { name: 'Note for agents' })).not.toBeInTheDocument();
     unmount();
     useGraphStore.setState({ nodes: [selectedNode('3f1c2a4e-1d2b-4c5d-8e9f-0a1b2c3d4e5f')] });
     render(<SelectionToolbar />);
-    expect(screen.queryByRole('button', { name: 'Note for agents' })).not.toBeInTheDocument();
+    const note = screen.getByRole('button', { name: 'Note for agents' });
+    expect(note).toBeDisabled();
+    expect(note).toHaveAttribute('title', 'You can leave a note on this node after you reopen the project.');
   });
 });

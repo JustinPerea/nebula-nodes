@@ -12,8 +12,8 @@ import { ConnectedApps } from './ConnectedApps';
 import { DailyTotalRow } from './DailyTotalRow';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
+import { SettingsRowError } from './SettingsRowError';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
-import { LineText } from '../../LineText';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
@@ -238,7 +238,7 @@ export function AgentSpendSection() {
           </select>
         </div>
       </div>
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      <SettingsRowError id="agentSpend" message={error} />
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
   );
@@ -256,7 +256,7 @@ function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
       {rows.map((agent) => (
         <div className="settings-pref" key={agent.id} data-testid="settings-personal-spend-row">
           <span className="settings-pref__text">
-            <span className="settings-pref__title">{agent.name}</span>
+            <span className="settings-pref__title agent-name" title={agent.name} aria-label={agent.name}>{agent.name}</span>
             <span className="settings-pref__description">
               {spentUsd(agent.spentUsd)} in the last 24 hours
               {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}, inside the budget above

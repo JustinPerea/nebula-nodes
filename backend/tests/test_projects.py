@@ -523,7 +523,7 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     recovered = client.post("/api/projects/recover", json=body)
     assert recovered.status_code == 200, recovered.text
     # Still in the trash, so the copy keeps its real name.
-    assert recovered.json()["project"]["name"] == "Deleted elsewhere (recovered)"
+    assert recovered.json()["project"]["name"] == "Recovered Deleted elsewhere"
     assert recovered.json()["project"]["snapshot"] == snapshot
     assert client.post("/api/projects/recover", json=body).json() == recovered.json()
     # Gone for good: the copy is still made, under a generic name.
@@ -532,7 +532,7 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     body["recoveryId"] = uuid4().hex
     gone = client.post("/api/projects/recover", json=body)
     assert gone.status_code == 200, gone.text
-    assert gone.json()["project"]["name"] == "Deleted project (recovered)"
+    assert gone.json()["project"]["name"] == "Recovered Deleted project"
 
 
 def _trash(client, project_id, revision):
@@ -566,7 +566,10 @@ def test_a_deleted_project_waits_in_the_trash_and_restores_whole(workspace):
     catalog = store.read()
     assert catalog["trash"] == {}
     assert catalog["activeProjectId"] == second["project"]["id"]
-    assert catalog["projects"][project_id] == before
+    # Whole, plus when it came back (a restore of a damaged list reads it).
+    restored_entry = dict(catalog["projects"][project_id])
+    assert restored_entry.pop("restoredAt")
+    assert restored_entry == before
     assert client.post(f"/api/projects/{project_id}/restore").status_code == 404
 
 
@@ -650,22 +653,34 @@ def test_trash_expires_after_thirty_days(workspace):
     assert set(store.read()["trash"]) == {recent["project"]["id"]}
 
 
-def test_restore_respects_the_project_limit(workspace, monkeypatch):
+def test_restore_may_pass_the_project_limit_and_a_create_still_may_not(workspace, monkeypatch):
+    """Justin, 2026-10-29 (PR #199 fix round 12): a restore from Recently
+    deleted may pass the project limit; the limit applies to new projects."""
     client, graph, store, _ = workspace
     a = create(client, "A")
     b = create(client, "B", a["workspaceRevision"])
     _trash(client, a["project"]["id"], b["workspaceRevision"])
     monkeypatch.setattr("services.project_store.MAX_PROJECTS", 1)
-    assert client.post(f"/api/projects/{a['project']['id']}/restore").status_code == 413
-    assert a["project"]["id"] in store.read()["trash"]
+    assert client.post(f"/api/projects/{a['project']['id']}/restore").status_code == 200
+    assert a["project"]["id"] in store.read()["projects"]
+    revision = client.get("/api/projects").json()["workspaceRevision"]
+    created = client.post("/api/projects", json={"name": "C", "workspaceRevision": revision})
+    assert created.status_code == 413 and created.json()["limit"] == "projects"
 
 
 def test_a_corrupt_trash_entry_is_reported_not_silently_dropped(workspace):
+    """The catalog no longer validates, so its last good copy comes back
+    (tests/test_project_catalog_backup.py), the damaged file is kept as it
+    was, and the entry that couldn't come back is reported, not dropped."""
     client, graph, store, _ = workspace
     create(client, "A")
     raw = json.loads(store.path.read_text())
     raw["trash"] = {"0" * 32: {"id": "0" * 32, "snapshot": {}, "deletedAt": "not a date"}}
     store.path.write_text(json.dumps(raw))
     before = store.path.read_bytes()
-    assert client.get("/api/projects").status_code == 507
-    assert store.path.read_bytes() == before
+    listing = client.get("/api/projects")
+    assert listing.status_code == 200
+    assert [project["name"] for project in listing.json()["projects"]] == ["A"]
+    assert listing.json()["catalogRestore"]["notAddedBack"] == [{"id": "0" * 32, "reason": "invalid", "trashed": True}]
+    [kept] = store.root.glob("catalog.json.damaged-*")
+    assert kept.read_bytes() == before

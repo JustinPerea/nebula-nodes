@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import inspect
 import json as _json
@@ -11,7 +12,7 @@ import re as _re
 import sys
 import time as _time
 from pathlib import Path as _Path
-from typing import Any
+from typing import Any, Iterator
 
 import anyio
 import anyio.from_thread
@@ -19,12 +20,13 @@ import anyio.lowlevel
 import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
-from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, never_reached, next_backoff,
+from nebula_api import (AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, never_reached, next_backoff,
                         offline_read_only, unanswered, with_identity)
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
+from services.wording import counted
 from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
@@ -297,6 +299,25 @@ def _sleep_unless_cancelled(seconds: float) -> None:
         _time.sleep(min(0.05, left))
 
 
+@contextlib.contextmanager
+def _canvas_waiting_said() -> Iterator[None]:
+    """Every tool's refusal by the waiting-canvas guard (review 6 of PR #199,
+    M-1: any change to a canvas waiting to be saved as a project, at the
+    limit) reaches the agent as GM's line with "(409, canvas_waiting)", so
+    it tells it from a stale revision, whichever tool sent the write."""
+    try:
+        yield
+    except NebulaAPIError as exc:
+        payload = exc.payload if isinstance(exc.payload, dict) else {}
+        code = payload.get("code")
+        # canvas_held_full: the canvas is too big to keep aside (review 7, L-3);
+        # canvas_kept_in_tab: the person's tab keeps unsaved edits (GM r16).
+        if code not in AGENT_REFUSAL_CODES or code in exc.detail:
+            raise
+        raise NebulaAPIError(f"{exc.detail} ({exc.status}, {code})", status=exc.status, kind=exc.kind,
+                             headers=exc.headers, payload=exc.payload) from exc
+
+
 def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_output: bool | None = None):
     """Register a tool. A plain function is registered as an async wrapper that
     runs it on a worker thread; the module keeps the plain function, so direct
@@ -315,7 +336,8 @@ def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_outpu
         if inspect.iscoroutinefunction(fn):
             @functools.wraps(fn)
             async def native(*args: Any, **kwargs: Any) -> Any:
-                return await _through_channel(name, kwargs, lambda: fn(*args, **kwargs))
+                with _canvas_waiting_said():
+                    return await _through_channel(name, kwargs, lambda: fn(*args, **kwargs))
 
             mcp.tool(**options)(native)
             return fn
@@ -323,8 +345,9 @@ def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_outpu
         @functools.wraps(fn)
         async def offloaded(*args: Any, **kwargs: Any) -> Any:
             # A partial, so a tool argument can never collide with _offload's own names.
-            return await _through_channel(
-                name, kwargs, lambda: _offload(functools.partial(fn, *args, **kwargs), waits=waits))
+            with _canvas_waiting_said():
+                return await _through_channel(
+                    name, kwargs, lambda: _offload(functools.partial(fn, *args, **kwargs), waits=waits))
 
         offloaded._nebula_offloaded = True  # type: ignore[attr-defined]
         mcp.tool(**options)(offloaded)
@@ -340,7 +363,11 @@ def get_selected_nodes(ctx: Context | None = None) -> dict[str, Any]:
 
     The result includes bounded, redacted parameters, available output ports,
     and connections touching the selection. Deleted/stale IDs are never
-    returned as live nodes.
+    returned as live nodes. A node only the person's tab has (a duplicate or
+    a paste, until the project is opened again) is never listed, not even as
+    stale: `tabOnlyCount` and `tabOnlyNote` say how many (look_at_canvas,
+    start_here and the `selection.changed` event carry them too). Don't ask
+    about or change it; it gets an id when the project is opened again.
     """
     return _canvas_call("GET", "/api/canvas/selection", ctx)
 
@@ -413,9 +440,38 @@ def start_here(ctx: Context | None = None) -> str:
     """Call this first: everything a first turn needs, in one call. Call it
     again after wait_for_canvas_change reports `gap` or `reset`.
 
-    JSON with seven parts, each kept short:
+    JSON with seven parts, each kept short, led by `catalogRestore` when
+    Nebula restored a damaged project list the person hasn't closed the
+    notice of (its `note`, the copy and its time, the damaged file's path, a
+    few of the projects added back, and of those that went back to the
+    copy's version, came back after a delete or are in Recently deleted
+    again, and whether the damaged file was read to its end, only those
+    that still hold; list_projects has it in full), then `canvasNotFiled`
+    while the live canvas, or a canvas held aside, isn't a saved project
+    because the list is at a limit ({reason, since, projectLimit, live,
+    held, roomNow, note}: nothing in it is lost, but the person can't see
+    or open it until it is saved, so never say it is open; opening an
+    existing project works, and at the limit every change to the waiting
+    canvas (an edit, a removal, a run, a clear, load_graph_file) is refused
+    with "(409, canvas_waiting)", so open a project to work in; tell them what
+    `note` says frees room, or, with `roomNow`, that the next listing saves
+    it; don't free it yourself; and while the person's tab keeps edits
+    Nebula couldn't save after a restore (and for about 10 s after its
+    connection drops, each tab on its own, or about 15 s after a Nebula
+    restart until it is back), every canvas change, run and project switch is
+    refused with "(409, canvas_kept_in_tab)", while renaming a project,
+    trashing one that isn't open and restoring from Recently deleted still
+    work: tell them, and try again after they save those edits as a project
+    or discard them, which only they can do; nodes they added while kept
+    get Nebula's `nN` ids at that save, so read the canvas again then, and
+    connections Nebula's rules refuse are left out and listed in the
+    `project.created` event's `droppedWires`, each with its ends by the
+    copy's ids (null for a node not in the copy, its tab id in
+    `sourceWas` / `targetWas`), names, port labels and types, `kind` and
+    `detail`; while kept, the canvas shows no selection and no view):
     - `canvas`: the project, `view.stale` (no browser watching), the
-      selection, other agents' cursors, and the nodes (id, name,
+      selection (with `tabOnlyCount` and `tabOnlyNote` when the person
+      selected nodes only their tab has, never listed), other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
       characters). A big canvas shows its first nodes in full (selected
       first, then on screen), the rest in `others` by id and name, with
@@ -458,7 +514,9 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    connections, the user's selection, and other agents' cursors. A node
+    connections, the user's selection (with `tabOnlyCount` and `tabOnlyNote`
+    beside it when the person selected nodes only their tab has: a duplicate
+    or a paste, never listed), and other agents' cursors. A node
     holding a file has `fileName` (its filePath's) and, with other file
     params, `fileNames` ({param: name}): the name the canvas shows, which is
     the name the file was uploaded with, else the path's own name, and
@@ -765,7 +823,10 @@ def wait_for_canvas_change(
     or look_at_canvas `events.journal`): if Nebula restarted in between,
     the result has `reset` instead of reading the new journal from an old
     cursor. Projects made, renamed, deleted or restored are `project.*`
-    events; a held paid start is `provider.hold`.
+    events; a held paid start is `provider.hold`; settings.json put back
+    at start from Nebula's copy, after a save cut short, is
+    `settings.restored` (its `summary` says where the replaced file is
+    kept, for the person: no agent can read it).
     `kinds` filters by group or exact kind, e.g. ["node", "run.failed"];
     ["board"] returns on any moodboard write. `board.fields` is a change to
     a board's own fields (Direction, Avoid, notes, strength...): its
@@ -812,7 +873,18 @@ def _with_identity_note(response: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
+def _cost_classes_doc(fn: Any) -> Any:
+    """Write the cost classes into a tool's description from the one table
+    (model_pricing.CLASS_ENTRIES; review 10 of PR #203, LOW-2), before the
+    tool is registered, so the two can't drift."""
+    from services.model_pricing import class_entries_doc
+
+    fn.__doc__ = (fn.__doc__ or "").replace("<<COST_CLASSES>>", class_entries_doc())
+    return fn
+
+
 @_tool(annotations=_EDIT)
+@_cost_classes_doc
 def propose_change(
     note: str,
     nodes: list[dict] | None = None,
@@ -855,12 +927,18 @@ def propose_change(
     the ones a model change drops, below); edit_canvas and
     remove_from_canvas do that directly.
 
-    Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
-    "free" (run locally) or "paid · <provider>" (the provider the run would
-    go through with the keys set, as its price is; a Krea copy on its
-    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), and `cost.estimate` sums
-    list prices in USD where Nebula has them (null when none do; `open` when
-    some paid node has none). `cost.notReady` lists the run's nodes that
+    Returns {"proposal": {...}} with `id`, `status`, and `cost`. Each run
+    node in `cost.nodes` has a `kind`, its cost class, and a `label`:
+<<COST_CLASSES>>
+    A provider is the one the run would go through with the keys set, as its
+    price is; a Krea copy on its maker's key names both: "paid · Grok Imagine
+    2.0 via xAI". Idol is `mayCost` with the person's Hugging Face token set
+    and `free` without; that is read with the keys set when you look: a token
+    added or removed after you proposed changes it in get_proposal and
+    list_proposals, on each node and in the run's counts. Read a `kind` or a
+    `reason` kind you don't know as paid with no listed price.
+    `cost.estimate` sums list prices in USD where Nebula has them (null when
+    none do; `open` when some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
     in find_nodes' words (`person` beside it is the canvas's line; read
     `missing`), and `warning` says so in a sentence: if the person
@@ -1345,8 +1423,12 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     or null when Nebula has no
     list price). "free" is at the node's defaults: a
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
-    mode, with no list price. With ready_only=false, nodes that can't run here
-    are included with `missing` saying what to set up.
+    mode, with no list price. A row that runs free on someone's own allowance
+    has `billing`, saying who can still be billed past it (Idol on a
+    Hugging Face PRO, Team or Enterprise account), as the key is set now: it
+    starts "Free here" without it and "May cost here" with it, and then you
+    propose the run (propose_change) instead of running it. With ready_only=false,
+    nodes that can't run here are included with `missing` saying what to set up.
     """
     # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
@@ -1375,7 +1457,18 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     here) and, per route, `params` exactly as the card shows them on that
     provider (values cut, ranges narrowed, `onlyWhen`; a setting it doesn't
     offer is absent and named in `hides`), `price`, `priceUnconfirmed`,
-    `note` and `block`. A route never receives a setting it doesn't offer;
+    `note` and `block`. A keyless route (`keys` []) has `optionalKeys`
+    ([{key, set}]): it runs without them, and one that is set is used, so the
+    run is on that person's own account and quota. A maker's Hugging Face
+    Space route (Idol's, keyless with an optional HF_TOKEN) has `billing`:
+    without the token it runs free on Hugging Face's shared GPUs; with it, on
+    the person's own ZeroGPU allowance, and past its daily quota Hugging Face
+    bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
+    GPU-minutes, though Nebula prices it at $0. The note is worded for the
+    token as set now ("Free here" or "May cost here"). With the token set an
+    agent's run stops at it before calling Hugging Face (its error says so,
+    and the nodes after it don't run): propose it with propose_change.
+    A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
     null = clear: plain param edits) on a propose_change cost entry; a run
@@ -1458,11 +1551,17 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     `edgeCount`, `idMap` (the file's node ids to the canvas's), `filesRestored`,
     `warnings` (files a bundle lacked, links left out), `savingPaused`, `size`
     and `note`. An in-app chat's turn reads only its own workspace; a relative
-    path means that workspace."""
+    path means that workspace.
+
+    While the canvas waits to be saved as a project (list_projects
+    `canvasNotFiled`, live) and the list is at its limit, refused with
+    "... (409, canvas_waiting)": open an existing project (open_project) to
+    work in, or ask the person to delete a project. Below the limit the
+    waiting canvas is held aside first and the load works."""
     import graph_file_client
 
     try:
-        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx), via="mcp")
+        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx))
     except graph_file_client.GraphFileError as exc:
         raise RuntimeError(str(exc)) from exc
 
@@ -1503,6 +1602,12 @@ def edit_canvas(
       no canvas open, the first one to open does it; the result's `arrange` says which.
     - `remove`: node ids to delete, with their connections. `unwire`: single connections,
       [{"source", "sourceHandle", "target", "targetHandle"}].
+      A node World Labs state holds is refused (409 "Cannot delete n3: it has
+      unresolved World Labs paid state..."): a kept recovery ID holds its node
+      unless Nebula recorded, when the run wrote it, that the run belongs to
+      another project that still exists and the open project's run history
+      doesn't name it; a start settling or waiting on the person's check holds
+      by node id; an ID in the node's settings holds too.
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
     - `pending`: true makes this call's new nodes your placeholders while you
@@ -1560,8 +1665,8 @@ def edit_canvas(
     usual (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”
     (`no Style “Neon dusk”`); a next call is in backticks.
-    Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
-    or the Krea plan) and a multi-provider node's route (`_provider`: a route id
+    Who bills a run is the person's call: Krea billing (`_kreaAuth`: the API
+    key connection or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
     OpenRouter, Nous Portal and Replicate nodes take their ports from their
@@ -1614,18 +1719,96 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     """The person's saved projects, most recently edited first. `open` marks
     the one on the canvas now. `cover` is the picture on its card ({source:
     pinned, output or references, images: URLs}; null when it has none);
-    get_project reads one in full without opening it."""
+    get_project reads one in full without opening it. `catalogRestore` is
+    there after Nebula found its project list damaged and restored it
+    (until the person closes the notice): `note` says what happened,
+    `source` the copy it came from (null: rebuilt from the damaged files),
+    `addedBack` the projects it added back, `notAddedBack` those it
+    couldn't (`reason: "limit"` for readable ones left out at the project
+    limit, still in the damaged file; `notAddedBackLimitCount` counts those,
+    `projectLimit` is the limit), `reverted` those that went back to the copy's version,
+    `cameBack` those deleted after the copy that are back, `backInTrash`
+    those restored after the copy that are in Recently deleted again,
+    `recoveredCanvas` the live canvas filed as its own project ("Recovered
+    <project>", or "Recovered canvas", "Recovered canvas 2" and on when
+    which project it was is unknown), `canvasNotFiled` when it couldn't be
+    filed because the list is at a limit, `damagedReadWhole` false when the
+    damaged file couldn't be read whole (cut, zeroed, or a key or section
+    name damaged: changes after the copy may then be missing without a
+    row), `damagedRecordsUnread` true when it also held project records
+    Nebula couldn't read (false when the damage came only after its
+    projects group closed; absent on older restores: `note` then says "no
+    project is missing" only when it says nothing else, as the person's
+    notice does), and `damagedFile` where the damaged file is kept. The
+    open project is said once: when `note` says the open canvas was saved
+    or waits on the limit, its left-out row isn't named again. Every row says
+    `current`: false once it no longer holds (that project was restored,
+    deleted or deleted for good since), and `note` leaves those out, as the
+    person's notice does. Project ids from before it may be stale; ask the
+    person before deleting a project that came back.
+    `canvasNotFiled` (top level, {reason: projects | storage, since,
+    projectLimit, live, held, roomNow, note}) means a canvas the person had
+    open isn't a saved project and the list had no room to save it as one,
+    whether or not a restore notice is open: the live canvas (`live`, no
+    project open), and `held` more held aside. Nothing in them is lost, but
+    the person can't see or open one until it is saved (never say it is
+    open). open_project works: the waiting canvas is held aside first,
+    whole, and saved from that copy later. new_project is refused (413)
+    until there is room; so is every change to the live canvas while it
+    waits at the limit (409, code canvas_waiting): a clear or load_graph_file
+    ("The project limit is reached, so a new canvas can't be saved. Open an
+    existing project to work in, or ask the person to delete a project.")
+    and any edit, removal or run ("The open canvas isn't saved as a project
+    yet because the project limit is reached, so it can't be changed. …").
+    Below the limit a change holds it aside first and works, on a canvas
+    with no project that is never saved (open or make a project to keep
+    your work). A restore from Recently deleted is never refused by the
+    project limit (it may pass it); `canvasHeldUnreadable` says a held
+    canvas couldn't be read. `roomNow`
+    true means room is free and the next listing saves them; `projectLimit` (top level) is the list's limit; `note` says what frees it
+    for that limit (the project limit: a move to Recently deleted; the size
+    limit: only a delete for good). Don't free it for them. `canvasSaved`
+    ({id, name, at, filed}, for 10 minutes) says such canvases were then saved.
+    `openHold` is there while Nebula holds opening or switching projects
+    (open_project and new_project are refused): {state, nodeId, nodeName,
+    projectId, projectName, count, fields, detail, note}, `state` one of
+    active, ambiguity, recovery, params, bootstrap or run, and `note` says
+    which node and project hold and what clears it (the person's Forget ID
+    in Run History for recovery, their "I’ve checked Marble" for ambiguity).
+    It covers Nebula's own holds only: while the person's tab keeps edits
+    of its own, an open is refused with code canvas_kept_in_tab, which
+    `openHold` doesn't show. A recovered copy's row has `sourceName` (null
+    when unknown or deleted for good) and `sourceProjectId` (while that
+    project is in the list): its source. Never read the source from the
+    copy's name."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))
+
+
+@contextlib.contextmanager
+def _limit_said_whole() -> Iterator[None]:
+    """A store limit's refusal (413) reaches the agent whole, as HTTP gives
+    it (review 5 of PR #199, L-2; GM r17: new_project too): the bare
+    detail left out which limit and how many projects it holds."""
+    try:
+        yield
+    except NebulaAPIError as exc:
+        payload = exc.payload if isinstance(exc.payload, dict) else {}
+        if exc.status != 413:
+            raise
+        fields = {key: payload[key] for key in ("limit", "projectLimit", "projectCount", "deletes", "scope", "code") if key in payload}
+        raise NebulaAPIError(f"{exc.detail} (413, {_json.dumps(fields)})", status=413, kind=exc.kind,
+                             headers=exc.headers, payload=exc.payload) from exc
 
 
 def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
     listing = _canvas_call("GET", "/api/projects", ctx)
     previous_id = listing.get("activeProjectId")
     previous = next((p for p in listing.get("projects") or [] if p.get("id") == previous_id), None)
-    result = _canvas_call("POST", path, ctx, timeout=30.0,
-                          json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
+    with _limit_said_whole():
+        result = _canvas_call("POST", path, ctx, timeout=30.0,
+                              json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
     project = result.get("project") or {}
     reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name"),
                                          "nodes": len((project.get("snapshot") or {}).get("nodes") or [])}}
@@ -1635,6 +1818,12 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
                          f"`open_project('{previous_id}')` goes back.")
     if result.get("warnings"):
         reply["warnings"] = result["warnings"]
+    if result.get("renumbered"):
+        # Nodes the person's Duplicate or Paste made got Nebula's ids at this
+        # open (PR #199 round 17): any id read before for them is stale.
+        reply["renumbered"] = result["renumbered"]
+        reply["renumberedNote"] = (f"Nebula gave {counted(len(result['renumbered']), 'node')} its own ids at this "
+                                   "open ({old: new}). Read the canvas again and use the ids you see.")
     return reply
 
 
@@ -1646,8 +1835,22 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     canvas: the project that was open is saved as it is. The person's canvas follows, names you,
     and offers them a way back. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project named after the project left, "<project
-    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    that fails, as a new project named after the project left, "Recovered
+    <project left>", then "Recovered <project left> copy", "copy 2" and so
+    on). Refused while a run is going, and while World Labs state holds
+    (a paid start settling, a start waiting on the person's check, a kept
+    recovery ID or an ID in a node's settings, any project's, or Nebula
+    couldn't save its World Labs safeguards: code paid_bootstrap): the 409
+    carries `hold`, as list_projects' `openHold` says it. It is refused
+    too (409, code canvas_kept_in_tab) while the person's tab keeps edits
+    of its own. If Nebula can't verify the paid-start fence's storage, it
+    answers 507 "Cannot switch projects because Nebula cannot verify the
+    durable World Labs paid-start fence." Open proposals close (another
+    project's canvas).
+    Refused at the project limit with the whole refusal, as HTTP answers it:
+    "Project limit reached (413, {"limit": "projects", "projectLimit": N,
+    "projectCount": M, "deletes": D})": how many there are, and how many to
+    delete before a new one fits.
     """
     return _switch("/api/projects", {"name": name}, ctx)
 
@@ -1658,13 +1861,41 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     The project that was open is saved as it is. The person's canvas follows,
     names you, and offers them a way back. Opening the project that is already
-    open reloads it from what was saved; what they had typed there still lands. Their canvas is read-only until the
+    open reloads it from what was saved; what they had typed there still lands,
+    and open proposals stay open with the same ids (their nodes keep their
+    ids; the edit rule still applies at Accept). Opening another project
+    closes them. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project named after the project left, "<project
-    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    that fails, as a new project named after the project left, "Recovered
+    <project left>", then "Recovered <project left> copy", "copy 2" and so
+    on; a number in the name is never read). Refused while a run is going,
+    and while World Labs state holds (a paid start settling, a start
+    waiting on the person's check, a kept recovery ID or an ID in a node's
+    settings, any project's, or Nebula couldn't save its World Labs
+    safeguards: code paid_bootstrap), the open of the project already open
+    too: the 409 carries `hold`, as list_projects' `openHold` says it; and
+    while the person's tab keeps edits of its own (code canvas_kept_in_tab).
+    If Nebula can't verify the paid-start fence's storage, it answers 507
+    "Cannot switch projects because Nebula cannot verify the durable World
+    Labs paid-start fence."
+    A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
+    is held aside first, whole, and saved as its own project once there is
+    room, so opening works then too.
     `warnings` lists what opening changed: a folded node's connections, or a
     Cinema scene's shot output no shot owns and its connections, left out
     (a renumbered shot keeps its own port and connections).
+    `renumbered` ({old: new}, with `renumberedNote`) lists nodes that got
+    Nebula's ids at this open: the person's Duplicate and Paste make nodes
+    only their tab knows until the next open. Read the canvas again then; an
+    old id answers 404 "… read the canvas again for the current ids."
+    Reopening the project the person has open never doubles those nodes:
+    what their tab hadn't saved lands on the new id. Of a renumbered node,
+    the tab's handoff takes only what differs from the node as this open
+    loaded it (each setting whose value differs from that, its name, its
+    place), so your later edit to another setting, the name or the place
+    stands; if the person changed the same setting, theirs wins. The person
+    can reopen it themselves too (canvas.replaced in their name, with
+    `renumbered`).
     """
     from urllib.parse import quote
 
@@ -1691,6 +1922,12 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     undo_canvas_edit (or the person's Cmd+Z) puts them back. On the person's
     open canvas the nodes leave at once, and edits to them still waiting to be
     sent (the person's typing) are dropped.
+    A node World Labs state holds can't be deleted (409 "Cannot delete n3: it
+    has unresolved World Labs paid state..."): a kept recovery ID holds its node
+    unless Nebula recorded, when the run wrote it, that the run belongs to
+    another project that still exists and the open project's run history
+    doesn't name it; a start settling or waiting on the person's check holds by
+    node id; an ID in the node's settings holds too. Tell the person.
     """
     body: dict[str, Any] = {}
     if node_ids:
@@ -1825,6 +2062,10 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
         shown["errors"] = payload["errors"]
+    if payload.get("stopped"):
+        # Node id -> "proposal_needed": stopped at a call only the person may
+        # make; its errors entry says how to propose the run.
+        shown["stopped"] = payload["stopped"]
     if payload.get("skipped"):
         # Node id -> why: a gate upstream (Jev Decide) withheld their input.
         shown["skipped"] = payload["skipped"]
@@ -1875,7 +2116,13 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     person as it is), `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd: the
     total, used, left and this run's estimate) and, when it also needs their
     OK for another reason, `alsoNeeds` (perRun, modelPerRun, unpriced, limit
-    or planRuns). Nothing ran; get_proposal tells you when they decide. A node priced
+    or planRuns). Nothing ran; get_proposal tells you when they decide. A node that
+    can bill the person's own provider account (Idol with HF_TOKEN set: a
+    Hugging Face PRO, Team or Enterprise account's prepaid credits past its
+    daily allowance) doesn't refuse the run: the run goes ahead, a result
+    it reuses passes, and the node stops before calling Hugging Face, its
+    error saying so and the nodes after it not run: propose
+    that run with propose_change. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this
@@ -1957,7 +2204,9 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     """Look at a node's output. Images come back as an image (`size` small
     512 px, medium 1024, large 1568), videos as three frames side by side,
     image lists as up to four tiles. Text comes back as text; audio and 3D
-    as their type and URL. `port` picks an output when a node has several.
+    as their type and URL, and a World v2 Gaussian splat (Idol) also with a
+    `splat` summary: Gaussian count, bounding box, file size, seed,
+    provider and model. `port` picks an output when a node has several.
     A node whose last run failed and made nothing answers with that error
     ({"nodeId", "state": "error", "error"}); one that still has an output
     from before says so beside it."""
@@ -1982,6 +2231,17 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     chosen = {port: outputs[port]} if port and port in outputs else outputs
     whole = {name: {"type": entry.get("type"), "value": _absolute(entry.get("value"))}
              for name, entry in chosen.items() if isinstance(entry, dict)}
+    # A World v2 splat (Idol's .ply) can't be looked at, so it comes back as
+    # numbers the backend reads from the file: Gaussian count, bounding box,
+    # file size, seed, provider and model.
+    for name, entry in chosen.items():
+        if isinstance(entry, dict) and entry.get("type") == "World" and isinstance(entry.get("value"), dict) \
+                and entry["value"].get("schemaVersion") == 2:
+            try:
+                summary = _canvas_call("GET", f"/api/graph/node/{node_id}/splat-summary", ctx, params={"port": name})
+            except NebulaAPIError:
+                continue
+            whole[name]["splat"] = {key: value for key, value in summary.items() if key not in ("nodeId", "port")}
     # A value from before a run that failed says so, as a picture does.
     note = {"note": f"This output is from before its last run, which failed: {unquote(failed)}"} if failed else {}
     return [_json.dumps({"nodeId": node_id, **note, "outputs": whole})]
@@ -2045,10 +2305,14 @@ def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[s
 
     It comes back with the same id and contents, so a Moodboard or Character
     node that points at it runs again. A project comes back closed. Any
-    agent may restore; only the person can delete for good."""
+    agent may restore; only the person can delete for good. A project
+    restore may pass the project limit (the limit applies to new projects);
+    after one, new_project is still refused at the limit (413, limit
+    "projects", projectLimit), as HTTP answers it."""
     from urllib.parse import quote
 
-    return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
+    with _limit_said_whole():
+        return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
 
 
 # -- commons (smart moodboard) ------------------------------------------------
@@ -2905,10 +3169,11 @@ def _krea_call(method: str, path: str, ctx: Context | None, **kwargs: Any) -> di
     try:
         return _canvas_call(method, path, ctx, timeout=30.0, **kwargs)
     except NebulaAPIError as exc:
-        if exc.status in (400, 503) and "connect" in exc.detail.lower():
+        detail = exc.detail.lower()
+        if exc.status in (400, 503) and ("connect" in detail or "sign in" in detail):
             raise NebulaAPIError(
-                f"{exc.detail.rstrip('.')}. Only the person can connect Krea: ask them to open "
-                "Settings > Connections > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
+                f"{exc.detail.rstrip('.')}. Only the person can sign in to Krea: ask them to open "
+                "Settings > Providers > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
         raise
 
 
@@ -2919,7 +3184,7 @@ def krea_discovery_tools(ctx: Context | None = None) -> dict[str, Any]:
     Krea's prompting guide, the account's styles and moodboards, node apps.
     Call one with krea_discover. None of them generates, uploads or spends;
     Krea generation goes through Krea graph nodes. If Krea isn't connected,
-    ask the person to connect it in Nebula (Settings > Connections > Krea)."""
+    ask the person to sign in to Krea in Nebula (Settings > Providers > Krea)."""
     allowed = _krea_allowed()
     payload = _krea_call("GET", "/api/krea/tools", ctx)
     tools = [tool for tool in payload.get("tools") or [] if isinstance(tool, dict) and tool.get("name") in allowed]
@@ -3101,7 +3366,10 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
     Run History, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
-    output once the project is open."""
+    output once the project is open. A recovered copy has `sourceName` (null
+    when unknown or deleted for good) and `sourceProjectId` (while that
+    project is in the list): its source. Never read the source from the
+    copy's name."""
     import project_client
 
     return project_client.get_project(_api(), project_id, headers=_agent_headers(ctx))

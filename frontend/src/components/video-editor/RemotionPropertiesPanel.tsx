@@ -130,7 +130,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
         <span className="remotion-properties-panel__id">{item.id.slice(0, 8)}</span>
       </header>
       <fieldset className="remotion-properties-panel__fields" disabled={lock.locked} {...lock.mark}
-        title={lock.act().title}>
+        title={lock.act({ kept: 'edit-video' }).title}>
 
       <section className="remotion-properties-panel__section">
         <h4>Time</h4>

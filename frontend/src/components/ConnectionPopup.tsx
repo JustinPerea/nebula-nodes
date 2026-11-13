@@ -17,6 +17,7 @@ import { ScrollFade } from './ScrollFade';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { isBackendOffline, isOfflineRefusal, refuseEditWhileOffline } from '../lib/backendConnection';
 import { useCanvasLock } from '../lib/canvasLock';
+import { isCanvasKept } from '../lib/keptCanvas';
 import { addNodeLine } from '../lib/runLock';
 import '../styles/canvas-next-steps.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
@@ -228,7 +229,9 @@ export function ConnectionPopup() {
     }
     let newId: string | null = null;
     try {
-      if (/^n\d+$/.test(nodeId)) {
+      // While kept (GM r21, 3) the step and its wire are this tab's own, one
+      // kept step, checked by the server's wire rules (the store's kept path).
+      if (/^n\d+$/.test(nodeId) || isCanvasKept()) {
         newId = await addNodeAndConnect(node.definition.id, nodePosition, {
           source: handleType === 'source' ? nodeId : '',
           sourceHandle: handleType === 'source' ? handleId : node.matchingPortId,
@@ -249,6 +252,8 @@ export function ConnectionPopup() {
       // A tab that went offline while the add was on its way: the store
       // refused it, and the banner already says why.
       if (!newId && isBackendOffline()) return;
+      // A kept wire the server's rules refuse: the canvas notice says why.
+      if (!newId && isCanvasKept()) { hideConnectionPopup(); return; }
       if (!newId) { setError("Couldn't confirm the connected step. Check the canvas before trying again."); return; }
       hideConnectionPopup();
       if (nextStep) {
@@ -360,7 +365,7 @@ export function ConnectionPopup() {
               </button>
               {isOpen && nodes.map((node) => (
                 <div key={node.definition.id} className="next-step-choice">
-                <button type="button" {...lock.act({ disabled: pending })}
+                <button type="button" {...lock.act({ disabled: pending, kept: 'live' })}
                   className="connection-popup__item"
                   onClick={() => handleSelect(node)}
                 >

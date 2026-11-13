@@ -86,7 +86,7 @@ a node onto the plan themselves, or onto another provider: changing
 (``main._refuse_agent_billing_change``). That holds on every way in: the
 edit routes, project snapshots, and the run routes, which take params in the
 request (a run may only bill a node the way its canvas node does, and a node
-that exists only for the run starts on Auto and the API token).
+that exists only for the run starts on Auto and the API key connection).
 
 A cinema scene is a local node that calls its base image model once per
 shot, so it is priced, limited and counted as that model, times its shots
@@ -1233,6 +1233,14 @@ def decide(
     def refuse(reason: str) -> Decision:
         return decision(f"Needs the person's approval: {reason} {how_to_ask}")
 
+    # A node that may bill the person's own provider account (a keyless
+    # route run with its optional key: Idol with HF_TOKEN set) no longer
+    # refuses the whole run here. Justin decided (2026-10-31) to gate only
+    # the call: the run starts, and the node stops at its call, before
+    # anything is sent, when an agent started the run
+    # (handlers/speridlabs_idol.run_idol, execution/run_origin.py). Its list
+    # price stays $0, so it never counts toward a budget.
+
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
     # The daily total is a USD limit (Justin's Q165, 2026-10-31): with it on,
@@ -1322,18 +1330,49 @@ def decide(
     return decision(None)
 
 
-_PROPOSE_TAIL = "The person accepts on the canvas, and the canvas runs it."
-_PROPOSE_CLI = "Propose it instead: `nebula propose --note \"<why>\" {targets}`. "
-_PROPOSE_MCP = "Propose it instead with propose_change. "
+# Who a may-bill call can bill, by the account it runs on: the agent's
+# detail when its run stops at that call (handlers/speridlabs_idol
+# agent_call_stop). Agent-facing, so plain facts:
+# https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with credits".
+MAY_BILL_WHO = {
+    "Hugging Face": ("the person's Hugging Face token is set",
+                 "their Hugging Face account: a PRO, Team or Enterprise account's prepaid credits are billed past "
+                 "its daily ZeroGPU allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit"),
+}
 
 
-def propose_hint(run_ids: list[str]) -> str:
+def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Mapping[str, Any]],
+                   api_keys: Mapping[str, Any]) -> list[str]:
+    """The ids of the run's nodes that may bill the person's own provider
+    account, in run order: the one cost class's "mayCost"
+    (model_pricing.cost_class), as every cost surface reads it (review 10 of
+    PR #203, NIT-5). Its reach is node_route.may_bill's, exactly:
+    cost_class returns a key-billing route's own class first
+    (tests/test_idol_round11.py proves the two agree on every node)."""
+    found = []
+    for item in items:
+        definition = definitions.get(str(item.get("definitionId") or ""))
+        if definition and model_pricing.cost_class(definition, item.get("params") or {},
+                                                   api_keys) == model_pricing.MAY_COST:
+            found.append(str(item["id"]))
+    return found
+
+
+def propose_hint(run_ids: list[str], where: str = "mcp") -> str:
     """The sentence pointing an agent at a proposal for these canvas nodes, in
-    the CLI's words (the backend can't tell which surface asked). MCP's tools
-    reword it for their reader (propose_hint_for_mcp): each surface names only
-    its own call (GM - Design, PR #212 r2, item 3)."""
-    targets = " ".join(f"--run {node_id}" for node_id in run_ids[:6]) or "--run <node>"
-    return _PROPOSE_CLI.format(targets=targets) + _PROPOSE_TAIL
+    its reader's words (services/agent_words: "propose_change (run: n2)" for
+    MCP, `nebula propose --note "<why>" --run n2` for the CLI), worded here,
+    never rewritten on the way out (review 8 of PR #203, NIT-4; review 9,
+    keys MEDIUM-1)."""
+    from services import agent_words
+
+    return (
+        f"Propose it instead: {agent_words.propose_run(run_ids[:6], where)}. "
+        "The person accepts on the canvas, and the canvas runs it."
+    )
+
+
+_PROPOSE_MCP = "Propose it instead with propose_change. "
 
 
 def propose_hint_for_mcp(message: str) -> str:

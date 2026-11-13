@@ -83,7 +83,7 @@ describe('ProjectHome', () => {
     const toast = screen.getByRole('status');
     expect(toast.textContent).toContain('Moved “Glass campaign” to Recently deleted');
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
-    expect(actions.onRestore).toHaveBeenCalledWith('glass');
+    expect(actions.onRestore).toHaveBeenCalledWith('glass', 'undo');
     // Hovering holds the toast; leaving lets it time out.
     fireEvent.mouseEnter(toast);
     vi.advanceTimersByTime(20_000);
@@ -184,6 +184,9 @@ describe('ProjectHome', () => {
   });
 
   it('Delete forever confirms on its own row under the name, date and Restore, and Cancel closes it', () => {
+    // The fixture dates are fixed, so pin the clock: unpinned, the purge date passes and the copy changes.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
     const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
     const long = 'N long names, the project whose boards have the longest names of all';
     const actions = props({ trash: [{ ...project({ id: 'n', name: long }), ...base, goesWith: {

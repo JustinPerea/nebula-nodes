@@ -60,6 +60,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's Generate refusal, nodes not added (PR #204 r8, GM r10 3; heading GM r12 2): two fixed sentences, then personRequiredCopy's fixed sentences" },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} ${WORLD_LABS_NEEDS_CHECK}`',
     why: "GM's own World Labs line: the tail is a fixed sentence, never a named line" },
+  { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`",
+    why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} It${RECOVERY_ID_FORGET_TAIL}`',
     why: "GM's own World Labs line: the tail is a fixed sentence" },
   { file: 'lib/worldLabsWaiting.ts', text: '`Couldn\'t delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`',
@@ -72,7 +74,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
-  { file: 'lib/canvasFollow.ts', text: '`Couldn\'t run ${what}. ${followingReason({ agent, projectName: project })}`',
+  { file: 'lib/canvasFollow.ts', text: '`Nebula couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`',
     why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”."' },
   { file: 'lib/canvasFollow.ts', text: '`${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`',
     why: 'GM\'s following line for Create: the tail is the same fixed "is opening" sentence' },
@@ -81,8 +83,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'components/canvas/PinComposer.tsx', text: '`${headingText} ${targetNode}`',
     why: 'PR #200\'s note composer: an accessible name (the heading and the node id when two cards share a title), never a failure line' },
   { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'lib/directRoute.ts', text: '`${name} can\'t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`',
-    why: 'GM\'s direct-route line: the tail is its own fixed "fix" sentences' },
   { file: 'store/providerReadinessStore.ts', text: '`${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
@@ -100,6 +100,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // single line already had (copyForAnswer's), merged for several scenes.
   { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
     why: "GM's heading over the line's own reason (GM r32 answer 2)" },
+  { file: 'lib/reopenHoldLines.ts', text: "`Nebula couldn’t save its World Labs safeguards. ${reopen} after you ${desktop ? 'quit Nebula and open it again' : 'restart Nebula'}.`",
+    why: "GM's held-reopen line for the bootstrap state (PR #199, GM r32 1): the second sentence is GM's own lock line, never a reason" },
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line. Round 19
   // (GM r28 item 2): the state slot's merged line, with GM's subject-and-comma fix.
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },

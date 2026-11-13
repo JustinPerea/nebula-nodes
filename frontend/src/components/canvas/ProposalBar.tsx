@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-import {
-  acceptLabel,
-  changeCountLabel,
-  countdown,
-  decisionLine,
-  ghostBoxes,
-  notReadyLine,
-  proposalChangeCount,
-  proposalChanges,
-  proposalEstimateLabel,
-  proposalPlan,
-} from '../../lib/canvasProposals';
-import { useProposalNotReady } from '../../hooks/useProposalReadiness';
+import { ghostBoxes } from '../../lib/canvasProposals';
+import { acceptChipTitle, acceptCountChip, acceptLabel, changeCountLabel, countdown, decisionLine, notReadyShown, proposalChangeCount, proposalChanges, proposalEstimateLabel, proposalPlan } from '../../lib/canvasProposalsBar';
+import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
+import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
+import { runNodeName } from '../../lib/runScope';
+import { isKeyLocked, withKeyLock } from '../../lib/runKeyLock';
 import { isNeutralProposalLine, useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
@@ -29,8 +22,6 @@ import { sayPolitely } from '../../lib/noticeSay';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
-/** Not-ready lines the bar shows before the rest move to the details. */
-const READINESS_LINES = 3;
 
 /** On the canvas while a keyboard decision put focus there (GM r69 Q2): it
  * shows the same ring Tab arrival does (canvas.css); the mark goes on its blur. */
@@ -141,6 +132,38 @@ function useNow(active: boolean): number {
   return now;
 }
 
+/** A canvas node's name as the run names it (runScope runNodeName), read when asked. */
+function useCanvasRunName(): (nodeId: string) => string | null {
+  return (nodeId) => {
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    return node ? runNodeName(node, null) : null;
+  };
+}
+
+/** The Accept button's props with the count chip's tooltip added to its
+ * description (`costId`, the hidden span that holds it), after any key lock's
+ * line: one description, never the name (GM, PR #203 r19 item 3). */
+function withAcceptCost<T extends { 'aria-describedby'?: string }>(props: T, costId: string | null): T {
+  if (!costId) return props;
+  const ids = [props['aria-describedby'], costId].filter(Boolean).join(' ');
+  return { ...props, 'aria-describedby': ids };
+}
+
+/** The person gate's marks under the button's own (key lock, canvas lock, cost
+ * description): what the button sets wins, an unset one never hides the gate's,
+ * and the descriptions add up. */
+function withGate<G extends { 'aria-describedby'?: string | undefined }, T extends { 'aria-describedby'?: string }>(gate: G, own: T): G & T {
+  const set = Object.fromEntries(Object.entries(own).filter(([, value]) => value !== undefined));
+  const ids = [...new Set([gate['aria-describedby'], own['aria-describedby']].join(' ').split(' ').filter(Boolean))].join(' ');
+  return { ...gate, ...set, 'aria-describedby': ids || undefined } as G & T;
+}
+
+/** Where a canvas node sits, so the Accept chip's reasons read left to
+ * right as the Run chip's do (runScope reasonSentences). */
+function canvasAt(nodeId: string): { x: number; y: number } | null {
+  return useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId)?.position ?? null;
+}
+
 /**
  * The decision bar for agents' proposals: who proposed what, what it will
  * run, and Accept / Reject. There is deliberately no keyboard shortcut for
@@ -208,11 +231,25 @@ export function ProposalBar() {
   // answer 2): the last proposal stays drawn, inert, until its scale-out
   // ends. Its inline error line leaves as a row.
   const leave = useLeave(live ?? null);
-  const current = leave.shown ?? undefined;
+  // Its key-billing nodes read with the keys set now (GM, PR #203 r15 item 2).
+  const current = useLiveProposalEntry(leave.shown ?? undefined);
   const errorLeave = useLeave(live ? errors[live.view.id] ?? null : null, 'row');
   const currentId = live?.view.id ?? null;
   const position = live ? open.indexOf(live) : 0;
+  // GM, PR #203 r6 item 1: a proposal whose run can't start without a key
+  // (a keyed route's missing key) can't be accepted yet: Accept is locked
+  // with the Accept line, as Run is (withKeyLock). The backend still refuses
+  // the run if one is sent.
   const notReady = useProposalNotReady(current);
+  const acceptLock = useProposalAcceptLock(current);
+  const acceptLockId = useId();
+  const countChip = current ? acceptCountChip(current.view) : null;
+  const canvasName = useCanvasRunName();
+  const acceptTitle = current ? acceptChipTitle(current.view, canvasName, canvasAt) : null;
+  // The count chip's tooltip, for screen readers too: the Accept button's
+  // description, beside the key lock's line when it has one (GM, PR #203 r19
+  // item 3; review 9, LOW-2). Its name stays the visible text.
+  const acceptCostId = useId();
   const shownViewId = current?.view.id ?? null;
   const detailsOpen = shownViewId !== null && detailsFor === shownViewId;
   const noteOpen = shownViewId !== null && noteFor === shownViewId;
@@ -291,14 +328,17 @@ export function ProposalBar() {
   // Update and MCP show, and the panel lists everything it counts.
   const changeTotal = proposalChangeCount(current.view, changes);
   const hasChangeLines = changeTotal > 0;
-  const moreNotReady = notReady.length > READINESS_LINES;
+  // Up to 3 nodes a line each; from 4 one count line, and every node's line
+  // in the details (the shared rule; GM, PR #203 r24).
+  const { lines: notReadyLines, inDetails: notReadyInDetails } = notReadyShown(notReady, acceptLock);
+  const moreNotReady = notReadyInDetails.length > 0;
   const hasDetails = hasChangeLines || moreNotReady;
   // The label never changes (GM - Design, 2026-11-01): the chevron and
   // aria-expanded carry the state.
   const detailsLabel = hasChangeLines ? 'What Accept writes' : 'Every node that can\u2019t run';
   const detailsCount = hasChangeLines
     ? changeCountLabel(changeTotal)
-    : `${notReady.length} node${notReady.length === 1 ? '' : 's'}`;
+    : `${notReadyInDetails.length} node${notReadyInDetails.length === 1 ? '' : 's'}`;
   const priced = current.view.run.length > 0 && current.view.cost.paidRuns > 0
     && proposalEstimateLabel(current.view) !== null;
   const plan = proposalPlan(current.view);
@@ -307,6 +347,11 @@ export function ProposalBar() {
   const price = priced ? proposalEstimateLabel(current.view) : null;
   const priceAt = price && plan.endsWith(` · ${price}`) ? plan.length - price.length : -1;
   const pendingKind = pending[current.view.id];
+  // The missing key first, then the canvas lock, then the gate (withKeyLock,
+  // GM PR #203 r11 item 3), as on every Run surface. A kept canvas holds
+  // Accept first, with no key line.
+  const acceptKeyProps = withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId);
+  const acceptKeyLocked = isKeyLocked(acceptKeyProps);
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -416,22 +461,17 @@ export function ProposalBar() {
                   )}
                 </p>
               )}
-              {notReady.length > 0 && (
+              {notReadyLines.length > 0 && (
                 // Accept stays as the Run button does for a node without its
                 // key: the run is refused at that node, before anything is spent.
-                <ul className="proposal-bar__readiness" aria-label="Can't run here">
-                  {notReady.slice(0, READINESS_LINES).map((row, index) => (
+                <ul className="proposal-bar__readiness" aria-label="Can’t run here">
+                  {notReadyLines.map((line, index) => (
                     // The first ⚠ row is kept in view with the plan line (GM r6).
-                    <li key={row.ref} className="proposal-bar__not-ready" {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}>
+                    <li key={line.key} className="proposal-bar__not-ready" {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}>
                       <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
-                      {notReadyLine(row)}
+                      {line.text}
                     </li>
                   ))}
-                  {moreNotReady && (
-                    <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
-                      and {notReady.length - READINESS_LINES} more in the details
-                    </li>
-                  )}
                 </ul>
               )}
               {hasDetails && (
@@ -461,9 +501,9 @@ export function ProposalBar() {
                     {priced && <p className="proposal-bar__quote">List prices, not a quote</p>}
                     {moreNotReady && (
                       <section className="proposal-bar__group">
-                        <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
-                        {notReady.map((row) => (
-                          <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
+                        <h3 className="proposal-bar__group-title">Can’t run here</h3>
+                        {notReadyInDetails.map((line) => (
+                          <p key={line.key} className="proposal-bar__line">{line.text}</p>
                         ))}
                       </section>
                     )}
@@ -534,7 +574,7 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button"
-              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' })}
               {...gate.control()}
               onClick={(event) => {
                 if (gateHeld || !settled()) return;
@@ -549,16 +589,27 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button proposal-bar__button--primary"
-              {...lock.act({ disabled: Boolean(pendingKind) })}
-              {...gate.control()}
+              {...withGate(gate.control(), withAcceptCost(acceptKeyProps,
+                pendingKind !== 'accept' && countChip && acceptTitle ? acceptCostId : null))}
               onClick={(event) => {
-                if (gateHeld || !settled()) return;
+                if (gateHeld || acceptKeyLocked || !settled()) return;
                 byKeyboard(event, 'accept');
                 void accept(current.view.id);
               }}
             >
               {pendingKind === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
+              {pendingKind !== 'accept' && countChip && (
+                // GM, PR #203 r11 item 2: the count beside "Accept and run",
+                // "2 paid · 1 may cost", as the Run chip counts it. The space
+                // keeps the button's name "Accept and run 1 paid"; a flex
+                // container draws no space-only text.
+                <>{' '}<span className="proposal-bar__count" title={acceptTitle ?? undefined}>{countChip}</span></>
+              )}
             </button>
+            {acceptKeyLocked && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
+            {pendingKind !== 'accept' && countChip && acceptTitle && (
+              <span id={acceptCostId} className="toolbar__sr-only">{acceptTitle}</span>
+            )}
           </span>
         </div>
         <PersonLockLine lock={gate} place="control" className="proposal-bar__held-line" />

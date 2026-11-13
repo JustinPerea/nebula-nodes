@@ -6,6 +6,7 @@ import {
 } from '../lib/backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from '../lib/useBackendOffline';
 import { useOfflinePulse } from '../hooks/useOfflinePulse';
+import { sayTopStackChanged } from '../lib/bottomBar';
 
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
 
@@ -87,6 +88,14 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
   }, [offline]);
 
   const pulse = useOfflinePulse(banner, offline);
+  // On the canvas the banner is part of the top stack the selection toolbar
+  // reads (GM r35 on PR #199): a toolbar flipped below a selection stays
+  // below it too. Said when it comes and goes.
+  const inStack = offline && placement === 'workspace';
+  useEffect(() => {
+    sayTopStackChanged();
+    return inStack ? sayTopStackChanged : undefined;
+  }, [inStack]);
 
   // The banner is part of the top line the proposal card stays under (GM -
   // Design, PR #216 r4 7): it marks the root while it shows, so the notice
@@ -107,6 +116,7 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
       className="backend-connection backend-connection--offline"
       {...{ [NOTICE_TOP_LINE_ATTR]: '' }}
       data-placement={placement}
+      data-top-stack={placement === 'workspace' ? '' : undefined}
       role="status"
       aria-live="polite"
       data-pulse-seq={pulse?.seq}

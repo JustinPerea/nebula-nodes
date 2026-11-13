@@ -383,6 +383,11 @@ def test_websocket_sends_pins_after_graph_sync(api):
         assert ws.receive_json()["type"] == "graphSync"
         message = ws.receive_json()
     assert message["type"] == "canvasPins" and message["pins"][0]["text"] == "hello"
+    # It left before the handler read from it again: still unregistered, so no
+    # canvas counts as open afterwards (PR #203 round 13).
+    import main as main_module
+
+    assert main_module.manager.active_connections == [] and not main_module.manager.canvas_open()
 
 
 def test_a_canvas_closed_mid_handshake_is_no_longer_counted_as_open(api, monkeypatch):

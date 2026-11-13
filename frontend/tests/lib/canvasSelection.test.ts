@@ -138,8 +138,10 @@ describe('canvas selection context', () => {
       },
     })])).rejects.toThrow('Node n1 is too large for the ZIP. Download it on its own.');
 
+    // The asset's path, relative or on the test backend's base: whether the base has
+    // resolved by now depends on timing (jszip loads first, PR #235), not on the claim.
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/outputs/world-full.spz',
+      expect.stringMatching(/^(https?:\/\/[^/]+)?\/api\/outputs\/world-full\.spz$/),
       { cache: 'no-store' },
     );
   });

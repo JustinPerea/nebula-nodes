@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Container, Iterable
+from typing import Any, Container, Iterable, Mapping
 
 from models.events import ErrorEvent, ExecutedEvent, ExecutingEvent, SkippedEvent
 
@@ -74,7 +74,8 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category", "person", "providerText", "provider"} and value}
+                               if key in {"error", "hint", "category", "person", "providerText", "provider", "notStarted"}
+                               and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
             }
@@ -131,6 +132,23 @@ class NodeErrors:
             self._projects[new] = {**moved, **self._projects.get(new, {})}
             self._save()
 
+    def renumber(self, project_id: str | None, mapping: Mapping[str, str]) -> None:
+        """The project's nodes got new ids ({old: new}; a renumber of tab-local
+        ids, PR #199 review 18 handoff-reopen LOW-2): their errors move with
+        them. An error already kept under a new id stays."""
+        key = _project_key(project_id)
+        errors = self._projects.get(key)
+        if not errors or not any(node_id in mapping for node_id in errors):
+            return
+        moved: dict[str, dict[str, str]] = {}
+        for node_id, entry in errors.items():
+            new = mapping.get(node_id, node_id)
+            if new != node_id and new in errors:
+                continue
+            moved[new] = entry
+        self._projects[key] = moved
+        self._save()
+
     def keep_projects(self, project_ids: Container[str]) -> None:
         """Forget projects that no longer exist (deleted for good, trash emptied)."""
         gone = [key for key in self._projects if key and key not in project_ids]
@@ -143,10 +161,15 @@ class NodeErrors:
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
                category: str | None = None, person: str | None = None, provider_text: bool = False,
-               provider: str | None = None) -> None:
+               provider: str | None = None, not_started: bool = False) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
+        # The pre-call check refused the run (record_validation): the card's
+        # heading is "Nebula couldn’t start the run." (GM, PR #203 r32), as
+        # the Agent log's. Card-only, like the person line.
+        if not_started:
+            entry["notStarted"] = "1"
         # The person's line (error copy round 3c): the card shows it, agents
         # never get it from here (get() is the specific text, word for word).
         if person:
@@ -192,7 +215,8 @@ class NodeErrors:
                 lines.setdefault(node_id, []).append(getattr(error, "person", None))
         for node_id, messages in by_node.items():
             person = joined_lines(lines.get(node_id, []))
-            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown")
+            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown",
+                        not_started=True)
 
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""
@@ -213,9 +237,16 @@ class NodeErrors:
             self._save()
 
     def get(self, node_id: str) -> dict[str, str] | None:
-        """{error, hint?}: what agents read."""
+        """{error, hint?, stopped?}: what agents read. ``stopped``:
+        "proposal_needed" for a stop at a call only the person may make (the
+        run's category "waiting"), whose error is the agents' whole text."""
         entry = self._errors.get(node_id)
-        return {key: value for key, value in entry.items() if key in {"error", "hint"}} if entry else None
+        if not entry:
+            return None
+        read = {key: value for key, value in entry.items() if key in {"error", "hint"}}
+        if entry.get("category") == "waiting":
+            read["stopped"] = "proposal_needed"
+        return read
 
     def card(self, node_id: str) -> dict[str, Any] | None:
         """The node data fields the canvas card shows a failure with (NodeError)."""
@@ -232,7 +263,8 @@ class NodeErrors:
                 **({"errorCategory": category} if category else {}),
                 **({"errorProvider": entry["provider"]} if entry.get("provider") else {}),
                 **({"errorPerson": entry["person"]} if entry.get("person") else {}),
-                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {})}
+                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {}),
+                **({"errorNotStarted": True} if entry.get("notStarted") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

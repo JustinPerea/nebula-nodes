@@ -3,6 +3,8 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts } from './check-built-fonts.mjs';
+import { sparkImportCycles } from './check-chunk-cycles.mjs';
+import { chunkLabel, startupSet } from './lib/startupChunks.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(scriptDir, process.env.NEBULA_DESKTOP_BUILD === '1' ? '../dist-desktop' : '../dist');
@@ -33,6 +35,31 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
   );
 }
 
+// The entry alone is not the startup cost: chunks it imports statically or
+// modulepreloads load before the first paint too. Measured on main with
+// `npm run build` (1,885,863 / 488,271 once jszip loaded on download); the
+// limits are that plus about 8 KB raw / 3.5 KB gzip. Raise
+// them only with the reason in the PR (the same rule as the entry limits).
+// Raised by PR #199 (project catalog backup) by its own measured cost, +33,454
+// raw / +12,309 gzip (1,919,292 / 500,565 with it): a canvas kept in the tab
+// after a restore is only in that tab, so what keeps it safe loads with the app
+// (the kept unload guard and fallback line, the kept edit steps in graphStore,
+// keptWires' refusals, Projects home's kept notice, the bottom bar's kept
+// state). Its round 28 notes measured lazy splits of these; a kept edit that
+// waits for a chunk is refused for good when that chunk can't load, which is
+// when a canvas is kept, so they stay.
+const MAX_STARTUP_BYTES = 1_928_000;
+const MAX_STARTUP_GZIP_BYTES = 505_000;
+const startup = await startupSet(distDir);
+const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
+
+if (startup.raw > MAX_STARTUP_BYTES || startup.gzip > MAX_STARTUP_GZIP_BYTES) {
+  throw new Error(
+    `Startup set exceeds budget: ${startup.raw} bytes raw / ${startup.gzip} bytes gzip across ${startup.members.length} chunks ` +
+    `(limits ${MAX_STARTUP_BYTES} / ${MAX_STARTUP_GZIP_BYTES}). Biggest members: ${biggest}`,
+  );
+}
+
 const assetNames = await readdir(path.join(distDir, 'assets'));
 for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   const source = await readFile(path.join(distDir, 'assets', assetName), 'utf8');
@@ -41,11 +68,21 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   }
 }
 
+// Spark must not share an import cycle with another chunk (check-chunk-cycles.mjs says why).
+const jsChunks = new Map();
+for (const name of assetNames.filter((asset) => asset.endsWith('.js'))) {
+  jsChunks.set(name, await readFile(path.join(distDir, 'assets', name), 'utf8'));
+}
+for (const { spark, back } of sparkImportCycles(jsChunks)) {
+  throw new Error(`${spark} is in an import cycle with ${back.join(', ')}; Spark would run before what it imports`);
+}
+
 // The app ships its own fonts; nothing in the build may ask a font CDN.
 const fonts = await checkBuiltFonts(distDir, { desktop: process.env.NEBULA_DESKTOP_BUILD === '1' });
 
 console.log(
-  `Build budget passed: ${entrySize} bytes raw / ${entryGzipSize} bytes gzip; ` +
+  `Build budget passed: entry ${entrySize} bytes raw / ${entryGzipSize} bytes gzip; ` +
+  `startup set ${startup.raw} raw / ${startup.gzip} gzip in ${startup.members.length} chunks (biggest: ${biggest}); ` +
   `${assetNames.filter((name) => name.endsWith('.js')).length} JavaScript assets are eval-free; ` +
   `${fonts.fontFiles} bundled woff2 files (${fonts.fontBytes} bytes) behind ${fonts.faces} @font-face rules, no font CDN.`,
 );

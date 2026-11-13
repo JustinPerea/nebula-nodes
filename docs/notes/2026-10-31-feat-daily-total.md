@@ -243,3 +243,12 @@ GM's round 4 rulings.
 - **Ruling 3.** Cinema scene at its 200 px width: no change. The title shows 6 of its 14 characters ("⛭ Cine" and the ellipsis: the glyph, a space and 4 letters of "Cinema Scene"). The name span is 55.6 px wide of the 99 px it needs; the label takes 108.4 px.
 - **Shots** (`.planning/private/gm-shots/212/`, isolated backend 8631, Vite 5631, Chrome for Testing 138, full-viewport captures after the rects held for 6 samples; 0 requests blocked in the browser; canary lines only in the backend's blocked log): the stores were seeded from the page (graph, proposals, presence); the clip is a generated WebM answered from the request interceptor. Cursor shots use one agent per cursor (a presence store keeps one cursor per agent id).
 - **Flag.** A header over media exists only for cards with no input ports and a media result, such as an imported video; a paid model card with input ports draws its result below the ports, so its header is on the card surface and keeps the row tint.
+
+## Merge of origin/main 723dbf79 (2026-11-13: #199 catalog backup, #203 Idol)
+
+- `agent_spend.py`: main's `MAY_BILL_WHO`, `may_bill_nodes` and `propose_hint(run_ids, where="mcp")` (worded per surface through `agent_words`) kept; the branch's `propose_hint_for_mcp` kept beside it, with `_PROPOSE_MCP`. The branch's one-argument CLI-only `propose_hint` can't stand: main's callers pass the surface. The MCP wording is now main's ("Propose it instead: propose_change (run: n1).") where GM's r2 item 3 had "Propose it instead with propose_change."; flagged for GM.
+- `main.py`: both typing imports; `proposal.created` keeps main's `mayCostRuns`/`planRuns` and the branch's `waiting`.
+- `mcp_server.py` `run_nodes` docstring and `MCP-SETUP.md` spend paragraph: both sides' sentences.
+- `ModelNode.tsx`: main's backend-id chip (#199) and provider-chip `label` inside the branch's `NodeWaitSwap`.
+- `canvasProposals.ts`: `WAITING_FOR_OK` kept; `decisionLine` moved to `canvasProposalsBar.ts` by main.
+- Tests: `test_idol_round20_review19.py`'s "no spending limits" settings also turn the daily total off (`dailyTotalUsd: None`), since the default $5 total now holds the unpriced scene; `test_daily_total_review1.py` asks `propose_hint(..., "cli")`.

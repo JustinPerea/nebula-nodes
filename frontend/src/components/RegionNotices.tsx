@@ -7,6 +7,7 @@ import { SceneClashNotices } from './canvas/SceneClashNotice';
 import { SceneStopLines } from './canvas/SceneStopLines';
 import { InNoticeRegion } from './InNoticeRegion';
 import { SavePausedNotice } from './projects/SavePausedNotice';
+import { KeptEditsNotice } from './projects/KeptEditsNotice';
 import { ProjectSizePanel } from './projects/ProjectSizePanel';
 import '../styles/canvasProposals.css';
 
@@ -23,8 +24,9 @@ import '../styles/canvasProposals.css';
  * prompt, which stays until the person chooses (SceneClashNotices), and
  * the scenes' stop lines, a state that stays until the stop ends (GM r28,
  * SceneStopLines).
- * A project over the save limit (Q118): its one notice, and the "what's
- * large" panel it and the header open.
+ * The canvas kept in this tab after a restore, with [Save as a project]
+ * (GM r15 on PR #199). A project over the save limit: its one
+ * notice, and the "what's large" panel it and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (
@@ -35,6 +37,7 @@ export function RegionNotices({ canvas }: { canvas: boolean }) {
       <InNoticeRegion slot="scene-clash"><SceneClashNotices /></InNoticeRegion>
       <InNoticeRegion slot="scene-stop"><SceneStopLines /></InNoticeRegion>
       <InNoticeRegion slot="message"><CanvasMessageNotice /></InNoticeRegion>
+      <InNoticeRegion slot="kept-edits"><KeptEditsNotice /></InNoticeRegion>
       <InNoticeRegion slot="save-paused"><SavePausedNotice /></InNoticeRegion>
       <ProjectSizePanel />
     </>

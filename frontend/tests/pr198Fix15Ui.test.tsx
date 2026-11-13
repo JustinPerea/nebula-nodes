@@ -17,7 +17,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect
   subscribe: vi.fn(() => () => {}) } }));
 
 import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/ProjectHome';
-import { editsSavedAsProjectLine } from '../src/store/projectStore';
+import { editsSavedAsProjectLine } from '../src/store/projectFlows';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

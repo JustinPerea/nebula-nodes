@@ -23,6 +23,9 @@ import { SHORTCUTS_OPEN_EVENT } from '../src/lib/keyboardShortcuts';
 import { moveFocusFromLeave } from '../src/lib/noticeLeave';
 import { useUIStore } from '../src/store/uiStore';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
+import { DeferredKeyboardShortcutsDialog } from '../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 // The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
 beforeAll(regionNoticesReady);
@@ -33,7 +36,9 @@ const initialUI = useUIStore.getState();
 /** Notices like the app's: each a slot child with its own "Dismiss" (×),
  * leaving as a real one does (focus moved first, then gone). */
 function notices(count: number) {
-  const slot = document.querySelector('[data-notice-slot]')!;
+  // The canvas notice's slot: the first slot is the proposal bar's, which a
+  // dialog's Tab order skips (it sits under the scrim, GM r7 of PR #203).
+  const slot = document.querySelector('[data-notice-slot="notice"]')!;
   return Array.from({ length: count }, (_, index) => {
     const notice = document.createElement('div');
     notice.setAttribute('role', 'status');
@@ -141,7 +146,7 @@ describe('review 15 LOW-B / GM r27 item 3: a notice replaced under focus', () =>
   it('Undo replaced by "Restored" (a new element): focus goes to the note field; Redo is a Tab stop', async () => {
     MODALS[0].open();
     const field = screen.getByRole('textbox', { name: 'Note for agents' });
-    const slot = document.querySelector('[data-notice-slot]')!;
+    const slot = document.querySelector('[data-notice-slot="notice"]')!;
     const deleted = document.createElement('div');
     deleted.innerHTML = '<span>Deleted the node.</span><button type="button">Undo</button><button type="button" aria-label="Dismiss">×</button>';
     slot.appendChild(deleted);

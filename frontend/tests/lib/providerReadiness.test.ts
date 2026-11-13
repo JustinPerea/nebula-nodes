@@ -143,7 +143,7 @@ describe('provider readiness without generation', () => {
 
   it.each([
     ['nano-banana-fal', 'fal.ai', 'FAL key', 'FAL_KEY'],
-    ['krea-image-google-nano-banana-2', 'Krea', 'Krea API token', 'KREA_API_TOKEN'],
+    ['krea-image-google-nano-banana-2', 'Krea', 'Krea API key', 'KREA_API_TOKEN'],
   ])('says which route %s takes: your Google key, else its fal or Krea copy', (id, copy, copyKey, fallbackKey) => {
     const definition = NODE_DEFINITIONS[id];
     const direct = modelReadiness(definition, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, [fallbackKey]: TOKEN } }), health());
@@ -162,7 +162,7 @@ describe('provider readiness without generation', () => {
     const definition = NODE_DEFINITIONS['krea-image-google-nano-banana-2'];
     const keys = { GOOGLE_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
     const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', width: 1920 }), credentials({ apiKeys: keys }), health());
-    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
     expect(ready.detail).toContain('This recipe sets width, which only Krea takes, so it runs on Krea.');
     const googleOnly = modelReadiness(definition, freeze({ width: 1920 }), credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN } }), health());
     expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
@@ -172,7 +172,7 @@ describe('provider readiness without generation', () => {
     const definition = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
     const keys = { GOOGLE_VERTEX_CREDENTIALS: TOKEN, KREA_API_TOKEN: TOKEN };
     const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '4K' }), credentials({ apiKeys: keys }), health());
-    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
     expect(ready.detail).toContain("Google Vertex's own API doesn't take resolution 4K, so it runs on Krea. Change resolution to run on Google Vertex.");
     const hd = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '1080p' }), credentials({ apiKeys: keys }), health());
     expect(hd).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
@@ -214,7 +214,7 @@ describe('provider readiness without generation', () => {
     const definition = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
     const keys = { MINIMAX_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
     const ready = modelReadiness(definition, freeze({ duration: 8 }), credentials({ apiKeys: keys }), health());
-    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
     expect(ready.detail).toContain("MiniMax's own API doesn't take duration 8, so it runs on Krea. Change duration to run on MiniMax.");
     const combo = modelReadiness(definition, freeze({ resolution: '1080p', duration: 10 }), credentials({ apiKeys: keys }), health());
     expect(combo.detail).toContain("MiniMax's own API doesn't take 1080p at 10 seconds, so it runs on Krea. Change resolution to run on MiniMax.");
@@ -319,7 +319,7 @@ describe('provider readiness without generation', () => {
   it.each([kreaImage, kreaVideo])('retains API-token billing for an old $displayName recipe despite a signed-in account', (definition) => {
     const cache = credentials({ kreaConnection: { status: 'connected' }, kreaConnectionMode: 'mcp' });
     expect(modelReadiness(definition, freeze({ prompt: 'fixture logo' }), cache, health())).toMatchObject({
-      label: 'Setup required', connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
+      label: 'Setup required', connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
     });
     const configured = modelReadiness(definition, {}, credentials({ ...cache, apiKeys: { KREA_API_TOKEN: TOKEN } }), health({ Krea: entry('valid') }));
     expect(configured.label).toBe('Verified credential');
@@ -336,7 +336,7 @@ describe('provider readiness without generation', () => {
       apiKeys: { KREA_API_TOKEN: TOKEN }, kreaConnection: { status }, kreaConnectionMode: 'api-token',
     }), health({ Krea: entry('valid') }));
     expect(ready).toMatchObject({ label, tone: 'warning', connectionLabel: 'Krea sign-in', setupTarget: { kind: 'krea-mcp' } });
-    expect(ready.detail).toContain('an API token does not replace');
+    expect(ready.detail).toBe('This recipe uses Krea sign-in. Sign in to Krea in Settings; an API key doesn’t replace it.');
   });
 
   it('describes Krea sign-in separately from verified model availability or API credit checks', () => {
@@ -365,7 +365,7 @@ describe('provider readiness without generation', () => {
       .toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
     // Recipes saved before the choice existed keep the API token.
     expect(modelReadiness(NODE_DEFINITIONS[id], freeze({}), signedIn, health())).toMatchObject({
-      label: 'Setup required', connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
+      label: 'Setup required', connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
     });
   });
 

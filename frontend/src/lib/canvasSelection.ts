@@ -1,8 +1,8 @@
-import JSZip from 'jszip';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { backendAssetUrlSync, fetchUrl } from './backend';
 import { apiRequest } from './apiRequest';
+import { jszipModule } from './deferredChunks';
 import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
@@ -10,6 +10,7 @@ import {
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { copyForStatus, FailureNotice, requestError, requestSucceeded } from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
+import { isCanvasKept } from './keptCanvas';
 
 
 export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
@@ -18,6 +19,10 @@ export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
 
 
 export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSignal): Promise<void> {
+  // Review 14 of PR #199 (lock-order LOW-2): a kept canvas is this tab's
+  // own, and Nebula's canvas may be another project now, so its ids would
+  // name other nodes there. Nothing is shared while kept.
+  if (isCanvasKept()) return;
   // Background sync, never shown; named like every request so the console
   // says what failed, once.
   await apiRequest("Couldn't share the selection.", '/api/canvas/selection', {
@@ -127,6 +132,10 @@ function extensionFor(url: string, contentType: string | null): string {
 export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<number> {
   const outputs = collectDownloadableOutputs(nodes);
   if (outputs.length === 0) return 0;
+  // jszip (96 kB, its own vendor chunk) loads when a download starts, not with the
+  // canvas: Canvas imports this file for the selection it shares (it was 28 kB
+  // gzip of the startup set). deferredModule retries a stale chunk URL.
+  const { default: JSZip } = await jszipModule.load();
   const zip = new JSZip();
   const nameCounts = new Map<string, number>();
   let totalBytes = 0;

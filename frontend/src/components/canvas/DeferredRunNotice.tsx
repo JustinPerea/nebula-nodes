@@ -1,6 +1,8 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Play, X } from 'lucide-react';
-import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { deferredRunKeyLock, useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { useUIStore } from '../../store/uiStore';
+import { isKeyLocked, withKeyLock } from '../../lib/runKeyLock';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { PersonLockLine } from '../PersonLock';
@@ -36,6 +38,15 @@ export function DeferredRunNotice() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
+  // GM, PR #203 r8 item 3: locked while what it runs needs a key that isn't
+  // set (a keyed route's missing key), focusable, its line as the
+  // reason; runDeferred refuses the same way.
+  const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
+  const settingsCache = useUIStore((s) => s.settingsCache);
+  const keyLock = useMemo(() => (deferredRun ? deferredRunKeyLock(deferredRun, { nodes, edges }, settingsCache) : null),
+    [deferredRun, nodes, edges, settingsCache]);
+  const keyLockId = useId();
   const lock = useCanvasLock();
   const lineId = useId();
   // PR #204 round 10 (GM r15): Dismiss releases the run's approval (DELETE
@@ -63,6 +74,13 @@ export function DeferredRunNotice() {
   if (deferredRun && (last.line !== live.line || last.running !== live.running)) setLast(live);
   const { running, line } = deferredRun ? live : last;
   if (!leave.shown) return null;
+  // The missing key first (withKeyLock, GM PR #203 r11 item 3), then
+  // canvasLock's order (review 7, L5: run, following, offline).
+  const runProps = withKeyLock(lock.act({ kept: 'run' }, { run: running, runTitle: line, shown: { id: lineId, text: line } }),
+    keyLock, keyLockId);
+  const runKeyLocked = isKeyLocked(runProps);
+  // A key-locked Run sends nothing (withKeyLock): the click is refused here.
+  const runNow = () => (runKeyLocked ? undefined : runDeferred());
   return (
     <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
       <p className="proposal-bar__summary" id={lineId}>{line}</p>
@@ -70,14 +88,14 @@ export function DeferredRunNotice() {
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          // Review 7, L5: canvasLock's order (run, then following, then offline).
-          {...lock.act({}, { run: running, runTitle: line, shown: { id: lineId, text: line } })}
+          {...runProps}
           {...(nothingLeft ? definedProps(dismissLock.control(lineId)) : {})}
-          onClick={nothingLeft ? dismissLock.guard(runDeferred) : () => void runDeferred()}
+          onClick={nothingLeft ? dismissLock.guard(runNow) : () => void runNow()}
         >
           <Play size={13} aria-hidden="true" />
           Run
         </button>
+        {runKeyLocked && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
         <button type="button" className="proposal-bar__button" aria-label="Dismiss" {...dismissLock.control()}
           onClick={dismissLock.guard(dismissDeferred)}>
           <X size={13} aria-hidden="true" />

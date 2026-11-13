@@ -337,7 +337,7 @@ export function PinComposer() {
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={{ ...lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+          confirm={{ ...lock.act({ offline: 'send notes', kept: 'note', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
             : gateBanner ? {}
             : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) }),
             ...(heldPending && !targetGone ? { 'aria-disabled': true as const, 'data-held-pending': '' as const } : {}),

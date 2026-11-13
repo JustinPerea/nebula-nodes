@@ -79,7 +79,7 @@ reference, read 2026-10-14) before it is read.
 Three Krea copies of Ideogram's models also run on Ideogram's own API when
 `IDEOGRAM_API_KEY` is saved. A node set to your Krea plan stays on the plan;
 otherwise your Ideogram key wins and Ideogram bills the run; with no Ideogram
-key, your Krea API token runs it.
+key, your Krea API key runs it.
 
 | Krea node | Ideogram endpoint | What changes on Ideogram |
 |---|---|---|

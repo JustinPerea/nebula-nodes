@@ -154,7 +154,7 @@ def test_no_krea_token_says_add_the_token_not_the_field(maker_client):
     body = _execute_node(maker_client, KREA2, {}, "r-krea2-nokey")
     assert body["status"] == "validation_error", body
     lines = [error["person"] for error in body["errors"]]
-    assert lines == ["Add your Krea API token in Settings, then run the node again."], lines
+    assert lines == ["Add your Krea API key in Settings, then run the node again."], lines
 
 
 # -- review 13's B probes, adapted -------------------------------------------

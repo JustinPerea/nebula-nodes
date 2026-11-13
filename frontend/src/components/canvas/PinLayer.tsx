@@ -182,7 +182,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
           </p>
           {resolved && pin.reply && (
             <p className="canvas-pin__reply">
-              <span className="canvas-pin__agent">{pin.reply.agent.name}</span>
+              <span className="canvas-pin__agent agent-name" title={pin.reply.agent.name} aria-label={pin.reply.agent.name}>{pin.reply.agent.name}</span>
               <span>{pinDisplayText(pin.reply.text, { multiline: false })}</span>
             </p>
           )}
@@ -190,7 +190,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             type="button"
             className="canvas-pin__delete"
             aria-label="Delete note"
-            {...lock.act()}
+            {...lock.act({ kept: 'delete-note' })}
             {...deleteLock.control()}
             onClick={deleteLock.guard(() => remove(pin.id))}
           >

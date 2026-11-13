@@ -235,6 +235,16 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // Projects home: a target the page moves focus to (tabindex -1: the heading
+  // after a notice's ×, the held edits' saved line) is not a control; it never
+  // shows a ring, from the keyboard either (GM - Design r6, bug 4).
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus': 'programmatic focus target, not a control (GM r6)',
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus-visible': 'programmatic focus target, not a control (GM r6)',
+  // The canvas root takes focus after Projects > Open returns to the canvas
+  // (PR #199 review 19, item 6), so focus doesn't fall to <body>. It is not in
+  // the Tab order and not a control; a ring around the whole canvas would
+  // read as a selection. Its nodes and controls keep their own rings.
+  "App.css::.react-flow[tabindex='-1']:focus": 'programmatic focus target (the canvas root), not a control',
   // PR #204 round 18g (GM r36): a heading or a line focused from code (see the describe below).
   'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
   // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
@@ -448,6 +458,7 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
     'components/nodes/SceneUnsavedMark.tsx': { count: 1, why: 'a popover focused on open: a ring only from the keyboard (GM r37)' },
     'components/nodes/ProviderSwitcher.tsx': { count: 3, why: 'menu items, moved through with the arrow keys' },
     'components/nodes/MeshPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/WorldSplatPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37), as WorldPreview' },
     'components/nodes/WorldPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
     'components/commons/CommonsLeavePopover.tsx': { count: 1, why: 'an alertdialog focused on open: a ring only from the keyboard (GM r37)' },
     'components/commons/CommonsView.tsx': { count: 1, why: 'a section tab folded into More: a control keeps its ring' },
@@ -464,6 +475,7 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
     'components/proposals/AssetProposalStrip.tsx': { count: 2, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },
     'components/asset-move/AssetMoveMenu.tsx': { count: 1, why: 'menu items, moved through with the arrow keys' },
     'components/panels/Inspector.tsx': { count: 1, why: 'the palette\'s "Extracting colors…" line, focused from code: its own :focus rule draws no ring (#208, panels.css)' },
+    'lib/canvasFocus.ts': { count: 1, why: 'the canvas root, focused after Projects > Open returns to it: no ring around the whole canvas (App.css .react-flow[tabindex="-1"]:focus, review 19 item 6 of PR #199)' },
     'lib/noticeLeave.ts': { count: 1, why: 'a notice with no ×, or the start of the page: a notice is a status or alert line; the start draws no ring (data-focus-start, GM r38 3d)' },
   };
 

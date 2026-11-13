@@ -218,11 +218,11 @@ async def test_a_character_node_with_no_character_names_the_field_not_the_api() 
 @pytest.mark.parametrize(("text", "line"), [
     ("OPENAI_API_KEY is required", "Add your OpenAI API key in Settings, then run the node again."),
     ("FAL_KEY is required", "Add your fal.ai API key in Settings, then run the node again."),
-    ("REPLICATE_API_TOKEN is required", "Add your Replicate API token in Settings, then run the node again."),
+    ("REPLICATE_API_TOKEN is required", "Add your Replicate token in Settings, then run the node again."),
     ("ELEVENLABS_API_KEY or RUNWAY_API_KEY is required",
      "Add your ElevenLabs or Runway API key in Settings, then run the node again."),
     ("GOOGLE_VERTEX_CREDENTIALS is required",
-     "Add your Google Vertex AI credentials in Settings, then run the node again."),
+     "Add your Vertex AI service account key in Settings, then run the node again."),
 ])
 def test_a_missing_key_says_add_it_in_settings(text: str, line: str) -> None:
     from execution.missing_credential import MissingCredentialError
@@ -332,7 +332,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "handlers/qc_base.py": 1, "handlers/quiver.py": 6, "handlers/remotion_node.py": 5,
     "handlers/replicate_model.py": 12, "handlers/replicate_universal.py": 4, "handlers/runway.py": 11,
     "handlers/spatial.py": 12, "handlers/style_reference.py": 3, "handlers/veo.py": 10,
-    "handlers/video_edit.py": 4, "handlers/worldlabs.py": 87, "handlers/xai_image.py": 2,
+    "handlers/video_edit.py": 4, "handlers/worldlabs.py": 86, "handlers/xai_image.py": 2,
     "execution/async_poll_runner.py": 6, "execution/engine.py": 6, "execution/gating.py": 3,
     "execution/maker_routes.py": 5, "execution/maker_routes_byteplus.py": 4,
     "execution/maker_routes_byteplus_seedance.py": 3, "execution/maker_routes_elevenlabs.py": 1,

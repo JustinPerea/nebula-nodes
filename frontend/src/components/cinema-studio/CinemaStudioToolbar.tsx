@@ -62,6 +62,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
           // GM PR #205 r1: an import's lock says what unlocks it too.
           title: isImportingGraph ? lockLine(RUN_LOCK_VERBS.generateShots, 'import')
             : referenceIssue ?? 'Generate every shot using the current scene settings',
+          kept: 'generate',
           offline: 'generate',
         }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting,
           runTitle: runFinishesLine(RUN_LOCK_VERBS.generateShots) })}

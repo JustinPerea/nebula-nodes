@@ -59,7 +59,7 @@ Auto order is left to right. A dash means no route, for the reason in "Left out"
 
 - **Shared:** `aspect_ratio`, `resolution` (the same tiers; BFL's OpenAPI gives Klein the same `aspect_ratio` and `resolution` fields, with `width`/`height` as optional overrides), `safety_tolerance` 0-4, `seed` 0-4294967295 (unset by default).
 - **BFL:** route params `steps` 1-16 (default 16) and `output_format` jpeg/png (default jpeg).
-- **OpenRouter:** OpenRouter's `/images` record for Klein lists no seed, so the route declares `paramVisibleWhen {seed: false}` (PR 5, 2026-10-16): no Seed row on OpenRouter, and none is sent. A seed saved on another route still stops the run, because BFL would honor it: "FLUX 3 Image Klein can't run on OpenRouter: it doesn't offer Seed 7. Clear Seed, or switch provider." A click on the OpenRouter row clears it with a note. (Its chat record lists `seed`; the `/images` record is treated as the authority.)
+- **OpenRouter:** OpenRouter's `/images` record for Klein lists no seed, so the route declares `paramVisibleWhen {seed: false}` (PR 5, 2026-10-16): no Seed row on OpenRouter, and none is sent. A seed saved on another route still stops the run, because BFL would honor it: "“FLUX 3 Image Klein” can’t run on OpenRouter with “Seed” set to 7. Clear “Seed”, or add your Black Forest Labs API key in Settings and switch to Black Forest Labs." A click on the OpenRouter row clears it with a note. (Its chat record lists `seed`; the `/images` record is treated as the authority.)
 - **Prices per image:** both routes $0.008 / 0.009 / 0.011 / 0.014 / 0.036.
 
 ## FLUX 3 Image Klein Base

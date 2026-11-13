@@ -29,6 +29,7 @@ import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+import type { KeptAction } from '../../lib/keptCanvas';
 import { LineText } from '../LineText';
 
 type Scope = 'global' | 'project';
@@ -311,6 +312,7 @@ export function AssetsPanel() {
                   onOpen={() => enterCharacterEditor(c.id, scope)}
                   openLabel="Open"
                   onAdd={() => addCharacterNode(c.id, canvasCenter(), { name: c.name, thumbnail: c.thumbnail })}
+                  keptAdd="add-character"
                   move={<AssetMoveMenu noun="Character" buttonClassName="assets-item__action"
                     choices={moveChoices(c.projectId, project)} busy={movingId === c.id}
                     onChoose={(choice) => { void moveAsset('character', c.id, choice.target); }} />}
@@ -339,6 +341,7 @@ export function AssetsPanel() {
                   onAdd={() => addMoodboardNode(m.id, canvasCenter(),
                     { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length,
                       setAsideCount: setAsideCount(m.images), mode: m.mode })}
+                  keptAdd="add-moodboard"
                   move={<AssetMoveMenu noun="board" buttonClassName="assets-item__action"
                     choices={moveChoices(m.projectId, project)} busy={movingId === m.id}
                     onChoose={(choice) => { void moveAsset('moodboard', m.id, choice.target); }} />}
@@ -400,6 +403,7 @@ function AssetItem({
   onOpen,
   openLabel,
   onAdd,
+  keptAdd = 'other',
   onDragStart,
   move,
   onDelete,
@@ -417,6 +421,8 @@ function AssetItem({
   onOpen: () => void;
   openLabel: string;
   onAdd?: () => void;
+  /** Its add's line while the canvas is kept (GM r22, 4). */
+  keptAdd?: KeptAction;
   onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
   /** The Move menu (Characters and Moodboards). */
   move?: ReactNode;
@@ -462,7 +468,7 @@ function AssetItem({
             {openLabel}
           </button>
           {onAdd && (
-            <button type="button" className="assets-item__action" onClick={onAdd} {...lock.act()} aria-label={`Add ${label} to canvas`}>
+            <button type="button" className="assets-item__action" onClick={onAdd} {...lock.act({ kept: keptAdd })} aria-label={`Add ${label} to canvas`}>
               Add to canvas
             </button>
           )}

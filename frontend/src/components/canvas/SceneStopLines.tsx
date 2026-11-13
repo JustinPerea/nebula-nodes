@@ -45,7 +45,7 @@ export function SceneStopLines() {
   return (
     <>
       {lines.map((line) => (
-        <StopLine key={line.key} line={line} track={track(line)} buttonRef={buttonRef(line.key)} act={lock.act()}
+        <StopLine key={line.key} line={line} track={track(line)} buttonRef={buttonRef(line.key)} act={lock.act({ kept: 'scene' })}
           onRetry={() => { for (const nodeId of line.nodeIds) retry(nodeId); }} />
       ))}
     </>

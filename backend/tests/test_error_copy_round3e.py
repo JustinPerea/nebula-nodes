@@ -37,6 +37,8 @@ CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
 KEY_LINE = "Add your OpenAI API key in Settings, then run the node again."
 PROMPT_LINE = "Connect a prompt to this node, then run it again."
+# A prompt and a key on one node: one line, ending once (GM, PR #203 r38 item 1).
+BOTH_LINE = "Connect the prompt and add your OpenAI API key in Settings, then run it again."
 OVER_CAP = ("This Batch has 3 items, more than its “Item cap” of 2. Remove items or raise the cap, then run it "
             "again. Nothing was generated.")
 
@@ -101,7 +103,8 @@ def test_an_unconfigured_universal_node_with_no_key_names_its_provider():
     errors = validate_graph([_node("n1", "fal-universal")], [], {})
     key = next(error for error in errors if error.message.startswith("Missing API key"))
     assert key.message == "Missing API key: FAL_KEY"
-    assert _clean(key.person) == "Add your fal.ai API key in Settings, then run the node again."
+    # With its prompt unwired too: one line, ending once (GM, PR #203 r38 item 1).
+    assert _clean(key.person) == "Connect the prompt and add your fal.ai API key in Settings, then run it again."
 
 
 def test_an_unwired_required_input_names_it_in_words():
@@ -191,8 +194,8 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     assert error.message == node_route.route_unavailable(ROUTES, {"_provider": "replicate"}, keys)["message"]
     assert "REPLICATE_API_TOKEN" in error.message
     assert _clean(error.person) == (
-        "Fixture Image is set to Replicate, which needs your Replicate API token. Add it in Settings, or "
-        "choose another provider. Black Forest Labs or fal.ai can take it.")
+        "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or "
+        "switch to Black Forest Labs or fal.ai.")
 
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]
     [error] = _for(validate_graph(auto, [_edge("t", "text", "n1", "prompt")], {}), "n1")
@@ -210,9 +213,11 @@ def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch
     [error] = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], keys), "n1")
     assert "can't run on Black Forest Labs" in error.message
     line = _clean(error.person)
-    # Round 3f: GM's words, the setting by its label in quotes.
-    assert line.startswith("Fixture Image can't run on Black Forest Labs with “Safety tolerance” set to 6.")
-    assert line.endswith("fal.ai can take it.")
+    # Round 3f: GM's words, the setting by its label in quotes; GM, PR #203
+    # r32: the node's name in quotes too.
+    assert line.startswith("“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 6.")
+    # GM r31 item 3: who can take it is named in the one action sentence.
+    assert line.endswith("Change that setting, or switch to fal.ai.")
 
 
 def test_the_krea_account_check_has_a_line(monkeypatch):
@@ -220,9 +225,9 @@ def test_the_krea_account_check_has_a_line(monkeypatch):
 
     monkeypatch.setattr(krea_connector, "is_krea_connected", lambda: False)
     errors = [e for e in validate_graph([_node("n1", "krea-moodboard-search")], [], {})
-              if "Connect your Krea account" in e.message]
-    assert errors and errors[0].message == "Connect your Krea account in Settings before running this recipe"
-    assert _clean(errors[0].person) == "Connect your Krea account in Settings, then run the node again."
+              if "Sign in to Krea in Settings" in e.message]
+    assert errors and errors[0].message == "Sign in to Krea in Settings before running this recipe"
+    assert _clean(errors[0].person) == "Sign in to Krea in Settings, then run the node again."
 
 
 def test_the_gemini_guardrail_shows_as_it_is():
@@ -321,21 +326,22 @@ def test_the_canvas_reads_the_person_line_and_agents_the_specific_text(canvas):
     canvas_run = client.post("/api/execute", json={"nodes": nodes, "edges": []}).json()
     assert canvas_run["status"] == "validation_error"
     by_message = {error["message"]: error for error in canvas_run["errors"]}
-    assert by_message["Missing API key: OPENAI_API_KEY"]["person"] == KEY_LINE
-    assert by_message["Required input port prompt is not connected"]["person"] == PROMPT_LINE
+    # A prompt and a key: one line, ending once (GM, PR #203 r38 item 1).
+    assert by_message["Missing API key: OPENAI_API_KEY"]["person"] == BOTH_LINE
+    assert by_message["Required input port prompt is not connected"]["person"] == BOTH_LINE
 
     # The socket's event carries the line too (another tab, an agent's run).
     [event] = [m for m in sent if m.get("type") == "validationError"]
     assert {e["message"]: e.get("person") for e in event["errors"]} == {
-        "Required input port prompt is not connected": PROMPT_LINE,
-        "Missing API key: OPENAI_API_KEY": KEY_LINE,
+        "Required input port prompt is not connected": BOTH_LINE,
+        "Missing API key: OPENAI_API_KEY": BOTH_LINE,
     }
 
-    # A reload's graph gives the card both, as the run's answer did.
+    # A reload's graph gives the card the line once, as the run's answer did.
     exported = client.get("/api/graph/export").json()
     data = next(n for n in exported["nodes"] if n["id"] == node)["data"]
     assert data["error"] == "Required input port prompt is not connected; Missing API key: OPENAI_API_KEY"
-    assert data["errorPerson"] == f"{PROMPT_LINE} {KEY_LINE}"
+    assert data["errorPerson"] == BOTH_LINE
 
     # Agents: look_at_canvas keeps the specific text, no person line.
     shown = next(n for n in client.get("/api/canvas/snapshot").json()["nodes"] if n["id"] == node)
@@ -350,9 +356,11 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     assert "person" not in json.dumps(body)
     assert client.get(f"/api/graph/runs/{body['runId']}").json()["errors"] == body["errors"]
     # The agent's cursor on the canvas says the person's line, not the keys.
-    [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "can't run" in str(m.get("say"))]
+    [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "needs" in str(m.get("say"))]
     assert "OPENAI_API_KEY" not in said and "'prompt'" not in said
-    assert said.endswith(f"can't run. {PROMPT_LINE} {KEY_LINE}")
+    # GM, PR #203 r39 item 5: the bubble says the needs sentence only (r38 kept the "Connect ..." second sentence).
+    assert said.endswith("needs a prompt and your OpenAI API key.")
+    assert "Connect the prompt" not in said
 
 
 def test_a_validation_event_serializes_its_person_line():

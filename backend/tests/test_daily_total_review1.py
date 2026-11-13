@@ -528,7 +528,7 @@ def test_a_caller_with_no_name_gets_the_unpriced_line_and_no_proposal(api):
 
 
 def test_the_propose_hint_names_only_the_callers_surface():
-    cli = agent_spend.propose_hint(["n1", "n2"])
+    cli = agent_spend.propose_hint(["n1", "n2"], "cli")
     assert cli == ('Propose it instead: `nebula propose --note "<why>" --run n1 --run n2`. '
                    "The person accepts on the canvas, and the canvas runs it.")
     assert "propose_change" not in cli and "MCP" not in cli
