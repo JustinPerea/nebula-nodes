@@ -47,8 +47,10 @@ afterEach(() => {
 
 describe('GM r25 2: the notices are the dialog\'s second focus region', () => {
   it('Tab: field -> Cancel -> Send note -> each notice\'s × -> back to the field; Shift+Tab reverses it', () => {
-    const { closes } = notices(2);
+    // Notices that arrive while it is open (one already showing goes under
+    // its scrim, inert: GM r25 (4) of PR #199, noticesUnderModal.fix18).
     openPrompt();
+    const { closes } = notices(2);
     const [cancel, send] = [screen.getByRole('button', { name: 'Cancel' }), screen.getByRole('button', { name: 'Send note' })];
     expect(document.activeElement).toBe(fieldEl());
     const seen: Element[] = [];
@@ -70,9 +72,9 @@ describe('GM r25 2: the notices are the dialog\'s second focus region', () => {
   });
 
   it('every modal gets it from ModalPortal: a confirm with two buttons', () => {
-    const { closes } = notices(1);
     render(<ModalPortal><div role="dialog" aria-modal="true" aria-label="Confirm">
       <button type="button">Keep</button><button type="button">Forget</button></div></ModalPortal>);
+    const { closes } = notices(1);
     const [keep, forget] = [screen.getByRole('button', { name: 'Keep' }), screen.getByRole('button', { name: 'Forget' })];
     forget.focus();
     tab();
@@ -92,8 +94,8 @@ describe('GM r25 2: the notices are the dialog\'s second focus region', () => {
 
 describe('GM r25 1: a click on a notice never reaches the dialog', () => {
   it('the dialog stays open with the typed note after a click on a notice and its ×', () => {
-    const { region, closes } = notices(1);
     const onDone = openPrompt();
+    const { region, closes } = notices(1);
     fireEvent.mouseDown(region.querySelector('span')!);
     fireEvent.click(region.querySelector('span')!);
     fireEvent.mouseDown(closes[0]);
@@ -122,8 +124,8 @@ describe('GM r25 3: focus after × with a dialog open', () => {
     heading.id = 'recent-projects-title';
     heading.tabIndex = -1;
     document.body.appendChild(heading);
-    const { closes } = notices(2);
     openPrompt();
+    const { closes } = notices(2);
     closes[0].focus();
     act(() => moveFocusFromLeave(closes[0].parentElement!));
     expect(document.activeElement).toBe(closes[1]);

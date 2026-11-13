@@ -80,7 +80,9 @@ beforeEach(() => {
   useGraphStore.getState().resetExecution();
   useGraphStore.setState({ nodes: [node('n1'), node('n2')], edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
     undoStack: [], redoStack: [], isExecuting: false, undoNotice: null,
-    providerRecoveries: [recovery('n1')], providerStartAmbiguities: [] } as never);
+    providerRecoveries: [recovery('n1')], providerStartAmbiguities: [],
+    // The records' runs (r1, r2) are this project's (review 20 of PR #199, LOW-2).
+    runHistory: ['r1', 'r2'].map((id) => ({ id, trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } })) } as never);
 });
 
 describe('Delete on a node that holds World Labs state', () => {

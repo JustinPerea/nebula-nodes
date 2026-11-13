@@ -43,7 +43,7 @@ ENVIRONMENT = "worldlabs-environment"
 EXPORT = "worldlabs-world-export"
 
 # Round 13 of PR #114 (GM): the buttons' labels and the state lines, verbatim.
-UNLOCK = "“I've checked Marble”"
+UNLOCK = "“I’ve checked Marble”"
 FORGET = "“Forget ID”"
 STARTING = "A World Labs run is still starting. Try again in a moment."
 NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen."
@@ -178,7 +178,7 @@ def test_the_codes_are_raised_where_the_refusal_is_made(tmp_path):
     assert journal.value.limit == 1
 
 
-# -- "I've checked Marble" (was "Checked Marble — unlock") ---------------------------------------------------
+# -- "I’ve checked Marble" (was "Checked Marble — unlock") ---------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_unlock_while_that_nodes_start_is_in_flight(isolated_paid_state):

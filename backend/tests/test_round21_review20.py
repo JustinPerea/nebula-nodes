@@ -12,8 +12,8 @@
   from an agent").
 - G4. The handoff's refusal reads "Nebula couldn't keep this save's unsent
   changes in the project because <why>, so nothing was saved."
-- G5. Recovered copies are numbered: "<project> (recovered)", then
-  "(recovered 2)", 3 and so on; a new copy never reuses an earlier one.
+- G5. Recovered copies are numbered: "Recovered <project>", then
+  "Recovered <project> 2", 3 and so on (GM r23 a on PR #199); a new copy never reuses an earlier one.
 """
 from __future__ import annotations
 
@@ -196,10 +196,11 @@ def test_G5_recovered_copies_are_numbered(api):
         answer = _recover(api, f"{index:032x}")
         assert answer.status_code == 200, answer.text
         names.append(answer.json()["project"]["name"])
-    assert names == ["Active (recovered)", "Active (recovered 2)", "Active (recovered 3)"]
+    # GM r29 of PR #199, 2: " copy", then " copy 2".
+    assert names == ["Recovered Active", "Recovered Active copy", "Recovered Active copy 2"]
 
 
 def test_G5_a_retry_of_the_same_copy_is_the_same_copy(api):
     first = _recover(api, "a" * 32).json()["project"]
     again = _recover(api, "a" * 32).json()["project"]
-    assert again["id"] == first["id"] and again["name"] == "Active (recovered)"
+    assert again["id"] == first["id"] and again["name"] == "Recovered Active"

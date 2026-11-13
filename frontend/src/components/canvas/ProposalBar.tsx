@@ -534,7 +534,7 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button"
-              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' })}
               {...gate.control()}
               onClick={(event) => {
                 if (gateHeld || !settled()) return;
@@ -549,7 +549,7 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button proposal-bar__button--primary"
-              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' })}
               {...gate.control()}
               onClick={(event) => {
                 if (gateHeld || !settled()) return;

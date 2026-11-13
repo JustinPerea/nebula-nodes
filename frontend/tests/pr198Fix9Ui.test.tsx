@@ -24,7 +24,7 @@ import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/P
 import { useGraphStore } from '../src/store/graphStore';
 import { quotedNames } from '../src/lib/errorCopy';
 import { sceneClashLine, shotBackWithoutLine, shotsRemovedLine, theirsLabel } from '../src/lib/sceneSaveCopy';
-import { copyDeletedAfterUpdateLine } from '../src/store/projectStore';
+import { copyDeletedAfterUpdateLine } from '../src/store/projectFlows';
 
 afterEach(cleanup);
 

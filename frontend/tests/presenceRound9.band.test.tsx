@@ -125,7 +125,7 @@ describe('GM r13 (2): a waiting notice is never lost', () => {
   it('every timed notice in the region holds its timer while it waits', () => {
     const SRC = join(__dirname, '../src');
     for (const file of ['components/projects/ProjectSwitchToast.tsx', 'components/moodboard-studio/BoardUndoToast.tsx',
-      'components/asset-trash/AssetTrash.tsx', 'components/projects/ProjectHome.tsx']) {
+      'components/asset-trash/AssetTrash.tsx', 'components/projects/UndoToast.tsx']) {
       expect(readFileSync(join(SRC, file), 'utf8'), file).toMatch(/useSlotWaiting\('[\w-]+'\)/);
     }
     for (const file of ['components/projects/SavePausedNotice.tsx', 'components/canvas/CanvasUndoNotice.tsx',

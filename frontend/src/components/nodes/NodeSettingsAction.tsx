@@ -22,6 +22,8 @@ export function NodeSettingsAction({ id }: { id: string }) {
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-label="Show node settings"
+      // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+      // param edit stays on this tab as typing does; its writes are gated.
       title="Show node settings"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {

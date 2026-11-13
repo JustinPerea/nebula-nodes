@@ -17,10 +17,21 @@ import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies 
 import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
-import { refuseCanvasEdit, useCanvasLock, type ActProps } from '../lib/canvasLock';
+import { refuseCanvasEdit, refuseTabOnlyEdit, useCanvasLock, type ActProps } from '../lib/canvasLock';
+import type { KeptAction } from '../lib/keptCanvas';
 import { composing } from '../lib/imeComposing';
 import { canvasWait } from '../lib/runLock';
 import '../styles/command-palette.css';
+
+/** A palette command's line while the canvas is kept (GM r17 on PR #199). */
+function paletteKeptAction(id: string): KeptAction | 'live' {
+  if (id === 'action:run') return 'run';
+  if (id === 'action:load') return 'load';
+  if (id === 'agent:ask') return 'ask';
+  // GM r19 (5): adding a node is the kept tab's own now.
+  if (id.startsWith('node:')) return 'live';
+  return 'other';
+}
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
 const NO_COMMANDS: PaletteCommand[] = [];
@@ -216,7 +227,8 @@ export function CommandPalette() {
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
       // Enter on an acting command while locked: refused, with the pulse.
-      if (cmd.acts && refuseCanvasEdit()) return;
+      // A node command is the kept tab's own while kept (GM r19 on PR #199, 5).
+      if (cmd.acts && (paletteKeptAction(cmd.id) === 'live' ? refuseTabOnlyEdit() : refuseCanvasEdit())) return;
       if (!cmd.keepsOpen) close();
       cmd.perform();
     },
@@ -364,7 +376,7 @@ export function CommandPalette() {
                 {g.items.map((cmd) => {
                   const index = indexById.get(cmd.id) ?? 0;
                   const isSel = index === safeSelected;
-                  const { disabled: actDisabled, ...act }: ActProps = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : { disabled: false, title: undefined };
+                  const { disabled: actDisabled, ...act }: ActProps = cmd.acts ? lock.act({ disabled: cmd.enabled === false, kept: paletteKeptAction(cmd.id) }) : { disabled: false, title: undefined };
                   const disabled = cmd.acts ? Boolean(actDisabled) : cmd.enabled === false;
                   // GM PR #205 r2 item 3: the run's lock line is the row's own
                   // text (a canvas lock's title, when there is one, wins).

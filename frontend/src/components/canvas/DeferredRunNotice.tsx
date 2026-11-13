@@ -71,7 +71,7 @@ export function DeferredRunNotice() {
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
           // Review 7, L5: canvasLock's order (run, then following, then offline).
-          {...lock.act({}, { run: running, runTitle: line, shown: { id: lineId, text: line } })}
+          {...lock.act({ kept: 'run' }, { run: running, runTitle: line, shown: { id: lineId, text: line } })}
           {...(nothingLeft ? definedProps(dismissLock.control(lineId)) : {})}
           onClick={nothingLeft ? dismissLock.guard(runDeferred) : () => void runDeferred()}
         >

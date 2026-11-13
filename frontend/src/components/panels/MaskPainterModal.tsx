@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { canvasLockNow, refuseTabOnlyEdit, useCanvasLock } from '../../lib/canvasLock';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -108,8 +108,9 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Read-only while following or offline (review 3 LOW-3): no stroke.
-    if (refuseCanvasEdit()) return;
+    // Read-only while following or offline (review 3 LOW-3): no stroke. Kept
+    // in this tab (PR #199), a mask is this tab's own, as typing.
+    if (refuseTabOnlyEdit()) return;
     const pt = canvasPoint(e);
     if (!pt) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -230,7 +231,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             className={`mask-painter__tool ${tool === 'brush' ? 'mask-painter__tool--active' : ''}`}
             aria-pressed={tool === 'brush'}
             onClick={() => setTool('brush')}
-            {...lock.act({ offline: true })}
+            {...lock.act({ offline: true, kept: 'live' })}
           >
             <Brush size={14} /> Brush
           </button>
@@ -239,7 +240,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             className={`mask-painter__tool mask-painter__tool--erase ${tool === 'erase' ? 'mask-painter__tool--active' : ''}`}
             aria-pressed={tool === 'erase'}
             onClick={() => setTool('erase')}
-            {...lock.act({ offline: true })}
+            {...lock.act({ offline: true, kept: 'live' })}
           >
             <Eraser size={14} /> Erase
           </button>
@@ -251,10 +252,10 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
               max={160}
               value={brushSize}
               onChange={(e) => setBrushSize(Number(e.target.value))}
-              {...lock.act({ offline: true })}
+              {...lock.act({ offline: true, kept: 'live' })}
             />
           </label>
-          <button type="button" className="mask-painter__tool mask-painter__tool--clear" onClick={clearStrokes} {...lock.act({ offline: true })}>
+          <button type="button" className="mask-painter__tool mask-painter__tool--clear" onClick={clearStrokes} {...lock.act({ offline: true, kept: 'live' })}>
             <Trash2 size={14} /> Clear
           </button>
           <div className="mask-painter__spacer" />
@@ -267,7 +268,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             onClick={saveMask}
             // Saving writes the node's mask (updateNodeData): the canvas lock
             // (fix round 2 of PR #200, review 2 L-5; GM's sweep list).
-            {...lock.act({ disabled: !natural || !hasStrokes, offline: true })}
+            {...lock.act({ disabled: !natural || !hasStrokes, offline: true, kept: 'live' })}
           >
             Save Mask
           </button>

@@ -57,10 +57,10 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
     expect(wl.WORLD_LABS_NEEDS_CHECK).toBe('A World Labs run needs your check first. Use the notice at the top of the screen.');
     expect(`“Harbor world”${wl.RECOVERY_ID_SAVED_TAIL}`).toBe(
       '“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.');
-    expect(wl.UNLOCK_LABEL).toBe("I've checked Marble");
+    expect(wl.UNLOCK_LABEL).toBe("I’ve checked Marble");
     // Round 14: the name comes quoted from recordNodeName.
     const nodes = [{ id: 'n2', data: { label: 'Harbor world' } }];
-    expect(wl.unlockAriaLabel(wl.recordNodeName(nodes, 'n2'))).toBe("I've checked Marble. Unlock “Harbor world”.");
+    expect(wl.unlockAriaLabel(wl.recordNodeName(nodes, 'n2'))).toBe("I’ve checked Marble. Unlock “Harbor world”.");
     expect(wl.FORGET_LABEL).toBe('Forget ID');
     expect(wl.forgetHeading(wl.recordNodeName(nodes, 'n2'))).toBe('Forget the recovery ID for “Harbor world”?');
   });
@@ -69,7 +69,7 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
     const wl = await import('./worldLabsWaiting');
     const { noteNodeLabels, forgetNodeLabelsForTests } = await import('./lastNodeLabels');
     forgetNodeLabelsForTests();
-    expect(wl.UNLOCK_RUN_ARIA).toBe("I've checked Marble. Unlock this World Labs run.");
+    expect(wl.UNLOCK_RUN_ARIA).toBe("I’ve checked Marble. Unlock this World Labs run.");
     expect(wl.forgetAriaLabel(wl.recordNodeName([{ id: 'n2', data: { label: 'Harbor world' } }], 'n2', true)))
       .toBe('Forget the recovery ID for “Harbor world”');
     expect(wl.recordNodeName([], 'n2')).toBe('A removed World Labs node');

@@ -175,7 +175,7 @@ def test_a_world_export_node_names_its_own_recovery_field(canvas, monkeypatch):
     import main as main_module
 
     # "Forget ID" cleared the record; the ID is still in the node.
-    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
+    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source, **_: [])
     node = canvas.graph.add_node("worldlabs-world-export", {"resume_operation_id": "op-export-1"},
                                  position={"x": 0, "y": 0})
     response = _delete(canvas, node)
@@ -186,7 +186,7 @@ def test_a_world_export_node_names_its_own_recovery_field(canvas, monkeypatch):
 def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
     import main as main_module
 
-    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
+    monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source, **_: [])
     both = canvas.graph.add_node("worldlabs-environment", {"resume_operation_id": "op-1", "existing_world_id": "w-1"},
                                  position={"x": 0, "y": 0})
     assert _delete(canvas, both).json()["detail"] == PARAMS(
@@ -221,12 +221,28 @@ GRAPH_PAID_STATE_PERSON = {
 }
 
 
+def _ran_in_the_open_project(run_id: str) -> None:
+    """The open project's stored run history has ``run_id`` (the tab's
+    autosave of its Run History): a held record of that run is the open
+    project's, so the person's line names the live node by its card title.
+    PR #199 round 22 (GM r34 A1): a record no project can be placed for no
+    longer borrows the live canvas's node of the same id."""
+    import main as main_module
+
+    with main_module.project_store.transaction() as catalog:
+        snapshot = catalog["projects"][catalog["activeProjectId"]]["snapshot"]
+        snapshot["runHistory"] = [{"id": run_id, "status": "complete", "startedAt": 1,
+                                   "snapshot": {"nodes": [], "edges": []}}]
+        main_module.project_store.commit(catalog)
+
+
 def _hold(canvas, monkeypatch, state, node):
     if state == "active":
         monkeypatch.setattr(canvas.guard, "has_active", lambda: True)
     elif state == "ambiguity":
         monkeypatch.setattr(canvas.guard, "list", lambda: [{"nodeId": node, "runId": "r1", "kind": "worldlabs"}])
     else:
+        _ran_in_the_open_project("r1")
         monkeypatch.setattr(canvas.recoveries, "list", lambda: [{"nodeId": node, "runId": "r1"}])
 
 
@@ -645,6 +661,7 @@ def test_restoring_a_bundle_names_the_field_that_holds_the_id(canvas, params, fi
 def test_restoring_a_bundle_names_a_recovery_records_node_by_its_card_title(canvas, monkeypatch):
     node = canvas.graph.add_node("worldlabs-environment", {}, position={"x": 0, "y": 0})
     canvas.graph.set_label(node, "Harbor world")
+    _ran_in_the_open_project("r1")
     monkeypatch.setattr(canvas.recoveries, "list", lambda: [{"nodeId": node, "runId": "r1"}])
     response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
     assert response.json()["detail"] == RECOVERY("Harbor world")

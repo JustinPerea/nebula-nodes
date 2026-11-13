@@ -47,6 +47,19 @@ export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload t
 /** 413 with no reason (GM). */
 export const TOO_LARGE_COPY = "That's too large to save.";
 
+/** GM r35 on PR #199, verbatim, for every refusal of a new project at the
+ * project limit (the limit is for new projects: a restore, an Undo of a
+ * delete and the person's save of kept edits may take the list past it):
+ * "You have 501 projects and the limit is 500. You can make a new one after
+ * you delete 2 projects." The real numbers; `deletes` is what the backend
+ * counted (what is added with the new one too), else the count past the
+ * limit plus one. */
+export function overProjectLimitCopy(count: number, limit: number, deletes?: number | null): string {
+  const n = Math.max(1, typeof deletes === 'number' && Number.isInteger(deletes) && deletes > 0 ? deletes : count - limit + 1);
+  return `You have ${count} ${count === 1 ? 'project' : 'projects'} and the limit is ${limit}. `
+    + `You can make a new one after you delete ${n} ${n === 1 ? 'project' : 'projects'}.`;
+}
+
 /** The person gate's code for a refusal only the person may get past: this
  * tab isn't connected as the person (no person token, or one from before
  * Nebula restarted), which reconnecting fixes (backend services/person_gate.py). */
@@ -626,6 +639,12 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
+  /** A refused new project at the project limit: its numbers (null for any other answer). */
+  readonly projectCounts: ProjectCounts | null;
+  /** The answer's additive `hold` beside `detail` (a project open's 409:
+   * Nebula's own verdict of what holds it, PR #199 review 19 item 1), raw;
+   * undefined when the answer had none. lib/reopenHold reads it. */
+  readonly hold: unknown;
   /** The promote count its request was sent under (review 4 LOW-1, round 6; null: unknown). */
   readonly sentAt: number | null;
   /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
@@ -638,7 +657,7 @@ export class RequestFailedError extends Error {
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
       storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
-      sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
+      hold?: unknown; sentAt?: number | null; sentBeforePromote?: boolean; projectCounts?: ProjectCounts } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -651,6 +670,8 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
+    this.projectCounts = options.projectCounts ?? null;
+    this.hold = options.hold;
     this.sentAt = sentAtOf(options);
   }
 
@@ -849,18 +870,33 @@ export function refusalError(read: { code: string | null; sentAt: number | null 
  * storage refusal, main._storage_error_body), from one read of its body. */
 interface FailureBody {
   detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null;
-  overSaveLimit: boolean; sizeBytes: number | null;
+  overSaveLimit: boolean; sizeBytes: number | null; hold?: unknown;
+  /** A refused new project at the project limit, with its numbers: overProjectLimitCopy. */
+  limitReason?: string;
+  /** The same refusal's numbers (GM r24, the kept save's own lines): how many projects there are, the limit, what to delete. */
+  projectCounts?: ProjectCounts;
 }
+/** The project limit's numbers from a 413 `limit: "projects"`: `deletes` is what the backend counted, else null. */
+export interface ProjectCounts { count: number; limit: number; deletes: number | null }
+const wholeNumber = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
     const body = await response.json() as {
-      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown;
+      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown; hold?: unknown;
+      projectLimit?: unknown; projectCount?: unknown; deletes?: unknown;
     } | null;
     const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
     const code = typeof body?.code === 'string' ? body.code : null;
     const overSaveLimit = response.status === 413 && body?.limit === 'size';
     const sizeBytes = overSaveLimit && typeof body?.sizeBytes === 'number' && Number.isFinite(body.sizeBytes) ? body.sizeBytes : null;
-    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes };
+    const limitReason = response.status === 413 && limit === 'projects' && wholeNumber(body?.projectCount)
+      && wholeNumber(body?.projectLimit) && body.projectLimit > 0 && body.projectCount >= body.projectLimit
+      ? overProjectLimitCopy(body.projectCount, body.projectLimit, wholeNumber(body?.deletes) ? body.deletes : null) : undefined;
+    const projectCounts = limitReason && wholeNumber(body?.projectCount) && wholeNumber(body?.projectLimit)
+      ? { count: body.projectCount, limit: body.projectLimit, deletes: wholeNumber(body?.deletes) && body.deletes > 0 ? body.deletes : null } : undefined;
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes,
+      ...(body && typeof body === 'object' && 'hold' in body ? { hold: body.hold } : {}),
+      ...(limitReason ? { limitReason } : {}), ...(projectCounts ? { projectCounts } : {}) };
   } catch {
     return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null };
   }
@@ -975,9 +1011,10 @@ export async function requestError(heading: string, response: Response,
     ? { detail: options.detail, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null }
     : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
-  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
+  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason ?? body.limitReason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, sentAt: sentUnderPromote(response) });
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, hold: body.hold, sentAt: sentUnderPromote(response),
+    ...(body.projectCounts ? { projectCounts: body.projectCounts } : {}) });
 }
 
 /**
@@ -1018,8 +1055,9 @@ export function agentNameList(names: string[]): string {
   return joinedList(agents);
 }
 
-/** "A", "A and B", "A, B and C": the lists' shared join. */
-function joinedList(parts: string[]): string {
+/** "A", "A and B", "A, B and C": the lists' shared join (also the kept
+ * refusals' "images and masks", lib/keptWires). */
+export function joinedList(parts: string[]): string {
   return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 

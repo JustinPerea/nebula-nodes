@@ -60,7 +60,6 @@
   "lib/assetProposals.ts": 2,
   "lib/backendConnection.ts": 1,
   "lib/canvasFileDrop.ts": 4,
-  "lib/canvasFollow.ts": 1,
   "lib/canvasPins.ts": 3,
   "lib/canvasProposals.ts": 2,
   "lib/canvasSelection.ts": 2,
@@ -109,12 +108,12 @@
   "lib/uploadReference.ts": 1,
   "lib/validationCopy.ts": 1,
   "lib/worldDownload.ts": 1,
-  "lib/worldLabsWaiting.ts": 13,
+  "lib/worldLabsWaiting.ts": 9,
   "lib/worldSplat.ts": 1,
   "store/agentQuestionsStore.ts": 2,
   "store/assetProposalsStore.ts": 1,
   "store/canvasProposalsStore.ts": 3,
   "store/graphStore.ts": 31,
-  "store/projectStore.ts": 27,
+  "store/projectFlows.ts": 26,
   "store/providerReadinessStore.ts": 1
 }

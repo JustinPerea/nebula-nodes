@@ -14,6 +14,13 @@ import httpx
 
 DEFAULT_URL = "http://127.0.0.1:8000"
 
+# The refusal codes an agent acts on, said with the detail as "(409, code)"
+# by MCP, the CLI and the graph-file tools: the canvas waits to be saved as a
+# project at a limit (canvas_waiting), it is too big to keep aside
+# (canvas_held_full), or the person's tab keeps edits Nebula couldn't save
+# after a restore (canvas_kept_in_tab, GM r16 on PR #199).
+AGENT_REFUSAL_CODES = ("canvas_waiting", "canvas_held_full", "canvas_kept_in_tab")
+
 
 class NebulaAPIError(RuntimeError):
     """A request Nebula refused (`status` set) or never answered (`kind` connect/timeout)."""

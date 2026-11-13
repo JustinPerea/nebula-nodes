@@ -296,10 +296,11 @@ describe('the project bar while offline', () => {
 
 describe('the banner (GM, round 15 item 1)', () => {
   const css = readFileSync(join(__dirname, '../src/App.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it', () => {
+  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it (but the World Labs notice, which moves the toolbar and so the banner under it: GM r34 A5)', () => {
     const rule = /\.backend-connection\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position:\s*fixed/);
-    expect(rule).toMatch(/top:\s*150px/);
+    // 150px with no notice (the variable unset reads 0px); below the notice's foot while it shows.
+    expect(rule).toMatch(/top:\s*max\(150px,\s*calc\(var\(--top-notice-bottom,\s*0px\)\s*\+\s*66px\)\)/);
     // No other rule sets its top (no toolbar-dependent offset), except the
     // home screen's own place under its top bar (GM, round 17 C); a studio
     // has a row of its own layout instead (GM, PR #198 r2).

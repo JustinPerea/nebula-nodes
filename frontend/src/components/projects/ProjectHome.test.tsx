@@ -83,7 +83,7 @@ describe('ProjectHome', () => {
     const toast = screen.getByRole('status');
     expect(toast.textContent).toContain('Moved “Glass campaign” to Recently deleted');
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
-    expect(actions.onRestore).toHaveBeenCalledWith('glass');
+    expect(actions.onRestore).toHaveBeenCalledWith('glass', 'undo');
     // Hovering holds the toast; leaving lets it time out.
     fireEvent.mouseEnter(toast);
     vi.advanceTimersByTime(20_000);

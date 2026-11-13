@@ -55,7 +55,7 @@ describe('ProviderRecoveryStatus', () => {
     fireEvent.click(screen.getByRole('button', {
       // GM, round 13 of PR #114: the label and its accessible name; round
       // 14: a node not on the canvas (never seen with a label) is named so.
-      name: 'I\'ve checked Marble. Unlock a removed World Labs node.',
+      name: 'I’ve checked Marble. Unlock a removed World Labs node.',
     }));
     await waitFor(() => expect(acknowledge).toHaveBeenCalledWith(
       'worldlabs-environment',
@@ -101,7 +101,7 @@ describe('ProviderRecoveryStatus', () => {
 
     fireEvent.click(screen.getByRole('button', {
       // No node to name: GM's round 14 line.
-      name: "I've checked Marble. Unlock this World Labs run.",
+      name: "I’ve checked Marble. Unlock this World Labs run.",
     }));
 
     expect(acknowledge).toHaveBeenCalledOnce();
@@ -111,14 +111,14 @@ describe('ProviderRecoveryStatus', () => {
 });
 
 describe("the status bar's button (GM, round 13 of PR #114)", () => {
-  it('shows "I\'ve checked Marble" and names the held node by its card title', () => {
+  it('shows "I’ve checked Marble" and names the held node by its card title', () => {
     useGraphStore.setState({
       nodes: [{ id: 'world-1', type: 'model-node', position: { x: 0, y: 0 },
         data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } }] as never,
       providerStartAmbiguities: [{ runId: 'r1', nodeId: 'world-1', kind: 'worldlabs-environment', message: 'held', durable: true }] as never,
     });
     render(<ProviderRecoveryStatus />);
-    const button = screen.getByRole('button', { name: 'I\'ve checked Marble. Unlock “Harbor world”.' });
-    expect(button).toHaveTextContent("I've checked Marble");
+    const button = screen.getByRole('button', { name: 'I’ve checked Marble. Unlock “Harbor world”.' });
+    expect(button).toHaveTextContent("I’ve checked Marble");
   });
 });

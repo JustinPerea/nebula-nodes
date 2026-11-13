@@ -123,7 +123,7 @@ export async function cancelExecution(runId: string, signal?: AbortSignal): Prom
   return response.json();
 }
 
-/** The headings for the status bar's "I've checked Marble" and Run
+/** The headings for the status bar's "I’ve checked Marble" and Run
  * History's "Forget ID" (round 3, GM: named after what the button does);
  * the store and the screens use these. */
 export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
@@ -134,7 +134,7 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  // Round 3 (GM): what the person clicked. The status bar's "I've checked
+  // Round 3 (GM): what the person clicked. The status bar's "I’ve checked
   // Marble" unlocks one node.
   await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
