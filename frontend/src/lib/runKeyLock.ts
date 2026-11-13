@@ -164,6 +164,17 @@ export function keyLockedProps(reason: string | null, reasonId: string): KeyLock
   return { 'aria-disabled': true, 'aria-describedby': reasonId, [KEY_LOCK_MARK]: '' };
 }
 
+/**
+ * Whether a control is in fact key-locked: the props `withKeyLock` returned
+ * carry the key-lock mark. A kept canvas comes first, so `withKeyLock` hands
+ * its props back unmarked and the missing-key reason is not shown. Every
+ * surface that renders or acts on the key line asks this, never the raw
+ * `keyLock` line (the ratchet, agentPresenceFollowups.ratchet.test.ts).
+ */
+export function isKeyLocked(props: KeyLockedProps): boolean {
+  return props[KEY_LOCK_MARK] !== undefined;
+}
+
 /** The marks the canvas lock puts on a control it holds (lib/canvasLock):
  * a press on one pulses the project bar or the offline banner. A key-locked
  * control drops them, so the press and the tooltip name the same reason

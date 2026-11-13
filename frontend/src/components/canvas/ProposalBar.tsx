@@ -6,7 +6,7 @@ import { acceptChipTitle, acceptCountChip, acceptLabel, changeCountLabel, countd
 import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
 import { runNodeName } from '../../lib/runScope';
-import { withKeyLock } from '../../lib/runKeyLock';
+import { isKeyLocked, withKeyLock } from '../../lib/runKeyLock';
 import { isNeutralProposalLine, useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
@@ -347,6 +347,11 @@ export function ProposalBar() {
   const price = priced ? proposalEstimateLabel(current.view) : null;
   const priceAt = price && plan.endsWith(` · ${price}`) ? plan.length - price.length : -1;
   const pendingKind = pending[current.view.id];
+  // The missing key first, then the canvas lock, then the gate (withKeyLock,
+  // GM PR #203 r11 item 3), as on every Run surface. A kept canvas holds
+  // Accept first, with no key line.
+  const acceptKeyProps = withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId);
+  const acceptKeyLocked = isKeyLocked(acceptKeyProps);
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -584,12 +589,10 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button proposal-bar__button--primary"
-              // The missing key first, then the canvas lock, then the gate
-              // (withKeyLock, GM PR #203 r11 item 3), as on every Run surface.
-              {...withGate(gate.control(), withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId),
+              {...withGate(gate.control(), withAcceptCost(acceptKeyProps,
                 pendingKind !== 'accept' && countChip && acceptTitle ? acceptCostId : null))}
               onClick={(event) => {
-                if (gateHeld || acceptLock || !settled()) return;
+                if (gateHeld || acceptKeyLocked || !settled()) return;
                 byKeyboard(event, 'accept');
                 void accept(current.view.id);
               }}
@@ -603,7 +606,7 @@ export function ProposalBar() {
                 <>{' '}<span className="proposal-bar__count" title={acceptTitle ?? undefined}>{countChip}</span></>
               )}
             </button>
-            {acceptLock && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
+            {acceptKeyLocked && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
             {pendingKind !== 'accept' && countChip && acceptTitle && (
               <span id={acceptCostId} className="toolbar__sr-only">{acceptTitle}</span>
             )}

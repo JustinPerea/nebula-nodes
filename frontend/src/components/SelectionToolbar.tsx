@@ -23,7 +23,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock, type LockOwn } from '../lib/canvasLock';
-import { runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
 import { TOP_STACK_EVENT, applySelectionToolbarPlace } from '../lib/bottomBar';
 import { useBackendOffline } from '../lib/useBackendOffline';
 import { itOrThem, RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
@@ -108,7 +108,7 @@ export function SelectionToolbar() {
   const runProps = withKeyLock(runLocked(isExecuting || runStarting,
     itOrThem(ids.length, RUN_LOCK_VERBS.runIt, RUN_LOCK_VERBS.runThem),
     { title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run-nodes' }), keyLock, runScopeId);
-  const runKeyLocked = runProps['data-key-locked'] !== undefined;
+  const runKeyLocked = isKeyLocked(runProps);
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar
   // that unmounts first (the selection cleared) cancels that focus.
   const focusTimer = useRef<number | null>(null);

@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { Play, X } from 'lucide-react';
 import { deferredRunKeyLock, useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useUIStore } from '../../store/uiStore';
-import { withKeyLock } from '../../lib/runKeyLock';
+import { isKeyLocked, withKeyLock } from '../../lib/runKeyLock';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { PersonLockLine } from '../PersonLock';
@@ -78,7 +78,7 @@ export function DeferredRunNotice() {
   // canvasLock's order (review 7, L5: run, following, offline).
   const runProps = withKeyLock(lock.act({ kept: 'run' }, { run: running, runTitle: line, shown: { id: lineId, text: line } }),
     keyLock, keyLockId);
-  const runKeyLocked = runProps['data-key-locked'] !== undefined;
+  const runKeyLocked = isKeyLocked(runProps);
   // A key-locked Run sends nothing (withKeyLock): the click is refused here.
   const runNow = () => (runKeyLocked ? undefined : runDeferred());
   return (

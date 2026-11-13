@@ -22,7 +22,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
@@ -272,6 +272,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
     return runKeyLockLine(nodes, edges, { kind: 'node', nodeId: renderNodeId }, settingsCache);
   }, [renderNodeId, nodes, edges, settingsCache]);
   const keyLockId = useId();
+  // The Run's props: the missing key first, then canvasLock's order (run,
+  // following, offline): withKeyLock. A kept canvas holds it, with no key line.
+  const runProps = withKeyLock(lock.act({ title: 'Run this node and its dependencies', kept: 'run' },
+    { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) }), keyLock, keyLockId);
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
   // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
@@ -1619,10 +1623,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
-            {...withKeyLock(lock.act({ title: 'Run this node and its dependencies', kept: 'run' },
-              { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) }), keyLock, keyLockId)}
-            onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
+            {...runProps}
+            onClick={() => { if (!isKeyLocked(runProps)) void executeNode(renderNode.id); }}
           >
             <Play
               className="inspector__action-icon"
@@ -1634,7 +1636,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>Run</span>
           </button>
           {/* The locked Run's description (toolbar__sr-only: read out, not shown). */}
-          {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
+          {isKeyLocked(runProps) && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
           <button
             type="button"
             className="inspector__action-button"

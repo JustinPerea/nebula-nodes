@@ -7,7 +7,7 @@ import { useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
-import { runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
 import { RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
 import { useCappedPopover } from '../lib/noticeWaiting';
 
@@ -140,7 +140,6 @@ export function ContextMenu() {
       keyLock,
       run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
-        if (keyLock) return;
         executeNode(nodeId);
         hideContextMenu();
       },
@@ -186,25 +185,33 @@ export function ContextMenu() {
     },
   ];
 
+  // One withKeyLock per item: the Run item's missing key comes after a kept canvas.
+  const rows = items.map((item) => ({
+    item,
+    props: withKeyLock(lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal },
+      item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {}), item.keyLock, keyLockId),
+  }));
+
   return (
     <div
       ref={menuRef}
       className="context-menu"
       style={style}
     >
-      {items.map((item) => (
+      {rows.map(({ item, props }) => (
         <button
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
-          onClick={item.action}
-          {...withKeyLock(lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal },
-            item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {}), item.keyLock, keyLockId)}
+          // A key-locked item sends nothing (withKeyLock); a kept canvas
+          // disables it, so there is nothing to refuse there.
+          onClick={() => { if (!isKeyLocked(props)) item.action(); }}
+          {...props}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}
         </button>
       ))}
-      {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
+      {rows.some(({ props }) => isKeyLocked(props)) && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
     </div>
   );
 }

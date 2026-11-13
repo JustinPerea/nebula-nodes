@@ -4481,3 +4481,9 @@ plain build, 117 over, +8.3 kB over main.
 - Auto row, signed out of Krea: "Auto · Krea needs a sign-in" (providerSwitch.ts, same `kreaSignedIn` signal as the sign-in line); signed in it stays "Auto · runs on Krea plan".
 - Settings temp folder refusals by cause. `_require_same_device` now raises cause `temp_folder` (stat failure) or `temp_disk` (different device); `in_the_way` is left for a real folder at a file's name. main.py maps them to GM's lines, naming the folder from `settings.TEMP_FOLDER`. Both keep code `settings_unwritable`, so the frontend (which picks by code, settingsWrites.ts) and the MCP/CLI forms (same refusal text, agent form of each fix) keep working. No check, order, descriptor or path logic changed.
 - Krea sign-in line: "Sign in from Settings" replaces "Sign in to Krea in Settings" in the switcher's message only; the engine's run-time lines are untouched.
+
+## Review finding: kept canvas with a missing key (screen-reader text)
+
+- `withKeyLock` returns its props unmarked on a kept canvas, but the Toolbar's description span and `--waiting` class, and the sr-only spans in the Inspector, Run History and context menu, read the raw `keyLock` line. They now ask `isKeyLocked(props)` (lib/runKeyLock.ts) on the props `withKeyLock` returned, as the selection bar and deferred-run notice do; click refusals worded as the key lock use it too. On a kept canvas the Toolbar's span reads the run scope.
+- Beyond the four named surfaces: ProposalBar's Accept had the same span and refusal on `acceptLock`; fixed the same way. Its "can't run here" lines (`notReadyShown(notReady, acceptLock)`) still read the Accept line on a kept canvas; that is visible text, flagged, not changed.
+- Tests: tests/keyLockKept.test.tsx; a source ratchet in agentPresenceFollowups.ratchet.test.ts fails on a component that tests the raw `keyLock` in its markup or calls `withKeyLock` without `isKeyLocked`.

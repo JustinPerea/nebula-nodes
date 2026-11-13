@@ -3,7 +3,7 @@ import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { historyRunKeyLock, placeholderKey } from '../../lib/historyRunKeyLock';
-import { withKeyLock } from '../../lib/runKeyLock';
+import { isKeyLocked, withKeyLock } from '../../lib/runKeyLock';
 import { useProjectStore } from '../../store/projectStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
@@ -263,6 +263,27 @@ export function RunHistoryPanel() {
                 const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
                 return source?.state === 'current' && Boolean(source.snapshot);
               });
+              // L6 (GM r9 answer 3): one order, as the toolbar's:
+              // kept first (lib/canvasLock; GM r19 on PR #199), then the missing key (withKeyLock, GM PR #203 r11
+              // item 3), then the run, following, offline (lib/canvasLock).
+              // Offline, its own verb (PR #200 review 3 LOW-1; GM
+              // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
+              const replayProps = withKeyLock(lockedAction(lock, {
+                kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun',
+                title: recoveryReplayReady
+                  ? 'Resume this run from its saved checkpoint'
+                  : 'Run this again with the same nodes and settings',
+                offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN,
+              },
+              // GM r37: while a run goes, what unlocks it, by its own verb.
+              { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) }),
+              keyLock, keyLockId);
+              const latestProps = withKeyLock(lockedAction(lock, {
+                kept: 'rerun', disabled: !latestSourceReady, offline: OFFLINE_RERUN,
+                title: latestSourceReady
+                  ? 'Run again with the same settings and the latest artwork from Paper'
+                  : 'Refresh or reconnect the Paper source first.',
+              }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) }), keyLock, keyLockId);
               return (
               <li key={r.id} className="run-history__item">
                 <span
@@ -315,22 +336,11 @@ export function RunHistoryPanel() {
                         type="button"
                         className="run-history__replay"
                         onClick={() => {
-                          if (keyLock) return;
+                          if (isKeyLocked(replayProps)) return;
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        // L6 (GM r9 answer 3): one order, as the toolbar's:
-                        // kept first (lib/canvasLock; GM r19 on PR #199), then the missing key (withKeyLock, GM PR #203 r11
-                        // item 3), then the run, following, offline (lib/canvasLock).
-                        // Offline, its own verb (PR #200 review 3 LOW-1; GM
-                        // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
-                        {...withKeyLock(lockedAction(lock, { kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun', title: recoveryReplayReady
-                          ? 'Resume this run from its saved checkpoint'
-                          : 'Run this again with the same nodes and settings',
-                        offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
-                        // GM r37: while a run goes, what unlocks it, by its own verb.
-                        { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) }),
-                        keyLock, keyLockId)}
+                        {...replayProps}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -344,15 +354,12 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...withKeyLock(lockedAction(lock, { kept: 'rerun', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
-                            ? 'Run again with the same settings and the latest artwork from Paper'
-                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) }),
-                          keyLock, keyLockId)}
-                          onClick={() => { if (!keyLock) void rerunHistoryWithLatestPaperSource(r.id); }}
+                          {...latestProps}
+                          onClick={() => { if (!isKeyLocked(latestProps)) void rerunHistoryWithLatestPaperSource(r.id); }}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>
                       )}
-                      {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
+                      {(isKeyLocked(replayProps) || isKeyLocked(latestProps)) && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
                     </span>
                   )}
                   {recoveryReplayBlocked && (

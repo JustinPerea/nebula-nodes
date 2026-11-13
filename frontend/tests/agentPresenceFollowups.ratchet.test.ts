@@ -1929,6 +1929,51 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(evil('../lib/canvasLock', 'lockedAction', 'probe.tsx')).toHaveLength(1);
   });
 
+  // PR #203 review finding (kept canvas + missing key): `withKeyLock` hands its
+  // props back unmarked on a kept canvas, so the missing-key reason is shown
+  // only when `isKeyLocked(props)` says so. A component that tests the raw
+  // `keyLock` line in its markup (`{keyLock && <span>}`, a class on `keyLock`,
+  // `keyLock ?? scope`) shows it on a kept canvas too. `keyLock ? a : b`'s
+  // branches, `title={keyLock}` and passing it to withKeyLock are fine; the
+  // test of it is not. A file that calls withKeyLock must ask isKeyLocked.
+  const keyLineTests = (source: string, file = 'components/probe.tsx'): string[] => {
+    const root = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const found: string[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isIdentifier(node) && node.text === 'keyLock') {
+        const parent = node.parent;
+        const tested = (ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind))
+          || (ts.isConditionalExpression(parent) && parent.condition === node)
+          || (ts.isPrefixUnaryExpression(parent) && parent.operator === ts.SyntaxKind.ExclamationToken)
+          || (ts.isIfStatement(parent) && parent.expression === node);
+        let inJsx = false;
+        for (let up: ts.Node | undefined = parent; up; up = up.parent) if (ts.isJsxExpression(up)) inJsx = true;
+        if (tested && inJsx) found.push(`${file}:${root.getLineAndCharacterOfPosition(node.getStart(root)).line + 1}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(root);
+    if (/\bwithKeyLock\(/.test(source) && !/\bisKeyLocked\(/.test(source)) found.push(`${file}: calls withKeyLock without isKeyLocked`);
+    return found;
+  };
+
+  it('no component tests the raw keyLock line in its markup: the six Run surfaces ask isKeyLocked(props) (PR #203, kept canvas)', () => {
+    const files = walk(join(SRC, 'components'), /\.tsx$/);
+    const findings = files.flatMap((file) => keyLineTests(readFileSync(file, 'utf8'), relative(SRC, file)));
+    expect(findings).toEqual([]);
+    const shared = readFileSync(join(SRC, 'lib/runKeyLock.ts'), 'utf8');
+    expect(/export function isKeyLocked[\s\S]*?\n\}\n/.exec(shared)?.[0]).toMatch(/return props\[KEY_LOCK_MARK\] !== undefined;/);
+    for (const file of ['panels/Toolbar.tsx', 'panels/Inspector.tsx', 'panels/RunHistoryPanel.tsx', 'ContextMenu.tsx', 'SelectionToolbar.tsx', 'canvas/DeferredRunNotice.tsx']) {
+      expect(readFileSync(join(SRC, 'components', file), 'utf8'), file).toMatch(/\bisKeyLocked\(/);
+    }
+    // The probes: what the finding looked like, and what is allowed.
+    expect(keyLineTests('const A = () => <p>{keyLock && <span>{keyLock}</span>}</p>;')).toHaveLength(1);
+    expect(keyLineTests('const A = () => <p className={x || keyLock ? "w" : ""}>{keyLock ?? scope}</p>;')).toHaveLength(2);
+    expect(keyLineTests('const A = () => <b onClick={() => { if (keyLock) return; }} />;')).toHaveLength(1);
+    expect(keyLineTests('const A = () => <p title={keyLock}>{locked ? keyLock : scope}</p>;')).toEqual([]);
+    expect(keyLineTests("import { withKeyLock } from '../lib/runKeyLock';\nconst p = withKeyLock(a, keyLock, id);\nconst A = () => <p {...p} />;")).toHaveLength(1);
+  });
+
   it('review 23\'s two misses read the lock now', () => {
     for (const file of ['components/editor/EditorView.tsx', 'components/panels/ChatPanel.tsx', 'components/video-editor/useRemotionKeyboard.ts']) {
       expect(readFileSync(join(SRC, file), 'utf8'), file).toMatch(READS_LOCK);
