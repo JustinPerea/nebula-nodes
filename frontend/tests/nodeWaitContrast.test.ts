@@ -74,12 +74,23 @@ describe('the waiting label\'s contrast', () => {
     expect(wait).toMatch(/background-image:\s*none/);
   });
 
+  it('is the same ratio on the pill over media (GM r5 ruling 2): the pill is the same opaque tint, the ink the same white', () => {
+    const pill = /node-wait-swap__label::before \{[^}]*background-color:\s*([^;]+);/.exec(wait)![1];
+    expect(pill).toBe('color-mix(in srgb, var(--agent-color) var(--sr-wait-tint), var(--sr-wait-base))');
+    // The pill is an opaque base mixed with the accent, so nothing of the preview shows through it.
+    expect(parseColor(token('--sr-wait-base'))[3]).toBe(1);
+    expect(wait).not.toMatch(/node-wait-swap__label::before \{[^}]*opacity/);
+    const worst = Math.min(...ACCENTS.map((accent) => ratio(over(ink(), tint(accent)), tint(accent))));
+    expect(worst).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('is one ink: the label sets it once, no state (selected, hover, focus) or opacity changes it', () => {
     const rules = [...wait.matchAll(/([^{}]*node-wait-swap__label[^{}]*)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
-    const colours = rules.filter((r) => /\bcolor:/.test(r.body));
+    const colours = rules.filter((r) => /(^|[;\s{])color:/.test(r.body));
     expect(colours).toHaveLength(1);
     expect(colours[0].body).toMatch(/color:\s*var\(--sr-wait-ink\)/);
-    for (const r of rules) expect(r.selector).not.toMatch(/selected|hover|focus|:not\(|disabled/);
+    // (The over-media rules only place the pill; they set no ink.)
+    for (const r of rules.filter((x) => !x.selector.includes(':has('))) expect(r.selector).not.toMatch(/selected|hover|focus|:not\(|disabled/);
     // Nothing else in the app restyles the label.
     expect(restraint).not.toContain('node-wait-swap__label');
     // Fully opaque once on (the fade is only the crossfade).

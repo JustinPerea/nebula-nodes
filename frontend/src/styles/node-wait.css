@@ -11,6 +11,13 @@
    - On the right, "Waiting for your OK" (one label for one proposal or
      several; the count is in the description) replaces the model chip: both sit in one grid cell and crossfade on the opacity spring
      (SOFT, lib/springs.ts; never stock easing; at once under reduced motion).
+   - Over media (GM r5 ruling 2): when a preview sits under the header (the
+     card pulls it up beneath the title, --sr-node-preview-overlap) the row
+     keeps its legibility gradient, no tint, and the tint becomes a pill
+     behind the label alone, where the model chip sits (the ::before, out of
+     flow, so the node does not change size). The preview stays visible and
+     the label's ground is the same opaque tint, so the same ink and ratio.
+     Header rows on the card surface keep the full-row tint.
    - The title truncates first; the label never does.
    - The reason is not drawn: the bar and the Updates card show it. The header
      has it as its accessible description (.node-wait-swap__reason, visually
@@ -25,6 +32,30 @@ body.app-slava-restraint .model-node__card .model-node__header[data-waiting='tru
 body.app-slava-restraint .cinema-scene-node .cinema-scene-node__title[data-waiting='true'] {
   background-color: color-mix(in srgb, var(--agent-color) var(--sr-wait-tint), var(--sr-wait-base));
   background-image: none;
+}
+
+/* Over media. Mirrors the pull-up in slava-restraint.css: the preview that
+   is drawn beneath the title is the card's own .model-node__preview, not one
+   behind a column of input ports, not a card that draws its title on a
+   surface (text, image, world, structured, Jev) or a spatial/structured card
+   that starts below it (spatial-preview.css; a world preview is on a world surface). */
+body.app-slava-restraint .model-node:not(.model-node--text-surface, .model-node--image-surface, .model-node--world-surface, .model-node--structured-surface, .model-node--jev-surface) .model-node__card:has(> .model-node__preview:not(.model-node__ports--input + .model-node__preview, .model-node__preview--spatial, .model-node__preview--structured)) > .model-node__header[data-waiting='true'] {
+  background-color: transparent;
+  background-image: var(--sr-node-header-gradient);
+}
+
+body.app-slava-restraint .model-node:not(.model-node--text-surface, .model-node--image-surface, .model-node--world-surface, .model-node--structured-surface, .model-node--jev-surface) .model-node__card:has(> .model-node__preview:not(.model-node__ports--input + .model-node__preview, .model-node__preview--spatial, .model-node__preview--structured)) > .model-node__header[data-waiting='true'] .node-wait-swap__label {
+  position: relative;
+  isolation: isolate;
+}
+
+body.app-slava-restraint .model-node:not(.model-node--text-surface, .model-node--image-surface, .model-node--world-surface, .model-node--structured-surface, .model-node--jev-surface) .model-node__card:has(> .model-node__preview:not(.model-node__ports--input + .model-node__preview, .model-node__preview--spatial, .model-node__preview--structured)) > .model-node__header[data-waiting='true'] .node-wait-swap__label::before {
+  content: '';
+  position: absolute;
+  inset: -3px -8px;
+  z-index: -1;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--agent-color) var(--sr-wait-tint), var(--sr-wait-base));
 }
 
 body.app-slava-restraint .model-node__header,

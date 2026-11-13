@@ -34,7 +34,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 const css = (file: string) => readFileSync(join(__dirname, '../src/styles', file), 'utf8');
 function rule(file: string, selector: string): string {
   const source = css(file);
-  const at = source.indexOf(`${selector} {`);
+  // At a line start: a longer selector that ends the same way (the over-media rules) is not this rule.
+  const at = source.indexOf(`\n${selector} {`) + 1 || -1;
   expect(at, `${selector} in ${file}`).toBeGreaterThanOrEqual(0);
   return source.slice(source.indexOf('{', at) + 1, source.indexOf('}', at));
 }
