@@ -79,8 +79,11 @@
 
 /* The launcher's activity badge (slice 8, 10c): 6 px dots, agent colour, placed
    from JS (middle at left/top) at the launcher's top right corner, outside the
-   glyph's box. A 1.5 px ring in the rail's background (rgba(24, 24, 26) in
-   workspace-rail.css) lets them read on the icon's edge; "+N" is the app's
+   glyph's box. A 1.5 px ring in the launcher's own surface colour lets them
+   read on the icon's edge: each launcher's host sets --agent-launcher-surface
+   (the rail shell in workspace-rail.css, the dock panel in panels.css and the
+   Slava skin), JS reads it per launcher and sets --agent-badge-ring on the
+   dot; the value below is only the fallback for a host that sets none; "+N" is the app's
    smallest label size (--sr-type-micro). Opacity (the idle dim, the leave) runs
    on the soft spring; a dot that arrives fades in on it. A mark, never a control. */
 .agent-launcher-dots {

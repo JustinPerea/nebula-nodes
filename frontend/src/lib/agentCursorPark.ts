@@ -18,11 +18,19 @@ const ARROW_RIGHT_PX = Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - 
 const ARROW_DOWN_PX = Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) - AGENT_CURSOR_ARROW_TIP.y;
 
 /** How far from the tip, along `angle`, the arrow's box ends: 0 for a
- *  direction that leaves it at once (up or left of the tip). */
+ *  direction that leaves it at once (up or left of the tip, by enough that
+ *  the chevron's own width stands clear). A direction a hair past straight
+ *  down (or right) has a slightly negative cosine (sine) and its chevron
+ *  would still sit on the arrow's edge, so only a component that clears the
+ *  chevron by the time it is placed counts as leaving; the rest leave by the
+ *  far side. (The bottom park's chevron hid under the arrow when the item's
+ *  middle was a pixel left of the tip.) */
 export function arrowExitPx(angle: number): number {
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
-  if (dx < 0 || dy < 0) return 0;
+  const placed = PARK_CHEVRON_GAP_PX + PARK_CHEVRON_PX / 2;
+  const clears = PARK_CHEVRON_PX / 2;
+  if (-dx * placed >= clears || -dy * placed >= clears) return 0;
   return Math.min(dx > 0 ? ARROW_RIGHT_PX / dx : Infinity, dy > 0 ? ARROW_DOWN_PX / dy : Infinity);
 }
 

@@ -560,6 +560,7 @@ body.app-slava-restraint .chat-panel.chat-panel--exiting {
 }
 
 body.app-slava-restraint .panel {
+  --agent-launcher-surface: rgb(22, 22, 24);
   z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);

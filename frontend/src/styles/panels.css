@@ -1,4 +1,6 @@
 .panel {
+  /* The launcher badge's ring for a row or tab in this panel: its own surface, not the rail's. */
+  --agent-launcher-surface: #1a1a1a;
   position: fixed;
   display: flex;
   flex-direction: column;

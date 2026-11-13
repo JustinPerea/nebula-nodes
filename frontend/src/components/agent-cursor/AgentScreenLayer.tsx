@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useAgentPresenceStore, type AgentCursor } from '../../store/agentPresenceStore';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { AnchorResolver, domEnv, type ResolverEnv } from '../../lib/agentAnchorResolve';
@@ -177,6 +177,9 @@ function ItemOutlines({ agents, space, landings }: { agents: Record<string, Agen
  * (so it never re-renders on a presence event); `aria-hidden`, the Agents
  * panel lists every agent. Lib: lib/agentLauncherDots.ts.
  */
+/** The badge ring takes the launcher's own surface colour; none set, the stylesheet's default. */
+const ringStyle = (ring: string): CSSProperties => (ring ? { ['--agent-badge-ring' as string]: ring } : {});
+
 function LauncherDots({ agents, space, landings }: { agents: Record<string, AgentCursor>; space: ScreenSpace; landings: CursorLandings }) {
   const [book] = useState(() => new DotBook({ landings, space, reducedMotion: prefersReducedMotion }));
   const { groups, ghosts } = useSyncExternalStore(book.subscribe, book.getSnapshot);
@@ -192,23 +195,23 @@ function LauncherDots({ agents, space, landings }: { agents: Record<string, Agen
               className="agent-launcher-dot"
               data-agent-key={dot.key}
               data-idle={dot.idle ? 'true' : undefined}
-              style={{ left: dot.at.x, top: dot.at.y, opacity: dot.idle ? DOT_IDLE_OPACITY : 1, ['--agent-color' as string]: dot.color }}
+              style={{ left: dot.at.x, top: dot.at.y, opacity: dot.idle ? DOT_IDLE_OPACITY : 1, ['--agent-color' as string]: dot.color, ...ringStyle(group.ring) }}
             />
           ))}
           {group.moreAt ? (
             <span
               className="agent-launcher-dot__more"
-              style={{ left: group.moreAt.x, top: group.moreAt.y, ['--agent-color' as string]: group.moreColor, color: inkFor(group.moreColor) }}
+              style={{ left: group.moreAt.x, top: group.moreAt.y, ['--agent-color' as string]: group.moreColor, color: inkFor(group.moreColor), ...ringStyle(group.ring) }}
             >{`+${group.more}`}</span>
           ) : null}
         </div>
       ))}
       {ghosts.map((ghost) => (ghost.more > 0 ? (
         <span key={ghost.id} className="agent-launcher-dot__more" data-leaving="true"
-          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, color: inkFor(ghost.color) }}>{`+${ghost.more}`}</span>
+          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, color: inkFor(ghost.color), ...ringStyle(ghost.ring) }}>{`+${ghost.more}`}</span>
       ) : (
         <span key={ghost.id} className="agent-launcher-dot" data-leaving="true"
-          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color }} />
+          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, ...ringStyle(ghost.ring) }} />
       )))}
     </div>
   );

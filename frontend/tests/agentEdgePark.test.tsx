@@ -75,10 +75,11 @@ const drawn = (el: HTMLElement) => {
   const half = AGENT_CURSOR_ARROW_STROKE / 2;
   const arrowRight = tip.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - AGENT_CURSOR_ARROW_TIP.x + half;
   const arrowBottom = tip.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) - AGENT_CURSOR_ARROW_TIP.y + half;
+  // The chevron is stroked 1.5 px (agentCursorAnywhere.css): its drawn reach is the half stroke beyond its box.
   const c = chevron() as unknown as HTMLElement | null;
   const px = (name: string) => Number(c!.style.getPropertyValue(name).replace('px', ''));
-  const chevronRight = c ? tip.x + px('--park-x') - AGENT_CURSOR_ARROW_TIP.x + PARK_CHEVRON_PX / 2 : -Infinity;
-  const chevronBottom = c ? tip.y + px('--park-y') - AGENT_CURSOR_ARROW_TIP.y + PARK_CHEVRON_PX / 2 : -Infinity;
+  const chevronRight = c ? tip.x + px('--park-x') - AGENT_CURSOR_ARROW_TIP.x + PARK_CHEVRON_PX / 2 + 0.75 : -Infinity;
+  const chevronBottom = c ? tip.y + px('--park-y') - AGENT_CURSOR_ARROW_TIP.y + PARK_CHEVRON_PX / 2 + 0.75 : -Infinity;
   return { arrowRight, arrowBottom, chevronRight, chevronBottom,
     right: Math.max(arrowRight, chevronRight), bottom: Math.max(arrowBottom, chevronBottom) };
 };
@@ -241,6 +242,26 @@ describe('the chevron', () => {
     expect(parkChevron({ x: 100, y: 100 }, { x: 100, y: 500 }).distance).toBeCloseTo(arrowExitPx(Math.PI / 2) + 7, 5);
     expect(arrowExitPx(Math.PI / 2)).toBeGreaterThan(15);
     expect(parkChevron({ x: 0, y: 0 }, { x: 10, y: 10 }).angle).toBeCloseTo(Math.PI / 4, 5);
+  });
+
+  it('an item a pixel left of straight below still puts the chevron past the arrow\'s tail, not under it (found by the bottom-park shot)', () => {
+    const straightDown = arrowExitPx(Math.PI / 2);
+    // The tip's x is 1 px right of the item's middle: the angle is a hair past vertical, cos < 0.
+    for (const dxPx of [-0.5, -1, -3, 3, 0]) {
+      const { angle, distance } = parkChevron({ x: 100, y: 100 }, { x: 100 + dxPx, y: 600 });
+      expect(distance, `dx ${dxPx}`).toBeGreaterThan(straightDown - 1);
+      // The chevron's middle is clear of the arrow's box below its tail.
+      expect(Math.sin(angle) * distance).toBeGreaterThan(straightDown);
+    }
+    // Same on the right side, a hair above or below horizontal.
+    for (const dyPx of [-0.5, 0.5, -3]) {
+      const { distance } = parkChevron({ x: 100, y: 100 }, { x: 900, y: 100 + dyPx });
+      expect(distance).toBeGreaterThan(arrowExitPx(0) - 1);
+    }
+    // Clearly up or left is unchanged: leaves at once.
+    expect(arrowExitPx(-Math.PI / 2)).toBe(0);
+    expect(arrowExitPx(Math.PI)).toBe(0);
+    expect(arrowExitPx(-Math.PI / 4)).toBe(0);
   });
 });
 

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
@@ -164,6 +166,61 @@ describe('the dot on a launcher (PR #233 slice 8)', () => {
   });
 });
 
+describe('the badge ring takes the launcher\'s own surface colour', () => {
+  const ringOf = (el: Element | null) => (el as HTMLElement | null)?.style.getPropertyValue('--agent-badge-ring');
+  it('a rail launcher and a dock row each get their own host\'s colour, never the rail\'s on a row', () => {
+    const rail = put('launcher', 'moodboard', RAIL_BOX);
+    rail.style.setProperty('--agent-launcher-surface', 'rgb(24, 24, 26)');
+    const row = put('launcher', 'moodboard:b1', { left: 900, top: 200, width: 280, height: 40 });
+    row.style.setProperty('--agent-launcher-surface', 'rgb(26, 26, 26)');
+    renderLayer();
+    send(event(0, { target: { surface: 'moodboard', itemId: 'b1/i1' } }));
+    settle();
+    // The row is open, so the cursor's launcher is the row; its ring is the row's colour.
+    expect(ringOf(dots()[0])).toBe('rgb(26, 26, 26)');
+    cleanup();
+    boxes.clear();
+    document.body.innerHTML = '';
+    useAgentPresenceStore.getState().clear();
+    const only = put('launcher', 'moodboard', RAIL_BOX);
+    only.style.setProperty('--agent-launcher-surface', 'rgb(24, 24, 26)');
+    renderLayer();
+    send(event(0));
+    settle();
+    expect(ringOf(dots()[0])).toBe('rgb(24, 24, 26)');
+  });
+
+  it('the "+N" pill carries the same ring, and a host that sets none leaves it to the stylesheet', () => {
+    const rail = put('launcher', 'moodboard', RAIL_BOX);
+    rail.style.setProperty('--agent-launcher-surface', 'rgb(1, 2, 3)');
+    renderLayer();
+    send(event(0)); send(event(1)); send(event(2));
+    settle();
+    expect(ringOf(more())).toBe('rgb(1, 2, 3)');
+    rail.style.removeProperty('--agent-launcher-surface');
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    settle();
+    expect(ringOf(dots()[0])).toBe('');
+  });
+
+  it('the rail and the dock panel each set the variable, to different colours', () => {
+    const read = (file: string) => readFileSync(resolve(__dirname, '../src/styles', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const value = (css: string, selector: string) => {
+      const block = [...css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].find(([, sel]) => sel.trim() === selector);
+      return /--agent-launcher-surface:\s*([^;]+);/.exec(block?.[2] ?? '')?.[1].trim();
+    };
+    const rail = value(read('workspace-rail.css'), '.workspace-rail__shell');
+    const dock = value(read('panels.css'), '.panel');
+    expect(rail).toBeTruthy();
+    expect(dock).toBeTruthy();
+    expect(dock).not.toBe(rail);
+    expect(value(read('workspace-rail.css'), 'body.app-slava-restraint .workspace-rail__shell')).not.toBe(value(read('slava-restraint.css'), 'body.app-slava-restraint .panel'));
+    // The dots layer reads the ring from the variable it sets, never a literal beside the host's.
+    const dots = read('agentCursorAnywhere.css');
+    expect(dots).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
+  });
+});
+
 describe('the dim, and when the dot goes', () => {
   it('dims with its cursor at the 20 s idle, to the cursor\'s own idle opacity', () => {
     put('launcher', 'moodboard', RAIL_BOX);
@@ -267,7 +324,7 @@ describe('reduced motion', () => {
 
 describe('the grouping rule (launcherDots)', () => {
   const entry = (key: string, arrivedAt: number): DotEntry => ({ key, color: '#fff', arrivedAt, idle: false, launcher: 'l1',
-    box: { left: 0, top: 0, width: 40, height: 40 } });
+    box: { left: 0, top: 0, width: 40, height: 40 }, surface: '' });
   it('1 or 2 dots, then two dots and "+N" for the agents without one; earliest first, ties by key', () => {
     expect(launcherDots([entry('a', 1)])[0].dots).toHaveLength(1);
     expect(launcherDots([entry('b', 2), entry('a', 2)])[0].dots.map((d) => d.key)).toEqual(['a', 'b']);

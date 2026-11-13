@@ -26,6 +26,8 @@ export interface DotEntry {
   /** Which launcher element (any stable id). */
   launcher: string;
   box: Box;
+  /** The launcher's own surface colour (its host's `--agent-launcher-surface`), '' when the host sets none. */
+  surface: string;
 }
 
 export interface DotSlot { key: string; color: string; idle: boolean; at: Point }
@@ -38,6 +40,8 @@ export interface DotGroup {
   moreAt: Point | null;
   /** The "+N" pill's colour: the earliest agent's. */
   moreColor: string;
+  /** The ring's colour: the launcher's own surface ('' = the stylesheet's default). */
+  ring: string;
 }
 
 /** The dots of every launcher: where each is (its middle), and the "+N". */
@@ -60,13 +64,13 @@ export function launcherDots(entries: readonly DotEntry[]): DotGroup[] {
     }));
     const more = group.length - shown.length;
     const last = dots[dots.length - 1].at;
-    groups.push({ launcher, dots, more, moreAt: more > 0 ? { x: last.x - px / 2 - gapPx, y } : null, moreColor: dots[0].color });
+    groups.push({ launcher, dots, more, moreAt: more > 0 ? { x: last.x - px / 2 - gapPx, y } : null, moreColor: dots[0].color, ring: group[0].surface });
   }
   return groups;
 }
 
 /** A dot that has left and is fading where it was. */
-export interface DotGhost { id: string; color: string; at: Point; /** The "+N" label of a pill that left. */ more: number }
+export interface DotGhost { id: string; color: string; at: Point; /** The "+N" label of a pill that left. */ more: number; ring: string }
 
 export interface DotSnapshot { groups: readonly DotGroup[]; ghosts: readonly DotGhost[] }
 
@@ -86,6 +90,12 @@ export interface DotSources {
 /** How long a leaving dot fades: the soft spring the dot's opacity runs on. */
 export const DOT_FADE_MS = springLinear(SPRING_SOFT).durationMs;
 export { AGENT_CURSOR_IDLE_OPACITY as DOT_IDLE_OPACITY };
+
+/** The CSS variable each launcher host sets to its own background (the rail, a dock row). */
+export const LAUNCHER_SURFACE_VAR = '--agent-launcher-surface';
+const surfaceOf = (element: Element): string => {
+  try { return window.getComputedStyle(element).getPropertyValue(LAUNCHER_SURFACE_VAR).trim(); } catch { return ''; }
+};
 
 const shared = (a: DotSnapshot, b: DotSnapshot) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -107,7 +117,7 @@ export class DotBook {
   private idleTimer: number | null = null;
   private readonly ghostTimers = new Map<string, number>();
   private ghosts = new Map<string, DotGhost>();
-  private previous = new Map<string, { color: string; at: Point; more: number }>();
+  private previous = new Map<string, { color: string; at: Point; more: number; ring: string }>();
   private readonly sources: DotSources;
 
   constructor(sources: DotSources) {
@@ -173,7 +183,7 @@ export class DotBook {
       const idle = wall >= idleAt;
       if (!idle) nextIdle = Math.min(nextIdle, idleAt);
       entries.push({ key: cursor.key, color: cursor.color, arrivedAt: cursor.arrivedAt, idle,
-        launcher: this.launcherId(found.element), box: found.box });
+        launcher: this.launcherId(found.element), box: found.box, surface: surfaceOf(found.element) });
     }
     for (const key of [...this.seen.keys()]) if (!(key in this.agents)) this.seen.delete(key);
     if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
@@ -181,10 +191,10 @@ export class DotBook {
 
     const groups = launcherDots(entries);
     // A dot that left fades where it was (instantly under reduced motion).
-    const now = new Map<string, { color: string; at: Point; more: number }>();
+    const now = new Map<string, { color: string; at: Point; more: number; ring: string }>();
     for (const group of groups) {
-      for (const dot of group.dots) now.set(`${group.launcher}|${dot.key}`, { color: dot.color, at: dot.at, more: 0 });
-      if (group.moreAt) now.set(`${group.launcher}|more`, { color: group.moreColor, at: group.moreAt, more: group.more });
+      for (const dot of group.dots) now.set(`${group.launcher}|${dot.key}`, { color: dot.color, at: dot.at, more: 0, ring: group.ring });
+      if (group.moreAt) now.set(`${group.launcher}|more`, { color: group.moreColor, at: group.moreAt, more: group.more, ring: group.ring });
     }
     const reduced = (this.sources.reducedMotion ?? (() => false))();
     for (const [id, was] of this.previous) {
