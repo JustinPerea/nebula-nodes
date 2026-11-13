@@ -76,7 +76,7 @@ export function DeferredRunNotice() {
   if (!leave.shown) return null;
   // The missing key first (withKeyLock, GM PR #203 r11 item 3), then
   // canvasLock's order (review 7, L5: run, following, offline).
-  const runProps = withKeyLock(lock.act({}, { run: running, runTitle: line, shown: { id: lineId, text: line } }),
+  const runProps = withKeyLock(lock.act({ kept: 'run' }, { run: running, runTitle: line, shown: { id: lineId, text: line } }),
     keyLock, keyLockId);
   const runKeyLocked = runProps['data-key-locked'] !== undefined;
   // A key-locked Run sends nothing (withKeyLock): the click is refused here.

@@ -4,16 +4,18 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { historyRunKeyLock, placeholderKey } from '../../lib/historyRunKeyLock';
 import { withKeyLock } from '../../lib/runKeyLock';
+import { useProjectStore } from '../../store/projectStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
-import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
+import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, providerRecoveryPlaceKey, recordNodeType, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
 import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 import { showNotice } from '../../lib/canvasNotice';
+import { useAnnounced } from '../../lib/useAnnounced';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -76,6 +78,31 @@ export function RunHistoryPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runHistory, placeholders, settingsCache]);
   const keyLockIdBase = useId();
+  // Whose each record is (review 20 of PR #199, LOW-2; GM r34 A1): one the
+  // open canvas owns is named by its node; the one Nebula's open-hold
+  // verdict names, by the verdict's names; any other as another project's.
+  const openHold = useProjectStore((s) => s.openHold);
+  const openId = useProjectStore((s) => s.activeProject?.id ?? null);
+  // A store method read through its selector, not the function imported:
+  // the presence ratchet's G scan follows an imported function into
+  // graphStore.ts, whose size made the scan run for most of an hour.
+  const recoveryOnCanvas = useGraphStore((s) => s.providerRecoveryOnCanvas);
+  const owned = providerRecoveries.map((checkpoint) => recoveryOnCanvas(checkpoint));
+  const verdictIndex = verdictRecordIndex(openHold, 'recovery', openId, providerRecoveries, owned);
+  // Each record's type, when it knows it (GM r36 item 1): the node type
+  // Nebula stored with it (the person-only places), or its World ID.
+  const places = useGraphStore((s) => s.providerRecoveryPlaces);
+  const recordName = (index: number, inSentence = false) => {
+    const { runId, nodeId, existingWorldId } = providerRecoveries[index];
+    const kind = recordNodeType(places[providerRecoveryPlaceKey(runId, nodeId)]?.nodeType, existingWorldId);
+    return heldRecordName(nodes, nodeId, owned[index], index === verdictIndex ? openHold : null, inSentence, kind);
+  };
+  // GM r34 A4: while Run History is open, the held reopen's Forget ID line
+  // shows at the top of its safeguards (the rail's callout hides). Its own
+  // polite region, mounted empty and then given the line, so the first
+  // line is announced too.
+  const reopenLine = useProjectStore((s) => (s.heldReopenLine?.place === 'runHistory' ? s.heldReopenLine.line : null));
+  const announcedReopenLine = useAnnounced(visible ? reopenLine : null);
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -109,6 +136,11 @@ export function RunHistoryPanel() {
   useEffect(() => {
     if (!visible) setConfirmingForget(null);
   }, [visible]);
+
+  const forgetConfirmName = ({ runId, nodeId }: { runId: string; nodeId: string }) => {
+    const index = providerRecoveries.findIndex((checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId);
+    return index >= 0 ? recordName(index, true) : heldRecordName(nodes, nodeId, false, null, true);
+  };
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
@@ -165,20 +197,24 @@ export function RunHistoryPanel() {
       </div>
 
       <ScrollFade className="panel__body panel__body--history">
-        {providerRecoveries.length > 0 && (
+        {(providerRecoveries.length > 0 || reopenLine) && (
           <section className="run-history__safeguards" aria-label="World Labs recovery safeguards">
+            <p className="run-history__reopen-line" role="status" aria-live="polite" data-reopen-hold-line>
+              {announcedReopenLine}
+            </p>
             <div className="run-history__safeguards-title">World Labs recovery safeguards</div>
+            {providerRecoveries.length > 0 && (<>
             <p>
               These IDs prevent an accidental second World Labs run. Keep them unless you have
               checked Marble and intentionally want to forget recovery.
             </p>
             <ul>
-              {providerRecoveries.map((checkpoint) => {
+              {providerRecoveries.map((checkpoint, index) => {
                 const key = `${checkpoint.runId}:${checkpoint.nodeId}`;
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
                 // GM, round 14 of PR #114: named by node, then "Operation ID"
                 // or "World ID", the ID in mono (was "n2 · operation op-…").
-                const name = recordNodeName(nodes, checkpoint.nodeId);
+                const name = recordName(index);
                 const idLabel = recoveryIdLabel(checkpoint.existingWorldId);
                 return (
                   <li key={key}>
@@ -194,10 +230,10 @@ export function RunHistoryPanel() {
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         // Review 7, L5: canvasLock's order (run, then
                         // following, then offline); GM, round 15 of PR #114's title.
-                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.forgetRun) })}
+                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.forgetRun) })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
-                        aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
+                        aria-label={forgetAriaLabel(recordName(index, true))}
                         aria-describedby={`run-history-recovery-${key}`}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
@@ -208,6 +244,7 @@ export function RunHistoryPanel() {
                 );
               })}
             </ul>
+            </>)}
           </section>
         )}
         {runHistory.length === 0 ? (
@@ -283,11 +320,11 @@ export function RunHistoryPanel() {
                           else void rerunHistoryRecord(r.id);
                         }}
                         // L6 (GM r9 answer 3): one order, as the toolbar's:
-                        // the missing key first (withKeyLock, GM PR #203 r11
+                        // kept first (lib/canvasLock; GM r19 on PR #199), then the missing key (withKeyLock, GM PR #203 r11
                         // item 3), then the run, following, offline (lib/canvasLock).
                         // Offline, its own verb (PR #200 review 3 LOW-1; GM
                         // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
-                        {...withKeyLock(lockedAction(lock, { title: recoveryReplayReady
+                        {...withKeyLock(lockedAction(lock, { kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun', title: recoveryReplayReady
                           ? 'Resume this run from its saved checkpoint'
                           : 'Run this again with the same nodes and settings',
                         offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
@@ -307,7 +344,7 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...withKeyLock(lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
+                          {...withKeyLock(lockedAction(lock, { kept: 'rerun', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
                             : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) }),
                           keyLock, keyLockId)}
@@ -332,7 +369,7 @@ export function RunHistoryPanel() {
       </ScrollFade>
       {confirmingForget && visible && (
         <ForgetRecoveryConfirm
-          name={recordNodeName(nodes, confirmingForget.nodeId, true)}
+          name={forgetConfirmName(confirmingForget)}
           onCancel={() => setConfirmingForget(null)}
           onConfirm={() => {
             const { runId, nodeId } = confirmingForget;

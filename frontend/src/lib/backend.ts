@@ -1,7 +1,7 @@
 import { getProjectContext, type ProjectContext } from './projectContext';
 import { refuseWriteWhileOffline } from './backendConnection';
 import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
-import { TAB_HEADER, TAB_ID } from './tabId';
+import { TAB_HEADER, TAB_ID, tabIdConfirmed, tabIdReady } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import {
@@ -425,8 +425,12 @@ export async function apiFetch(path: string, init?: RequestInit,
     if (project.canvas !== undefined) headers.set('X-Nebula-Canvas-Revision', project.canvas);
   }
   // Which tab wrote, so this tab can tell its own edits' graphSync echoes
-  // from edits made elsewhere (lib/tabId.ts).
-  if (method !== 'GET' && method !== 'HEAD') headers.set(TAB_HEADER, TAB_ID);
+  // from edits made elsewhere (lib/tabId.ts). Never an id the page doesn't
+  // hold yet (review 21 LOW-1 on PR #199): a write waits for the claim.
+  if (method !== 'GET' && method !== 'HEAD') {
+    if (!tabIdConfirmed()) await tabIdReady();
+    headers.set(TAB_HEADER, TAB_ID);
+  }
   let requestInit: RequestInit = { ...init, headers };
   // The graph goes back with the relative asset links the backend gave it,
   // whatever this tab shows (canonicalBackendAssetUrls).

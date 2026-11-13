@@ -33,6 +33,10 @@ function record(id: string, status: RunRecord['status'], targetNodeId?: string):
   };
 }
 
+/** Runs of the open project: a record of one is this project's (review 20
+ * of PR #199, LOW-2), so its row is named by its node. */
+const ownRuns = (...ids: string[]) => ids.map((id) => record(id, 'complete'));
+
 describe('RunHistoryPanel replay actions', () => {
   beforeEach(() => {
     forgetNodeLabelsForTests();
@@ -303,6 +307,7 @@ describe('RunHistoryPanel replay actions', () => {
 
   it('renders each exact World Labs recovery safeguard', () => {
     useGraphStore.setState({
+      runHistory: ownRuns('generation-run', 'completed-run'),
       providerRecoveries: [
         {
           runId: 'generation-run',
@@ -343,6 +348,7 @@ describe('RunHistoryPanel replay actions', () => {
     useGraphStore.setState({
       nodes: [{ id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
         data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } }] as never,
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -382,6 +388,7 @@ describe('RunHistoryPanel replay actions', () => {
   it('Escape is Cancel, and Tab stays inside the dialog', () => {
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved',
         existingWorldId: null, durable: true }],
       deleteProviderRecovery,
@@ -416,6 +423,7 @@ describe('RunHistoryPanel replay actions', () => {
       }));
     });
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run', 'other-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -446,6 +454,7 @@ describe('RunHistoryPanel replay actions', () => {
       new Error('Backend still has an active provider task.'),
     );
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -473,7 +482,7 @@ describe('RunHistoryPanel replay actions', () => {
     const world = { id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
       data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [world] as never });
-    useGraphStore.setState({ nodes: [] as never,
+    useGraphStore.setState({ nodes: [] as never, runHistory: ownRuns('paid-run'),
       providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'op-1', existingWorldId: null, durable: true }] });
     render(<RunHistoryPanel />);
     const row = screen.getByRole('button', { name: 'Forget the recovery ID for “Harbor world”, no longer on the canvas' });

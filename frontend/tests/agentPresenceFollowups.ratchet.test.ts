@@ -947,7 +947,8 @@ function gatedOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, dept
  * A guard in a `catch`, after the call, inside a loop that `continue`s, or
  * whose result is dropped guards nothing. The handler's coverage is what all
  * its gated calls share. */
-const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
+// PR #199: refuseTabOnlyEdit refuses following and offline as refuseCanvasEdit does (lib/canvasLock).
+const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseTabOnlyEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
 function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = new Set()): number {
   const again = (node: ts.Expression) => guardMask(node, scope, seen);
   if (ts.isParenthesizedExpression(condition) || ts.isAwaitExpression(condition)) return again(condition.expression);
@@ -1887,8 +1888,10 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
   it('withKeyLock keeps act\'s lock without a key line, and with one is key-locked first: focusable, refused in the handler, no canvas-lock marks (PR #203 rounds 6 and 7)', () => {
     const source = readFileSync(join(SRC, 'lib/runKeyLock.ts'), 'utf8');
     const body = /export function withKeyLock[\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
-    // No key line: the props come back exactly as the canvas lock gave them.
-    expect(body).toMatch(/\n {2}if \(!reason\) return props;\n/);
+    // No key line, or a kept canvas (PR #199, GM r19 item 4: kept comes first
+    // of all, as in canvasLock `act`): the props come back exactly as the
+    // canvas lock gave them.
+    expect(body).toMatch(/\n {2}if \(!reason \|\| KEPT_MARK in props\) return props;\n/);
     // A key line comes first (GM r11 item 3): never natively disabled, the
     // lock's marks dropped so a press pulses nothing the title doesn't name.
     expect(body).toMatch(/for \(const mark of CANVAS_LOCK_MARKS\) delete rest\[mark\];/);

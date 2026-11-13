@@ -97,6 +97,12 @@ export interface RunRecord {
    *  Krea 2's board strengths. Missing means 0. Read through
    *  runBehaviourVersion. */
   behaviourVersion?: number;
+  /** When each node's result landed in this tab, for this tab's own run
+   *  (node id -> epoch ms): its output, its skip or its failure. Nebula
+   *  compares a node's landing with an agent's newer result by this, not by
+   *  the whole run's end (review 20 of PR #199, NIT-2). A renumber moves the
+   *  keys with the node (projectStore remapSnapshotIds). */
+  nodeLandedAt?: Record<string, number>;
 }
 
 export interface ProviderRecoveryCheckpoint {
@@ -296,6 +302,20 @@ export function recordRunOutput(
     ? { ...record, resultOutputs: deepFreeze(JSON.parse(JSON.stringify({
       ...record.resultOutputs, [nodeId]: outputs,
     })) as Record<string, Record<string, PortValue>>) } : record);
+}
+
+/** Note when a node's result (output, skip or failure) landed in this tab
+ * on its running record (RunRecord.nodeLandedAt); the latest landing wins.
+ * The same history when no running record of `runId` holds the node. */
+export function recordNodeLanded(
+  history: RunRecord[], runId: string, nodeId: string, at: number = Date.now(),
+): RunRecord[] {
+  if (!Number.isFinite(at) || at <= 0) return history;
+  const index = history.findIndex((record) => record.id === runId && record.status === 'running'
+    && record.snapshot.nodes.some((node) => node.id === nodeId));
+  if (index < 0) return history;
+  return history.map((record, recordIndex) => recordIndex === index
+    ? { ...record, nodeLandedAt: deepFreeze({ ...record.nodeLandedAt, [nodeId]: at }) } : record);
 }
 
 /** Compatibility for callers predating ordinary result provenance. */
@@ -574,6 +594,22 @@ export function applyProviderRecoveriesToHistory(
   return historyChanged ? nextHistory : history;
 }
 
+/** Whether a node's settings hold the record's own World Labs ID, in the
+ * fields paramsWithProviderRecovery writes it to: an Environment's
+ * `resume_operation_id` or `existing_world_id`, an Export's
+ * `resume_operation_id`. What the tab matches a record by when it can't tell
+ * the record's project (review 20 of PR #199, LOW-2): never by node id alone. */
+export function paramsHoldRecoveryId(
+  definitionId: string,
+  params: Record<string, unknown> | undefined,
+  checkpoint: Pick<ProviderRecoveryCheckpoint, 'resumeOperationId' | 'existingWorldId'>,
+): boolean {
+  if (!WORLD_LABS_DEFINITION_IDS.has(definitionId) || !params) return false;
+  const same = (field: string, id: string | null) => nonEmptyString(id) && params[field] === id;
+  if (same('resume_operation_id', checkpoint.resumeOperationId)) return true;
+  return definitionId === 'worldlabs-environment' && same('existing_world_id', checkpoint.existingWorldId);
+}
+
 /** Apply one checkpoint to a matching live node without accepting recovery
  * fields on unrelated definitions. */
 export function applyProviderRecoveryToLiveParams(
@@ -848,6 +884,15 @@ function isRunRecord(value: unknown): value is RunRecord {
       && Object.values(value.skippedNodes).every((reason) => typeof reason === 'string')));
 }
 
+/** The well-formed landing stamps (finite, positive epoch ms) of a stored
+ * record's `nodeLandedAt`, or undefined when none is. */
+function sanitizeNodeLandedAt(value: unknown): Record<string, number> | undefined {
+  if (!isObject(value)) return undefined;
+  const kept = Object.entries(value)
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] > 0);
+  return kept.length > 0 ? deepFreeze(Object.fromEntries(kept)) : undefined;
+}
+
 function isCreateRunOrigin(value: unknown): value is CreateRunOrigin {
   return isObject(value) && typeof value.genId === 'string'
     && typeof value.sessionId === 'string' && typeof value.prompt === 'string'
@@ -927,9 +972,14 @@ export function loadRunHistory(
         : status === 'failed'
           ? (record.statusNote ?? worldLabsFailureNote(record.snapshot, record.targetNodeId))
           : undefined;
+      // A malformed landing stamp is dropped, never the record.
+      const nodeLandedAt = sanitizeNodeLandedAt(record.nodeLandedAt);
+      if (record.nodeLandedAt !== undefined
+        && JSON.stringify(record.nodeLandedAt) !== JSON.stringify(nodeLandedAt)) metadataChanged = true;
       return {
         ...unstamped,
         ...stamp,
+        nodeLandedAt,
         snapshot: freezeRunSnapshot(record.snapshot),
         createOrigin: record.createOrigin ? deepFreeze(record.createOrigin) : undefined,
         cinemaShot: record.cinemaShot ? deepFreeze(record.cinemaShot) : undefined,

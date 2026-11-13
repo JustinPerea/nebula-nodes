@@ -3,7 +3,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { keyPhrase, routeMissingKeyLine, selectRoute, type ApiKeys } from './directRoute';
 import { nodesThatRun, type RunScope } from './runScope';
-import { FOLLOWING_MARK } from './canvasLock';
+import { FOLLOWING_MARK, KEPT_MARK } from './canvasLock';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL } from './useBackendOffline';
 
 /**
@@ -176,7 +176,7 @@ const CANVAS_LOCK_MARKS = [FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL] as con
  * comes before reasons that clear by themselves, or the person waits out the
  * run only to be refused. So the missing key comes first, then the run in
  * progress, then following, then offline (lib/canvasLock `act`, in its own
- * order), then the control's own disabled state and title.
+ * order; a kept canvas, which holds every other reason, comes before all), then the control's own disabled state and title.
  *
  * A control with a missing key is key-locked whatever else holds it:
  * `aria-disabled`, never natively disabled, so it keeps its focus and
@@ -189,7 +189,9 @@ const CANVAS_LOCK_MARKS = [FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL] as con
 export function withKeyLock<T extends { disabled: boolean; title?: string | undefined }>(
   props: T, reason: string | null | undefined, reasonId: string,
 ): T & KeyLockedProps {
-  if (!reason) return props;
+  // A kept canvas (PR #199, GM r19 item 4) comes first of all, as in canvasLock `act`:
+  // its line and mark stay, and the missing key is told once the canvas is back.
+  if (!reason || KEPT_MARK in props) return props;
   const rest: Record<string, unknown> = { ...props };
   for (const mark of CANVAS_LOCK_MARKS) delete rest[mark];
   return { ...(rest as T), disabled: false, title: reason, ...keyLockedProps(reason, reasonId) };

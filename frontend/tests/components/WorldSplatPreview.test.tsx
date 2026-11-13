@@ -255,7 +255,7 @@ describe('World v2 splat preview', () => {
   // GM, PR #203 r13 item 1: the 3D viewer isolates the page behind it (the
   // proposal bar's slot with it) and keeps the notices usable; on close the
   // page is back and focus returns to "Explore in 3D".
-  it('isolates the page and the proposal bar behind it, notices usable; on close both are back and focus returns', async () => {
+  it('isolates the page and the proposal bar behind it, a notice already shown under its scrim; on close both are back and focus returns', async () => {
     const region = document.createElement('div');
     region.setAttribute('data-notice-region', '');
     region.innerHTML = '<div data-notice-slot="proposal"><button type="button">Accept</button></div>'
@@ -274,12 +274,15 @@ describe('World v2 splat preview', () => {
       const slot = region.querySelector('[data-notice-slot="proposal"]')!;
       expect(slot).toHaveAttribute('inert', '');
       expect(slot).toHaveAttribute('aria-hidden', 'true');
-      expect(region.querySelector('[data-notice-slot="notice"] button')!.closest('[inert], [aria-hidden="true"]')).toBeNull();
+      // A notice already on the page goes under the scrim with it (GM r25 (4) on PR #199: lib/modalFocus holdNoticesUnderModal).
+      const undoNotice = region.querySelector('[data-notice-slot="notice"] button')!;
+      expect(undoNotice.closest('[inert]')).toBe(undoNotice);
       fireEvent.click(within(dialog).getByRole('button', { name: 'Close 3D viewer' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       expect(page).not.toHaveAttribute('inert');
       expect(slot).not.toHaveAttribute('inert');
       expect(slot).not.toHaveAttribute('aria-hidden');
+      expect(undoNotice.closest('[inert], [aria-hidden="true"]')).toBeNull();
       expect(screen.getByRole('button', { name: EXPLORE })).toHaveFocus();
     } finally {
       region.remove();

@@ -52,8 +52,9 @@ RECOVERY_FIELD_LABELS = {
     ("worldlabs-environment", "existing_world_id"): "Existing World ID",
     ("worldlabs-world-export", "resume_operation_id"): "Resume Export Operation ID",
 }
-# The status bar's button, by its round 13 label (GM).
-UNLOCK_BUTTON = "“I've checked Marble”"
+# The status bar's button, by its round 13 label (GM; curly apostrophe, GM r33
+# on PR #199). The frontend's UNLOCK_LABEL is the same text.
+UNLOCK_BUTTON = "“I’ve checked Marble”"
 PERSON_LINES = {
     # The answer to the paid request never came (or can't prove World Labs
     # didn't take it): the node is held until the person checks Marble.

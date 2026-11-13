@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
-import { canTakeFocus, hideBehind, holdNoticeTabbing, returnFocusTo } from '../lib/modalFocus';
+import { canTakeFocus, hideBehind, holdNoticesUnderModal, holdNoticeTabbing, returnFocusTo } from '../lib/modalFocus';
 import { createPortal } from 'react-dom';
 
 let opened = 0;
@@ -109,6 +109,10 @@ const contain = (event: SyntheticEvent) => event.stopPropagation();
  *   attribute back and, when focus was left on nothing (in the dialog that
  *   is going, or on <body>), returns it to the control that opened it. A
  *   dialog's own focus return runs after this, so it wins where it has one.
+ * - GM r25 (4) on PR #199: an aria-modal dialog puts the notices already on
+ *   the page under its scrim (inert and dimmed: lib/modalFocus
+ *   holdNoticesUnderModal) as it opens, and gives them back as it closes;
+ *   one that arrives while it is open stays above, live.
  */
 export function ModalPortal({ children, fallbackFocus }: {
   children: ReactNode;
@@ -187,6 +191,23 @@ export function ModalPortal({ children, fallbackFocus }: {
       });
     };
   }, [openers]);
+  // Before paint, so a notice never shows live for a frame under an open
+  // dialog. A dialog that renders later (a lazy chunk) holds when it shows.
+  useLayoutEffect(() => {
+    const own = portal.current;
+    if (!own) return undefined;
+    let release: (() => void) | null = null;
+    const observer = new MutationObserver(() => hold());
+    function hold() {
+      const dialog = own?.querySelector('[aria-modal="true"]');
+      if (release || !own || !dialog) return;
+      observer.disconnect();
+      release = holdNoticesUnderModal(own, dialog);
+    }
+    observer.observe(own, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-modal'] });
+    hold();
+    return () => { observer.disconnect(); release?.(); };
+  }, []);
   return createPortal(
     <div ref={portal} className="modal-portal nokey" data-modal-layer={layer}
       onClick={contain} onDoubleClick={contain} onContextMenu={contain}>

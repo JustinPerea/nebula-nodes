@@ -22,7 +22,7 @@ import { SceneClashNotices } from '../src/components/canvas/SceneClashNotice';
 import { SceneStopLines } from '../src/components/canvas/SceneStopLines';
 import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/ProjectHome';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
-import { editsSavedAsProjectLine } from '../src/store/projectStore';
+import { editsSavedAsProjectLine } from '../src/store/projectFlows';
 
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());

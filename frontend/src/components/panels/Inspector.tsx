@@ -1060,7 +1060,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
                       // lock's own tooltip, the follow reason first, then
                       // offline's verb; "Remove swatch" when live.
-                      {...lock.act({ title: held ? undefined : 'Remove swatch', offline: 'remove swatches' })}
+                      {...lock.act({ title: held ? undefined : 'Remove swatch', offline: 'remove swatches', kept: 'live' })}
                       {...heldProps}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
@@ -1103,7 +1103,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
               // reason, not "Add a swatch", while it can't add.
               // While the line shows, Add waits under it with Extract.
-              {...lock.act({ title: 'Add a swatch', offline: 'add swatches' })}
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches', kept: 'live' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -1122,7 +1122,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 type="button"
                 className="inspector__action-button"
                 data-palette-part="try"
-                {...lock.act({ title: undefined, offline: 'extract a palette' })}
+                {...lock.act({ title: undefined, offline: 'extract a palette', kept: 'live' })}
                 aria-disabled={retrying || undefined}
                 onClick={() => {
                   if (retrying || refuseCanvasEdit()) return;
@@ -1620,7 +1620,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button"
             // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
-            {...withKeyLock(lock.act({ title: 'Run this node and its dependencies' },
+            {...withKeyLock(lock.act({ title: 'Run this node and its dependencies', kept: 'run' },
               { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) }), keyLock, keyLockId)}
             onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
           >
@@ -1638,7 +1638,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.duplicateIt) })}
+            {...lock.act({ title: 'Duplicate this node', kept: 'live' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.duplicateIt) })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1653,7 +1653,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.deleteIt) })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node', kept: 'live' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.deleteIt) })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

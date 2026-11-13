@@ -100,7 +100,10 @@ body.app-slava-restraint .react-flow__minimap {
      the empty Panel stays 0 px wide. */
   --selection-toolbar-slot-w: 960px;
   min-height: var(--selection-toolbar-h);
-  margin-top: 92px;
+  /* Below the World Labs notice while it shows (GM r34 A5 on PR #199;
+     lib/bottomBar.ts publishTopNotice): the lower of its own line and the
+     notice's foot plus 8px. Without a notice the value is unset: 92px. */
+  margin-top: max(92px, var(--top-notice-clearance, 0px));
   pointer-events: none;
 }
 
@@ -126,6 +129,11 @@ body.app-slava-restraint .react-flow__minimap {
   -webkit-backdrop-filter: blur(22px);
   pointer-events: auto;
   animation: selection-toolbar-in 140ms ease-out both;
+  /* Off its own place only to keep clear of the selection (GM r35 on PR
+     #199; lib/bottomBar.ts placeSelectionToolbar): flipped below it. The
+     Panel, the floating panels' marker, stays where it is. */
+  position: relative;
+  top: var(--selection-toolbar-offset, 0px);
 }
 
 .selection-toolbar__count {

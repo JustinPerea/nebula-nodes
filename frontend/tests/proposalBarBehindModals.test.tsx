@@ -116,6 +116,9 @@ describe.each(MODALS)('the proposal bar behind the $label (review r5 MEDIUM-1)',
     expect(home()).not.toBeNull();
     expect(accept.closest('[inert]')).toBe(slot);
     expect(accept.closest('[aria-hidden="true"]')).toBe(slot);
+    // A notice already shown goes under the scrim (GM r25 (4) on PR #199: holdNoticesUnderModal), and is back on close.
+    expect(undo.closest('[inert]')).toBe(undo.closest('[role="status"]'));
+    close();
     expect(undo.closest('[inert], [aria-hidden="true"]')).toBeNull();
   });
 

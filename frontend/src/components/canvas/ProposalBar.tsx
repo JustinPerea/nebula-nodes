@@ -569,7 +569,7 @@ export function ProposalBar() {
             <button
               type="button"
               className="proposal-bar__button"
-              {...lock.act({ disabled: Boolean(pendingKind) })}
+              {...lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' })}
               {...gate.control()}
               onClick={(event) => {
                 if (gateHeld || !settled()) return;
@@ -586,7 +586,7 @@ export function ProposalBar() {
               className="proposal-bar__button proposal-bar__button--primary"
               // The missing key first, then the canvas lock, then the gate
               // (withKeyLock, GM PR #203 r11 item 3), as on every Run surface.
-              {...withGate(gate.control(), withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pendingKind) }), acceptLock, acceptLockId),
+              {...withGate(gate.control(), withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId),
                 pendingKind !== 'accept' && countChip && acceptTitle ? acceptCostId : null))}
               onClick={(event) => {
                 if (gateHeld || acceptLock || !settled()) return;

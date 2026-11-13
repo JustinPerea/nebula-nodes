@@ -17,6 +17,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { isCanvasSelectionDragging, onCanvasSelectionDragEnd } from '../lib/canvasSelectionDrag';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { personFocusMark, personMovedFocusSince } from '../lib/canvasFocus';
 import { forgetPersonPlaced, notePersonPlaced } from '../lib/personNodeMoves';
 import { useArrangeStore } from './arrangeStore';
 import {
@@ -39,6 +40,8 @@ import {
   recordRunOutput,
   recordRunBatchOutputs,
   recordRunSkip,
+  recordNodeLanded,
+  paramsHoldRecoveryId,
   sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
   sameRecipeParams,
@@ -90,7 +93,7 @@ import {
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../lib/agentCursorMotion';
 import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText, providerRecoveryPlaceKey } from '../lib/worldLabsWaiting';
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
@@ -143,10 +146,13 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
   settingsOnOneNode, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
+import { checkKeptWire, refusedConnectionLine, refusedDropLine, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
+import { notePersonInput } from '../lib/personInput';
 import { addNodeLine, lockLine, runFinishesLine } from '../lib/runLock';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
@@ -530,7 +536,32 @@ export interface UndoNotice {
   copy?: NoticeCopy;
   /** A part of `text` shown in mono (a model id, GM round 15 of PR #114). */
   mono?: string;
+  /** The kept tab's own step the button acts on (GM r18 on PR #199):
+   * set instead of `entry` while the canvas is kept in this tab. */
+  keptStep?: KeptStep;
 }
+
+/**
+ * GM r18 on PR #199: while the canvas is kept in this tab (lib/keptCanvas),
+ * moves, deletes, a clear, duplicates and Arrange change only this tab, and
+ * Undo walks these steps only: its own history, started empty when the canvas
+ * was kept, so it never steps back into the history Nebula saved. Each step
+ * holds what it changed, never a whole-canvas snapshot, so undoing a delete
+ * brings the nodes back without undoing typing done since.
+ */
+export type KeptStep =
+  | { kind: 'remove'; nodes: { item: Node<NodeData>; index: number }[]; edges: { item: Edge; index: number }[] }
+  | { kind: 'add'; nodes: Node<NodeData>[]; edges: Edge[] }
+  | { kind: 'move'; from: Record<string, { x: number; y: number }>; to: Record<string, { x: number; y: number }> }
+  // GM r19 (5): typing and a rename, as normal Undo takes them (one step per
+  // node while the typing runs, maybePushUndo's 500 ms).
+  | { kind: 'data'; nodeId: string; from: KeptNodeFields; to: KeptNodeFields }
+  // GM r21 (3): a connection drawn while kept (with the wires it replaced,
+  // and the node a wire-drop added with it).
+  | { kind: 'wire'; nodes: Node<NodeData>[]; added: Edge[]; removed: { item: Edge; index: number }[] };
+
+/** The fields a kept typing or rename step puts back. */
+export interface KeptNodeFields { params?: Record<string, unknown>; label?: string }
 
 /** The project a line's "Open copy" opens (the copy a failed handoff saved). */
 export interface NoticeCopy { projectId: string }
@@ -736,6 +767,9 @@ function pushUndo(
   const newStack = [...undoStack, snapshot];
   if (newStack.length > UNDO_CAP) newStack.shift();
   set({ undoStack: newStack, redoStack: [] });
+  // Only the person's own actions take a step here (an agent's edit arriving
+  // is stacked by editArrived): their first own edit (GM r13 on PR #199, 1).
+  notePersonInput();
   return snapshot;
 }
 
@@ -751,6 +785,7 @@ function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
   const undoStack = [...get().undoStack, step];
   if (undoStack.length > UNDO_CAP) undoStack.shift();
   set({ undoStack, redoStack: [] });
+  notePersonInput();
   return step;
 }
 
@@ -1007,6 +1042,10 @@ interface GraphState {
   releaseGraphImport: (options?: { discardSuspended?: boolean }) => void;
   providerRecoveryWarning: string | null;
   providerRecoveries: ProviderRecoveryCheckpoint[];
+  /** Where Nebula wrote each record (PR #199 round 23): its stamp, keyed
+   * by providerRecoveryPlaceKey. Only the person's tab gets these (the
+   * graphSync's person form, the frame after a verified hello). */
+  providerRecoveryPlaces: Readonly<Record<string, ProviderRecoveryPlace>>;
   uncertainWorldLabsRunId: string | null;
   providerStartAmbiguities: ProviderStartAmbiguity[];
   backendFreshStartPending: boolean;
@@ -1014,6 +1053,9 @@ interface GraphState {
   // Undo/Redo
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
+  /** The kept tab's own Undo and Redo (KeptStep); empty unless kept. */
+  keptUndo: KeptStep[];
+  keptRedo: KeptStep[];
   undo: () => void;
   redo: () => void;
   /** Starts an undo step for an edit this tab sends and the backend makes
@@ -1122,6 +1164,15 @@ interface GraphState {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection, options?: { skipUndo?: boolean }) => void;
+  /** A connection the canvas refused as it was dropped (a wrong kind, a
+   * loop): says why, on kept and normal tabs alike (GM r26, 3). */
+  sayRefusedConnection: (connection: Connection) => void;
+  /** A drop React Flow refused on a handle (Canvas.onConnectEnd): says its
+   * line (GM r26, 3; GM r28, 1: two outputs, two inputs) and changes
+   * nothing. True when the drop was a refusal on a handle, so the canvas
+   * opens no connection popup for it. */
+  sayRefusedDrop: (from: { nodeId: string; handleId: string; handleType: 'source' | 'target' },
+    state: { isValid: boolean | null; toHandle?: { nodeId: string; id?: string | null; type?: 'source' | 'target' } | null }) => boolean;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   /** Give a node a custom name. Blank, or the model's own name, restores the default. */
   renameNode: (nodeId: string, label: string) => void;
@@ -1190,6 +1241,12 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
   deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
+  /** Whether a recovery record is one the open canvas names as its own
+   * (providerRecoveryOnCanvas on the store as it is now), for Run History.
+   * A store method, so the panel reads it through its selector: importing
+   * the function made the presence ratchet's G scan follow it into this
+   * file's every same-named definition (round 22 of PR #199). */
+  providerRecoveryOnCanvas: (checkpoint: ProviderRecoveryCheckpoint) => boolean;
   /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
    * notice saying why, when one of `nodeIds` holds World Labs state, so React
    * Flow removes neither the nodes nor their wires (round 3b). */
@@ -1576,16 +1633,6 @@ function dynamicProviderFor(definitionId: string): DynamicProviderType {
   return DYNAMIC_PROVIDER_BY_DEFINITION[definitionId] ?? 'openrouter';
 }
 
-function targetHandleAllowsMultiple(node: Node<NodeData>, handleId: string | null | undefined): boolean {
-  if (!handleId) return false;
-  const dynamicData = node.data as unknown as DynamicNodeData | undefined;
-  if (dynamicData?.isDynamic && dynamicData.dynamicInputPorts) {
-    return Boolean(dynamicData.dynamicInputPorts.find((p) => p.id === handleId)?.multiple);
-  }
-  const definition = NODE_DEFINITIONS[node.data.definitionId];
-  return Boolean(definition?.inputPorts.find((p) => p.id === handleId)?.multiple);
-}
-
 function toDynamicPort(p: {
   id: string;
   label: string;
@@ -1701,7 +1748,11 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
           outputs: Object.fromEntries(Object.entries(data.outputs ?? {}).filter(
             ([portId]) => !portId.startsWith('shot_') || validHandleIds.has(portId),
           )),
-          dynamicInputPorts: data.dynamicInputPorts ?? [],
+          // The definition's inputs, as a loaded file gets them (graphFile):
+          // an empty list would hide them from the port lookups (review 16
+          // kept-ui LOW-1: a second Character ref replaced the first).
+          dynamicInputPorts: data.dynamicInputPorts?.length ? data.dynamicInputPorts
+            : (NODE_DEFINITIONS[data.definitionId]?.inputPorts ?? []),
           dynamicOutputPorts: outputPorts,
           dynamicParams: data.dynamicParams ?? [],
           providerMeta: data.providerMeta ?? {},
@@ -2710,6 +2761,26 @@ const labelsSavedBefore = new Map<string, string>();
 export interface HandoffPending {
   params: Record<string, Record<string, unknown>>;
   labels: Record<string, string>;
+  /** The nodes only this tab had (a duplicate, a paste) that it deleted since
+   * the project loaded (review 18 MEDIUM-1 of PR #199): Nebula deletes only
+   * these, and only for the tab that saved them; a node a handoff leaves out
+   * is never a delete. Their ids as this tab had them. */
+  deleted: string[];
+}
+
+/** Every node only this tab has had since the project loaded, and those
+ * Nebula gave its own ids since (adopted: gone under the old id, but not
+ * deleted). Their difference with the canvas is what this tab deleted. */
+const tabLocalSeen = new Set<string>();
+const tabLocalAdopted = new Set<string>();
+function resetTabLocalDeletes(): void {
+  tabLocalSeen.clear();
+  tabLocalAdopted.clear();
+}
+/** The tab-local nodes this tab deleted since the project loaded. */
+export function tabLocalDeletes(nodes: Node<NodeData>[] = useGraphStore.getState().nodes): string[] {
+  const present = new Set(nodes.map((node) => node.id));
+  return [...tabLocalSeen].filter((id) => !present.has(id) && !tabLocalAdopted.has(id));
 }
 
 function handoffPending(nodes: Node<NodeData>[]): HandoffPending {
@@ -2726,7 +2797,7 @@ function handoffPending(nodes: Node<NodeData>[]): HandoffPending {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     if (node && typeof node.data.label === 'string') labels[nodeId] = node.data.label;
   }
-  return { params, labels };
+  return { params, labels, deleted: tabLocalDeletes(nodes) };
 }
 
 /** Whether a sync's backend nodes are the ones on the canvas now: the same
@@ -2974,7 +3045,7 @@ function parkParamSave(nodeId: string, saves: CutOffSave[]): void {
 
 function resendParkedParamSave(nodeId: string): void {
   const parked = parkedParamSaves.get(nodeId);
-  if (!parked) return;
+  if (!parked || isCanvasKept()) return;
   clearTimeout(parked.timer);
   parkedParamSaves.delete(nodeId);
   // Typing since then is on its own timer and goes with it.
@@ -3007,7 +3078,38 @@ function forgetParkedParamSaves(): void {
   takeParkedParamSaves();
 }
 
+/** GM r15 on PR #199 (review 11, HIGH-1): the canvas is kept in this
+ * tab. Parked saves stop waiting for a resend (one would be refused and put
+ * back); typing stays on the canvas only (updateNodeData, pushNodeParams). */
+export function keepCanvasLocally(): void {
+  const already = isCanvasKept();
+  setCanvasKept(true);
+  // The kept tab's own Undo starts empty (GM r18): it never reaches
+  // the steps before, which Nebula saved.
+  if (!already) useGraphStore.setState({ keptUndo: [], keptRedo: [] });
+  forgetParkedParamSaves();
+  // The backend refuses agents' writes and switches meanwhile (GM r16 on
+  // PR #199: 409 canvas_kept_in_tab). Optional: tests mock the socket.
+  wsClient.setKeptEdits?.(true);
+}
+
+/** The kept canvas was saved as its own project (or let go): what this
+ * tab tracked as unsaved for the old project goes, since the project it
+ * opens next brings its own. */
+export function releaseKeptCanvas(): void {
+  if (!isCanvasKept()) return;
+  setCanvasKept(false);
+  useGraphStore.setState({ keptUndo: [], keptRedo: [] });
+  keptDragFrom.clear();
+  wsClient.setKeptEdits?.(false);
+  forgetParkedParamSaves();
+  clearAllParamPushTimers();
+}
+
 function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Promise<void> {
+  // Kept in this tab (GM r15): nothing is sent; the typing waits for
+  // [Save as a project] with the rest of the canvas.
+  if (isCanvasKept()) return Promise.resolve();
   const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
   if (!node) {
     if (deletesInFlight.has(nodeId) && unsavedParamEdits.has(nodeId)) deferredParamPushes.add(nodeId);
@@ -3079,7 +3181,15 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
     // canvas replaced since: its own lines say what was cut off.
     const outOfDate = err instanceof ParamSaveRefused && err.outOfDate;
     const sameGraph = graphAtPush === canvasReplacementRevision;
-    if (outOfDate && sameGraph && !options.resent && unsavedParamEdits.get(nodeId) === edits) {
+    if (isCanvasKept() && sameGraph) {
+      // Review 11 of PR #199, HIGH-1: refused because Nebula restored its
+      // project list (or an agent's write closed the project) while it was on
+      // its way. The canvas is kept in this tab now, so the typing stays:
+      // never put back, never sent again; [Save as a project] files it.
+      parked = true;
+      const pushes = paramPushesOut.get(nodeId);
+      if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
+    } else if (outOfDate && sameGraph && !options.resent && unsavedParamEdits.get(nodeId) === edits) {
       // Round 22 (review 21, L-a): kept for what the next sync says
       // (parkParamSave). Its keys are this save's again for the resend.
       parked = true;
@@ -6736,6 +6846,8 @@ function persistNodePositions(positions: Record<string, { x: number; y: number }
   // drop, a nudge, an Arrange): an agent cursor resting on it rides it,
   // never flies (lib/personNodeMoves.ts records each move's own position).
   notePersonPlaced(positions);
+  // Kept in this tab (GM r18): a move stays on this tab until [Save as a project].
+  if (isCanvasKept()) return;
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
   );
@@ -6860,6 +6972,15 @@ function changeCanvasNodes(
   breakUndoDebounce();
   const undoStep = shared?.step ?? pushUndo(set, get);
   const shownBefore = new Set(get().nodes.map((node) => node.id));
+  // What was selected and focused at the press: a delete Nebula refuses
+  // puts it back (below, putBackFailedDeletes).
+  const selectionBefore = {
+    nodes: get().nodes.filter((node) => node.selected).map((node) => node.id),
+    inspected: useUIStore.getState().selectedNodeId,
+    focus: focusMarkOf(typeof document === 'undefined' ? null : document.activeElement),
+    // The person's own focus moves so far (GM r36 item 6): one after this is moving on.
+    personFocus: personFocusMark(),
+  };
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
   const replacementRevision = canvasReplacementRevision;
@@ -7055,24 +7176,38 @@ function changeCanvasNodes(
     takeover?.(set, get);
   }
   /** The nodes whose delete failed come back where they were, with their
-   * wires, unselected; the steps taken since hold them again. Nothing was
-   * deleted at all: the step goes, wherever it is (a delete that didn't
-   * happen is no step), unless it also took wires (deleteCanvasElements). */
+   * wires; the steps taken since hold them again. Nothing was deleted at
+   * all: the step goes, wherever it is (a delete that didn't happen is no
+   * step), unless it also took wires (deleteCanvasElements).
+   *
+   * GM r34 addendum 3 on PR #199 (refining round 20 B): when the person
+   * hasn't selected or focused anything since the press (GM r36 item 6:
+   * focus the person moved, never focus Nebula moved; lib/canvasFocus
+   * personMovedFocusSince), a refused delete
+   * restores the state at the press: the nodes come back selected as they
+   * were, the inspected one inspected again, focus where it was (so a
+   * refusal that names the node's id, which a selected card shows, reads
+   * beside it). When they've moved on, B holds: the nodes come back
+   * unselected, so a late refusal never rings a node over what they
+   * turned to. */
   function putBackFailedDeletes(failed: string[]): void {
     const back = new Set(failed);
     // Review 1 of PR #205 (LOW-1): what stays on the canvas isn't brought
     // back by this step's Undo, and its lines never name it.
     forgetRemoved(undoStep, back);
-    // GM (round 20, B): the node comes back unselected, in the UI's
-    // selection too (the ring and the settings pill read selectedNodeId).
-    const selectedInUi = useUIStore.getState().selectedNodeId;
-    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null, { keepPin: true });
+    const ui = useUIStore.getState();
+    // Nothing selected since the press but what was selected then.
+    const untouched = get().nodes.every((node) => !node.selected || selectionBefore.nodes.includes(node.id))
+      && (ui.selectedNodeId === null || ui.selectedNodeId === selectionBefore.inspected)
+      && !personMovedFocusSince(selectionBefore.personFocus);
+    const reselect = new Set(untouched ? selectionBefore.nodes.filter((nodeId) => back.has(nodeId)) : []);
+    if (!untouched && ui.selectedNodeId && back.has(ui.selectedNodeId)) ui.selectNode(null, { keepPin: true });
     set((state) => {
       const present = new Set(state.nodes.map((node) => node.id));
-      // Where it was, as it was; never selected (GM: "Don't select it").
+      // Where it was, as it was, selected only as it was at the press.
       // A rename of it Nebula refused meanwhile isn't its name (review 7 of PR #205).
       const returning = onCanvas.filter((node) => back.has(node.id) && !present.has(node.id))
-        .map((node) => withoutRefusedName(node.selected ? { ...node, selected: false } : node));
+        .map((node) => withoutRefusedName(Boolean(node.selected) === reselect.has(node.id) ? node : { ...node, selected: reselect.has(node.id) }));
       const nodes = [...state.nodes];
       for (const node of returning) {
         const after = onCanvas.slice(onCanvas.findIndex((candidate) => candidate.id === node.id) + 1)
@@ -7101,10 +7236,38 @@ function changeCanvasNodes(
       const drop = removedNone && !shared?.keep;
       return { nodes, edges, ...(drop ? { undoStack: state.undoStack.filter((step) => step !== undoStep) } : {}) };
     });
+    if (!untouched) return;
+    if (selectionBefore.inspected && back.has(selectionBefore.inspected)) useUIStore.getState().selectNode(selectionBefore.inspected);
+    restoreFocusMark(selectionBefore.focus);
   }
   // A restore already queued (an earlier undo or redo) reaches the backend
   // after these deletes, so its restore can name what they removed.
   restoreQueue = restoreQueue.then(() => deleting);
+}
+
+/** Where focus was at a delete's press, so a refused delete can put it back
+ * (putBackFailedDeletes): the element itself, and, for when it was
+ * re-rendered meanwhile (a node card, the selection toolbar's button),
+ * how to find its new copy. */
+interface FocusMark { element: Element | null; nodeId: string | null; toolbarLabel: string | null }
+function focusMarkOf(element: Element | null): FocusMark | null {
+  if (!element || typeof document === 'undefined' || element === document.body) return null;
+  const card = element.closest('.react-flow__node');
+  const button = element.closest('.selection-toolbar button');
+  return { element, nodeId: card?.getAttribute('data-id') ?? null, toolbarLabel: button?.getAttribute('aria-label') ?? null };
+}
+/** Focus back on `mark`'s element, or its re-rendered copy, after the next
+ * paint; only while nothing else took focus meanwhile. */
+function restoreFocusMark(mark: FocusMark | null): void {
+  if (!mark || typeof window === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    const now = document.activeElement;
+    if (now && now !== document.body && now !== mark.element) return;
+    const target = (mark.element?.isConnected ? mark.element : null)
+      ?? (mark.toolbarLabel ? document.querySelector(`.selection-toolbar button[aria-label="${CSS.escape(mark.toolbarLabel)}"]`) : null)
+      ?? (mark.nodeId ? document.querySelector(`.react-flow__node[data-id="${CSS.escape(mark.nodeId)}"]`) : null);
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  });
 }
 
 /** The canvas's wire changes, after the caller took the undo step for a
@@ -7754,9 +7917,115 @@ function namedOnCanvas(nodes: readonly Node<NodeData>[], nodeId: string): string
   return typeof label === 'string' && label.trim() ? `\u201c${label}\u201d` : undefined;
 }
 
+/** Where Nebula wrote a World Labs record (PR #199 round 23): the project
+ * its stamp names (null: unstamped, or a project deleted for good) and the
+ * node's type (a definition id), from the person-only places. */
+export interface ProviderRecoveryPlace { projectId: string | null; nodeType: string | null }
+/** The places a person-only payload carries ([{runId, nodeId, projectId,
+ * nodeType}]), or null when it carries none (an agents' form: keep what
+ * the tab has). */
+export function providerRecoveryPlacesFrom(raw: unknown): Record<string, ProviderRecoveryPlace> | null {
+  if (!Array.isArray(raw)) return null;
+  const places: Record<string, ProviderRecoveryPlace> = {};
+  for (const entry of raw as unknown[]) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { runId, nodeId, projectId, nodeType } = entry as Record<string, unknown>;
+    if (typeof runId !== 'string' || typeof nodeId !== 'string') continue;
+    places[providerRecoveryPlaceKey(runId, nodeId)] = {
+      projectId: typeof projectId === 'string' && projectId ? projectId : null,
+      nodeType: typeof nodeType === 'string' && nodeType ? nodeType : null,
+    };
+  }
+  return places;
+}
+/** The store takes the places a payload carries; the same places keep the
+ * same object (no re-render). */
+export function applyProviderRecoveryPlaces(raw: unknown): void {
+  const places = providerRecoveryPlacesFrom(raw);
+  if (!places) return;
+  const now = useGraphStore.getState().providerRecoveryPlaces;
+  if (JSON.stringify(now) === JSON.stringify(places)) return;
+  useGraphStore.setState({ providerRecoveryPlaces: places });
+}
+function placeOf(state: Partial<Pick<GraphState, 'providerRecoveryPlaces'>>, runId: string, nodeId: string):
+  ProviderRecoveryPlace | undefined {
+  return state.providerRecoveryPlaces?.[providerRecoveryPlaceKey(runId, nodeId)];
+}
+
+/**
+ * Whose World Labs record this is, as the tab can tell (review 20 of PR
+ * #199, LOW-2; node ids repeat across projects): this project's when its
+ * run is in the open canvas's run history, is a run this tab started on
+ * this project that is still going (its record opens with the run, so this
+ * only covers a history that has dropped it), or (round 23, with `nodeId`)
+ * Nebula's stamp for it names this project. Anything else can't be known
+ * to be this project's.
+ */
+export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory'>
+  & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>, runId: string, nodeId?: string): boolean {
+  if (state.runHistory.some((record) => record.id === runId)) return true;
+  const open = canvasNow().projectId;
+  if (nodeId !== undefined && open !== null && placeOf(state, runId, nodeId)?.projectId === open) return true;
+  const started = runCanvases.get(runId);
+  return started !== undefined && ownsRun(runId) && started.projectId === open;
+}
+
+/* The tab never releases a hold on its own (review 21 LOW-1, round 23):
+ * a delete of a node it can't place (no run of this history, no stamp
+ * naming this project, no ID in the node's settings) goes to the backend,
+ * whose guard holds it unless Nebula's stamp names another project, and
+ * whose line says why. A blank World Labs copy is refused whatever the
+ * records say (providerSafeCloneParams). */
+
+/**
+ * The one matcher for a recovery record and a canvas node (Delete,
+ * Duplicate and Paste, the hydrate write, Run History's names): the same
+ * node id, and either the record is this project's
+ * (providerRecordIsThisProjects) or the node's own settings hold the
+ * record's ID (runHistory paramsHoldRecoveryId). Never by node id alone.
+ */
+export function providerRecoveryMatchesNode(
+  state: Pick<GraphState, 'runHistory'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>,
+  checkpoint: ProviderRecoveryCheckpoint,
+  node: { id: string; data?: { definitionId?: unknown; params?: unknown } } | undefined,
+): boolean {
+  if (!node || checkpoint.nodeId !== node.id) return false;
+  if (providerRecordIsThisProjects(state, checkpoint.runId, checkpoint.nodeId)) return true;
+  const { definitionId, params } = node.data ?? {};
+  return typeof definitionId === 'string' && params !== null && typeof params === 'object'
+    && paramsHoldRecoveryId(definitionId, params as Record<string, unknown>, checkpoint);
+}
+
+/** An unconfirmed start holds a node only when its run is this project's:
+ * it carries no ID a node could hold, so a run the tab can't place holds no
+ * node here (the backend still refuses a paid start it holds). */
+export function providerAmbiguityMatchesNode(
+  state: Pick<GraphState, 'runHistory'>,
+  ambiguity: ProviderStartAmbiguity,
+  nodeId: string,
+): boolean {
+  return ambiguity.nodeId === nodeId && providerRecordIsThisProjects(state, ambiguity.runId);
+}
+
+/** Whether a recovery record is one the open canvas names as its own (Run
+ * History's names): this project's (its node on the canvas or not), or a
+ * canvas node holds its ID. */
+export function providerRecoveryOnCanvas(
+  state: Pick<GraphState, 'runHistory' | 'nodes'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>,
+  checkpoint: ProviderRecoveryCheckpoint,
+): boolean {
+  return providerRecordIsThisProjects(state, checkpoint.runId, checkpoint.nodeId)
+    || providerRecoveryMatchesNode(state, checkpoint, state.nodes.find((node) => node.id === checkpoint.nodeId));
+}
+
+function nodeHasAmbiguity(state: GraphState, nodeId: string): boolean {
+  return state.providerStartAmbiguities.some((ambiguity) => providerAmbiguityMatchesNode(state, ambiguity, nodeId));
+}
+
 function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
-  return state.providerRecoveries.some((checkpoint) => checkpoint.nodeId === nodeId)
-    || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
+  const node = state.nodes.find((candidate) => candidate.id === nodeId);
+  return state.providerRecoveries.some((checkpoint) => providerRecoveryMatchesNode(state, checkpoint, node))
+    || nodeHasAmbiguity(state, nodeId);
 }
 
 /**
@@ -7864,7 +8133,7 @@ function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): 
   const held = ids.filter((nodeId) => nodeHasProviderSafety(state, nodeId));
   if (held.length === 0) return false;
   // The backend's order: an unconfirmed start before a recovery record.
-  const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
+  const unlock = held.some((nodeId) => nodeHasAmbiguity(state, nodeId));
   const name = ids.length === 1 ? namedOnCanvas(state.nodes, ids[0]) : undefined;
   set(noticeLine(state, heldDeleteText(ids.length, unlock, held.length, name)));
   return true;
@@ -7958,12 +8227,12 @@ function providerSafeCloneParams(
   state: GraphState,
   node: Node<NodeData>,
 ): Record<string, unknown> | null {
-  if (state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === node.id)) {
+  if (nodeHasAmbiguity(state, node.id)) {
     return null;
   }
   const checkpoint = [...state.providerRecoveries]
     .reverse()
-    .find((candidate) => candidate.nodeId === node.id);
+    .find((candidate) => providerRecoveryMatchesNode(state, candidate, node));
   if (!checkpoint) {
     const snapshot = {
       nodes: [{
@@ -8027,12 +8296,26 @@ function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
   return replaceChanged(nodes, (node) => (node.selected ? { ...node, selected: false } : node));
 }
 
+/** The records' IDs written into the live nodes they belong to (a reload,
+ * a load, a hydrate). Only this project's records write (review 20 of PR
+ * #199, LOW-2, P7): a record the tab can't place never writes an ID into a
+ * node, so another project's record never lands in this project's node
+ * with the same id, nor overwrites the ID that node holds. `owner` is the
+ * run history that says whose a record is (the store's, or the one being
+ * loaded with these nodes). */
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
+  owner: Pick<GraphState, 'runHistory'> & Partial<Pick<GraphState, 'providerRecoveryPlaces'>>
+    = useGraphStore.getState(),
 ): Node<NodeData>[] {
   const latestByNode = new Map<string, ProviderRecoveryCheckpoint>();
-  for (const checkpoint of checkpoints) latestByNode.set(checkpoint.nodeId, checkpoint);
+  const places = owner.providerRecoveryPlaces ?? useGraphStore.getState().providerRecoveryPlaces;
+  for (const checkpoint of checkpoints) {
+    if (providerRecordIsThisProjects({ ...owner, providerRecoveryPlaces: places }, checkpoint.runId, checkpoint.nodeId)) {
+      latestByNode.set(checkpoint.nodeId, checkpoint);
+    }
+  }
   let changed = false;
   const next = nodes.map((node) => {
     const checkpoint = latestByNode.get(node.id);
@@ -8498,6 +8781,22 @@ function refuseAdd(line: string): null {
  * isn't connected yet"; until round 12 it kept the node to itself), and a
  * tab whose banner says Nebula is offline refuses before sending anything.
  */
+/** The cards addDynamicNode shows while Nebula makes the node (a uuid
+ * until its `nN` id arrives, milliseconds later). Not a tab-local node:
+ * the reopen stopgap lines (canvasLock's TAB_LOCAL_LINES) don't flash on
+ * it (review 17 drops-locks-ui NIT). */
+const arrivingNodeIds = new Set<string>();
+export function isArrivingNode(id: string): boolean {
+  return arrivingNodeIds.has(id);
+}
+
+/** A node only this tab has, by a tab-local id (Duplicate and Paste), until
+ * the project's next open gives it Nebula's id: the reopen stopgap locks
+ * (GM r26, 4; GM r27, 4). STOPGAP: the bulk-create PR deletes it. */
+export function isTabLocalNode(id: string): boolean {
+  return !CLI_ID_RE.test(id) && !arrivingNodeIds.has(id);
+}
+
 async function createNodeOnBackend(
   set: GraphSet,
   get: GraphGet,
@@ -8669,6 +8968,7 @@ async function reconcilePendingNodeCreation(
       nodes: nodesWithProviderRecoveries(
         [...state.nodes, reconciledNode],
         state.providerRecoveries,
+        state,
       ),
       backendFreshStartPending: false,
     };
@@ -10993,6 +11293,11 @@ function releaseUnresolvedCreates(): void {
 
 wsClient.subscribe((event) => {
   if (event.type === 'socketReconnected') firstSyncAfterReconnect = true;
+  // Sent after a verified hello (PR #199 round 23): the person-only places.
+  if ((event as { type: string }).type === 'providerRecoveryPlaces') {
+    applyProviderRecoveryPlaces((event as { places?: unknown }).places);
+    return;
+  }
   if (event.type === 'graphSync') {
     const boot = (event as { bootId?: unknown }).bootId;
     // Review 10, N-4: a sync from a process this tab has already seen
@@ -11031,10 +11336,60 @@ wsClient.subscribe((event) => {
  * revision and no edit, so read as a sync it could look like a missed
  * clear. It only adopts the revision: the tab is empty, nothing is held for
  * its canvas, and no line is said. */
+/** Select again by the new ids what was selected by the old ones (and the
+ * Inspector's node), after Nebula gave nodes new ids: Save as a project's
+ * copy (PR #199 round 16), and an open, a restore or a restart that
+ * renumbered the canvas this tab shows (round 17). */
+export function adoptRenumberedSelection(renumbered: Record<string, string>, selected: string[], inspected: string | null): void {
+  // Given Nebula's ids: gone under the old ones, never deleted (review 18 MEDIUM-1).
+  for (const id of Object.keys(renumbered)) tabLocalAdopted.add(id);
+  const graph = useGraphStore.getState();
+  const present = new Set(graph.nodes.map((node) => node.id));
+  const adopt = (id: string) => { const next = renumbered[id] ?? id; return present.has(next) ? next : null; };
+  const reselect = new Set(selected.map(adopt).filter((id): id is string => id !== null));
+  if (reselect.size > 0) {
+    useGraphStore.setState({ nodes: graph.nodes.map((node) => (reselect.has(node.id) === Boolean(node.selected)
+      ? node : { ...node, selected: reselect.has(node.id) })) });
+  }
+  const inspect = inspected ? adopt(inspected) : null;
+  if (inspect && useUIStore.getState().selectedNodeId !== inspect) useUIStore.getState().selectNode(inspect);
+}
+
+/** A sync whose `renumbered` says Nebula gave this canvas's local nodes its
+ * own ids (review 15 HIGH-1, round 17: cli_graph never holds a non-nN id,
+ * so an open, a restore or a restart renumbers them): the tab's copies under
+ * the old ids give way to Nebula's nodes under the new ones (a tab keeps its
+ * local nodes through a sync, so without this both would show), and the
+ * selection and the Inspector follow. */
 function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
+  const raw = (event as { renumbered?: unknown }).renumbered;
+  const renumbered = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? Object.fromEntries(Object.entries(raw as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== entry[1]))
+    : {};
+  // The graphNotForThisTab check here is defence only (review 16 NIT-2,
+  // mutant F5, equivalent today): a switch's sync reaches this store after
+  // projectStore's subscribeFirst handler has cleared the project context,
+  // so applyGraphSyncNow would refuse it anyway. Kept so a renumbered sync
+  // for another canvas never removes this tab's nodes if that order changes.
+  if (Object.keys(renumbered).length === 0 || graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
+    const applied = applyGraphSyncNow(event, options);
+    // The answers waiting for this sync (or an earlier one) are handled now,
+    // after it, as if it had come before them (whenSynced).
+    if (applied) noteAppliedSync(event);
+    return applied;
+  }
+  const before = useGraphStore.getState();
+  const selected = before.nodes.filter((node) => node.selected).map((node) => node.id);
+  const inspected = useUIStore.getState().selectedNodeId;
+  const gone = new Set(Object.keys(renumbered));
+  if (before.nodes.some((node) => gone.has(node.id))) {
+    useGraphStore.setState((state) => ({ nodes: state.nodes.filter((node) => !gone.has(node.id)),
+      edges: state.edges.filter((edge) => !gone.has(edge.source) && !gone.has(edge.target)) }));
+  }
   const applied = applyGraphSyncNow(event, options);
-  // The answers waiting for this sync (or an earlier one) are handled now,
-  // after it, as if it had come before them (whenSynced).
+  adoptRenumberedSelection(renumbered, selected, inspected);
+  // As above: the answers waiting for this sync are handled after it.
   if (applied) noteAppliedSync(event);
   return applied;
 }
@@ -11185,6 +11540,8 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
     useCinemaMotionStore.getState().clear();
     clearReplacedCanvasFocus();
   }
+  // The person form's places first, so the records land placed.
+  applyProviderRecoveryPlaces((event as { providerRecoveryPlaces?: unknown }).providerRecoveryPlaces);
   useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
   useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
   if (executionStatuses !== undefined) {
@@ -12151,6 +12508,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   createCancelledLaunchIds: [],
   providerRecoveryWarning: null,
   providerRecoveries: [],
+  providerRecoveryPlaces: {},
   uncertainWorldLabsRunId: null,
   providerStartAmbiguities: [],
   backendFreshStartPending: false,
@@ -12161,6 +12519,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // ---------------------------------------------------------------------------
   undoStack: [],
   redoStack: [],
+  keptUndo: [],
+  keptRedo: [],
   clipboard: null,
 
   // ---------------------------------------------------------------------------
@@ -12175,9 +12535,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   sceneClashes: {},
   resolveSceneClash: (nodeId, keep) => resolveSceneClash(nodeId, keep),
   retrySceneSave: (nodeId) => retrySceneSave(nodeId),
-  undo: () => stepHistory('undo', set, get),
+  // The person's Undo and Redo are their own edits (GM r13 on PR #199, 1).
+  undo: () => { if (get().undoStack.length > 0) notePersonInput(); stepHistory('undo', set, get); },
 
-  redo: () => stepHistory('redo', set, get),
+  redo: () => { if (get().redoStack.length > 0) notePersonInput(); stepHistory('redo', set, get); },
 
   beginUndoStep: (options) => {
     breakUndoDebounce();
@@ -12611,22 +12972,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         return fail('The backend did not confirm the requested connection. Check canvas sync before trying again.');
       }
       const params = node.params && typeof node.params === 'object' && !Array.isArray(node.params) ? node.params : defaults;
-      const nodeTypes: Record<string, string> = {
-        batch: 'batchNode', 'paper-source': 'paperSourceNode', reroute: 'reroute-node',
-        'video-edit': 'editNode', 'remotion-node': 'remotionNode', 'cinema-scene': 'cinemaSceneNode',
-        character: 'characterNode', 'camera-rig': 'cameraRigNode', 'reference-set': 'referenceSetNode',
-        'nebula-moodboard': 'moodboardNode',
-      };
-      const dynamic = isDynamicDefinition(definitionId);
-      const data: NodeData = { label: canvasTitle(definition), definitionId, params, state: 'idle', outputs: {},
-        keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache),
-        ...(dynamic ? { isDynamic: true, providerType: dynamicProviderFor(definitionId),
-          dynamicInputPorts: definition.inputPorts.map(toDynamicPort), dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
-          dynamicParams: [], providerMeta: {} } : {}),
-      };
-      const newNode: Node<NodeData> = { id: nodeId,
-        type: nodeTypes[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
-        position: { ...position }, data };
+      const newNode = newCanvasNode(nodeId, definitionId, params, position);
       // A fast graphSync may already contain either item. Keep its canonical
       // data, outputs and edge ID (or its removal since: an agent's unwire);
       // otherwise expose the acknowledged pair now.
@@ -12689,6 +13035,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         providerMeta: {},
       },
     });
+    arrivingNodeIds.add(tempId);
     set((state) => ({ nodes: [...state.nodes, buildNode(tempId) as unknown as Node<NodeData>] }));
 
     // Its step owns this card, and later the backend id it gets (round 14 of
@@ -12700,6 +13047,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // the node off this tab again (it had stayed there, frontend-only, with
     // only a console line) and says why, as addNode does.
     const takeBack = (): null => {
+      arrivingNodeIds.delete(tempId);
       set((state) => ({
         nodes: state.nodes.filter((n) => n.id !== tempId),
         edges: state.edges.filter((e) => e.source !== tempId && e.target !== tempId),
@@ -12757,6 +13105,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // Remap edges too so any connections drawn during the race window
       // keep pointing at the renamed node.
       const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
+      arrivingNodeIds.delete(tempId);
       if (undoStep) renameOwnedNode(undoStep, tempId, shortId);
       set((state) => ({
         // The create's own graphSync lands before its answer (the backend
@@ -12826,6 +13175,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     changeCanvasNodes(nodes.map((id) => ({ id, type: 'remove' as const })), set, get, { step, keep: wireChanges.length > 0 });
   },
 
+  sayRefusedConnection: (connection) => {
+    const state = get();
+    const line = refusedConnectionLine(connection, state.nodes, state.edges);
+    if (line) set((current) => noticeLine(current, line));
+  },
+
+  sayRefusedDrop: (from, end) => {
+    const state = get();
+    const line = refusedDropLine(from, end, state.nodes, state.edges);
+    if (line) set((current) => noticeLine(current, line));
+    return line !== null;
+  },
+
   onConnect: (connection, options) => {
     if (!connection.source || !connection.target) return;
     const sourceNode = get().nodes.find((n) => n.id === connection.source);
@@ -12874,7 +13236,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const replacedIds = new Set(edgesToReplace.map((edge) => edge.id));
     set((state) => ({ edges: [...state.edges.filter((edge) => !replacedIds.has(edge.id)), newEdge] }));
 
-    if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
+    // While kept (GM r21, 3) the wire is this tab's own: [Save as a project]
+    // files it with the canvas (keptRecordWire checked it by the server's rules).
+    if (!isCanvasKept() && CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
       // The wires it replaces go first; all are held from now (sendWire).
       let sent: Promise<unknown> | undefined;
       for (const edge of edgesToReplace) {
@@ -12984,7 +13348,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // rapid typing in a text-input doesn't hammer the backend — the final
     // value is what matters. Execution state updates (outputs/state/progress)
     // don't need to sync.
-    if (isParamChange && CLI_ID_RE.test(nodeId)) {
+    // Kept in this tab after a restore (GM r15 on PR #199): the typing
+    // stays on the canvas only, for [Save as a project]; nothing is sent.
+    if (isParamChange && CLI_ID_RE.test(nodeId) && !isCanvasKept()) {
       const currentNode = get().nodes.find((node) => node.id === nodeId);
       const currentScene = currentNode?.data.params.scene as CinemaSceneSpec | undefined;
       if (currentNode?.data.definitionId === 'cinema-scene' && currentScene?.shots) {
@@ -14756,6 +15122,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    // GM r20 on PR #199: a kept canvas never outlives its canvas (its kept
+    // mode and its kept Undo go with it; projectStore drops its line).
+    releaseKeptCanvas();
     forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     canvasLoadedOverHttp();
     noteCanvasReplaced({ kind: 'changed' });
@@ -14863,6 +15232,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   loadProjectGraph: (nodes, edges, history, options) => {
+    // A project loaded: what this tab deleted is counted from here.
+    resetTabLocalDeletes();
     // Validate before revoking any current owner or draft. Corrupt project data
     // must never turn a previously protected paid run into an unowned one.
     let restoredHistory: RunRecord[];
@@ -14882,6 +15253,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    // GM r20 on PR #199: a kept canvas never outlives its canvas (its kept
+    // mode and its kept Undo go with it; projectStore drops its line).
+    releaseKeptCanvas();
     forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
     canvasLoadedOverHttp();
@@ -15311,7 +15685,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         if (record && runId && ownsRun(runId) && record.status === 'running'
           && record.snapshot.nodes.some((saved) => saved.id === event.nodeId)) {
           set((state) => {
-            let runHistory = recordRunOutput(state.runHistory, runId, event.nodeId, outputs);
+            let runHistory = recordNodeLanded(recordRunOutput(state.runHistory, runId, event.nodeId, outputs), runId, event.nodeId);
             if (batchOutputs) {
               runHistory = recordRunBatchOutputs(runHistory, runId, event.nodeId,
                 batchOutputs, batchVariants);
@@ -15363,7 +15737,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         const runId = event.runId ?? currentRunId;
         if (runId && ownsRun(runId)) {
           set((state) => {
-            const runHistory = recordRunSkip(state.runHistory, runId, event.nodeId, String(event.reason ?? ''));
+            const runHistory = recordNodeLanded(recordRunSkip(state.runHistory, runId, event.nodeId, String(event.reason ?? '')),
+              runId, event.nodeId);
             return runHistory === state.runHistory ? {} : { runHistory: persistedRunHistory(runHistory) };
           });
         }
@@ -15400,11 +15775,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         });
         break;
       }
-      case 'error':
+      case 'error': {
         if (event.runId && runErrors.has(event.runId)) {
           runErrors.set(event.runId, true);
         }
         if (!event.runId && currentRunId) runErrors.set(currentRunId, true);
+        // A node's failure is its result landing too (RunRecord.nodeLandedAt).
+        const failedRunId = event.runId ?? currentRunId;
+        if (failedRunId && ownsRun(failedRunId) && event.nodeId) {
+          set((state) => {
+            const runHistory = recordNodeLanded(state.runHistory, failedRunId, event.nodeId);
+            return runHistory === state.runHistory ? {} : { runHistory: persistedRunHistory(runHistory) };
+          });
+        }
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
@@ -15419,6 +15802,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           streamingPartials: undefined,
         });
         break;
+      }
       case 'validationError': {
         const runId = event.runId ?? currentRunId;
         // CLI runs also annotate their validation errors, but an unrelated
@@ -15483,7 +15867,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return {
         runHistory,
         providerRecoveries,
-        nodes: nodesWithProviderRecoveries(state.nodes, providerRecoveries),
+        nodes: nodesWithProviderRecoveries(state.nodes, providerRecoveries, { runHistory }),
       };
     });
   },
@@ -15567,6 +15951,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set({ uncertainWorldLabsRunId: currentRunId, providerRecoveryWarning: WORLD_LABS_STATUS_UNCERTAIN_WARNING });
     }
   },
+
+  providerRecoveryOnCanvas: (checkpoint) => providerRecoveryOnCanvas(get(), checkpoint),
 
   acknowledgeProviderStartAmbiguity: async (kind, nodeId) => {
     const ambiguity = get().providerStartAmbiguities.find(
@@ -15678,7 +16064,7 @@ function refuseRunWhileFollowing(nodeIds: string[]): Promise<void> {
   const name = only ? (nodeTitle(NODE_DEFINITIONS[only.data.definitionId], only.data.label) || null) : null;
   // No ids: a run of the whole canvas; several: counted (GM round 21).
   useGraphStore.getState().notify(runWhileFollowingLine(name, following.agent, following.projectName,
-    ids.length >= 2 ? ids.length : undefined));
+    ids.length >= 2 ? ids.length : undefined, following.byNebula === true));
   return Promise.resolve();
 }
 const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
@@ -15688,10 +16074,20 @@ const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
 /** React Flow's changes minus the edits while following: selection and
  * measured sizes pass; a move, removal or add is refused (one pulse). */
 function followingChanges<C extends { type: string }>(changes: C[]): C[] {
-  if (!followingSwitch()) return changes;
+  if (!followingSwitch()) return keptCanvasChanges(changes);
   const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
   if (kept.length < changes.length) refuseEditWhileFollowing();
   return kept;
+}
+
+/** The same while the canvas is kept in this tab after a restore (GM r15):
+ * a move, removal or add would need Nebula, so it is refused and the
+ * kept line pulses; selection and measured sizes pass. */
+function keptCanvasChanges<C extends { type: string }>(changes: C[]): C[] {
+  if (!isCanvasKept()) return changes;
+  const passing = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
+  if (passing.length < changes.length) pulseKeptCanvas();
+  return passing;
 }
 
 /**
@@ -15761,6 +16157,415 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
       blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data || 'label' in data) as FollowGate['blocks'] } },
 };
 
+// -- GM r18 on PR #199: the kept tab is a scratch canvas -----------------
+// Moves, deletes, a clear, duplicates and Arrange change only this tab while
+// the canvas is kept; [Save as a project] files the canvas as it then is.
+// Undo and Redo walk the kept tab's own steps (KeptStep), which start empty
+// when the canvas is kept: never a step of the history Nebula saved.
+
+/** React Flow's node type for a definition (an added node's card). */
+const NODE_TYPES: Record<string, string> = {
+  batch: 'batchNode', 'paper-source': 'paperSourceNode', reroute: 'reroute-node',
+  'video-edit': 'editNode', 'remotion-node': 'remotionNode', 'cinema-scene': 'cinemaSceneNode',
+  character: 'characterNode', 'camera-rig': 'cameraRigNode', 'reference-set': 'referenceSetNode',
+  'nebula-moodboard': 'moodboardNode',
+};
+
+/** A new node for `definitionId` as an add puts it on the canvas. */
+function newCanvasNode(id: string, definitionId: string, params: Record<string, unknown>,
+  position: { x: number; y: number }): Node<NodeData> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  const dynamic = isDynamicDefinition(definitionId);
+  const data: NodeData = { label: canvasTitle(definition), definitionId, params, state: 'idle', outputs: {},
+    keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache),
+    ...(dynamic ? { isDynamic: true, providerType: dynamicProviderFor(definitionId),
+      dynamicInputPorts: definition.inputPorts.map(toDynamicPort), dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
+      dynamicParams: [], providerMeta: {} } : {}),
+  };
+  return { id, type: NODE_TYPES[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
+    position: { ...position }, data };
+}
+
+/** Where each node a kept drag moves started, until its drop. */
+const keptDragFrom = new Map<string, { x: number; y: number }>();
+
+function insertKept<T extends { id: string }>(list: T[], entries: { item: T; index: number }[]): T[] {
+  const present = new Set(list.map((entry) => entry.id));
+  const out = [...list];
+  for (const { item, index } of [...entries].sort((a, b) => a.index - b.index)) {
+    if (present.has(item.id)) continue;
+    out.splice(Math.min(index, out.length), 0, item);
+  }
+  return out;
+}
+
+/** Does (`do`) or undoes a kept step on the canvas. Nothing is sent. */
+function applyKeptStep(step: KeptStep, direction: 'do' | 'undo'): void {
+  useGraphStore.setState((state) => {
+    if (step.kind === 'move') {
+      const at = direction === 'do' ? step.to : step.from;
+      return { nodes: state.nodes.map((node) => (at[node.id] ? { ...node, position: { ...at[node.id] } } : node)) };
+    }
+    if (step.kind === 'data') {
+      const at = direction === 'do' ? step.to : step.from;
+      return { nodes: state.nodes.map((node) => {
+        if (node.id !== step.nodeId) return node;
+        const params = at.params ?? node.data.params;
+        return { ...node, data: { ...node.data, params, ...(at.label !== undefined ? { label: at.label } : {}),
+          ...(at.params ? { keyStatus: nodeKeyStatus(NODE_DEFINITIONS[node.data.definitionId], params,
+            useUIStore.getState().settingsCache) } : {}) } };
+      }) };
+    }
+    if (step.kind === 'wire') {
+      const nodeIds = new Set(step.nodes.map((node) => node.id));
+      const addedIds = new Set(step.added.map((edge) => edge.id));
+      if (direction === 'undo') {
+        const edges = state.edges.filter((edge) => !addedIds.has(edge.id) && !nodeIds.has(edge.source) && !nodeIds.has(edge.target));
+        return { nodes: state.nodes.filter((node) => !nodeIds.has(node.id)), edges: insertKept(edges, step.removed) };
+      }
+      const removedIds = new Set(step.removed.map(({ item }) => item.id));
+      const nodes = insertKept(state.nodes, step.nodes.map((item, index) => ({ item: { ...item, selected: false }, index: state.nodes.length + index })));
+      const edges = state.edges.filter((edge) => !removedIds.has(edge.id));
+      return { nodes, edges: insertKept(edges, step.added.map((item, index) => ({ item, index: edges.length + index }))) };
+    }
+    const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
+    const edgeIds = new Set((step.kind === 'remove' ? step.edges.map((entry) => entry.item) : step.edges).map((edge) => edge.id));
+    const adding = (step.kind === 'remove') === (direction === 'undo');
+    if (!adding) {
+      return {
+        nodes: state.nodes.filter((node) => !nodeIds.has(node.id)),
+        edges: state.edges.filter((edge) => !edgeIds.has(edge.id) && !nodeIds.has(edge.source) && !nodeIds.has(edge.target)),
+      };
+    }
+    if (step.kind === 'remove') {
+      // Back where they were, not selected (as the person's own undo of a delete).
+      const nodes = insertKept(state.nodes, step.nodes.map(({ item, index }) => ({ item: { ...item, selected: false }, index })));
+      const present = new Set(nodes.map((node) => node.id));
+      const edges = insertKept(state.edges, step.edges.filter(({ item }) => present.has(item.source) && present.has(item.target)));
+      return { nodes, edges };
+    }
+    const nodes = insertKept(state.nodes, step.nodes.map((item, index) => ({ item: { ...item, selected: false }, index: state.nodes.length + index })));
+    const present = new Set(nodes.map((node) => node.id));
+    const edges = insertKept(state.edges, step.edges.filter((edge) => present.has(edge.source) && present.has(edge.target))
+      .map((item, index) => ({ item, index: state.edges.length + index })));
+    return { nodes, edges };
+  });
+}
+
+/** The step as the canvas holds its nodes now, for one that takes them off
+ * (a redo of a delete, an undo of a duplicate): typing since goes with them,
+ * and comes back with them. */
+function currentKeptStep(step: KeptStep, action: 'undo' | 'redo'): KeptStep {
+  const { nodes, edges } = useGraphStore.getState();
+  if (step.kind === 'move' || step.kind === 'data') return step;
+  if (step.kind === 'wire') {
+    // An undo takes the added node off as it is now (typing since goes with it).
+    if (action !== 'undo' || step.nodes.length === 0) return step;
+    const ids = new Set(step.nodes.map((node) => node.id));
+    return { ...step, nodes: nodes.filter((node) => ids.has(node.id)) };
+  }
+  const removing = (step.kind === 'remove') === (action === 'redo');
+  if (!removing) return step;
+  const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
+  const edgeIds = new Set((step.kind === 'remove' ? step.edges.map((entry) => entry.item) : step.edges).map((edge) => edge.id));
+  const touches = (edge: Edge) => edgeIds.has(edge.id) || nodeIds.has(edge.source) || nodeIds.has(edge.target);
+  if (step.kind === 'add') return { kind: 'add', nodes: nodes.filter((node) => nodeIds.has(node.id)), edges: edges.filter(touches) };
+  return {
+    kind: 'remove',
+    nodes: nodes.flatMap((item, index) => (nodeIds.has(item.id) ? [{ item, index }] : [])),
+    edges: edges.flatMap((item, index) => (touches(item) ? [{ item, index }] : [])),
+  };
+}
+
+function keptDeleteNotice(step: KeptStep, offer: 'undo' | 'redo'): UndoNotice | null {
+  if (step.kind !== 'remove' || step.nodes.length === 0) return null;
+  const count = step.nodes.length;
+  return { id: ++undoNoticeSeq, text: offer === 'undo' ? deletedNoticeText(count) : restoredNoticeText(count, 0), offer, keptStep: step };
+}
+
+function pushKeptStep(step: KeptStep, undoNotice?: UndoNotice | null): void {
+  useGraphStore.setState((state) => ({
+    keptUndo: [...state.keptUndo, step].slice(-UNDO_CAP),
+    keptRedo: [],
+    ...(undoNotice !== undefined ? { undoNotice } : {}),
+  }));
+}
+
+/** Undo or Redo while kept: the kept tab's own steps only. With none left,
+ * nothing happens; the steps before the canvas was kept are Nebula's saved
+ * history, which a kept tab never steps into (GM r18). */
+function keptStepHistory(action: 'undo' | 'redo'): void {
+  const state = useGraphStore.getState();
+  const step = (action === 'undo' ? state.keptUndo : state.keptRedo).at(-1);
+  if (!step) return;
+  const now = currentKeptStep(step, action);
+  applyKeptStep(now, action === 'undo' ? 'undo' : 'do');
+  const undoNotice = keptDeleteNotice(now, action === 'undo' ? 'redo' : 'undo');
+  useGraphStore.setState((current) => (action === 'undo'
+    ? { keptUndo: current.keptUndo.slice(0, -1), keptRedo: [...current.keptRedo, now], undoNotice }
+    : { keptRedo: current.keptRedo.slice(0, -1), keptUndo: [...current.keptUndo, now], undoNotice }));
+}
+
+/** A kept delete: the nodes (and their wires) and the wires named leave
+ * this tab's canvas, as one step, with "Deleted the node." and Undo. */
+function keptRemove(nodeIds: string[], edgeIds: string[] = []): void {
+  const state = useGraphStore.getState();
+  if (state.isExecuting) return;
+  const doomed = new Set(nodeIds.filter((id) => state.nodes.some((node) => node.id === id)));
+  if (doomed.size > 0 && refuseHeldNodeDelete(state, [...doomed], useGraphStore.setState as GraphSet)) return;
+  const wires = new Set(edgeIds);
+  const step: KeptStep = {
+    kind: 'remove',
+    nodes: state.nodes.flatMap((item, index) => (doomed.has(item.id) ? [{ item, index }] : [])),
+    edges: state.edges.flatMap((item, index) => (wires.has(item.id) || doomed.has(item.source) || doomed.has(item.target) ? [{ item, index }] : [])),
+  };
+  if (step.nodes.length === 0 && step.edges.length === 0) return;
+  const selected = useUIStore.getState().selectedNodeId;
+  if (selected && doomed.has(selected)) useUIStore.getState().selectNode(null);
+  applyKeptStep(step, 'do');
+  pushKeptStep(step, keptDeleteNotice(step, 'undo') ?? undefined);
+}
+
+/** Clear canvas while kept (GM r18): every node and wire leaves this
+ * tab's canvas as one step, which Undo brings back. Nothing is sent. */
+export function clearKeptCanvas(): boolean {
+  if (!keptCanvasTakesTyping()) return refuseEditWhileKept();
+  const { nodes, edges } = useGraphStore.getState();
+  if (nodes.length === 0 && edges.length === 0) return false;
+  keptRemove(nodes.map((node) => node.id), edges.map((edge) => edge.id));
+  return true;
+}
+setKeptCanvasClearer(clearKeptCanvas);
+
+/** Review 13 of PR #199 (kept-scratch LOW-1): a kept action runs the
+ * store's own (a duplicate, Arrange, typing), which would push the saved
+ * history's undo step; the kept tab's steps are its own, so that history is
+ * put back as it was (lib/personInput says nothing while kept either). */
+function withSavedHistoryUntouched(run: () => void): void {
+  const { undoStack, redoStack } = useGraphStore.getState();
+  try { run(); } finally {
+    const now = useGraphStore.getState();
+    if (now.undoStack !== undoStack || now.redoStack !== redoStack) useGraphStore.setState({ undoStack, redoStack });
+  }
+}
+
+/** Typing (or a rename) while kept (GM r19, 5): the store's own edit,
+ * recorded as a kept step. Edits of one node within 500 ms are one step, as
+ * normal Undo takes them (maybePushUndo); a run's state or outputs aren't
+ * steps. */
+let keptTypingAt = 0;
+function keptRecordData(nodeId: string, data: Partial<NodeData>, run: () => void): void {
+  const before = useGraphStore.getState().nodes.find((node) => node.id === nodeId);
+  if (!before || !('params' in data || 'label' in data)) { withSavedHistoryUntouched(run); return; }
+  withSavedHistoryUntouched(run);
+  const after = useGraphStore.getState().nodes.find((node) => node.id === nodeId);
+  if (!after) return;
+  const from: KeptNodeFields = {};
+  const to: KeptNodeFields = {};
+  if ('params' in data && after.data.params !== before.data.params) { from.params = before.data.params; to.params = after.data.params; }
+  if ('label' in data && after.data.label !== before.data.label) { from.label = before.data.label; to.label = after.data.label; }
+  if (!from.params && from.label === undefined && to.label === undefined) return;
+  const now = Date.now();
+  const state = useGraphStore.getState();
+  const last = state.keptUndo.at(-1);
+  if (last?.kind === 'data' && last.nodeId === nodeId && now - keptTypingAt < 500 && state.keptRedo.length === 0) {
+    const merged: KeptStep = { kind: 'data', nodeId, from: { ...from, ...last.from }, to: { ...last.to, ...to } };
+    useGraphStore.setState({ keptUndo: [...state.keptUndo.slice(0, -1), merged] });
+  } else {
+    pushKeptStep({ kind: 'data', nodeId, from, to });
+  }
+  keptTypingAt = now;
+}
+
+/** A rename while kept (review 13 kept-scratch LOW-2): the name changes on
+ * this tab only (as typing), a kept step; nothing is sent. */
+function keptRename(nodeId: string, label: string): void {
+  renameDrafts.delete(nodeId);
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) return;
+  const next = cleanNodeLabel(node, label);
+  if (next === node.data.label) return;
+  useGraphStore.getState().updateNodeData(nodeId, { label: next });
+}
+
+/** A new kept node's params: the definition's defaults, as an add's. */
+function keptNewNodeParams(definitionId: string): Record<string, unknown> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (isDynamicDefinition(definitionId)) {
+    const params: Record<string, unknown> = {};
+    for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
+    return params;
+  }
+  const params = buildDefaultParams(definition);
+  Object.assign(params, withNewKreaMode(definition, {}, useUIStore.getState().settingsCache.kreaConnectionMode));
+  return params;
+}
+
+/** Adding a node while kept (GM r19, 5: a full scratch canvas, whose empty
+ * state says "drag a node from the library to begin"): the node is this
+ * tab's own (a local id, as a duplicate's), sent nowhere until [Save as a
+ * project] files the canvas; one kept step that Undo takes off. */
+function keptAddNode(definitionId: string, position: { x: number; y: number }): Promise<string | null> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (!definition || useGraphStore.getState().isImportingGraph) return Promise.resolve(null);
+  const node = newCanvasNode(uuidv4(), definitionId, keptNewNodeParams(definitionId), position);
+  useGraphStore.setState((state) => ({ nodes: [...state.nodes, node] }));
+  pushKeptStep({ kind: 'add', nodes: [node], edges: [] }, null);
+  return Promise.resolve(node.id);
+}
+
+/** Runs a tab-only add (a duplicate) and records what it added as a kept step. */
+function keptRecordAdd(run: () => void): void {
+  const before = useGraphStore.getState();
+  const nodeIds = new Set(before.nodes.map((node) => node.id));
+  const edgeIds = new Set(before.edges.map((edge) => edge.id));
+  withSavedHistoryUntouched(run);
+  const after = useGraphStore.getState();
+  const nodes = after.nodes.filter((node) => !nodeIds.has(node.id));
+  const edges = after.edges.filter((edge) => !edgeIds.has(edge.id));
+  if (nodes.length > 0 || edges.length > 0) pushKeptStep({ kind: 'add', nodes, edges }, null);
+}
+
+/** A connection drawn while kept (GM r21, 3), with the wires it replaces
+ * and (a wire-drop's) the node added with it: checked by the server's rules
+ * first (lib/keptWires; a refused one is never drawn, and says why), then
+ * drawn on this tab only as one kept step. Nothing is sent. */
+let keptWireDepth = 0;
+function keptRecordWire(connection: Connection, run: () => void, added: Node<NodeData> | null = null): boolean {
+  const before = useGraphStore.getState();
+  // The mask painter's auto-wire runs inside the outer one: one step for
+  // both, held to the same rules (a refused one is quietly left off).
+  if (keptWireDepth > 0) {
+    const nested = checkKeptWire(connection, before.nodes, before.edges);
+    if (!nested.ok || nested.duplicate) return false;
+    run();
+    return true;
+  }
+  const nodes = added ? [...before.nodes, added] : before.nodes;
+  const check = checkKeptWire(connection, nodes, before.edges);
+  if (!check.ok) {
+    // The line is whole: "Nebula couldn’t connect to “References”. It takes images and masks, not text." (GM r23, 1; GM r25, 1).
+    if (check.line) useGraphStore.setState((state) => noticeLine(state, check.line));
+    return false;
+  }
+  if (check.duplicate && !added) return true;
+  const edgeIds = new Set(before.edges.map((edge) => edge.id));
+  keptWireDepth += 1;
+  try {
+    withSavedHistoryUntouched(() => {
+      if (added) useGraphStore.setState((state) => ({ nodes: [...state.nodes, added] }));
+      run();
+    });
+  } finally { keptWireDepth -= 1; }
+  const after = useGraphStore.getState();
+  const afterIds = new Set(after.edges.map((edge) => edge.id));
+  const step: KeptStep = {
+    kind: 'wire',
+    nodes: added ? after.nodes.filter((node) => node.id === added.id) : [],
+    added: after.edges.filter((edge) => !edgeIds.has(edge.id)),
+    removed: before.edges.flatMap((item, index) => (afterIds.has(item.id) ? [] : [{ item, index }])),
+  };
+  if (step.nodes.length > 0 || step.added.length > 0 || step.removed.length > 0) pushKeptStep(step, null);
+  return true;
+}
+
+/** The wire-drop popup's add-and-connect while kept: the new node (a local
+ * id, as a library add) and its wire, as one kept step. */
+function keptAddNodeAndConnect(definitionId: string, position: { x: number; y: number },
+  connect: { source: string; sourceHandle: string; target: string; targetHandle: string; newNodeIs: 'source' | 'target' }): Promise<string | null> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (!definition || useGraphStore.getState().isImportingGraph) return Promise.resolve(null);
+  const params = keptNewNodeParams(definitionId);
+  const node = newCanvasNode(uuidv4(), definitionId, params, position);
+  const connection: Connection = {
+    source: connect.newNodeIs === 'source' ? node.id : connect.source, sourceHandle: connect.sourceHandle,
+    target: connect.newNodeIs === 'target' ? node.id : connect.target, targetHandle: connect.targetHandle,
+  };
+  const drawn = keptRecordWire(connection, () => useGraphStore.getState().onConnect(connection, { skipUndo: true }), node);
+  return Promise.resolve(drawn ? node.id : null);
+}
+
+/** Runs a tab-only Arrange (its positions are never sent while kept:
+ * persistNodePositions) and records the moves as a kept step. */
+function keptRecordMove(run: () => void): void {
+  const before = new Map(useGraphStore.getState().nodes.map((node) => [node.id, { ...node.position }]));
+  withSavedHistoryUntouched(run);
+  const from: Record<string, { x: number; y: number }> = {};
+  const to: Record<string, { x: number; y: number }> = {};
+  for (const node of useGraphStore.getState().nodes) {
+    const was = before.get(node.id);
+    if (was && (was.x !== node.position.x || was.y !== node.position.y)) {
+      from[node.id] = was;
+      to[node.id] = { ...node.position };
+    }
+  }
+  if (Object.keys(to).length > 0) pushKeptStep({ kind: 'move', from, to }, null);
+}
+
+/** React Flow's node changes while kept: selection and sizes pass; a drag
+ * moves the node on this tab (its drop is one step); a removal is a kept
+ * delete; anything else is refused with a pulse. While the save is on its
+ * way, only selection and sizes pass (keptCanvasChanges). */
+function keptNodesChange(changes: NodeChange[], pass: (changes: NodeChange[]) => void): void {
+  if (!keptCanvasTakesTyping()) {
+    const passing = keptCanvasChanges(changes);
+    if (passing.length > 0) pass(passing);
+    return;
+  }
+  const passing = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
+  const moves = changes.filter((change): change is Extract<NodeChange, { type: 'position' }> => change.type === 'position');
+  const removes = changes.filter((change): change is Extract<NodeChange, { type: 'remove' }> => change.type === 'remove').map((change) => change.id);
+  if (passing.length + moves.length + removes.length < changes.length) pulseKeptCanvas();
+  if (passing.length > 0) pass(passing);
+  if (moves.length > 0) {
+    const nodes = useGraphStore.getState().nodes;
+    const from: Record<string, { x: number; y: number }> = {};
+    const to: Record<string, { x: number; y: number }> = {};
+    for (const move of moves) {
+      const node = nodes.find((candidate) => candidate.id === move.id);
+      if (!node) continue;
+      if (move.dragging && !keptDragFrom.has(move.id)) keptDragFrom.set(move.id, { ...node.position });
+      if (move.dragging === false) {
+        const origin = keptDragFrom.get(move.id) ?? node.position;
+        keptDragFrom.delete(move.id);
+        const end = move.position ?? node.position;
+        if (origin.x !== end.x || origin.y !== end.y) {
+          from[move.id] = { ...origin };
+          to[move.id] = { ...end };
+        }
+      }
+    }
+    useGraphStore.setState((state) => ({ nodes: applyNodeChanges(moves, state.nodes) as Node<NodeData>[] }));
+    if (Object.keys(to).length > 0) pushKeptStep({ kind: 'move', from, to }, null);
+  }
+  if (removes.length > 0) keptRemove(removes);
+}
+
+/** The same for wires: selection passes; a removal is a kept delete. */
+function keptEdgesChange(changes: EdgeChange[], pass: (changes: EdgeChange[]) => void): void {
+  if (!keptCanvasTakesTyping()) {
+    const passing = keptCanvasChanges(changes);
+    if (passing.length > 0) pass(passing);
+    return;
+  }
+  const passing = changes.filter((change) => change.type === 'select');
+  const removes = changes.filter((change): change is Extract<EdgeChange, { type: 'remove' }> => change.type === 'remove').map((change) => change.id);
+  if (passing.length + removes.length < changes.length) pulseKeptCanvas();
+  if (passing.length > 0) pass(passing);
+  if (removes.length > 0) keptRemove([], removes);
+}
+
+/** The edits that only change this tab's canvas, which the kept state
+ * (GM r15 on PR #199) lets through: typing (a param edit; the push
+ * waits), a duplicate (GM r17: frontend-only copies, no graph request; the
+ * project snapshot [Save as a project] files carries them), and, GM r18
+ *, a delete (the person's, Create's result delete and the Delete key go
+ * through onNodesChange, so keptNodesChange takes them). Undo, Redo, the
+ * Delete key's deleteCanvasElements, duplicates and Arrange have their kept
+ * versions in the gate below (they record kept steps). */
+const KEPT_TAB_ONLY: ReadonlySet<keyof GraphState> = new Set<keyof GraphState>(['updateNodeData', 'duplicateSelected', 'duplicateNode',
+  'deleteSelected', 'deleteNode', 'deleteGeneration', 'renameNode', 'addNode']);
+
 /** The actions whose own run lock refuses them with the run's line (and
  * changes nothing) while this tab runs: that line goes before following's
  * pulse or offline's (M2). */
@@ -15781,8 +16586,13 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   'beginUndoStep', 'cancelUndoStep', 'endUndoStep', 'noteOwnAdd', 'noteRenameDraft',
   // Notices.
   'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'sayRunLocked', 'dismissProviderRecoveryWarning',
+  // A refused drop's line (GM r26, 3): it says why, and changes nothing.
+  'sayRefusedConnection', 'sayRefusedDrop',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
+  // Run History's record matcher (PR #199 round 22): a method only so the
+  // panel reads it through the store; it answers from the state and sets nothing.
+  'providerRecoveryOnCanvas',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.
   'resetExecution', 'cancelExecution', 'cancelRun', 'reserveGraphImport', 'releaseGraphImport',
   'reserveCreateGeneration', 'releaseCreateGeneration', 'cancelCreateGeneration',
@@ -15927,6 +16737,27 @@ subscribeBackendConnection(() => {
 {
   const ungated = useGraphStore.getState();
   const gated: Partial<GraphState> = {};
+  // GM r18 on PR #199: the kept versions (see keptStepHistory and the rest).
+  const keptLocal: Partial<Record<keyof GraphState, (...args: unknown[]) => unknown>> = {
+    undo: () => keptStepHistory('undo'),
+    redo: () => keptStepHistory('redo'),
+    deleteCanvasElements: (nodeIds, edgeIds) => keptRemove(nodeIds as string[], edgeIds as string[]),
+    duplicateSelected: () => keptRecordAdd(() => ungated.duplicateSelected()),
+    duplicateNode: (nodeId) => keptRecordAdd(() => ungated.duplicateNode(nodeId as string)),
+    autoLayoutSelected: () => keptRecordMove(() => ungated.autoLayoutSelected()),
+    autoLayout: () => keptRecordMove(() => ungated.autoLayout()),
+    // GM r19 (5): typing, a rename and an added node are kept steps too.
+    updateNodeData: (nodeId, data) => keptRecordData(nodeId as string, data as Partial<NodeData>,
+      () => ungated.updateNodeData(nodeId as string, data as Partial<NodeData>)),
+    renameNode: (nodeId, label) => keptRename(nodeId as string, label as string),
+    addNode: (definitionId, position) => keptAddNode(definitionId as string, position as { x: number; y: number }),
+    // GM r21 (3): connections, and the wire-drop popup's add-and-connect.
+    onConnect: (connection, options) => {
+      keptRecordWire(connection as Connection, () => ungated.onConnect(connection as Connection, options as { skipUndo?: boolean }));
+    },
+    addNodeAndConnect: (definitionId, position, connect) => keptAddNodeAndConnect(definitionId as string,
+      position as { x: number; y: number }, connect as Parameters<typeof keptAddNodeAndConnect>[2]),
+  };
   for (const [name, gate] of Object.entries(EDIT_GATES) as [keyof GraphState, EditGate][]) {
     const action = ungated[name] as unknown as (...args: unknown[]) => unknown;
     if (typeof action !== 'function') continue;
@@ -15934,6 +16765,23 @@ subscribeBackendConnection(() => {
     const isRun = String(name).startsWith('execute') || String(name).startsWith('rerun') || name === 'retryFailedRun';
     const runSaysFirst = RUN_LOCK_FIRST.has(name);
     (gated as Record<string, unknown>)[name] = (...args: unknown[]) => {
+      const blocks = !gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args);
+      // Kept in this tab after a restore first (GM r19 on PR #199, 4: a
+      // reason only the person can fix goes before the run, following and
+      // offline, as lib/canvasLock orders them): typing joins the kept
+      // edits, and so do a duplicate (GM r17: its copies are this tab's own
+      // nodes, sent nowhere until [Save as a project] files the canvas), a
+      // rename, an added node and, GM r18 answer 3, moves, deletes, Arrange,
+      // Undo and Redo, on the kept tab's own steps. Any other edit or run is
+      // refused, and the kept line pulses.
+      const local = isCanvasKept() ? keptLocal[name] : undefined;
+      if (blocks && isCanvasKept()) {
+        const tabOnly = (KEPT_TAB_ONLY.has(name) || local !== undefined) && keptCanvasTakesTyping();
+        if (!tabOnly) {
+          pulseKeptCanvas();
+          return gate.refused();
+        }
+      }
       // PR #198 review 6, M2 (GM r9 answer 3): during this tab's own run, a
       // delete or an undo says the run's line (the action's own run lock),
       // as the toolbar's tooltip does, before following or offline.
@@ -15944,13 +16792,17 @@ subscribeBackendConnection(() => {
         if (!isRun) refuseEditWhileFollowing();
         return (follow.refused as (...a: unknown[]) => unknown)(...args);
       }
-      if ((!gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args)) && refuseEditWhileOffline()) {
+      if (blocks && refuseEditWhileOffline()) {
         return gate.refused();
       }
-      return action(...args);
+      return local ? local(...args) : action(...args);
     };
   }
   gated.onNodesChange = (changes) => {
+    if (isCanvasKept() && !followingSwitch() && !isBackendOffline()) {
+      keptNodesChange(changes, ungated.onNodesChange);
+      return;
+    }
     const followed = followingChanges(changes);
     if (followed.length === 0) return;
     if (!isBackendOffline()) noteDragOrigins(followed);
@@ -15958,6 +16810,10 @@ subscribeBackendConnection(() => {
     if (kept.length > 0) ungated.onNodesChange(kept);
   };
   gated.onEdgesChange = (changes) => {
+    if (isCanvasKept() && !followingSwitch() && !isBackendOffline()) {
+      keptEdgesChange(changes, ungated.onEdgesChange);
+      return;
+    }
     const kept = readOnlyChanges(followingChanges(changes));
     if (kept.length > 0) ungated.onEdgesChange(kept);
   };
@@ -16123,3 +16979,11 @@ useGraphStore.subscribe((state, previous) => {
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   (window as unknown as { __nebulaGraphStore?: typeof useGraphStore }).__nebulaGraphStore = useGraphStore;
 }
+
+// Review 18 MEDIUM-1 of PR #199: every node only this tab has, as it appears
+// (a duplicate, a paste, a project's own), so a handoff can name the ones
+// this tab deleted (tabLocalDeletes).
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes) return;
+  for (const node of state.nodes) if (isTabLocalNode(node.id)) tabLocalSeen.add(node.id);
+});

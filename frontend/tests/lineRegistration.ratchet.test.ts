@@ -200,6 +200,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
     { file: 'components/projects/ProjectHome.tsx', expr: 'error' },
   ],
   'project.load-retry': { none: 'a retry: its line is project.error' },
+  'project.kept-save': [{ file: 'components/projects/KeptEditsNotice.tsx', expr: 'refusal' }],
   'project.save': [{ file: 'components/create-studio/ResultCard.tsx', expr: 'saveError' }],
   'project.save-retry': { none: 'a retry: its line is project.save' },
   'graph.refusal': [
@@ -225,6 +226,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 
 /** Text children that read a failure-named value but can never hold a not-connected line. */
 const EXEMPT: Record<string, string> = {
+  'components/projects/ProjectHome.tsx: notice.text': 'the catalog restore notice\'s own status line (PR #199): what Nebula did, never a refusal of a request, so it can\'t be a not-connected line',
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
   'components/commons/CommonsDetail.tsx: analysisFailureReason(asset.last_error_kind)': 'a too-transparent reference\'s muted reason (#208): from the asset\'s own analysis, never a request\'s refusal',
 };

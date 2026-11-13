@@ -7,7 +7,7 @@ import fcntl
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 
@@ -19,6 +19,7 @@ MAX_RECOVERY_FILE_BYTES = 2 * 1024 * 1024
 MAX_NODE_ID_CHARS = 4096
 MAX_RUN_ID_CHARS = 128
 MAX_PROVIDER_ID_CHARS = 256
+MAX_STAMP_FIELD_CHARS = 128
 
 
 class ProviderRecoveryPersistenceError(RuntimeError):
@@ -61,6 +62,12 @@ class ProviderRecoveryStore:
         self._max_records = max(1, max_records)
         self._lock = RLock()
         self._records: dict[tuple[str, str], dict[str, str | None]] = {}
+        # Where each record's run was when Nebula wrote it (PR #199 round 23,
+        # review 21 LOW-1): {(runId, nodeId): {"projectId", "nodeType"}}.
+        # Internal: never in list(), the export or anything an agent reads.
+        # The delete guard releases a node only for a stamp naming another
+        # project (main.py _recovery_record_holds_node).
+        self._stamps: dict[tuple[str, str], dict[str, str | None]] = {}
         self._reservations: dict[tuple[str, str], str] = {}
         self._storage_error: str | None = None
         self._load()
@@ -180,7 +187,14 @@ class ProviderRecoveryStore:
         node_id: str,
         resume_operation_id: str | None,
         existing_world_id: str | None,
+        project_id: str | None = None,
+        node_type: str | None = None,
     ) -> None:
+        """Write one checkpoint. ``project_id``/``node_type``: the project
+        whose canvas the run is on and the node's definition id, when Nebula
+        knows them; they stamp the record (kept when this write doesn't
+        know them, so a later write of the same key never drops one)."""
+        stamp = self._validated_stamp(project_id, node_type)
         key, record = self._validated_record(
             run_id=run_id,
             node_id=node_id,
@@ -227,14 +241,20 @@ class ProviderRecoveryStore:
                     )
                 previous = dict(self._records)
                 previous_reservations = dict(self._reservations)
+                previous_stamps = dict(self._stamps)
                 self._records.pop(key, None)
                 self._records[key] = record
                 self._reservations.pop(key, None)
+                merged = {**(self._stamps.get(key) or {}),
+                          **{field: value for field, value in (stamp or {}).items() if value}}
+                if merged.get("projectId") or merged.get("nodeType"):
+                    self._stamps[key] = {"projectId": merged.get("projectId"), "nodeType": merged.get("nodeType")}
                 try:
                     self._persist()
                 except ProviderRecoveryPersistenceError as exc:
                     self._records = previous
                     self._reservations = previous_reservations
+                    self._stamps = previous_stamps
                     self._storage_error = str(exc)
                     raise
 
@@ -243,8 +263,14 @@ class ProviderRecoveryStore:
         *,
         run_id: str,
         checkpoints: Iterable[tuple[str, str | None, str | None]],
+        project_id: str | None = None,
+        node_types: Mapping[str, str] | None = None,
     ) -> list[dict[str, str | None]]:
         """Durably seed graph-carried checkpoints in one atomic journal write.
+
+        ``project_id``: the project whose canvas carries these nodes, and
+        ``node_types`` each node's definition id, which stamp each record
+        this call adds (a reused record keeps its own stamp).
 
         Graph import/create/update can introduce a trustworthy World Labs
         recovery ID without executing a handler. Every backend worker must see
@@ -329,14 +355,19 @@ class ProviderRecoveryStore:
 
                 previous = dict(self._records)
                 previous_reservations = dict(self._reservations)
+                previous_stamps = dict(self._stamps)
                 for key, record in additions:
                     self._records[key] = record
                     self._reservations.pop(key, None)
+                    stamp = self._validated_stamp(project_id, (node_types or {}).get(key[1]))
+                    if stamp is not None:
+                        self._stamps[key] = stamp
                 try:
                     self._persist()
                 except ProviderRecoveryPersistenceError as exc:
                     self._records = previous
                     self._reservations = previous_reservations
+                    self._stamps = previous_stamps
                     self._storage_error = str(exc)
                     raise
                 return [dict(record) for _key, record in additions]
@@ -375,6 +406,70 @@ class ProviderRecoveryStore:
             "resumeOperationId": resume_operation_id,
             "existingWorldId": existing_world_id,
         }
+
+    @staticmethod
+    def _validated_stamp(project_id: Any, node_type: Any) -> dict[str, str | None] | None:
+        """A stamp from what the caller knows; a field that isn't a bounded
+        identifier is left out (never a guess). None when neither is known."""
+        def bounded(value: Any) -> str | None:
+            try:
+                return _bounded_identifier(value, label="stamp", max_chars=MAX_STAMP_FIELD_CHARS)
+            except ValueError:
+                return None
+        project, kind = bounded(project_id), bounded(node_type)
+        if project is None and kind is None:
+            return None
+        return {"projectId": project, "nodeType": kind}
+
+    def stamp_of(self, run_id: Any, node_id: Any) -> dict[str, str | None] | None:
+        """The record's stamp ({projectId, nodeType}), or None: unstamped, or
+        no such record. Internal (the delete guard, the person's places)."""
+        with self._lock:
+            stamp = self._stamps.get((run_id, node_id)) if (run_id, node_id) in self._records else None
+            return dict(stamp) if stamp else None
+
+    def places(self) -> list[dict[str, str | None]]:
+        """Every stamped record's place, for the person's tab only
+        (main.py's person form): [{runId, nodeId, projectId, nodeType}]."""
+        with self._lock:
+            if self._storage_error is None:
+                try:
+                    with self._journal_lock():
+                        self._reload_locked()
+                except ProviderRecoveryPersistenceError as exc:
+                    self._storage_error = str(exc)
+            return [{"runId": key[0], "nodeId": key[1], **stamp}
+                    for key, stamp in self._stamps.items() if key in self._records]
+
+    def stamp_unstamped(self, placer: Any) -> int:
+        """The one-time pass for records saved before stamps (PR #199 round
+        23): each unstamped record gets ``placer(record)``'s project id when
+        it answers one (unambiguous placement only; None leaves it unstamped,
+        so it holds). One atomic write under the journal lock; idempotent (a
+        stamped record is never restamped). Answers how many it stamped."""
+        if self._path is None:
+            return 0
+        with self._lock:
+            with self._journal_lock():
+                self._reload_locked()
+                previous_stamps = dict(self._stamps)
+                count = 0
+                for key, record in self._records.items():
+                    if (self._stamps.get(key) or {}).get("projectId"):
+                        continue
+                    stamp = self._validated_stamp(placer(dict(record)), (self._stamps.get(key) or {}).get("nodeType"))
+                    if stamp is None or not stamp.get("projectId"):
+                        continue
+                    self._stamps[key] = stamp
+                    count += 1
+                if not count:
+                    return 0
+                try:
+                    self._persist()
+                except ProviderRecoveryPersistenceError:
+                    self._stamps = previous_stamps
+                    raise
+                return count
 
     def list(self) -> list[dict[str, str | None]]:
         with self._lock:
@@ -451,14 +546,60 @@ class ProviderRecoveryStore:
                         "deleting the newer checkpoint"
                     )
                 previous = dict(self._records)
+                previous_stamps = dict(self._stamps)
                 removed = self._records.pop(key, None) is not None
+                self._stamps.pop(key, None)
                 if removed:
                     try:
                         self._persist()
                     except ProviderRecoveryPersistenceError:
                         self._records = previous
+                        self._stamps = previous_stamps
                         raise
                 return removed
+
+    def renumber_nodes(self, mapping: Mapping[str, str]) -> int:
+        """Move each checkpoint whose node got a new id ({old: new}; a renumber
+        of tab-local ids, PR #199 review 18 handoff-reopen LOW-2) to
+        ``(runId, new)``, its run and IDs unchanged, in one write: Run
+        History's hydration still finds its run record (moved to the new id
+        too) and the node's guards read it by its new id. A record already
+        at the new key is never overwritten (the old one stays). Answers how
+        many moved."""
+        if not mapping or self._path is None:
+            return 0  # no journal: nothing is kept to move
+        with self._lock:
+            with self._journal_lock():
+                self._reload_locked()
+                previous = dict(self._records)
+                previous_stamps = dict(self._stamps)
+                moved: dict[tuple[str, str], dict[str, str | None]] = {}
+                stamps: dict[tuple[str, str], dict[str, str | None]] = {}
+                count = 0
+                for (run_id, node_id), record in self._records.items():
+                    new = mapping.get(node_id)
+                    stamp = self._stamps.get((run_id, node_id))
+                    if (isinstance(new, str) and new and (run_id, new) not in self._records
+                            and (run_id, new) not in moved):
+                        moved[(run_id, new)] = {**record, "nodeId": new}
+                        if stamp:
+                            stamps[(run_id, new)] = stamp  # its stamp moves with it
+                        count += 1
+                    else:
+                        moved[(run_id, node_id)] = record
+                        if stamp:
+                            stamps[(run_id, node_id)] = stamp
+                if not count:
+                    return 0
+                self._records = moved
+                self._stamps = stamps
+                try:
+                    self._persist()
+                except ProviderRecoveryPersistenceError:
+                    self._records = previous
+                    self._stamps = previous_stamps
+                    raise
+                return count
 
     def delete_many_exact(
         self,
@@ -496,14 +637,17 @@ class ProviderRecoveryStore:
                             "World Labs recovery checkpoint changed during graph rollback"
                         )
                 previous = dict(self._records)
+                previous_stamps = dict(self._stamps)
                 removed = 0
                 for key, _expected in validated:
                     removed += int(self._records.pop(key, None) is not None)
+                    self._stamps.pop(key, None)
                 if removed:
                     try:
                         self._persist()
                     except ProviderRecoveryPersistenceError:
                         self._records = previous
+                        self._stamps = previous_stamps
                         raise
                 return removed
 
@@ -512,11 +656,14 @@ class ProviderRecoveryStore:
             with self._journal_lock():
                 self._reload_locked()
                 previous = dict(self._records)
+                previous_stamps = dict(self._stamps)
                 self._records.clear()
+                self._stamps.clear()
                 try:
                     self._persist()
                 except ProviderRecoveryPersistenceError:
                     self._records = previous
+                    self._stamps = previous_stamps
                     raise
 
     def _load(self) -> None:
@@ -543,6 +690,7 @@ class ProviderRecoveryStore:
             )
         if not path.is_file():
             self._records = {}
+            self._stamps = {}
             self._storage_error = None
             return
         try:
@@ -570,11 +718,37 @@ class ProviderRecoveryStore:
                     raise ValueError("recovery journal contains duplicate records")
                 loaded[key] = record
             self._records = loaded
+            self._stamps = self._loaded_stamps(payload.get("stamps"), loaded)
             self._storage_error = None
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
             raise ProviderRecoveryPersistenceError(
                 f"provider recovery journal is invalid: {exc}"
             ) from exc
+
+    def _loaded_stamps(self, raw: Any, records: Mapping[tuple[str, str], Any]
+                       ) -> dict[tuple[str, str], dict[str, str | None]]:
+        """The journal's stamps, for records it holds. A stamps list Nebula
+        can't read is ignored whole (every record then holds, as unstamped),
+        never an error: the records themselves stay the safeguard."""
+        if raw is None:
+            return {}
+        try:
+            if not isinstance(raw, list) or len(raw) > self._max_records:
+                raise ValueError("stamps")
+            stamps: dict[tuple[str, str], dict[str, str | None]] = {}
+            for entry in raw:
+                if not isinstance(entry, dict):
+                    raise ValueError("stamp")
+                key = (entry.get("runId"), entry.get("nodeId"))
+                if key not in records or key in stamps:
+                    continue
+                stamp = self._validated_stamp(entry.get("projectId"), entry.get("nodeType"))
+                if stamp is not None:
+                    stamps[key] = stamp
+            return stamps
+        except (TypeError, ValueError):
+            logger.warning("Provider recovery journal %s has unreadable stamps; its records hold", self._path)
+            return {}
 
     @contextmanager
     def _journal_lock(self):
@@ -617,6 +791,11 @@ class ProviderRecoveryStore:
                 "version": RECOVERY_STORE_VERSION,
                 "records": [dict(record) for record in self._records.values()],
             }
+            stamps = [{"runId": key[0], "nodeId": key[1], **stamp}
+                      for key, stamp in self._stamps.items() if key in self._records]
+            if stamps:
+                # Only when there are any: a journal with none stays as it was.
+                payload["stamps"] = stamps
             if probe is not None:
                 payload["probe"] = probe
             with temporary.open("w", encoding="utf-8") as output:

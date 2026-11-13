@@ -59,6 +59,8 @@
   {"method": "PUT", "path": "/api/personal-agents/{agent_id}", "handler": "main.update_personal_agent"},
   {"method": "POST", "path": "/api/presets", "handler": "main.create_preset"},
   {"method": "PUT", "path": "/api/presets/{preset_id}", "handler": "main.update_preset"},
+  {"handler": "main.dismiss_canvas_held_unreadable", "method": "POST", "path": "/api/projects/canvas-held-unreadable/dismiss"},
+  {"handler": "main.dismiss_catalog_restore", "method": "POST", "path": "/api/projects/catalog-restore/dismiss"},
   {"method": "POST", "path": "/api/projects/recover", "handler": "main.recover_project_copy"},
   {"method": "POST", "path": "/api/projects/trash/empty", "handler": "main.empty_project_trash"},
   {"method": "DELETE", "path": "/api/projects/trash/{project_id}", "handler": "main.purge_trashed_project"},

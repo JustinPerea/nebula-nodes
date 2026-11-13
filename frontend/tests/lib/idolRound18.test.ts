@@ -117,12 +117,12 @@ describe('Krea’s sign-in line never names a provider that can’t take the run
     { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false, pricing: null }).message;
 
   it('fal.ai takes it: named', () => {
-    expect(line({})).toBe(`“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or switch to fal.ai.`);
+    expect(line({})).toBe(`“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or switch to fal.ai.`);
   });
 
   it('fal.ai’s key is set but it refuses high reasoning with no image: "or choose another provider"', () => {
     expect(line({ reasoning_level: 'high' })).toBe(
-      `“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or choose another provider.`);
+      `“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or choose another provider.`);
   });
 });
 

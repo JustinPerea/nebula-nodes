@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { useState } from 'react';
 import { SceneUnsavedMark } from '../src/components/nodes/SceneUnsavedMark';
 import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/ProjectHome';
-import { copyDeletedAfterUpdateLine } from '../src/store/projectStore';
+import { copyDeletedAfterUpdateLine } from '../src/store/projectFlows';
 
 afterEach(cleanup);
 

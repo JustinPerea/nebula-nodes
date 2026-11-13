@@ -9,7 +9,9 @@ import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/u
 //   says so; the person's own clear and a backend restart never do.
 // M2: a sync after a backend restart (the same canvas, its revision kept, or
 //   one moved by a restart that lost it) is not a clear.
-// L1 (GM B): a refused delete brings the node back unselected.
+// L1 (GM B, refined by GM r34 addendum 3 on PR #199): a refused delete brings
+//   the node back unselected once the person has moved on; with nothing changed
+//   since the press, as it was (selected, inspected, focused).
 // L4: two drains at once: a save that landed is never named as cut off.
 // GM 1: a failed delete with no answer names the nodes.
 // M3: a delete from before a clear never touches the new canvas.
@@ -287,22 +289,79 @@ describe('round 20 (review 19)', () => {
     });
   });
 
-  it('SEL (L1, GM B): a refused delete of the node the person clicked comes back unselected', async () => {
+  it('SEL (L1, GM B, refined by GM r34 addendum 3): a refused delete after the person moved on comes back unselected', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2')], [], ['n2']);
     useUIStore.getState().selectNode('n2');
+    nebula().holdAnswers = true;
     refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'DELETE', 500, 'Nope.');
     await del('n2');
+    // The person moved on before Nebula answered: they selected n1.
+    useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: node.id === 'n1' })) }));
+    useUIStore.getState().selectNode('n1');
+    while (nebula().releaseAnswer());
+    await settle();
     await tick(2000);
     expect(nodeOf('n2')).toBeTruthy();
     expect(nodeOf('n2')?.selected ?? false).toBe(false);
-    expect(useUIStore.getState().selectedNodeId).toBeNull();
+    expect(nodeOf('n1')?.selected).toBe(true);
+    expect(useUIStore.getState().selectedNodeId).toBe('n1');
     // As drawn: no selected ring, no settings pill.
     const node = nodeOf('n2')!;
     const { container } = render(<ModelNode {...({ id: 'n2', data: node.data, selected: node.selected ?? false } as NodeProps)} />);
     expect(container.querySelector('.model-node')).not.toHaveClass('model-node--selected');
     expect(container.querySelector('.model-node__settings-edit')).toBeNull();
     cleanup();
+  });
+
+  it('GM r34 addendum 3: a refused delete with nothing changed since the press puts back the selection, the inspected node and the focus', async () => {
+    setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
+    start([textFakeNode('n1'), textFakeNode('n2')], [], ['n2']);
+    useUIStore.getState().selectNode('n2');
+    const card = document.createElement('div');
+    card.className = 'react-flow__node';
+    card.setAttribute('data-id', 'n2');
+    card.tabIndex = 0;
+    document.body.appendChild(card);
+    card.focus();
+    try {
+      nebula().holdAnswers = true;
+      refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'DELETE', 409, 'Refused.');
+      await del('n2');
+      // The card leaves with the node (React Flow unmounts it); focus falls to the page.
+      card.remove();
+      expect(useUIStore.getState().selectedNodeId).toBeNull();
+      // React Flow draws the card again when the node comes back.
+      const again = document.createElement('div');
+      again.className = 'react-flow__node';
+      again.setAttribute('data-id', 'n2');
+      again.tabIndex = 0;
+      document.body.appendChild(again);
+      while (nebula().releaseAnswer());
+      await settle();
+      await tick(100);
+      expect(nodeOf('n2')?.selected).toBe(true);
+      expect(useUIStore.getState().selectedNodeId).toBe('n2');
+      expect(document.activeElement).toBe(again);
+      again.remove();
+    } finally {
+      card.remove();
+    }
+  });
+
+  it('GM r34 addendum 3: in a multi-select, the refused nodes come back selected; the deleted ones are gone', async () => {
+    setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
+    start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')], [], ['n1', 'n2']);
+    nebula().holdAnswers = true;
+    refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'DELETE', 409, 'Refused.');
+    store().deleteSelected();
+    await settle();
+    while (nebula().releaseAnswer());
+    await settle();
+    await tick(2000);
+    expect(nodeOf('n1')).toBeUndefined();
+    expect(nodeOf('n2')?.selected).toBe(true);
+    expect(nodeOf('n3')?.selected ?? false).toBe(false);
   });
 
   it('a delete that lands clears the selection that named the node', async () => {

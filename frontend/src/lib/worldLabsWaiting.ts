@@ -13,14 +13,16 @@ import { lastNodeLabel } from './lastNodeLabels';
 /** A start still in flight. */
 export const WORLD_LABS_STARTING = "A World Labs run is still starting. Try again in a moment.";
 /** An unconfirmed start, or a run this tab couldn't confirm: the status
- * bar's "I've checked Marble". The Projects screen's own check says it too
+ * bar's "I’ve checked Marble". The Projects screen's own check says it too
  * (projectStore worldLabsHold). */
 export const WORLD_LABS_NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen.";
 /** A saved recovery ID: "“<node>”" and then this (Run History's "Forget ID"). */
 export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.";
 
-/** The status bar's button and Run History's (GM, round 13 of PR #114). */
-export const UNLOCK_LABEL = "I've checked Marble";
+/** The status bar's button and Run History's (GM, round 13 of PR #114; the
+ * curly apostrophe, GM r33 on PR #199). Every line that names the button
+ * (its accessible names, the held reopen's line) quotes this constant. */
+export const UNLOCK_LABEL = 'I’ve checked Marble';
 export const FORGET_LABEL = 'Forget ID';
 /**
  * How a held node is named in the World Labs controls (GM - Design, round 14
@@ -38,12 +40,97 @@ export function recordNodeName(nodes: readonly { id: string; data?: { label?: un
   return inSentence ? 'a removed World Labs node' : REMOVED_WORLD_LABS_NODE;
 }
 
+/** A record whose node isn't this project's (or can't be known to be),
+ * named in Run History, Forget ID and the unlock (GM r34 A1 and its
+ * addendum on PR #199): never the open canvas's node with the same id. Its
+ * type when the record knows it (GM r36 item 1): otherWorldLabsNode. */
+export const OTHER_PROJECT_WORLD_LABS_NODE = 'A World Labs node from another project';
+
+/** A record's key in the person-only places (graphStore
+ * providerRecoveryPlaces): its run and node. */
+export function providerRecoveryPlaceKey(runId: string, nodeId: string): string {
+  return `${runId}\u0000${nodeId}`;
+}
+
+/** The World Labs node types a record can name, as the node picker names
+ * them (nodeDefinitions.ts displayName; pinned equal by a test). */
+export const WORLD_LABS_NODE_TYPE_NAMES: Readonly<Record<string, string>> = {
+  'worldlabs-environment': 'World Labs Environment',
+  'worldlabs-world-export': 'World Labs Export',
+};
+/**
+ * A World Labs record's node type (GM r36 item 1 on PR #199; the backend's
+ * main.py _record_node_type is the same rule): the node type Nebula stored
+ * with the record's stamp (`nodeType`, a definition id) when it is a World
+ * Labs one, else "World Labs Environment" for a record holding an Existing
+ * World ID (a field only that node has), else null. Never guessed from a
+ * node id.
+ */
+export function recordNodeType(nodeType: string | null | undefined, existingWorldId: string | null | undefined):
+  string | null {
+  const stored = nodeType ? WORLD_LABS_NODE_TYPE_NAMES[nodeType] : undefined;
+  return stored ?? (existingWorldId ? WORLD_LABS_NODE_TYPE_NAMES['worldlabs-environment'] : null);
+}
+/** "A World Labs Environment node from another project", "A World Labs
+ * Export node from another project", or "A World Labs node from another
+ * project" (`kind` from recordNodeType; "a …" inside a sentence). */
+export function otherWorldLabsNode(kind: string | null, inSentence = false): string {
+  const name = kind ? `A ${kind} node from another project` : OTHER_PROJECT_WORLD_LABS_NODE;
+  return inSentence ? `a${name.slice(1)}` : name;
+}
+
+/** What Nebula's open-hold verdict says of the record it names (lib/reopenHold
+ * OpenHold, structurally, so this module needs no store). */
+export interface HeldRecordVerdict {
+  state: string;
+  nodeId: string | null;
+  nodeName: string | null;
+  projectId: string | null;
+}
+
+/**
+ * Which of `records` the open-hold verdict names, or -1. The verdict names
+ * the backend journal's first record (main.py _graph_replacement_hold,
+ * `records[0]`; the tab gets the journal's list in the same order), and
+ * says its project only when that isn't the open one. So: the verdict's
+ * `state` (recovery or ambiguity), another project (or none known), and
+ * the first record the open canvas doesn't own (`owned`, parallel to
+ * `records`), when its node id is the verdict's.
+ */
+export function verdictRecordIndex(verdict: HeldRecordVerdict | null, state: 'recovery' | 'ambiguity',
+  openId: string | null, records: readonly { nodeId: string }[], owned: readonly boolean[]): number {
+  if (!verdict || verdict.state !== state || !verdict.nodeId || verdict.projectId === openId) return -1;
+  const first = records.findIndex((_, index) => !owned[index]);
+  return first >= 0 && records[first].nodeId === verdict.nodeId ? first : -1;
+}
+
+/**
+ * How a World Labs record is named (GM r34 A1 and its addendum on PR
+ * #199): `owned` (this project's, or a canvas node holds its ID) → as
+ * recordNodeName says; the record the open-hold verdict names (`named`, its
+ * nodeName and projectName) → "“World” from “Alpha”", or "“World” from
+ * another project" with no project name; otherwise its type, when the
+ * record knows it (`kind`, recordNodeType; GM r36 item 1): "A World Labs
+ * Environment node from another project", "A World Labs Export node …" or
+ * "A World Labs node …" ("a …" in a sentence).
+ */
+export function heldRecordName(nodes: readonly { id: string; data?: { label?: unknown } }[], nodeId: string,
+  owned: boolean, named: { nodeName: string | null; projectName: string | null } | null = null,
+  inSentence = false, kind: string | null = null): string {
+  if (owned) return recordNodeName(nodes, nodeId, inSentence);
+  if (named?.nodeName) {
+    return named.projectName ? `“${named.nodeName}” from “${named.projectName}”`
+      : `“${named.nodeName}” from another project`;
+  }
+  return otherWorldLabsNode(kind, inSentence);
+}
+
 /** The status bar button's accessible name for a held node; `name` from recordNodeName. */
 export function unlockAriaLabel(name: string): string {
-  return `I've checked Marble. Unlock ${name}.`;
+  return `${UNLOCK_LABEL}. Unlock ${name}.`;
 }
 /** The same button for a run Nebula couldn't confirm: there is no node to name (GM, round 14). */
-export const UNLOCK_RUN_ARIA = "I've checked Marble. Unlock this World Labs run.";
+export const UNLOCK_RUN_ARIA = `${UNLOCK_LABEL}. Unlock this World Labs run.`;
 /** "Forget ID"'s confirm, in the app's own dialog (GM, round 13). */
 export function forgetHeading(name: string): string {
   return `Forget the recovery ID for ${name}?`;
@@ -178,6 +265,8 @@ export function moreNodesNeedCheck(more: number): string {
 export const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
   "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.";
 
-/** GM, round 15 of PR #114: the status bar unlock's tooltip, and Forget ID's. */
-export const UNLOCK_TITLE = "Only unlock after you've checked the run in Marble.";
+/** GM, round 15 of PR #114: the status bar unlock's tooltip, and Forget ID's.
+ * The unlock's words are GM r36 on PR #199 (4): they name what the person
+ * does first, and say nothing built from the button's own label. */
+export const UNLOCK_TITLE = "Press this only after you’ve checked the run in Marble.";
 export const FORGET_TITLE = "Check the run in Marble first. Once the ID is gone, Nebula won't block a new paid run.";

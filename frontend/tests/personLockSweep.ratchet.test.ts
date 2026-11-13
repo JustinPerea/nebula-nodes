@@ -71,9 +71,9 @@ const CALLERS: Record<string, Entry> = {
   [`${SETTINGS}PersonalAgentsSection.tsx#PersonalAgentsSection`]: { lock: 'change your agents', in: [`${SETTINGS}PersonalAgentsSection.tsx`] },
   [`${SETTINGS}PersonalAgentsSection.tsx#KeyOption`]: { lock: 'change your agents', in: [`${SETTINGS}PersonalAgentsSection.tsx`] },
   [`${SETTINGS}PersonalAgentsSection.tsx#DownloadAndSignIn`]: { lock: 'change your agents', in: [`${SETTINGS}PersonalAgentsSection.tsx`] },
-  'store/projectStore.ts#remove': { not: 'sends DELETE /api/projects/{id} (moves it to Recently deleted, open to every tab); the tracer matches {project_id}' },
-  'store/projectStore.ts#purge': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
-  'store/projectStore.ts#emptyTrashOf': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
+  'store/projectFlows.ts#remove': { not: 'sends DELETE /api/projects/{id} (moves it to Recently deleted, open to every tab); the tracer matches {project_id}' },
+  'store/projectFlows.ts#purge': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
+  'store/projectFlows.ts#emptyTrashOf': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
   'components/asset-trash/AssetTrash.tsx#RecentlyDeletedAssets': { lock: 'delete items for good', in: ['components/asset-trash/AssetTrash.tsx'] },
   // Round 11 (review 9 MEDIUM-2, LOW-7): these reach PUT /api/settings only through
   // lib/runCostConfirm's run-cost carry-over after a settings read, which now runs only on a tab

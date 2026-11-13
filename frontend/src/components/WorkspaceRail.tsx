@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CircleHelp,
   FolderHeart,
@@ -10,10 +10,15 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore, type LeftDock } from '../store/uiStore';
+import { useProjectStore } from '../store/projectStore';
 import type { OnboardingTarget } from '../lib/onboarding';
 import { COMMAND_PALETTE_OPEN_EVENT } from '../lib/commandPaletteKeys';
 import '../styles/workspace-rail.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+
+// The held-reopen callout loads when a line for it first arrives (review 21
+// LOW-1, the entry chunk's budget); until then there is nothing to show.
+const ReopenHoldCallout = lazy(() => import('./ReopenHoldCallout').then((m) => ({ default: m.ReopenHoldCallout })));
 
 interface RailItemProps {
   label: string;
@@ -47,6 +52,7 @@ function RailItem({ label, icon: Icon, onClick, active = false, primary = false,
 export function WorkspaceRail() {
   const navRef = useRef<HTMLElement | null>(null);
   const leftDock = useUIStore((s) => s.leftDock);
+  const reopenLineHere = useProjectStore((s) => s.heldReopenLine?.place === 'runHistory');
   const setLeftDock = useUIStore((s) => s.setLeftDock);
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const enterCommons = useUIStore((s) => s.enterCommons);
@@ -128,13 +134,17 @@ export function WorkspaceRail() {
             active={leftDock === 'assets'}
             onClick={() => toggleDock('assets')}
           />
-          <RailItem
-            label="Open run history"
-            onboardingTarget="history"
-            icon={History}
-            active={leftDock === 'history'}
-            onClick={() => toggleDock('history')}
-          />
+          {/* The held-reopen line's Forget ID form sits beside Run History (GM r32, 2). */}
+          <div className="workspace-rail__anchor">
+            <RailItem
+              label="Open run history"
+              onboardingTarget="history"
+              icon={History}
+              active={leftDock === 'history'}
+              onClick={() => toggleDock('history')}
+            />
+            {reopenLineHere && <Suspense fallback={null}><ReopenHoldCallout place="runHistory" /></Suspense>}
+          </div>
           <RailItem
             label="Search commands and nodes"
             icon={Search}
