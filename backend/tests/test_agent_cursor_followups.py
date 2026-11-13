@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 
 from services.agent_presence import ARRIVAL_RADIUS, AgentPresence
-from tests.conftest import PERSON
+from tests.conftest import PERSON, timeless as _timeless
 from tests.test_agent_cursor_sessions import (  # noqa: F401 - fixtures
     AGENT,
     CLAUDE,
@@ -204,14 +204,6 @@ def test_a_deleted_nodes_cursor_keeps_its_arrival_at_the_point_it_falls_back_to(
     presence.forget_node("n1")
     clock.now += 1
     assert _form(presence, "a", {"x": 100.0, "y": 60.0})["since"] == since
-
-
-def _timeless(value):
-    if isinstance(value, dict):
-        return {k: _timeless(v) for k, v in value.items() if k not in ("secondsAgo", "activeSecondsAgo")}
-    if isinstance(value, list):
-        return [_timeless(v) for v in value]
-    return value
 
 
 def _agent_reads(api) -> list[str]:
