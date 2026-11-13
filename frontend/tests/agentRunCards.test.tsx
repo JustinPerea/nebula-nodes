@@ -83,7 +83,7 @@ describe('the card', () => {
   });
 
   it('a failure has the error icon by the message and no thumbnail', () => {
-    const { container } = card(sanitizeNote(raw({ outcome: 'failure' }, "Codex's run of “Hero shots” failed.")));
+    const { container } = card(sanitizeNote(raw({ outcome: 'failure' }, "Codex’s run of “Hero shots” failed.")));
     expect(container.querySelector('.agent-note-card')?.getAttribute('data-outcome')).toBe('failure');
     const icon = container.querySelector('.agent-run-icon')!;
     // GM - Design, 2026-10-25: aria-hidden, the message already says "failed";

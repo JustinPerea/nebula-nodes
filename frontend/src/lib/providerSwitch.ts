@@ -326,15 +326,16 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   };
 }
 
-/** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6,
- * verbatim: a run on the plan, never "billed"), naming who can take it when
- * Nebula knows (r32 item 4: "…Sign in to Krea in Settings, or switch to
- * fal.ai."); "or choose another provider" only when no route can. */
+/** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6, r41
+ * item 2: "“Hero shot” runs on Krea, which needs you to sign in. Sign in to
+ * Krea in Settings, or switch to fal.ai."), the node's own name in quotes
+ * (the renamed label, else the model's); names who can take it when Nebula
+ * knows (r32 item 4); "or choose another provider" only when no route can. */
 function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
   const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
     .map((routeId) => providerLabel(routeById(definition, routeId)?.provider));
   const switchTo = others.length ? `switch to ${orList([...new Set(others)])}` : 'choose another provider';
-  return `“${definition.displayName}” runs on your Krea plan. Sign in to Krea in Settings, or ${switchTo}.`;
+  return `“${context.name || definition.displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or ${switchTo}.`;
 }
 
 /** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)

@@ -32,8 +32,9 @@ _THUMB_KINDS = {"image": "image", "video": "video"}
 
 
 def possessive(name: str) -> str:
-    """GM's pattern ("Codex's run of ..."): 's after any name, one ending in s too."""
-    return f"{name}'s"
+    """GM's pattern ("Codex’s run of ..."): ’s after any name, one ending in s too
+    (curly, app-wide: PR #203 r41 item 3)."""
+    return f"{name}’s"
 
 
 def _quoted(labels: Mapping[str, str], node_id: str) -> str:
@@ -82,14 +83,14 @@ def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
     - Success: Codex finished “Hero shots”. / Codex finished 3 nodes.
     - Partial: Codex finished 2 of 3 nodes. “Upscale” failed. With more than
       one failed: Codex finished 2 of 5 nodes. 3 failed.
-    - Failure: Codex's run of “Hero shots” failed. / Codex's run of 3 nodes failed.
+    - Failure: Codex’s run of “Hero shots” failed. / Codex’s run of 3 nodes failed.
 
     Nodes in ``stopped`` wait for the person (GM r40): "Claude Code finished
     1 of 3 nodes. “Idol” is waiting for you to run it because it could bill
     your Hugging Face account."; with a failure beside it, "… “Idol” is
     waiting for you to run it, and “Writer” failed."; from 4 nodes, counts.
-    With nothing done (a draft for GM): "Codex's run didn’t finish. “Idol” is
-    waiting …" for one node, "Codex's run of 3 nodes didn’t finish. …"."""
+    With nothing done (a draft for GM): "Codex’s run didn’t finish. “Idol” is
+    waiting …" for one node, "Codex’s run of 3 nodes didn’t finish. …"."""
     done = [node_id for node_id in planned if node_id in set(succeeded)]
     broke = [node_id for node_id in planned if node_id in set(failed)]
     waiting = [node_id for node_id in broke if node_id in set(stopped)]

@@ -125,15 +125,15 @@ def test_the_agents_done_card_and_agent_log_say_it_stopped(world):
 def test_the_done_card_line_for_a_run_of_idol_alone():
     labels = {"n1": "Idol"}
     assert run_done_cards.done_text("Codex", labels, ["n1"], succeeded=[], failed=["n1"], stopped=["n1"]) == (
-        "Codex's run didn’t finish. “Idol” is waiting for you to run it because it could bill your Hugging Face "
+        "Codex’s run didn’t finish. “Idol” is waiting for you to run it because it could bill your Hugging Face "
         "account.", "failure")
     three = {"n1": "Idol", "n2": "Reroute", "n3": "Reroute"}
     assert run_done_cards.done_text("Codex", three, ["n1", "n2", "n3"], succeeded=[], failed=["n1"],
                                     stopped=["n1"]) == (
-        "Codex's run of 3 nodes didn’t finish. “Idol” is waiting for you to run it because it could bill your "
+        "Codex’s run of 3 nodes didn’t finish. “Idol” is waiting for you to run it because it could bill your "
         "Hugging Face account.", "failure")
     assert run_done_cards.done_text("Codex", labels, ["n1"], succeeded=[], failed=["n1"]) == (
-        "Codex's run of “Idol” failed.", "failure")
+        "Codex’s run of “Idol” failed.", "failure")
 
 
 def test_a_reused_result_passes_with_no_stop_and_no_request(world):

@@ -130,12 +130,17 @@ describe('Krea’s sign-in line names who can take the run (GM r32 item 4)', () 
 
   it('a provider with its key set: named', () => {
     const state = providerSwitchState(krea3(), plan, { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false, pricing });
-    expect(state.message).toBe(`“${krea3().displayName}” runs on your Krea plan. Sign in to Krea in Settings, or switch to fal.ai.`);
+    expect(state.message).toBe(`“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or switch to fal.ai.`);
+  });
+
+  it('a renamed node: its own name in the quotes (GM r41 item 2)', () => {
+    const state = providerSwitchState(krea3(), plan, { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false, pricing, name: 'Hero shot' });
+    expect(state.message).toBe('“Hero shot” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or switch to fal.ai.');
   });
 
   it('none: "or choose another provider"', () => {
     const state = providerSwitchState(krea3(), plan, { apiKeys: {}, kreaSignedIn: false, pricing });
-    expect(state.message).toBe(`“${krea3().displayName}” runs on your Krea plan. Sign in to Krea in Settings, or choose another provider.`);
+    expect(state.message).toBe(`“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or choose another provider.`);
   });
 
   it('the Krea API key alone is the same route, not another provider', () => {

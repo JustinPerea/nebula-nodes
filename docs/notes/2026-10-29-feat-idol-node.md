@@ -4441,3 +4441,37 @@ plain build, 117 over, +8.3 kB over main.
   tab whose chunks went stale; the key lock (runKeyLock) and its proposal
   twin, which must work before any chunk loads; the Idol node definition; the
   route/readiness code the cards draw from at the first paint (ModelNode).
+
+## Round 25 (GM sign-off, rulings of 2026-11-13)
+
+- **The stop card's agent text keeps the propose hint**, by the caller's
+  surface: `propose_change (run: n2)` for MCP, `` `nebula propose --note "<why>"
+  --run n2` `` for the CLI. It was already built that way
+  (`speridlabs_idol.agent_call_stop` reads `origin.ask`, else
+  `agent_spend.propose_hint(ids, origin.surface)`, the same
+  `agent_words.surface` rule main uses for refusals). The two-surface test is
+  `test_idol_round19_gate.py::test_an_agents_run_that_must_call_stops_before_any_request`
+  (ids `mcp` and `cli`); the quick run's two forms are in
+  `test_an_agents_quick_run_stops_and_points_at_a_canvas_node`. No code change.
+- **The Krea sign-in line** (`providerSwitch.kreaSignInLine`, frontend only; the
+  backend has no copy of this line): "“Hero shot” runs on Krea, which needs you
+  to sign in. Sign in to Krea in Settings, or switch to fal.ai." The name is the
+  node's own (`SwitchContext.name`, the renamed label), else the model's.
+  "or choose another provider" stays for the case where no provider can take the
+  run. The Auto row's reason is untouched. Tests: `idolRound11`, `idolRound17`
+  (new: a renamed node), `idolRound18`.
+- **The curly apostrophe**: `run_done_cards.possessive` returns ’s ("Codex’s run
+  of 3 nodes failed."). It is the only caller-facing helper of that name; no
+  other straight-apostrophe ratchet scans `run_done_cards.py` (the CLI ratchet,
+  `test_flag_parens_copy.py`, reads the CLI files). Tests that expected the
+  straight one now expect ’: `test_run_done_cards.py`, `test_idol_round19_gate.py`,
+  and `agentRunCards.test.tsx`'s fixture.
+- **The temp-folder "is a folder" line**, checked, not changed: it does not show
+  for a symlink or a file at the private temp folder. `_open_private_folder`
+  (settings.py) returns None for those, and the save goes in place
+  (`_InPlaceInstead`; `test_idol_round23b_settings.py` pins the symlink).
+  `in_the_way` is raised only for a real directory at a fixed file name
+  (settings.py:722 and 1466), and by `_require_same_device` (settings.py:930
+  and 933) when the temp folder can't be stat'ed or is on another filesystem. In
+  those two cases the person reads "{folder} is a folder, and Nebula needs to put
+  a file there", which is not what happened. Flagged to GM.
