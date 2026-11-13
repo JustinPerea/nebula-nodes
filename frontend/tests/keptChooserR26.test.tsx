@@ -103,7 +103,7 @@ describe('the refusal line follows the live list', () => {
     render(<KeptEditsNotice />);
     expect(screen.getByRole('alert').textContent).toBe(`${HEAD} you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.`);
     act(() => { useProjectStore.setState({ projects: [summary('a', 'Alpha')] }); });
-    expect(screen.getByRole('alert').textContent).toBe(`${HEAD} you’ve reached the limit of 1 project. Delete 1 project, and Nebula saves your edits.`);
+    expect(screen.getByRole('alert').textContent).toBe(`${HEAD} you’ve reached the limit of 1 project. Delete one, and Nebula saves your edits.`);
     expect(saveKeptEdits).not.toHaveBeenCalled();
     act(() => { useProjectStore.setState({ projects: [] }); });
     expect(saveKeptEdits).toHaveBeenCalledTimes(1);
@@ -139,8 +139,8 @@ describe('the refusal line follows the live list', () => {
     expect(saveKeptEdits).toHaveBeenCalledTimes(1);
   });
 
-  it('names how many projects: "Delete 1 project" and "Delete 2 projects"', () => {
-    expect(keptLimitLine(1, 1)).toBe(`${HEAD} you’ve reached the limit of 1 project. Delete 1 project, and Nebula saves your edits.`);
+  it('names how many projects: "Delete one" and "Delete 2 projects"', () => {
+    expect(keptLimitLine(1, 1)).toBe(`${HEAD} you’ve reached the limit of 1 project. Delete one, and Nebula saves your edits.`);
     expect(keptLimitLine(2, 1)).toBe(`${HEAD} you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.`);
   });
 });

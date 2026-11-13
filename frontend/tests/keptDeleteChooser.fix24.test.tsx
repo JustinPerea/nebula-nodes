@@ -22,7 +22,7 @@ beforeAll(regionNoticesReady);
 
 const summary = (id: string, name: string) => ({ id, name, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
   lastOpenedAt: null, nodeCount: 0, edgeCount: 0, thumbnail: null });
-const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete 1 project, and Nebula saves your edits.';
+const AT_LIMIT = 'Nebula couldn’t save your edits as a project because you’ve reached the limit of 3 projects. Delete one, and Nebula saves your edits.';
 const STORAGE = 'Nebula couldn’t save your edits as a project because the project list is full. Delete a project and remove it from Recently deleted, and Nebula saves your edits.';
 const initialProject = useProjectStore.getState();
 const remove = vi.fn(async () => {});

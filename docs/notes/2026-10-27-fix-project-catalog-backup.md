@@ -1126,3 +1126,7 @@ Bytes (entry raw / gzip, startup closure raw):
 - Startup set after: 1,919,317 raw / 500,582 gzip in 40 chunks (-95,881 / -28,272 from before; 62,388 raw / 15,926 gzip under main). Entry 484,455 raw / 150,462 gzip.
 - Tried and not kept (WIP in the round 28 scratch, `cb28/split-wip/`): (a) the kept tab's edit steps (applyKeptStep ... keptEdgesChange) as a lazy chunk loaded by `keepCanvasLocally`: -7.5K raw / -1.8K gzip; (b) the refused-wire lines (keptWires split in two, the lines lazy): -3.3K / -0.9K; (c) SelectionToolbar as a deferred overlay: -6.4K / -1.4K. With jszip out none was needed, and (a) would refuse every kept edit until its chunk is in (and for good if the chunk can't load, which is when a canvas is kept), so it is left for GM/Justin to choose.
 - Gates: tsc, lint, check:ratchets (frontend 220 files / 6411 tests, backend 87 files / 3642 passed), build + budget + dev-only + kept-guard checks, pr_tests (see report), isolated pytest on the PR's backend tests and every test file named kept/catalog/restore/delete (47 files, 2084 passed), person_gate.py diff vs origin/main empty.
+
+## GM sign-off (2026-11-13)
+
+GM signed off from three shots (limit notice, toolbar under the banner, the Undo pill under the kept notice), with one string: at the limit the line ends "Delete one, and Nebula saves your edits." (was "Delete 1 project"). Over the limit keeps "Delete 2 projects". `keptLimitLine` and its three tests changed; nothing else.

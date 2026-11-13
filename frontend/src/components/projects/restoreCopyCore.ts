@@ -61,8 +61,8 @@ export function keptStorageFullLine(): string {
 }
 
 /** GM r24 (b), verbatim: the kept save the project limit refused. At the
- * limit, "…because you’ve reached the limit of 3 projects. Delete 1 project, and
- * Nebula saves your edits."; over it, "…because you have 2 projects, over the
+ * limit, "…because you’ve reached the limit of 3 projects. Delete one, and
+ * Nebula saves your edits." (GM's sign-off, 2026-11-13: "Delete one", not "Delete 1 project"); over it, "…because you have 2 projects, over the
  * limit of 1. Delete 2 projects, and Nebula saves your edits." `deletes` is what the
  * backend counted, else the count past the limit plus one. */
 export function keptLimitLine(count: number, limit: number, deletes?: number | null): string {
@@ -70,7 +70,7 @@ export function keptLimitLine(count: number, limit: number, deletes?: number | n
   const why = count > limit
     ? `you have ${count} ${count === 1 ? 'project' : 'projects'}, over the limit of ${limit}`
     : `you’ve reached the limit of ${limit} ${limit === 1 ? 'project' : 'projects'}`;
-  return `${KEPT_SAVE_REFUSED} ${why}. Delete ${n} ${n === 1 ? 'project' : 'projects'}, and Nebula saves your edits.`;
+  return `${KEPT_SAVE_REFUSED} ${why}. Delete ${n === 1 ? 'one' : `${n} projects`}, and Nebula saves your edits.`;
 }
 
 /** PR #199 r26 (for GM): the notice's line once deleting has made room, until the retry
