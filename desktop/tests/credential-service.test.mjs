@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { runInNewContext } from 'node:vm';
 
 import {
   ALLOWED_PROVIDERS,
@@ -31,6 +32,7 @@ import {
   CREDENTIALS_VERSION,
   MIGRATION_STATUSES,
   CREDENTIAL_CHANNELS,
+  REVERT_WINDOW_MS,
   CredentialError,
   SafeStorageUnavailableError,
   UnknownProviderError,
@@ -146,9 +148,11 @@ function createMockIpcMain() {
   };
 }
 
-/** A mock IPC event with a trusted sender frame. */
+/** A mock IPC event with a trusted sender frame: its page's main frame
+ * (Electron's `event.sender.mainFrame`), as every credential call must be. */
 function createTrustedEvent(url) {
-  return { senderFrame: { url: url || 'file:///app/dist/index.html' } };
+  const frame = { url: url || 'file:///app/dist/index.html', processId: 1, routingId: 1 };
+  return { senderFrame: frame, sender: { mainFrame: frame } };
 }
 
 /** A mock IPC event with an untrusted sender frame. */
@@ -166,8 +170,8 @@ function createNoSenderEvent() {
 // ---------------------------------------------------------------------------
 
 describe('Published constants', () => {
-  test('ALLOWED_PROVIDERS has exactly 21 entries', () => {
-    assert.equal(ALLOWED_PROVIDERS.length, 21);
+  test('ALLOWED_PROVIDERS has exactly 22 entries', () => {
+    assert.equal(ALLOWED_PROVIDERS.length, 22);
   });
 
   test('ALLOWED_PROVIDERS is frozen', () => {
@@ -197,6 +201,7 @@ describe('Published constants', () => {
       'WORLDLABS_API_KEY',
       'KREA_USAGE_KEY',
       'GOOGLE_VERTEX_CREDENTIALS',
+      'HF_TOKEN',
     ];
     assert.deepEqual([...ALLOWED_PROVIDERS].sort(), expected.sort());
   });
@@ -226,14 +231,16 @@ describe('Published constants', () => {
     ]);
   });
 
-  test('CREDENTIAL_CHANNELS has exactly 5 channels (no get)', () => {
-    assert.equal(CREDENTIAL_CHANNELS.length, 5);
+  test('CREDENTIAL_CHANNELS has exactly 7 channels (no get)', () => {
+    assert.equal(CREDENTIAL_CHANNELS.length, 7);
     assert.ok(!CREDENTIAL_CHANNELS.includes('credentials:get'));
     assert.deepEqual([...CREDENTIAL_CHANNELS].sort(), [
       'credentials:clear',
+      'credentials:commit',
       'credentials:has',
       'credentials:migration-status',
       'credentials:retry-migration',
+      'credentials:revert',
       'credentials:set',
     ]);
   });
@@ -603,7 +610,8 @@ describe('createCredentialService', () => {
     test('encrypts and persists a credential', async () => {
       const { service, credsPath } = makeService();
       const result = await service.set('OPENAI_API_KEY', 'aaa-bbb-123');
-      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(result, { ok: true, writeId: result.writeId });
+      assert.match(result.writeId, /^[0-9a-f-]{36}$/);
 
       // File should exist with v1: format
       const store = readCredentialsStore(credsPath);
@@ -715,7 +723,8 @@ describe('createCredentialService', () => {
       await service.set('OPENAI_API_KEY', 'aaa');
       assert.equal(service.has('OPENAI_API_KEY'), true);
       const result = service.clear('OPENAI_API_KEY');
-      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(result, { ok: true, writeId: result.writeId });
+      assert.match(result.writeId, /^[0-9a-f-]{36}$/);
       assert.equal(service.has('OPENAI_API_KEY'), false);
     });
 
@@ -731,7 +740,7 @@ describe('createCredentialService', () => {
     test('is safe to call for a provider that does not exist', () => {
       const { service } = makeService();
       assert.doesNotThrow(() => service.clear('OPENAI_API_KEY'));
-      assert.deepEqual(service.clear('OPENAI_API_KEY'), { ok: true });
+      assert.equal(service.clear('OPENAI_API_KEY').ok, true);
     });
 
     test('throws UnknownProviderError for unknown provider', () => {
@@ -856,9 +865,9 @@ describe('registerCredentialHandlers', () => {
     return { ipcMain: ipcMain, service: service, validateSender: validateSender, event: event, credsPath: credsPath, migrationPath: migrationPath, ss: ss };
   }
 
-  test('registers exactly 5 channels', () => {
+  test('registers exactly 7 channels', () => {
     const { ipcMain } = makeHarness();
-    assert.equal(ipcMain._channels().length, 5);
+    assert.equal(ipcMain._channels().length, 7);
   });
 
   test('registers all expected channels', () => {
@@ -866,11 +875,335 @@ describe('registerCredentialHandlers', () => {
     const channels = ipcMain._channels().sort();
     assert.deepEqual(channels, [
       'credentials:clear',
+      'credentials:commit',
       'credentials:has',
       'credentials:migration-status',
       'credentials:retry-migration',
+      'credentials:revert',
       'credentials:set',
     ]);
+  });
+
+  // Review 13 of PR #203, LOW-1, and review 14, keychain HIGH-1: the
+  // renderer undoes a Keychain write the backend then refused, by the
+  // write's one-time id, and gets nothing back but ok.
+
+  /** A page (webContents) that can be destroyed or navigate away. */
+  let nextPage = 10;
+  function createSender() {
+    const listeners = {};
+    nextPage += 1;
+    return {
+      mainFrame: { url: 'file:///app/dist/index.html', processId: nextPage, routingId: 1 },
+      on(name, listener) { (listeners[name] ||= []).push(listener); },
+      emit(name, ...args) { for (const listener of listeners[name] || []) listener(...args); },
+      count(name) { return (listeners[name] || []).length; },
+    };
+  }
+  function pageEvent(sender = createSender()) {
+    return { senderFrame: sender.mainFrame, sender };
+  }
+  const call = (ipcMain, channel, event, arg) => ipcMain._get(channel)(event, arg);
+  const set = (ipcMain, event, provider, key) => call(ipcMain, 'credentials:set', event, { provider, key });
+  const stored = (credsPath) => readCredentialsStore(credsPath).providers;
+  const NOT_LATEST = { ok: false, error: 'NOT_THE_LATEST_WRITE' };
+
+  test('set and clear answer a one-time write id, a new one each time', async () => {
+    const { ipcMain } = makeHarness();
+    const event = pageEvent();
+    const first = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+    const second = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-2');
+    const cleared = await call(ipcMain, 'credentials:clear', event, 'OPENAI_API_KEY');
+    for (const result of [first, second, cleared]) {
+      assert.equal(result.ok, true);
+      assert.match(result.writeId, /^[0-9a-f-]{36}$/);
+      assert.deepEqual(Object.keys(result).sort(), ['ok', 'writeId']);
+    }
+    assert.equal(new Set([first.writeId, second.writeId, cleared.writeId]).size, 3);
+  });
+
+  test('credentials:revert puts back the key a set replaced, once', async () => {
+    const { ipcMain, service, credsPath } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'old-key-1234');
+    const old = stored(credsPath).OPENAI_API_KEY;
+    const { writeId } = await set(ipcMain, event, 'OPENAI_API_KEY', 'new-key-5678');
+    assert.notEqual(stored(credsPath).OPENAI_API_KEY, old);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), { ok: true });
+    assert.equal(stored(credsPath).OPENAI_API_KEY, old);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'old-key-1234' });
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'old-key-1234' });
+  });
+
+  test('credentials:revert removes a key a set added, and restores one a clear removed', async () => {
+    const { ipcMain, service, credsPath } = makeHarness();
+    const event = pageEvent();
+    const added = await set(ipcMain, event, 'FAL_KEY', 'fal-new-1');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, added.writeId), { ok: true });
+    assert.ok(!('FAL_KEY' in stored(credsPath)));
+    await service.set('FAL_KEY', 'fal-kept-2');
+    const cleared = await call(ipcMain, 'credentials:clear', event, 'FAL_KEY');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, cleared.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-kept-2' });
+  });
+
+  test('credentials:revert after a commit changes nothing', async () => {
+    const { ipcMain, service } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'old-key');
+    const { writeId } = await set(ipcMain, event, 'OPENAI_API_KEY', 'new-key');
+    assert.deepEqual(await call(ipcMain, 'credentials:commit', event, writeId), { ok: true });
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'new-key' });
+    assert.deepEqual(await call(ipcMain, 'credentials:commit', event, writeId), NOT_LATEST);
+  });
+
+  test('credentials:revert refuses a stale, made-up or missing id and changes nothing', async () => {
+    const { ipcMain, service, credsPath } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'old-key');
+    await set(ipcMain, event, 'OPENAI_API_KEY', 'new-key');
+    const before = readFileSync(credsPath, 'utf8');
+    for (const id of ['00000000-0000-4000-8000-000000000000', 'OPENAI_API_KEY', '', null, undefined, 42, {}]) {
+      assert.deepEqual(await call(ipcMain, 'credentials:revert', event, id), NOT_LATEST, String(id));
+      assert.deepEqual(await call(ipcMain, 'credentials:commit', event, id), NOT_LATEST, String(id));
+    }
+    assert.equal(readFileSync(credsPath, 'utf8'), before);
+  });
+
+  test('credentials:revert of an earlier write after a later one changes nothing', async () => {
+    const { ipcMain, service } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'key-0');
+    const first = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+    await call(ipcMain, 'credentials:commit', event, first.writeId);
+    const second = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-2');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, first.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-2' });
+    // A later write of another provider leaves this one's id good.
+    await set(ipcMain, event, 'FAL_KEY', 'fal-1');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, second.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1', FAL_KEY: 'fal-1' });
+  });
+
+  test('overlapping saves of one provider: only the latest can be undone, back to the one before it', async () => {
+    const { ipcMain, service } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'key-0');
+    // Both in flight: neither committed when the second lands.
+    const [first, second] = await Promise.all([
+      set(ipcMain, event, 'OPENAI_API_KEY', 'key-1'),
+      set(ipcMain, event, 'OPENAI_API_KEY', 'key-2'),
+    ]);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, first.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-2' });
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, second.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
+  });
+
+  test('credentials:revert puts nothing back over a store something else changed (compare-and-swap)', async () => {
+    const { ipcMain, service, credsPath, ss } = makeHarness();
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'key-0');
+    const { writeId } = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+    const store = readCredentialsStore(credsPath);
+    store.providers.OPENAI_API_KEY = await encryptValue('key-from-elsewhere', ss);
+    writeCredentialsStore(credsPath, store);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), { ok: false, error: 'STORE_CHANGED' });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-from-elsewhere' });
+    // And the entry is gone: a second try can't land either.
+    writeCredentialsStore(credsPath, { version: CREDENTIALS_VERSION, providers: { OPENAI_API_KEY: (await encryptValue('key-1', ss)) } });
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), NOT_LATEST);
+  });
+
+  test('only the page that made a write can undo or commit it', async () => {
+    const { ipcMain, service } = makeHarness();
+    const mine = pageEvent();
+    const other = pageEvent();
+    await service.set('OPENAI_API_KEY', 'key-0');
+    const { writeId } = await set(ipcMain, mine, 'OPENAI_API_KEY', 'key-1');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', other, writeId), NOT_LATEST);
+    assert.deepEqual(await call(ipcMain, 'credentials:commit', other, writeId), NOT_LATEST);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', mine, writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-0' });
+  });
+
+  for (const [what, leave] of [
+    ['is destroyed', (sender) => sender.emit('destroyed')],
+    ['loses its renderer', (sender) => sender.emit('render-process-gone', {}, { reason: 'crashed' })],
+    ['navigates (details form)', (sender) => sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: true })],
+    ['navigates (older argument form)', (sender) => sender.emit('did-start-navigation', {}, 'file:///x', false, true)],
+  ]) {
+    test(`a page that ${what} mid-write can't undo it afterwards`, async () => {
+      const { ipcMain, service } = makeHarness();
+      const sender = createSender();
+      const event = pageEvent(sender);
+      await service.set('OPENAI_API_KEY', 'key-0');
+      const { writeId } = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+      leave(sender);
+      // The page that loaded next answers from the same webContents.
+      assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), NOT_LATEST);
+      assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
+    });
+  }
+
+  test('a same-document or subframe navigation keeps the write', async () => {
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const event = pageEvent(sender);
+    await service.set('OPENAI_API_KEY', 'key-0');
+    const { writeId } = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+    sender.emit('did-start-navigation', { isSameDocument: true, isMainFrame: true });
+    sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: false });
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-0' });
+  });
+
+  test('each page is watched once, however many writes it makes', async () => {
+    const { ipcMain } = makeHarness();
+    const sender = createSender();
+    const event = pageEvent(sender);
+    for (const key of ['a', 'b', 'c']) await set(ipcMain, event, 'FAL_KEY', key);
+    await call(ipcMain, 'credentials:clear', event, 'FAL_KEY');
+    assert.deepEqual(['destroyed', 'render-process-gone', 'did-start-navigation', 'did-navigate'].map((name) => sender.count(name)),
+      [1, 1, 1, 1]);
+  });
+
+  test('a write can be undone only inside the window', async (t) => {
+    // Fake timers (review 15 of PR #203, sockets-tests LOW-3): no real-time
+    // budget, so a slow runner can't fail the "inside the window" half.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const dir = mkTemp();
+    const credsPath = join(dir, CREDENTIALS_FILE_NAME);
+    const service = createCredentialService({ credentialsPath: credsPath, safeStorage: createMockSafeStorage(), revertWindowMs: 20 });
+    const ipcMain = createMockIpcMain();
+    registerCredentialHandlers(ipcMain, service, () => true);
+    const event = pageEvent();
+    await service.set('OPENAI_API_KEY', 'key-0');
+    const late = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
+    t.mock.timers.tick(20);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, late.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
+    const soon = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-2');
+    t.mock.timers.tick(19);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, soon.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
+  });
+
+  test('a write that lands after its page started navigating is committed at once', async () => {
+    // Review 15 of PR #203, settings-keychain NIT-2.
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const slow = { ...createMockSafeStorage(), encryptStringAsync: async (plaintext) => {
+      await gate;
+      return Buffer.from(`enc::${plaintext}`, 'utf8');
+    } };
+    const { ipcMain, service } = makeHarness({ safeStorage: slow });
+    const sender = createSender();
+    const event = pageEvent(sender);
+    const writing = set(ipcMain, event, 'FAL_KEY', 'fal-new');
+    sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: true });
+    release();
+    const result = await writing;
+    assert.equal(result.ok, true);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, result.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-new' });
+  });
+
+  test('a write that lands with no navigation in between stays undoable', async () => {
+    const { ipcMain, service } = makeHarness();
+    const event = pageEvent();
+    const result = await set(ipcMain, event, 'FAL_KEY', 'fal-new');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, result.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), {});
+  });
+
+  test('only the frame that made a write can undo or commit it; a subframe is refused every call', async () => {
+    // Review 15 of PR #203, settings-keychain NIT-3: a file:// subframe of
+    // the same window passes the validator, but isn't the page's main frame.
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const page = pageEvent(sender);
+    const sub = { senderFrame: { url: 'file:///app/sub.html', processId: sender.mainFrame.processId, routingId: 2 }, sender };
+    const wrote = await set(ipcMain, page, 'FAL_KEY', 'fal-new');
+    const UNTRUSTED = { ok: false, error: 'UNTRUSTED_SENDER' };
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', sub, wrote.writeId), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:commit', sub, wrote.writeId), UNTRUSTED);
+    assert.deepEqual(await set(ipcMain, sub, 'FAL_KEY', 'fal-sub'), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:clear', sub, 'FAL_KEY'), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:has', sub, 'FAL_KEY'), UNTRUSTED);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-new' });
+    // The page's own frame still can.
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', page, wrote.writeId), { ok: true });
+  });
+
+  test('the service binds a write to its frame: another frame of the same page is another owner', async () => {
+    const { service } = makeHarness();
+    const sender = createSender();
+    const main = { key: '11:1', sender };
+    const other = { key: '11:2', sender };
+    const { writeId } = await service.set('FAL_KEY', 'fal-new', main);
+    assert.deepEqual(service.revert(writeId, other), NOT_LATEST);
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender }), { ok: true });
+  });
+
+  // Review 16 of PR #203, settings LOW-2 (mutant D8), NIT-1 and NIT-4.
+  test('another object for the same frame can undo its write; another routing id cannot', async () => {
+    // Electron's WebFrameMain: distinct instances can refer to one frame.
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const wrote = await set(ipcMain, pageEvent(sender), 'FAL_KEY', 'fal-new');
+    const sameFrame = { senderFrame: { ...sender.mainFrame }, sender };
+    assert.notEqual(sameFrame.senderFrame, sender.mainFrame);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', sameFrame, wrote.writeId), { ok: true });
+    const again = await set(ipcMain, pageEvent(sender), 'FAL_KEY', 'fal-newer');
+    sender.mainFrame = { ...sender.mainFrame, routingId: sender.mainFrame.routingId + 1 };
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', pageEvent(sender), again.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-newer' });
+  });
+
+  test('a write the old document makes after its navigation started is final once the new one commits', async () => {
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const event = pageEvent(sender);
+    sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: true });
+    const before = await set(ipcMain, event, 'FAL_KEY', 'fal-a');
+    // Still the old document's own write until the new one commits.
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, before.writeId), { ok: true });
+    const after = await set(ipcMain, event, 'FAL_KEY', 'fal-b');
+    sender.emit('did-navigate', {}, 'file:///app/dist/index.html', 200, 'OK');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, after.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-b' });
+  });
+
+  test('the same frame ids in another page are another owner', async () => {
+    const { service } = makeHarness();
+    const one = createSender();
+    const two = createSender();
+    const { writeId } = await service.set('FAL_KEY', 'fal-new', { key: '11:1', sender: one });
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender: two }), NOT_LATEST);
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender: one }), { ok: true });
+  });
+
+  test('an event with no main frame to check against is refused (fails closed)', async () => {
+    const { ipcMain } = makeHarness();
+    const frame = { url: 'file:///app/dist/index.html' };
+    for (const event of [{ senderFrame: frame }, { senderFrame: frame, sender: {} }]) {
+      assert.deepEqual(await set(ipcMain, event, 'FAL_KEY', 'fal-x'), { ok: false, error: 'UNTRUSTED_SENDER' });
+    }
+  });
+
+  test('the default window is a minute', () => {
+    assert.equal(REVERT_WINDOW_MS, 60_000);
+  });
+
+  test('credentials:revert and credentials:commit check the sender', async () => {
+    const untrusted = makeHarness({ validateSender: () => false });
+    for (const channel of ['credentials:revert', 'credentials:commit']) {
+      assert.deepEqual(await call(untrusted.ipcMain, channel, untrusted.event, 'any-id'),
+        { ok: false, error: 'UNTRUSTED_SENDER' });
+    }
   });
 
   test('does NOT register credentials:get', () => {
@@ -888,7 +1221,8 @@ describe('registerCredentialHandlers', () => {
         provider: 'OPENAI_API_KEY',
         key: 'aaa',
       });
-      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(result, { ok: true, writeId: result.writeId });
+      assert.match(result.writeId, /^[0-9a-f-]{36}$/);
       const store = readCredentialsStore(credsPath);
       assert.ok(store.providers.OPENAI_API_KEY.startsWith(V1_PREFIX));
     });
@@ -1041,7 +1375,8 @@ describe('registerCredentialHandlers', () => {
       await service.set('OPENAI_API_KEY', 'aaa');
       const handler = ipcMain._get('credentials:clear');
       const result = await handler(event, 'OPENAI_API_KEY');
-      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(result, { ok: true, writeId: result.writeId });
+      assert.match(result.writeId, /^[0-9a-f-]{36}$/);
       assert.equal(service.has('OPENAI_API_KEY'), false);
     });
 
@@ -1247,5 +1582,52 @@ describe('Encryption round-trip through service', () => {
 
     const values = await service2.decryptAll();
     assert.equal(values.OPENAI_API_KEY, 'aaa-persisted');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The preload's credential namespace (review 14 of PR #203, keychain LOW-2)
+// ---------------------------------------------------------------------------
+
+describe('preload credentials namespace', () => {
+  function loadPreload() {
+    const invoked = [];
+    let exposed;
+    const page = 'file:///app/dist/index.html';
+    runInNewContext(readFileSync(new URL('../preload.cjs', import.meta.url), 'utf8'), {
+      require: () => ({
+        contextBridge: { exposeInMainWorld: (_key, value) => { exposed = value; } },
+        ipcRenderer: { invoke: async (channel, ...args) => { invoked.push([channel, ...args]); return { ok: true }; } },
+      }),
+      URL,
+      location: { href: page },
+      process: { platform: 'darwin', isMainFrame: true, argv: [`--nebula-renderer-url=${page}`] },
+    });
+    return { credentials: exposed.credentials, invoked };
+  }
+
+  test('has exactly set, has, clear, revert and commit, frozen, and no get', () => {
+    const { credentials } = loadPreload();
+    assert.deepEqual(Object.keys(credentials).sort(), ['clear', 'commit', 'has', 'revert', 'set']);
+    assert.equal(Object.isFrozen(credentials), true);
+    assert.equal('get' in credentials, false);
+  });
+
+  test('each method calls its own channel with what it was given', async () => {
+    const { credentials, invoked } = loadPreload();
+    await credentials.set('FAL_KEY', 'fal-1');
+    await credentials.has('FAL_KEY');
+    await credentials.clear('FAL_KEY');
+    await credentials.revert('w-1');
+    await credentials.commit('w-2');
+    // The preload runs in its own realm: compare by value.
+    assert.deepEqual(JSON.parse(JSON.stringify(invoked)), [
+      ['credentials:set', { provider: 'FAL_KEY', key: 'fal-1' }],
+      ['credentials:has', 'FAL_KEY'],
+      ['credentials:clear', 'FAL_KEY'],
+      ['credentials:revert', 'w-1'],
+      ['credentials:commit', 'w-2'],
+    ]);
+    for (const [channel] of invoked) assert.ok(CREDENTIAL_CHANNELS.includes(channel), channel);
   });
 });

@@ -24,6 +24,17 @@ body,
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+/* The notice region is portalled to <body>, absolute (never fixed: a fixed element is a stacking
+   context, GM r7 of PR #203; styles/noticeRegion.css). Its containing block is the body, a
+   full-window positioned box that clips and never scrolls (overflow: clip forbids even a
+   programmatic scroll), so it is placed against the window exactly as a fixed one was, and
+   an overflow at body level can't carry it off with a scrolled page.
+   tests/noticeRegionContainingBlock.test.ts reads this rule. */
+body {
+  position: relative;
+  overflow: clip;
+}
+
 a {
   color: inherit;
   text-decoration: none;

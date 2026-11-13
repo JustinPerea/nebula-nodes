@@ -852,7 +852,7 @@ def test_m3_graph_load_from_the_cli_and_mcp_says_the_refusal(app, monkeypatch, t
     path.write_text(json.dumps({"nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "file"}}], "edges": []}))
     api = NebulaAPI("http://testserver", client=client)
     with pytest.raises(graph_file_client.GraphFileError) as raised:
-        graph_file_client.load(api, str(path), via="cli", headers={"X-Nebula-Agent": "Probe"})
+        graph_file_client.load(api, str(path), headers={"X-Nebula-Agent": "Probe", "X-Nebula-Surface": "cli"})
     text = str(raised.value)
     assert main_module.CANVAS_WAITING_REFUSAL in text and "canvas_waiting" in text
     monkeypatch.setattr(mcp_server, "_api", lambda: api)

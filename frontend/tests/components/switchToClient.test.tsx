@@ -130,6 +130,6 @@ describe('switch_cases.json: a switcher click writes what the backend run expect
     expect(useProviderNoteStore.getState().notes.n1 ?? '').toBe(c.switcher.notes.join('. '));
     const { chip, blocked, alternatives } = c.switcher;
     expect(view(definition, afterClick, context)).toEqual({ chip, blocked, alternatives });
-    if (c.switcher.blocked) expect(screen.getByRole('status')).toHaveTextContent(/can't run on/);
+    if (c.switcher.blocked) expect(screen.getByRole('status')).toHaveTextContent(/can’t run on/);
   });
 });

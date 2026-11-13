@@ -8,6 +8,7 @@ import { KREA_ROW, type RowTone } from './rowHelpers';
 import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { SettingsRowError } from './SettingsRowError';
 import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 import { LineText } from '../../LineText';
 import { PersonLockLine, type PersonLock } from '../../PersonLock';
@@ -94,12 +95,12 @@ function KreaDefault({ mode, lock }: { mode: KreaConnectionMode; lock: PersonLoc
         <select id="settings-krea-default" className="settings__select" aria-label="Default Krea connection for new nodes"
           value={mode} disabled={pending} {...lock.control()}
           onChange={lock.guard((event: ChangeEvent<HTMLSelectElement>) => saveField('kreaConnectionMode', event.target.value === 'mcp' ? 'mcp' : 'api-token'))}>
-          <option value="api-token">API token · API balance</option>
+          <option value="api-token">API key · API balance</option>
           <option value="mcp">Krea sign-in · workspace compute</option>
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>
       </div>
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      <SettingsRowError id="kreaConnectionMode" message={error} />
       <p className="settings-hint">Nodes you already placed keep their connection.</p>
     </div>
   );
@@ -146,7 +147,7 @@ export function KreaSignInRow({ krea, mode, lock }: { krea: KreaController; mode
       <ProviderRow id={KREA_ROW} setup="krea-mcp" tone={shown.tone} name="Krea · sign-in"
         status={started || !status ? shown.label : undefined} statusTone={signedIn ? 'ok' : shown.tone === 'warn' ? 'warn' : undefined}
         summary={signedIn ? 'workspace compute' : started ? undefined
-          : mode === 'mcp' ? 'New Krea nodes are set to use it' : "Your Krea plan's compute, no API token"}
+          : mode === 'mcp' ? 'New Krea nodes are set to use it' : 'Uses your Krea plan instead of an API key'}
         title="Uses the Krea workspace you pick during sign-in and its compute units. Connecting never changes existing nodes or starts generation."
         action={action}>
         {showBody ? (

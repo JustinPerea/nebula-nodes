@@ -32,8 +32,9 @@ from typing import Any
 import httpx
 import pytest
 
-from execution import route_clients
+from execution import route_clients, run_origin
 from execution.maker_routes import translate_params
+from execution.run_origin import RunOrigin
 from services import node_route
 from tests.test_flux3_nodes import AUDIO, CATALOG, CLIP, P, REF, REGISTRY, defaults, hosts_for
 from tests.test_route_clients import (  # noqa: F401  (quick is an autouse fixture)
@@ -110,6 +111,11 @@ def _schema_for(provider: str, url: str, sent: dict[str, Any]) -> list[dict[str,
         return [SCHEMAS["replicate"][match.group(1)]]
     if provider == "openrouter":
         return [SCHEMAS["openrouter"][parsed.path.removeprefix("/api/v1/") + "/" + sent["model"]]]
+    if provider == "speridlabs":
+        # The Space's /call/run body, from its pinned /gradio_api/info.
+        from tests.speridlabs_fakes import run_schema
+        assert parsed.path == "/gradio_api/call/run", url
+        return [run_schema()]
     return [entry["requestSchema"] for entry in CATALOG.values() if entry["endpoint"] == parsed.path]
 
 
@@ -157,7 +163,11 @@ async def test_each_route_sends_only_fields_its_provider_takes(monkeypatch, node
         if node_route.route_block(definition, route, routed) is not None:
             continue
         hosts = hosts_for(monkeypatch, route["provider"], video)
-        await registry_handler(node_id)(node(node_id, **params), ports(**wired), dict(KEYS))
+        # The person's own run: Idol's Hugging Face call with their token set
+        # is the person's alone (execution/run_origin.py), and this harness
+        # checks what each route sends, not who may send it.
+        with run_origin.running(RunOrigin(person=True)):
+            await registry_handler(node_id)(node(node_id, **params), ports(**wired), dict(KEYS))
         posts = [r for r in hosts.requests if r.method == "POST" and "/uploads" not in str(r.url)
                  and "/files" not in str(r.url)]
         assert posts, (node_id, route_id, params)

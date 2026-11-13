@@ -206,18 +206,19 @@ def test_the_cli_derives_its_cursor_session_from_claude_code_and_never_sends_the
     monkeypatch.delenv("NEBULA_AGENT_SESSION", raising=False)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", raw)
     headers = client._identity_headers()
-    assert headers == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Cursor-Session": expected}
+    assert headers == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Surface": "cli", "X-Nebula-Cursor-Session": expected}
     assert raw not in json.dumps(headers)
     # Never the scene-read header: that would change which reads guard a write.
     assert "X-Nebula-Agent-Session" not in headers
 
     # NEBULA_AGENT_SESSION set: the headers sent before, exactly.
     monkeypatch.setenv("NEBULA_AGENT_SESSION", "lane-a")
-    assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": "lane-a"}
+    assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Surface": "cli",
+                                          "X-Nebula-Agent-Session": "lane-a"}
     # Neither: no session header at all.
     monkeypatch.delenv("NEBULA_AGENT_SESSION")
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
-    assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code"}
+    assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Surface": "cli"}
 
 
 def test_sessions_touch_no_permission_path():

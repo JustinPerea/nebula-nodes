@@ -29,6 +29,7 @@ from services.agent_profiles import (
     agent_workspace, agent_workspace_env, codex_default_model, codex_filesystem_args,
     codex_mcp_server_args, codex_profile_args, default_secret_paths, normalize_effort,
     protected_agent_dirs,
+    secret_dirs,
 )
 
 
@@ -402,7 +403,7 @@ def _codex_base_args(model: str | None, effort: str | None = DEFAULT_EFFORT,
         "never",
         *codex_profile_args(effort=effort),
         *codex_filesystem_args(workdir=workdir,
-                               deny_paths=[*protected_agent_dirs(), *default_secret_paths()],
+                               deny_paths=[*protected_agent_dirs(), *secret_dirs(), *default_secret_paths()],
                                output_root=OUTPUT_ROOT),
         "-c",
         'approval_policy="never"',

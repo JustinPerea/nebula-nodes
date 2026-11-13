@@ -313,7 +313,7 @@ def test_q10_an_existing_project_protected_again_is_said_as_kept(app, monkeypatc
         monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
         reply = asyncio.run(mcp_server.mcp.call_tool("load_graph_file", {"path": str(path)}))
     else:
-        reply = graph_file_client.load(NebulaAPI("http://testserver", client=client), str(path), via="cli")
+        reply = graph_file_client.load(NebulaAPI("http://testserver", client=client), str(path), headers={"X-Nebula-Surface": "cli"})
     if hasattr(reply, "status_code"):
         assert reply.status_code == 200, reply.text
         saved = reply.json()["savedCanvas"]

@@ -96,7 +96,7 @@ def _agent(how, client, monkeypatch, tmp_path):
         cli._client = client
         return cli.clear_graph(force=True)
     if how == "cli-load":
-        return graph_file_client.load(NebulaAPI("http://testserver", client=client), str(path), via="cli")
+        return graph_file_client.load(NebulaAPI("http://testserver", client=client), str(path), headers={"X-Nebula-Surface": "cli"})
     graph = client.get("/api/graph/export", headers=CODEX).json()
     first = graph["nodes"][0]["id"]
     if how == "apply":

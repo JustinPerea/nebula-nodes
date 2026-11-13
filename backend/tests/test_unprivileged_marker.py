@@ -19,27 +19,73 @@ TESTS = Path(__file__).resolve().parent
 OWNER_RW = stat.S_IRUSR | stat.S_IWUSR
 
 
-def _mode(node: ast.AST) -> int | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, int):
-        return node.value
+def _modes(node: ast.AST) -> list[int] | None:
+    """Every mode `node` can be: an int literal, a stat constant, a `|` of
+    those, or a conditional (`a if c else b`: both branches). None when the
+    scan can't tell (a variable, a call), which drops_owner_access counts as
+    dropping access: the scan fails closed (review 15 of PR #203,
+    sockets-tests LOW-2)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool):
+        return [node.value]
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "stat":
         value = getattr(stat, node.attr, None)
-        return value if isinstance(value, int) else None
+        return [value] if isinstance(value, int) else None
+    if isinstance(node, ast.Attribute) and node.attr == "st_mode":
+        # The file's own mode (p.stat().st_mode), alone or with bits or-ed
+        # onto it, takes nothing away: modelled as keeping the owner's access.
+        return [OWNER_RW]
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        left, right = _mode(node.left), _mode(node.right)
-        return None if left is None or right is None else left | right
+        left, right = _modes(node.left), _modes(node.right)
+        return None if left is None or right is None else [a | b for a in left for b in right]
+    if isinstance(node, ast.IfExp):
+        body, orelse = _modes(node.body), _modes(node.orelse)
+        return None if body is None or orelse is None else body + orelse
+    return None
+
+
+CHMODS = {"chmod", "lchmod", "fchmod"}
+
+
+def _command_mode(call: ast.Call) -> ast.AST | None:
+    """The mode of a chmod run as a command: `subprocess.run(["chmod",
+    "000", p])`, with the list passed as the first argument or as `args=`,
+    and the command named by path too (`/bin/chmod`). An octal string is read
+    as its number; anything else, a digit string that isn't octal ("999")
+    included, is unproven (review 16 of PR #203, tests NIT-2; review 17, tests
+    NIT-1). A chmod inside a shell string (`os.system("chmod 0 p")`) isn't
+    read."""
+    lists = [*call.args, *(keyword.value for keyword in call.keywords if keyword.arg == "args")]
+    for arg in lists:
+        if isinstance(arg, (ast.List, ast.Tuple)) and arg.elts and isinstance(arg.elts[0], ast.Constant) \
+                and isinstance(arg.elts[0].value, str) and arg.elts[0].value.rsplit("/", 1)[-1] == "chmod":
+            mode = arg.elts[1] if len(arg.elts) > 1 else arg
+            if isinstance(mode, ast.Constant) and isinstance(mode.value, str) and mode.value.isdigit():
+                try:
+                    return ast.Constant(int(mode.value, 8))
+                except ValueError:
+                    return arg  # not octal: unproven
+            return arg  # unproven: _modes reads it as None
     return None
 
 
 def _chmod_mode(call: ast.Call) -> ast.AST | None:
-    """The mode of os.chmod(path, mode), path.chmod(mode) or either with mode=."""
+    """The mode of os.chmod(path, mode), a bare chmod(path, mode) (from os
+    import chmod), path.chmod(mode), either with mode=, or a chmod command.
+    A starred or ** argument hides the mode: it is returned as is, so _modes
+    reads it as unproven (review 16 of PR #203, tests NIT-2)."""
     func = call.func
-    if not (isinstance(func, ast.Attribute) and func.attr in {"chmod", "lchmod", "fchmod"}):
-        return None
+    bare = isinstance(func, ast.Name) and func.id in CHMODS
+    if not (bare or (isinstance(func, ast.Attribute) and func.attr in CHMODS)):
+        return _command_mode(call)
     for keyword in call.keywords:
         if keyword.arg == "mode":
             return keyword.value
-    if isinstance(func.value, ast.Name) and func.value.id == "os":
+        if keyword.arg is None:
+            return keyword.value
+    starred = next((arg for arg in call.args if isinstance(arg, ast.Starred)), None)
+    if starred is not None:
+        return starred
+    if bare or (isinstance(func.value, ast.Name) and func.value.id == "os"):
         return call.args[1] if len(call.args) > 1 else None
     return call.args[0] if call.args else None
 
@@ -49,8 +95,8 @@ def drops_owner_access(function: ast.AST) -> list[int]:
     lines = []
     for node in ast.walk(function):
         if isinstance(node, ast.Call) and (mode := _chmod_mode(node)) is not None:
-            value = _mode(mode)
-            if value is not None and value & OWNER_RW != OWNER_RW:
+            values = _modes(mode)
+            if values is None or any(value & OWNER_RW != OWNER_RW for value in values):
                 lines.append(node.lineno)
     return lines
 
@@ -87,7 +133,10 @@ def _uses(function: Function) -> set[str]:
 
 def unmarked(source: str) -> list[str]:
     """Tests that reach a chmod dropping the owner's read or write and aren't
-    marked. Scope: chmod modes written as int literals or stat constants, in
+    marked. Scope: every chmod call (os.chmod, a bare chmod, path.chmod,
+    lchmod, fchmod, and a chmod command in a list: _chmod_mode; a chmod in a
+    shell string isn't read), with any mode the scan can't prove keeps the
+    owner's read and write (a variable, a call) counted as dropping them, in
     module functions and in test classes' methods, followed through helpers
     and fixtures by name. A parametrize with one marked case counts as marked:
     the scan doesn't check that the chmod runs only in that case."""
@@ -156,6 +205,34 @@ def test_every_test_that_takes_away_file_access_is_marked():
         ("import os\nclass TestA:\n    def _lock(self, p):\n        os.chmod(p, 0)\n"
          "    def test_a(self, p):\n        self._lock(p)\n", ["test_a (line 5)"]),
         ("import os, pytest\n@pytest.mark.unprivileged\nclass TestA:\n    def test_a(self, p):\n        os.chmod(p, 0)\n", []),
+        # A conditional mode: either branch that drops access counts (review 15, LOW-2).
+        ("def test_a(p, what):\n    p.chmod(0o444 if what == 'f' else 0o555)\n", ["test_a (line 1)"]),
+        ("def test_a(p, what):\n    p.chmod(0o644 if what == 'f' else 0o400)\n", ["test_a (line 1)"]),
+        ("def test_a(p, what):\n    p.chmod(0o644 if what == 'f' else 0o755)\n", []),
+        # A mode the scan can't prove keeps access: fails closed.
+        ("def test_a(p, mode):\n    p.chmod(mode)\n", ["test_a (line 1)"]),
+        ("import os, stat\ndef test_a(p):\n    os.chmod(p, p.stat().st_mode & ~stat.S_IWUSR)\n", ["test_a (line 2)"]),
+        # The file's own mode with bits added takes nothing away.
+        ("import stat\ndef test_a(p):\n    p.chmod(p.stat().st_mode | stat.S_IXUSR)\n", []),
+        ("import os\ndef _h(p, m):\n    os.chmod(p, m)\ndef test_a(p):\n    _h(p, 0o644)\n", ["test_a (line 4)"]),
+        # A `|` whose right side brings the owner's bit back (review 16, tests LOW-4).
+        ("import os, stat\ndef test_a(p):\n    os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)\n", []),
+        ("import os, stat\ndef test_a(p, c):\n    os.chmod(p, (0o400 if c else 0o600) | stat.S_IWUSR)\n", []),
+        ("import os, stat\ndef test_a(p, c):\n    os.chmod(p, (0o400 if c else 0o600) | stat.S_IXUSR)\n",
+         ["test_a (line 2)"]),
+        # A bare chmod, a starred mode and a chmod command (review 16, tests NIT-2).
+        ("from os import chmod\ndef test_a(p):\n    chmod(p, 0)\n", ["test_a (line 2)"]),
+        ("from os import chmod\ndef test_a(p):\n    chmod(p, 0o600)\n", []),
+        ("import os\ndef test_a(args):\n    os.chmod(*args)\n", ["test_a (line 2)"]),
+        ("import os\ndef test_a(p, kw):\n    os.chmod(p, **kw)\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '000', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p, m):\n    subprocess.run(['chmod', m, p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '644', p])\n", []),
+        # `args=`, a chmod named by its path, and a digit string that isn't octal (review 17, tests NIT-1).
+        ("import subprocess\ndef test_a(p):\n    subprocess.check_call(args=['chmod', '0', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['/bin/chmod', '0', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '999', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(args=['/bin/chmod', '644', p])\n", []),
         # The word alone in pytestmark isn't the mark.
         ("import os\npytestmark = ['unprivileged']\ndef test_a(p):\n    os.chmod(p, 0)\n", ["test_a (line 3)"]),
     ],

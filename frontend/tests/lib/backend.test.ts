@@ -828,6 +828,10 @@ describe('browser person link', () => {
     expect(header(3)).toBe(TOKEN);
     expect(fetchSpy.mock.calls[4][0]).toBe('http://127.0.0.1:8131/api/settings');
     expect(header(4)).toBe(TOKEN);
+    // The line at the top of Settings is the person's only (PR #203 round 19, GM r38 item 5).
+    await backend.apiFetch('/api/settings/notice');
+    expect(fetchSpy.mock.calls[5][0]).toBe('http://127.0.0.1:8131/api/settings/notice');
+    expect(header(5)).toBe(TOKEN);
   });
 
   it('never rediscovers another backend after a failed read while pinned', async () => {

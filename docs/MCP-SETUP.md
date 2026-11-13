@@ -1,7 +1,7 @@
 # Nebula Nodes MCP setup
 
 To connect a Krea account for Nebula's agents and Canvas/Create generation,
-use **Settings → Connections → Krea**. [Krea MCP setup](KREA-MCP.md) explains
+use **Settings > Providers > Krea**. [Krea MCP setup](KREA-MCP.md) explains
 sign-in, saved connection choices and workspace billing.
 
 Nebula includes a local stdio MCP server that lets an agent work on the
@@ -60,7 +60,10 @@ don't free room yourself. `nebula context` prints it as `CANVAS NOT SAVED
 AS A PROJECT`.
 
 No private note, image note, board note or pin reply history goes in. The
-route is `GET /api/agent/start` (`?via=cli` words the hints for the CLI);
+route is `GET /api/agent/start` (a request with `X-Nebula-Surface: cli`, which
+the CLI sends on every call, gets its hints in `nebula` words; an older CLI's
+`?via=cli` with no such header reads the same, while a header, whatever it
+says, wins over the query);
 `nebula context` prints the same, and `nebula context --json` prints it as
 it comes. Later turns use `look_at_canvas`, which stays the full snapshot.
 
@@ -107,7 +110,14 @@ The server exposes these tools for building and running (see
   node, priced per second of its Audio Input's file.
   `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
-  Video QC nodes) calls a provider in another mode. Every word of `query`
+  Video QC nodes) calls a provider in another mode. A row that runs free on
+  someone's own allowance has `billing`, saying who can still be billed past
+  it (Idol: with the person's `HF_TOKEN` set, Hugging Face bills a PRO,
+  Team or Enterprise account's prepaid credits past the daily ZeroGPU
+  quota, so with it set an agent proposes the run instead of running it).
+  It is worded for the token as set now: "Free here: …" without it, "May
+  cost here: …" with it, naming `propose_change`; `nebula nodes` prints it
+  as a `BILLING:` line under the table, naming `` `nebula propose` ``. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
   (and `nebula find`), on the same route: by default the node types that
   run here, by category, each with `runsWith` and its price, then one line
@@ -122,6 +132,77 @@ The server exposes these tools for building and running (see
   and list prices by the params that set them (`price.byInputSize` and
   `multiplyBy` on a price read from the input file, `price.unconfirmed` when
   the vendor's page doesn't state it exactly; a route has `priceBy`).
+  A route on a maker's Hugging Face Space (Idol) has `billing`. Idol is
+  keyless: without `HF_TOKEN` it runs free on Hugging Face's shared GPUs,
+  and an agent runs it like any free node. With `HF_TOKEN` set it runs on
+  the person's own ZeroGPU allowance, Nebula still prices it at $0, but on a
+  PRO, Team or Enterprise token Hugging Face can bill GPU time past the
+  daily quota from the person's prepaid credits ($1 per 10 minutes). So
+  with the token set, an agent's run (`run_nodes`, `nebula run`, `nebula
+  quick`, the HTTP run routes, a Cinema shot) starts as usual: the nodes
+  before Idol run, and an Idol node whose last result is reused passes, but
+  an Idol node that must call Hugging Face stops there, before anything is
+  sent, and the nodes after it don't run (Justin decided, 2026-10-31: only
+  the call is gated). The error text says why, by the node's name as the
+  canvas shows it, then names the reader's own way to propose, worded where
+  it is written: "“Idol” wasn’t run. Nodes that call Hugging Face with the
+  person’s token can bill their account, so only the person can run them.
+  Ask them to run “Idol”, or carry on without it." then, over MCP, "Propose
+  it instead: propose_change (run: n2). The person accepts on the canvas,
+  and the canvas runs it.", from the CLI `` `nebula propose --note "<why>"
+  --run n2` ``. Every place an agent reads the stop marks it as a stop, not
+  a failure, with that text whole: the canvas's error event has
+  `proposalNeeded: true` and category `waiting`; the run's result
+  (`run_nodes`, `get_run`, `POST /api/graph/run`, `GET
+  /api/graph/runs/{id}`) has `stopped` (`{"n2": "proposal_needed"}`) beside
+  `errors`, and its one-line `error` is the node's text, never "n2 failed:
+  …"; the `run.failed` journal entry (`/api/canvas/events`,
+  `wait_for_canvas_change`, `nebula watch`) has `proposalNeeded: true` and
+  the text whole (up to 600 characters, where other errors are cut at 160);
+  `look_at_canvas` and `nebula look` show the node with `stopped` and the
+  text whole. The person's card says "Waiting for you to run it" in the
+  notice style, and Claude Code's done line says the node is waiting
+  ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it
+  because it could bill your Hugging Face account."). A run whose origin
+  Nebula can't tell stops there too.
+  The CLI sends `X-Nebula-Surface: cli` on every request and prints a
+  refusal exactly as it came; any other caller reads MCP words. The header
+  says which surface is asking and nothing else: it is no agent marker and
+  changes no gate. The billing-setting refusals (a Krea billing mode, a
+  provider choice, a person's run) and `nebula quick`'s hint ("Add it to
+  the canvas instead (`nebula create <id>`), then propose the run: …") are
+  worded the same way. The person's
+  own Run, and an accepted proposal, run it as usual. The `billing` note
+  says which state holds now ("Free here" or "May cost here"), and both
+  state the rule (an agent's run stops at the node before calling Hugging
+  Face); `nebula info` prints it as its `BILLING:` line in the CLI's
+  words. Whether the token is set is read one way everywhere: a key
+  that is only spaces or invisible characters once trimmed is unset, even
+  one already saved that way, and PUT /api/settings refuses one (400:
+  "Nothing was saved because the key is empty once spaces and invisible
+  characters are removed."). A save writes back every entry it wasn't
+  asked to change as it was. When a key is set, replaced or removed, the
+  person's browser tabs get `{"type": "settingsChanged", "keys": [...]}`
+  (the names of the keys whose value changed, never a value, plus
+  `origin`, the canvas tab's `X-Nebula-Tab`, when the person's tab made the
+  write, so that tab doesn't say its own change again) and read their
+  settings again; it goes to the canvas's sockets only, so an MCP or
+  CLI listener never receives it. An open proposal's "may cost" follows a
+  token added from anywhere;
+  `get_proposal`, `list_proposals` and `nebula proposals` already read the
+  keys set at each call. A proposal's cost entries carry `reason` for a
+  paid node that leaves the total open (`noPrice`, `cantRun`,
+  `awaitingInput`, `missingKey` with its `keys`, `leftOut` with its
+  `plus`), the reason the canvas's Accept chip prints. Every node that
+  calls a provider has one cost class (`model_pricing.cost_class`): `paid`,
+  `plan` (a run on the person's Krea plan: entry `kind: "plan"`, label "on
+  Krea plan", `reason: {"kind": "plan"}`, counted in the cost's `planRuns`,
+  never in `paidRuns` or the estimate), `mayCost`, or `free` (a key-billing
+  route with no key, or a sourced $0: "free · fal.ai" with `price` {0, 0},
+  in `freeRuns`). Treat a reason kind you don't know as `noPrice`. An
+  entry `kind` Nebula doesn't name is counted in `paidRuns`, never in
+  `freeRuns`: `freeRuns` counts only `kind: "free"`, so the four counts
+  always add up to the run.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers
@@ -428,7 +509,12 @@ The server exposes these tools for building and running (see
   this server, has them too. None generates, uploads or spends; anything
   else is refused before Krea is called.
 - `view_output`: a node's output as an image (videos as three frames, image
-  lists as tiles), or as text. For a node whose last run failed it returns
+  lists as tiles), or as text. A World v2 Gaussian splat (Idol's `.ply`)
+  can't be looked at, so it also comes back with a `splat` summary the
+  backend reads from the file (`GET /api/graph/node/{id}/splat-summary`,
+  `services/splat_ply.py`): per splat its Gaussian count, bounding box,
+  file size, spherical-harmonics degree and opacity spread, and the
+  world's provider, model, seed and axes. For a node whose last run failed it returns
   the error instead of "no output yet"; if an older output is still on the
   card it returns that with a note that the last run failed.
 - `get_spend_limits`: the limits and what this session has used.
@@ -724,7 +810,8 @@ The server exposes these tools for building and running (see
   model and its settings). `style_update` returns `previous`, which undoes it
   as one checked write; `style_delete` moves one to Recently deleted. See
   [Styles from the CLI and MCP](#styles-from-the-cli-and-mcp).
-- `get_settings`: what agents need from Settings, from `GET /api/settings`:
+- `get_settings`: what agents need from Settings, from `GET /api/settings`
+  (a 409 with `code` when the settings file can't be read, below):
   `configured` (each provider key's name with `true` or `false`), `routing`,
   `executionMode`, `batchSizeCap`, `exportFolder` and `kreaConnectionMode`.
   No part of a key comes back. The route itself sends a set key's last 4
@@ -734,6 +821,58 @@ The server exposes these tools for building and running (see
   prints this result). It turns each key into true or false as this tool
   does, so even a reply that carried an ending would print none; the CLI
   never has the person token.
+  When Nebula can't use the settings file, the route answers 409 with
+  `detail`, `code` and `fix`: `settings_unreadable` (a file it can't read or
+  parse, or one that isn't a JSON object: "Nebula can’t read <path>. Ask the
+  person to fix the file."), `keys_unreadable` (its `apiKeys` isn't an
+  object; writes only), `settings_unwritable` (the file is read-only, or
+  its folder is and the file can't be written in place: the line names the
+  file or the folder; a folder that can't be made names the existing folder
+  that refuses it; and when Nebula's own folder takes no copy for an
+  in-place save, the line names the folder that refuses: Nebula's state
+  folder (`~/.nebula`, or the desktop app's
+  `~/Library/Application Support/Nebula Nodes/state`), its `settings-copy`
+  folder, as in "Nothing was saved because Nebula isn’t allowed to change
+  ~/.nebula/settings-copy, where it keeps a copy while it saves. Ask the
+  person to check the folder’s permissions.", or, when a folder above the
+  state folder refuses so the state folder can't be made, both: "Nothing
+  was saved because Nebula isn’t allowed to change ~/ro, so it can’t make
+  ~/ro/deeper/state, where it keeps a copy while it saves. Ask the person
+  to check the permissions of ~/ro."), `settings_not_a_folder` (a folder on
+  the way to the file, or to Nebula's copy folder, is a file, named in the
+  line; or a folder sits at one of the save's own file names, the temp file
+  or the copy, also named: "… is a folder, and Nebula needs to put a file
+  there.") or `settings_busy` (another Nebula's save held the file past the
+  wait, about 10 seconds: "Nothing was saved because another Nebula is
+  saving your settings. Try again in a moment."; nothing changed, and
+  trying again later is fine). A save replaces the file whole
+  (keeping its mode, owner, ACL and extended attributes) through a temp
+  file of its own in a private folder beside it, `.settings-nebula-tmp/.settings.json.nebula-tmp-<pid>-<token>` (0700; a symlinked or foreign folder fails the save; no agent can read the folder); a file with a second name or
+  another owner, a folder that takes no new file, metadata that can't be
+  carried, or a rename the system refuses, is written in place instead, with
+  a copy kept in Nebula's `settings-copy` folder until the write is done, and
+  a file left unreadable by a write cut short is put back from that copy at
+  the next start, the file it replaced kept beside the copy (the
+  `settings.restored` event), or, when Nebula can't write the file then, left
+  for the next start (the `settings.not_restored` event). Every save holds an
+  exclusive lock where the filesystem supports flock, and PUT and DELETE
+  settings hold it from their read to their save. Where the filesystem takes
+  no flock (some network mounts), every save writes its own temp file and renames it only while
+  the name is still that open file (device and inode), else writes again, so
+  it never replaces the file with another save's half-written temp; a save
+  that finds a leftover at the older shared name `.settings.json.nebula-tmp`
+  waits for it and then answers `settings_busy`. One that a save cut short left
+  (its writer gone, and older than a minute on the folder's own clock, or dated more than 5
+  seconds ahead of it) is removed only while it is still that file: it is
+  moved into `.settings-nebula-judging` beside it, checked by inode there,
+  and removed, or put back if it is another save's since. No agent can read
+  the temp file, the judging folder or the `settings-copy` folder: all are
+  on every agent deny list. The last three codes are for writes only, and
+  only the person writes; a desktop Keychain save (`credentials/update`)
+  never writes the file, so it gets only the read codes. `fix` is the sentence
+  that says what to do, worded for the reader: an agent's says to ask the
+  person. Every browser tab gets the person's words; only agents get these.
+  An empty `NEBULA_SETTINGS_PATH` means the default path.
 - `provider_status`: whether each key works, from `GET /api/health/providers`
   (free, read-only checks, never a generation; cached 5 minutes, `refresh`
   checks again), and the Krea account connection from
@@ -756,7 +895,10 @@ And these canvas tools:
   An input holding an uploaded file has `fileName`, the name it was uploaded
   with (`nebula look` prints it as `file:`).
   A node whose last run failed has `state: "error"` with the message in
-  `error` (and the plain-language `errorHint`, when there is one). Where a
+  `error` (and the plain-language `errorHint`, when there is one). A node
+  that stopped at a call only the person may make (Idol with `HF_TOKEN`
+  set) has `stopped: "proposal_needed"` too, and its `error` is the whole
+  text, never cut (other errors are cut at 300 in `nebula look`). Where a
   provider quoted a key in that message (OpenAI's 401 shows its first and
   last characters), the key is `<key hidden>`; `get_project` and `get_run`
   errors are cleaned the same way (`services/key_echoes.py`).
@@ -1044,8 +1186,30 @@ nodes"), with the verb they share, else "Changed". Moodboard writes are listed t
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
-they move no cursor. The log is in the browser's memory only: the last 50
-entries, gone on reload.
+they move no cursor. A run the pre-call check refuses, from any route and
+whoever asked (MCP, the CLI, an in-app chat turn), is one line there in the
+proposal bar's merged words: "Nebula couldn’t start the run. 2 “GPT Image
+2” nodes need your OpenAI API key. Add it in Settings, then run the nodes
+again." (from 4 nodes that share it, the count is in its sentence: "4
+nodes need your OpenAI API key. …"). A
+required input with nothing connected merges the same way: "2 “GPT Image
+2” nodes need a prompt. Connect a prompt to each, then run the nodes
+again." A node with several inputs with nothing connected says them as
+one need, in its input order: "“FLUX Kontext” needs a prompt and an image.
+Connect both, then run the node again." ("Connect them" from three); nodes
+with the same set merge ("2 “FLUX Kontext” nodes need a prompt and an
+image. Connect both to each, then run the nodes again."), and different
+sets are separate sentences. A node stopped for a reason and an input with
+nothing connected says both, the reason first. The cursor points
+at the first node with that node's own line as `say`, and the event's `log`
+is the merged line, never cut: only a line longer than 600 characters
+says "Nebula couldn’t start the run. 9 nodes can’t run here yet."
+instead, and one node's line is said whole (`say`
+stays up to 140; a `log` built from what you sent, such as raw field keys,
+is still cut at 600). Your reply is unchanged: `error` and `errors` name
+every node by id.
+The log is in the browser's memory only: the last 50 entries, gone on
+reload.
 
 The REST surface is `POST /api/canvas/cursor` (a `target`, or only `say` to
 narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
@@ -1088,7 +1252,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal connected it |
 | `selection.changed` | the selected set changed, or how many selected nodes only the person's tab has ("selected 1 node only their tab has") | `nodeIds`, `count`; `tabOnlyCount`, `tabOnlyNote` when there are such nodes |
-| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal; on `run.failed`, `proposalNeeded: true` when the node stopped at a call only the person may make (Idol with `HF_TOKEN` set): its `error` is then the whole text saying so and how to propose, and its `summary` ends "stopped" |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids, at most 50) and `renumberedCount` (all of them); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids, and `proposalsOpen` (how many; the summary says "1 open proposal stayed open") |
@@ -1100,7 +1264,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `pin.resolved` | an agent answered a note | `pinId`, `text`, `reply` |
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
 | `pin.reattached` | the undo of that delete (the person's Cmd+Z or Undo, or an agent's `undo_canvas_edit`) put the node back, and the note is on it again as before | `pinId`, `text`, `anchor` (`{nodeId}`) |
-| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
+| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`, `mayCostRuns`, `planRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.accept_refused` | the person's Accept was refused because the canvas would be past Save's shape limits or the project over its size limit; nothing changed and the proposal is still open | `proposalId`, `agentId`, `code` (`proposal_too_complex`), `limit` (`kind`: `depth`, `values` or `size`, `max`; bytes for `size`) |
@@ -1110,6 +1274,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it; `sourceName` and `sourceProjectId` on a recovered copy (its source; never read it from the name) |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
+| `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read; named by the time and a random suffix, `settings-replaced-<UTC time>-<8 hex>.json`, never by what is in it); never a key or a setting. The person's line about it stays at the top of Settings until they dismiss it, across restarts (it is kept in that same folder); no agent route returns it |
+| `settings.not_restored` | at start, Nebula found the copy it keeps for an in-place save that was cut short but couldn't put it back; the copy is kept and tried again at the next start. When Nebula isn't allowed to change the file (or its folder), nothing is kept aside; when the copy folder takes no file for the one it would replace, nothing is kept aside either; when the write itself fails after the replaced file was kept, that file stays kept, once however many starts meet it. Attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, by cause: "Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed to change <path>. It’ll try again the next time Nebula starts." when Nebula isn't allowed (<path> is the file, its folder or the copy folder, whichever refuses), else "Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again the next time Nebula starts." (a full disk, an I/O error). Tell the person; only they can change the file's permissions or free the space | `file` (the settings file's path as the person sees it); never a key or a setting |
 | `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
 | `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "Recovered <project>" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null), `held` (true: saved from the copy held aside when a project opened over it, or a clear or load replaced it) |
 | `project.canvasHeldUnreadable` | A canvas held aside (`projects/canvas-held/`) couldn't be read from either copy, or couldn't be saved as a project, and may be lost; its files are kept beside them; by `system`, once | `count` (null: unknown), `kept` (the kept files' names), `at` |
@@ -2133,6 +2299,25 @@ row has a `person` line beside `missing`; and a project storage refusal
 (507) adds `storage: "full"` beside `detail` when the disk is full. Don't
 parse any of them.
 
+A node whose run the pre-call check refused (a missing key, a route that
+can't take the recipe) also carries `errorNotStarted: true` in the graph, so
+its card's heading is "Nebula couldn’t start the run.", the Agent log's; a
+run that started and failed doesn't. It's for the canvas only: `error` is the
+same text as before, and a refused run's result still says so in `errors`.
+The card's route lines now quote the node's name ("“FLUX 3 Image” is set to
+Replicate, …"), and a fix that lists choices takes a comma before the
+switch ("Pick 1K, 2K or 4K, or switch to fal.ai."). Those are the person's
+words, in `person` and `reason` too; you read `error` and `missing` as
+before. In your `error` a value is the one you send back, and one whose
+option is labelled with a size it doesn't spell has the size after it:
+"Pick 768sq (768 × 768), 1k, 2k or 4k, or switch provider." A renamed
+node's card line and cursor bubble name it by its name ("“Hero shot” can’t
+run on fal.ai with “Resolution” set to 1.5K."), never by its type as
+well. A node whose only needs are inputs to connect and a key says them in
+one line; for a node with several providers the key is "your Black Forest
+Labs API key or fal.ai API key" (two or three) or "a key for one of its 4
+providers" (four or more).
+
 The status is the one the provider's API answered, attached where Nebula
 raised the error, never a number read out of the text (round 3d, part 2): a
 storage upload's 403 or "Prompt is too long: 500 characters over" keeps
@@ -2521,7 +2706,7 @@ proposal that clears the model, or names one whose ports Nebula can't read,
 is refused (`unwire` them with `edit_canvas`); setting the model a node
 already has reads its ports again (`params[].inputsUpdated`, "GPT-4o · inputs
 updated" on the card). Names on the card, in `plan` and in get_proposal (the
-removed connections' too) follow the person's renames while the proposal is open; the note stays as written. They can drag ghosts before accepting; the nodes land where they
+removed connections' too) follow the person's renames while the proposal is open; the note stays as written. The cost classes (paid, free, may cost, on the Krea plan) are read with the keys set when it is shown: each ghost card names its cost ("paid · fal", "free · runs locally", and for Idol "may cost · Hugging Face" with the person's token, "free · Hugging Face" without), and a token added or removed after you proposed changes them in `get_proposal`, `list_proposals` and `nebula proposals`. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
@@ -2590,6 +2775,26 @@ the `propose_change` arguments:
 }
 ```
 
+`nebula propose` and `nebula proposal` print the run's cost on the `runs`
+line, each cost class counted on its own, as `cost` counts them: "up to 1
+paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices", "1
+run on the person's Krea plan", "1 paid run (openai), 1 that may bill the
+person's own account (Idol) and 1 free (fal), $0.011 at list prices".
+A run on the Krea plan is never free and never in the figure. "run" goes on
+the first class only and carries through the rest, and a class that stands
+alone keeps it: "1 run on the person's Krea plan and 1 free (fal)", "1 free
+run (fal)". Each part is tagged one way, by where its runs go as ids: one
+place alone ("1 paid run (openai) and 1 free (huggingface)"), a count each
+when there are several, local last ("3 paid runs (2 anthropic, 1 krea) and
+2 free (1 fal, 1 local)").
+A free run goes where it runs: a cost entry's `runsOn` when it has one (a
+key-billing route's host, "huggingface" for Idol's Space; `provider` stays
+the route's maker, "speridlabs"), else its provider, else it runs locally.
+Free runs that are all local say "(runs locally)" when they are the whole
+run, and "(local)" beside another class, as the paid part is tagged ("1
+paid run (openai) and 1 free (local)"). When the cost's entries don't match
+its `freeRuns` (more or fewer), the free part carries no tag at all.
+
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its
 card will show (the model's, without the gateway for a node whose provider
@@ -2637,7 +2842,7 @@ already exists); while that file doesn't exist yet it is in `unpriced` and
 
 **Nodes that can't run here.** `cost.notReady` lists every node the run
 reads, upstream nodes with outputs included, that can't run here as set up,
-as `[{ref, nodeId, name, missing, person}]`. `missing` is in the words `find_nodes`
+as `[{ref, nodeId, name, missing, person, reason}]`. `missing` is in the words `find_nodes`
 and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
@@ -2647,9 +2852,23 @@ pointing at its own way to find a node that runs here: `find_nodes` for MCP,
 `nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
-details), each in its `person` line ("GPT Image 2 needs your OpenAI API key.
-Add it in Settings.", round 3f; read `missing`, not that). Both re-check keys as the person adds them, so a line goes away
-once its key is set. Accept stays enabled, as the canvas's Run button does
+details), each in its `person` line ("“GPT Image 2” needs your OpenAI API key.
+Add it in Settings.", round 3f, the name in curly quotes; a node on the Krea
+plan: "“Krea 2” needs your Krea plan. Sign in to Krea in Settings."; read
+`missing`, not that). `reason` is that line without the name, for one node
+and for several (`{one, many}`: "needs your OpenAI API key. Add it in
+Settings." and "need your OpenAI API key. Add it in Settings."); the bar
+merges nodes with the same reason into one line ("“Writer” and “Editor” need
+your Anthropic API key. Add it in Settings.", "2 “FLUX.2” nodes need your
+Black Forest Labs or fal.ai API key. Add one in Settings."). A node whose
+provider switcher is set to a route it doesn't list reads "“N” is set to a
+provider that isn’t in its list. Choose one in its provider switcher." A row
+with no `reason` gets a line of its own. `reason` is the person's words,
+for the bar to merge by: read `missing` to decide what to do, and don't
+parse `reason` (its wording follows the person's lines and can change).
+`nebula propose` prints `missing`, not `reason`. The warning and the bar
+both re-check keys as the person adds them, so a line goes away once its key
+is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
 
@@ -3092,9 +3311,9 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   no field is named: the run is refused for the key or the sign-in first.
   Your `run_nodes` and `nebula run` get "Missing API key: KREA_API_TOKEN"
   (or every key a copy can use: "Missing API key: XAI_API_KEY or
-  KREA_API_TOKEN"), the card "Add your Krea API token in Settings, then
+  KREA_API_TOKEN"), the card "Add your Krea API key in Settings, then
   run the node again."; a run on the plan that isn't signed in gets
-  "Connect your Krea account in Settings before running this recipe".
+  "Sign in to Krea in Settings before running this recipe".
   A run that would send one with nothing in it is refused before anything
   runs or is priced, on every run path, and before any dialog (the canvas
   reads the keys and the plan's sign-in first when it hasn't yet, and
@@ -3585,7 +3804,7 @@ How it works (`backend/services/agent_spend.py`):
     the way the canvas node with its id and definition does (`_kreaAuth`, and
     a multi-provider node's `_provider` too; a Moodboard node can't open
     `send_notes` further), judged on its params after retired ones are
-    renamed; any other node starts on Auto and the API token. A
+    renamed; any other node starts on Auto and the API key connection. A
     run's params are written back to the canvas only onto a node of the same
     definition, and for a run that isn't the person's only what the run
     itself changed, never `_kreaAuth`.
@@ -3615,7 +3834,11 @@ its session has used, to the cent; an amount under half a cent that isn't
 nothing reads "<$0.01" (Settings shows spend the same way, and a Run or
 proposal chip shows any amount under a cent as "<$0.01": "$0" only ever
 means free). `budget` is `chat`, `shared` or `app`; outside callers
-also get `outsideSpent`, the shared 24-hour total.
+also get `outsideSpent`, the shared 24-hour total. When Nebula can't read
+the settings file, it answers 200 with only `note` ("Nebula can’t read
+<path>. Ask the person to fix the file.") and `code:
+"settings_unreadable"`, as `start_here`'s spend part does, and `nebula
+spend` prints "Spending limits: <note>".
 
 ### Personal agents' session tokens
 
@@ -5754,7 +5977,10 @@ module (`backend/graph_file_client.py`): a bundle's files are restored, a
 file under the save limit replaces the open project's canvas, and one over
 it opens as a new project named after the file, the open one left as it
 was; it prints what happened and how to go back (`nebula project open
-<id>`).
+<id>`). It sends the CLI's `X-Nebula-Surface: cli` like every other
+command, so the backend's refusals and the notes name `nebula` commands;
+the notes' calls come from the one table, `services/agent_words.WORDS`
+(`size`, `apply`, `delete`, `open`).
 
 `rename`, `show`, `size`, `trash list`, `keys` and `providers` are the CLI
 twins of `rename_project`, `get_project`, `project_size`, `list_trash`,

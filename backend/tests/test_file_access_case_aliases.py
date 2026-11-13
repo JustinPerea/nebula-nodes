@@ -41,7 +41,7 @@ def test_secret_file_case_and_unicode_aliases_denied(tmp_path, monkeypatch, form
 
     secret = tmp_path / "crédentials.json"
     secret.write_text("synthetic secret fixture")
-    monkeypatch.setattr(settings, "SETTINGS_PATH", secret)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(secret))
     name = secret.name.upper() if "uppercase" in form else secret.name
     if "nfd" in form:
         name = unicodedata.normalize("NFD", name)

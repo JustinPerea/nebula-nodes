@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { isTabLocalNode, sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
@@ -7,6 +7,7 @@ import { useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
 import { RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
 import { useCappedPopover } from '../lib/noticeWaiting';
 
@@ -20,11 +21,13 @@ interface MenuItem {
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
-  /** Why it is disabled, when that isn't offline. */
+  /** Why it is disabled, when that isn't offline; e.g. why Run is disabled. */
   title?: string;
   /** This tab's run locks it now: the run's line wins (lib/canvasLock),
    * by the row's verb plus "it" (GM r39 item 2, lib/runLock). */
   run?: { held: boolean; verb: RunLockVerb };
+  /** Locked by a missing key, when nothing else holds it (withKeyLock). */
+  keyLock?: string | null;
   /** GM r26 (4), a stopgap the bulk-create PR deletes: it acts on a node
    * with a tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
   tabLocal?: 'note';
@@ -50,6 +53,10 @@ export function ContextMenu() {
   // here edits, so each is disabled and looks it, with "Wait for “<project>”
   // to open." while following.
   const lock = useCanvasLock();
+  const graphNodes = useGraphStore((s) => s.nodes);
+  const graphEdges = useGraphStore((s) => s.edges);
+  const keyLockId = useId();
+  const settingsCache = useUIStore((s) => s.settingsCache);
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
@@ -122,11 +129,15 @@ export function ContextMenu() {
     );
   }
 
+  // A node that can't run without its key (a keyed route's missing key), this
+  // one or one feeding it: locked as the other Runs are (withKeyLock).
+  const keyLock = runKeyLockLine(graphNodes, graphEdges, { kind: 'node', nodeId }, settingsCache);
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
       kept: 'run',
-      // The run lock's line wins (M2): run, follow, offline, kept.
+      // The missing key after kept (which comes first of all), then the run lock's line (M2): run, follow, offline: withKeyLock.
+      keyLock,
       run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
         executeNode(nodeId);
@@ -174,23 +185,33 @@ export function ContextMenu() {
     },
   ];
 
+  // One withKeyLock per item: the Run item's missing key comes after a kept canvas.
+  const rows = items.map((item) => ({
+    item,
+    props: withKeyLock(lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal },
+      item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {}), item.keyLock, keyLockId),
+  }));
+
   return (
     <div
       ref={menuRef}
       className="context-menu"
       style={style}
     >
-      {items.map((item) => (
+      {rows.map(({ item, props }) => (
         <button
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
-          onClick={item.action}
-          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal }, item.run ? { run: item.run.held, runTitle: runFinishesLine(item.run.verb) } : {})}
+          // A key-locked item sends nothing (withKeyLock); a kept canvas
+          // disables it, so there is nothing to refuse there.
+          onClick={() => { if (!isKeyLocked(props)) item.action(); }}
+          {...props}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}
         </button>
       ))}
+      {rows.some(({ props }) => isKeyLocked(props)) && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
     </div>
   );
 }

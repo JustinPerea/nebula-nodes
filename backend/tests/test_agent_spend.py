@@ -218,7 +218,7 @@ def test_cli_run_over_the_threshold_is_refused_with_a_proposal_hint(client):
     response = client.post("/api/graph/run", json={"targetNodeId": node_id})
     assert response.status_code == 403
     detail = response.json()["detail"]
-    assert "$2.00" in detail and f"--run {node_id}" in detail and "nebula propose" in detail
+    assert "$2.00" in detail and f"propose_change (run: {node_id})" in detail and "nebula propose" not in detail
     main.execute_graph.assert_not_awaited()
 
 
@@ -236,7 +236,7 @@ def test_cli_run_of_an_unpriced_node_is_refused(client):
     node_id = add_paid_node(client)
     response = client.post("/api/graph/run", json={})
     assert response.status_code == 403
-    assert "no list price" in response.json()["detail"] and f"--run {node_id}" in response.json()["detail"]
+    assert "no list price" in response.json()["detail"] and f"propose_change (run: {node_id})" in response.json()["detail"]
 
 
 def test_free_nodes_run_without_a_price(client):
@@ -292,7 +292,7 @@ def test_quick_points_at_the_canvas(client):
     price(5.0)
     response = client.post("/api/quick", json={"definitionId": PAID, "params": {}, "inputs": {"prompt": "a cat"}})
     assert response.status_code == 403
-    assert f"nebula create {PAID}" in response.json()["detail"]
+    assert f"edit_canvas, a {PAID} node" in response.json()["detail"]
 
 
 def test_canvas_run_endpoints_hold_other_callers_to_it(client, monkeypatch):
@@ -308,7 +308,7 @@ def test_canvas_run_endpoints_hold_other_callers_to_it(client, monkeypatch):
     assert invalid.status_code == 200 and invalid.json()["status"] == "validation_error"
     monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
     execute = client.post("/api/execute", json={"nodes": [node], "edges": []})
-    assert execute.status_code == 403 and "--run n1" in execute.json()["detail"]
+    assert execute.status_code == 403 and "propose_change (run: n1)" in execute.json()["detail"]
     one = client.post("/api/execute-node", json={"nodes": [node], "edges": [], "targetNodeId": "n1"})
     assert one.status_code == 403
 

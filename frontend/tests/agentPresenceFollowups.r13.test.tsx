@@ -10,6 +10,10 @@ import { join } from 'node:path';
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError } from '../src/lib/errorCopy';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
@@ -20,6 +24,9 @@ const { HIDDEN_TEXT_COPY, MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinRefusal
 beforeAll(() => pinTextReady);
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
+// The app draws its notices in the notice region, which stays usable beside
+// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const pin = (id: string) => ({ id, text: 'note', anchor: { nodeId: 'n1' }, position: null, status: 'open' as const,
@@ -86,7 +93,7 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
     await useCanvasPinsStore.getState().remove('pin_a');
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
     expect(useCanvasPinsStore.getState().error).toBe(PIN_REFUSAL_COPY.deleteFailed);
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     const toast = screen.getByRole('status');
     expect(toast).toHaveClass('canvas-pin-toast', 'canvas-pin-toast--notice');
     expect(toast.textContent).toBe(`${PIN_REFUSAL_COPY.deleteFailed}×`);
@@ -95,7 +102,7 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
   it('the composer: a refused add shows the neutral status over the open dialog, the note still in the field', async () => {
     api.createPin.mockRejectedValue(refused(503));
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'warmer please' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send note' })); });
     expect(screen.queryByRole('alert')).toBeNull();

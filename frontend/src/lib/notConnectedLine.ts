@@ -55,7 +55,9 @@ export function isBecauseLine(text: string): boolean {
   return kind === 'fix' || kind === 'defers';
 }
 
-const HIDDEN = '[hidden], [aria-hidden="true"], [inert]';
+// What a modal holds inert behind its scrim (data-behind-modal, lib/modalFocus hideBehind) is dimmed, not
+// hidden: a line there still counts (GM r27 2, with the prompt open at the demote).
+const HIDDEN = '[hidden], [aria-hidden="true"]:not([data-behind-modal]), [inert]:not([data-behind-modal])';
 
 /** Whether nothing IntersectionObserver can't see hides the element: hidden, aria-hidden or
  * inert on it or above it, visibility or opacity (the browser's own check, or computed styles in

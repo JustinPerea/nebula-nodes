@@ -142,15 +142,15 @@ describe('Providers: keys and the Krea sign-in share "change provider settings"'
     render(<ProvidersTab saved={SAVED} />);
     await flush();
     await hold();
-    const add = screen.getByRole('button', { name: 'Add OpenAI key' });
+    const add = screen.getByRole('button', { name: 'Add OpenAI API key' });
     expectLocked(add, words);
     fireEvent.click(add);
     expect(useSettingsDraftStore.getState().openRow).toBeNull();
     expect(screen.queryByLabelText('OpenAI API key')).toBeNull();
     promote();
     expect(shownLines(words)).toHaveLength(0);
-    expectUnlocked(screen.getByRole('button', { name: 'Add OpenAI key' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add OpenAI key' }));
+    expectUnlocked(screen.getByRole('button', { name: 'Add OpenAI API key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add OpenAI API key' }));
     expect(useSettingsDraftStore.getState().openRow).toEqual({ id: 'OPENAI_API_KEY', mode: 'edit' });
   });
 

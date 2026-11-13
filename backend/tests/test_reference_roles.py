@@ -106,11 +106,42 @@ APPROVED_OPTION_LABEL_CHANGES = {
         "eleven_turbo_v2": ("Turbo v2", "Turbo v2 (deprecated: use Flash v2)"),
     }},
 }
+# Sizes read "768 × 768", with spaces, the option's own label on every
+# surface (GM, PR #203 r37 item 3, 2026-10-31; tests/test_idol_round19_copy.py
+# pins every size label). Values are unchanged. Each node's baseline wrote its
+# sizes with one separator and none with a spaced ×, so turning each "N × N"
+# back into it restores the baseline label exactly.
+APPROVED_SIZE_LABEL_SPACING = {
+    **dict.fromkeys(("flux-schnell", "gpt-image-1-edit", "gpt-image-1-generate"), "×"),
+    **dict.fromkeys(("gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-edit", "gpt-image-2-fal-edit",
+                     "gpt-image-2-fal-generate", "gpt-image-2-generate", "ideogram-reframe", "ideogram-remix",
+                     "ideogram-v4", "runway-act-two", "runway-image", "runway-video", "seedream-4-5"), "x"),
+}
+_SPACED_SIZE = re.compile(r"(?<=\d) × (?=\d)")
+
+
+def _unspace_size_labels(node_id: str, normalized: dict[str, Any]) -> None:
+    separator = APPROVED_SIZE_LABEL_SPACING.get(node_id)
+    if separator is None:
+        return
+    params = [param for section in ("params", "sharedParams", "directParams", "falParams")
+              for param in normalized.get(section) or []]
+    params += [param for route in normalized.get("routes") or [] for param in route.get("params") or []]
+    spaced = 0
+    for param in params:
+        for option in param.get("options") or []:
+            label = option.get("label")
+            if isinstance(label, str) and _SPACED_SIZE.search(label):
+                option["label"] = _SPACED_SIZE.sub(separator, label)
+                spaced += 1
+    assert spaced, f"stale size-label approval: {node_id}"
+
+
 # Krea account billing (2026-10-09): the three original Krea nodes that call
 # Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
 # and Style Train gained the training models Krea added since the baseline.
 _KREA_AUTH_PARAM = {"key": "_kreaAuth", "label": "Krea connection", "type": "enum", "required": False,
-                    "options": [{"value": "api-token", "label": "API token · API balance"},
+                    "options": [{"value": "api-token", "label": "API key · API balance"},
                                 {"value": "mcp", "label": "Krea account · workspace compute"}],
                     "default": "api-token"}
 # Pricing and readiness (2026-10-13): cinema-scene declares the base models its
@@ -765,6 +796,7 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
             {key: value for key, value in port.items() if key not in {"role", "weight"}}
             for port in normalized.get(section, [])
         ]
+    _unspace_size_labels(node_id, normalized)
     approved = APPROVED_EXECUTION_PATTERN_CHANGES.get(node_id)
     if approved is not None:
         baseline_value, current_value = approved
@@ -920,6 +952,17 @@ def test_role_additions_are_additive_only(
         "baseline nodes changed outside additive port role/weight metadata: "
         f"{mismatches}"
     )
+
+
+def test_a_size_label_approval_goes_stale_loudly(definitions: dict[str, dict[str, Any]]) -> None:
+    # A listed node whose sizes no longer read "N × N" fails, so the
+    # approval can't outlive the change it covers.
+    node = deepcopy(definitions["runway-video"])
+    for param in node["params"]:
+        for option in param.get("options") or []:
+            option["label"] = _SPACED_SIZE.sub("x", str(option.get("label")))
+    with pytest.raises(AssertionError, match="stale size-label approval: runway-video"):
+        _unspace_size_labels("runway-video", node)
 
 
 @pytest.mark.parametrize(

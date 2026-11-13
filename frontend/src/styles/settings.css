@@ -389,6 +389,14 @@ body.app-slava-restraint .settings-row__summary {
   text-overflow: ellipsis;
 }
 
+/* A sentence summary wraps rather than ending in "…" (GM, PR #203 r14 item 1). */
+body.app-slava-restraint .settings-row__summary--wrap {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+}
+
 body.app-slava-restraint .settings-row__status--ok { color: var(--sr-success); }
 body.app-slava-restraint .settings-row__status--warn { color: var(--sr-warning); }
 
@@ -451,6 +459,12 @@ body.app-slava-restraint .settings-row__error {
   margin: 0;
   color: var(--sr-danger);
   font-size: var(--sr-type-label);
+}
+
+/* A line that lost nothing (another Nebula is saving the settings): the
+   row's normal muted text, not the error colour (GM, PR #203 r39). */
+body.app-slava-restraint .settings-row__error--neutral {
+  color: var(--sr-ink-meta);
 }
 
 /* Key field */
@@ -830,6 +844,16 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   from { opacity: 0; }
 }
 
+/* A row that changed section (its key set or removed elsewhere while the
+   panel is open) springs in where it lands (GM, PR #203 r19 item 6). */
+body.app-slava-restraint .settings-row--moved {
+  animation: settings-row-moved var(--settings-spring) backwards;
+}
+
+@keyframes settings-row-moved {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
 @keyframes settings-row-open {
   from { opacity: 0; transform: translateY(-4px) scaleY(0.98); }
 }
@@ -846,6 +870,7 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   body.app-slava-restraint .settings__tabpanel,
   body.app-slava-restraint .settings-row__body,
   body.app-slava-restraint .settings-notice { animation: none; }
+  body.app-slava-restraint .settings-row--moved { animation: none; }
   body.app-slava-restraint .settings-tabs__pill,
   body.app-slava-restraint .settings-switch::before,
   body.app-slava-restraint .settings-pref--link svg { transition: none; }
@@ -871,6 +896,47 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   cursor: not-allowed;
 }
 
+/* Nebula restored the settings at start (GM, PR #203 r38 item 5): one
+   neutral line at the top of Settings until dismissed, its path in mono and
+   selectable. */
+body.app-slava-restraint .settings-top-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sr-space-3);
+  margin: var(--sr-space-3) var(--sr-space-4) 0;
+  padding: 9px 12px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-control-lg);
+  color: var(--sr-ink);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .settings-top-notice__line { margin: 0; }
+
+/* The line, and under it why a Dismiss didn't land (GM, PR #203 r40 item 4). */
+body.app-slava-restraint .settings-top-notice__body { min-width: 0; }
+body.app-slava-restraint .settings-top-notice__error { margin: var(--sr-space-2) 0 0; }
+
+body.app-slava-restraint .settings-top-notice__path {
+  font-family: var(--sr-mono);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .settings-top-notice__dismiss {
+  flex: none;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--sr-ink-light);
+  font: 500 var(--sr-type-label) var(--sr-ui);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .settings-top-notice__dismiss:hover { color: var(--sr-ink-bold); }
+body.app-slava-restraint .settings-top-notice__dismiss:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 /* PR #204 round 11 (GM r18 b): a lock line inside a list box belongs to the row above it: no
    divider between them, and the row's own inset (the run cost's "You can change this…"). */
 body.app-slava-restraint .settings-list > .person-lock-line {

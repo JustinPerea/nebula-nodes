@@ -43,6 +43,7 @@ import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
 import { clearKeptTab, isCanvasKept, keptLockTitle } from '../../lib/keptCanvas';
 import { assertGraphComplexityWithinLimits, GraphStructureLimitError, serializeGraph } from '../../lib/graphFileShared';
 import { useProjectStore } from '../../store/projectStore';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
@@ -89,6 +90,15 @@ export function Toolbar() {
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
+  // GM, PR #203 r6 item 1: a node that can't run without its key (a keyed
+  // route's missing key) locks the whole canvas's Run, in the
+  // following look (aria-disabled: focusable, with its tooltip), and the
+  // scope line it reads out is the lock reason (r6 item 3).
+  const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
+  // Over exactly what a graph run runs (agents' placeholders skipped), the
+  // same line Cmd+Enter and the palette refuse with (runKeyLockLine).
+  const keyLock = useMemo(() => runKeyLockLine(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' },
+    { loaded: settingsLoaded, apiKeys }), [graphNodes, graphEdges, settingsLoaded, apiKeys]);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -313,6 +323,21 @@ export function Toolbar() {
   const runKeptMark: Record<string, '' | undefined> = runKept
     ? { ...Object.fromEntries(Object.keys(lock.mark).map((key) => [key, undefined])), [KEPT_MARK]: '' } : {};
   const runKeptTitle = runKept ? keptLockTitle('run-nodes') : undefined;
+  const runProps = withKeyLock({
+    ...lock.mark,
+    ...runKeptMark,
+    disabled: nodeCount === 0 || isImportingGraph || runStarting || offline || lock.kept,
+    'aria-disabled': following ? true : undefined,
+    title: runKeptTitle ?? (following ? waitToOpenTooltip(following.projectName)
+      : runStarting ? runFinishesLine(RUN_LOCK_VERBS.runCanvas)
+      : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runCanvas, 'import')
+        // The Run chip's own tooltip text (describeRunScope reads
+        // runChipTitle; GM, PR #203 r19 item 2).
+        : `Run canvas. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`),
+  }, keyLock, runScopeId);
+  // A kept canvas holds the control first and shows its own line: the missing
+  // key is told once the canvas is back (withKeyLock).
+  const runKeyLocked = isKeyLocked(runProps);
 
   return (
     <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"
@@ -336,20 +361,16 @@ export function Toolbar() {
       ) : (
         <button
           type="button"
-          className={`toolbar__button toolbar__button--primary${following ? ' toolbar__button--waiting' : ''}`}
+          className={`toolbar__button toolbar__button--primary${following || runKeyLocked ? ' toolbar__button--waiting' : ''}`}
           // Round 20 (GM follow-up 3): disabled while the tab follows an
           // agent's switch, with its tooltip (aria-disabled keeps the tooltip
           // and the focus; a click only pulses the project bar). Offline it
-          // is disabled outright (round 15 of PR #114).
-          onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
-          disabled={nodeCount === 0 || isImportingGraph || runStarting || offline || lock.kept}
-          aria-disabled={following ? true : undefined}
-          {...lock.mark}
-          {...runKeptMark}
+          // is disabled outright (round 15 of PR #114). A missing key comes
+          // first, as on every Run surface (withKeyLock, GM PR #203 r11 item
+          // 3): key-locked, a click sends nothing and pulses nothing.
+          onClick={() => { if (runKeyLocked) return; if (refuseEditWhileFollowing()) return; void executeGraph(); }}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={runKeptTitle ?? (following ? waitToOpenTooltip(following.projectName)
-            : runStarting ? runFinishesLine(RUN_LOCK_VERBS.runCanvas)
-            : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runCanvas, 'import') : `Run canvas. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`)}
+          {...runProps}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -358,7 +379,7 @@ export function Toolbar() {
           )}
         </button>
       )}
-      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
+      <span id={runScopeId} className="toolbar__sr-only">{runKeyLocked ? keyLock : describeRunScope(runScope)}</span>
       <div className="toolbar__divider" aria-hidden="true" />
       <div className="toolbar__actions" ref={actionsRoot} onKeyDown={onActionsKeyDown}>
         <button type="button" ref={actionsTrigger} className="toolbar__button toolbar__button--actions"

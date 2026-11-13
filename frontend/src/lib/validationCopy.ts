@@ -18,6 +18,9 @@ export interface ValidationReading {
   error: string;
   errorPerson?: string;
   errorCategory?: 'unknown';
+  /** The pre-call check refused the run: the card's heading is "Nebula
+   * couldn’t start the run." (GM, PR #203 r32; node_errors.record_validation). */
+  errorNotStarted: true;
 }
 
 /** A node in the run with nothing wrong of its own, while another has. */
@@ -38,7 +41,8 @@ function reading(errors: Pick<ExecutionValidationError, 'message' | 'person'>[])
     else if (!lines.includes(line)) lines.push(line);
   }
   const error = messages.join('; ');
-  return unlined || !lines.length ? { error, errorCategory: 'unknown' } : { error, errorPerson: lines.join(' ') };
+  return unlined || !lines.length ? { error, errorCategory: 'unknown', errorNotStarted: true }
+    : { error, errorPerson: lines.join(' '), errorNotStarted: true };
 }
 
 /** A Cinema shot whose run the check refused, with no node named. */
@@ -46,7 +50,7 @@ export const SHOT_NOT_STARTED_LINE = "Nothing ran. Check the scene's inputs and 
 
 /** A written line Nebula's canvas says itself: the heading over it, no Details. */
 export function writtenReading(line: string): ValidationReading {
-  return { error: line, errorPerson: line };
+  return { error: line, errorPerson: line, errorNotStarted: true };
 }
 
 /** Each named node's reading, and the reading of the checks that name no node. */

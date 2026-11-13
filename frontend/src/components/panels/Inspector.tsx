@@ -1,4 +1,4 @@
-import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useId } from 'react';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -16,12 +16,13 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { apiRequest } from '../../lib/apiRequest';
 import { quoted } from '../../lib/canvasFileDrop';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
-import { MaskPainterModal } from '../DeferredPanels';
+import { MaskPainterModal } from './DeferredMaskPainter';
 import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
 import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { isKeyLocked, runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
@@ -262,6 +263,19 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+  // A node that can't run without its key (a keyed route's missing key), this
+  // one or one feeding it: Run is locked with its line as the reason (GM, PR
+  // #203 r4), aria-disabled so it keeps its focus and tooltip, and it reads
+  // the line out (keyLockedProps).
+  const keyLock = useMemo(() => {
+    if (!renderNodeId) return null;
+    return runKeyLockLine(nodes, edges, { kind: 'node', nodeId: renderNodeId }, settingsCache);
+  }, [renderNodeId, nodes, edges, settingsCache]);
+  const keyLockId = useId();
+  // The Run's props: the missing key first, then canvasLock's order (run,
+  // following, offline): withKeyLock. A kept canvas holds it, with no key line.
+  const runProps = withKeyLock(lock.act({ title: 'Run this node and its dependencies', kept: 'run' },
+    { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) }), keyLock, keyLockId);
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
   // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
@@ -1396,6 +1410,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
       {definition && switchable && (
         <ProviderSwitcher definition={definition} params={activeNodeData.params} variant="inspector" wired={wiredCounts}
+          label={activeNodeData.label}
           onPick={(next, notes) => {
             updateNodeData(activeNode.id, { params: next });
             useProviderNoteStore.getState().show(activeNode.id, notes);
@@ -1409,7 +1424,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       )}
       {usesKreaMcp && activeNodeData.keyStatus === 'missing' && !switchable && (
         <div className="inspector__notice inspector__notice--warning" role="status">
-          Krea sign-in required. Connect or check Krea in Settings.
+          Krea sign-in required. Sign in to Krea in Settings.
         </div>
       )}
 
@@ -1608,8 +1623,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies', kept: 'run' }, { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) })}
-            onClick={() => executeNode(renderNode.id)}
+            {...runProps}
+            onClick={() => { if (!isKeyLocked(runProps)) void executeNode(renderNode.id); }}
           >
             <Play
               className="inspector__action-icon"
@@ -1620,6 +1635,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
             />
             <span>Run</span>
           </button>
+          {/* The locked Run's description (toolbar__sr-only: read out, not shown). */}
+          {isKeyLocked(runProps) && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
           <button
             type="button"
             className="inspector__action-button"

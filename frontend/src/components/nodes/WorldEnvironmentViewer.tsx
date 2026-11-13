@@ -12,11 +12,20 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Euler, MathUtils, Vector2, Vector3, type PerspectiveCamera } from 'three';
-import { MARBLE_RAW_OPENCV_FRAME, marbleRawToThreeTransform } from '../../lib/worldTransform';
 import {
+  forwardInThree,
+  MARBLE_RAW_OPENCV_FRAME,
+  marbleRawToThreeTransform,
+  upAxisToThreeRotation,
+  type WorldAxis,
+} from '../../lib/worldTransform';
+import {
+  objectFraming,
+  objectUnitScale,
   placeWorldCamera,
   robustWorldSceneBounds,
   sampleWorldSplatCenters,
+  sampleWorldSplatExtents,
   syncWorldFlyAngles,
   worldFlyGestureScale,
   worldFlySpeedMetersPerSecond,
@@ -28,13 +37,37 @@ import {
   WorldSplatFormatError,
   WorldSplatTooLargeError,
 } from '../../lib/worldSplat';
+import { RequestFailedError } from '../../lib/errorCopy';
+import { disposeSparkQuietly, disposeSparkWhenSettled } from '../../lib/sparkDispose';
 
 /** Error copy round 3e (GM): the SPZ format check's line on the card. */
 const WORLD_SPZ_FORMAT_LINE = "This world's preview file is damaged or in a format Nebula can't open. "
   + 'Use the panorama or the downloaded splat in a 3D viewer.';
+/** GM (PR #203 r1): the same check's line for a World v2 PLY splat (Idol),
+ * which has no panorama, and its too-large line. */
+export const WORLD_PLY_FORMAT_LINE = 'Nebula can’t open this splat. Download it to try a desktop 3D viewer.';
+export const WORLD_PLY_TOO_LARGE_LINE = 'This splat is too large to open in the browser. '
+  + 'Download it to open in a desktop 3D viewer.';
 
 export type WorldNavigationMode = 'orbit' | 'fly';
 export type WorldViewerStatus = 'loading' | 'ready' | 'error';
+/** Why the viewer couldn't show the splat (GM, PR #203 r3, each its own
+ * line): its file failed the format check ('format'), is past the size caps
+ * ('too-large'), is gone (404, 'missing'), the browser has no WebGL 2
+ * ('webgl'), the file didn't load (any other HTTP error or a dropped
+ * connection, 'load': worth trying again), or it loaded but Spark couldn't
+ * read or draw it ('other'). */
+export type WorldViewerFailure = 'format' | 'too-large' | 'missing' | 'webgl' | 'load' | 'other';
+
+/** The failure for an error thrown while the file was fetched and checked. */
+function fetchFailure(error: unknown): WorldViewerFailure {
+  if (error instanceof WorldSplatTooLargeError) return 'too-large';
+  if (error instanceof WorldSplatFormatError) return 'format';
+  if (error instanceof RequestFailedError) return error.status === 404 ? 'missing' : 'load';
+  // fetchUrl's ConnectionLostError, or a body cut off mid-stream.
+  return error instanceof TypeError || (error instanceof DOMException && error.name === 'NetworkError')
+    ? 'load' : 'other';
+}
 
 export interface WorldEnvironmentViewerProps {
   src: string;
@@ -46,8 +79,23 @@ export interface WorldEnvironmentViewerProps {
   metricScaleFactor?: number;
   groundPlaneOffset?: number;
   coordinateFrame?: string;
+  /** The splat's file format (World v2): gzip SPZ, the default, or a 3DGS
+   * PLY, each with its own preflight (lib/worldSplat.ts, lib/splatPly.ts). */
+  format?: 'spz' | 'ply';
+  /** A World v2 coordinate system's axes: the splat turns so `upAxis` is up,
+   * and with `framing: 'object'` the camera starts on its `forwardAxis` side. */
+  upAxis?: WorldAxis;
+  forwardAxis?: WorldAxis;
+  /** 'environment' (World Labs: the camera stands inside, at eye height) or
+   * 'object' (Idol: the camera stands outside and orbits the object). */
+  framing?: 'environment' | 'object';
   describedById?: string;
   onStatusChange?: (status: WorldViewerStatus) => void;
+  /** Called with the reason when the status turns to 'error'. */
+  onFailure?: (failure: WorldViewerFailure) => void;
+  /** The fallback shows nothing: the dialog says the reason in its own
+   * words, centred in its stage (the World v2 splat preview, GM PR #203 r2). */
+  quietFallback?: boolean;
 }
 
 interface ViewerState {
@@ -104,12 +152,15 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function fileNameForSource(src: string): string {
+function fileNameForSource(src: string, format: 'spz' | 'ply' = 'spz'): string {
+  // Spark picks its reader from the name's extension, so it must match the
+  // format the preflight checked.
   try {
     const pathname = new URL(src, window.location.href).pathname;
-    return pathname.split('/').pop() || 'world.spz';
+    const name = pathname.split('/').pop() || `world.${format}`;
+    return name.toLowerCase().endsWith(`.${format}`) ? name : `world.${format}`;
   } catch {
-    return 'world.spz';
+    return `world.${format}`;
   }
 }
 
@@ -131,6 +182,10 @@ function WorldSplatScene({
   metricScaleFactor,
   groundPlaneOffset,
   coordinateFrame,
+  format,
+  upAxis,
+  forwardAxis,
+  framing,
   onReady,
   onError,
 }: {
@@ -139,10 +194,16 @@ function WorldSplatScene({
   metricScaleFactor?: number;
   groundPlaneOffset?: number;
   coordinateFrame?: string;
+  format?: 'spz' | 'ply';
+  upAxis?: WorldAxis;
+  forwardAxis?: WorldAxis;
+  framing?: 'environment' | 'object';
   onReady: (bounds: WorldSceneBounds) => void;
-  onError: (message?: string) => void;
+  onError: (message?: string, failure?: WorldViewerFailure) => void;
 }) {
   const { gl, invalidate } = useThree();
+  // Read when the splat is framed, not subscribed: a resize mustn't reload it.
+  const getThree = useThree((state) => state.get);
   const [loadedSplat, setLoadedSplat] = useState<LoadedSplat | null>(null);
   const splat = loadedSplat?.src === src ? loadedSplat.mesh : null;
   const spark = useMemo(
@@ -152,7 +213,12 @@ function WorldSplatScene({
 
   useEffect(() => () => {
     spark.removeFromParent();
-    spark.dispose();
+    // No sort starts after the dispose, and a running one settles before it
+    // (a sort that reads the disposed target throws "No target";
+    // disposeSparkWhenSettled). Spark's sort worker rejects a sort still in
+    // its worker with "Worker terminate", and nothing in Spark catches it
+    // (disposeSparkQuietly).
+    disposeSparkWhenSettled(spark);
   }, [spark]);
 
   useEffect(() => {
@@ -161,16 +227,19 @@ function WorldSplatScene({
     let currentMesh: SplatMesh | null = null;
 
     const load = async () => {
+      let fetched = false;
       try {
         const fileBytes = await fetchWorldSplatBytes(src, {
           signal: controller.signal,
           variant: splatVariant,
+          format,
         });
+        fetched = true;
         if (cancelled) return;
 
         const mesh = new SplatMesh({
           fileBytes,
-          fileName: fileNameForSource(src),
+          fileName: fileNameForSource(src, format),
         });
         currentMesh = mesh;
         let resetPosition: [number, number, number] | undefined;
@@ -181,20 +250,33 @@ function WorldSplatScene({
           mesh.rotation.set(...transform.rotation);
           mesh.updateMatrixWorld(true);
           resetPosition = [...transform.position];
+        } else if (upAxis) {
+          mesh.rotation.set(...upAxisToThreeRotation(upAxis));
+          mesh.updateMatrixWorld(true);
         }
         await mesh.initialized;
         if (cancelled) {
           // File-byte initialization can finish after the effect cleanup. Dispose
           // again so any late-created PackedSplats/GPU resources are terminally released.
           mesh.removeFromParent();
-          mesh.dispose();
+          disposeSparkQuietly(mesh);
           return;
         }
 
         mesh.updateMatrixWorld(true);
-        const sampledCenters = mesh.packedSplats
+        let sampledCenters = mesh.packedSplats
           ? sampleWorldSplatCenters(mesh.packedSplats, mesh.matrixWorld)
           : [];
+        if (framing === 'object' && mesh.packedSplats) {
+          // An object is drawn at one size whatever its file's units
+          // (objectUnitScale, review r3 LOW-3), then framed.
+          const unit = objectUnitScale(sampledCenters, sampleWorldSplatExtents(mesh.packedSplats, mesh.matrixWorld));
+          if (unit !== 1) {
+            mesh.scale.multiplyScalar(unit);
+            mesh.updateMatrixWorld(true);
+            sampledCenters = sampleWorldSplatCenters(mesh.packedSplats, mesh.matrixWorld);
+          }
+        }
         const fallbackCenter = resetPosition
           ? { x: resetPosition[0], y: resetPosition[1], z: resetPosition[2] }
           : { x: 0, y: 0, z: 0 };
@@ -203,6 +285,20 @@ function WorldSplatScene({
           fallbackCenter,
         );
         if (resetPosition) bounds.resetPosition = resetPosition;
+        if (framing === 'object') {
+          const { camera, size } = getThree();
+          const fov = (camera as PerspectiveCamera).fov;
+          const framed = objectFraming(sampledCenters, forwardInThree(upAxis ?? 'y', forwardAxis ?? 'z'), {
+            fovDegrees: fov, aspect: size.height > 0 ? size.width / size.height : 1,
+            extents: mesh.packedSplats ? sampleWorldSplatExtents(mesh.packedSplats, mesh.matrixWorld) : [],
+          });
+          bounds.resetPosition = framed.resetPosition;
+          bounds.resetTarget = framed.resetTarget;
+          bounds.orbitMaxDistance = framed.orbitMaxDistance;
+          bounds.orbitMinDistance = framed.orbitMinDistance;
+          bounds.near = framed.near;
+          bounds.far = framed.far;
+        }
         setLoadedSplat({ src, mesh });
         onReady(bounds);
       } catch (error) {
@@ -211,10 +307,14 @@ function WorldSplatScene({
           // Error copy round 3e (GM): the format check's own text ("not a
           // valid supported SPZ file (invalid NGSP magic)") stays in the
           // console above; the card reads a written line.
+          // Past the fetch, the bytes passed the check: Spark couldn't read or draw them.
+          const failure: WorldViewerFailure = fetched ? 'other' : fetchFailure(error);
           onError(
-            error instanceof WorldSplatTooLargeError ? error.message
-              : error instanceof WorldSplatFormatError ? WORLD_SPZ_FORMAT_LINE
+            error instanceof WorldSplatTooLargeError ? (format === 'ply' ? WORLD_PLY_TOO_LARGE_LINE : error.message)
+              : error instanceof WorldSplatFormatError
+                ? (format === 'ply' ? WORLD_PLY_FORMAT_LINE : WORLD_SPZ_FORMAT_LINE)
               : undefined,
+            failure,
           );
         }
       }
@@ -227,10 +327,11 @@ function WorldSplatScene({
       controller.abort();
       if (currentMesh) {
         currentMesh.removeFromParent();
-        currentMesh.dispose();
+        disposeSparkQuietly(currentMesh);
       }
     };
-  }, [coordinateFrame, groundPlaneOffset, metricScaleFactor, onError, onReady, splatVariant, src]);
+  }, [coordinateFrame, format, forwardAxis, framing, getThree, groundPlaneOffset, metricScaleFactor, onError,
+    onReady, splatVariant, src, upAxis]);
 
   return (
     <>
@@ -240,12 +341,15 @@ function WorldSplatScene({
   );
 }
 
+const ENVIRONMENT_ORBIT_MIN_DISTANCE = 0.01;
+
 function syncOrbitControls(
   controls: OrbitControls,
   bounds: WorldSceneBounds | null,
   target: Vector3,
 ): void {
-  controls.maxDistance = bounds ? worldOrbitMaxDistance(bounds.radius) : 1_000;
+  controls.maxDistance = bounds ? bounds.orbitMaxDistance ?? worldOrbitMaxDistance(bounds.radius) : 1_000;
+  controls.minDistance = bounds?.orbitMinDistance ?? ENVIRONMENT_ORBIT_MIN_DISTANCE;
   controls.target = target;
   controls.update();
 }
@@ -258,13 +362,16 @@ function configureAccessibleCanvas(
   canvas: HTMLCanvasElement,
   label: string,
   describedById?: string,
+  framing: 'environment' | 'object' = 'environment',
 ): void {
   makeCanvasKeyboardFocusable(canvas);
   // R3F applies the Canvas className to its wrapper. Mark the actual WebGL
   // canvas so its keyboard focus treatment cannot depend on renderer markup.
   canvas.classList.add('world-environment-viewer__interactive-canvas');
   canvas.setAttribute('role', 'application');
-  canvas.setAttribute('aria-label', `${label} interactive 3D environment`);
+  canvas.setAttribute('aria-label', framing === 'object'
+    ? `${label}, interactive 3D object`
+    : `${label} interactive 3D environment`);
   if (describedById) canvas.setAttribute('aria-describedby', describedById);
   else canvas.removeAttribute('aria-describedby');
 }
@@ -324,22 +431,31 @@ function OrbitNavigation({
 }) {
   const { camera, gl } = useThree();
   const perspectiveCamera = camera as PerspectiveCamera;
-  const controls = useMemo(() => {
+  // Made in an effect, with its cleanup (review r3 LOW-4): the constructor
+  // attaches its listeners, so a memo's discarded copy (StrictMode renders
+  // twice) stayed on the canvas and every wheel zoomed twice.
+  const controlsRef = useRef<OrbitControls | null>(null);
+  useEffect(() => {
     const next = new OrbitControls(perspectiveCamera, gl.domElement);
     next.enableDamping = true;
     next.dampingFactor = 0.08;
     next.screenSpacePanning = true;
-    next.minDistance = 0.01;
+    next.minDistance = ENVIRONMENT_ORBIT_MIN_DISTANCE;
     next.target = target;
-    return next;
+    controlsRef.current = next;
+    return () => {
+      if (controlsRef.current === next) controlsRef.current = null;
+      next.dispose();
+    };
   }, [gl, perspectiveCamera, target]);
 
+  // After the one above in the same commit, so new controls get the bounds.
   useEffect(() => {
-    syncOrbitControls(controls, bounds, target);
-  }, [bounds, controls, resetToken, target]);
+    const controls = controlsRef.current;
+    if (controls) syncOrbitControls(controls, bounds, target);
+  }, [bounds, gl, perspectiveCamera, resetToken, target]);
 
-  useEffect(() => () => controls.dispose(), [controls]);
-  useFrame(() => controls.update());
+  useFrame(() => controlsRef.current?.update());
   return null;
 }
 
@@ -518,11 +634,16 @@ function ViewerFallback({
   thumbnail,
   label,
   detail,
+  quiet = false,
 }: {
   thumbnail?: string;
   label: string;
   detail?: string;
+  quiet?: boolean;
 }) {
+  // The dialog says why in its own line (GM, PR #203 r2: the specific line
+  // replaces "Interactive preview unavailable", never both).
+  if (quiet) return <div className="world-environment-viewer__fallback" aria-hidden="true" />;
   return (
     <div className="world-environment-viewer__fallback" role="img" aria-label={`${label}. Interactive 3D preview unavailable.`}>
       {thumbnail && <img src={thumbnail} alt="" loading="lazy" />}
@@ -544,8 +665,14 @@ export function WorldEnvironmentViewer({
   metricScaleFactor,
   groundPlaneOffset,
   coordinateFrame,
+  format,
+  upAxis,
+  forwardAxis,
+  framing,
   describedById,
   onStatusChange,
+  onFailure,
+  quietFallback = false,
 }: WorldEnvironmentViewerProps) {
   const [viewerState, setViewerState] = useState<ViewerState>({
     src,
@@ -571,19 +698,24 @@ export function WorldEnvironmentViewer({
     updateStatus('ready', nextBounds);
   }, [updateStatus]);
 
-  const handleError = useCallback((message?: string) => {
+  const handleError = useCallback((message?: string, failure: WorldViewerFailure = 'other') => {
     updateStatus('error', null, message);
-  }, [updateStatus]);
+    onFailure?.(failure);
+  }, [onFailure, updateStatus]);
+  const handleBoundaryError = useCallback(() => handleError(undefined, 'other'), [handleError]);
 
   useEffect(() => {
     onStatusChange?.(supported ? 'loading' : 'error');
-  }, [onStatusChange, src, supported]);
+    if (!supported) onFailure?.('webgl');
+  }, [onFailure, onStatusChange, src, supported]);
 
   const fallback = (
     <ViewerFallback
       thumbnail={thumbnail}
       label={label}
-      detail={viewerState.src === src ? viewerState.errorMessage : undefined}
+      quiet={quietFallback}
+      detail={(viewerState.src === src ? viewerState.errorMessage : undefined)
+        ?? (format === 'ply' ? WORLD_PLY_FORMAT_LINE : undefined)}
     />
   );
   if (!supported || status === 'error') return fallback;
@@ -593,7 +725,7 @@ export function WorldEnvironmentViewer({
       className={`world-environment-viewer world-environment-viewer--${status}`}
     >
       {thumbnail && <img className="world-environment-viewer__backdrop" src={thumbnail} alt="" aria-hidden="true" />}
-      <ViewerErrorBoundary fallback={fallback} onError={handleError} resetKey={src}>
+      <ViewerErrorBoundary fallback={fallback} onError={handleBoundaryError} resetKey={src}>
         <Canvas
           className="world-environment-viewer__canvas"
           camera={{ fov: 58, near: 0.01, far: 10_000, position: [0, 1.6, 4] }}
@@ -601,7 +733,7 @@ export function WorldEnvironmentViewer({
           frameloop="always"
           gl={{ antialias: false, alpha: false, powerPreference: 'high-performance' }}
           fallback={fallback}
-          onCreated={({ gl }) => configureAccessibleCanvas(gl.domElement, label, describedById)}
+          onCreated={({ gl }) => configureAccessibleCanvas(gl.domElement, label, describedById, framing)}
         >
           <color attach="background" args={['#05070a']} />
           <WorldSplatScene
@@ -610,6 +742,10 @@ export function WorldEnvironmentViewer({
             metricScaleFactor={metricScaleFactor}
             groundPlaneOffset={groundPlaneOffset}
             coordinateFrame={coordinateFrame}
+            format={format}
+            upAxis={upAxis}
+            forwardAxis={forwardAxis}
+            framing={framing}
             onReady={handleReady}
             onError={handleError}
           />

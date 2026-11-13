@@ -70,7 +70,7 @@ afterEach(() => {
   useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
 });
 
-const acceptButton = () => screen.getByRole('button', { name: 'Accept and run' }) as HTMLButtonElement;
+const acceptButton = () => screen.getByRole('button', { name: /^Accept and run/  }) as HTMLButtonElement;
 const rejectButton = () => screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
 
 describe('survivor M2: a press in the lock\'s first moment sends nothing', () => {

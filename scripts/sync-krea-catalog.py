@@ -1283,7 +1283,7 @@ def definitions(catalog):
         params, ports, json_params = fields_for(model["requestSchema"])
         params.insert(0, {"key": "_kreaAuth", "label": "Krea connection", "type": "enum",
                           "required": False, "options": [
-                              {"value": "api-token", "label": "API token · API balance"},
+                              {"value": "api-token", "label": "API key · API balance"},
                               {"value": "mcp", "label": "Krea account · workspace compute"}],
                           "default": "api-token"})
         if ports != model["inputPorts"] or json_params != model["jsonParams"]:

@@ -53,8 +53,12 @@ def client(monkeypatch, person, tmp_path):
     monkeypatch.setattr(main.model_pricing, "load_pricing", lambda path=None: {"nodes": {}})
     monkeypatch.setattr(main, "execute_graph", AsyncMock(side_effect=runs_nothing))
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
-    # No keys or prompts here; what's tested is who may bill what.
+    # No keys or prompts here; what's tested is who may bill what. A quick
+    # run checks its route's key itself, outside validate_graph (a route-table
+    # node with no key that can run it is refused before the spend check),
+    # so that check stands down too.
     monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
+    monkeypatch.setattr(main.node_route, "route_unavailable", lambda *args, **kwargs: None)
     test_client = TestClient(main.app)
     limits = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": None, "models": {}}}
     assert test_client.put("/api/settings", json=limits, headers=PERSON).status_code == 200

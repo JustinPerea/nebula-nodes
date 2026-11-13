@@ -639,6 +639,10 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
+  /** The refusal's own fix sentence beside `detail`, when it sends one (a
+   * settings write's 409: "Fix “apiKeys” in ~/.nebula/settings.json, then
+   * try again."; PR #203 round 15, GM r29 item 6). Null otherwise. */
+  readonly fix: string | null;
   /** A refused new project at the project limit: its numbers (null for any other answer). */
   readonly projectCounts: ProjectCounts | null;
   /** The answer's additive `hold` beside `detail` (a project open's 409:
@@ -657,7 +661,7 @@ export class RequestFailedError extends Error {
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
       storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
-      hold?: unknown; sentAt?: number | null; sentBeforePromote?: boolean; projectCounts?: ProjectCounts } = {}) {
+      hold?: unknown; fix?: string | null; sentAt?: number | null; sentBeforePromote?: boolean; projectCounts?: ProjectCounts } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -670,6 +674,7 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
+    this.fix = options.fix ?? null;
     this.projectCounts = options.projectCounts ?? null;
     this.hold = options.hold;
     this.sentAt = sentAtOf(options);
@@ -870,7 +875,7 @@ export function refusalError(read: { code: string | null; sentAt: number | null 
  * storage refusal, main._storage_error_body), from one read of its body. */
 interface FailureBody {
   detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null;
-  overSaveLimit: boolean; sizeBytes: number | null; hold?: unknown;
+  overSaveLimit: boolean; sizeBytes: number | null; fix: string | null; hold?: unknown;
   /** A refused new project at the project limit, with its numbers: overProjectLimitCopy. */
   limitReason?: string;
   /** The same refusal's numbers (GM r24, the kept save's own lines): how many projects there are, the limit, what to delete. */
@@ -882,7 +887,7 @@ const wholeNumber = (value: unknown): value is number => typeof value === 'numbe
 async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
     const body = await response.json() as {
-      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown; hold?: unknown;
+      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown; fix?: unknown; hold?: unknown;
       projectLimit?: unknown; projectCount?: unknown; deletes?: unknown;
     } | null;
     const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
@@ -894,11 +899,12 @@ async function readFailureBody(response: Response): Promise<FailureBody> {
       ? overProjectLimitCopy(body.projectCount, body.projectLimit, wholeNumber(body?.deletes) ? body.deletes : null) : undefined;
     const projectCounts = limitReason && wholeNumber(body?.projectCount) && wholeNumber(body?.projectLimit)
       ? { count: body.projectCount, limit: body.projectLimit, deletes: wholeNumber(body?.deletes) && body.deletes > 0 ? body.deletes : null } : undefined;
-    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes,
+    const fix = typeof body?.fix === 'string' && body.fix ? body.fix : null;
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes, fix,
       ...(body && typeof body === 'object' && 'hold' in body ? { hold: body.hold } : {}),
       ...(limitReason ? { limitReason } : {}), ...(projectCounts ? { projectCounts } : {}) };
   } catch {
-    return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null };
+    return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null, fix: null };
   }
 }
 
@@ -1008,13 +1014,22 @@ export function resetFailureWarningsForTests(): void {
 export async function requestError(heading: string, response: Response,
   options: { detail?: unknown; reason?: string } = {}): Promise<RequestFailedError> {
   const body: FailureBody = 'detail' in options
-    ? { detail: options.detail, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null }
+    ? { detail: options.detail, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null, fix: null }
     : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason ?? body.limitReason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, hold: body.hold, sentAt: sentUnderPromote(response),
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, fix: body.fix, hold: body.hold, sentAt: sentUnderPromote(response),
     ...(body.projectCounts ? { projectCounts: body.projectCounts } : {}) });
+}
+
+/** The shared rule's line: up to 3 things are named, from 4 they are
+ * counted. Every list of names in a line reads it (nodeNameList,
+ * agentNameList, quotedNames), and so do the proposal bar's not-ready lines
+ * (canvasProposals.notReadyShown), so 4 is never "3 and 1 more". */
+export const NAMED_AT_MOST = 3;
+export function countsInstead(count: number): boolean {
+  return count > NAMED_AT_MOST;
 }
 
 /**
@@ -1036,7 +1051,7 @@ export async function requestError(heading: string, response: Response,
  * lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
-  if (names.length >= 4) return `${names.length} nodes`;
+  if (countsInstead(names.length)) return `${names.length} nodes`;
   const groups = new Map<string, number>();
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
   return joinedList([...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`)));
@@ -1051,7 +1066,7 @@ export function nodeNameList(names: string[]): string {
  */
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
-  if (agents.length >= 4) return `${agents.length} agents`;
+  if (countsInstead(agents.length)) return `${agents.length} agents`;
   return joinedList(agents);
 }
 
@@ -1064,7 +1079,7 @@ export function joinedList(parts: string[]): string {
 /** The same rule for things that aren't nodes and whose names are their
  * own (shots): up to 3 quoted names, from 4 a count ("4 shots"). */
 export function quotedNames(names: readonly string[], counted: string): string {
-  if (names.length >= 4) return `${names.length} ${counted}`;
+  if (countsInstead(names.length)) return `${names.length} ${counted}`;
   const quoted = names.map((name) => `“${name}”`);
   return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
 }

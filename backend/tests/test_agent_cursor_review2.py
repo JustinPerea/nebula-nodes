@@ -197,12 +197,12 @@ def test_the_cli_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch, 
     # The scene-read header is sent as given (scene keys unchanged), and the
     # cursor lands on the Claude Code session's own cursor, as if unset.
     assert headers == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": bad,
-                       "X-Nebula-Cursor-Session": unset}
+                       "X-Nebula-Surface": "cli", "X-Nebula-Cursor-Session": unset}
     assert presence_session(headers) == unset
     # Outside Claude Code: one cursor for the name, as if unset.
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
     headers = client._identity_headers()
-    assert headers == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": bad}
+    assert headers == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": bad, "X-Nebula-Surface": "cli"}
     assert presence_session(headers) is None
 
 
@@ -214,7 +214,8 @@ def test_the_cli_sends_a_valid_session_alone(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc")
     for good in ("lane-a", "x" * 64, "a.b:c_d-1"):
         monkeypatch.setenv("NEBULA_AGENT_SESSION", good)
-        assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": good}
+        assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": good,
+                                                         "X-Nebula-Surface": "cli"}
 
 
 def test_mcp_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch):

@@ -40,7 +40,7 @@ vi.mock('../src/store/graphStore', () => {
 });
 
 const { ProposalBar, DECISION_FOCUS_ATTR } = await import('../src/components/canvas/ProposalBar');
-const { decisionLine } = await import('../src/lib/canvasProposals');
+const { decisionLine } = await import('../src/lib/canvasProposalsBar');
 const { SAY_ATTR } = await import('../src/lib/noticeSay');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 

@@ -13,6 +13,7 @@ backend restart forgets them, as it forgets the runs themselves.
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Mapping
 from typing import Any
 
 from models.events import (
@@ -90,6 +91,10 @@ class RunReports:
         elif isinstance(event, ErrorEvent):
             node["state"] = "error"
             node["error"] = event.friendly or event.error or "failed"
+            if event.proposal_needed:
+                # A stop only the person may lift (Idol's Hugging Face call):
+                # the agent's words whole, and marked (review 19, NIT-4).
+                node["error"], node["stopped"] = event.error or "stopped", True
 
     def _run(self, run_id: str) -> dict[str, Any]:
         run = self._runs.get(run_id)
@@ -131,6 +136,7 @@ class RunReports:
         results: dict[str, Any] = {}
         errors: dict[str, str] = {}
         skipped: dict[str, str] = {}
+        stopped: dict[str, str] = {}
         notes: list[str] = []
         for node_id, node in run["nodes"].items():
             if node["state"] == "complete":
@@ -138,15 +144,34 @@ class RunReports:
                 notes.extend(note for note in node.get("notes") or [] if note not in notes)
             elif node["state"] == "error":
                 errors[node_id] = node.get("error") or "failed"
+                if node.get("stopped"):
+                    stopped[node_id] = STOPPED_FOR_PROPOSAL
             elif node["state"] == "skipped":
                 skipped[node_id] = node.get("reason") or ""
         outcome: dict[str, Any] = {"results": results, "errors": errors, "skipped": skipped}
+        if stopped:
+            outcome["stopped"] = stopped
         if notes:
             outcome["notes"] = notes
         for key in ("duration", "nodesExecuted"):
             if key in run:
                 outcome[key] = run[key]
         return outcome
+
+
+# A node an agent's run stopped at because only the person may run it (its
+# errors entry has why and how to propose): ``stopped: {node id: this}``.
+STOPPED_FOR_PROPOSAL = "proposal_needed"
+
+
+def one_line_error(errors: Mapping[str, str], stopped: Mapping[str, str] | None = None) -> str:
+    """A failed run's one-line ``error``: one node's own words ("n2 failed:
+    …", or a stop's own text, never "failed"), else how many."""
+    failed = list(errors)
+    if len(failed) == 1:
+        node_id = failed[0]
+        return errors[node_id] if node_id in (stopped or {}) else f"{node_id} failed: {errors[node_id]}"
+    return f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)"
 
 
 run_reports = RunReports()

@@ -1,8 +1,8 @@
 """Tests for NEBULA_SETTINGS_PATH env var support in settings.py.
 
 Covers VAL-MIG-003, VAL-MIG-011:
-  - SETTINGS_PATH defaults to repo root when NEBULA_SETTINGS_PATH is not set
-  - SETTINGS_PATH reads from NEBULA_SETTINGS_PATH env var when set
+  - settings_path() defaults to repo root when NEBULA_SETTINGS_PATH is not set
+  - settings_path() reads NEBULA_SETTINGS_PATH at each call when it is set
   - load_settings reads from the env-specified path
   - save_settings writes to the env-specified path
   - get_api_key uses the env-specified settings file
@@ -11,7 +11,6 @@ Covers VAL-MIG-003, VAL-MIG-011:
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 from pathlib import Path
@@ -20,43 +19,17 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# Autouse fixture: restore settings module after each test
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def _restore_settings_module(monkeypatch):
-    """Reload settings module after each test so the module-level
-    SETTINGS_PATH constant is restored to the session's sandbox path.
-    Without this, a test that sets NEBULA_SETTINGS_PATH and reloads would
-    leave the constant pointing at its own temp path for subsequent tests.
-    """
-    # Reload with the session's sandbox path (conftest.py), not with the
-    # variable removed: removed, SETTINGS_PATH falls back to the repo's real
-    # settings.json, and every later test in the run reads the person's keys
-    # and writes their settings (PUT /api/settings).
-    session_path = os.environ.get("NEBULA_SETTINGS_PATH")
-    yield
-    if session_path is None:
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
-    else:
-        monkeypatch.setenv("NEBULA_SETTINGS_PATH", session_path)
-    import services.settings as _s
-    importlib.reload(_s)
-
-
-# ---------------------------------------------------------------------------
-# SETTINGS_PATH resolution
+# settings_path resolution, read at each call (no module reload)
 # ---------------------------------------------------------------------------
 
 class TestSettingsPathResolution:
-    """VAL-MIG-003, VAL-MIG-011: SETTINGS_PATH env var support."""
+    """VAL-MIG-003, VAL-MIG-011: NEBULA_SETTINGS_PATH env var support."""
 
     def test_defaults_to_repo_root_without_env_var(self, monkeypatch):
-        """Without NEBULA_SETTINGS_PATH, SETTINGS_PATH is the repo-root
+        """Without NEBULA_SETTINGS_PATH, settings_path() is the repo-root
         settings.json — the original hardcoded behaviour."""
         monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         # settings.py is at backend/services/settings.py → parent³ = repo root.
         # This test file is at backend/tests/test_settings_path.py → parent³
@@ -64,17 +37,16 @@ class TestSettingsPathResolution:
         expected = (
             Path(__file__).resolve().parent.parent.parent / "settings.json"
         )
-        assert settings_mod.SETTINGS_PATH == expected
+        assert settings_mod.settings_path() == expected
 
     def test_uses_env_var_when_set(self, monkeypatch, tmp_path):
-        """With NEBULA_SETTINGS_PATH set, SETTINGS_PATH follows it."""
+        """With NEBULA_SETTINGS_PATH set, settings_path() follows it."""
         custom = tmp_path / "appsupport" / "settings.json"
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
 
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert settings_mod.SETTINGS_PATH == custom
+        assert settings_mod.settings_path() == custom
 
     def test_env_var_path_is_not_repo_root(self, monkeypatch, tmp_path):
         """The env-specified path should not coincide with the repo-root
@@ -83,20 +55,18 @@ class TestSettingsPathResolution:
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
 
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         repo_root = (
             Path(__file__).resolve().parent.parent.parent / "settings.json"
         )
-        assert settings_mod.SETTINGS_PATH != repo_root
+        assert settings_mod.settings_path() != repo_root
 
     def test_browser_mode_path_has_no_app_support(self, monkeypatch):
         """In browser mode the path must not contain 'Application Support'."""
         monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert "Application Support" not in str(settings_mod.SETTINGS_PATH)
+        assert "Application Support" not in str(settings_mod.settings_path())
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +88,6 @@ class TestLoadSettingsFromEnvPath:
 
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         loaded = settings_mod.load_settings()
         assert loaded["outputPath"] == "/custom/output"
@@ -130,7 +99,6 @@ class TestLoadSettingsFromEnvPath:
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(missing))
 
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         loaded = settings_mod.load_settings()
         assert loaded == settings_mod.DEFAULT_SETTINGS
@@ -144,16 +112,15 @@ class TestLoadSettingsFromEnvPath:
 
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         loaded = settings_mod.load_settings()
         assert loaded["outputPath"] == "/from-appsupport"
 
-        # Verify the SETTINGS_PATH is not the repo root
+        # Verify settings_path() is not the repo root
         repo_root = (
             Path(__file__).resolve().parent.parent.parent / "settings.json"
         )
-        assert settings_mod.SETTINGS_PATH != repo_root
+        assert settings_mod.settings_path() != repo_root
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +136,6 @@ class TestSaveSettingsToEnvPath:
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
 
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         test_data = {"apiKeys": {}, "outputPath": "/saved/output"}
         settings_mod.save_settings(test_data)
@@ -185,7 +151,6 @@ class TestSaveSettingsToEnvPath:
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
 
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         repo_root = (
             Path(__file__).resolve().parent.parent.parent / "settings.json"
@@ -215,7 +180,6 @@ class TestGetApiKeyFromEnvPath:
 
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         assert settings_mod.get_api_key("OPENAI_API_KEY") == fake_key
 
@@ -226,7 +190,6 @@ class TestGetApiKeyFromEnvPath:
 
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         assert settings_mod.get_api_key("OPENAI_API_KEY") is None
 
@@ -240,7 +203,6 @@ class TestGetApiKeyFromEnvPath:
 
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(custom))
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         # First name missing, second name found
         assert settings_mod.get_api_key(["NONEXISTENT_KEY", "FAL_KEY"]) == fake_key
@@ -254,20 +216,18 @@ class TestBrowserModeFallback:
     """VAL-MIG-011: Browser/dev mode uses repo-root settings.json."""
 
     def test_no_env_var_uses_repo_root(self, monkeypatch):
-        """Without NEBULA_SETTINGS_PATH, SETTINGS_PATH is the repo-root path."""
+        """Without NEBULA_SETTINGS_PATH, settings_path() is the repo-root path."""
         monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
         expected = (
             Path(__file__).resolve().parent.parent.parent / "settings.json"
         )
-        assert settings_mod.SETTINGS_PATH == expected
+        assert settings_mod.settings_path() == expected
 
     def test_no_env_var_does_not_point_to_app_support(self, monkeypatch):
         """Browser mode path must not contain 'Application Support'."""
         monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert "Application Support" not in str(settings_mod.SETTINGS_PATH)
+        assert "Application Support" not in str(settings_mod.settings_path())

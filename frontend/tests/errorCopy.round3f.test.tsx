@@ -43,7 +43,7 @@ import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { RUNTIME_FIELDS } from '../src/lib/canvasUndo';
 import { NOTHING_RAN_LINE } from '../src/lib/validationCopy';
-import { notReadyLine } from '../src/lib/canvasProposals';
+import { notReadyLine } from '../src/lib/canvasProposalsBar';
 import { WORLD_LABS_RECONNECTING_NOTE } from '../src/lib/runHistory';
 import { saveToFolder } from '../src/lib/createFiles';
 

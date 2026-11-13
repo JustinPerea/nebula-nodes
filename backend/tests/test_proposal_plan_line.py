@@ -65,6 +65,20 @@ def test_change_one_run_another():
     assert plan_line(view) == "Changes “Prompt”, runs “Hero shot” · Krea 2 on your Krea plan · Up to $0.43"
 
 
+def test_runs_say_their_class_paid_plan_may_cost_never_free():
+    """GM, PR #203 r11 item 2, r19 item 1 (the frontend's old line 1, now the backend's)."""
+    entries = [_entry("a", "A", model="GPT Image 2", billed="your OpenAI key"),
+               _entry("b", "B", model="GPT Image 2", billed="your OpenAI key"),
+               _entry("+k", "Krea 2")]
+    mixed = _view(run=["a", "b", "+k"], nodes=[{"ref": "+k", "name": "Krea 2"}],
+                  cost={"paidRuns": 2, "planRuns": 1, "nodes": entries})
+    assert plan_line(mixed) == "Adds and runs “Krea 2”, runs “A” and “B” · 2 paid runs · 1 on your Krea plan · no list price"
+    plan_only = _view(run=["+k"], cost={"paidRuns": 0, "planRuns": 1, "nodes": [entries[2]]})
+    assert plan_line(plan_only) == "Runs “Krea 2” · Krea 2 on your Krea plan · no list price"
+    may = _view(run=["n1"], cost={"mayCostRuns": 1, "mayCost": [{"name": "Idol", "account": "Hugging Face"}]})
+    assert "free" not in plan_line(may) and "Hugging Face" in plan_line(may)
+
+
 def test_adds_with_connections_and_counts_from_four():
     one = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}])
     assert plan_line(one) == "Adds “Krea 2” and 1 connection · nothing runs until you choose"
@@ -78,9 +92,9 @@ def test_adds_with_connections_and_counts_from_four():
 def test_adds_and_runs_the_new_node():
     view = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}], run=["+k"], cost={
         "paidRuns": 1, "estimate": {"low": 0.07, "high": 0.07, "open": True},
-        "nodes": [_entry("+k", "Krea 2", billed="your Krea API token")]})
+        "nodes": [_entry("+k", "Krea 2", billed="your Krea API key")]})
     # GM - Design, PR #216 r3: the verbs merge onto the node, and "plus" carries the connections.
-    assert plan_line(view) == "Adds and runs “Krea 2” plus 1 connection · Krea 2 on your Krea API token · $0.07 + unpriced"
+    assert plan_line(view) == "Adds and runs “Krea 2” plus 1 connection · Krea 2 on your Krea API key · $0.07 + unpriced"
 
 
 def test_an_add_a_change_and_a_run_never_take_a_serial_comma():
@@ -142,7 +156,7 @@ def test_billed_to_names_who_pays():
     krea = definitions["krea-2-generate"]
     paid = {"kind": "paid", "provider": "krea"}
     assert billed_to(krea, {"_kreaAuth": "mcp"}, paid) == "your Krea plan"
-    assert billed_to(krea, {"_kreaAuth": "api-token"}, paid) == "your Krea API token"
+    assert billed_to(krea, {"_kreaAuth": "api-token"}, paid) == "your Krea API key"
     assert billed_to(definitions["gpt-image-2-generate"], {}, {"kind": "paid", "provider": "openai"}) == "your OpenAI key"
     assert billed_to(krea, {}, {"kind": "free", "provider": None}) is None
     assert billed_to(krea, {"_kreaAuth": "api-token"}, {"kind": "paid", "provider": None}) is None
@@ -165,7 +179,7 @@ def test_the_view_card_cli_and_mcp_read_the_same_names(api):  # noqa: F811 - pyt
     # The CLI prints the card's line word for word, beside its own id lines.
     assert f"  card     {view['plan']}" in format_proposal(view).splitlines()
     # The not-ready line names the node in curly quotes (GM - Design, PR #216 r1).
-    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea account. Connect it in Settings."
+    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea plan. Sign in to Krea in Settings."
     # get_proposal (MCP) and the HTTP read return the same view.
     again = api.client.get(f"/api/canvas/proposals/{view['id']}", headers={"X-Nebula-Agent": "Claude Code"})
     assert again.json()["proposal"]["plan"] == view["plan"]
@@ -371,12 +385,14 @@ def test_a_route_line_takes_the_nodes_name_in_place_of_the_model():
         if not node_route.has_routes(definition) or not case.get("unavailableLine"):
             continue
         params = node_route.with_wired_blockers(definition, case["params"], case.get("wiredCounts") or case.get("wired", ()))
+        # The card names the node by its type, in quotes (GM, PR #203 r32);
+        # given the node's own name (quoted by the function) it names that.
         model = str(definition.get("displayName") or "")
         plain = node_route.route_unavailable_line(definition, params, case["apiKeys"]) or ""
-        if not plain.startswith(f"{model} "):
+        if not plain.startswith(f"“{model}” "):
             continue
-        named = node_route.route_unavailable_line(definition, params, case["apiKeys"], name="“Hero shot”")
-        assert named == "“Hero shot”" + plain[len(model):]
+        named = node_route.route_unavailable_line(definition, params, case["apiKeys"], name="Hero shot")
+        assert named == "“Hero shot”" + plain[len(model) + 2:]
         checked += 1
     assert checked > 0
 
@@ -469,7 +485,7 @@ def test_a_quoted_name_is_quoted_once_in_the_not_ready_line(api):  # noqa: F811 
                               "run": [node_id]})
     assert response.status_code == 201, response.text
     view = response.json()["proposal"]
-    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea account. Connect it in Settings."
+    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea plan. Sign in to Krea in Settings."
     assert view["plan"].startswith("Changes and runs “Hero shot” · ")
     import main
 
