@@ -259,7 +259,9 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
       // free" without its token and plain "Auto" with it.
       : autoSpec && isKeylessRoute(autoSpec) && autoSpec.handler === 'hf-space'
         ? (autoRoute.key ? 'Auto' : 'Auto · free')
-        : `Auto · runs on ${autoName}`,
+        // GM, PR #203 r26 item 1: signed out, a plan run can't happen, so the row doesn't promise it.
+        : autoRoute.kind === 'plan' && !context.kreaSignedIn ? 'Auto · Krea needs a sign-in'
+          : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
@@ -327,15 +329,15 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 }
 
 /** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6, r41
- * item 2: "“Hero shot” runs on Krea, which needs you to sign in. Sign in to
- * Krea in Settings, or switch to fal.ai."), the node's own name in quotes
+ * item 2, r26 item 3: "“Hero shot” runs on Krea, which needs you to sign in.
+ * Sign in from Settings, or switch to fal.ai."), the node's own name in quotes
  * (the renamed label, else the model's); names who can take it when Nebula
  * knows (r32 item 4); "or choose another provider" only when no route can. */
 function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
   const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
     .map((routeId) => providerLabel(routeById(definition, routeId)?.provider));
   const switchTo = others.length ? `switch to ${orList([...new Set(others)])}` : 'choose another provider';
-  return `“${context.name || definition.displayName}” runs on Krea, which needs you to sign in. Sign in to Krea in Settings, or ${switchTo}.`;
+  return `“${context.name || definition.displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or ${switchTo}.`;
 }
 
 /** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)

@@ -4475,3 +4475,9 @@ plain build, 117 over, +8.3 kB over main.
   and 933) when the temp folder can't be stat'ed or is on another filesystem. In
   those two cases the person reads "{folder} is a folder, and Nebula needs to put
   a file there", which is not what happened. Flagged to GM.
+
+## Round 26 (GM's three strings)
+
+- Auto row, signed out of Krea: "Auto · Krea needs a sign-in" (providerSwitch.ts, same `kreaSignedIn` signal as the sign-in line); signed in it stays "Auto · runs on Krea plan".
+- Settings temp folder refusals by cause. `_require_same_device` now raises cause `temp_folder` (stat failure) or `temp_disk` (different device); `in_the_way` is left for a real folder at a file's name. main.py maps them to GM's lines, naming the folder from `settings.TEMP_FOLDER`. Both keep code `settings_unwritable`, so the frontend (which picks by code, settingsWrites.ts) and the MCP/CLI forms (same refusal text, agent form of each fix) keep working. No check, order, descriptor or path logic changed.
+- Krea sign-in line: "Sign in from Settings" replaces "Sign in to Krea in Settings" in the switcher's message only; the engine's run-time lines are untouched.

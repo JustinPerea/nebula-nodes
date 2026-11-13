@@ -78,6 +78,7 @@ from execution.engine import execute_graph, validate_graph, topological_sort, ge
 from execution.sync_runner import get_handler_registry
 from execution import provider_calls, run_origin
 from services.settings import (
+    TEMP_FOLDER,
     load_settings,
     load_saved_settings,
     saved_keys_writable,
@@ -12051,6 +12052,25 @@ SETTINGS_IN_THE_WAY = {
     "agent": "Nothing was saved because {folder} is a folder, and Nebula needs to put a file there. "
              "Ask the person to move or rename that folder.",
 }
+# The private temp folder beside the settings file can't be read or checked,
+# or is on another disk (GM, PR #203 r26 item 2, verbatim). The folder's name
+# comes from settings.TEMP_FOLDER, in curly quotes.
+SETTINGS_TEMP_FOLDER_UNUSABLE = {
+    "person": "Nebula couldn’t save your settings because it can’t use the folder “{temp_folder}” next to them. "
+              "Check that folder’s permissions, then try again.",
+    "agent": "Nebula couldn’t save your settings because it can’t use the folder “{temp_folder}” next to them. "
+             "Ask the person to check that folder’s permissions.",
+}
+SETTINGS_TEMP_FOLDER_OTHER_DISK = {
+    "person": "Nebula couldn’t save your settings because “{temp_folder}” is on a different disk from them. "
+              "Remove that folder, then try again.",
+    "agent": "Nebula couldn’t save your settings because “{temp_folder}” is on a different disk from them. "
+             "Ask the person to remove that folder.",
+}
+SETTINGS_TEMP_FOLDER_FIX = {"person": "Check that folder’s permissions, then try again.",
+                            "agent": "Ask the person to check that folder’s permissions."}
+SETTINGS_TEMP_DISK_FIX = {"person": "Remove that folder, then try again.",
+                          "agent": "Ask the person to remove that folder."}
 # A folder on the way to the file is a file (GM, PR #203 r31 item 2), named
 # by its real path.
 SETTINGS_NOT_A_FOLDER = {
@@ -12180,6 +12200,12 @@ def _unwritable_refusal(block: SettingsUnwritable) -> CodedRefusal:
         return _settings_refusal(SETTINGS_NOT_A_FOLDER, SETTINGS_NOT_A_FOLDER_CODE, **folder)
     if block.cause == "in_the_way":
         return _settings_refusal(SETTINGS_IN_THE_WAY, SETTINGS_NOT_A_FOLDER_CODE, **folder)
+    if block.cause == "temp_folder":
+        return _settings_refusal(SETTINGS_TEMP_FOLDER_UNUSABLE, SETTINGS_UNWRITABLE_CODE,
+                                 fix=SETTINGS_TEMP_FOLDER_FIX, temp_folder=TEMP_FOLDER)
+    if block.cause == "temp_disk":
+        return _settings_refusal(SETTINGS_TEMP_FOLDER_OTHER_DISK, SETTINGS_UNWRITABLE_CODE,
+                                 fix=SETTINGS_TEMP_DISK_FIX, temp_folder=TEMP_FOLDER)
     if block.cause == "copy_folder" and block.creates is not None:
         return _settings_refusal(SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE, SETTINGS_UNWRITABLE_CODE,
                                  fix=SETTINGS_FOLDER_FIX, creates=shown_path(block.creates), **folder)

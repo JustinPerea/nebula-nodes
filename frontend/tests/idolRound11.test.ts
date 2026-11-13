@@ -92,7 +92,7 @@ describe('Krea’s one verb and the plan-only line (GM r21 items 5 and 6)', () =
     const state = providerSwitchState(NODE_DEFINITIONS['krea-3'], { _provider: 'krea', _kreaAuth: 'mcp' }, {
       apiKeys: {}, kreaSignedIn: false, pricing: shippedTable as unknown as PricingTable });
     expect(state.message).toBe(`“${NODE_DEFINITIONS['krea-3'].displayName}” runs on Krea, which needs you to sign in. `
-      + 'Sign in to Krea in Settings, or choose another provider.');
+      + 'Sign in from Settings, or choose another provider.');
   });
 });
 

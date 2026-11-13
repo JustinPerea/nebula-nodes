@@ -112,6 +112,9 @@ describe('providerSwitchState', () => {
     expect(video.rows.map((row) => row.id)).toEqual(['auto', 'bfl', 'openrouter', 'krea-plan:plan']);
     const krea = providerSwitchState(routed['routes-krea'], { _kreaAuth: 'mcp' }, context({}, { kreaSignedIn: true }));
     expect(krea.rows[0].label).toBe('Auto · runs on Krea plan');
+    // GM, PR #203 r26 item 1: signed out, the Auto row promises no run that can't happen.
+    const signedOut = providerSwitchState(routed['routes-krea'], { _kreaAuth: 'mcp' }, context({}, { kreaSignedIn: false }));
+    expect(signedOut.rows[0].label).toBe('Auto · Krea needs a sign-in');
     expect(krea.chip).toBe('Auto · Krea plan');
     // Where Krea is the maker, Auto bills the saved mode: the Auto row keeps it.
     expect(krea.rows[0].writes).toEqual({ _provider: 'auto' });

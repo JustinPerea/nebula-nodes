@@ -74,6 +74,10 @@ class SettingsUnwritable(PermissionError):
     - "in_the_way": a folder is at one of the save's fixed file names (the
       temp file beside settings.json, the copy or its temp; review 18 of PR
       #203, settings NIT-1), so the file can't be made there.
+    - "temp_folder": the private temp folder beside the file can't be read
+      or checked (GM, PR #203 r26 item 2);
+    - "temp_disk": that temp folder is on a different filesystem from the
+      file, so the rename would be a copy (GM, PR #203 r26 item 2).
 
     ``where`` is the path the line names: the file, its folder, the folder
     that refuses the copy, or the file that is in the way. ``creates``: for
@@ -827,8 +831,8 @@ def temp_folder_for(parent: Path) -> Path:
     return parent / TEMP_FOLDER
 
 
-def _refuse_temp_folder(folder: Path, why: str) -> SettingsUnwritable:
-    return SettingsUnwritable(errno.EPERM, why, folder, "in_the_way")
+def _refuse_temp_folder(folder: Path, why: str, cause: str = "temp_folder") -> SettingsUnwritable:
+    return SettingsUnwritable(errno.EPERM, why, folder, cause)
 
 
 # Directory file descriptors (round 23c of PR #203): the private folder is
@@ -927,10 +931,10 @@ def _require_same_device(temp: str, target: Path, dir_fd: int | None = None) -> 
         here = os.fstat(dir_fd).st_dev if dir_fd is not None else os.stat(os.path.dirname(temp) or ".").st_dev
         same = here == os.stat(target.parent).st_dev
     except OSError as exc:
-        raise _refuse_temp_folder(Path(temp).parent, "the temp folder can't be checked") from exc
+        raise _refuse_temp_folder(Path(temp).parent, "the temp folder can't be checked", "temp_folder") from exc
     if not same:
         raise SettingsUnwritable(errno.EXDEV, "the temp folder is on another filesystem", Path(temp).parent,
-                                 "in_the_way")
+                                 "temp_disk")
 
 
 def new_temp_path_for(path: Path) -> Path:
