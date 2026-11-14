@@ -164,8 +164,8 @@ until the item is verified:
 - **Four reads, then a refusal.** Any save of an item counts on the watch (`_broadcast_stored_asset` calls
   `rename_item` on every write), so an item that is being edited can count during each read. A third check showed
   that storing after the fourth read left a cursor on a Character deleted during that read. The route now refuses
-  with "Character “Mara” is changing right now. Point at it again." ("Board" and "Style" likewise) and stores
-  nothing. The line is new agent-facing copy, sent to GM - Design for the wording list.
+  with "Nebula couldn’t point at the character “Mara” because it kept changing while Nebula checked it. Point at it
+  again." (likewise "the moodboard" and "the style") and stores nothing. The words are GM - Design's.
 - **Why this closes the window.** A write that finished before the read shows in the read. A write after the read
   runs its forget either before the route goes on, which the watch sees, or after both cursors are stored, where the
   forget finds them like any others.

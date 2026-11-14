@@ -1293,15 +1293,16 @@ def test_an_item_written_at_every_look_is_not_pointed_at(api, monkeypatch):
                      after=lambda main, held: held.rename_item("character", character["id"], "Mara"))
     refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A)
     assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"] == "Character “Mara” is changing right now. Point at it again."
+    assert refused.json()["detail"] == ("Nebula couldn’t point at the character “Mara” because it kept changing "
+                                        "while Nebula checked it. Point at it again.")
     _nothing_left(presence, sent, heard)
     assert len(looks) == 4 and presence._watches == []
 
 
 @pytest.mark.parametrize("surface, made, said", [
     ("moodboard", lambda client: client.post("/api/moodboards", json={"name": "Desert light"}).json(),
-     "Board “Desert light” is changing right now. Point at it again."),
-    ("style", lambda client: _make_style(client), "Style “Dusk grain” is changing right now. Point at it again."),
+     "Nebula couldn’t point at the moodboard “Desert light” because it kept changing while Nebula checked it. Point at it again."),
+    ("style", lambda client: _make_style(client), "Nebula couldn’t point at the style “Dusk grain” because it kept changing while Nebula checked it. Point at it again."),
 ])
 def test_the_changing_refusal_names_a_board_and_a_style(api, monkeypatch, surface, made, said):
     client, sent, heard, presence, _ = api

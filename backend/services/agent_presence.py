@@ -510,10 +510,11 @@ def surface_ids(target: Mapping[str, Any]) -> tuple[str, str | None] | None:
 def changing_refusal(target: Mapping[str, Any], names: Mapping[str, Any]) -> str:
     """The refusal for a point whose item was written during every look at it
     (main._settled_surface_names): nothing was stored, and the agent can point again."""
-    surface = str(target.get("surface"))
-    subject = {"moodboard": "Board"}.get(surface, surface.capitalize())
-    item = names.get(SURFACE_TABLE[surface].name_key) or (surface_ids(target) or ("",))[0]
-    return f"{subject} {_quoted(item)} is changing right now. Point at it again."
+    info = SURFACE_TABLE[str(target.get("surface"))]
+    item = names.get(info.name_key) or (surface_ids(target) or ("",))[0]
+    # GM - Design's wording (2026-11-14): what happened and why, then what to do.
+    return (f"Nebula couldn\u2019t point at the {info.noun} {_quoted(item)} because it kept changing while "
+            "Nebula checked it. Point at it again.")
 
 
 def _ids_on(target: Mapping[str, Any] | None, surface: str) -> tuple[str, str | None] | None:
