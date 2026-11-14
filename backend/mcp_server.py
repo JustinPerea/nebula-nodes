@@ -27,7 +27,9 @@ from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wordi
 from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
 from services.wording import counted
-from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
+from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, moodboard_clash as _moodboard_clash,
+                                     moodboard_clash_refusal as _moodboard_clash_refusal,
+                                     refusal as _cursor_action_refusal, session_ok)
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -650,6 +652,9 @@ def point_at(
     from_node_id: str | None = None,
     from_port: str | None = None,
     action: str = "move",
+    moodboard: str | None = None,
+    image: str | int | None = None,
+    part: str | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Move your cursor on the Nebula canvas so the user can see where you are working.
@@ -701,6 +706,19 @@ def point_at(
     A line shows for max(3 s, 60 ms per character), at most 8 s. Graph edits
     through Nebula's API pick their own action. Any other value is refused.
 
+    Beyond the canvas: point at a moodboard with `moodboard` (its id or exact
+    name), at one of its images with `image` (its number, `12` or `#12`, or
+    its id), and at a control with `part`: `name`, `direction`, `avoid`,
+    `colors` ("Colors that must appear") or `colors-out` ("Colors to keep
+    out") on a board; `note` or `weight` on an image. Use these alone:
+    they can't be combined with `node_id`, `port`, `x`, `y` or the drag's
+    `from_node_id`. Nebula never opens a panel or scrolls for the person: if
+    the Moodboard panel is closed or the item is out of view, your cursor
+    parks at the button that opens it, or at the edge of what they see, and
+    their own click shows the rest. Board writes you make (moodboard_edit,
+    moodboard_update, moodboard_add, ...) move your cursor there on their
+    own, to the image or control they touched.
+
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set
     NEBULA_AGENT_SESSION to choose the id yourself. Subagents that share this
@@ -716,6 +734,19 @@ def point_at(
 
     if not isinstance(action, str) or action not in _CURSOR_ACTIONS:
         raise ValueError(f"point_at: {_cursor_action_refusal(action)}")
+    if image is not None or part is not None or moodboard:
+        # A moodboard item: its own target, never mixed with a node or a spot.
+        if not moodboard:
+            raise ValueError("point_at: image and part need moodboard (its id or exact name)")
+        clash = _moodboard_clash(node_id=node_id, port=port, x=x, y=y, from_node_id=from_node_id, from_port=from_port)
+        if clash:
+            raise ValueError(f"point_at: {_moodboard_clash_refusal(clash)}")
+        item: dict[str, Any] = {"surface": "moodboard", "board": moodboard}
+        if image is not None:
+            item["image"] = image
+        if part is not None:
+            item["part"] = part
+        return _canvas_call("POST", "/api/canvas/cursor", ctx, json={"target": item, "say": say, "action": action})
     if not node_id and (x is None) != (y is None):
         raise ValueError(f"point_at needs node_id, or x and y (both): you gave only {'x' if y is None else 'y'}")
     target = anchor(node_id, port, x, y)

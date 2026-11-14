@@ -573,8 +573,10 @@ GUARD_SHAPES = {
 def test_no_cursor_event_is_broadcast_outside_broadcast_presence():
     source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
     assert cursor_broadcasts_outside_the_helper(source) == []
-    # The two target=None emitters (the Agent log only) stay allowed.
-    assert source.count("broadcast_raw(_point(") == 2
+    # The one target=None emitter left (the Agent log only) stays allowed. _say_agent_action was the
+    # other: Phase 3 sends every one of its events through _broadcast_presence, a board write's with
+    # its surface anchor and the rest with none (the person's copy is the event and its id).
+    assert source.count("broadcast_raw(_point(") == 1
 
 
 @pytest.mark.parametrize("shape", GUARD_SHAPES.values(), ids=GUARD_SHAPES.keys())

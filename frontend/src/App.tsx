@@ -8,6 +8,7 @@ import { NodeLibrary } from './components/panels/NodeLibrary';
 import {
   AgentLog, AgentNotes, AssetsPanel, ChatPanel, CommandPalette, NodeInspectorPopover, OnboardingOverlay, RunHistoryPanel,
 } from './components/DeferredPanels';
+import { AgentScreenLayer } from './components/DeferredScreenOverlays';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
@@ -394,6 +395,9 @@ export default function App() {
       {/* Updates on every screen, with the open project's list (Q107 a); one
           mount, so the list, the card and the count carry across screens. */}
       {!isBrandShowcase && <AgentNotes />}
+      {/* The agent cursors on the surfaces beside the canvas (Phase 3): above
+          the docks, below modals and the notice region. */}
+      {!isHome && !isBrandShowcase && <AgentScreenLayer canvasMounted={isCanvas} />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {/* The app's one notice region, above every panel and Studio (GM - Design,
           2026-10-23): the canvas's notices with their Undo or Redo and the

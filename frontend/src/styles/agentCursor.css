@@ -296,7 +296,11 @@
   gap: 4px;
   white-space: nowrap;
   font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
-  transition: transform var(--agent-cursor-say-fade);
+  /* A cursor parked at its panel's edge moves its pills inside the panel
+     (--label-dx/-dy, from lib/agentCursorPark.ts parkLabelNudge); none set,
+     none moved. */
+  translate: var(--label-dx, 0px) var(--label-dy, 0px);
+  transition: transform var(--agent-cursor-say-fade), translate var(--agent-cursor-say-fade);
 }
 
 /* With two or more cursors the name always shows, moving too, so the say pill

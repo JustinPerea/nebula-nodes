@@ -12,6 +12,7 @@ import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
+import { agentLauncher } from '../../lib/agentAnchors';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -54,7 +55,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
 
   return (
     <div ref={cardRef} className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status} data-pending={pendingAttr(data.pending)}
-      data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Moodboard Studio' : undefined}>
+      data-node-inspector-anchor={id} data-agent-launcher={agentLauncher('moodboard', boardId)} title={canOpen ? 'Double-click to open in Moodboard Studio' : undefined}>
       <div className="moodboard-node__title">Moodboard</div>
       <NodeSettingsAction id={id} />
       <div className="moodboard-node__name">{name}</div>

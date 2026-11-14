@@ -98,9 +98,13 @@ const canvasZ = Math.max(0, ...rulesFor('react-flow').flatMap((r) => decls(r.bod
 
 describe('the cursor layer paints inside the canvas', () => {
   it('renders into React Flow\'s viewport, never a portal of its own', () => {
+    // The canvas layer puts the shared `.agent-cursor-layer` (the hook in
+    // agent-cursor/AgentCursorField.tsx, Phase 3) straight into the viewport.
     const layer = read('components/canvas/AgentCursorLayer.tsx');
-    expect(layer).toMatch(/<ViewportPortal>\s*<div className="agent-cursor-layer"/);
-    expect(layer).not.toMatch(/createPortal|document\.body/);
+    const shared = read('components/agent-cursor/AgentCursorField.tsx');
+    expect(layer).toMatch(/<ViewportPortal>\{layer\}<\/ViewportPortal>/);
+    expect(shared).toMatch(/layerClass = 'agent-cursor-layer'/);
+    expect(layer + shared).not.toMatch(/createPortal|document\.body/);
     const css = read('styles/agentCursor.css');
     for (const { body } of rules.filter((r) => r.file.endsWith('agentCursor.css'))) {
       expect(decls(body, 'position')).not.toContain('fixed');

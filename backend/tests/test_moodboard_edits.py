@@ -437,7 +437,7 @@ def test_journal_kinds_and_actors(client, root, journal, canvas_project, person)
     assert first["data"]["refs"] == [{"number": 1, "id": "img-a"}]
     assert first["projectId"] == canvas_project
     assert events[1]["actor"]["name"] == "Claude Code" and events[1]["data"]["say"] == "Set #2 aside"
-    assert "#2" in events[1]["summary"]
+    assert "image 2" in events[1]["summary"]
     # kinds=board reaches them through the group name.
     assert len(journal.read(after=0, kinds={"board.moved"})["events"]) == 1
 

@@ -51,7 +51,7 @@ def told(tmp_path, monkeypatch):
     async def broadcast(kind, board, *_, **__):
         calls["broadcast"].append(board["id"] if isinstance(board, dict) else board)
 
-    async def say(line):
+    async def say(line, **_where):  # the cursor's place (target, action, names) isn't this test's
         calls["said"].append(line)
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)

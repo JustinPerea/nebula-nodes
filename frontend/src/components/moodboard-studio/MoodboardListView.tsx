@@ -2,6 +2,8 @@ import type { DragEvent as ReactDragEvent } from 'react';
 import type { MoodboardAnalysis, MoodboardImage } from '../../types';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
+import { agentAnchor } from '../../lib/agentAnchors';
+import { useStudioBoardId } from './useStudioBoardId';
 import type { BoardCover } from '../../lib/moodboardCover';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ImageColors } from './MoodboardColors';
@@ -44,6 +46,7 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
    *  reason, and the drop hint goes until it reconnects. */
   offline?: boolean;
 }) {
+  const board = useStudioBoardId();
   return (
     <section
       className="moodboard-dropzone"
@@ -78,7 +81,8 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
           // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
           const view = storedImageView(img.url);
           return (
-          <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
+          <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}
+            data-agent-anchor={agentAnchor(board, img.id)}>
             <div className="moodboard-tile__image">
               {view.src ? <img src={view.src} alt="" draggable={false} />
                 : view.outside && <span className="moodboard-tile__outside"><OutsideImageNote /></span>}
@@ -95,7 +99,7 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
             </div>
             <ImageColors analysis={analysis} imageId={img.id} />
             <div className="moodboard-tile__controls">
-              <label>
+              <label data-agent-anchor={agentAnchor(board, img.id, 'weight')}>
                 <span>Weight {img.weight.toFixed(2)}</span>
                 <input
                   type="range"
@@ -130,7 +134,7 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
                   <span className="moodboard-tile__cover-hint">The board opens on this image</span>
                 )}
               </div>
-              <label className="moodboard-tile__note">
+              <label className="moodboard-tile__note" data-agent-anchor={agentAnchor(board, img.id, 'note')}>
                 <span>Image note</span>
                 <AutoGrowTextarea
                   rows={2}

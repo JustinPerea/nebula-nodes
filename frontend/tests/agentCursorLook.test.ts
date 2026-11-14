@@ -566,7 +566,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
   it('measures the arrow the layer draws', () => {
     expect(AGENT_CURSOR_ARROW_POINTS).toEqual(ARROW);
     expect(AGENT_CURSOR_ARROW_PATH).toBe(`M${ARROW.map((p) => `${p.x} ${p.y}`).join(' L')} Z`);
-    const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    const layer = readFileSync(resolve(__dirname, '../src/components/agent-cursor/AgentCursorField.tsx'), 'utf8');
     expect(layer).toMatch(/<path className="agent-cursor__arrow" d=\{AGENT_CURSOR_ARROW_PATH\} \/>/);
   });
 

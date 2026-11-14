@@ -19,7 +19,7 @@ export const AGENT_PRESENCE_FEED_MAX = 64;
 
 export type PresenceFeedEvent = Extract<
   ExecutionEvent,
-  { type: 'agentPresence' | 'agentPresenceReplay' | 'agentPresenceArrival' | 'socketDemoted' | 'graphSync' }
+  { type: 'agentPresence' | 'agentPresenceReplay' | 'agentPresenceArrival' | 'agentPresenceLeave' | 'agentPresenceRetarget' | 'socketDemoted' | 'graphSync' }
 >;
 /** One event and when this tab heard it (ms), so a late drain keeps its age. */
 export type PresenceSink = (event: PresenceFeedEvent, receivedAt: number) => void;
@@ -32,7 +32,7 @@ let held: Held[] = [];
 
 function wanted(event: ExecutionEvent): event is PresenceFeedEvent {
   return event.type === 'agentPresence' || event.type === 'agentPresenceReplay' || event.type === 'agentPresenceArrival'
-    || event.type === 'socketDemoted'
+    || event.type === 'agentPresenceLeave' || event.type === 'agentPresenceRetarget' || event.type === 'socketDemoted'
     || (event.type === 'graphSync' && Boolean(event.graphReplaced || event.empty));
 }
 

@@ -46,6 +46,8 @@
    the left edge holds its small gap, and the corners stay concentric on every
    frame because the whole thing scales together. */
 .workspace-rail__shell {
+  /* The launcher badge's ring (lib/agentLauncherDots.ts): this shell's own surface, as drawn below. */
+  --agent-launcher-surface: rgb(24, 24, 26);
   position: relative;
   display: flex;
   max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
@@ -237,6 +239,7 @@ body.app-slava-restraint .workspace-dock-panel.panel.panel--exiting {
 }
 
 body.app-slava-restraint .workspace-rail__shell {
+  --agent-launcher-surface: rgb(28, 28, 31);
   border-color: var(--sr-edge, rgba(255, 255, 255, 0.09));
   background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
   box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.55));
