@@ -3,6 +3,7 @@ import type {
   RouteSpec,
 } from '../types';
 import { usesKreaAccount } from './kreaConnection';
+import { universalSettingLabel } from './universalSettingLabel';
 
 /**
  * Which route one run of a node takes, and so which provider it bills.
@@ -684,7 +685,7 @@ function optionLabelOf(param: ParamDefinition | undefined, value: unknown): stri
  * "Grounding off", "Draft (fast preview)" (a switch that is on), or just the
  * label for text (node_route._setting_text). */
 export function settingText(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = param?.label || key;
+  const label = param?.label || universalSettingLabel(key);
   if (Array.isArray(param?.options) && param.options.length) return `${label} ${optionLabelOf(param, value)}`;
   if (typeof value === 'boolean') return value ? label : `${label} off`;
   if (typeof value === 'number') return `${label} ${matchValue(value)}`;
@@ -1057,7 +1058,7 @@ function paramDef(definition: RoutedDefinition, key: string): ParamDefinition | 
 
 /** “Draft (fast preview)” on, “Safety” set to 5, “Resolution” set to 1.5K. */
 function personSetting(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = `“${param?.label || key}”`;
+  const label = `“${param?.label || universalSettingLabel(key)}”`;
   if (Array.isArray(param?.options) && param.options.length && hasValue(value)) {
     return `${label} set to ${plain(optionLabelOf(param, value))}`;
   }

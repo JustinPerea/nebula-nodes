@@ -23,15 +23,15 @@ export const CARD_GLYPH: Readonly<Record<string, string>> = {
 
 /** The type name of a card whose title is a fixed name. */
 const FIXED_NAME: Readonly<Record<string, string>> = {
-  referenceSetNode: 'Reference Set',
-  cameraRigNode: 'Camera Rig',
-  cinemaSceneNode: 'Cinema Scene',
-  editNode: 'Video Edit',
-  remotionNode: 'Remotion Composition',
+  referenceSetNode: 'Reference set',
+  cameraRigNode: 'Camera rig',
+  cinemaSceneNode: 'Cinema scene',
+  editNode: 'Video edit',
+  remotionNode: 'Remotion composition',
   paperSourceNode: 'Paper source',
 };
 
-/** A glyph card's title as the card prints it: "◈ Camera Rig". */
+/** A glyph card's title as the card prints it: "◈ Camera rig". */
 export function glyphTitle(type: string, text: string): string {
   return `${CARD_GLYPH[type]} ${text}`;
 }

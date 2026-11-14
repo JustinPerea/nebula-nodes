@@ -5141,7 +5141,8 @@ model's file inputs are its ports. One backend module has the rules
   model's ports without a node (and, for Replicate, its params and version).
   A Replicate param's `label` is its key in sentence case ("Guidance
   scale"), as the Inspector and your cursor's bubble show it; a port's
-  label stays in Title Case ("Input Image").
+  label is sentence case too ("Input image"), and a camelCase key splits
+  into words ("filePath" gives "File path").
 - The canvas export, the connection checks (`port_contracts.node_ports`) and the
   run check read `_model_ports`, so the canvas draws the ports and connections an
   agent made without a reload. A node saved before 2026-10-20 has no

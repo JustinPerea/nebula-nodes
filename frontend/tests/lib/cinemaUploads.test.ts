@@ -7,7 +7,8 @@ const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof import('../../src/lib/backend')>(),
   apiFetch: (...args: unknown[]) => fetchMock(...args), backendAssetUrlSync: (url: string) => `http://localhost:8000${url}` }));
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
-import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../src/lib/cinemaUploads';
+import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload, uploadFailure } from '../../src/lib/cinemaUploads';
+import { ConnectionLostError, FailureNotice, RequestFailedError } from '../../src/lib/errorCopy';
 import { createCinemaUploadStore, getCinemaUploadIssue, useCinemaUploadStore,
   CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadReasonRole } from '../../src/store/cinemaUploadStore';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
@@ -107,7 +108,7 @@ describe('Cinema reference ownership', () => {
   it('keeps per-file HTTP errors actionable, retains successful references and retries explicitly', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
-    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: "Couldn't upload bad.png. Invalid image bytes", canRetry: true }); // error-copy round 2 (GM)
+    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server didn’t accept it. Try again.', canRetry: true }); // GM 2026-11 copy sweep: the because form, ending as its Try again does
     expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “bad.png” again or remove it.');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);
@@ -130,7 +131,7 @@ describe('Cinema reference ownership', () => {
     pending.resolve(response('old.png')); await drain(); useGraphStore.getState().releaseGraphImport();
     fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) });
     retryCinemaReferenceUpload(id);
-    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: expect.stringContaining('Invalid image bytes') }));
+    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: 'Nebula couldn’t upload “reference.png” because the server didn’t accept it. Try again.' }));
     expect(uploadReasonRole(uploads()[0])).toBe('alert');
   });
   it('keeps restored interruption metadata through persisted-owner terminal settlement before graph hydration', async () => {
@@ -208,5 +209,29 @@ describe('Cinema current-recipe admission', () => {
     await useGraphStore.getState().rerunHistoryRecord('saved'); expect(api.generateCinemaShot).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.generateCinemaShot).mock.calls[0][0]).toEqual(snapshot.nodes);
     expect(useGraphStore.getState().runHistory.find((record) => record.id === 'saved')).toBe(saved);
+  });
+});
+
+describe('GM 2026-11 copy sweep item 20: the upload row\'s failure lines, in the because form', () => {
+  const failed = (status: number, detail?: string) => new RequestFailedError("Couldn't upload photo.png.", status, { detail });
+  it.each([
+    ['the server is not answering', new ConnectionLostError(new TypeError('Failed to fetch')),
+      'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
+    ['a 503 from a gateway', failed(503), 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Try again.', true],
+    ['a 500', failed(500), 'Nebula couldn’t upload “photo.png” because the server hit an error. Try again.', true],
+    ['a 429', failed(429), 'Nebula couldn’t upload “photo.png” because the server is busy. Try again.', true],
+    ['a refusal with no listed reason', failed(415, 'Invalid image bytes'), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it. Try again.', true],
+    ['a reply with no image', new FailureNotice("Couldn't upload photo.png.", 'The upload sent back no image.'),
+      'Nebula couldn’t upload “photo.png” because the server sent back no image. Try again.', true],
+    ['a file over the size limit', new FailureNotice("Couldn't upload photo.png.", 'Image exceeds the 20 MB limit.'),
+      'Nebula couldn’t upload “photo.png” because it’s over the 20 MB limit. Choose a smaller image.', false],
+    ['a 413', failed(413), 'Nebula couldn’t upload “photo.png” because it’s over the 20 MB limit. Choose a smaller image.', false],
+    ['a wrong file type', new FailureNotice("Couldn't upload photo.png.", 'Use a PNG, JPEG, GIF or WebP image.'),
+      'Nebula couldn’t upload “photo.png” because it isn’t a PNG, JPEG, GIF or WebP image. Choose one of those.', false],
+    ['a refusal because you are signed out', failed(401), 'Nebula couldn’t upload “photo.png” because you don’t have access to this anymore. Reload to sign in again.', false],
+  ])('%s', (_why, error, line, retryable) => {
+    expect(uploadFailure('photo.png', error)).toEqual({ line, retryable });
+    // The rule: a line beside Try again ends in "Try again."; one without it names the fix.
+    expect(line.endsWith('Try again.')).toBe(retryable);
   });
 });

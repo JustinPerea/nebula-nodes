@@ -96,7 +96,7 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
     render(<Flow nodes={[cinemaNode(scene)]} />);
     expect(document.querySelector('[data-node-card-boundary]')).toBeNull();
     expect(document.querySelector('.react-flow__node')).not.toBeNull();
-    expect(document.body.textContent).toContain('Cinema Scene');
+    expect(document.body.textContent).toContain('Cinema scene');
   });
 
   it.each([

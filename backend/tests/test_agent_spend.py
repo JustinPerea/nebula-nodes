@@ -691,7 +691,7 @@ def test_a_scene_on_a_base_without_a_list_price_needs_a_proposal(client):
     for base in (None, "seedream-4-5"):  # None: the handler's default base
         response = client.post("/api/cinema/generate-shot", json=_shot_request(1, base=base))
         assert response.status_code == 403
-        assert "no list price for c1 (Cinema Scene)" in response.json()["detail"]
+        assert "no list price for c1 (Cinema scene)" in response.json()["detail"]
     assert spent(client) == 0
 
 

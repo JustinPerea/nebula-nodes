@@ -112,19 +112,30 @@ def modality_ports(row: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[d
     return inputs, outputs
 
 
-def _title(key: str) -> str:
-    """A Replicate file input's port label, in the Title Case every other
-    port label uses ("input_image" → "Input Image")."""
-    return re.sub(r"\b\w", lambda match: match.group(0).upper(), key.replace("_", " "), flags=re.ASCII)
-
-
 def setting_label(key: str) -> str:
-    """A universal node's provider setting as the Inspector and an agent's
-    cursor name it (GM, PR #198 r1 item 7): the key in sentence case,
-    "guidance_scale" → "Guidance scale". The frontend's twin is
-    lib/universalSettingLabel.ts."""
-    words = key.replace("_", " ")
-    return words[:1].upper() + words[1:]
+    """A raw provider key as a person reads it (GM, PR #198 r1 item 7, then
+    the 2026-11 copy sweep item 17): split into words and set in sentence
+    case. Snake case, camelCase and PascalCase all split, and an acronym stays
+    in capitals: "guidance_scale" gives "Guidance scale", "filePath" gives
+    "File path", "numInferenceSteps" gives "Num inference steps", "imageURL"
+    gives "Image URL". The frontend's twin is lib/universalSettingLabel.ts;
+    both are held to the same table of cases."""
+    spaced = key.replace("_", " ")
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", spaced, flags=re.ASCII)
+    spaced = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", spaced, flags=re.ASCII)
+    words = [
+        word if re.fullmatch(r"[A-Z]{2,}", word, flags=re.ASCII) else word.lower()
+        for word in spaced.split(" ")
+        if word != ""
+    ]
+    joined = " ".join(words)
+    return joined[:1].upper() + joined[1:]
+
+
+def _title(key: str) -> str:
+    """A Replicate file input's port label, in sentence case like every
+    other label ("input_image" gives "Input image")."""
+    return setting_label(key)
 
 
 def replicate_inputs(schema: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -290,7 +301,7 @@ def configure(definition_id: str, params: Mapping[str, Any], model: str, data: M
     """The node's params and ports for ``model``, from the provider's data for
     it (an OpenRouter/Nous catalog row, a Replicate schema), as the picker set
     them: over ``params``, the model and its canvas-owned params (Replicate:
-    the schema's defaults too, over the old values, as "Fetch Schema" did)."""
+    the schema's defaults too, over the old values, as "Fetch schema" did)."""
     base = dict(params)
     if definition_id == "replicate-universal":
         inputs, dynamic_params = replicate_inputs(data)

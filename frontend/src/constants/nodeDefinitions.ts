@@ -22,7 +22,7 @@ const QC_JEV_PARAMS: ParamDefinition[] = [
 export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'paper-source': {
     id: 'paper-source',
-    displayName: 'Paper Source',
+    displayName: 'Paper source',
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2134,7 +2134,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'video-edit': {
     id: 'video-edit',
-    displayName: 'Video Edit',
+    displayName: 'Video edit',
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2158,7 +2158,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'remotion-node': {
     id: 'remotion-node',
-    displayName: 'Remotion Composition',
+    displayName: 'Remotion composition',
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2251,18 +2251,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'cinema-scene': {
     id: 'cinema-scene',
-    displayName: 'Cinema Scene',
+    displayName: 'Cinema scene',
     category: 'cinematic',
     apiProvider: 'utility',
     apiEndpoint: '',
     envKeyName: [],
     executionPattern: 'async-poll',
-    capabilityNote: 'Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.',
+    capabilityNote: 'Camera rig adds prompt guidance. Reference set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.',
     inputPorts: [
-      { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
+      { id: 'character_refs', label: 'Character refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
-      { id: 'camera_rig', label: 'Camera Rig', dataType: 'CameraRig', required: false },
-      { id: 'reference_set', label: 'Reference Set', dataType: 'ReferenceSet', required: false },
+      { id: 'camera_rig', label: 'Camera rig', dataType: 'CameraRig', required: false },
+      { id: 'reference_set', label: 'Reference set', dataType: 'ReferenceSet', required: false },
     ],
     // Output ports are dynamic — one Image port per shot, written at runtime from
     // the editor-managed scene spec. Starts empty (mirrors remotion-node).
@@ -2369,7 +2369,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'camera-rig': {
     id: 'camera-rig',
-    displayName: 'Camera Rig',
+    displayName: 'Camera rig',
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2379,7 +2379,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     // CameraRigBundle emitted on the camera_rig output port.
     inputPorts: [],
     outputPorts: [
-      { id: 'camera_rig', label: 'Camera Rig', dataType: 'CameraRig', required: false },
+      { id: 'camera_rig', label: 'Camera rig', dataType: 'CameraRig', required: false },
     ],
     params: [
       { key: 'height', label: 'Height (m)', type: 'float', required: false, default: 1.7, min: 0.1, max: 10, step: 0.1 },
@@ -2549,7 +2549,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'reference-set': {
     id: 'reference-set',
-    displayName: 'Reference Set',
+    displayName: 'Reference set',
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2568,7 +2568,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'background', label: 'Background', dataType: 'Image', required: false },
     ],
     outputPorts: [
-      { id: 'reference_set', label: 'Reference Set', dataType: 'ReferenceSet', required: false },
+      { id: 'reference_set', label: 'Reference set', dataType: 'ReferenceSet', required: false },
     ],
     params: [
       { key: 'style_weight', label: 'Style Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
@@ -2674,7 +2674,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: true,
         default: '',
-        placeholder: 'Loading models...',
+        placeholder: 'Loading models…',
       },
       {
         key: 'temperature',
@@ -4536,7 +4536,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
+          { label: 'Auto', value: 'auto' },
           { label: 'hf-space', value: 'hf-space' },
         ],
         hidden: true,
@@ -7617,9 +7617,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'fal', value: 'fal' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'fal.ai', value: 'fal' },
         ],
         hidden: true,
       },
@@ -13703,11 +13703,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'fal', value: 'fal' },
-          { label: 'replicate', value: 'replicate' },
-          { label: 'openrouter', value: 'openrouter' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Replicate', value: 'replicate' },
+          { label: 'OpenRouter', value: 'openrouter' },
         ],
         hidden: true,
       },
@@ -13879,9 +13879,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'openrouter', value: 'openrouter' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'OpenRouter', value: 'openrouter' },
         ],
         hidden: true,
       },
@@ -14017,7 +14017,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: 'auto',
-        options: [{ label: 'auto', value: 'auto' }, { label: 'fal', value: 'fal' }],
+        options: [{ label: 'Auto', value: 'auto' }, { label: 'fal.ai', value: 'fal' }],
         hidden: true,
       },
     ],
@@ -14106,12 +14106,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'fal', value: 'fal' },
-          { label: 'replicate', value: 'replicate' },
-          { label: 'openrouter', value: 'openrouter' },
-          { label: 'krea', value: 'krea' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Replicate', value: 'replicate' },
+          { label: 'OpenRouter', value: 'openrouter' },
+          { label: 'Krea', value: 'krea' },
         ],
         hidden: true,
       },
@@ -14390,10 +14390,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'fal', value: 'fal' },
-          { label: 'krea', value: 'krea' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Krea', value: 'krea' },
         ],
         hidden: true,
       },
@@ -14459,11 +14459,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'bfl', value: 'bfl' },
-          { label: 'fal', value: 'fal' },
-          { label: 'replicate', value: 'replicate' },
-          { label: 'krea', value: 'krea' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'Black Forest Labs', value: 'bfl' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Replicate', value: 'replicate' },
+          { label: 'Krea', value: 'krea' },
         ],
         hidden: true,
       },
@@ -14556,9 +14556,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'fal', value: 'fal' },
-          { label: 'replicate', value: 'replicate' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Replicate', value: 'replicate' },
         ],
         hidden: true,
       },
@@ -14626,7 +14626,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: 'auto',
-        options: [{ label: 'auto', value: 'auto' }, { label: 'fal', value: 'fal' }],
+        options: [{ label: 'Auto', value: 'auto' }, { label: 'fal.ai', value: 'fal' }],
         hidden: true,
       },
     ],
@@ -14664,9 +14664,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'auto', value: 'auto' },
-          { label: 'fal', value: 'fal' },
-          { label: 'replicate', value: 'replicate' },
+          { label: 'Auto', value: 'auto' },
+          { label: 'fal.ai', value: 'fal' },
+          { label: 'Replicate', value: 'replicate' },
         ],
         hidden: true,
       },
@@ -14721,7 +14721,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: 'auto',
-        options: [{ label: 'auto', value: 'auto' }, { label: 'krea', value: 'krea' }, { label: 'fal', value: 'fal' }],
+        options: [{ label: 'Auto', value: 'auto' }, { label: 'Krea', value: 'krea' }, { label: 'fal.ai', value: 'fal' }],
         hidden: true,
       },
       {

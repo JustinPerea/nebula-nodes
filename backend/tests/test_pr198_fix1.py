@@ -53,8 +53,8 @@ def test_the_picker_labels_a_replicate_models_settings_in_sentence_case():
     }}})
     assert [param["label"] for param in params] == ["Guidance scale", "Num inference steps"]
     assert universal_ports.setting_label("guidance_scale") == "Guidance scale"
-    # Ports keep the Title Case every other port label uses.
-    assert [port["label"] for port in ports] == ["Input Image"]
+    # Ports take the same sentence case.
+    assert [port["label"] for port in ports] == ["Input image"]
 
 
 def test_a_setting_with_no_label_leaves_the_bubble_empty_and_the_log_says_what_changed(api):  # noqa: F811
@@ -209,3 +209,26 @@ def test_undo_of_a_shot_delete_brings_the_shot_back_with_its_image_for_the_perso
     assert response.status_code == 200, response.text
     shots = {shot["id"]: shot for shot in graph.nodes[other]["params"]["scene"]["shots"]}
     assert shots["s3"]["output"] == {"status": "idle"}
+
+
+# The shared table of cases: frontend/tests/pr198Fix1Ui.test.tsx holds the same rows
+# against universalSettingLabel, so the two sides give one label for one key.
+RAW_KEY_LABELS = [
+    ("guidance_scale", "Guidance scale"),
+    ("seed", "Seed"),
+    ("num_inference_steps", "Num inference steps"),
+    ("input_image", "Input image"),
+    ("filePath", "File path"),
+    ("FilePath", "File path"),
+    ("guidanceScale", "Guidance scale"),
+    ("numInferenceSteps", "Num inference steps"),
+    ("imageURL", "Image URL"),
+    ("HTTPUrl", "HTTP url"),
+    ("Guidance Scale", "Guidance scale"),
+]
+
+
+@pytest.mark.parametrize(("key", "label"), RAW_KEY_LABELS)
+def test_a_raw_key_gets_one_sentence_case_label_on_both_sides(key, label):
+    assert universal_ports.setting_label(key) == label
+    assert universal_ports._title(key) == label

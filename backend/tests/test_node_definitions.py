@@ -16,7 +16,7 @@ def test_remotion_node_definition_exists(definitions):
     assert "remotion-node" in definitions, "remotion-node entry missing"
     entry = definitions["remotion-node"]
     assert entry["id"] == "remotion-node"
-    assert entry["displayName"] == "Remotion Composition"
+    assert entry["displayName"] == "Remotion composition"
     assert entry["category"] == "utility"
     assert entry["apiProvider"] == "utility"
     assert entry["executionPattern"] == "async-poll"

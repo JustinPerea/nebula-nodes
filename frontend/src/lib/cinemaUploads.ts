@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { uploadReference } from './uploadReference';
-import { failureMessage } from './errorCopy';
+import { FailureNotice, RequestFailedError, isNoAnswer, loadFailedLine } from './errorCopy';
+import { quoted } from './quoted';
+import { shownFileName } from './fileName';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../store/cinemaUploadStore';
 import { useGraphStore } from '../store/graphStore';
 import type { CinemaSceneSpec } from '../types';
@@ -8,6 +10,40 @@ import type { CinemaSceneSpec } from '../types';
 // Files and request ownership last for this page only, never saved graph/history/storage.
 const files = new Map<string, File>();
 const controllers = new Map<string, AbortController>();
+
+/** uploadReference's own reasons for a file it turned away before sending (lib/uploadReference.ts). */
+const OVER_LIMIT_REASON = 'Image exceeds the 20 MB limit.';
+const WRONG_TYPE_REASON = 'Use a PNG, JPEG, GIF or WebP image.';
+const NO_IMAGE_REASON = 'The upload sent back no image.';
+
+/**
+ * A failed upload's line for the Cinema row, in the because form with Nebula
+ * the subject ("Nebula couldn’t upload “photo.png” because the server isn’t
+ * answering. Try again."), built from the shared load-failure helper so its
+ * reasons are the app's. The row's Try again sits beside the line, so the
+ * line ends in "Try again." (the standing rule); a reason where trying again
+ * cannot help (a file over the size limit, a wrong type, a refusal because
+ * you're signed out) names the fix instead, ends without it, and the row
+ * offers no Try again (`retryable` false).
+ */
+export function uploadFailure(name: string, error: unknown): { line: string; retryable: boolean } {
+  const lead = `Nebula couldn’t upload ${quoted(shownFileName(name))} because`;
+  const turnedAway = error instanceof FailureNotice ? error.reason : '';
+  if (turnedAway === OVER_LIMIT_REASON || (error instanceof RequestFailedError && error.status === 413)) {
+    return { line: `${lead} it’s over the 20 MB limit. Choose a smaller image.`, retryable: false };
+  }
+  if (turnedAway === WRONG_TYPE_REASON) {
+    return { line: `${lead} it isn’t a PNG, JPEG, GIF or WebP image. Choose one of those.`, retryable: false };
+  }
+  if (turnedAway === NO_IMAGE_REASON) return { line: `${lead} the server sent back no image. Try again.`, retryable: true };
+  if (isNoAnswer(error)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
+  const shared = loadFailedLine(`upload ${quoted(shownFileName(name))}`, error)
+    // The shared lines end in a step that fits a page load ("Try again in a moment.", "Check that Nebula is
+    // running, then try again."); beside the row's own button they end in "Try again.".
+    .replace(/(?:Try again in a moment\.|Check that Nebula is running, then try again\.)$/, 'Try again.');
+  const line = shared || `${lead} the server isn’t answering. Try again.`;
+  return { line, retryable: line.endsWith('Try again.') };
+}
 
 function hasTarget(nodeId: string, shotId?: string) {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId
@@ -45,8 +81,8 @@ async function finish(upload: CinemaReferenceUpload) {
   } catch (error) {
     if (!owns(upload)) return;
     useCinemaUploadStore.getState().setUploads((uploads) => uploads.map((item) => item.id === upload.id
-      // uploadReference's error names the file and the reason (error-copy round 2).
-      ? { ...item, status: 'error', error: failureMessage(error, `Couldn't upload ${upload.name}.`) }
+      // The line names the file and the reason, and ends as its buttons do (uploadFailure).
+      ? { ...item, status: 'error', ...(() => { const failure = uploadFailure(upload.name, error); return { error: failure.line, canRetry: failure.retryable }; })() }
       : item));
   } finally { controllers.delete(upload.attempt); }
 }

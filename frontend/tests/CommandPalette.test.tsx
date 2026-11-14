@@ -31,8 +31,8 @@ describe('CommandPalette node insertion', () => {
       fireEvent.click(screen.getByRole('option', { name: new RegExp(query) }));
     };
 
-    insert('Cinema Scene');
-    insert('Remotion Composition');
+    insert('Cinema scene');
+    insert('Remotion composition');
 
     expect(addNode).toHaveBeenCalledTimes(2);
     const [first, second] = addNode.mock.calls.map((call) => call[1]);

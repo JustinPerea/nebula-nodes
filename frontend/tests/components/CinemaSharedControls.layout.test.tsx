@@ -141,18 +141,18 @@ describe('Cinema collapsed shared scene settings', () => {
     expect(change).not.toHaveBeenCalled();
   });
 
-  it('error-copy round 2 (GM\'s WRAP rule): a retryable upload\'s reason drops its own "try again"', () => {
+  it('GM 2026-11 copy sweep item 20: a retryable upload\'s line is the because form and ends in "Try again."', () => {
     metadata.uploads = [
       { id: 'failed', nodeId: 'scene', name: 'failed.png', status: 'error', canRetry: true,
-        error: "Couldn't upload failed.png. Nebula's server isn't answering. Make sure it's running, then try again." },
+        error: 'Nebula couldn’t upload “failed.png” because the server isn’t answering. Try again.' },
       { id: 'kept', nodeId: 'scene', name: 'kept.png', status: 'error', canRetry: false,
-        error: "Couldn't upload kept.png. Nebula didn't respond. Try again." },
+        error: 'Nebula couldn’t upload “kept.png” because it’s over the 20 MB limit. Choose a smaller image.' },
     ];
     render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
     expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
-      "Couldn't upload failed.png. Nebula's server isn't answering. Make sure it's running.",
-      // No Retry button here (an upload from before a reload): the line keeps its "try again".
-      "Couldn't upload kept.png. Nebula didn't respond. Try again.",
+      'Nebula couldn’t upload “failed.png” because the server isn’t answering. Try again.',
+      // No Try again here (trying again cannot help): the line names the fix.
+      'Nebula couldn’t upload “kept.png” because it’s over the 20 MB limit. Choose a smaller image.',
     ]);
   });
 
@@ -174,9 +174,9 @@ describe('Cinema collapsed shared scene settings', () => {
 
   it('GM PR #205 r14 item 4, control: a failed upload the person must fix stays an alert in the warning colour', () => {
     metadata.uploads = [{ id: 'failed', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
-      error: "Couldn't upload ref.png. The file is too large." }];
+      error: 'Nebula couldn’t upload “ref.png” because the server hit an error. Try again.' }];
     render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
-    expect(screen.getByRole('alert')).toHaveTextContent(/too large/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/server hit an error/);
   });
 
   it('retains multi-reference attachment and connected reference ownership inside the disclosure', () => {

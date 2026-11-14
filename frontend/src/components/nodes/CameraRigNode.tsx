@@ -222,7 +222,7 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
     <div className={`camera-rig-node ${selected ? 'camera-rig-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="camera-rig-node__title">{fixedCardTitle('cameraRigNode')}</div>
       <p className="camera-rig-node__guidance">
-        Connect to Cinema Scene for camera prompt guidance. Models may interpret it differently.
+        Connect to Cinema scene for camera prompt guidance. Models may interpret it differently.
       </p>
 
       <div className="camera-rig-node__diagram">

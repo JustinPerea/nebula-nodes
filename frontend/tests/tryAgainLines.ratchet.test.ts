@@ -22,6 +22,8 @@ const CLOSE_ROWS: [where: string, line: string][] = [
 ];
 import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { projectRestoreFailedLine } from '../src/components/moodboard-studio/boardSaveLine';
+import { uploadFailure } from '../src/lib/cinemaUploads';
+import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
 // GM r23 on #208: a line shown with a [Try again] button ends in "Try
@@ -34,6 +36,12 @@ const ROWS: [where: string, line: string][] = [
   // #210 round 6m (GM r53 Q1): Restore project's neutral failures, each beside its Try again.
   ["Restore project, the server isn't answering (#210)", projectRestoreFailedLine('Shore', 'noAnswer').text],
   ["Restore project, the server didn't accept it (#210)", projectRestoreFailedLine('Shore', 'refused').text],
+  // GM 2026-11 copy sweep item 20: the Cinema upload row's retryable reasons, each beside its Try again.
+  ["the Cinema upload row, the server isn't answering", uploadFailure('photo.png', new ConnectionLostError(new TypeError('Failed to fetch'))).line],
+  ['the Cinema upload row, the server is busy', uploadFailure('photo.png', new RequestFailedError('', 429)).line],
+  ['the Cinema upload row, the server hit an error', uploadFailure('photo.png', new RequestFailedError('', 500)).line],
+  ["the Cinema upload row, the server didn't respond", uploadFailure('photo.png', new RequestFailedError('', 503)).line],
+  ["the Cinema upload row, the server didn't accept it", uploadFailure('photo.png', new RequestFailedError('', 415, { detail: 'Invalid image bytes' })).line],
 ];
 
 describe('every line shown with Try again ends in "Try again."', () => {

@@ -133,7 +133,7 @@ const ALLOWLIST: Record<string, string> = {
   'lib/cinemaMotion.ts': "Send to motion's local node; called from CinemaShotPanel, whose Send to motion takes the lock",
   'lib/cinemaUploads.ts': "a Cinema reference upload writing its scene; started from CinemaSharedControls and CinemaShotPanel, whose attach and Retry buttons take the lock",
   'store/canvasProposalsStore.ts': "a proposal's Accept and its run; ProposalBar's buttons take the lock, the store gate refuses them, and Accept is fenced (proposal_canvas_replaced)",
-  'store/uiStore.ts': "opening the trim editor makes or finds its edit node: VideoEditAction's button takes the lock (EditNode's Open Editor opens its own node read-only, openEditNode, which writes nothing); and selection changes; no control",
+  'store/uiStore.ts': "opening the trim editor makes or finds its edit node: VideoEditAction's button takes the lock (EditNode's Open editor opens its own node read-only, openEditNode, which writes nothing); and selection changes; no control",
 };
 
 /** Fix round 2 of PR #200 (review 2, L-5): G's holes closed.
@@ -1824,7 +1824,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     }
   });
 
-  // EditNode's Open Editor (review 1 L-5) left the list in fix round 2
+  // EditNode's Open editor (review 1 L-5) left the list in fix round 2
   // (review 2 L-6): it opens its own editor, read-only, and writes nothing.
   // Fix round 25 of PR #198 (review 23 NIT-4): the merge trusted any `act`
   // param and `lockedAction` by name. Now an `act` counts only where every

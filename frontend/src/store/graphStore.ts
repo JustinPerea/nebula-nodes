@@ -1972,9 +1972,9 @@ function paramLabel(node: Node<NodeData>, key: string): string | null {
   return dynamic ? universalSettingLabel(key) : null;
 }
 
-/** A param as the Agent log names it: its label, else its raw key. */
+/** A param as the Agent log names it: its label, else its key in sentence case. */
 function paramLogName(node: Node<NodeData> | undefined, key: string): string {
-  return (node ? paramLabel(node, key) : null) ?? key;
+  return (node ? paramLabel(node, key) : null) ?? universalSettingLabel(key);
 }
 
 /** GM round 22 (4a): the Agent log's line for a delete Nebula answered
@@ -14912,7 +14912,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       position: { x: sourceNode.position.x + 280, y: sourceNode.position.y },
       data: {
         definitionId: 'video-edit',
-        label: 'Video Edit',
+        label: 'Video edit',
         state: 'idle' as const,
         inputs: {},
         outputs: {},

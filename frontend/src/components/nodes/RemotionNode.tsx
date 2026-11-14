@@ -37,7 +37,7 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
 
   const summary =
     layerCount === 0
-      ? 'no layers yet'
+      ? 'No layers yet.'
       : `${layerCount} layer${layerCount === 1 ? '' : 's'} · ${totalFrames}f`;
 
   return (
@@ -53,7 +53,7 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
           className="remotion-node__open"
           onClick={() => enterRemotionEditor(id)}
         >
-          Open Editor
+          Open editor
         </button>
       )}
       <NodeRunError data={data as unknown as NodeData} className="remotion-node__run-error" />

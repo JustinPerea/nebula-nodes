@@ -1,7 +1,7 @@
 {
   "paper-source": {
     "id": "paper-source",
-    "displayName": "Paper Source",
+    "displayName": "Paper source",
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4417,7 +4417,7 @@
   },
   "video-edit": {
     "id": "video-edit",
-    "displayName": "Video Edit",
+    "displayName": "Video edit",
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4472,7 +4472,7 @@
   },
   "remotion-node": {
     "id": "remotion-node",
-    "displayName": "Remotion Composition",
+    "displayName": "Remotion composition",
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4735,7 +4735,7 @@
   },
   "cinema-scene": {
     "id": "cinema-scene",
-    "displayName": "Cinema Scene",
+    "displayName": "Cinema scene",
     "category": "cinematic",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4744,7 +4744,7 @@
     "inputPorts": [
       {
         "id": "character_refs",
-        "label": "Character Refs",
+        "label": "Character refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -4758,13 +4758,13 @@
       },
       {
         "id": "camera_rig",
-        "label": "Camera Rig",
+        "label": "Camera rig",
         "dataType": "CameraRig",
         "required": false
       },
       {
         "id": "reference_set",
-        "label": "Reference Set",
+        "label": "Reference set",
         "dataType": "ReferenceSet",
         "required": false
       }
@@ -4779,7 +4779,7 @@
         "hidden": true
       }
     ],
-    "capabilityNote": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
+    "capabilityNote": "Camera rig adds prompt guidance. Reference set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
     "providerVia": {
       "kind": "model",
       "path": [
@@ -4955,7 +4955,7 @@
   },
   "camera-rig": {
     "id": "camera-rig",
-    "displayName": "Camera Rig",
+    "displayName": "Camera rig",
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4965,7 +4965,7 @@
     "outputPorts": [
       {
         "id": "camera_rig",
-        "label": "Camera Rig",
+        "label": "Camera rig",
         "dataType": "CameraRig",
         "required": false
       }
@@ -5713,7 +5713,7 @@
   },
   "reference-set": {
     "id": "reference-set",
-    "displayName": "Reference Set",
+    "displayName": "Reference set",
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -5766,7 +5766,7 @@
     "outputPorts": [
       {
         "id": "reference_set",
-        "label": "Reference Set",
+        "label": "Reference set",
         "dataType": "ReferenceSet",
         "required": false
       }
@@ -5994,7 +5994,7 @@
         "type": "string",
         "required": true,
         "default": "",
-        "placeholder": "Loading models..."
+        "placeholder": "Loading models…"
       },
       {
         "key": "temperature",
@@ -14394,15 +14394,15 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           }
         ],
@@ -24091,7 +24091,7 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
@@ -24856,23 +24856,23 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "replicate",
+            "label": "Replicate",
             "value": "replicate"
           },
           {
-            "label": "openrouter",
+            "label": "OpenRouter",
             "value": "openrouter"
           }
         ],
@@ -25179,15 +25179,15 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "openrouter",
+            "label": "OpenRouter",
             "value": "openrouter"
           }
         ],
@@ -25439,11 +25439,11 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           }
         ],
@@ -25623,27 +25623,27 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "replicate",
+            "label": "Replicate",
             "value": "replicate"
           },
           {
-            "label": "openrouter",
+            "label": "OpenRouter",
             "value": "openrouter"
           },
           {
-            "label": "krea",
+            "label": "Krea",
             "value": "krea"
           }
         ],
@@ -26274,19 +26274,19 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "krea",
+            "label": "Krea",
             "value": "krea"
           }
         ],
@@ -26391,23 +26391,23 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "bfl",
+            "label": "Black Forest Labs",
             "value": "bfl"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "replicate",
+            "label": "Replicate",
             "value": "replicate"
           },
           {
-            "label": "krea",
+            "label": "Krea",
             "value": "krea"
           }
         ],
@@ -26556,15 +26556,15 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "replicate",
+            "label": "Replicate",
             "value": "replicate"
           }
         ],
@@ -26680,11 +26680,11 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           }
         ],
@@ -26753,15 +26753,15 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           },
           {
-            "label": "replicate",
+            "label": "Replicate",
             "value": "replicate"
           }
         ],
@@ -26864,15 +26864,15 @@
         "default": "auto",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "krea",
+            "label": "Krea",
             "value": "krea"
           },
           {
-            "label": "fal",
+            "label": "fal.ai",
             "value": "fal"
           }
         ],

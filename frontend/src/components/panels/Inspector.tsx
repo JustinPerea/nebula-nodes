@@ -127,7 +127,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // /api/settings, both the person's alone. The pickers lock as one group with one line; the
   // star has its own.
   const modelLock = usePersonLock('change the model');
-  // Replicate's Fetch Schema has its own line (GM, 2026-11-05): the Model ID field stays
+  // Replicate's Fetch schema has its own line (GM, 2026-11-05): the Model ID field stays
   // editable like any param, so only the fetch is the person's.
   const schemaLock = usePersonLock('fetch the schema');
   const favoriteLock = usePersonLock('save favorites');
@@ -1360,7 +1360,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-hidden="true"
               focusable="false"
             />
-            <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
+            <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh schema' : 'Fetch schema')}</span>
           </button>
         )}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={schemaLock} place="control" />}

@@ -211,6 +211,23 @@ describe('GM (7): a universal node\'s settings, and the Agent log', () => {
     expect(universalSettingLabel('num_inference_steps')).toBe('Num inference steps');
   });
 
+  // The same rows as RAW_KEY_LABELS in backend/tests/test_pr198_fix1.py: one label for one key on both sides.
+  it.each([
+    ['guidance_scale', 'Guidance scale'],
+    ['seed', 'Seed'],
+    ['num_inference_steps', 'Num inference steps'],
+    ['input_image', 'Input image'],
+    ['filePath', 'File path'],
+    ['FilePath', 'File path'],
+    ['guidanceScale', 'Guidance scale'],
+    ['numInferenceSteps', 'Num inference steps'],
+    ['imageURL', 'Image URL'],
+    ['HTTPUrl', 'HTTP url'],
+    ['Guidance Scale', 'Guidance scale'],
+  ])('a raw key %s is labelled %s', (key, label) => {
+    expect(universalSettingLabel(key)).toBe(label);
+  });
+
   it('the Inspector shows a universal node\'s settings by that label, not the stored Title Case', () => {
     expect(source('components/panels/Inspector.tsx'))
       .toMatch(/dynamicParams\.map\(\(param\) => renderParamSection\(\{ \.\.\.param, label: universalSettingLabel\(param\.key\) \}, 'dynamic'\)\)/);

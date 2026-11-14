@@ -324,7 +324,7 @@ describe('the Inspector: "change the model" and "save favorites"', () => {
   });
 });
 
-describe('the Inspector: Replicate\'s Fetch Schema has its own line (GM 2026-11-05)', () => {
+describe('the Inspector: Replicate\'s Fetch schema has its own line (GM 2026-11-05)', () => {
   it('locks only the fetch, says "fetch the schema", and leaves Model ID editable', async () => {
     const fetchSchema = vi.fn();
     useGraphStore.setState({
@@ -337,7 +337,7 @@ describe('the Inspector: Replicate\'s Fetch Schema has its own line (GM 2026-11-
     render(<Inspector embedded />);
     await flush();
     await hold();
-    const fetchButton = screen.getByRole('button', { name: /Fetch Schema/ });
+    const fetchButton = screen.getByRole('button', { name: /Fetch schema/ });
     expectLocked(fetchButton, line('fetch the schema'));
     expect(shownLines(line('change the model'))).toHaveLength(0);
     const modelId = screen.getByDisplayValue('acme/refiner');

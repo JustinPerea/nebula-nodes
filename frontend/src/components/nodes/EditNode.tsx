@@ -18,7 +18,7 @@ interface EditClipShape {
 
 export function EditNode({ id, data, selected }: NodeProps) {
   // Fix round 2 of PR #200 (review 2 L-6, GM 2026-10-28 answer 4): this is
-  // the edit node, so Open Editor opens its own editor (uiStore
+  // the edit node, so Open editor opens its own editor (uiStore
   // openEditNode) and writes nothing. It stays available while following or
   // offline; the editor opens read-only there (its keys, clips and
   // transport take the canvas lock), and the follow bar or the offline row
@@ -87,7 +87,7 @@ export function EditNode({ id, data, selected }: NodeProps) {
       <div className="edit-node__summary">{summary || 'no edits yet'}</div>
       {selected && (
         <button type="button" className="edit-node__open" onClick={handleOpenEditor}>
-          Open Editor
+          Open editor
         </button>
       )}
       <NodeRunError data={data as unknown as NodeData} className="edit-node__run-error" />

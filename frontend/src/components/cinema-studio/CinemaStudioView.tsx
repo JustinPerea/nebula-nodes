@@ -87,7 +87,7 @@ export function CinemaStudioView() {
       <div className="cinema-studio-view">
         <WorkspaceHeader title="Cinema" onBack={exitCinemaEditor} className="cinema-studio-view__header" />
         <div className="cinema-studio-view__empty">
-          Select a Cinema Scene node on Canvas to open it here.
+          Select a Cinema scene node on Canvas to open it here.
         </div>
       </div>
     );
