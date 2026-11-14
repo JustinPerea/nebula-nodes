@@ -18,7 +18,13 @@
      flow, so the node does not change size). The preview stays visible and
      the label's ground is the same opaque tint, so the same ink and ratio.
      Header rows on the card surface keep the full-row tint.
-   - The title truncates first; the label never does.
+   - The title truncates first; the label never does, except that it shortens
+     to "Waiting" when the full one would leave the title fewer than 8
+     characters, ellipsis included (GM r6 item 2; lib/nodeWaitLabel.ts decides,
+     NodeWaitSwap sets data-short). The two spans crossfade on the same springs;
+     the one not shown leaves the layout at once (absolute, at the right end)
+     so the cell is as wide as the one shown. The short one carries the
+     tooltip; the full one stays the accessible name.
    - The reason is not drawn: the bar and the Updates card show it. The header
      has it as its accessible description (.node-wait-swap__reason, visually
      hidden). */
@@ -90,6 +96,9 @@ body.app-slava-restraint .cinema-scene-node__title {
 }
 
 .node-wait-swap__label {
+  display: inline-grid;
+  justify-items: end;
+  position: relative;
   white-space: nowrap;
   opacity: 0;
   transition: opacity var(--spring-soft-ms) var(--spring-soft);
@@ -98,6 +107,31 @@ body.app-slava-restraint .cinema-scene-node__title {
 
 .node-wait-swap[data-on='true'] .node-wait-swap__label {
   opacity: 1;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+/* The full and the short words share the label's box. */
+.node-wait-swap__full,
+.node-wait-swap__short {
+  grid-area: 1 / 1;
+  opacity: 1;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+}
+
+.node-wait-swap[data-short='true'] .node-wait-swap__full,
+.node-wait-swap:not([data-short='true']) .node-wait-swap__short {
+  position: absolute;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.node-wait-swap[data-short='true'] .node-wait-swap__short {
+  pointer-events: auto;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+.node-wait-swap:not([data-short='true']) .node-wait-swap__full {
   transition: opacity var(--spring-pop-ms) var(--spring-pop);
 }
 
@@ -123,6 +157,10 @@ body.app-slava-restraint .node-wait-swap__label {
   body.app-slava-restraint .cinema-scene-node__title,
   .node-wait-swap__rest,
   .node-wait-swap__label,
+  .node-wait-swap__full,
+  .node-wait-swap__short,
+  .node-wait-swap[data-short] .node-wait-swap__full,
+  .node-wait-swap[data-short] .node-wait-swap__short,
   .node-wait-swap[data-on='true'] .node-wait-swap__label {
     transition: none;
   }

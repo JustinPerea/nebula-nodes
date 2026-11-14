@@ -97,7 +97,7 @@ describe('the Cinema scene\'s title row', () => {
     expect(title(container).style.getPropertyValue('--agent-color')).toBe('#c7f36b');
     const label = container.querySelector('.node-wait-swap__label')!;
     expect(title(container).contains(label)).toBe(true);
-    expect(label.textContent).toBe(WAITING_FOR_OK);
+    expect(label.querySelector('.node-wait-swap__full')!.textContent).toBe(WAITING_FOR_OK);
     expect(document.getElementById(title(container).getAttribute('aria-describedby')!)!.textContent)
       .toBe(`A proposal is waiting for your OK. ${BAR}`);
     expect([...container.querySelector('.cinema-scene-node')!.children].map((el) => el.className)).toEqual(rowsBefore);

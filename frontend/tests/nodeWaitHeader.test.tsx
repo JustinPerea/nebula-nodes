@@ -93,6 +93,8 @@ function card(id = 'n1', definitionId = 'flux-2-pro', label = 'FLUX.2') {
 }
 const header = (container: HTMLElement) => container.querySelector<HTMLElement>('.model-node__header')!;
 const label = (container: HTMLElement) => container.querySelector<HTMLElement>('.node-wait-swap__label');
+/** The label's words: the full ones (the short ones are aria-hidden and read from their own span). */
+const fullText = (container: HTMLElement) => label(container)!.querySelector('.node-wait-swap__full')!.textContent;
 const open = (...views: ProposalView[]) => act(() => {
   for (const v of views) useCanvasProposalsStore.getState().open(v, 'key');
 });
@@ -105,7 +107,7 @@ describe('the waiting state in the node card\'s header', () => {
     open(view('p_one', ['n1'], CLAUDE, 1));
     expect(header(container).dataset.waiting).toBe('true');
     expect(header(container).style.getPropertyValue('--agent-color')).toBe(CLAUDE.color);
-    expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
+    expect(fullText(container)).toBe(WAITING_FOR_OK);
     expect(WAITING_FOR_OK).toBe('Waiting for your OK');
     // The model chip is still there (inert, faded), in the same cell.
     const swap = container.querySelector('.node-wait-swap')!;
@@ -123,13 +125,13 @@ describe('the waiting state in the node card\'s header', () => {
   it('draws one label for one proposal or several: no count, so the node never changes width (GM r3 item 1)', () => {
     const { container } = card();
     open(view('p_one', ['n1'], CLAUDE, 1));
-    const one = label(container)!.textContent;
+    const one = fullText(container);
     const swapOne = container.querySelector('.node-wait-swap')!.outerHTML.replace(/<span id="[^"]*" class="node-wait-swap__reason">.*?<\/span>/, '');
     open(view('p_two', ['n1', 'n3'], CODEX, 2));
     // The same text, the same markup: nothing in the header can be wider with two than with one.
-    expect(label(container)!.textContent).toBe(one);
-    expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
-    expect(label(container)!.textContent).not.toMatch(/\d|·/);
+    expect(fullText(container)).toBe(one);
+    expect(fullText(container)).toBe(WAITING_FOR_OK);
+    expect(fullText(container)).not.toMatch(/\d|·/);
     const swapTwo = container.querySelector('.node-wait-swap')!.outerHTML.replace(/<span id="[^"]*" class="node-wait-swap__reason">.*?<\/span>/, '');
     const bare = (html: string) => html.replace(/ (data-[a-z-]+|style)="[^"]*"/g, '');
     expect(bare(swapTwo)).toBe(bare(swapOne));
@@ -146,7 +148,7 @@ describe('the waiting state in the node card\'s header', () => {
     expect(container.querySelector('.node-wait-swap')).toBeNull();
     open(view('p_one', ['n4'], CLAUDE, 1));
     expect(header(container).dataset.waiting).toBe('true');
-    expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
+    expect(fullText(container)).toBe(WAITING_FOR_OK);
   });
 
   it('never changes the node\'s size: nothing outside the header moves, the header gets no new row', () => {
@@ -227,7 +229,7 @@ describe('the waiting state in the node card\'s header', () => {
     act(() => useCanvasProposalsStore.setState((state) => ({
       proposals: { ...state.proposals, p_two: { ...state.proposals.p_two, closing: 'rejected' } },
     })));
-    expect(label(container)!.textContent).toBe(WAITING_FOR_OK);
+    expect(fullText(container)).toBe(WAITING_FOR_OK);
     expect(describe()).toMatch(/^A proposal is waiting for your OK\./);
     expect(header(container).style.getPropertyValue('--agent-color')).toBe(CLAUDE.color);
   });

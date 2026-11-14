@@ -532,8 +532,7 @@ def test_the_propose_hint_names_only_the_callers_surface():
     assert cli == ('Propose it instead: `nebula propose --note "<why>" --run n1 --run n2`. '
                    "The person accepts on the canvas, and the canvas runs it.")
     assert "propose_change" not in cli and "MCP" not in cli
-    mcp = agent_spend.propose_hint_for_mcp(f"Needs the person's approval: no price. {cli}")
-    assert mcp == ("Needs the person's approval: no price. Propose it instead with propose_change. "
+    mcp = agent_spend.propose_hint(["n1", "n2"], "mcp")
+    assert mcp == ("Propose it instead: propose_change (run: n1, n2). "
                    "The person accepts on the canvas, and the canvas runs it.")
     assert "nebula" not in mcp
-    assert agent_spend.propose_hint_for_mcp("No hint here.") == "No hint here."

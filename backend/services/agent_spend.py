@@ -1370,18 +1370,3 @@ def propose_hint(run_ids: list[str], where: str = "mcp") -> str:
         f"Propose it instead: {agent_words.propose_run(run_ids[:6], where)}. "
         "The person accepts on the canvas, and the canvas runs it."
     )
-
-
-_PROPOSE_MCP = "Propose it instead with propose_change. "
-
-
-def propose_hint_for_mcp(message: str) -> str:
-    """A refusal that carries propose_hint, in MCP's words: propose_change,
-    with no `nebula` command. Everything else in it stays as it was."""
-    start = message.find("Propose it instead: `nebula propose ")
-    if start < 0:
-        return message
-    end = message.find("`. ", start)
-    if end < 0:
-        return message
-    return message[:start] + _PROPOSE_MCP + message[end + 3:]
