@@ -619,6 +619,29 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAttribute('title', KEY_LINE);
   });
 
+  it('the returned Accept key row is not remounted when the node it stands for changes, so its entrance plays once (review of #241, LOW-1)', () => {
+    const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const withRows = (refs: string[]) => {
+      const idol = proposal('p_a', {
+        nodes: refs.map((ref) => ({ ...proposal('p_a').nodes[0], ref, definitionId: 'speridlabs-idol', name: 'Idol' })),
+        run: refs,
+      });
+      idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: refs.length,
+        notReady: refs.map((ref) => ({ ref, nodeId: null, name: 'Idol', missing: ROW, person: ROW })) };
+      return idol;
+    };
+    open(withRows(['+a', '+b']));
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const view = render(<ProposalBar />);
+    act(() => setCanvasKept(true));
+    act(() => setCanvasKept(false));
+    const row = view.container.querySelector('.proposal-bar__not-ready[data-entering]');
+    expect(row).not.toBeNull();
+    // The first key-locked node leaves the proposal: another node's row is now the Accept row.
+    act(() => open(withRows(['+b'])));
+    expect(view.container.querySelector('.proposal-bar__not-ready')).toBe(row);
+  });
+
   it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {
     const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
     // Made while the token was set: the backend listed nothing that can't run.

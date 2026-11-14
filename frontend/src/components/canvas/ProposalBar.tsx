@@ -164,6 +164,9 @@ function canvasAt(nodeId: string): { x: number; y: number } | null {
   return useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId)?.position ?? null;
 }
 
+/** The Accept key row's list key: never a node's ref (refs hold no NUL). */
+const ACCEPT_ROW_KEY = '\u0000accept-key';
+
 /**
  * The bar's "Accept needs your key" row (GM, #203 follow-up r240: hidden while
  * the canvas is kept, back with it). It enters and leaves as the bar's other
@@ -487,7 +490,9 @@ export function ProposalBar() {
                   {notReadyLines.map((line, index) => (
                     // The first ⚠ row is kept in view with the plan line (GM r6).
                     <li
-                      key={line.key}
+                      // The Accept row keeps one key whichever node's row it stands for, so it is
+                      // not remounted (and its entrance replayed) when that node changes under it.
+                      key={line.accept ? ACCEPT_ROW_KEY : line.key}
                       className="proposal-bar__not-ready"
                       {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}
                       {...(line.accept ? { ...keyRow.props, 'data-entering': keyRow.entering || undefined } : {})}
