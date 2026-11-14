@@ -29,7 +29,7 @@ export const FALLBACK_SIZE_BY_TYPE: Readonly<Record<string, FallbackSize>> = {
   'model-node': { width: 300, height: 220 },
   'dynamic-node': { width: 200, height: 145 },
   editNode: { width: 160, height: 107 },
-  remotionNode: { width: 220, height: 96 },
+  remotionNode: { width: 220, height: 65 },
   cinemaSceneNode: { width: 200, height: 268 },
   characterNode: { width: 200, height: 250 },
   cameraRigNode: { width: 232, height: 339 },
