@@ -6,7 +6,10 @@ import { useLineLock } from '../../hooks/usePersonLock';
 import { COMMONS_OFF_REVIEW_LINE, useCommonsOff } from '../../lib/commonsOff';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
-import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
+import { authorInitials, clipDuration, noteControls, noteText, type NoteButton } from '../../lib/agentNotesView';
+import { useHoldLine } from '../../hooks/useBefore';
+import { withHoldLine } from '../../lib/ledgerHold';
+import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 
 /**
  * What a surface (the main canvas, later a board in the Studio) gives the
@@ -198,4 +201,17 @@ export function NoteButtons({
         : holds && !sharedLock && <PersonLockLine lock={lock} place="control" className="agent-notes-acts__held-line" />}
     </div>
   );
+}
+
+/**
+ * An Update's text. The Update of a run held while the spend record was unreadable gets the
+ * hold's sentence after its own, until the hold ends (the proposal's wait details carry it); the
+ * stored text never has it.
+ */
+export function NoteText({ note, numberFor }: { note: AgentNote; numberFor?: (ref: string) => number | null }) {
+  const proposalId = note.actions.find((action) => action.op.kind === 'proposal.review')?.op.proposalId;
+  const hold = useCanvasProposalsStore((state) =>
+    typeof proposalId === 'string' ? state.proposals[proposalId]?.view.wait?.ledgerHold : undefined);
+  const line = useHoldLine(hold);
+  return <>{withHoldLine(noteText(note, numberFor), line)}</>;
 }

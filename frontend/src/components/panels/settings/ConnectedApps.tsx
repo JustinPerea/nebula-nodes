@@ -13,6 +13,7 @@ import { failureMessage } from '../../../lib/errorCopy';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { formatSpentUsd } from '../../../lib/pricing';
+import { holdFigure } from '../../../lib/ledgerHold';
 import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 import { LineText } from '../../LineText';
 import { LineBox } from '../../LineBox';
@@ -151,8 +152,12 @@ function SetupPanel({ name, setup, onDone, onError }: {
  * cursor, and a daily limit (backend services/app_tokens.py), plus the exact
  * config to paste (services/agent_connect.py). Every app still counts inside
  * "Agents outside Nebula chats", so a token never adds headroom. */
-export function ConnectedApps({ view, loadError, onChanged }: {
+export function ConnectedApps({ view, counted = false, unknown = false, loadError, onChanged }: {
   view: OutsideSpend | null;
+  /** The spend record's hold is on: an app's usage figure reads "Counted as used up", or "Amount unknown" with no daily limit. */
+  counted?: boolean;
+  /** The spend record can't be read at all: with `counted`, every app's figure reads "Amount unknown". */
+  unknown?: boolean;
   loadError: string | null;
   onChanged: () => void;
 }) {
@@ -252,8 +257,10 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               </span>
               <span className="settings-pref__description">
                 {labelOf(app.client) ? `${labelOf(app.client)} · ` : ''}
-                {formatSpentUsd(app.spentUsd)} in the last 24 h
-                {app.kreaPlanRuns > 0 && `, ${app.kreaPlanRuns} Krea plan runs`}
+                {counted ? holdFigure(!unknown && app.dailyUsd !== null) : <>
+                  {formatSpentUsd(app.spentUsd)} in the last 24 h
+                  {app.kreaPlanRuns > 0 && `, ${app.kreaPlanRuns} Krea plan runs`}
+                </>}
               </span>
             </span>
             <span className="settings-model-limit__controls">

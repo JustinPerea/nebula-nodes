@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
@@ -17,6 +17,8 @@ import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
+import { useNowUntil } from '../../../hooks/useBefore';
+import { AMOUNT_UNKNOWN, LEDGER_CANT_READ, holdFigure, holdOn, holdSentence, ledgerHoldLine } from '../../../lib/ledgerHold';
 import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
@@ -27,6 +29,8 @@ const SAME_AS_SESSION = 'session';
 const DEFAULT_CHOICE = 'default';
 const MODEL_RUN_CHOICES = [0.5, 1, 2, 5, 10, 20] as const;
 const MODEL_SESSION_CHOICES = [5, 10, 25, 50, 100] as const;
+/** How often the view is read again while the spend record's hold or can't-open state is on. */
+const RELOAD_WHILE_HELD_MS = 30_000;
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image', 'video-gen': 'Video', 'audio-gen': 'Audio', 'text-gen': 'Text and chat',
@@ -103,6 +107,25 @@ export function AgentSpendSection() {
   const error = useSettingsDraftStore((s) => s.errors.agentSpend);
   const perRun = useUIStore((s) => s.runCostConfirmUsd);
   const outside = useOutsideSpend();
+  // The spend record's 24-hour hold (backend ledgerHold): one timer for its end, so the section
+  // goes back to the file's figures without a reload.
+  const hold = outside.view?.ledgerHold;
+  const now = useNowUntil(hold?.until);
+  // The record can't be read at all (backend ledgerBlocked): no end time and no true amount anywhere.
+  const blocked = outside.view?.ledgerBlocked === true;
+  const counted = blocked || holdOn(hold, now);
+  const holdLine = blocked ? LEDGER_CANT_READ : ledgerHoldLine(hold, now);
+  // While either is on, the view is read again every 30 s and when the window is shown again, so
+  // the line goes once the record reads (review of PR #242 round 2, L5). The last view stays until
+  // the new one arrives, so no row changes height or flickers.
+  const { reload } = outside;
+  useEffect(() => {
+    if (!counted) return undefined;
+    const timer = setInterval(reload, RELOAD_WHILE_HELD_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') reload(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [counted, reload]);
   // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
   // focus to the section's line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
@@ -129,6 +152,10 @@ export function AgentSpendSection() {
 
   if (!saved) return null;
   const limits: AgentSpendLimits = saved;
+  // During the hold a row reads "Counted as used up" where it has a limit and "Amount unknown" where
+  // it has none. Outside agents follow the chat session's amount until the person picks one.
+  const outsideLimit = limits.outsideDailyUsd === undefined ? limits.sessionUsd : limits.outsideDailyUsd;
+  const outsideFigure = counted ? (blocked ? AMOUNT_UNKNOWN : holdFigure(outsideLimit !== null)) : null;
   const save = lock.guard((next: AgentSpendLimits) => saveField('agentSpend', next));
   const setModel = (id: string, next: ModelSpendLimit | null) => {
     const models = { ...limits.models };
@@ -154,8 +181,9 @@ export function AgentSpendSection() {
         MCP server or API. A program running as you with its own unrestricted shell could read the link&rsquo;s token,
         so these limits don&rsquo;t bind it.
       </p>
+      {holdLine && <p className="settings-hint settings-hint--state" data-testid="settings-agent-ledger-hold">{holdLine}</p>}
       <div className="settings-list">
-        <DailyTotalRow limits={limits} spentUsd={outside.view ? outside.view.daily?.spentUsd ?? 0 : null}
+        <DailyTotalRow limits={limits} spentUsd={outside.view ? outside.view.daily?.spentUsd ?? 0 : null} counted={counted} unknown={blocked}
           disabled={pending} onChange={save} lock={lock.control} />
         <div className="settings-pref">
           <span className="settings-pref__text">
@@ -174,15 +202,17 @@ export function AgentSpendSection() {
               last 24 hours; restarting Nebula doesn&rsquo;t reset it.
               {outside.view && (
                 <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
-                  {' '}{spentUsd(outside.view.outside.spentUsd)} in the last 24 hours
-                  {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
+                  {' '}{counted ? holdSentence(!blocked && outsideLimit !== null) : <>
+                    {spentUsd(outside.view.outside.spentUsd)} in the last 24 hours
+                    {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
+                  </>}
                 </span>
               )}
             </span>
           </span>
           <OutsideSelect limits={limits} disabled={pending} onChange={save} lock={lock.control} />
         </div>
-        <PersonalAgentSpend view={outside.view} />
+        <PersonalAgentSpend view={outside.view} held={outsideFigure} />
         <div className="settings-pref">
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-plan-runs">Krea plan runs</label>
@@ -239,7 +269,7 @@ export function AgentSpendSection() {
         </div>
       </div>
       <SettingsRowError id="agentSpend" message={error} />
-      <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
+      <ConnectedApps view={outside.view} counted={counted} unknown={blocked} loadError={outside.error} onChanged={outside.reload} />
     </section>
   );
 }
@@ -248,7 +278,11 @@ export function AgentSpendSection() {
  * the last 24 hours. Read-only: their spending counts inside the outside
  * budget above (services/agent_spend.py PERSONAL_AGENT_BUDGET), so there is no
  * separate limit to set. */
-function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
+function PersonalAgentSpend({ view, held }: {
+  view: OutsideSpend | null;
+  /** The figure every row reads during the spend record's hold (they sit inside the outside budget); null otherwise. */
+  held: string | null;
+}) {
   const rows = (view?.personal ?? []).filter((agent) => agent.spentUsd > 0 || agent.kreaPlanRuns > 0);
   if (rows.length === 0) return null;
   return (
@@ -258,8 +292,10 @@ function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
           <span className="settings-pref__text">
             <span className="settings-pref__title agent-name" title={agent.name} aria-label={agent.name}>{agent.name}</span>
             <span className="settings-pref__description">
-              {spentUsd(agent.spentUsd)} in the last 24 hours
-              {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}, inside the budget above
+              {held ?? <>
+                {spentUsd(agent.spentUsd)} in the last 24 hours
+                {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}
+              </>}, inside the budget above
             </span>
           </span>
         </div>

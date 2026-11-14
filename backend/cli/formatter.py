@@ -611,7 +611,8 @@ def format_start(start: dict[str, Any]) -> str:
         for proposal in proposals.get("open") or []:
             note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
             lines.append(f"  {proposal.get('id')} by {proposal.get('agent')}: {note} "
-                         f"(expires in {_minutes(proposal.get('expiresInSeconds'))}{_cant_run(proposal)})")
+                         f"(expires in {_minutes(proposal.get('expiresInSeconds'))}{_cant_run(proposal)})"
+                         f"{ledger_hold_note(proposal.get('ledgerHold'))}")
         if proposals.get("more"):
             lines.append(f"  ({proposals['more']})")
 
@@ -681,6 +682,8 @@ def format_start(start: dict[str, Any]) -> str:
         daily = spend.get("daily")
         if isinstance(daily, dict):
             lines.append(f"  {daily_total_line(daily)}")
+        if spend.get("ledgerNote"):
+            lines.append(f"  {spend['ledgerNote']}")
         lines.append("  (a run over a limit goes through `nebula propose`; `nebula spend` has the detail)")
 
     nxt = start.get("next") or {}
@@ -826,7 +829,8 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
             left = proposal.get("expiresInSeconds")
             expires = f" (expires in {_minutes(left)}{_cant_run(proposal)})" if isinstance(left, (int, float)) else ""
             note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
-            lines.append(f"  {proposal.get('id', '?')} by {proposal.get('agent') or 'an agent'}: {note}{expires}")
+            lines.append(f"  {proposal.get('id', '?')} by {proposal.get('agent') or 'an agent'}: {note}{expires}"
+                         f"{ledger_hold_note(proposal.get('ledgerHold'))}")
         lines.append("  (nebula proposal <id> --wait to hear the decision)")
 
     nodes = snapshot.get("nodes") or []
@@ -1191,6 +1195,19 @@ def _usd(amount: float) -> str:
     return f"${float(f'{amount:.2g}'):g}"
 
 
+def ledger_hold_note(hold: Any, now: float | None = None) -> str:
+    """" <sentence>" after a waiting proposal's line while the spend ledger's
+    hold it waited in still holds (``ledgerHold``, agent_spend.hold_line),
+    else "": the proposal's note never holds it, since its end time would go
+    stale (review of PR #242)."""
+    import time as _time
+
+    from services.agent_spend import hold_line
+
+    line = hold_line(hold, _time.time() if now is None else now)
+    return f" {line}" if line else ""
+
+
 def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: float | None = None) -> str:
     """A proposal as the person will see it: what it adds, connects, sets and runs.
 
@@ -1211,6 +1228,9 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
         reason = f" — {view['reason']}" if view.get("reason") and status != "open" else ""
         note = json.dumps(str(view.get("note") or ""), ensure_ascii=False)
         head = f"{proposal_id} by {agent} [{status}{when}]{reason}: {note}"
+    wait = view.get("wait") if isinstance(view.get("wait"), dict) else {}
+    if status == "open":
+        head += ledger_hold_note(wait.get("ledgerHold"), now / 1000)
     lines = [head]
     if view.get("kind"):
         # A project's or a board's (services/asset_proposals.py): what it changes, no graph.

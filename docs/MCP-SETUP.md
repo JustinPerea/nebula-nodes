@@ -3959,6 +3959,40 @@ How it works (`backend/services/agent_spend.py`):
     checked and the stricter wins, so a token never adds headroom.
 
   Totals are kept in `~/.nebula/agent-spend.json`.
+  Every Nebula backend on the same data folder shares that file: each
+  check and count re-reads it under a lock between processes, so spend
+  through one backend counts in the other's next check. When another
+  backend holds the lock for more than 2 seconds, the run is refused with
+  a 503, "Nebula couldn’t check this run’s cost because another Nebula on
+  this computer is updating the spending record. Try again in a moment.",
+  followed by the usual proposal hint; nothing was counted. Other causes
+  end "…because it can’t lock the spending record.", "…because it can’t
+  read the spending record or set it aside." (a file that exists but can't
+  be opened or read now, which is left as it is and works again once it
+  reads) and "…because the spending record is busy.". A pricing table
+  Nebula can't load reads "Nebula couldn’t check this run’s cost because
+  it can’t read the pricing table. Error: <error>." and the hint, with no
+  "Try again". A file whose content isn't a ledger (not JSON, the wrong shape,
+  empty) is kept aside as `agent-spend.unreadable-<UTC time>.json` and
+  never overwritten, and for 24 hours every limit counts as used up: a
+  paid run waits for the person's OK or is refused as at any limit, with
+  "Nebula couldn’t read its record of what agents have spent, so it counts
+  every spending limit as used up until 3:40 PM on Sunday." (the hold's
+  end, in the computer's local time). When it ends, a chat session's own
+  total restarts from $0 (it has no 24-hour window); the daily total still
+  caps that chat's day. Only a path with nothing at it starts at $0.
+  While that holds, `nebula spend`, `nebula context` and `get_spend_limits`
+  show the daily total as used up and carry the same sentence
+  (`ledgerNote`, with `ledgerHold.until` in epoch seconds). A run that
+  waits as a proposal carries `wait.ledgerHold` ({until, line}); the
+  proposal's note and `barLine` leave the sentence out, and `nebula
+  proposals`, `nebula context` and the canvas show `line` only until
+  `until`. A record that can't be opened at all (no permission, an I/O
+  error, a link to nothing) is a different state: nothing is set aside,
+  agents' paid runs are refused until it reads again, and the same reads
+  carry `ledgerBlocked` with "Nebula can’t open its record of what agents
+  have spent, so agents can’t start paid runs until it can." in place of
+  an end time.
 - Krea plan runs: a node billed to the signed-in Krea plan has no per-call
   price (Krea charges compute units it doesn't publish per model), so it is
   counted as runs: batch runs times a cinema scene's shots times variations.

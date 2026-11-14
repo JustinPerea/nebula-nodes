@@ -3,6 +3,7 @@ import {
   DAILY_AMOUNT_INVALID, DAILY_TOTAL_CHOICES, dailyAmountDraft, dailyLimit, dailyMeterShown, dailyUsageLine, limitUsd,
   parseDailyAmount,
 } from '../../../lib/dailyTotal';
+import { holdFigure } from '../../../lib/ledgerHold';
 import type { AgentSpendLimits } from '../../../store/settingsDraftStore';
 import type { LockProps } from '../../PersonLock';
 
@@ -19,10 +20,14 @@ const NONE = 'none';
  * saved keeps the field open with a line saying why. The usage line and the
  * meter read `spentUsd`, the last 24 hours.
  */
-export function DailyTotalRow({ limits, spentUsd, disabled, onChange, lock }: {
+export function DailyTotalRow({ limits, spentUsd, counted = false, unknown = false, disabled, onChange, lock }: {
   limits: AgentSpendLimits;
   /** What everything that isn't the person spent in the last 24 hours; null while it loads. */
   spentUsd: number | null;
+  /** The spend record's hold is on: the usage line reads "Counted as used up" ("Amount unknown" with no limit) and the meter keeps its place unshown. */
+  counted?: boolean;
+  /** The spend record can't be read at all: with `counted`, the line reads "Amount unknown" whatever the limit. */
+  unknown?: boolean;
   disabled: boolean;
   onChange: (next: AgentSpendLimits) => void;
   /** The section's person lock (#204): the select reads as disabled, described by the one line, until this tab is the person's. */
@@ -79,8 +84,11 @@ export function DailyTotalRow({ limits, spentUsd, disabled, onChange, lock }: {
 
   const current = limit === null ? NONE : String(limit);
   const custom = limit !== null && !(DAILY_TOTAL_CHOICES as readonly number[]).includes(limit);
-  const line = spentUsd === null ? null : dailyUsageLine(spentUsd, limit);
-  // The meter shows only with a limit and something spent (GM).
+  // During the hold the line is "Counted as used up", or "Amount unknown" with no limit to count.
+  const line = counted ? holdFigure(!unknown && limit !== null) : spentUsd === null ? null : dailyUsageLine(spentUsd, limit);
+  // The meter shows only with a limit and something spent (GM). During the hold it keeps its place
+  // but isn't shown (a full meter would read as real spending), so the row's height doesn't jump
+  // when the record reads again and the fill comes back with its own transition.
   const meter = spentUsd !== null && dailyMeterShown(spentUsd, limit) ? limit : null;
 
   return (
@@ -98,13 +106,17 @@ export function DailyTotalRow({ limits, spentUsd, disabled, onChange, lock }: {
         {line && (
           <span className="settings-daily__usage settings-agent-spent" data-testid="settings-agent-daily-spent">{line}</span>
         )}
-        {meter !== null && spentUsd !== null && line !== null && (
+        {meter !== null && spentUsd !== null && line !== null && (counted ? (
+          <span className="settings-daily__meter" data-held="" aria-hidden="true">
+            <span className="settings-daily__meter-fill" />
+          </span>
+        ) : (
           <span className="settings-daily__meter" role="meter" aria-label="Daily total used"
             aria-valuemin={0} aria-valuemax={meter} aria-valuenow={Math.min(spentUsd, meter)} aria-valuetext={line}>
             <span className="settings-daily__meter-fill"
               style={{ ['--daily-fill' as string]: Math.round(Math.min(1, spentUsd / meter) * 10_000) / 10_000 } as CSSProperties} />
           </span>
-        )}
+        ))}
       </span>
       {editing ? (
         <span className="settings-daily__edit">
