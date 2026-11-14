@@ -47,7 +47,7 @@ const FAKE = {
   id: 'fake', kind: 'custom', displayName: 'Fake Agent', color: '#123456', enabled: true, command: '/bin/fake',
   args: [], status: 'ready', resolvedPath: '/bin/fake', note: '', startable: true,
 };
-const OFF = { ...FAKE, id: 'gemini', kind: 'preset', displayName: 'Gemini (your setup)', enabled: false, status: 'disabled' };
+const OFF = { ...FAKE, id: 'gemini', kind: 'preset', displayName: 'Your Gemini', enabled: false, status: 'disabled' };
 
 beforeEach(() => {
   vi.clearAllMocks(); ChatSocket.instances = []; vi.stubGlobal('WebSocket', ChatSocket);
@@ -274,7 +274,7 @@ describe('Settings > Personal agents', () => {
     apiMocks.updatePersonalAgent.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
     render(<PersonalAgentsSection />);
     await screen.findAllByTestId('personal-agent-row');
-    const toggle = () => screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' });
+    const toggle = () => screen.getByRole('switch', { name: 'Use your Gemini in chat' });
     expect(toggle()).not.toBeChecked();
     fireEvent.click(toggle());
     expect(toggle()).toBeChecked();
@@ -294,7 +294,7 @@ describe('Settings > Personal agents', () => {
     apiMocks.updatePersonalAgent.mockResolvedValueOnce({ agent: { ...OFF, enabled: true } });
     render(<PersonalAgentsSection />);
     await screen.findAllByTestId('personal-agent-row');
-    const toggle = () => screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' });
+    const toggle = () => screen.getByRole('switch', { name: 'Use your Gemini in chat' });
     let reloaded!: (value: unknown) => void;
     apiMocks.fetchPersonalAgents.mockImplementationOnce(() => new Promise((resolve) => { reloaded = resolve; }));
     await act(async () => { fireEvent.click(toggle()); });
@@ -313,7 +313,7 @@ describe('Settings > Personal agents', () => {
     render(<PersonalAgentsSection />);
     const rows = await screen.findAllByTestId('personal-agent-row');
     expect(rows.map((row) => row.getAttribute('data-agent-id'))).toEqual(['fake', 'gemini']);
-    fireEvent.click(screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Use your Gemini in chat' }));
     await waitFor(() => expect(apiMocks.updatePersonalAgent).toHaveBeenCalledWith('gemini', { enabled: true }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Custom agent id' }), { target: { value: 'mine' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Custom agent command' }), { target: { value: '/usr/local/bin/mine' } });
@@ -329,7 +329,7 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
   const GEMINI = { ...OFF, enabled: true, status: 'needs_setup', version: '0.25.2', args: ['--experimental-acp'],
     note: 'Gemini CLI 0.25.2, started with `--experimental-acp`. It signs in with a Google account. Since 2026-06-18 ...',
     keyOption: { enabled: false, keySaved: true, billing: 'Google bills that key for every turn this agent runs.', blocked: null } };
-  const ANTIGRAVITY = { ...FAKE, id: 'antigravity', kind: 'preset', displayName: 'Antigravity (your setup)', enabled: false,
+  const ANTIGRAVITY = { ...FAKE, id: 'antigravity', kind: 'preset', displayName: 'Your Antigravity', enabled: false,
     status: 'not_installed', command: 'agy_acp_server.par', note: 'Download first.',
     termsNote: 'Google\'s FAQ says using Antigravity through third-party apps "is not supported under consumer plans". Your Google account carries that risk.',
     install: { state: 'missing', version: '1.4.1', sizeBytes: 112737434, message: 'Download first.',
@@ -355,7 +355,7 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
     render(<PersonalAgentsSection />);
     const option = await screen.findByTestId('personal-agent-key-option');
     expect(within(option).getByRole('switch', { name: 'Use my Gemini API key from Nebula' })).toBeDisabled();
-    expect(within(option).getByText(/Save a Gemini API key/)).toBeInTheDocument();
+    expect(within(option).getByText(/Save a Gemini API key in Settings > Providers > Google · Gemini API to use this\./)).toBeInTheDocument();
   });
 
   it('shows the terms note and walks download, sign-in and sign-out through the backend', async () => {
@@ -365,7 +365,7 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
     const panel = await screen.findByTestId('personal-agent-download');
     expect(screen.getByRole('note')).toHaveTextContent('not supported under consumer plans');
     expect(within(panel).getByText(/dl.google.com, pinned to 1.4.1 and checked by SHA-256/)).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Download 1.4.1 (113 MB)' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Download 1.4.1, 113 MB' }));
     await waitFor(() => expect(apiMocks.antigravityAction).toHaveBeenCalledWith('install'));
 
     cleanup();

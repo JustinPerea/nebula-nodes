@@ -172,12 +172,12 @@ export function AgentSpendSection() {
       <p className="settings-hint" id="settings-agent-spend-help">
         Agents must ask before going over these, and before running any node without a list price.
         Your own runs aren&rsquo;t limited.
-        {perRun === null ? '' : ` The per-run limit above (${usd(perRun)}) applies to agents too.`}
+        {perRun === null ? '' : ` The ${usd(perRun)} per-run limit above applies to agents too.`}
       </p>
       <p className="settings-hint" id="settings-agent-spend-who">
-        &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
-        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats (Codex&rsquo;s
-        shell has no network) and any agent that reaches Nebula only through its
+        &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch or from the desktop app.
+        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats, including
+        Codex, whose shell has no network, and against any agent that reaches Nebula only through its
         MCP server or API. A program running as you with its own unrestricted shell could read the link&rsquo;s token,
         so these limits don&rsquo;t bind it.
       </p>
@@ -198,8 +198,8 @@ export function AgentSpendSection() {
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-outside">Agents outside Nebula chats</label>
             <span className="settings-pref__description" id="settings-agent-outside-help">
-              Shared by every agent that isn&rsquo;t a Nebula chat: Claude Desktop, terminal tools, scripts. Counts the
-              last 24 hours; restarting Nebula doesn&rsquo;t reset it.
+              Shared by every agent that isn&rsquo;t a Nebula chat, such as Claude Desktop, terminal tools and scripts. It
+              counts the last 24 hours, and restarting Nebula doesn&rsquo;t reset it.
               {outside.view && (
                 <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
                   {' '}{counted ? holdSentence(!blocked && outsideLimit !== null) : <>
@@ -218,7 +218,7 @@ export function AgentSpendSection() {
             <label className="settings-pref__title" htmlFor="settings-agent-plan-runs">Krea plan runs</label>
             <span className="settings-pref__description" id="settings-agent-plan-runs-help">
               Per agent chat, or for the outside agents over 24 hours. Krea doesn&rsquo;t price its compute units per
-              model, so these count runs. Only you can move a node between your API balance and your Krea plan; agents
+              model, so these count runs. Only you can move a node between your API balance and your Krea plan. Agents
               have to ask.
             </span>
           </span>

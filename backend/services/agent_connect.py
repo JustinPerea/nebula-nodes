@@ -114,13 +114,13 @@ def checkout_paths(backend_dir: Path | None = None) -> CheckoutPaths:
     if ".app/Contents/" in str(backend) or getattr(sys, "frozen", False):
         raise ConnectError(
             "Nebula is running from the packaged app, whose bundled Python isn't set up for outside apps yet. "
-            "Connect your agent from a source checkout for now (it's planned for the desktop pass).")
+            "Connect your agent from a source checkout for now. It\u2019s planned for the desktop pass.")
     python = backend / ".venv" / "bin" / "python"
     server = backend / "mcp_server.py"
     if not server.is_file():
         raise ConnectError(f"Nebula's MCP server isn't at {server}.")
     if not python.exists():
-        raise ConnectError(f"This checkout has no backend virtualenv at {python}. Create it first (see the README).")
+        raise ConnectError(f"This checkout has no backend virtualenv at {python}. Create it first. The README says how.")
     return CheckoutPaths(python=str(python), server=str(server))
 
 
@@ -144,7 +144,7 @@ def server_entry(paths: CheckoutPaths, url: str | None, *, token_file: str | Non
     elif url:
         where = {"NEBULA_URL": url.rstrip("/")}
     else:
-        raise ConnectError("need Nebula's address (a URL or its backend-url file)")
+        raise ConnectError("need Nebula\u2019s address, a URL or its backend-url file")
     return {"command": paths.python, "args": [paths.server], "env": {**where, **_credential(token_file, token)}}
 
 
@@ -229,7 +229,7 @@ def _limit_text(daily_usd: float | None) -> str:
     if daily_usd is None:
         return "the shared budget for agents outside Nebula chats"
     amount = f"${daily_usd:.2f}" if daily_usd < 1 else f"${daily_usd:g}"
-    return f"its {amount} daily limit (and the shared budget for agents outside Nebula chats)"
+    return f"its {amount} daily limit and the shared budget for agents outside Nebula chats"
 
 
 def warnings(c: Client, app_name: str, daily_usd: float | None, *, token_file: str | None = None) -> list[str]:
@@ -242,7 +242,7 @@ def warnings(c: Client, app_name: str, daily_usd: float | None, *, token_file: s
     if token_file is not None:
         where = "its token file" if token_file == TOKEN_FILE_PLACEHOLDER else token_file
         found.append(
-            f"The token is saved in {where}, which only your macOS user can read; the config holds just that "
+            f"The token is saved in {where}, which only your macOS user can read. The config holds just that "
             f"path. Any program running as you can still read the file and spend as {app_name} until you revoke it "
             "in Settings > Connect your agent. Revoking deletes the file.")
         return found
@@ -285,19 +285,19 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str | None, app_name: s
     alternative: dict[str, str] | None = None
     if c.id == "hermes":
         main = {"format": "yaml", "where": "~/.hermes/config.yaml", "snippet": hermes_yaml(entry)}
-        steps = ["Add this under mcp_servers in ~/.hermes/config.yaml (keep any servers already there).",
+        steps = ["Add this under mcp_servers in ~/.hermes/config.yaml. Keep any servers already there.",
                  "Run /reload-mcp in Hermes, or restart it.",
                  "trust: untrusted makes Hermes ask you before every Nebula tool that changes something."]
     elif c.id == "openclaw":
         main = {"format": "shell", "where": "Terminal, with the OpenClaw Gateway stopped",
                 "snippet": _shell(["openclaw", "mcp", "set", SERVER_NAME, json.dumps(entry)])}
-        steps = ["Stop the local OpenClaw Gateway first: openclaw mcp set refuses while it runs.",
+        steps = ["Stop the local OpenClaw Gateway first, because openclaw mcp set refuses while it runs.",
                  "Run the command, then start the Gateway again.",
-                 "Or, with the Gateway running: Control UI > Settings > MCP > Add server, name it nebula, pick "
+                 "Or, with the Gateway running, open Control UI > Settings > MCP > Add server, name it nebula, pick "
                  "Stdio and enter the command line from the second block. Then add "
                  f"{' and '.join(entry['env'])} from the command above as environment variables if the form offers them."]
         if token is not None:
-            steps.append("openclaw mcp doctor will flag the token as a literal env value; that is expected.")
+            steps.append("openclaw mcp doctor will flag the token as a literal env value, which is expected.")
         alternative = {"format": "text", "where": "Settings > MCP > Stdio command",
                        "snippet": " ".join(shlex.quote(part) for part in [entry["command"], *entry["args"]])}
     elif c.id == "claude-desktop":
@@ -310,15 +310,15 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str | None, app_name: s
         main = {"format": "json", "where": c.stored_in,
                 "snippet": _json({"mcpServers": {SERVER_NAME: json_entry(c.id, entry)}})}
         steps = ["Add the nebula entry inside mcpServers in ~/.cursor/mcp.json, keeping any servers already there.",
-                 "Check it's enabled in Cursor's MCP settings (restart Cursor if it doesn't show up)."]
+                 "Check it\u2019s enabled in Cursor\u2019s MCP settings. Restart Cursor if it doesn\u2019t show up."]
     elif c.id == "claude-code":
         main = {"format": "shell", "where": "Terminal", "snippet": _shell(claude_code_add_argv(entry))}
         steps = ["Run this once. --scope user makes Nebula available in every project.",
-                 "Check with: claude mcp get nebula"]
+                 "Check it with claude mcp get nebula."]
     elif c.id == "codex":
         main = {"format": "shell", "where": "Terminal", "snippet": _shell(codex_add_argv(entry))}
-        steps = ["Run this once, or paste the config.toml block (the second block) instead.",
-                 f"Runs can take longer than Codex's 60-second tool timeout: add tool_timeout_sec = "
+        steps = ["Run this once, or paste the config.toml block, the second one, instead.",
+                 f"Runs can take longer than Codex\u2019s 60-second tool timeout, so add tool_timeout_sec = "
                  f"{CODEX_TOOL_TIMEOUT_SEC} under [mcp_servers.nebula] in ~/.codex/config.toml."]
         alternative = {"format": "toml", "where": "~/.codex/config.toml", "snippet": codex_toml(entry)}
     else:

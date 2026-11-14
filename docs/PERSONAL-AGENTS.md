@@ -29,10 +29,10 @@ sequenceDiagram
 
 | Agent | What it brings | How Nebula starts it | Needs |
 |---|---|---|---|
-| Claude (your setup) | Your Claude Code login and plan, `~/.claude` settings, **hooks**, **MCP servers**, memory and skills | `npx -y @agentclientprotocol/claude-agent-acp@0.84.0`, which runs the Agent SDK's bundled Claude Code (2.1.284), not your `claude` (see below) | Node.js 22+ next to `npx`; signed in to Claude Code in a terminal |
-| Codex (your setup) | Your Codex login and `~/.codex` config, its own sandbox settings | `npx -y @agentclientprotocol/codex-acp@2.0.0` (with `CODEX_PATH` set to your `codex` when found) | Node.js; signed in to Codex in a terminal |
-| Gemini (your setup) | Your Gemini CLI login and settings | your installed `gemini`, with the ACP flag its `--help` lists: `--acp`, or `--experimental-acp` on older releases (Nebula doesn't install it) | the `gemini` CLI, and a login Google still serves: a paid Gemini API key or a Gemini Code Assist Standard or Enterprise license. See [Gemini](#gemini-your-setup) |
-| Antigravity (your setup) | Your Google AI plan, through Google's own Antigravity ACP server | `agy_acp_server.par` 1.4.1, which Nebula downloads from dl.google.com when you press Download, checks by SHA-256 and never updates | macOS (Apple silicon or Intel); Sign in with Google in Settings. See [Antigravity](#antigravity-your-setup) |
+| Your Claude | Your Claude Code login and plan, `~/.claude` settings, **hooks**, **MCP servers**, memory and skills | `npx -y @agentclientprotocol/claude-agent-acp@0.84.0`, which runs the Agent SDK's bundled Claude Code (2.1.284), not your `claude` (see below) | Node.js 22+ next to `npx`; signed in to Claude Code in a terminal |
+| Your Codex | Your Codex login and `~/.codex` config, its own sandbox settings | `npx -y @agentclientprotocol/codex-acp@2.0.0` (with `CODEX_PATH` set to your `codex` when found) | Node.js; signed in to Codex in a terminal |
+| Your Gemini | Your Gemini CLI login and settings | your installed `gemini`, with the ACP flag its `--help` lists: `--acp`, or `--experimental-acp` on older releases (Nebula doesn't install it) | the `gemini` CLI, and a login Google still serves: a paid Gemini API key or a Gemini Code Assist Standard or Enterprise license. See [Gemini](#your-gemini) |
+| Your Antigravity | Your Google AI plan, through Google's own Antigravity ACP server | `agy_acp_server.par` 1.4.1, which Nebula downloads from dl.google.com when you press Download, checks by SHA-256 and never updates | macOS (Apple silicon or Intel); Sign in with Google in Settings. See [Antigravity](#your-antigravity) |
 | Hermes | Your Hermes agent | `hermes acp` | **Not startable yet**: it needs a Nebula profile first |
 | Custom | Any ACP agent | the absolute path or command name and arguments you enter | the binary |
 
@@ -134,7 +134,7 @@ name in the chat header once the session starts: "Model for this conversation", 
 the socket message needs the person token. Nebula shows at most four menus of 64 choices each, and only the values the
 agent offered are accepted. Session modes are left alone.
 
-## Gemini (your setup)
+## Your Gemini
 
 Before it starts the CLI, Nebula runs `gemini --version` and `gemini --help` side by side (30 seconds at most,
 once per installed binary, off the backend's event loop, and never twice at once: a look while one runs reads "still
@@ -157,7 +157,7 @@ license; a free Google account login and Google AI Pro or Ultra no longer work (
 - **Not signed in**: *Not set up yet*.
 
 **Use my Gemini API key from Nebula** (off by default, per agent). Turn it on and Nebula starts the CLI with
-`GEMINI_API_KEY` set to the key saved in Settings > API keys (Google), and points `GEMINI_CLI_SYSTEM_SETTINGS_PATH`
+`GEMINI_API_KEY` set to the key saved in Settings > Providers > Google · Gemini API, and points `GEMINI_CLI_SYSTEM_SETTINGS_PATH`
 at a file of Nebula's (`<state dir>/personal-agents/gemini-cli-system-settings.json`, mode 600, no secret in it):
 your real system settings plus "API key login". System settings outrank user settings, so your own
 `~/.gemini/settings.json` and cached Google login stay as they are. It also sets `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` to
@@ -166,7 +166,7 @@ runs, at Gemini API prices; the switch says so. The key is masked like the sessi
 If your settings enforce another login (`enforcedType`), the switch can't help and says so. Nebula doesn't ask the
 CLI to switch logins over ACP: its `authenticate` deletes the cached Google login and rewrites your settings file.
 
-## Antigravity (your setup)
+## Your Antigravity
 
 Runs `agy_acp_server.par`, the ACP server Google publishes for editors (the ACP registry's `antigravity-acp` entry;
 Zed installs the same one). It's a program, not an npm package, so Nebula downloads it itself, only when you press
