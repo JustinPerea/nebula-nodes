@@ -45,7 +45,7 @@ export function PreferencesTab() {
           <div className="settings-pref">
             <span className="settings-pref__text">
               <label className="settings-pref__title" htmlFor="settings-run-cost-confirm">Ask before costly runs</label>
-              <span className="settings-pref__description" id="settings-run-cost-confirm-help">At list prices. Agents must ask above this, and for any node without a published price</span>
+              <span className="settings-pref__description" id="settings-run-cost-confirm-help">At list prices. Agents must ask above this, and for any node without a list price</span>
             </span>
             <select
               id="settings-run-cost-confirm"

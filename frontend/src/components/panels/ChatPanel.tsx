@@ -50,6 +50,7 @@ import {
 } from '../../lib/chatClear';
 import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 import {
   chatCancellationDisconnectNotice,
   chatCancellationNotice,
@@ -862,7 +863,7 @@ export function ChatPanel() {
       setSelection((current) => ({ ...current, agent: next }));
       setSessionId(null);
       const nextName = next === 'claude' ? 'Claude Code' : next === 'codex' ? 'Codex'
-        : personalAgents?.agents.find((item) => `personal:${item.id}` === next)?.displayName ?? 'your agent';
+        : agentNameInSentence(personalAgents?.agents.find((item) => `personal:${item.id}` === next)?.displayName ?? 'your agent');
       setNotice(`Next message starts a new ${nextName} conversation. Earlier messages stay here.`);
     },
     [agent, busy, personal, sessionId, personalAgents],
@@ -2036,7 +2037,7 @@ export function ChatPanel() {
               {personalOptions.map((option) => (
                 <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
                   aria-label={`${option.name} for this conversation`} disabled={busy || offline} {...offlineMark(offline)}
-                  title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
+                  title={`${option.name}: ${agentNameInSentence(agentDisplayName)} offers these for this conversation`}
                   onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
                   {option.current === null && <option value="" disabled>{option.name}</option>}
                   {option.options.map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}

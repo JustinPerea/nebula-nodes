@@ -77,7 +77,7 @@ def test_a_google_account_login_without_a_project_can_not_work(tmp_path, home):
     result = check(fake_gemini(tmp_path, "0.25.2", OLD_HELP), home, tmp_path)
     assert not result.ready and result.acp_flag == "--experimental-acp"
     for words in ("2026-06-18", "paid Gemini API key", "Code Assist Standard or Enterprise", "Google AI Pro/Ultra",
-                  "Use my Gemini API key from Nebula"):
+                  "\u201cUse my Gemini API key from Nebula\u201d"):
         assert words in result.note
 
 
@@ -120,14 +120,14 @@ def test_env_files_are_ignored_when_folder_trust_is_on(tmp_path, home):
 
 def test_not_signed_in_at_all(tmp_path, home):
     result = check(fake_gemini(tmp_path, "0.64.0", NEW_HELP), home, tmp_path)
-    assert not result.ready and "isn't signed in" in result.note
+    assert not result.ready and "isn\u2019t signed in" in result.note
 
 
 def test_the_nebula_key_choice(tmp_path, home):
     binary = fake_gemini(tmp_path, "0.25.2", OLD_HELP)
     write_settings(home, "oauth-personal")
     missing = check(binary, home, tmp_path, use_key=True, key_saved=False)
-    assert not missing.ready and "Settings > API keys" in missing.note
+    assert not missing.ready and "Settings > Providers > Google · Gemini API" in missing.note
     on = check(binary, home, tmp_path, use_key=True, key_saved=True)
     assert on.ready and on.auth == "gemini-api-key" and "bills" in on.note
 

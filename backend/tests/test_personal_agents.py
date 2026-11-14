@@ -169,7 +169,7 @@ def test_spend_view_lists_personal_agents(client):
     assert PERSON_TOKEN  # the fixture's token is what PERSON carries
 
 
-# -- Gemini (your setup): the CLI's ACP flag, its login, and the opt-in key -------------------
+# -- Your Gemini: the CLI's ACP flag, its login, and the opt-in key -------------------
 
 GEMINI_OLD_HELP = "Usage: gemini\n  --experimental-acp  Starts the agent in ACP mode  [boolean]\n"
 
@@ -260,3 +260,18 @@ def test_the_key_overlay_keeps_the_real_system_defaults(tmp_path, gemini_bin, mo
     monkeypatch.setenv("GEMINI_CLI_SYSTEM_DEFAULTS_PATH", str(tmp_path / "admin" / "defaults.json"))
     spec = personal_agents.launch_spec(tmp_path, "gemini", home=home)
     assert spec.env["GEMINI_CLI_SYSTEM_DEFAULTS_PATH"] == str(tmp_path / "admin" / "defaults.json")
+
+
+def test_in_sentence_lowers_only_the_your_prefix():
+    for name, expected in (("Your Claude", "your Claude"), ("Your Codex", "your Codex"),
+                           ("Your Gemini", "your Gemini"), ("Your Antigravity", "your Antigravity")):
+        assert personal_agents.in_sentence(name) == expected
+    # A name stored before the change, and any name without the prefix, passes through.
+    for name in ("Claude (your setup)", "Gemini (your setup)", "Hermes", "Yours truly", "Your", "Your ", ""):
+        assert personal_agents.in_sentence(name) == name
+
+
+def test_presets_are_named_your_agent_and_read_right_in_a_sentence():
+    names = {preset_id: preset.display_name for preset_id, preset in personal_agents.PRESETS.items()}
+    assert names["claude"] == "Your Claude" and names["antigravity"] == "Your Antigravity"
+    assert personal_agents.in_sentence(names["gemini"]) == "your Gemini"

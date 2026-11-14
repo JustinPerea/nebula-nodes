@@ -1,6 +1,6 @@
 """Google's Antigravity ACP server as a personal agent: its pinned download and its sign-in.
 
-"Antigravity (your setup)" runs ``agy_acp_server.par``, the ACP server Google
+"Your Antigravity" runs ``agy_acp_server.par``, the ACP server Google
 LLC publishes for editors (the ACP registry's ``antigravity-acp`` entry,
 github.com/agentclientprotocol/registry, ``antigravity-acp/agent.json``; Zed
 installs it from there). It is a binary, not an npm package, so Nebula
@@ -184,10 +184,10 @@ def install_state(state_dir: Path) -> tuple[str, str]:
     """("unsupported" | "missing" | "changed" | "installed", a sentence)."""
     rel = release()
     if rel is None:
-        return "unsupported", "Nebula has Google's Antigravity ACP server for macOS only (Apple silicon and Intel)."
+        return "unsupported", "Nebula has Google\u2019s Antigravity ACP server for macOS only, on Apple silicon and Intel."
     folder = version_dir(state_dir)
     if not folder.exists():
-        return "missing", f"Download Google's Antigravity ACP server {VERSION} ({round(rel.size / 1_000_000)} MB) first."
+        return "missing", f"Download Google\u2019s Antigravity ACP server {VERSION}, {round(rel.size / 1_000_000)} MB, first."
     marker = _read_marker(folder)
     if not marker or marker.get("version") != VERSION or marker.get("archiveSha256") != rel.sha256:
         return "changed", "The downloaded Antigravity files don't match what Nebula checked. Remove and download again."
@@ -305,13 +305,13 @@ def _extract_checked(archive: Path, dest: Path, rel: Release) -> dict[str, dict[
         members = [info for info in bundle.infolist() if not info.is_dir()]
         names = sorted(info.filename for info in members)
         if names != sorted(expected):
-            raise AntigravityError("archive_unexpected", "The download held other files than expected; nothing was installed.")
+            raise AntigravityError("archive_unexpected", "The download held other files than expected, so nothing was installed.")
         for info in members:
             pinned = expected[info.filename]
             if "/" in info.filename or "\\" in info.filename or _is_symlink_member(info):
-                raise AntigravityError("archive_unexpected", "The download held an unsafe entry; nothing was installed.")
+                raise AntigravityError("archive_unexpected", "The download held an unsafe entry, so nothing was installed.")
             if info.file_size != pinned.size:
-                raise AntigravityError("checksum_mismatch", "A file in the download has the wrong size; nothing was installed.")
+                raise AntigravityError("checksum_mismatch", "A file in the download has the wrong size, so nothing was installed.")
             target = dest / pinned.name
             digest = hashlib.sha256()
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o700)
@@ -323,7 +323,7 @@ def _extract_checked(archive: Path, dest: Path, rel: Release) -> dict[str, dict[
                     digest.update(chunk)
                     out.write(chunk)
             if digest.hexdigest() != pinned.sha256:
-                raise AntigravityError("checksum_mismatch", "A file in the download didn't match its SHA-256; nothing was installed.")
+                raise AntigravityError("checksum_mismatch", "A file in the download didn\u2019t match its SHA-256, so nothing was installed.")
             os.chmod(target, 0o755)
             recorded[pinned.name] = {"sha256": pinned.sha256, **_file_stamp(target)}
     return recorded
@@ -342,11 +342,11 @@ async def _download(job_: Job, rel: Release, archive: Path, client_factory: Call
                 async for chunk in response.aiter_bytes(CHUNK):
                     job_.received += len(chunk)
                     if job_.received > rel.size:
-                        raise AntigravityError("checksum_mismatch", "The download is bigger than the pinned file; nothing was installed.")
+                        raise AntigravityError("checksum_mismatch", "The download is bigger than the pinned file, so nothing was installed.")
                     digest.update(chunk)
                     out.write(chunk)
     if job_.received != rel.size or digest.hexdigest() != rel.sha256:
-        raise AntigravityError("checksum_mismatch", "The download didn't match its pinned SHA-256; nothing was installed.")
+        raise AntigravityError("checksum_mismatch", "The download didn\u2019t match its pinned SHA-256, so nothing was installed.")
 
 
 def _default_client() -> Any:
@@ -385,7 +385,7 @@ def start_install(state_dir: Path, *, client_factory: Callable[[], Any] | None =
             for other in base.iterdir():
                 if other.is_dir() and other.name != VERSION and not other.name.startswith(".download-"):
                     await asyncio.to_thread(shutil.rmtree, other, True)
-            job_.message = f"Installed {VERSION}; SHA-256 checked."
+            job_.message = f"Installed {VERSION} and checked its SHA-256."
         finally:
             await asyncio.to_thread(shutil.rmtree, staging, True)
 
@@ -488,7 +488,7 @@ def start_sign_in(state_dir: Path, on_signed_in: Callable[[bool], None]) -> Job:
             except asyncio.TimeoutError as exc:
                 raise AntigravityError("sign_in_timeout", "Sign-in timed out. Try again.") from exc
             except AcpError as exc:
-                raise AntigravityError("sign_in_failed", f"Google sign-in didn't finish: {exc.message[:200]}") from exc
+                raise AntigravityError("sign_in_failed", f"Google sign-in didn\u2019t finish. {exc.message[:200]}") from exc
             except AcpConnectionClosed as exc:
                 raise AntigravityError("sign_in_failed", "Google's Antigravity server stopped during sign-in.") from exc
             on_signed_in(True)
@@ -508,7 +508,7 @@ async def sign_out(state_dir: Path, on_signed_in: Callable[[bool], None]) -> str
     await cancel(state_dir, "sign_in")
     on_signed_in(False)
     if installed_command(state_dir) is None:
-        return "Signed out in Nebula. The server isn't downloaded, so its stored Google login (if any) stays."
+        return "Signed out in Nebula. The server isn\u2019t downloaded, so any stored Google login stays."
     try:
         proc, conn, init = await _open_server(state_dir, browser=NO_BROWSER)
     except (AntigravityError, AcpError, AcpConnectionClosed, asyncio.TimeoutError, OSError):

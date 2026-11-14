@@ -153,7 +153,7 @@ async def test_spend_key_is_counted_in_the_shared_outside_budget(env, tmp_path, 
     ledger = agent_spend.SpendLedger(tmp_path / "spend.json")
     key = agent_spend.personal_agent_spend_key("claude", "chat-1")
     assert key == "outside:personal:claude" and agent_spend.is_outside(key)
-    ledger.record(key, "Claude (your setup)", {"fal-flux": 0.25})
+    ledger.record(key, "Your Claude", {"fal-flux": 0.25})
     ledger.record(agent_spend.OUTSIDE_SHARED, "outside", {"fal-flux": 0.5})
     assert ledger.spent_outside().total == pytest.approx(0.75)
     budgets = agent_spend.session_budgets(key, ledger.spent(key), {"outsideDailyUsd": 1.0},
