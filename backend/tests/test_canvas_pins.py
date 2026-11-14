@@ -58,7 +58,7 @@ def _activate(store: ProjectStore, project_id: str) -> None:
 
 def test_text_is_plain_single_line_and_capped():
     # A break and a tab read as spaces, kept inside (GM r19 answer 1, PR #200 fix round 12).
-    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
+    assert clean_text("  warmer\n\tplease\x00\x1b[31m \u202e ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
     assert clean_text("x" * MAX_PIN_TEXT, limit=MAX_PIN_TEXT) == "x" * MAX_PIN_TEXT
     for bad in ("", "   \n", None, 42, "x" * (MAX_PIN_TEXT + 1)):
         with pytest.raises(PinError) as exc:

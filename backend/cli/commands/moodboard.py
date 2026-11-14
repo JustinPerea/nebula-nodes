@@ -75,7 +75,7 @@ def _print_edit(result: dict[str, Any], *, undoing: bool) -> None:
     applied = [entry for entry in result.get("applied") or [] if isinstance(entry, dict)]
     changed = sum(1 for entry in applied if entry.get("status") == "applied")
     same = len(applied) - changed
-    label = f"{board.get('name')} ({board.get('id')})"
+    label = f"{boards.shown_name(board)} ({board.get('id')})"
     if undoing:
         print(f"Put {label} back." if changed else f"Nothing on {label} was put back:")
     else:
@@ -204,7 +204,7 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
     images = board.get("images") or []
     strength = board.get("strength")
     strength_text = f"{float(strength):.2f}" if isinstance(strength, (int, float)) else "?"
-    print(f"{board.get('name')}  ({board.get('id')})")
+    print(f"{boards.shown_name(board)}  ({board.get('id')})")
     print(f"  {board.get('mode')} · strength {strength_text} · {_scope_label(board, names)}")
     if board.get("notes"):
         print(f"  Notes: {board['notes']}")
@@ -312,7 +312,7 @@ def _print_list_change(label: str, change: dict[str, Any]) -> None:
 
 def _print_dry_run(result: dict[str, Any]) -> None:
     thresholds, defaults = result.get("thresholds") or {}, result.get("defaults") or {}
-    print(f"Dry run for {result.get('name')} ({result.get('id')}). Nothing was saved.")
+    print(f"Dry run for {boards.shown_name(result)} ({result.get('id')}). Nothing was saved.")
     names = (("accentMinChroma", "accent min chroma"), ("accentSeparation", "accent separation"),
              ("mergeDeltaE", "merge dE"))
     parts = []
@@ -366,7 +366,7 @@ def _added_line(count: int, skipped: int) -> str:
 def print_move(result: dict[str, Any], kind: str) -> None:
     """A move's answer in words, with the command that moves it back."""
     asset = result.get("asset") if isinstance(result.get("asset"), dict) else {}
-    label = f"{asset.get('name') or result.get('id')} ({result.get('id')})"
+    label = f"{boards.shown_name(asset) if asset.get('name') else result.get('id')} ({result.get('id')})"
     if result.get("status") != "moved":
         where = "Global" if not result.get("to") else f"in {result.get('toName') or result.get('to')}"
         print(f"{label} is already {where}. Nothing changed.")
@@ -518,7 +518,7 @@ def run(client: NebulaClient, args) -> None:
                 cover = boards.cover_of(board) if "coverImageId" in board else None
                 if cover is not None and cover["chosen"]:
                     counted += f", cover #{cover['number']}"
-                print(f"{board.get('id')}  {board.get('name')}  ({counted}, "
+                print(f"{board.get('id')}  {boards.shown_name(board)}  ({counted}, "
                       f"{board.get('mode')}, {analyzed}, {_scope_label(board, names)})")
         elif verb == "show":
             board = boards.get_board(api, args.board, headers)
@@ -538,7 +538,7 @@ def run(client: NebulaClient, args) -> None:
                 print(f"{boards.repeated_line(board)} Its id is {board.get('id')}, with {count} "
                       f"image{'' if count == 1 else 's'}. It's in Moodboard Studio.")
                 return
-            print(f"Made {board.get('name')} ({board.get('id')}) with "
+            print(f"Made {boards.shown_name(board)} ({board.get('id')}) with "
                   f"{_added_line(len(board.get('images') or []), skipped)}. It's in Moodboard Studio.")
         elif verb == "add":
             board, added, skipped, undo = boards.add_to_board(api, args.board, args.sources, headers=headers)
@@ -547,7 +547,7 @@ def run(client: NebulaClient, args) -> None:
                 _print_json({**boards.brief(board), "added": added, "duplicatesSkipped": skipped, "addedIds": ids,
                              "undo": undo})
                 return
-            print(f"Added {_added_line(added, skipped)} to {board.get('name')} "
+            print(f"Added {_added_line(added, skipped)} to {boards.shown_name(board)} "
                   f"({len(board.get('images') or [])} in all).")
             if ids:
                 removes = " ".join(f"--remove {image_id}" for image_id in ids)
@@ -602,7 +602,7 @@ def run(client: NebulaClient, args) -> None:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous,
                              **({"skipped": skipped} if args.restore is not None else {})})
                 return
-            print(f"Updated {board.get('name')} ({board.get('id')}).")
+            print(f"Updated {boards.shown_name(board)} ({board.get('id')}).")
             for message in skipped:
                 print(f"  {message}.")
             for url in removed:
@@ -667,10 +667,10 @@ def run(client: NebulaClient, args) -> None:
         elif verb == "delete":
             result = boards.delete_board(api, args.board, headers)
             if result.get("restorable"):
-                print(f"Deleted {result.get('name')} ({result.get('id')}). It's in Recently deleted: "
+                print(f"Deleted {boards.shown_name(result)} ({result.get('id')}). It's in Recently deleted: "
                       f"`nebula trash restore moodboard {result.get('id')}` brings it back.")
             else:
-                print(f"Deleted {result.get('name')} ({result.get('id')}).")
+                print(f"Deleted {boards.shown_name(result)} ({result.get('id')}).")
     except boards.MoodboardError as exc:
         if exc.previous is not None:
             # Part of the change was saved: say how to put it back.

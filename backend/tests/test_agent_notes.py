@@ -80,7 +80,7 @@ def notes(tmp_path):
 def test_text_is_plain_capped_and_private_use_characters_never_survive():
     from services.agent_notes import MAX_TEXT, NoteError, clean_note_text
 
-    assert clean_note_text("  two  seeds\n\there\x00‮ ") == "two seeds here"
+    assert clean_note_text("  two  seeds\n\there\x00\u202e ") == "two seeds here"
     # Private-use characters are how Nebula marks image refs in saved text, so
     # an agent can't forge one.
     assert clean_note_text("aimg1b") == "aimg1b"

@@ -277,8 +277,8 @@ describe('GM r16 answer 3: the canvas shows a note and a reply stripped, whateve
   const KNOWN = ['\x1b[31m', '\x1b[0m', '\x1b]0;t\x07', '\x1b]8;;http://e\x1b\\', '\x1bPq#0\x1b\\', '\x1b_Gf=1\x1b\\', '\x1b^pm\x1b\\',
     '\x1bXsos\x1b\\', '\x9b31m', '\x9d0;t\x9c', '\x90q\x9c', '\x9f a\x9c', '\x9e b\x9c', '\x98 c\x9c', '\x1b', '\x1b]', '\x1bP', '\x9d',
     '\x90', '\x1b[', '\x1b[?', '\x1bP\x1b[31m\x1b\\', '\x1b]\x1b]0;x\x07\x07', '\x00', '\x07', '\x08', '\x0b', '\x0c', '\x7f', '\x85',
-    ' ', '\r', '\r\n', '\x1bc', '\x1b(B', '\x1b7', '\x1b#8', '\x1bN', '\x1bO', '‮', '​'];
-  const ALPHABET = [...Array.from({ length: 0xa0 }, (_, i) => String.fromCharCode(i)), ...'abc ⏎é‮​<>"\\'];
+    ' ', '\r', '\r\n', '\x1bc', '\x1b(B', '\x1b7', '\x1b#8', '\x1bN', '\x1bO', '\u202e', '​'];
+  const ALPHABET = [...Array.from({ length: 0xa0 }, (_, i) => String.fromCharCode(i)), ...'abc ⏎é\u202e​<>"\\'];
   const cases = (n: number) => {
     let seed = 9;
     const random = () => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed / 2 ** 31; };
@@ -308,7 +308,7 @@ describe('GM r16 answer 3: the canvas shows a note and a reply stripped, whateve
 
   it('it matches the backend\'s shown form on the forms review 9 tried', () => {
     // Spaces inside stay (GM r19 answer 1, fix round 12), as the backend now shows them.
-    expect(pinDisplayText('say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x‮   ')).toBe('say \nline two end \nx');
+    expect(pinDisplayText('say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x\u202e   ')).toBe('say \nline two end \nx');
     expect(pinDisplayText('done \x1b[1mbold\x1b[0m\x9b2J and \x07bell\nnext', { multiline: false })).toBe('done bold and bell next');
     expect(pinDisplayText('  indented\n\n\n\nnext', { fold: false })).toBe('indented\n\n\n\nnext');
     expect(pinDisplayText('  indented\n\n\n\nnext')).toBe('indented\nnext');

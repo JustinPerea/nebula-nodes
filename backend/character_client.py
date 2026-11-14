@@ -37,7 +37,7 @@ def find_character(api: NebulaAPI, ref: str, headers: dict[str, str] | None = No
     candidates = _list(api, "global", None, headers)
     for project_id in projects:
         candidates.extend(_list(api, "project", project_id, headers))
-    matches = [item for item in candidates if str(item.get("name", "")).casefold() == ref.casefold()]
+    matches = [item for item in candidates if boards.same_name(item.get("name"), ref)]
     if not matches:
         # The caller's text is echoed cleaned and cut to 40 characters, as a cursor refusal echoes it.
         raise MoodboardError(f"no Character “{echoed(ref)}” (Character Studio lists them; use its id or exact name)")
