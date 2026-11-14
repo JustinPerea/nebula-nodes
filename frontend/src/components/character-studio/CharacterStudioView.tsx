@@ -10,6 +10,7 @@ import { UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import type { Character } from '../../types';
 import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
+import { useStudioCharacterStore } from '../../store/studioCharacterStore';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
 import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
@@ -116,6 +117,12 @@ export function CharacterStudioView() {
   const { draft, savedId, thumbnail, saveState, loadError, saveError, retry, loaded,
     dirty, pendingSaveId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   const loading = !loaded;
+  // The saved Character open here and its view count, for the agent cursor (a removed view is "gone"); a draft publishes nothing.
+  const viewCount = draft.referenceViews.length;
+  useEffect(() => {
+    useStudioCharacterStore.getState().setStudioCharacter(loaded && savedId ? { characterId: savedId, viewCount } : null);
+  }, [loaded, savedId, viewCount]);
+  useEffect(() => () => useStudioCharacterStore.getState().setStudioCharacter(null), []);
   const [railScope, setRailScope] = useState<AssetScope>(characterEditorScope);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -476,6 +483,7 @@ export function CharacterStudioView() {
               key={`${key}:${epoch}`}
               draft={draft}
               thumbnail={previewThumbnail}
+              agentId={loaded ? savedId : null}
               // Only what this edit changed goes onto the draft as it is now,
               // so an outside edit that landed since this render isn't undone.
               onChange={(next) => { if (isCurrent()) setDraft((current) => ({ ...current, ...editedFields(draft, next) })); }}

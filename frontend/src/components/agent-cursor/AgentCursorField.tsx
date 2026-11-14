@@ -110,14 +110,20 @@ function sayFor(cursor: AgentCursor, lookup: CursorLabels | undefined, headerWai
   const field = cursor.action === 'type' && nodeId ? findTypeField(nodeId, handle) : null;
   if (cursor.say) return { text: cursor.say, isDefault: false, field };
   if ('surface' in cursor.target && cursor.anchorNames) {
-    // A moodboard item: its default line names what `anchorNames` carries
-    // (the board, the image's number, the control), so it reads right even
-    // for an item that isn't on screen (GM - Design, PR #233 r4 item 4).
+    // A surface item: its default line names what `anchorNames` carries (the
+    // item, a sub-item's number, the control), so it reads right even for an
+    // item that isn't on screen (GM - Design, PR #233 r4 item 4).
     const names = cursor.anchorNames;
+    const hasSub = cursor.target.itemId.includes('/');
     const line = surfaceSay(cursor.action, {
-      board: names.board,
+      surface: cursor.target.surface,
+      board: names.board ?? null,
       image: names.image ?? null,
-      hasImage: cursor.target.itemId.includes('/'),
+      hasImage: hasSub,
+      character: names.character ?? null,
+      view: names.view ?? null,
+      hasView: hasSub,
+      style: names.style ?? null,
       part: cursor.target.part ?? null,
     });
     if (line) return { text: line, isDefault: true, field: null };

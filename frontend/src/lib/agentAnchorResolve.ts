@@ -1,11 +1,11 @@
-import { agentAnchor } from './agentAnchors';
+import { surfaceAnchor } from './agentAnchors';
 import { boardView } from './agentBoardView';
 import { parkReachPx } from './agentCursorPark';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
  * Where an agent cursor on a surface beside the canvas (the Moodboard panel
- * and Studio) goes, found in the DOM (Phase 3, "Anywhere"; plan section 3).
+ * and Studio, the Characters and Styles lists and the Character Studio) goes, found in the DOM (Phase 3, "Anywhere"; plan section 3).
  * Pure over an injected environment, so the whole chain is tested with fake
  * rects. In the cursor chunk (lib/deferredChunks.ts DEFERRED_MODULES).
  *
@@ -16,11 +16,12 @@ import type { AgentCursorAnchor } from './wsClient';
  *     DOM order. Inside its clip the cursor aims at the item's top (its
  *     middle across, 24 px down or half its height); out of it, it parks at
  *     the clip's edge on the item's side (an edge park).
- *  2. **The board's launcher** `moodboard:<board>`: its row in the Assets
- *     dock, or its Moodboard node on the canvas, when at least half of it is
- *     visible.
- *  3. **The surface's launcher** `moodboard`: the dock's tab when the dock is
- *     open, else the rail's "Open assets".
+ *  2. **The item's launcher** `<surface>:<item>` (`moodboard:<board>`,
+ *     `character:<id>`, `style:<id>`): its row in the Assets dock, or its
+ *     node on the canvas, when at least half of it is visible.
+ *  3. **The surface's launcher** `<surface>`: the dock's tab when the dock
+ *     is open, else the rail's "Open assets" (one button, launcher for every
+ *     surface: a launcher is space-separated tokens, matched with `~=`).
  *  4. **The canvas launcher** `canvas` (a Studio's "Back to Canvas"), for a
  *     canvas target when no canvas is mounted.
  *  5. **Nothing:** the caller holds the cursor's last spot (GM r6).
@@ -127,11 +128,12 @@ export function clampToClip(target: Point, clip: Box): { point: Point; angle: nu
 }
 
 /** The anchor values to try for a surface anchor, most exact first: a part
- *  that isn't drawn falls back to its item. */
+ *  that isn't drawn falls back to its item (a Style's part is never drawn,
+ *  so its DOM anchor has none). */
 export function anchorValues(anchor: Extract<AgentCursorAnchor, { surface: string }>): string[] {
-  const [board, image] = anchor.itemId.split('/');
-  const values = [agentAnchor(board, image, anchor.part)];
-  if (anchor.part) values.push(agentAnchor(board, image));
+  const [item, sub] = anchor.itemId.split('/');
+  const values = [surfaceAnchor(anchor.surface, item, sub, anchor.part)];
+  if (anchor.part) values.push(surfaceAnchor(anchor.surface, item, sub));
   return values.filter((value): value is string => value !== undefined);
 }
 
@@ -209,7 +211,7 @@ export class AnchorResolver {
     // Not in the DOM at all: an image card the Board view culled (panned out
     // of its pane) is still on the board, so it parks at the pane's edge.
     const [board, image] = anchor.itemId.split('/');
-    const culled = image ? this.env.culled?.(board, image) : null;
+    const culled = anchor.surface === 'moodboard' && image ? this.env.culled?.(board, image) : null;
     if (!culled || area(culled.box) === 0) return null;
     const aim = aimPoint(culled.box);
     const { point, angle } = clampToClip(aim, culled.clip);
@@ -217,7 +219,8 @@ export class AnchorResolver {
   }
 
   private launcher(key: string, step: LauncherStep, share = LAUNCHER_VISIBLE_SHARE): Resolution | null {
-    const matches = this.seen(`[data-agent-launcher="${key}"]`)
+    // `~=`: one button can be the launcher for several surfaces (space-separated tokens).
+    const matches = this.seen(`[data-agent-launcher~="${key}"]`)
       .filter((seen) => area(seen.visible) >= area(seen.box) * share);
     // The Assets dock's own tab beats the rail's button: it is where the person looks once the dock is open.
     const pick = this.best(step === 'surface' && matches.some((seen) => !seen.element.closest(RAIL))
@@ -232,7 +235,7 @@ export class AnchorResolver {
    * canvas anchor then is the canvas layer's, not this one's). `gone`: the
    * caller knows the anchor's item no longer exists (an image removed), so
    * an exact anchor that isn't there is `{kind: 'gone'}`, not a fall back to
-   * its board.
+   * its board or character.
    */
   resolve(anchor: AgentCursorAnchor, { canvasMounted = false, gone = false }: { canvasMounted?: boolean; gone?: boolean } = {}): Resolution {
     if (!('surface' in anchor)) {
@@ -241,10 +244,10 @@ export class AnchorResolver {
     const exact = this.exact(anchor);
     if (exact) return exact;
     if (gone) return { kind: 'gone' };
-    const [board] = anchor.itemId.split('/');
-    const launcherKey = agentAnchor(board) && `moodboard:${board}`;
+    const [item] = anchor.itemId.split('/');
+    const launcherKey = surfaceAnchor(anchor.surface, item);
     return (launcherKey ? this.launcher(launcherKey, 'board') : null)
-      ?? this.launcher('moodboard', 'surface')
+      ?? this.launcher(anchor.surface, 'surface')
       ?? { kind: 'none' };
   }
 }

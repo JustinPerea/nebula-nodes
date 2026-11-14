@@ -197,7 +197,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, moodboard_clash, moodboard_clash_refusal,
+from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, SURFACES, surface_clash, surface_clash_refusal,
                                      refusal as cursor_action_refusal)
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
@@ -8484,7 +8484,7 @@ _POINTED_AT_SPOT = {"look": "Looked around"}
 def _pointed(action: str, target: Mapping[str, Any], names: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     if isinstance(target, Mapping) and "surface" in target:
         verb = _POINTED_AT_NODE.get(action)
-        label = (names or {}).get("board")
+        label = next((names[key] for key in ("board", "character", "style") if (names or {}).get(key)), None)
         return {"verb": verb, "nodeId": None, "label": label} if verb and label else None
     node_id = target.get("nodeId") if isinstance(target, Mapping) else None
     if isinstance(node_id, str):
@@ -8509,6 +8509,23 @@ def _boards_to_point_at() -> list[dict[str, Any]]:
     project_id = _open_project_id()
     boards = store.list(scope="project", projectId=project_id) if project_id else []
     return [*boards, *store.list(scope="global")]
+
+
+def _characters_to_point_at() -> list[dict[str, Any]]:
+    """The characters a cursor may point at: those of the open project, then
+    Global, as the Characters tab lists them."""
+    store = _char_store()
+    project_id = _open_project_id()
+    characters = store.list("project", project_id) if project_id else []
+    return [*characters, *store.list("global")]
+
+
+def _styles_to_point_at() -> list[dict[str, Any]]:
+    """The styles a cursor may point at: those of the open project, then
+    Global, as the Styles tab lists them."""
+    project_id = _open_project_id()
+    styles = preset_store.list("project", project_id) if project_id else []
+    return [*styles, *preset_store.list("global")]
 
 
 @app.post("/api/canvas/cursor")
@@ -8549,11 +8566,17 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             target, placed = agent_presence.here(identity)
             names = agent_presence.here_names(identity) if placed == "cursor" else None
         elif isinstance(body.get("target"), dict) and "surface" in body["target"]:
-            # A moodboard item: the boards it may name are read off the loop.
-            clash = moodboard_clash(**{"from": body.get("from")})  # a moodboard item is a target of its own
+            # A surface item: the items it may name are read off the loop.
+            surface = body["target"].get("surface")
+            clash = surface_clash(**{"from": body.get("from")})  # a surface item is a target of its own
             if clash:
-                raise PresenceError(moodboard_clash_refusal(clash))
-            target, names = parse_surface_target(body["target"], await asyncio.to_thread(_boards_to_point_at))
+                raise PresenceError(surface_clash_refusal(clash, surface if surface in SURFACES else "moodboard"))
+            target, names = parse_surface_target(
+                body["target"],
+                await asyncio.to_thread(_boards_to_point_at) if surface == "moodboard" else None,
+                characters=await asyncio.to_thread(_characters_to_point_at) if surface == "character" else None,
+                styles=await asyncio.to_thread(_styles_to_point_at) if surface == "style" else None,
+            )
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
@@ -27558,15 +27581,16 @@ async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, as
         message["projectId"] = (asset or {}).get("projectId") or None
     if edit is not None:
         message.update({"version": (asset or {}).get("version"), "edit": _graph_edit_origin(), **edit})
-    if kind == "moodboard" and not deleted and asset and asset.get("id"):
-        # Every write that saves a board passes here, so a rename by any path
-        # (the PUT, an edits batch, an undo, an accepted proposal) reaches the
-        # names agents read off the cursors on it. The tabs are not told: a
-        # tab's default line is worked out once per event and fades in seconds.
+    if kind in SURFACES and not deleted and asset and asset.get("id"):
+        # Every write that saves a board, a character or a Style passes here,
+        # so a rename by any path (the PUT, an edits batch, an undo, an
+        # accepted proposal) reaches the names agents read off the cursors on
+        # it. The tabs are not told: a tab's default line is worked out once
+        # per event and fades in seconds.
         try:
-            agent_presence.rename_board(str(asset["id"]), asset.get("name"))
+            agent_presence.rename_item(kind, str(asset["id"]), asset.get("name"))
         except Exception:  # noqa: BLE001 - decoration must not break a saved write
-            logging.getLogger("nebula.presence").exception("renaming a board on its cursors failed")
+            logging.getLogger("nebula.presence").exception("renaming an item on its cursors failed")
     try:
         if holds_private_note(message.get("undo")):
             await manager.broadcast_browser(message)
@@ -27640,6 +27664,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
+    views_before: int | None = None
     if "referenceViews" in updates:
         try:
             stored = store.get(char_id)
@@ -27649,6 +27674,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         # any check (a Studio sends the views it read, held links too).
         if stored is None:
             return _asset_not_found("character", char_id)
+        views_before = len(stored.get("referenceViews") or [])
         # A version behind (versions only grow): the update below is the 409
         # the Studio merges from and writes nothing, so the views aren't
         # checked against a Character they can't land on.
@@ -27673,6 +27699,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     except ValueError:
         raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
+    await _forget_removed_views(character, views_before)
     return character
 
 
@@ -27686,6 +27713,8 @@ async def delete_character(char_id: str) -> dict:
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
+    # Cursors on the deleted Character leave: there is no place left to point at.
+    await _forget_item_cursors("character", char_id)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
 
@@ -27853,6 +27882,18 @@ async def _tell_tabs(event: dict[str, Any], cursors: list[dict[str, Any]]) -> No
 _CURSOR_TELL_MAX = 64  # bounded like the live set: 8 sessions an agent over the agents seen
 
 
+async def _forget_item_cursors(surface: str, item_id: str) -> None:
+    """A board, character or Style was deleted: cursors on it leave (the
+    caller's too), and the tabs are told. Never fails the route."""
+    gone: list[dict[str, Any]] = []
+    try:
+        agent_presence.forget_item(surface, item_id, gone)
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("forgetting a deleted item's cursors failed")
+        return
+    await _tell_tabs({"type": "agentPresenceLeave"}, gone)
+
+
 async def _forget_removed_images(after: dict, changes: dict) -> None:
     """A board write took images off the board: cursors on them fall back to
     the board, except the cursor of the agent that made the write, which
@@ -27872,6 +27913,23 @@ async def _forget_removed_images(after: dict, changes: dict) -> None:
         return
     # The tabs move the same cursors to the board, rather than hold them on a
     # tile that is gone until the 120 s prune.
+    await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
+
+
+async def _forget_removed_views(character: Mapping[str, Any], before: int | None) -> None:
+    """A Character's reference views were cut down: cursors on a view past the
+    new count fall back to the Character, and the tabs move them there too.
+    Views are positions, so nothing else is kept. Never fails the route."""
+    after = len(character.get("referenceViews") or [])
+    if before is None or after >= before:
+        return
+    fell: list[dict[str, Any]] = []
+    try:
+        agent_presence.forget_subs("character", str(character.get("id")),
+                                   [str(number) for number in range(after + 1, before + 1)], fell=fell)
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("forgetting removed views failed")
+        return
     await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
 
 
@@ -28742,7 +28800,7 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     from services.style_actions import changed_fields
 
-    await _style_written("updated", preset, fields=changed_fields(before, preset))
+    await _style_written("updated", preset, fields=changed_fields(before, preset), before=before)
     return preset
 
 
@@ -28756,6 +28814,7 @@ async def delete_preset(preset_id: str) -> dict:
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Style {preset_id} not found", "style", "styles")
     await _style_written("deleted", record, deleted=True)
+    await _forget_item_cursors("style", preset_id)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 
 
@@ -28828,28 +28887,38 @@ def _style_params_keeping_internal(before: Mapping[str, Any], params: Any) -> An
 
 
 def _journal_style(change: str, style: Mapping[str, Any] | None, *, style_id: str = "",
-                   fields: list[str] | None = None) -> str:
-    """One ``style.*`` journal event in the caller's name; returns its line."""
+                   fields: list[str] | None = None, before: Mapping[str, Any] | None = None) -> str:
+    """One ``style.*`` journal event in the caller's name; returns its line.
+    ``before`` is the Style as it was before an update, for a rename's line."""
     from services import style_actions
 
-    line = style_actions.describe(change, style, fields=fields, style_id=style_id)
+    line = style_actions.describe(change, style, fields=fields, style_id=style_id, before=before)
     _journal(f"style.{change}", data=style_actions.journal_data(style, fields=fields, style_id=style_id),
              summary=line)
     return line
 
 
 async def _style_written(change: str, style: Mapping[str, Any], *, fields: list[str] | None = None,
+                         before: Mapping[str, Any] | None = None,
                          deleted: bool = False, broadcast: bool = True) -> None:
     """After a Style write: the journal, ``storedAssetChanged`` (kind
     "style") so the Assets panel and Create's Styles list again, and, for an
-    agent, the same line in the Agent log."""
+    agent, the same line in the Agent log. An agent's create or update also
+    moves its cursor to the Style (with the part when one field changed), as
+    a board write does (_board_point), when the Style is the open project's or
+    Global's; a delete or a restore moves none (a delete's cursors leave)."""
     from services import style_actions
 
     style_id = str(style.get("id") or "")
-    line = _journal_style(change, style, style_id=style_id, fields=fields)
+    line = _journal_style(change, style, style_id=style_id, fields=fields, before=before)
     if broadcast:
         await _broadcast_stored_asset("style", None if deleted else style, style_id, deleted=deleted)
-    await _say_agent_action(style_actions.sentence(line))
+    point: dict[str, Any] = {}
+    scope = style.get("projectId")
+    if change in ("created", "updated") and style_id and not (scope and scope != _open_project_id()):
+        target, names = style_actions.style_anchor(style, fields if change == "updated" else None, style_id=style_id)
+        point = {"target": target, "action": "type", "names": names}
+    await _say_agent_action(style_actions.sentence(line), **point)
 
 
 # ---------- Preset seeding (first-run starter styles) ----------

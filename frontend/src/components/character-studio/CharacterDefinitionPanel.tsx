@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage } from '../../lib/errorCopy';
 import { storedImageView } from '../../lib/storedImage';
+import { surfaceAnchor } from '../../lib/agentAnchors';
 import { OutsideImageNote } from '../OutsideImageNote';
 import type { CharacterDraft } from './CharacterStudioView';
 import { LineText } from '../LineText';
@@ -12,6 +13,9 @@ interface CharacterDefinitionPanelProps {
   thumbnail: string;
   onChange: (next: CharacterDraft) => void;
   onAppendReferences?: (urls: string[]) => void;
+  /** The saved Character's id, for the agent cursor's anchors (lib/agentAnchors);
+   *  none for an unsaved draft, which carries no anchor. */
+  agentId?: string | null;
 }
 
 const SUBJECT_TYPES: Array<{ id: CharacterDraft['subjectType']; label: string }> = [
@@ -35,6 +39,7 @@ export function CharacterDefinitionPanel({
   thumbnail,
   onChange,
   onAppendReferences,
+  agentId = null,
 }: CharacterDefinitionPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -80,9 +85,11 @@ export function CharacterDefinitionPanel({
   // Only Nebula's own files are loaded (lib/storedImage.ts): a view saved
   // before Nebula checked them can be an outside link, kept but never drawn.
   const cover = storedImageView(thumbnail);
+  // `data-agent-anchor`: the Character, its controls and each reference view by position (a view has no id).
+  const anchor = (part?: string) => surfaceAnchor('character', agentId, null, part);
 
   return (
-    <div className="character-def">
+    <div className="character-def" data-agent-anchor={anchor()}>
       <section className="character-def__head">
         <div className="character-def__thumb">
           {cover.src ? (
@@ -94,7 +101,7 @@ export function CharacterDefinitionPanel({
           )}
         </div>
         <div className="character-def__head-fields">
-          <label className="character-def__field">
+          <label className="character-def__field" data-agent-anchor={anchor('name')}>
             <span className="character-def__label">Name</span>
             <input
               type="text"
@@ -104,7 +111,7 @@ export function CharacterDefinitionPanel({
               onChange={(e) => onChange({ ...draft, name: e.target.value })}
             />
           </label>
-          <label className="character-def__field">
+          <label className="character-def__field" data-agent-anchor={anchor('subject-type')}>
             <span className="character-def__label">Subject type</span>
             <select
               className="character-def__select"
@@ -128,7 +135,7 @@ export function CharacterDefinitionPanel({
 
       {/* Multi-view reference bundle — ≥3 required. Thumbnail auto-picks the
           first view, so order matters; we never reorder it. */}
-      <section className="character-def__section">
+      <section className="character-def__section" data-agent-anchor={anchor('views')}>
         <div className="character-def__section-head">
           <span className="character-def__label">
             Reference views ({draft.referenceViews.length})
@@ -139,7 +146,8 @@ export function CharacterDefinitionPanel({
           {draft.referenceViews.map((url, idx) => {
             const view = storedImageView(url);
             return (
-              <div key={`${url}-${idx}`} className={`character-def__ref${view.src ? '' : ' character-def__ref--empty'}`}>
+              <div key={`${url}-${idx}`} className={`character-def__ref${view.src ? '' : ' character-def__ref--empty'}`}
+                data-agent-anchor={surfaceAnchor('character', agentId, String(idx + 1))}>
                 {view.src ? <img src={view.src} alt="" draggable={false} /> : view.outside ? <OutsideImageNote /> : null}
                 {idx === 0 && <span className="character-def__ref-badge">cover</span>}
                 <button
@@ -183,7 +191,7 @@ export function CharacterDefinitionPanel({
       {/* frozenTraitString — re-emitted VERBATIM into prompts. Labeled clearly
           so the user understands paraphrasing it breaks identity. */}
       <section className="character-def__section">
-        <label className="character-def__field">
+        <label className="character-def__field" data-agent-anchor={anchor('traits')}>
           <span className="character-def__label">Frozen trait string</span>
           <span className="character-def__hint">
             Preserved verbatim in prompts that use this Character.
@@ -203,7 +211,7 @@ export function CharacterDefinitionPanel({
 
       {/* Seed + consistency strength */}
       <section className="character-def__section character-def__section--row">
-        <label className="character-def__field character-def__field--narrow">
+        <label className="character-def__field character-def__field--narrow" data-agent-anchor={anchor('seed')}>
           <span className="character-def__label">Seed</span>
           <input
             type="number"

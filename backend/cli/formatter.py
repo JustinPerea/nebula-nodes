@@ -869,16 +869,20 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
 
 
 def _surface_words(target: dict[str, Any], names: Any = None) -> str:
-    """Where a cursor on a moodboard item is, as `nebula look` and `agents`
-    say it: moodboard “Desert light”, image 12 (note). The names come
-    with the event (anchorNames); without them, the item's ids."""
+    """Where a cursor on a surface item is, as `nebula look` and `agents`
+    say it: moodboard “Desert light”, image 12 (note); character “Mara”,
+    view 2; style “Dusk grain” (prompt). The names come with the event
+    (anchorNames); without them, the item's ids."""
+    surface = str(target.get("surface") or "moodboard")
+    key, sub_word = {"character": ("character", "view"), "style": ("style", "")}.get(surface, ("board", "image"))
+    noun = surface if surface in ("character", "style") else "moodboard"
     item = str(target.get("itemId") or "")
-    board_id, _, image_id = item.partition("/")
+    item_id, _, sub_id = item.partition("/")
     names = names if isinstance(names, dict) else {}
-    board = str(names.get("board") or board_id or "?")
-    words = f"moodboard \u201c{board}\u201d" if names.get("board") else f"moodboard {board}"
-    if image_id:
-        words += f", image {names.get('image') or image_id}"
+    name = str(names.get(key) or item_id or "?")
+    words = f"{noun} \u201c{name}\u201d" if names.get(key) else f"{noun} {name}"
+    if sub_id and sub_word:
+        words += f", {sub_word} {names.get(sub_word) or sub_id}"
     if target.get("part"):
         words += f" ({target['part']})"
     return words

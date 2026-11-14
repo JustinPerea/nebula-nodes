@@ -50,14 +50,22 @@ def run_point(
     moodboard: str | None = None,
     image: str | None = None,
     part: str | None = None,
+    character: str | None = None,
+    view: str | None = None,
+    style: str | None = None,
 ) -> None:
     """Point the cursor; with no target, only `say`, shown where the cursor is (it doesn't move).
-    ``moodboard`` (with ``image`` and ``part``) points at a moodboard item instead."""
+    ``moodboard`` (with ``image`` and ``part``), ``character`` (with ``view`` and ``part``) or
+    ``style`` (with ``part``) points at that item instead."""
     body: dict = {"say": say}
-    if moodboard is not None:
-        item: dict = {"surface": "moodboard", "board": moodboard}
+    surface, ref = next(((name, value) for name, value in (("moodboard", moodboard), ("character", character),
+                                                           ("style", style)) if value is not None), ("", None))
+    if surface:
+        item: dict = {"surface": surface, {"moodboard": "board"}.get(surface, surface): ref}
         if image is not None:
             item["image"] = image
+        if view is not None:
+            item["view"] = view
         if part is not None:
             item["part"] = part
         body = {"target": item, **body}
@@ -65,9 +73,11 @@ def run_point(
         result = client.point_cursor(body, agent_name=agent_name)
         agent = result.get("agent", {}).get("name", "agent")
         names = result.get("anchorNames") or {}
-        where = f"moodboard \u201c{names.get('board') or moodboard}\u201d"
+        where = f"{surface} \u201c{names.get('board' if surface == 'moodboard' else surface) or ref}\u201d"
         if image is not None:
             where += f", image {names.get('image') or image}"
+        if view is not None:
+            where += f", view {names.get('view') or view}"
         if part is not None:
             where += f" ({part})"
         said = f": {result.get('say')}" if result.get("say") else ""

@@ -12,6 +12,7 @@ import type {
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
 import type { ChannelListenersEvent, PersonThreadEvent } from './personThread';
+import type { AgentSurfaceName } from './agentSurfaces';
 
 export type ErrorCategory =
   | 'blocked'
@@ -24,24 +25,35 @@ export type ErrorCategory =
   | 'unknown';
 
 /** Where an agent cursor points: a node, one of its ports, a flow-space spot,
- * or an item on a surface beside the canvas (Phase 3, "Anywhere"): the
- * Moodboard panel and Studio, one surface. `itemId` is `<board>` or
- * `<board>/<image>` (ids only, whatever the agent called the item); `part`
- * is a control: name, direction, avoid, colors or colors-out (the keep-out
- * colors) on a board, note or weight
- * on an image. The DOM carries the same string as `data-agent-anchor`
+ * or an item on a surface beside the canvas (Phase 3, "Anywhere"). The
+ * surfaces and their controls are in lib/agentSurfaces.ts:
+ *  - moodboard (the Moodboard panel and Studio): `itemId` is `<board>` or
+ *    `<board>/<image>` (ids only, whatever the agent called the item); `part`
+ *    is name, direction, avoid, colors or colors-out (the keep-out colors) on
+ *    a board, note or weight on an image;
+ *  - character: `<character>` or `<character>/<n>`, n a reference view's
+ *    1-based position (views have no ids); `part` is name, subject-type,
+ *    views, traits or seed, on the character, not on a view;
+ *  - style: `<style>`; `part` only chooses the default line.
+ * The DOM carries the same string as `data-agent-anchor`
  * (lib/agentAnchors.ts). */
 export type AgentCursorAnchor =
   | { nodeId: string; handle?: string }
   | { x: number; y: number }
-  | { surface: 'moodboard'; itemId: string; part?: string };
+  | { surface: AgentSurfaceName; itemId: string; part?: string };
 
 /** What a surface item is called, beside its anchor (never in it: tabs
  * compare anchors whole), so a line or a launcher park can name an item that
- * isn't on screen. `image` is the image's number on its board. */
+ * isn't on screen. The item's name is under its surface's key (`board`,
+ * `character` or `style`); `image` is an image's number on its board, `view`
+ * a reference view's number; `part` is a control's label (a Style's is its
+ * part id). */
 export interface AgentAnchorNames {
-  board: string;
+  board?: string;
   image?: number;
+  character?: string;
+  view?: number;
+  style?: string;
   part?: string;
 }
 

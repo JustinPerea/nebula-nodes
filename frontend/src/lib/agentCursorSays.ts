@@ -12,6 +12,7 @@
 import type { AgentCursorAction } from './agentPresenceActions';
 import { nodeNameList } from './errorCopy';
 import { AGENT_CURSOR_ERROR_CAUSE_MS, AGENT_CURSOR_SAY_HOLD } from './agentCursorTuning';
+import { AGENT_SURFACES, MOODBOARD_PART_LABELS, type AgentSurfaceName } from './agentSurfaces';
 
 /** A say's longest line (the backend's MAX_SAY_CHARS, agent_presence.py). */
 export const AGENT_SAY_MAX_CHARS = 140;
@@ -97,32 +98,74 @@ export function defaultSay(action: AgentCursorAction, { node, from = null, pulle
 /** The words a moodboard control goes by in a line: the labels the Studio
  *  shows for it (a test pins each against the Studio's own source), in the
  *  backend's words too (cursor_actions.PART_LABELS). Phase 3, GM - Design
- *  r4 item 4. */
-export const AGENT_SURFACE_PART_LABELS = {
-  name: 'Name', direction: 'Direction', avoid: 'Avoid', colors: 'Colors', 'colors-out': 'Colors to keep out',
-  note: 'Note', weight: 'Weight',
-} as const;
+ *  r4 item 4. The per-surface table (lib/agentSurfaces.ts) holds these and
+ *  the Character Studio's. */
+export const AGENT_SURFACE_PART_LABELS = MOODBOARD_PART_LABELS;
 
-/** What a surface anchor's line can name. `board` is the board's name,
- *  `image` the image's number on it (both `anchorNames`, beside the anchor);
- *  `hasImage` says the item is an image (its id is in the anchor). */
+/** What a surface anchor's line can name. `surface` is moodboard when left
+ *  out. A moodboard line names `board` (its name) and `image` (the image's
+ *  number on it); a character line `character` and `view` (the view's
+ *  number); a style line `style`. All of them are `anchorNames`, beside the
+ *  anchor; `hasImage` and `hasView` say the item is a sub-item (its id is in
+ *  the anchor). `part` is the anchor's part id. */
 export interface SurfaceSayContext {
-  board: string | null;
+  surface?: AgentSurfaceName;
+  board?: string | null;
   image?: number | null;
-  hasImage: boolean;
+  hasImage?: boolean;
+  character?: string | null;
+  view?: number | null;
+  hasView?: boolean;
+  style?: string | null;
   part?: string | null;
 }
 
+/** A Style's write, by part (GM - Design: lowercase nouns, no quotes). */
+const STYLE_WRITES: Readonly<Record<string, readonly [string, string]>> = {
+  name: ['Renaming ', ''],
+  prompt: ['Writing the prompt for ', ''],
+  category: ['Changing the category of ', ''],
+  settings: ['Changing the settings of ', ''],
+  model: ['Changing the model of ', ''],
+  references: ['Changing the references of ', ''],
+  thumbnail: ['Changing the thumbnail of ', ''],
+};
+
+function characterSay(action: AgentCursorAction, { character, view = null, hasView = false, part = null }: SurfaceSayContext): string | null {
+  // An agent can't write a Character yet, so only `look` has lines.
+  if (!character || action !== 'look') return null;
+  if (hasView) {
+    if (view === 1) return compose(['Looking at the cover of ', ''], [character]);
+    return view !== null ? compose([`Looking at view ${view} of `, ''], [character]) : compose(['Looking at a view of ', ''], [character]);
+  }
+  const label = part ? AGENT_SURFACES.character.parts[part] : null;
+  if (label) return compose(['Looking at ', ' on ', ''], [label, character]);
+  return compose(['Looking at ', ''], [character]);
+}
+
+function styleSay(action: AgentCursorAction, { style, part = null }: SurfaceSayContext): string | null {
+  if (!style) return null;
+  if (action === 'look') return compose(['Looking at ', ''], [style]);
+  if (action !== 'type') return null;
+  return compose(STYLE_WRITES[part ?? ''] ?? ['Changing ', ''], [style]);
+}
+
 /**
- * The default line for a cursor on a moodboard item (GM - Design r4 item 4),
- * or null for none: the line a cursor shows when the agent sends no say of
- * its own (the agent's always wins; a board write's is the backend's "Added
- * …"). Display only, like every default here. Only `look`, `type` and
- * `click` have lines on a surface; every other action keeps its own
+ * The default line for a cursor on a surface item (GM - Design r4 item 4,
+ * and the Characters and Styles round), or null for none: the line a cursor
+ * shows when the agent sends no say of its own (the agent's always wins; a
+ * board or Style write's is the backend's, in the past tense once the cursor
+ * is parked at a launcher). Display only, like every default here. Only
+ * `look`, `type` and `click` have lines on a surface (a Character's only
+ * `look`, a Style's `look` and `type`); every other action keeps its own
  * (`Thinking`, `Waiting for your OK`, ...: defaultSay with no node).
  */
-export function surfaceSay(action: AgentCursorAction, { board, image = null, hasImage, part = null }: SurfaceSayContext): string | null {
-  if (!board || (action !== 'look' && action !== 'type' && action !== 'click')) return null;
+export function surfaceSay(action: AgentCursorAction, context: SurfaceSayContext): string | null {
+  if (action !== 'look' && action !== 'type' && action !== 'click') return null;
+  if (context.surface === 'character') return characterSay(action, context);
+  if (context.surface === 'style') return styleSay(action, context);
+  const { board = null, image = null, hasImage = false, part = null } = context;
+  if (!board) return null;
   const onImage = image !== null ? `image ${image}` : 'an image';
   const names = AGENT_SURFACE_PART_LABELS;
   if (action === 'look') {
@@ -197,8 +240,8 @@ export const DEFAULT_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
   { action: 'error', when: 'unknown, or at a spot', line: defaultSay('error', { node: 'FLUX.2' }) },
 ];
 
-/** Every moodboard line, with its case, for GM's review and the docs
- *  (Phase 3, r4 item 4). */
+/** Every surface line, with its case, for GM's review and the docs (Phase 3,
+ *  r4 item 4; Characters and Styles). */
 export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
   ['look', 'a board', { board: 'Desert light', hasImage: false }],
   ['look', 'an image', { board: 'Desert light', image: 12, hasImage: true }],
@@ -210,4 +253,22 @@ export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
   ['type', 'an image\u2019s note', { board: 'Desert light', image: 12, hasImage: true, part: 'note' }],
   ['click', 'an image\u2019s weight', { board: 'Desert light', image: 12, hasImage: true, part: 'weight' }],
   ['type', 'a board, no control known', { board: 'Desert light', hasImage: false }],
+] as const).map(([action, when, context]) => ({ action, when, line: surfaceSay(action, context) ?? '' }));
+
+/** The Character and Style lines, with their cases (the common contract's
+ *  words, in GM's order). */
+export const CS_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
+  ['look', 'a character', { surface: 'character', character: 'Mara' }],
+  ['look', 'a reference view', { surface: 'character', character: 'Mara', view: 2, hasView: true }],
+  ['look', 'the cover view', { surface: 'character', character: 'Mara', view: 1, hasView: true }],
+  ['look', 'a character\u2019s control', { surface: 'character', character: 'Mara', part: 'traits' }],
+  ['look', 'a style', { surface: 'style', style: 'Dusk grain' }],
+  ['type', 'a style\u2019s name', { surface: 'style', style: 'Dusk grain', part: 'name' }],
+  ['type', 'a style\u2019s prompt', { surface: 'style', style: 'Dusk grain', part: 'prompt' }],
+  ['type', 'a style\u2019s category', { surface: 'style', style: 'Dusk grain', part: 'category' }],
+  ['type', 'a style\u2019s settings', { surface: 'style', style: 'Dusk grain', part: 'settings' }],
+  ['type', 'a style\u2019s model', { surface: 'style', style: 'Dusk grain', part: 'model' }],
+  ['type', 'a style\u2019s references', { surface: 'style', style: 'Dusk grain', part: 'references' }],
+  ['type', 'a style\u2019s thumbnail', { surface: 'style', style: 'Dusk grain', part: 'thumbnail' }],
+  ['type', 'a style, no part or several', { surface: 'style', style: 'Dusk grain' }],
 ] as const).map(([action, when, context]) => ({ action, when, line: surfaceSay(action, context) ?? '' }));

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchCharacters } from '../../lib/api';
 import { storedImageView } from '../../lib/storedImage';
+import { surfaceAnchor } from '../../lib/agentAnchors';
 import { OutsideImageNote } from '../OutsideImageNote';
 import type { Character } from '../../types';
 import type { AssetScope } from '../../store/uiStore';
@@ -137,6 +138,7 @@ export function CharacterLibraryRail({
               key={c.id}
               type="button"
               className={`character-rail__item ${c.id === activeId ? 'character-rail__item--active' : ''}`}
+              data-agent-anchor={surfaceAnchor('character', c.id)}
               onClick={() => onSelect(c.id, scope)}
             >
               <span className="character-rail__thumb">

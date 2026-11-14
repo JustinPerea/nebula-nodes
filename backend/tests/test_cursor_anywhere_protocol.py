@@ -80,7 +80,7 @@ def test_parse_target_takes_the_surface_form_beside_the_other_two():
 
 @pytest.mark.parametrize("raw, said", [
     ({"surface": "characters", "board": "b1"},
-     "“characters” isn’t a surface Nebula knows. Use moodboard."),
+     "“characters” isn’t a surface Nebula knows. Use moodboard, character or style."),
     ({"surface": "moodboard"}, "A moodboard target needs `board`: a board's id or its exact name."),
     ({"surface": "moodboard", "board": 4}, "A moodboard target needs `board`: a board's id or its exact name."),
     ({"surface": "moodboard", "board": "Nope"},
@@ -324,7 +324,7 @@ def test_the_route_refuses_in_the_house_voice(api):
     client, sent, _, _ = api
     _create(client)
     for target, said in [
-        ({"surface": "characters", "board": "x"}, "“characters” isn’t a surface Nebula knows. Use moodboard."),
+        ({"surface": "characters", "board": "x"}, "“characters” isn’t a surface Nebula knows. Use moodboard, character or style."),
         ({"surface": "moodboard", "board": "Nope"}, "No moodboard “Nope” here. The boards here: “Dusk dunes”."),
         ({"surface": "moodboard", "board": "Dusk dunes", "part": "weight"},
          "“weight” isn’t a part of a board. Use name, direction, avoid, colors or colors-out."),
@@ -400,7 +400,7 @@ def test_point_at_a_moodboard_sends_one_surface_target(mcp_calls):
     ({"moodboard": "b1", "from_node_id": "n1", "action": "drag"},
      "point_at: moodboard can't be combined with from_node_id."),
     ({"image": 3}, "point_at: image and part need moodboard (its id or exact name)"),
-    ({"part": "note"}, "point_at: image and part need moodboard (its id or exact name)"),
+    ({"part": "note"}, "point_at: part needs moodboard, character or style (an id or exact name)"),
 ])
 def test_point_at_a_moodboard_is_exclusive_with_a_node_or_a_spot(mcp_calls, kwargs, said):
     with pytest.raises(ValueError) as refused:
@@ -444,7 +444,8 @@ def test_nebula_point_moodboard_with_a_target_is_a_parser_error(monkeypatch):
     assert _cli(monkeypatch, "--moodboard", "Desert light", "--from", "n2").endswith(
         "--from can't go with --moodboard: a drag starts at a node or a spot")
     assert _cli(monkeypatch, "--image", "12").endswith("--image and --part go with --moodboard BOARD (its id or exact name)")
-    assert _cli(monkeypatch, "--part", "note").startswith("nebula point: error: --image and --part go with")
+    assert _cli(monkeypatch, "--part", "note").endswith(
+        "--part goes with --moodboard BOARD, --character NAME_OR_ID or --style NAME_OR_ID")
 
 
 def test_nebula_point_moodboard_sends_the_surface_target_and_prints_where(monkeypatch):
