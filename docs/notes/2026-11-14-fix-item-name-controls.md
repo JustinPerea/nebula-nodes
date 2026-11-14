@@ -102,3 +102,9 @@ Known and not changed:
 - **The moodboard brief (L6).** `_brief_text` now folds whitespace and strips the ends of the board's name, so a name with two spaces, a non-breaking space or a full-width space changes the generator prompt slightly, not only a name with control characters.
 - **The journal (L7).** Every summary is cleaned, and a summary is not only a name. A `settings.restored` line that quotes a file path holding a control or bidi character shows the path without it.
 - **Other agent-set text in the CLI.** `nebula moodboard show` prints a board's notes, direction and image notes raw. That is free text an agent can set, and cleaning names does not cover it. A follow-up should clean human-mode CLI output at the print layer.
+
+## Check of the fix round (Sonnet, read-only)
+
+Verdict "merge", with three LOWs, all applied: the whole tag block U+E0000 to U+E007F is dropped outside the three flags (U+E0000 and U+E0002 to U+E001F are unassigned, so the category test let them through); a test for an asset proposal's `targetName`; blank lines in `cli/commands/trash.py`.
+
+Not tested: the Style label in `_check_style_write` (`main.py`). It reaches a refusal only when an agent changes a Krea Style's billing mode, which needs a read-back state the test fixture does not set up. The line is one `clean_name` call.

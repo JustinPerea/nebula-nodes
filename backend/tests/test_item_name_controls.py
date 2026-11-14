@@ -531,7 +531,7 @@ def test_a_terminal_sequence_goes_whole_and_leaves_no_tail():
 
 
 @pytest.mark.parametrize("code", [0x00AD, 0x180E, 0x200B, 0x2060, 0x2061, 0x2064, 0x206A, 0x206F, 0xFEFF, 0xFFF9, 0xFFFA,
-                                  0xFFFB, 0x1D173, 0x1D17A, 0xE0001, 0xE0041, 0xE007F])
+                                  0xFFFB, 0x1D173, 0x1D17A, 0xE0000, 0xE0001, 0xE0002, 0xE001F, 0xE0041, 0xE007F])
 def test_a_format_character_that_draws_nothing_is_dropped(code):
     """Two names that look the same are the same name once cleaned (review M2)."""
     for name in (chr(code) + "Dusk", "Du" + chr(code) + "sk", "Dusk" + chr(code)):
@@ -634,6 +634,16 @@ def test_a_move_answer_names_the_item_cleaned(api):
     assert answer.status_code == 200, answer.text
     detail = answer.json()["detail"]
     assert "“Dusk”" in detail and not any(char in detail for char in (ESC, RLO, chr(0x200B))), repr(detail)
+
+
+def test_an_asset_proposals_journal_data_names_its_target_cleaned():
+    from types import SimpleNamespace
+
+    import main as main_module
+
+    proposal = SimpleNamespace(id="p1", agent=SimpleNamespace(id="a1"), kind="moodboard", target_id="b1",
+                               target_name=f"Dusk{ESC}[31m{RLO}{chr(0x200B)}", note="please")
+    assert main_module._asset_journal_data(proposal)["targetName"] == "Dusk"
 
 
 # -- the source itself holds no raw bidi control ------------------------------------------

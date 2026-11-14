@@ -157,7 +157,9 @@ def clean_name(value: object, limit: int | None = None, *, fallback: str = "", e
                 out.append(" ")
         elif char in _KEPT_FORMAT:
             out.append(char)
-        elif 0xD800 <= ord(char) <= 0xDFFF or unicodedata.category(char) in ("Cc", "Cf"):
+        elif (0xD800 <= ord(char) <= 0xDFFF or 0xE0000 <= ord(char) <= 0xE007F
+              or unicodedata.category(char) in ("Cc", "Cf")):
+            # The whole tag block goes, its unassigned code points included.
             continue
         else:
             out.append(char)

@@ -26,12 +26,12 @@ from ..client import NebulaClient
 KINDS = ("moodboard", "character", "style", "project")
 
 
-
 def _trashed_name(item: dict[str, Any]) -> str:
     """A deleted item's stored name as a terminal line shows it: no control,
     bidi or hidden character (services/text_cut.clean_name), "Untitled" when
     it has none. An agent can name an item and then delete it."""
     return clean_name(item.get("name"), fallback="Untitled")
+
 
 def _who(item: dict[str, Any]) -> str:
     """Who deleted it, from ``kind`` alone: an agent picks its own name, so a
