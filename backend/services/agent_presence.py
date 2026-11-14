@@ -359,7 +359,7 @@ def _find_item(info: SurfaceInfo, ref: str, items: Collection[Mapping[str, Any]]
     shown = clean_name(ref)
     named = [item for item in items
              if " ".join(str(item.get("name") or "").split()) == folded
-             or clean_name(item.get("name")) == shown]
+             or (shown and clean_name(item.get("name")) == shown)]
     if len(named) == 1:
         return named[0]
     if len(named) > 1:

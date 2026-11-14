@@ -491,7 +491,7 @@ class CanvasEventJournal:
             "projectId": tag,
             "data": _bound_data(data),
             # Whatever name a summary quotes is cleaned with it (clean_name).
-            "summary": clean_name(summary)[:SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)],
+            "summary": clean_name(summary, SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)),
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]

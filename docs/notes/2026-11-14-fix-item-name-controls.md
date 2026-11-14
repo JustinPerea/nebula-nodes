@@ -83,3 +83,22 @@ and surface listed above.
 The first draft held the nine bidi controls as raw characters in `_BIDI_CONTROLS` and in the new test file. A raw bidi control in source reorders the code a reviewer sees and an editor can drop it without showing a change, so they are now written as `\uXXXX` escapes. Seven older test files held raw ones too (`test_mcp_channel.py`, `test_canvas_pins.py`, `test_agent_cursor_review2.py`, `test_agent_notes.py`, `test_agent_presence_followups.py`, `test_pin_text_as_typed.py`, `fixtures/gen_pin_text_cases.py`). Each was rewritten to escapes only where the parsed AST stayed identical, which held for all seven.
 
 `test_no_source_file_holds_a_raw_bidi_control` in `backend/tests/test_item_name_controls.py` scans `backend`, `frontend/src`, `frontend/scripts`, `scripts`, `desktop` and `cli` and fails with the file and line. It caught one in the check's own pattern while it was being written.
+
+## Security review round (Opus, read-only)
+
+The review found no HIGH, two MEDIUM and nine LOW. What changed:
+
+- **M1, the trash CLI.** `nebula trash list` and `nebula trash restore` printed a deleted item's stored name raw. An agent can name an item and then delete it. Both now print the cleaned name (`cli/commands/trash.py`).
+- **M2, hidden text.** `clean_name` kept every format character except the nine bidi controls, so a name could carry tag characters that spell a sentence a model reads and a person never sees, or a zero-width space that makes two names look the same. It now drops category Cf, keeping ZWNJ, ZWJ, LRM, RLM and ALM, and keeps tag characters only inside the flags of England, Scotland and Wales, as a pin's text already did.
+- **L1.** A ref that cleans to nothing (a lone ESC) matched an unnamed item in the cursor's lookup. It is refused again.
+- **L2.** Four more echoes are cleaned: a look's name in a card refusal (`moodboard_client._card_of`), the move answer's detail and the Style label in `main.py`, and an asset proposal's `targetName` in journal data.
+- **L3.** A terminal escape sequence now goes whole, so `Dusk` followed by a colour code is `Dusk` and not `Dusk[31m`. The pattern moved from `canvas_pins` to `text_cut.ANSI_SEQUENCE` and both use it. It is unchanged: the review fix compared it with the one on main.
+- **L4.** A call with no limit reads the first 4,096 characters. The journal passes its summary cap as the limit.
+- **L5.** With an ellipsis, a name that is one long character keeps its start before the ellipsis.
+- **L8.** The source scan asserts each root exists and now also covers `frontend/tests`, `skills`, `contracts`, `nebula`, `docs` and `.github`, and `.yml`, `.yaml`, `.toml`, `.md` and `.html` files. That found four raw bidi characters in two frontend test files, inside single-quoted strings; they are escapes now.
+
+Known and not changed:
+
+- **The moodboard brief (L6).** `_brief_text` now folds whitespace and strips the ends of the board's name, so a name with two spaces, a non-breaking space or a full-width space changes the generator prompt slightly, not only a name with control characters.
+- **The journal (L7).** Every summary is cleaned, and a summary is not only a name. A `settings.restored` line that quotes a file path holding a control or bidi character shows the path without it.
+- **Other agent-set text in the CLI.** `nebula moodboard show` prints a board's notes, direction and image notes raw. That is free text an agent can set, and cleaning names does not cover it. A follow-up should clean human-mode CLI output at the print layer.

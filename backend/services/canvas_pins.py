@@ -30,6 +30,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 from services.agent_presence import AgentIdentity
 from services.project_store import ProjectStore
+from services.text_cut import ANSI_SEQUENCE
 
 MAX_PIN_TEXT = 280
 MAX_REPLY = 280
@@ -63,18 +64,9 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
-# Terminal escape sequences, each dropped whole (review 7 N-3, review 8
-# NIT-3), so no "Pq#0;2;0;0;0" or "_Gf=24;AAAA" is left: CSI (7- and 8-bit),
-# then the string sequences: OSC, DCS, APC, PM and SOS
-# (ESC ] P _ ^ X, or 8-bit 0x9d 0x90 0x9f 0x9e 0x98), each dropped whole with
-# its payload up to its end: ST (ESC \ or 0x9c) or BEL, even past an inner
-# ESC (review 8 NIT-3). One left unterminated goes to the end of its line,
-# so the person's next lines stay.
-_ANSI = re.compile(
-    r"\x1b\[[0-?]*[ -/]*[@-~]"
-    r"|\x9b[0-?]*[ -/]*[@-~]"
-    r"|(?:\x1b[\]P_^X]|[\x90\x98\x9d\x9e\x9f])[^\r\n]*?(?:\x1b\\|\x9c|\x07|(?=[\r\n])|\Z)"
-)
+# Terminal escape sequences, each dropped whole: the pattern is shared with
+# an item name's cleaning (services/text_cut.ANSI_SEQUENCE).
+_ANSI = ANSI_SEQUENCE
 
 
 # Review 11 MEDIUM-1 of PR #200 and GM r19 answer 1: what draws nothing is

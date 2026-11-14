@@ -19,11 +19,19 @@ import sys
 from typing import Any, TextIO
 
 import project_client
+from services.text_cut import clean_name
 
 from ..client import NebulaClient
 
 KINDS = ("moodboard", "character", "style", "project")
 
+
+
+def _trashed_name(item: dict[str, Any]) -> str:
+    """A deleted item's stored name as a terminal line shows it: no control,
+    bidi or hidden character (services/text_cut.clean_name), "Untitled" when
+    it has none. An agent can name an item and then delete it."""
+    return clean_name(item.get("name"), fallback="Untitled")
 
 def _who(item: dict[str, Any]) -> str:
     """Who deleted it, from ``kind`` alone: an agent picks its own name, so a
@@ -100,7 +108,7 @@ def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None
                 expiry = f", removed for good with its project{f' after {str(when)[:10]}' if when else ''}"
         elif item.get("purgeAt"):
             expiry = f", removed for good{_goes_with(item)} after {str(item['purgeAt'])[:10]}"
-        print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
+        print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {_trashed_name(item)}{scope}"
               f"  (deleted {_when(item)} by {_who(item)}{expiry})", file=out)
     first = items[0]
     print(f"Restore one: nebula trash restore {first.get('kind')} {first.get('id')}", file=out)
@@ -126,7 +134,8 @@ def run_restore(client: NebulaClient, target: list[str], *, out: TextIO | None =
         return 1
     result = client.restore_trashed(kind, item_id)
     asset = result.get("asset") or result.get("project") or {}
-    name = asset.get("name") or item_id
+    # A stored name is free text an agent may have set: cleaned before it reaches a terminal.
+    name = clean_name(asset.get("name"), fallback=clean_name(item_id))
     print(f"Restored {kind} {item_id} ({name}).", file=out)
     if kind == "project":
         print(f"It is back in the project list, closed. `nebula project open {item_id}` opens it.", file=out)

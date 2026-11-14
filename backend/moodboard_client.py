@@ -677,10 +677,10 @@ def _card_of(board: dict[str, Any], ref: str) -> tuple[dict[str, Any], dict[str,
         frame = next((f for f in frames if f.get("id") == frame_ref), None) or next(
             (f for f in frames if str(f.get("name", "")).casefold() == frame_ref.casefold()), None)
         if frame is None:
-            raise MoodboardError(f"no look “{frame_ref}” on this board")
+            raise MoodboardError(f"no look “{clean_name(frame_ref, 60, ellipsis=True)}” on this board")
         card = next((c for c in cards if c.get("frameId") == frame.get("id")), None)
         if card is None:
-            raise MoodboardError(f"#{number} has no card in {frame.get('name')}")
+            raise MoodboardError(f"#{number} has no card in {clean_name(frame.get('name'), 60, fallback=clean_name(frame.get('id'), 60), ellipsis=True)}")
         return image, card
     if len(cards) != 1:
         raise MoodboardError(f"#{number} has {len(cards)} cards: name one as {number}@<look>")
