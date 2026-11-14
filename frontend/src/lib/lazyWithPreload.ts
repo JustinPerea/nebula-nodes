@@ -49,7 +49,19 @@ export interface DeferredChunk {
   readonly subscribe: (listener: () => void) => () => void;
 }
 
-export type PreloadableComponent<P> = FunctionComponent<P> & DeferredChunk;
+/**
+ * Whether a load attempt has ended, for whoever holds something back until a
+ * chunk is in (the canvas's hold on a card: lib/cardHold.ts). Settled means
+ * loaded, or the last attempt failed and none is running; a retry that starts
+ * unsettles it again.
+ */
+export interface ChunkSettling {
+  readonly isSettled: () => boolean;
+  /** Called each time an attempt ends, loaded or failed; returns an unsubscribe. */
+  readonly onSettle: (listener: () => void) => () => void;
+}
+
+export type PreloadableComponent<P> = FunctionComponent<P> & DeferredChunk & ChunkSettling;
 
 /** How an attempt after a failure reaches the network; the defaults use the DOM (tests pass stubs). */
 export interface ChunkRetryIO {
@@ -208,6 +220,8 @@ export function lazyWithPreload<M, P extends object>(
   // attempt fails, the instance holds the rejection.
   let currentWaiting = false;
   const listeners = new Set<() => void>();
+  const settleListeners = new Set<() => void>();
+  const notifySettled = () => { for (const listener of [...settleListeners]) listener(); };
 
   const attempts = chunkAttempts(load, io);
   const attemptLoad = (): Promise<M> => attempts(failures > 0);
@@ -225,6 +239,7 @@ export function lazyWithPreload<M, P extends object>(
         pending = undefined;
         currentWaiting = false;
         for (const listener of [...listeners]) listener();
+        notifySettled();
         return loaded;
       }, (error: unknown) => {
         // A failed fetch (offline, redeploy) may be retried by the next trigger.
@@ -237,6 +252,7 @@ export function lazyWithPreload<M, P extends object>(
           currentWaiting = false;
         }
         if (typeof error === 'object' && error !== null) chunkLoadErrors.set(error, chunk);
+        notifySettled();
         throw error;
       });
       pending = attempt;
@@ -297,6 +313,11 @@ export function lazyWithPreload<M, P extends object>(
     preload,
     retry,
     isLoaded: () => loaded !== undefined,
+    isSettled: () => loaded !== undefined || (failures > 0 && !pending),
+    onSettle: (listener: () => void) => {
+      settleListeners.add(listener);
+      return () => { settleListeners.delete(listener); };
+    },
     failures: () => failures,
     subscribe: (listener: () => void) => {
       listeners.add(listener);

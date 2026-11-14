@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 import { useState } from 'react';
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 
@@ -73,6 +74,9 @@ function Flow({ nodes, nodeTypes = CANVAS_NODE_TYPES }: { nodes: Node[]; nodeTyp
 }
 
 // -- L4: damaged data on a card ----------------------------------------------------------
+
+// The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('L4: a card whose data is damaged never takes the canvas down', () => {
   const SHAPES: [string, unknown][] = [

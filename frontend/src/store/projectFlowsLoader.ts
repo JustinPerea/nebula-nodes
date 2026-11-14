@@ -1,4 +1,4 @@
-import { deferredModule, type DeferredModule } from '../lib/lazyWithPreload';
+import { deferredModule, preloadAll, type DeferredModule } from '../lib/lazyWithPreload';
 
 /**
  * PR #199 round 25: the project store's flows (store/projectFlows.ts: opening,
@@ -30,6 +30,16 @@ export const projectFlowsModule: DeferredModule<ProjectFlows> = {
   preload: () => projectFlowsModule.load(),
   isLoaded: () => loaded !== null,
 };
+
+// The node-card chunks (lib/deferredChunks.ts DEFERRED_CARD_PRELOADS), handed
+// over by that module when it loads: the flows ask for them the moment a
+// project opens or a restore reaches a canvas (lib/cardHold.ts holds a graph
+// back until they are in). Here and not an import of deferredChunks in
+// projectFlows, which would tie the flows to every deferred chunk's module.
+let cardPreloads: readonly (() => Promise<unknown>)[] = [];
+export function registerCardPreloads(preloads: readonly (() => Promise<unknown>)[]): void { cardPreloads = preloads; }
+/** Start loading the node-card chunks now (a no-op once they are in, and before they are registered). */
+export function preloadCardChunks(): void { preloadAll(cardPreloads); }
 
 /** The flows now, or null while the chunk loads. */
 export function flowsNow(): ProjectFlows | null {

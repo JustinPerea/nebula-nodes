@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../../src/lib/deferredChunks';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { Node, NodeProps } from '@xyflow/react';
 import shared from '../../../backend/tests/fixtures/jev_outputs.json';
@@ -77,6 +78,9 @@ const DRAWN: Array<[string, Record<string, PortValue>]> = [
   ['a World', { out: { type: 'World', value: worldV1Fixture } as PortValue }],
   ['a spatial representation', { out: { type: 'CameraPose', value: cameraPoseFixture } as PortValue }],
 ];
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('outputs that already draw get no structured block', () => {
   for (const card of ['model', 'dynamic'] as const) {

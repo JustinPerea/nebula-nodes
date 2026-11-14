@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../../src/lib/deferredChunks';
 import type { Node, NodeProps } from '@xyflow/react';
 import shared from '../../../backend/tests/fixtures/jev_outputs.json';
 import type { NodeData, PortValue } from '../../src/types';
@@ -29,6 +30,9 @@ const sample = (list: Sample[], name: string) => {
 const parse = (id: string, s: Sample) => parseJevOutputs(id, s.outputs) as JevResult;
 
 afterEach(cleanup);
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('Jev Decide on the card', () => {
   it('shows a passing yes/no with its meter, question, confidence and model', () => {

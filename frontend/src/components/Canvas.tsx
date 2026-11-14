@@ -29,10 +29,10 @@ import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 // Loaded after the first paint (lib/deferredChunks.ts); they draw only what the socket or a fetch brings in.
-import { AgentCursorLayer, AgentNodeMarks, PinComposer, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
+import { AgentCursorLayer, AgentNodeMarks, ArrangeController, PinComposer, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
-import { ArrangeController } from './canvas/ArrangeController';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
+import { useCardHold } from '../lib/cardHold';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { addDroppedFiles, fileDropInFlight } from '../lib/canvasFileDrop';
@@ -342,16 +342,20 @@ export function Canvas() {
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
   const isSlavaSkin = skin === 'slava-restraint';
+  // What React Flow draws: the graph without the nodes whose card chunks are
+  // still loading (lib/cardHold.ts). The store is never touched.
+  const hold = useCardHold(nodes, edges);
+  const drawnEdges = hold.edges as typeof edges;
   const renderedEdges = useMemo(() => {
-    if (!isSlavaSkin || !isExecuting) return edges;
-    return edges.map((edge) => ({
+    if (!isSlavaSkin || !isExecuting) return drawnEdges;
+    return drawnEdges.map((edge) => ({
       ...edge,
       animated: true,
       className: edge.className?.includes('typed-edge--running')
         ? edge.className
         : [edge.className, 'typed-edge--running'].filter(Boolean).join(' '),
     }));
-  }, [edges, isExecuting, isSlavaSkin]);
+  }, [drawnEdges, isExecuting, isSlavaSkin]);
   const liveSelectedNodeIds = useMemo(() => selectedNodeIds(nodes), [nodes]);
   const liveSelectionKey = liveSelectedNodeIds.join('\u0000');
 
@@ -429,9 +433,26 @@ export function Canvas() {
   // We measure the panel's actual position at fit-time so users who moved or
   // resized it still get a clean fit. Falls back to symmetric padding when
   // the panel is hidden.
+  // A fit asked for while the hold keeps nodes back would frame a graph that
+  // is not on screen yet: it waits, and runs when the hold lets go.
+  const holdWaiting = useRef(false);
+  holdWaiting.current = hold.waiting;
+  const fitAskedDuringHold = useRef<Event | null>(null);
+  useEffect(() => {
+    if (hold.waiting || !fitAskedDuringHold.current) return;
+    const asked = fitAskedDuringHold.current;
+    fitAskedDuringHold.current = null;
+    window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', {
+      detail: asked instanceof CustomEvent ? asked.detail : undefined,
+    }));
+  }, [hold.waiting]);
   useEffect(() => {
     const pendingFits = new Set<number>();
     function onNodesAdded(event: Event) {
+      if (holdWaiting.current) {
+        fitAskedDuringHold.current = event;
+        return;
+      }
       // Driver-side flag (DEV demo runs only) to suppress the auto-fit
       // when subsequent nodes arrive. Lets the driver own the post-first-
       // node layout instead of getting clobbered by every fitView call.
@@ -830,7 +851,7 @@ export function Canvas() {
     >
       <NodeRemeasureContext.Provider value={remeasureNode}>
         <ReactFlow
-          nodes={nodes}
+          nodes={hold.nodes as typeof nodes}
           edges={renderedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -897,6 +918,12 @@ export function Canvas() {
           <ProposalBar />
         </ReactFlow>
       </NodeRemeasureContext.Provider>
+      {hold.holding ? (
+        // The same line the app shows while the workspace itself loads (App.tsx).
+        <div className="workspace-loading workspace-loading--hold" role="status" aria-live="polite">
+          Loading workspace…
+        </div>
+      ) : null}
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
           <CrabMarkAnimated

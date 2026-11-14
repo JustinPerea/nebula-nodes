@@ -9,7 +9,7 @@ import { currentMediaSource } from '../../lib/canvasNextSteps';
 import { isBackendNodeId } from '../../lib/canvasPins';
 import '../../styles/canvas-next-steps.css';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
+import { drawsMediaOrText, jevResultFor, spatialOutputOf, worldOutputOf } from '../../lib/resultViews';
 import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
@@ -27,7 +27,7 @@ import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
 import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './DeferredViewers';
-import { RepresentationViewer } from './RepresentationViewer';
+import { RepresentationViewer } from './DeferredOutputViews';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';
 import { PlaceholderLine } from './PlaceholderLine';
@@ -45,10 +45,11 @@ import { MoodboardAdapterRow } from './MoodboardAdapterRow';
 import { fileParamName, middleTruncate } from '../../lib/fileName';
 import { useUploadNames } from '../../lib/uploadNames';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
-import { StructuredOutputs } from './StructuredValuePreview';
-import { JevResultView, type JevResultInputs } from './JevResult';
+import { StructuredOutputs } from './DeferredOutputViews';
+import { JevResultView } from './DeferredOutputViews';
+import type { JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
-import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
+import { isJevNode, jevBrandStyle, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
@@ -235,8 +236,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   // the generic Text/Image previews. A malformed result parses to null and
   // falls back to those previews, so nothing is hidden.
   const jevResult = useMemo(
-    () => (previewComplete && isJevNode(nodeData.definitionId)
-      ? parseJevOutputs(nodeData.definitionId, previewOutputs) : null),
+    () => jevResultFor(nodeData.definitionId, previewOutputs, previewComplete),
     [previewComplete, nodeData.definitionId, previewOutputs],
   );
   const jevKind = jevResult ? nodeData.definitionId : null;
@@ -287,10 +287,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const textOutput = Object.values(previewOutputs).find((o) => o.type === 'Text' && o.value);
   const videoOutput = Object.values(previewOutputs).find((o) => o.type === 'Video' && o.value);
   const meshOutput = Object.values(previewOutputs).find((o) => o.type === 'Mesh' && o.value);
-  const worldOutput = Object.values(previewOutputs).find((o) => o.type === 'World' && o.value);
+  const worldOutput = worldOutputOf(previewOutputs);
   const audioOutput = Object.values(previewOutputs).find((o) => o.type === 'Audio' && o.value);
   const svgOutput = Object.values(previewOutputs).find((o) => o.type === 'SVG' && o.value);
-  const spatialOutput = findStructuredRepresentation(previewOutputs, { includeWorld: false });
+  const spatialOutput = spatialOutputOf(previewOutputs);
 
   const outputText = textOutput && typeof textOutput.value === 'string' ? textOutput.value : null;
   const displayText = batchPreview.browsing ? outputText : nodeData.streamingText ?? outputText;
@@ -367,7 +367,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     || shouldRenderSpatial
     || (videoOutput !== undefined && typeof videoOutput.value === 'string')
     || (meshOutput !== undefined && typeof meshOutput.value === 'string')
-    || (audioOutput !== undefined && typeof audioOutput.value === 'string');
+    || (audioOutput !== undefined && typeof audioOutput.value === 'string')
+    // The same test lib/cardChunks.ts asks the result views' chunks by.
+    || drawsMediaOrText(previewOutputs, nodeData.streamingText != null);
   const structuredOutputs = previewComplete && !drewOutput ? Object.entries(previewOutputs) : [];
   const isStructuredSurface = structuredOutputs.length > 0;
   const isWorldSurface = previewComplete && Boolean(worldOutput);

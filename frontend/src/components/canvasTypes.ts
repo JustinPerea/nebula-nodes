@@ -1,39 +1,45 @@
 import type { ComponentType } from 'react';
 import type { EdgeTypes, NodeProps, NodeTypes } from '@xyflow/react';
 import { ModelNode } from './nodes/ModelNode';
-import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
-import { EditNode } from './nodes/EditNode';
-import { RemotionNode } from './nodes/RemotionNode';
-import { CinemaSceneNode } from './nodes/CinemaSceneNode';
-import { CharacterNode } from './nodes/CharacterNode';
-import { CameraRigNode } from './nodes/CameraRigNode';
-import { ReferenceSetNode } from './nodes/ReferenceSetNode';
-import { MoodboardNode } from './nodes/MoodboardNode';
 import { VideoQcNode } from './nodes/VideoQcNode';
-import { PaperSourceNode } from './nodes/PaperSourceNode';
-import { BatchNode } from './nodes/BatchNode';
+import { deferredAtOnce } from './deferredAtOnce';
+import {
+  DeferredDynamicNode,
+  DeferredEditNode,
+  DeferredRemotionNode,
+  DeferredCinemaSceneNode,
+  DeferredCharacterNode,
+  DeferredCameraRigNode,
+  DeferredReferenceSetNode,
+  DeferredMoodboardNode,
+  DeferredPaperSourceNode,
+  DeferredBatchNode,
+} from '../lib/deferredChunks';
 import { TypedEdge } from './edges/TypedEdge';
 import { withNodeCardBoundary } from './nodes/withNodeCardBoundary';
 
-/** The card each canvas node type draws, each inside its own boundary
+/** The card each canvas node type draws (the less common kinds are separate
+ * chunks, lib/deferredChunks.ts; the canvas does not hand React Flow a node
+ * until its card's chunk has settled, lib/cardHold.ts, so a card never draws
+ * empty), each inside its own boundary
  * (PR #198 review 3, L4: one card whose data is damaged shows a line on
  * its card and never takes the canvas down). One map, so tests render the
  * cards the canvas renders (tests/canvasRenderScope.test.tsx). */
 export const CANVAS_CARDS: NodeTypes = {
   'model-node': ModelNode,
-  'dynamic-node': DynamicNode,
+  'dynamic-node': deferredAtOnce(DeferredDynamicNode, 'DynamicNode'),
   'reroute-node': RerouteNode,
-  editNode: EditNode,
-  remotionNode: RemotionNode,
-  cinemaSceneNode: CinemaSceneNode,
-  characterNode: CharacterNode,
-  cameraRigNode: CameraRigNode,
-  referenceSetNode: ReferenceSetNode,
-  moodboardNode: MoodboardNode,
+  editNode: deferredAtOnce(DeferredEditNode, 'EditNode'),
+  remotionNode: deferredAtOnce(DeferredRemotionNode, 'RemotionNode'),
+  cinemaSceneNode: deferredAtOnce(DeferredCinemaSceneNode, 'CinemaSceneNode'),
+  characterNode: deferredAtOnce(DeferredCharacterNode, 'CharacterNode'),
+  cameraRigNode: deferredAtOnce(DeferredCameraRigNode, 'CameraRigNode'),
+  referenceSetNode: deferredAtOnce(DeferredReferenceSetNode, 'ReferenceSetNode'),
+  moodboardNode: deferredAtOnce(DeferredMoodboardNode, 'MoodboardNode'),
   videoQcNode: VideoQcNode,
-  paperSourceNode: PaperSourceNode,
-  batchNode: BatchNode,
+  paperSourceNode: deferredAtOnce(DeferredPaperSourceNode, 'PaperSourceNode'),
+  batchNode: deferredAtOnce(DeferredBatchNode, 'BatchNode'),
 };
 
 export const CANVAS_NODE_TYPES: NodeTypes = Object.fromEntries(

@@ -9,7 +9,18 @@
  * from other nodes and wires still updates.
  */
 import { act, cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DynamicNode } from '../src/components/nodes/DynamicNode';
+import { EditNode } from '../src/components/nodes/EditNode';
+import { RemotionNode } from '../src/components/nodes/RemotionNode';
+import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
+import { CharacterNode } from '../src/components/nodes/CharacterNode';
+import { CameraRigNode } from '../src/components/nodes/CameraRigNode';
+import { ReferenceSetNode } from '../src/components/nodes/ReferenceSetNode';
+import { MoodboardNode } from '../src/components/nodes/MoodboardNode';
+import { PaperSourceNode } from '../src/components/nodes/PaperSourceNode';
+import { BatchNode } from '../src/components/nodes/BatchNode';
+import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 import { memo, type ComponentType, type ReactNode } from 'react';
 import { ReactFlow, ReactFlowProvider, type Edge, type Node, type NodeProps, type NodeTypes } from '@xyflow/react';
 import shared from '../../backend/tests/fixtures/jev_outputs.json';
@@ -64,8 +75,16 @@ function counting(Component: ComponentType<NodeProps>): ComponentType<NodeProps>
 }
 // Each counted card inside its boundary, as CANVAS_NODE_TYPES draws it
 // (PR #198 review 3, L4): the count stays the card's own.
+// The less common cards load on demand in the canvas (lib/deferredChunks.ts);
+// the counter wraps the card's own component, so it is named here directly.
+const REAL_CARDS: NodeTypes = {
+  ...CANVAS_CARDS,
+  'dynamic-node': DynamicNode, editNode: EditNode, remotionNode: RemotionNode, cinemaSceneNode: CinemaSceneNode,
+  characterNode: CharacterNode, cameraRigNode: CameraRigNode, referenceSetNode: ReferenceSetNode,
+  moodboardNode: MoodboardNode, paperSourceNode: PaperSourceNode, batchNode: BatchNode,
+};
 const COUNTED_TYPES: NodeTypes = Object.fromEntries(
-  Object.entries(CANVAS_CARDS).map(([type, Component]) => [type,
+  Object.entries(REAL_CARDS).map(([type, Component]) => [type,
     withNodeCardBoundary(counting(Component as ComponentType<NodeProps>))]),
 );
 
@@ -179,6 +198,9 @@ afterEach(() => {
 });
 
 // ---- render scope ----------------------------------------------------------
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('a card re-renders only when something it draws changes', () => {
   it('a param change on one card re-renders only that card', () => {

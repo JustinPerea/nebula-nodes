@@ -12,7 +12,8 @@
  * The cases cover every type in CANVAS_NODE_TYPES, so a new card type fails
  * here until it shows its run error too.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 import { act, cleanup, render } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
@@ -87,6 +88,9 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUi, true);
 });
+
+// The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('every card on the canvas shows its run error', () => {
   it('covers every card type the canvas draws', () => {

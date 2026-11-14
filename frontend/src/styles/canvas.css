@@ -354,3 +354,13 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 .canvas-wrapper:not(.canvas-wrapper--slava-empty) .nn-splash {
   display: none;
 }
+
+/* While the canvas holds a graph back for its card chunks (lib/cardHold.ts):
+   the app's own "Loading workspace…" line over the canvas, under nothing it
+   needs (the graph is not drawn yet). */
+.workspace-loading--hold {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
