@@ -551,6 +551,18 @@ def clean_log(raw: Any, *, whole: bool = False) -> str:
         raise PresenceError("log must be text")
     text = " ".join(raw.split())
     return text if whole else text[:safe_cut(text, MAX_LOG_CHARS)]
+@dataclass(eq=False)
+class ItemWatch:
+    """A point in flight at a surface item (main.point_agent_cursor): what it
+    is about to point at, and how many writes to it the store heard of since
+    (``AgentPresence.watch``). The point stores no cursor until a look at the
+    item has passed with none."""
+    surface: str
+    item_id: str
+    sub_id: str | None
+    touched: int = 0
+
+
 @dataclass
 class _SessionSlot:
     """One live session's cursor, as the person's tabs draw it."""
@@ -663,6 +675,10 @@ class AgentPresence:
         # agent id -> raw session ('' for none) -> its live slot, oldest first.
         # The one source of every session's number: tabs show it as given.
         self._slots: OrderedDict[str, OrderedDict[str, _SessionSlot]] = OrderedDict()
+        # Points in flight at a surface item (watch): each is told of a forget
+        # or a rename of its item, which would otherwise miss a cursor that is
+        # not stored yet.
+        self._watches: list[ItemWatch] = []
         # The last arrival handed out (ms): each new one is later, so no two
         # sessions share one and a clock stepped back never puts a new
         # arrival ahead of the old ones (#211 review 9, LOW-2, NIT-3).
@@ -1136,6 +1152,7 @@ class AgentPresence:
         shown = _shown_name(name or item_id)
         key = SURFACE_TABLE[surface].name_key
         changed = 0
+        self._touch(surface, item_id)
 
         def renamed(target: Mapping[str, Any] | None, names: Any) -> bool:
             ids = _ids_on(target, surface)
@@ -1166,6 +1183,7 @@ class AgentPresence:
         collects each one as the open tabs name it (``{"agentId", "key"}``,
         key None for an agent's plain cursor), so the caller can tell them: a
         tab holds its cursors until told."""
+        self._touch(surface, item_id)
         left = 0
         for key, value in list(self._agents.items()):
             ids = _ids_on(value["target"], surface)
@@ -1183,29 +1201,26 @@ class AgentPresence:
                         gone.append({"agentId": agent_id, "key": slot.key})
         return left
 
-    def plain_cursor(self, identity: AgentIdentity) -> dict[str, Any] | None:
-        """The agent's plain cursor as stored now: what a point replaces, and
-        what it stored (``undo_point`` takes both)."""
-        return self._agents.get(identity.id)
+    def watch(self, target: Mapping[str, Any]) -> ItemWatch:
+        """Start watching the surface item ``target`` names, for a point that
+        has read it and not stored its cursor yet. Until ``unwatch``, a
+        ``forget_item`` or ``rename_item`` of the item, or a ``forget_subs``
+        that takes the image or view the target is on, counts on the watch:
+        the writes that fix up stored cursors and can't see this one."""
+        item_id, sub_id = surface_ids(target) or ("", None)
+        watch = ItemWatch(str(target.get("surface")), item_id, sub_id)
+        self._watches.append(watch)
+        return watch
 
-    def undo_point(self, identity: AgentIdentity, stored: dict[str, Any] | None,
-                   before: dict[str, Any] | None) -> None:
-        """A point the route refused after storing it never happened (its item
-        went while the route was reading, main.point_agent_cursor): the
-        agent's plain cursor goes back to ``before``, what it was when the
-        point came. ``stored`` is what the point put there. A newer point that
-        replaced it meanwhile stays. A delete that took it meanwhile leaves
-        nothing there, and ``before`` still goes back: it may be on the same
-        item, so the caller forgets every cursor on what is missing next
-        (forget_item or forget_subs), ``before`` among them. No session cursor
-        is touched: the route refuses before it writes one."""
-        current = self._agents.get(identity.id)
-        if current is not None and current is not stored:
-            return
-        if before is None:
-            self._agents.pop(identity.id, None)
-        else:
-            self._agents[identity.id] = before
+    def unwatch(self, watch: ItemWatch) -> None:
+        self._watches = [kept for kept in self._watches if kept is not watch]
+
+    def _touch(self, surface: str, item_id: str, sub_ids: Collection[str] | None = None) -> None:
+        """Tell the points in flight at this item (or, with ``sub_ids``, at one
+        of those sub-items) that it was written."""
+        for watch in self._watches:
+            if watch.surface == surface and watch.item_id == item_id and (sub_ids is None or watch.sub_id in sub_ids):
+                watch.touched += 1
 
     def forget_image(self, board_id: str, image_ids: Collection[str], *,
                      holder: tuple[str, str | None] | None = None,
@@ -1227,6 +1242,7 @@ class AgentPresence:
         "target", "anchorNames"?}``, key None for an agent's plain cursor),
         so the caller can move them there too."""
         gone = {str(sub_id) for sub_id in sub_ids}
+        self._touch(surface, item_id, gone)
         name_key = SURFACE_TABLE[surface].name_key
         board = {"surface": surface, "itemId": item_id}
 

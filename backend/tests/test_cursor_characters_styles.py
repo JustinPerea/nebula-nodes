@@ -1136,42 +1136,27 @@ def test_a_board_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch
     _nothing_left(presence, sent, heard)
 
 
-def _forget_before_the_second_look(monkeypatch, forget):
-    """The deleting route's own forget runs between the store of the cursor and
-    the route's second look (it awaits there)."""
+def _at_look(monkeypatch, number, *, before=None, after=None):
+    """Runs `before` just ahead of the route's Nth second look at the item and
+    `after` just behind its read, each with (main, presence): where another
+    request's store write and its forget can land. Returns the looks made."""
     import main as main_module
 
-    real = main_module._surface_target_missing
+    real = main_module._look_again
+    looks: list[int] = []
 
-    def look_again(raw, target):
-        forget(main_module.agent_presence)
-        return real(raw, target)
+    def look(raw, target):
+        looks.append(1)
+        mine = len(looks) == number or number == "every"
+        if mine and before:
+            before(main_module, main_module.agent_presence)
+        found = real(raw, target)
+        if mine and after:
+            after(main_module, main_module.agent_presence)
+        return found
 
-    monkeypatch.setattr(main_module, "_surface_target_missing", look_again)
-
-
-@pytest.mark.parametrize("forget_runs_meanwhile", [False, True])
-def test_a_refused_point_never_puts_back_a_cursor_on_the_deleted_item(api, monkeypatch, forget_runs_meanwhile):
-    """The agent is on the Character already and points at it again as it is
-    deleted: its earlier cursor there goes too, the plain one and the session's."""
-    client, sent, heard, presence, _ = api
-    character = _make_character(client)
-    assert _point(client, {"surface": "character", "character": "Mara"}, LANE_A).status_code == 200
-    (before,) = presence.replay()
-    sent.clear()
-    heard.clear()
-    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
-                                lambda main: main._char_store().delete(character["id"]))
-    if forget_runs_meanwhile:
-        _forget_before_the_second_look(monkeypatch, lambda held: held.forget_item("character", character["id"]))
-    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A, action="look")
-    assert refused.status_code == 422, refused.text
-    assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
-    assert presence.replay() == [] and _cursors(sent) == []
-    if not forget_runs_meanwhile:  # else the deleting route tells the tabs itself
-        (leave,) = _told(heard)
-        assert leave["type"] == "agentPresenceLeave"
-        assert [cursor["key"] for cursor in leave["cursors"] if cursor["key"] is not None] == [before["session"]["key"]]
+    monkeypatch.setattr(main_module, "_look_again", look)
+    return looks
 
 
 def test_a_refused_point_leaves_the_sessions_cursor_where_it_was(api, monkeypatch):
@@ -1188,46 +1173,145 @@ def test_a_refused_point_leaves_the_sessions_cursor_where_it_was(api, monkeypatc
     assert refused.status_code == 422, refused.text
     assert [live["target"] for live in presence.active()] == [spot]
     assert [cursor["target"] for cursor in presence.replay()] == [spot]
-    assert _cursors(sent) == [] and _told(heard) == []
+    assert _cursors(sent) == [] and _told(heard) == [] and presence._watches == []
 
 
-def test_a_refused_point_at_a_cut_view_moves_the_earlier_cursor_on_it_to_the_character(api, monkeypatch):
+@pytest.mark.parametrize("forget_lands", ["with the delete", "before the second read", "after the second read"])
+def test_a_point_at_an_item_deleted_under_it_leaves_no_cursor_there(api, monkeypatch, forget_lands):
+    """The agent is on the Character already and points at it again as it is
+    deleted. Wherever the deleting route's forget lands, no cursor is left on
+    the Character: not the one the point asked for, and not the earlier one."""
+    client, sent, _, presence, _ = api
+    character = _make_character(client)
+    assert _point(client, {"surface": "character", "character": "Mara"}, LANE_A).status_code == 200
+    sent.clear()
+
+    def delete(main, held=None):
+        main._char_store().delete(character["id"])
+
+    def forget(main, held):
+        held.forget_item("character", character["id"])
+
+    def both(main, held):
+        delete(main)
+        forget(main, held)
+
+    if forget_lands == "with the delete":
+        _delete_during_first_lookup(monkeypatch, "_characters_to_point_at", lambda main: both(main, main.agent_presence))
+        looks = _at_look(monkeypatch, 1)
+    elif forget_lands == "before the second read":
+        _delete_during_first_lookup(monkeypatch, "_characters_to_point_at", delete)
+        looks = _at_look(monkeypatch, 1, before=forget)
+    else:
+        looks = _at_look(monkeypatch, 1, after=both)
+    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A, action="look")
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"].startswith("No character “Mara” here."), refused.text
+    assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
+    assert presence.replay() == [] and _cursors(sent) == [] and presence._watches == []
+    assert len(looks) == (2 if forget_lands == "after the second read" else 1)
+
+
+def test_a_delete_that_lands_behind_the_second_read_is_seen_before_the_cursor_is_stored(api, monkeypatch):
+    """The read saw the Character; the delete and its forget both ran before
+    the route went on. Nothing is stored, so there is nothing the forget missed."""
     client, sent, heard, presence, _ = api
+    character = _make_character(client)
+
+    def delete_and_forget(main, held):
+        main._char_store().delete(character["id"])
+        held.forget_item("character", character["id"])
+
+    looks = _at_look(monkeypatch, 1, after=delete_and_forget)
+    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    assert refused.status_code == 422, refused.text
+    _nothing_left(presence, sent, heard)
+    assert len(looks) == 2 and presence._watches == []
+
+
+def test_a_cut_of_views_under_a_point_moves_the_earlier_cursor_and_refuses_the_point(api, monkeypatch):
+    """The agent is on view 5 and points at view 3 as a save cuts the views to
+    two. The cut's forget moves the cursor it finds (still the one on view 5)
+    to the Character, and the point at view 3 is refused."""
+    client, sent, _, presence, _ = api
     character = _make_character(client, views=5)
     on_character = {"surface": "character", "itemId": character["id"]}
     assert _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A).status_code == 200
-    (before,) = presence.replay()
     sent.clear()
-    heard.clear()
-    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
-                                lambda main: main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()]))
-    refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A, action="look")
+
+    def cut(main, held):
+        main._char_store().update(character["id"], referenceViews=[_url(), _url()])
+        held.forget_subs("character", character["id"], ["3", "4", "5"])
+
+    looks = _at_look(monkeypatch, 1, after=cut)
+    refused = _point(client, {"surface": "character", "character": character["id"], "view": 3}, LANE_A, action="look")
     assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == "Character “Mara” has no view “3”. Use its number (1-2)."
     assert [live["target"] for live in presence.active()] == [on_character]
     assert [cursor["target"] for cursor in presence.replay()] == [on_character]
-    assert _cursors(sent) == []
-    (retarget,) = _told(heard)
-    assert retarget["type"] == "agentPresenceRetarget"
-    assert [(cursor["key"], cursor["target"]) for cursor in retarget["cursors"] if cursor["key"] is not None] == [
-        (before["session"]["key"], on_character)]
+    assert _cursors(sent) == [] and len(looks) == 2
 
 
-def test_a_newer_point_is_not_undone_by_a_refused_one():
-    from services.agent_presence import identify
+def test_a_cut_that_keeps_the_pointed_view_costs_no_second_look(api, monkeypatch):
+    client, sent, _, presence, _ = api
+    character = _make_character(client, views=5)
 
-    presence, identity = AgentPresence(), identify({"X-Nebula-Agent": "Claude Code"})
-    spot, later = {"x": 1.0, "y": 2.0}, {"x": 9.0, "y": 9.0}
-    presence.point(identity, target=spot)
-    before = presence.plain_cursor(identity)
-    presence.point(identity, target={"surface": "character", "itemId": "c1"}, names={"character": "Mara"})
-    stored = presence.plain_cursor(identity)
-    presence.point(identity, target=later)
-    presence.undo_point(identity, stored, before)
-    assert [live["target"] for live in presence.active()] == [later]
-    presence.undo_point(identity, presence.plain_cursor(identity), before)
-    assert [live["target"] for live in presence.active()] == [spot]
-    presence.undo_point(identity, presence.plain_cursor(identity), None)
-    assert presence.active() == []
+    def cut(main, held):
+        main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()])
+        held.forget_subs("character", character["id"], ["4", "5"])
+
+    looks = _at_look(monkeypatch, 1, after=cut)
+    made = _point(client, {"surface": "character", "character": character["id"], "view": 2}, LANE_A)
+    assert made.status_code == 200, made.text
+    assert [live["target"]["itemId"] for live in presence.active()] == [f"{character['id']}/2"]
+    assert len(_cursors(sent)) == 1 and len(looks) == 1 and presence._watches == []
+
+
+def test_a_rename_under_a_point_reaches_the_name_it_stores(api, monkeypatch):
+    """The rename's own fix-up ran before this cursor was stored, so the point reads the name again."""
+    client, sent, _, presence, _ = api
+    character = _make_character(client)
+
+    def rename(main, held):
+        main._char_store().update(character["id"], name="Mara Vance")
+        held.rename_item("character", character["id"], "Mara Vance")
+
+    looks = _at_look(monkeypatch, 1, after=rename)
+    made = _point(client, {"surface": "character", "character": "Mara", "part": "traits"}, LANE_A)
+    assert made.status_code == 200, made.text
+    assert made.json()["anchorNames"]["character"] == "Mara Vance" and "part" in made.json()["anchorNames"]
+    assert [live["anchorNames"]["character"] for live in presence.active()] == ["Mara Vance"]
+    assert [cursor["anchorNames"]["character"] for cursor in presence.replay()] == ["Mara Vance"]
+    assert _cursors(sent)[0]["anchorNames"]["character"] == "Mara Vance" and len(looks) == 2
+
+
+def test_an_item_written_at_every_look_is_pointed_at_after_the_last_one(api, monkeypatch):
+    """The looks are bounded: an item still there after four is pointed at."""
+    client, sent, _, presence, _ = api
+    character = _make_character(client)
+    looks = _at_look(monkeypatch, "every", after=lambda main, held: held.forget_item("character", character["id"]))
+    made = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    assert made.status_code == 200, made.text
+    assert len(looks) == 4 and len(presence.active()) == 1 and presence._watches == []
+
+
+def test_a_watch_hears_only_writes_to_what_it_is_on():
+    presence = AgentPresence()
+    on_view = presence.watch({"surface": "character", "itemId": "c1/3"})
+    on_item = presence.watch({"surface": "character", "itemId": "c1"})
+    presence.forget_subs("character", "c1", ["4", "5"])
+    presence.forget_item("character", "c2")
+    presence.forget_item("style", "c1")
+    presence.rename_item("moodboard", "c1", "Other")
+    assert (on_view.touched, on_item.touched) == (0, 0)
+    presence.forget_subs("character", "c1", ["3"])
+    assert (on_view.touched, on_item.touched) == (1, 0)
+    presence.forget_item("character", "c1")
+    presence.rename_item("character", "c1", "Mara Vance")
+    assert (on_view.touched, on_item.touched) == (3, 2)
+    presence.unwatch(on_view)
+    presence.forget_item("character", "c1")
+    assert (on_view.touched, on_item.touched) == (3, 3) and presence._watches == [on_item]
 
 
 def test_a_name_that_is_one_long_character_is_still_a_name():
@@ -1252,6 +1336,7 @@ def test_a_rename_while_the_point_reads_does_not_refuse_it(api, monkeypatch):
     made = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
     assert made.status_code == 200, made.text
     assert len(presence.active()) == 1 and len(_cursors(sent)) == 1
+    assert made.json()["anchorNames"] == {"character": "Mara Vance"}  # the name as the second look read it
 
 
 # -- GM round 1, R2: a name cut at 80 characters keeps a joined emoji whole ----------------------------
