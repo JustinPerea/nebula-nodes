@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
+import { AGENT_SURFACES, isAgentSurface } from '../lib/agentSurfaces';
 import type { AgentAnchorNames, AgentCursorAnchor, AgentPresenceArrivalEvent, AgentPresenceEvent, AgentPresenceLeaveEvent, AgentPresenceRetargetEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
@@ -115,6 +116,13 @@ export function cursorAction(raw: unknown): AgentCursorAction {
   return AGENT_CURSOR_ACTIONS.includes(raw as AgentCursorAction) ? (raw as AgentCursorAction) : 'move';
 }
 
+/** What a cursor draws: an agent can't write a Character, so a `type` or a
+ *  `click` at one (the Character, a view or a control) is drawn as a `look`
+ *  (the backend stores `look` too; this covers a backend that doesn't). */
+export function shownAction(action: AgentCursorAction, target: AgentCursorAnchor): AgentCursorAction {
+  return 'surface' in target && target.surface === 'character' && (action === 'type' || action === 'click') ? 'look' : action;
+}
+
 // cleanSession lives with the cursor's label (agentCursorLabel), which the
 // Agent log, loaded with the app, uses without pulling in this store.
 export { cleanSession };
@@ -133,15 +141,20 @@ function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
 }
 
 const ANCHOR_ITEM = /^[A-Za-z0-9_.-]{1,64}(\/[A-Za-z0-9_.-]{1,64})?$/;
+const VIEW_POSITION = /^[1-9][0-9]{0,5}$/;
 
-/** The names beside a surface anchor: a board name, an image number, a control label. */
+/** The names beside a surface anchor: the item's name under its surface's
+ *  key, a sub-item's number, a control's label (lib/agentSurfaces.ts). */
 function cleanAnchorNames(raw: unknown, target: AgentCursorAnchor): AgentAnchorNames | undefined {
   if (!('surface' in target) || !raw || typeof raw !== 'object') return undefined;
   const names = raw as Record<string, unknown>;
-  if (typeof names.board !== 'string' || !names.board) return undefined;
+  const spec = AGENT_SURFACES[target.surface];
+  const name = names[spec.nameKey];
+  if (typeof name !== 'string' || !name) return undefined;
+  const sub = spec.sub ? names[spec.sub.nameKey] : undefined;
   return {
-    board: names.board,
-    ...(typeof names.image === 'number' && Number.isFinite(names.image) ? { image: names.image } : {}),
+    [spec.nameKey]: name,
+    ...(spec.sub && typeof sub === 'number' && Number.isFinite(sub) ? { [spec.sub.nameKey]: sub } : {}),
     ...(typeof names.part === 'string' && names.part ? { part: names.part } : {}),
   };
 }
@@ -149,10 +162,15 @@ function cleanAnchorNames(raw: unknown, target: AgentCursorAnchor): AgentAnchorN
 function isAnchor(value: unknown): value is AgentCursorAnchor {
   if (!value || typeof value !== 'object') return false;
   const anchor = value as Record<string, unknown>;
-  // A surface item: `itemId` is `<board>` or `<board>/<image>` (ids, 1-64 of the DOM attribute's characters).
-  if (anchor.surface === 'moodboard') {
-    return typeof anchor.itemId === 'string' && ANCHOR_ITEM.test(anchor.itemId)
-      && (anchor.part === undefined || typeof anchor.part === 'string');
+  // A surface item: `itemId` is `<item>` or, where the surface has sub-items,
+  // `<item>/<sub>` (ids, 1-64 of the DOM attribute's characters; a Character's
+  // view is a position). An unknown surface is not an anchor.
+  if ('surface' in anchor) {
+    if (!isAgentSurface(anchor.surface) || typeof anchor.itemId !== 'string' || !ANCHOR_ITEM.test(anchor.itemId)) return false;
+    const [, sub] = anchor.itemId.split('/');
+    const spec = AGENT_SURFACES[anchor.surface];
+    if (sub !== undefined && (!spec.sub || (spec.sub.kind === 'view' && !VIEW_POSITION.test(sub)))) return false;
+    return anchor.part === undefined || typeof anchor.part === 'string';
   }
   if (typeof anchor.nodeId === 'string') return anchor.handle === undefined || typeof anchor.handle === 'string';
   return Number.isFinite(anchor.x) && Number.isFinite(anchor.y);
@@ -216,7 +234,7 @@ function withEvent(
     target,
     anchorNames: cleanAnchorNames(event.anchorNames, target),
     from: !replayed && isAnchor(event.from) ? event.from : undefined,
-    action: cursorAction(event.action),
+    action: shownAction(cursorAction(event.action), target),
     say: typeof event.say === 'string' ? event.say : '',
     receivedAt,
     seq: nextSeq(key, previous?.seq),

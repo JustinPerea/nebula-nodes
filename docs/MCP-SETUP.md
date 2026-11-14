@@ -1212,38 +1212,66 @@ every node by id.
 The log is in the browser's memory only: the last 50 entries, gone on
 reload.
 
-### Beyond the canvas: pointing at a moodboard
+### Beyond the canvas: pointing at a moodboard, a Character or a Style
 
-A cursor can also point at a moodboard, one of its images, or one of their
-controls, on the Moodboard panel or in Moodboard Studio (they are one surface,
-`moodboard`). The target is an anchor, never a screen position:
+A cursor can also point at a moodboard, a Character or a Style, one of their
+parts, or one of their controls. The Moodboard panel and Moodboard Studio are
+one surface, `moodboard`; the Character Studio and the Characters tab of the
+Assets dock are `character`; the Styles tab is `style`. The target is an
+anchor, never a screen position:
 
 ```bash
 nebula point --moodboard "Desert light"                      # the board (its id or exact name)
 nebula point --moodboard "Desert light" --image 12            # image 12 (a number, #12 or its id)
 nebula point --moodboard "Desert light" --image 12 --part note --action type --say "Noting the shadows"
+nebula point --character Mara --action look                   # a Character (its id or exact name)
+nebula point --character Mara --view 2                        # its reference view 2 (1 is the cover)
+nebula point --character Mara --part traits                   # its "Frozen trait string"
+nebula point --style "Dusk grain" --action look               # a Style (its id or exact name)
 ```
 
-Over MCP: `point_at(moodboard="Desert light", image=12, part="note", action="type")`.
-`--moodboard` takes flags, not a target string, because a node id may hold a
-colon (`nebula point n2 --moodboard x` is a parser error, and so is `--from`
-with it: a drag starts at a node or a spot). Parts: `name`, `direction`,
-`avoid`, `colors` (“Colors that must appear”) or `colors-out` (“Colors to keep
-out”) on a board; `note` or `weight` on an image. A board that
-isn't there, a name that two boards share, an image past the last, or a part
-that item doesn't have is refused in plain words that say what to use.
+Over MCP: `point_at(moodboard="Desert light", image=12, part="note", action="type")`,
+`point_at(character="Mara", view=2, action="look")` and
+`point_at(style="Dusk grain", action="look")`.
+`--moodboard`, `--character` and `--style` take flags, not a target string,
+because a node id may hold a colon (`nebula point n2 --moodboard x` is a
+parser error, and so is `--from` with it: a drag starts at a node or a spot).
+Give at most one of the three. Parts:
+
+| Surface | Item | Parts |
+|---|---|---|
+| `moodboard` | a board | `name`, `direction`, `avoid`, `colors` (“Colors that must appear”) or `colors-out` (“Colors to keep out”) |
+| `moodboard` | an image (`image`) | `note` or `weight` |
+| `character` | a Character | `name`, `subject-type` (“Subject type”), `views` (“Reference views”), `traits` (“Frozen trait string”) or `seed` |
+| `character` | a reference view (`view`) | none |
+| `style` | a Style | `name`, `category`, `prompt`, `settings`, `model`, `references` or `thumbnail` |
+
+A reference view is its 1-based position in the Character's list (`2` or `#2`),
+since views have no ids; position 1 is the cover. `character_list` and
+`character_get` (CLI: `nebula character list`, `nebula character show`; read-only)
+give a Character's id, name, scope, subject type, reference views, trait string
+and seed. A Character can only be looked at, so `type` and `click` at one (or
+at its views or controls) are shown as `look`: the route stores `look`, and the
+result's `action` says so. `consistency` is accepted as a Character part and dropped: that
+control reads "unavailable", so the cursor goes to the Character. No screen
+draws a Style's fields, so a Style's `part` only chooses the default line
+("Writing the prompt for “Dusk grain”"). A board, Character or Style that isn't
+there, a name that two share (use an id), a view past the last, or a part that
+item doesn't have is refused in plain words that say what to use. You may name
+the open project's items and Global's, as the panels list them.
 
 **Nebula never opens a panel or scrolls for the person.** What they see
 depends on what they have open:
 
-- **The item is on screen** (the Moodboards tab in the Assets dock, or the
-  Studio's board or list view): your cursor flies to it, and shows what you
+- **The item is on screen** (its tab in the Assets dock, the Moodboard
+  Studio's board or list view, or the Character Studio): your cursor flies to it, and shows what you
   are doing there.
 - **The item is on screen but scrolled or panned out of its panel**: your
   cursor parks at the edge of the panel, on the side the item is, with a small
   arrow toward it. Their own scroll brings it back.
-- **The Moodboard panel is closed**: your cursor parks at the button that
-  opens it (the rail's "Open assets"), with a dot in your colour. In a Studio,
+- **The panel is closed**: your cursor parks at the button that opens it (the
+  rail's "Open assets" opens the Assets dock, which holds all three lists),
+  with a dot in your colour. In a Studio,
   a canvas target parks at "Back to Canvas". Whatever you do there, they open
   it themselves.
 
@@ -1263,22 +1291,37 @@ past tense because the line goes out after the write landed):
 | analyze | the board's `colors` | `look` |
 | keep the brief | the board's `direction` | `click` |
 | delete a board | nothing: every cursor on it leaves | n/a |
+| make a Style (`style_create`, `nebula style new`) | the Style | `type` |
+| change a Style (`style_update`, `nebula style set`) | the Style's `name`, `category`, `prompt`, `settings`, `model`, `references` or `thumbnail` when that is the one field changed, else the Style | `type` |
+| delete a Style | nothing: every cursor on it leaves | n/a |
 | a board outside the open project and Global (made in, or moved to, another project) | nothing: the panel doesn't list it, so the line shows in the Agent log and no cursor moves | n/a |
 
-A write that touches several things goes to the board, and two controls in
-one write are the board, not one control. The person's own writes send
+A write that touches several things goes to the board (a Style), and two
+controls in one write are the board (the Style), not one control. A Style
+outside the open project and Global gets no cursor either. A Character has no
+write for an agent, so none moves your cursor. The line a Style write says is
+the Agent log's and the journal's (`Made the style “Dusk grain”`, `Changed the
+prompt of the style “Dusk grain”`). The person's own writes send
 nothing. The event carries `target` (`{"surface": "moodboard", "itemId":
-"<board>" or "<board>/<image>", "part"?}`, ids only, whatever you called the
-item) and `anchorNames` (`{board, image?, part?}`: the board's name, the
-image's number, the control's label), so a line can name an item that isn't
-on screen. `nebula look` and `nebula context` say it as `on moodboard “Desert light”,
-image 12 (note)`, and `nebula agents` as `cursor on moodboard “Desert light”,
-image 12 (note)` under the agent. When a board is deleted or an image is
-removed by someone else, the person's open tabs move or clear the cursors at
-once, not after the two-minute expiry.
+"<board>" or "<board>/<image>", "part"?}`, `{"surface": "character", "itemId":
+"<character>" or "<character>/<view number>", "part"?}` or `{"surface":
+"style", "itemId": "<style>", "part"?}`, ids only, whatever you called the
+item) and `anchorNames` (`{board, image?, part?}`, `{character, view?, part?}`
+or `{style, part?}`: the item's name, the view's or image's number, the
+control's label, a Style's part id), so a line can name an item that isn't on
+screen. `nebula look` and `nebula context` say it as `on moodboard “Desert light”,
+image 12 (note)`, `on character “Mara”, view 2` or `on style “Dusk grain”
+(prompt)`, and `nebula agents` as `cursor on …` under the agent. When a board,
+Character or Style is deleted, an image is removed by someone else, or a
+Character's reference views are cut down below a cursor's view (it falls back
+to the Character), the person's open tabs move or clear the cursors at once,
+not after the two-minute expiry. A Character moved between Project and Global
+keeps its id, so a cursor on it stays.
 
 The REST surface is `POST /api/canvas/cursor` (a `target`: a node, a spot or a
-moodboard item `{"surface": "moodboard", "board", "image"?, "part"?}`; or only
+surface item `{"surface": "moodboard", "board", "image"?, "part"?}`,
+`{"surface": "character", "character", "view"?, "part"?}` or `{"surface": "style",
+"style", "part"?}`; or only
 `say` to narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
 run states; never persisted), plus `GET /api/canvas/events` (the change
@@ -6226,7 +6269,7 @@ copies those into Create; no saved graph points at one.
   actor (see [Watching for changes](#watching-for-changes)), broadcasts
   `storedAssetChanged` with `kind: "style"` (the Assets panel and Create's
   Styles list again), and an agent's write is a line in the Agent log
-  ("Changed the prompt of Style Dusk"). Starter Styles are seeded once
+  ("Changed the prompt of the style “Dusk”"). Starter Styles are seeded once
   (`<preset root>/.seeded` marks it), so starters the person deleted, even
   for good, don't come back on the next start.
 
@@ -6258,6 +6301,8 @@ nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run --only 3,5
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard move <board> --to global  # or current, or a project's id or exact name
 nebula character move <character> --to "Shoot B"
+nebula character list                      # Characters: Global, plus the open project's (read-only)
+nebula character show <character>          # id or exact name: reference views, trait string, seed
 nebula moodboard delete <board>
 ```
 

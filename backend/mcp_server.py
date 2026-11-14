@@ -27,8 +27,9 @@ from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wordi
 from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
 from services.wording import counted
-from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, moodboard_clash as _moodboard_clash,
-                                     moodboard_clash_refusal as _moodboard_clash_refusal,
+from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, surface_clash as _surface_clash,
+                                     surface_clash_refusal as _surface_clash_refusal,
+                                     surface_exclusive_refusal as _surface_exclusive_refusal,
                                      refusal as _cursor_action_refusal, session_ok)
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
@@ -655,6 +656,9 @@ def point_at(
     moodboard: str | None = None,
     image: str | int | None = None,
     part: str | None = None,
+    character: str | None = None,
+    view: str | int | None = None,
+    style: str | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Move your cursor on the Nebula canvas so the user can see where you are working.
@@ -710,14 +714,26 @@ def point_at(
     name), at one of its images with `image` (its number, `12` or `#12`, or
     its id), and at a control with `part`: `name`, `direction`, `avoid`,
     `colors` ("Colors that must appear") or `colors-out` ("Colors to keep
-    out") on a board; `note` or `weight` on an image. Use these alone:
-    they can't be combined with `node_id`, `port`, `x`, `y` or the drag's
+    out") on a board; `note` or `weight` on an image. Point at a Character
+    with `character` (its id or exact name; character_list names them), at
+    one of its reference views with `view` (its number, `2` or `#2`; 1 is
+    the cover), and at a control with `part`: `name`, `subject-type`
+    ("Subject type"), `views` ("Reference views"), `traits` ("Frozen trait
+    string") or `seed`; a view takes no part. A Character can only be looked
+    at, so `type` and `click` at one are shown as `look` (the result's
+    `action` says what was stored). Point at a Style with `style`
+    (its id or exact name; style_list names them) and `part` `name`,
+    `category`, `prompt`, `settings`, `model`, `references` or `thumbnail`
+    (no screen draws a Style's fields, so a part only changes the default
+    line). Give one of `moodboard`, `character` or `style`; use it alone:
+    it can't be combined with `node_id`, `port`, `x`, `y` or the drag's
     `from_node_id`. Nebula never opens a panel or scrolls for the person: if
-    the Moodboard panel is closed or the item is out of view, your cursor
-    parks at the button that opens it, or at the edge of what they see, and
-    their own click shows the rest. Board writes you make (moodboard_edit,
-    moodboard_update, moodboard_add, ...) move your cursor there on their
-    own, to the image or control they touched.
+    the Moodboard panel or the Assets dock is closed or the item is out of
+    view, your cursor parks at the button that opens it, or at the edge of
+    what they see, and their own click shows the rest. Board writes you make
+    (moodboard_edit, moodboard_update, moodboard_add, ...) and Style writes
+    you make (style_create, style_update) move your cursor there on their
+    own, to the image, control or Style they touched.
 
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set
@@ -734,16 +750,29 @@ def point_at(
 
     if not isinstance(action, str) or action not in _CURSOR_ACTIONS:
         raise ValueError(f"point_at: {_cursor_action_refusal(action)}")
-    if image is not None or part is not None or moodboard:
-        # A moodboard item: its own target, never mixed with a node or a spot.
-        if not moodboard:
+    given = {name: value for name, value in (("moodboard", moodboard), ("character", character), ("style", style))
+             if value is not None and value != ""}
+    if len(given) > 1:
+        raise ValueError(f"point_at: {_surface_exclusive_refusal(list(given))}")
+    if image is not None or view is not None or part is not None or given:
+        # A surface item: its own target, never mixed with a node or a spot.
+        if image is not None and not moodboard:
+            if given:
+                raise ValueError("point_at: image goes with moodboard; a character's reference view is `view`")
             raise ValueError("point_at: image and part need moodboard (its id or exact name)")
-        clash = _moodboard_clash(node_id=node_id, port=port, x=x, y=y, from_node_id=from_node_id, from_port=from_port)
+        if view is not None and not character:
+            raise ValueError("point_at: view needs character (its id or exact name)")
+        if not given:
+            raise ValueError("point_at: part needs moodboard, character or style (an id or exact name)")
+        surface, ref = next(iter(given.items()))
+        clash = _surface_clash(node_id=node_id, port=port, x=x, y=y, from_node_id=from_node_id, from_port=from_port)
         if clash:
-            raise ValueError(f"point_at: {_moodboard_clash_refusal(clash)}")
-        item: dict[str, Any] = {"surface": "moodboard", "board": moodboard}
+            raise ValueError(f"point_at: {_surface_clash_refusal(clash, surface)}")
+        item: dict[str, Any] = {"surface": surface, {"moodboard": "board"}.get(surface, surface): ref}
         if image is not None:
             item["image"] = image
+        if view is not None:
+            item["view"] = view
         if part is not None:
             item["part"] = part
         return _canvas_call("POST", "/api/canvas/cursor", ctx, json={"target": item, "say": say, "action": action})
@@ -3033,6 +3062,41 @@ def character_move(character: str, to: str, ctx: Context | None = None) -> dict[
     import character_client as characters
 
     return _board_call(characters.move_character, _api(), character, to, _board_headers(ctx))
+
+
+@_tool(annotations=_READ)
+def character_list(project_id: str | None = None, ctx: Context | None = None) -> list[dict[str, Any]]:
+    """List Characters (the ones in Character Studio and the Assets panel's
+    Characters tab): the Global ones, then one project's own.
+
+    Each comes with its `id`, `name`, `scope` and `projectId`, `subjectType`,
+    `viewCount` and `referenceViews` (their URLs in order: the first is the
+    cover, and `point_at`'s `view` names one by its number, 1 first),
+    `frozenTraitString`, `seed` and `version`. `project_id` (a canvas
+    project's id, or "current") defaults to the project open on the canvas;
+    "none" lists only the Global ones. Read-only: no tool edits a Character
+    (character_move re-homes one). Use an id or exact name with
+    `point_at(character=...)` to point your cursor at one."""
+    import character_client as characters
+    import moodboard_client as boards
+
+    api, headers = _api(), _board_headers(ctx)
+    if project_id == "none":
+        project = None
+    elif project_id:
+        project = _board_call(boards.resolve_project, api, project_id, headers)
+    else:
+        project = _board_call(boards.active_project, api, headers)
+    return _board_call(characters.list_characters, api, project=project, headers=headers)
+
+
+@_tool(annotations=_READ)
+def character_get(character: str, ctx: Context | None = None) -> dict[str, Any]:
+    """One Character by id or exact name (any case), as character_list gives
+    it. One in Recently deleted says so, with how to restore it."""
+    import character_client as characters
+
+    return _board_call(characters.get_character, _api(), character, _board_headers(ctx))
 
 
 # -- model catalogs for the universal nodes (MCP parity U10, 2026-10-20) ----------

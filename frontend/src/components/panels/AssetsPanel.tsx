@@ -31,7 +31,7 @@ import '../../styles/moodboard-studio.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
 import type { KeptAction } from '../../lib/keptCanvas';
 import { LineText } from '../LineText';
-import { agentAnchor, agentLauncher } from '../../lib/agentAnchors';
+import { agentLauncher, surfaceAnchor } from '../../lib/agentAnchors';
 
 type Scope = 'global' | 'project';
 type Tab = 'characters' | 'moodboards' | 'styles';
@@ -41,6 +41,13 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'moodboards', label: 'Moodboards' },
   { id: 'styles', label: 'Styles' },
 ];
+
+/** Each tab button is the launcher an agent cursor parks beside for its surface's items (lib/agentAnchors). */
+const TAB_SURFACE: Record<Tab, string | undefined> = {
+  characters: agentLauncher('character'),
+  moodboards: agentLauncher('moodboard'),
+  styles: agentLauncher('style'),
+};
 
 /**
  * Unified Assets panel — collapses the former Character, Moodboard, and Style
@@ -235,7 +242,7 @@ export function AssetsPanel() {
               role="tab"
               aria-selected={tab === t.id}
               className={`assets-panel__tab${tab === t.id ? ' assets-panel__tab--active' : ''}`}
-              data-agent-launcher={t.id === 'moodboards' ? agentLauncher('moodboard') : undefined}
+              data-agent-launcher={TAB_SURFACE[t.id]}
               onClick={() => setTab(t.id)}
             >
               {t.label}
@@ -303,6 +310,7 @@ export function AssetsPanel() {
               filteredCharacters.map((c) => (
                 <AssetItem
                   key={c.id}
+                  agentItem={{ surface: 'character', id: c.id }}
                   name={c.name}
                   sub={`${c.referenceViews.length} views`}
                   thumbnail={c.thumbnail}
@@ -330,7 +338,7 @@ export function AssetsPanel() {
               filteredMoodboards.map((m) => (
                 <AssetItem
                   key={m.id}
-                  agentBoard={m.id}
+                  agentItem={{ surface: 'moodboard', id: m.id }}
                   name={m.name}
                   sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
@@ -360,6 +368,7 @@ export function AssetsPanel() {
               filteredPresets.map((p) => (
                 <AssetItem
                   key={p.id}
+                  agentItem={{ surface: 'style', id: p.id }}
                   name={p.name}
                   sub={p.category}
                   thumbnail={p.thumbnail}
@@ -396,7 +405,7 @@ export function AssetsPanel() {
  * buttons; double-click opens it. Only "Add to canvas" and dragging add a node.
  */
 function AssetItem({
-  agentBoard,
+  agentItem,
   name,
   sub,
   thumbnail,
@@ -413,8 +422,8 @@ function AssetItem({
   onDelete,
   deleteBusy = false,
 }: {
-  /** A Moodboard row: the board an agent cursor can point at (lib/agentAnchors). */
-  agentBoard?: string;
+  /** The item an agent cursor can point at: this row is its anchor, and its launcher when the item has to be reached from here (lib/agentAnchors). */
+  agentItem?: { surface: 'moodboard' | 'character' | 'style'; id: string };
   name: string;
   sub: ReactNode;
   thumbnail?: string;
@@ -445,7 +454,8 @@ function AssetItem({
   const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
     <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}
-      data-agent-anchor={agentAnchor(agentBoard)} data-agent-launcher={agentLauncher('moodboard', agentBoard)}>
+      data-agent-anchor={agentItem && surfaceAnchor(agentItem.surface, agentItem.id)}
+      data-agent-launcher={agentItem && agentLauncher(agentItem.surface, agentItem.id)}>
       <button
         type="button"
         className="character-palette__item assets-item__select"

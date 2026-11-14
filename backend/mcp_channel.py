@@ -163,7 +163,7 @@ CHANGE_TURN_TOOLS = frozenset({
     "view_output", "get_run", "list_projects", "get_project", "project_size", "list_trash", "get_spend_limits",
     "list_notes", "list_agents", "get_answers", "list_project_covers", "wait_for_canvas_change",
     "commons_search", "commons_get", "commons_collections", "commons_status", "commons_borrowings",
-    "commons_concentration", "moodboard_list", "moodboard_get", "style_list", "style_get", "model_catalog",
+    "commons_concentration", "moodboard_list", "moodboard_get", "style_list", "style_get", "character_list", "character_get", "model_catalog",
     "model_schema", "krea_discovery_tools", "krea_discover", "get_settings", "provider_status", "channel_status",
     "read_thread",
 })

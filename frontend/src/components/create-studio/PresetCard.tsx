@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Preset } from '../../lib/createPresets';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
+import { surfaceAnchor } from '../../lib/agentAnchors';
 
 // Deterministic hue from the preset id so each card gets a stable gradient.
 function hueOf(id: string): number {
@@ -20,6 +21,7 @@ export function PresetCard({ preset, onApply }: { preset: Preset; onApply: (p: P
     <button
       type="button"
       className="preset-card"
+      data-agent-anchor={surfaceAnchor('style', preset.id)}
       onClick={() => onApply(preset)}
       style={{ ['--preset-hue' as string]: `${hue}` }}
       title={preset.prompt}

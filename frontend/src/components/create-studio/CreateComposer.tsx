@@ -12,6 +12,7 @@ import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasL
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { agentLauncher } from '../../lib/agentAnchors';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -151,7 +152,8 @@ export function CreateComposer({
           {modelDef?.displayName ?? 'Select model'}
           <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" />
         </button>
-        <button type="button" className="create-composer__styles" onClick={onOpenStyles} title="Browse styles">
+        <button type="button" className="create-composer__styles" onClick={onOpenStyles} title="Browse styles"
+          data-agent-launcher={agentLauncher('style')}>
           Styles
         </button>
         <button

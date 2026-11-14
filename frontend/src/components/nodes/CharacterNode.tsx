@@ -10,6 +10,7 @@ import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
+import { agentLauncher } from '../../lib/agentAnchors';
 import type { NodeData } from '../../types';
 import '../../styles/character-node.css';
 
@@ -45,7 +46,8 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
 
   return (
     <div ref={cardRef} className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-pending={pendingAttr(data.pending)}
-      data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Character Studio' : undefined}>
+      data-node-inspector-anchor={id} data-agent-launcher={agentLauncher('character', characterId)}
+      title={canOpen ? 'Double-click to open in Character Studio' : undefined}>
       <div className="character-node__title">◐ {name}</div>
       <NodeSettingsAction id={id} />
 

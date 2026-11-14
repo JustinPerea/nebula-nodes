@@ -8,6 +8,7 @@ import {
   surfaceSay,
 } from '../src/lib/agentCursorSays';
 import { resolveAnchor, type AnchorLookup } from '../src/lib/agentCursorMotion';
+import { AGENT_SURFACE_NAMES, AGENT_SURFACES } from '../src/lib/agentSurfaces';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
@@ -115,6 +116,21 @@ describe('the part labels', () => {
     const block = /PART_LABELS = \{([^}]*)\}/.exec(python)?.[1] ?? '';
     const backend = Object.fromEntries([...block.matchAll(/"([\w-]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
     expect(AGENT_SURFACE_PART_LABELS).toEqual(backend);
+  });
+
+  // The surfaces, a Character's labels and a Style's parts are written once
+  // on each side, so each is pinned to the backend's table here.
+  it('the surfaces and the Character and Style parts are the backend’s (cursor_actions)', () => {
+    const python = readFileSync(resolve(__dirname, '../../backend/services/cursor_actions.py'), 'utf8');
+    const tuple = (name: string) => [...(new RegExp(`^${name} = \\(([^)]*)\\)`, 'm').exec(python)?.[1] ?? '').matchAll(/"([\w-]+)"/g)].map((m) => m[1]);
+    expect(AGENT_SURFACE_NAMES).toEqual(tuple('SURFACES'));
+    const block = /CHARACTER_LABELS = \{([^}]*)\}/.exec(python)?.[1] ?? '';
+    const labels = Object.fromEntries([...block.matchAll(/"([\w-]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
+    expect(Object.keys(labels)).toEqual(tuple('CHARACTER_PARTS'));
+    expect(AGENT_SURFACES.character.parts).toEqual(labels);
+    expect(Object.keys(AGENT_SURFACES.style.parts).sort()).toEqual(tuple('STYLE_PARTS').sort());
+    expect(Object.keys(AGENT_SURFACES.moodboard.parts)).toEqual(tuple('BOARD_PARTS'));
+    expect(Object.keys(AGENT_SURFACES.moodboard.subParts)).toEqual(tuple('IMAGE_PARTS'));
   });
 
   // GM: each label must be the one the Studio shows for that control.
