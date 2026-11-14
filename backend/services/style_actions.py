@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from services.text_cut import safe_cut
+from services.text_cut import clean_name
 
 # The Style fields a write can change, as the app labels them.
 FIELD_LABELS = {
@@ -56,9 +56,8 @@ def _name(style: Mapping[str, Any] | None, style_id: str = "", limit: int = 60) 
     """A Style's name in curly quotes, cut to ``limit`` characters (else its
     id): “Dusk grain”."""
     style = style or {}
-    name = " ".join(str(style.get("name") or "").split()) or str(style.get("id") or style_id or "Untitled")
-    if len(name) > limit:
-        name = name[:safe_cut(name, limit - 1)].rstrip() + "\u2026"
+    name = clean_name(style.get("name"), limit, ellipsis=True) or clean_name(
+        style.get("id") or style_id or "Untitled", limit, ellipsis=True)
     return f"\u201c{name}\u201d"
 
 
@@ -75,8 +74,7 @@ def style_anchor(style: Mapping[str, Any] | None, fields: list[str] | None = Non
     several has none)."""
     style = style or {}
     item = str(style.get("id") or style_id)
-    name = " ".join(str(style.get("name") or item).split())
-    name = name[:safe_cut(name, 80)]
+    name = clean_name(style.get("name"), 80) or clean_name(item, 80)
     target: dict[str, Any] = {"surface": "style", "itemId": item}
     names: dict[str, Any] = {"style": name}
     if fields and len(fields) == 1 and fields[0] in FIELD_PARTS:
@@ -149,7 +147,7 @@ def describe(change: str, style: Mapping[str, Any] | None, *, fields: list[str] 
 def journal_data(style: Mapping[str, Any] | None, *, fields: list[str] | None = None,
                  style_id: str = "") -> dict[str, Any]:
     style = style or {}
-    data: dict[str, Any] = {"styleId": str(style.get("id") or style_id), "styleName": str(style.get("name") or ""),
+    data: dict[str, Any] = {"styleId": str(style.get("id") or style_id), "styleName": clean_name(style.get("name")),
                             "scope": style.get("projectId") or "global"}
     if fields is not None:
         data["fields"] = list(fields)

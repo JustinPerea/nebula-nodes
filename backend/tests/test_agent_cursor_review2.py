@@ -22,7 +22,7 @@ from tests.test_agent_cursor_sessions import Clock, sockets  # noqa: F401 - fixt
 from tests.test_canvas_proposals import CLAUDE, api  # noqa: F401 - fixture
 
 ESC = "\x1b[2J\x1b[31mred"
-RLO = "ab‮dcba"
+RLO = "ab\u202edcba"
 FAMILY = "\U0001F468‍\U0001F469‍\U0001F467‍\U0001F466"  # 7 code points, one character
 
 
@@ -34,7 +34,7 @@ def _clean(line: str) -> None:
     line.encode("utf-8")  # a lone surrogate would raise here
     for char in _quoted(line):
         assert char in "‍" or not (0xD800 <= ord(char) <= 0xDFFF), repr(line)
-        assert char not in "\x1b‮‭⁦⁧⁨⁩​\x00\x7f", repr(line)
+        assert char not in "\x1b\u202e\u202d\u2066\u2067\u2068\u2069​\x00\x7f", repr(line)
 
 
 # -- LOW-1: the echo ----------------------------------------------------------
@@ -43,7 +43,7 @@ def test_the_echo_drops_surrogates_controls_and_bidi_and_still_says_where():
     assert _quoted(refusal("\ud800x")) == "�x"
     assert _quoted(refusal(ESC)) == "�[2J�[31mred"
     assert _quoted(refusal(RLO)) == "ab�dcba"
-    assert _quoted(refusal("a​b\x00c⁦d")) == "a�b�c�d"
+    assert _quoted(refusal("a​b\x00c\u2066d")) == "a�b�c�d"
     for value in ("\ud800", ESC, RLO, "\udcff" * 3):
         _clean(refusal(value))
     # Plain text and a whole emoji are echoed as given.
@@ -100,7 +100,7 @@ def test_the_cli_refuses_each_with_a_clean_line(capsys, bad):
     err = capsys.readouterr().err
     err.encode("utf-8")
     assert refusal(bad) in err
-    assert "\x1b" not in err and "‮" not in err
+    assert "\x1b" not in err and "\u202e" not in err
 
 
 # -- LOW-2 and LOW-4: the caps ----------------------------------------------
@@ -183,7 +183,7 @@ def test_the_session_cap_lets_a_younger_idle_session_go_before_an_older_active_o
 
 
 # -- NIT-1: an invalid NEBULA_AGENT_SESSION is ignored for the cursor ---------
-@pytest.mark.parametrize("bad", ["lane a", "x" * 65, "lane/a", "lañe", "‮lane"])
+@pytest.mark.parametrize("bad", ["lane a", "x" * 65, "lane/a", "lañe", "\u202elane"])
 def test_the_cli_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch, bad):
     from cli.client import NebulaClient, cursor_session
     from services.agent_presence import presence_session

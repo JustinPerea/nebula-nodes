@@ -187,6 +187,7 @@ from services.agent_presence import (
     presence_session,
 )
 from services.canvas_events import (
+    MAX_VALUE_CHARS,
     MOVE_THRESHOLD_PX,
     OWN_REPLY_KIND,
     TooManyWaiters,
@@ -264,6 +265,7 @@ from services.agent_questions import (
     update_text as question_update_text,
 )
 from services.agent_presence import request_headers_scope
+from services.text_cut import clean_name
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services import channel_listeners
@@ -12538,7 +12540,9 @@ def _asset_proposal_closed_message(proposal: AssetProposal) -> dict[str, Any]:
 
 def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
     data = {"proposalId": proposal.id, "agentId": proposal.agent.id, "kind": proposal.kind,
-            "targetId": proposal.target_id, "targetName": proposal.target_name, "note": proposal.note}
+            "targetId": proposal.target_id,
+            # A board's, Character's or Style's stored name: cleaned as every line shows it.
+            "targetName": clean_name(proposal.target_name, MAX_VALUE_CHARS), "note": proposal.note}
     if proposal.kind == "commons":
         # Every agent on the canvas reads the journal, whatever its brand; the
         # note and the person's reason reach only those who see the reference.
@@ -13154,8 +13158,9 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     if board is None:
         raise HTTPException(status_code=404, detail=f"No moodboard {target_id[:40]} (moodboard_list lists them)")
     if board.get("sendNotes") is True:
+        shown = clean_name(board.get("name"), 60, fallback=clean_name(target_id, 60), ellipsis=True)
         raise HTTPException(status_code=409, detail=(
-            f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
+            f'Send notes to generators is already on for board "{shown}"; nothing to propose.'))
     return str(board.get("name") or ""), {"sendNotes": False}, None, None
 
 
@@ -28555,7 +28560,8 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     catalog = project_store.read()
     source = before.get("projectId") or None
     names = {"from": _scope_name(catalog, source), "to": _scope_name(catalog, target)}
-    name = after.get("name") or asset_id
+    # The stored name is free text an agent can set: cleaned for the detail line.
+    name = clean_name(after.get("name"), 60, fallback=clean_name(asset_id, 60), ellipsis=True)
     out = _moodboard_out(after) if kind == "moodboard" else after
     result: dict[str, Any] = {"status": "moved" if moved else "unchanged", "kind": kind, "id": asset_id,
                               "from": source, "to": target, "fromName": names["from"], "toName": names["to"],
@@ -28988,7 +28994,7 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     - An agent's ``modelId`` must be a node id in the catalog; a display
       name is refused naming its id (``node_lookup.unknown_definition``)."""
     params = params if isinstance(params, Mapping) else {}
-    label = f"Style “{str(name or '')[:60]}”"
+    label = f"Style “{clean_name(name, 60, ellipsis=True)}”"
     if has_agent_marker(current_request_headers()):
         was = before_params if before_params is not None else {}
         _refuse_agent_internal_params({key: value for key, value in params.items()

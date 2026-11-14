@@ -10,6 +10,7 @@ from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
+from services.text_cut import clean_name
 from services.wording import counted
 from services import node_categories
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
@@ -883,8 +884,9 @@ def _surface_words(target: dict[str, Any], names: Any = None) -> str:
     item = str(target.get("itemId") or "")
     item_id, _, sub_id = item.partition("/")
     names = names if isinstance(names, dict) else {}
-    name = str(names.get(key) or item_id or "?")
-    words = f"{noun} \u201c{name}\u201d" if names.get(key) else f"{noun} {name}"
+    shown = clean_name(names.get(key))  # the server cleans it already; an older one may not
+    name = shown or clean_name(item_id) or "?"
+    words = f"{noun} \u201c{name}\u201d" if shown else f"{noun} {name}"
     if sub_id and sub_word:
         words += f", {sub_word} {names.get(sub_word) or sub_id}"
     if target.get("part"):

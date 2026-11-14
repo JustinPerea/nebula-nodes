@@ -72,6 +72,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from services.text_cut import clean_name
+
 logger = logging.getLogger(__name__)
 
 # Bumped when the board's brief fields change shape; a board without it is
@@ -547,7 +549,7 @@ def _brief_text(board: dict[str, Any], analysis: dict[str, Any], *, direction: s
         strength = float(analysis.get("strength", board.get("strength", 0.7)))
     except (TypeError, ValueError):
         strength = 0.7
-    name = str(board.get("name") or "Moodboard")
+    name = clean_name(board.get("name"), fallback="Moodboard")
     parts: list[str] = []
     if direction:
         parts.append(_sentence(direction))

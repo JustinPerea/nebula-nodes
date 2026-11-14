@@ -15,6 +15,7 @@ from typing import Any
 
 import moodboard_client as boards
 from nebula_api import NebulaAPI, NebulaAPIError
+from services.text_cut import clean_name
 from services.saved_graph_upgrades import PARAMS_VERSION
 
 _STYLE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -64,12 +65,12 @@ def find_style(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) 
     candidates = list_styles(api, headers=headers)
     for project_id in projects:
         candidates.extend(list_styles(api, project=project_id, include_global=False, headers=headers))
-    matches = [style for style in candidates if str(style.get("name", "")).casefold() == ref.casefold()]
+    matches = [style for style in candidates if boards.same_name(style.get("name"), ref)]
     if not matches:
-        raise StyleError(f"no Style “{ref}” (`nebula style list` or style_list shows them)")
+        raise StyleError(f"no Style “{clean_name(ref, 60, ellipsis=True)}” (`nebula style list` or style_list shows them)")
     if len(matches) > 1:
         ids = ", ".join(str(style.get("id")) for style in matches)
-        raise StyleError(f"{len(matches)} Styles are named “{ref}” ({ids}); use the id")
+        raise StyleError(f"{len(matches)} Styles are named “{clean_name(ref, 60, ellipsis=True)}” ({ids}); use the id")
     return matches[0]
 
 
@@ -141,7 +142,7 @@ def update_style(api: NebulaAPI, ref: str, *, base_version: int | None = None,
     except NebulaAPIError as exc:
         if exc.status == 409:
             raise StyleError(
-                f"Style '{style.get('name')}' changed since that version was read, so nothing was written. "
+                f"Style '{boards.shown_name(style)}' changed since that version was read, so nothing was written. "
                 "Read it again (style_get, `nebula style show`) and redo the change on what it is now.") from exc
         raise
     previous = _previous(style, sent)

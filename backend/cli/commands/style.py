@@ -55,7 +55,7 @@ def _where(style: dict[str, Any], names: dict[str, tuple[str, bool]]) -> str:
 
 
 def _print_style(style: dict[str, Any], names: dict[str, tuple[str, bool]]) -> None:
-    print(f"{style.get('id')}  {style.get('name')}  ({style.get('category')}, {_where(style, names)}, "
+    print(f"{style.get('id')}  {boards.shown_name(style)}  ({style.get('category')}, {_where(style, names)}, "
           f"version {style.get('version')})")
     print(f"  prompt: {style.get('prompt') or '(none)'}")
     print(f"  model: {style.get('modelId') or '(any: a style-only Style)'}")
@@ -97,7 +97,7 @@ def run(client: NebulaClient, args) -> None:
                 return
             names = boards.project_names(api, headers) if any(s.get("projectId") for s in listing) else {}
             for style in listing:
-                print(f"{style.get('id')}  {style.get('name')}  ({style.get('category')}, "
+                print(f"{style.get('id')}  {boards.shown_name(style)}  ({style.get('category')}, "
                       f"{style.get('modelId') or 'any model'}, {_where(style, names)})")
         elif verb == "show":
             style = styles.find_style(api, args.style, headers)
@@ -113,7 +113,7 @@ def run(client: NebulaClient, args) -> None:
             if args.json:
                 _print_json(style)
                 return
-            print(f"Saved Style {style.get('name')} ({style.get('id')}).")
+            print(f"Saved Style {boards.shown_name(style)} ({style.get('id')}).")
             print(f"Take it back off: nebula style delete {style.get('id')}")
         elif verb == "set":
             if args.restore:
@@ -130,7 +130,7 @@ def run(client: NebulaClient, args) -> None:
                 return
             style = result["style"]
             changed = ", ".join(key for key in result["previous"] if key != "base_version") or "nothing"
-            print(f"Changed {changed} on Style {style.get('name')} ({style.get('id')}), now version "
+            print(f"Changed {changed} on Style {boards.shown_name(style)} ({style.get('id')}), now version "
                   f"{style.get('version')}.")
             if result["previous"]:
                 print("Undo it: save `--json` output and run "
@@ -140,7 +140,7 @@ def run(client: NebulaClient, args) -> None:
             if args.json:
                 _print_json(result)
                 return
-            print(f"Moved Style {result.get('name')} ({result.get('id')}) to Recently deleted.")
+            print(f"Moved Style {boards.shown_name(result)} ({result.get('id')}) to Recently deleted.")
             print(f"Bring it back: nebula trash restore style {result.get('id')}")
         else:
             _fail(f"unknown style command {verb}")
