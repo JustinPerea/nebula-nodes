@@ -165,6 +165,22 @@ function canvasAt(nodeId: string): { x: number; y: number } | null {
 }
 
 /**
+ * The bar's "Accept needs your key" row (GM, #203 follow-up r240: hidden while
+ * the canvas is kept, back with it). It enters and leaves as the bar's other
+ * rows do (noticeLeave 'row', notice-row-in), and only when it changes under
+ * an open proposal: a row that arrives with the card stays part of the card's
+ * own entrance. `present` is the shared rule (isKeyLocked on withKeyLock's
+ * props), so a kept canvas hides it.
+ */
+function useAcceptKeyRow(proposalId: string | null, present: boolean) {
+  const leave = useLeave(present, 'row');
+  const [track, setTrack] = useState({ id: proposalId, present, changed: false });
+  if (track.id !== proposalId) setTrack({ id: proposalId, present, changed: false });
+  else if (track.present !== present) setTrack({ id: proposalId, present, changed: true });
+  return { shown: leave.shown === true, props: leave.props, entering: track.changed && present };
+}
+
+/**
  * The decision bar for agents' proposals: who proposed what, what it will
  * run, and Accept / Reject. There is deliberately no keyboard shortcut for
  * Accept, so a stray keypress can never approve paid runs.
@@ -243,6 +259,14 @@ export function ProposalBar() {
   const notReady = useProposalNotReady(current);
   const acceptLock = useProposalAcceptLock(current);
   const acceptLockId = useId();
+  // The missing key first, then the canvas lock, then the gate (withKeyLock,
+  // GM PR #203 r11 item 3), as on every Run surface. A kept canvas holds
+  // Accept first, with no key line: the row, the screen-reader line and the
+  // click all read this one answer (isKeyLocked).
+  const pendingKind = current ? pending[current.view.id] : undefined;
+  const acceptKeyProps = withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId);
+  const acceptKeyLocked = isKeyLocked(acceptKeyProps);
+  const keyRow = useAcceptKeyRow(live?.view.id ?? null, acceptKeyLocked);
   const countChip = current ? acceptCountChip(current.view) : null;
   const canvasName = useCanvasRunName();
   const acceptTitle = current ? acceptChipTitle(current.view, canvasName, canvasAt) : null;
@@ -330,7 +354,8 @@ export function ProposalBar() {
   const hasChangeLines = changeTotal > 0;
   // Up to 3 nodes a line each; from 4 one count line, and every node's line
   // in the details (the shared rule; GM, PR #203 r24).
-  const { lines: notReadyLines, inDetails: notReadyInDetails } = notReadyShown(notReady, acceptLock);
+  // The Accept key row waits for the canvas (keyRow): a kept canvas holds Accept first.
+  const { lines: notReadyLines, inDetails: notReadyInDetails } = notReadyShown(notReady, acceptLock, keyRow.shown);
   const moreNotReady = notReadyInDetails.length > 0;
   const hasDetails = hasChangeLines || moreNotReady;
   // The label never changes (GM - Design, 2026-11-01): the chevron and
@@ -346,12 +371,6 @@ export function ProposalBar() {
   // #216 r1): the plan line's last segment is the run chip's label.
   const price = priced ? proposalEstimateLabel(current.view) : null;
   const priceAt = price && plan.endsWith(` · ${price}`) ? plan.length - price.length : -1;
-  const pendingKind = pending[current.view.id];
-  // The missing key first, then the canvas lock, then the gate (withKeyLock,
-  // GM PR #203 r11 item 3), as on every Run surface. A kept canvas holds
-  // Accept first, with no key line.
-  const acceptKeyProps = withKeyLock(lock.act({ disabled: Boolean(pendingKind), kept: 'proposal' }), acceptLock, acceptLockId);
-  const acceptKeyLocked = isKeyLocked(acceptKeyProps);
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -467,7 +486,12 @@ export function ProposalBar() {
                 <ul className="proposal-bar__readiness" aria-label="Can’t run here">
                   {notReadyLines.map((line, index) => (
                     // The first ⚠ row is kept in view with the plan line (GM r6).
-                    <li key={line.key} className="proposal-bar__not-ready" {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}>
+                    <li
+                      key={line.key}
+                      className="proposal-bar__not-ready"
+                      {...(index === 0 ? { [KEEP_ATTR]: '' } : {})}
+                      {...(line.accept ? { ...keyRow.props, 'data-entering': keyRow.entering || undefined } : {})}
+                    >
                       <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
                       {line.text}
                     </li>

@@ -560,6 +560,14 @@
   overflow-wrap: anywhere;
 }
 
+/* The Accept key row comes back with the canvas (it is hidden while the
+   canvas is kept): it expands into place as the bar's other rows do. */
+.proposal-bar__not-ready[data-entering] {
+  overflow: clip;
+  interpolate-size: allow-keywords;
+  animation: notice-row-in 420ms var(--notice-spring) both;
+}
+
 .proposal-bar__not-ready-mark {
   margin-right: 5px;
   color: #ffc107;
@@ -1046,6 +1054,7 @@ body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
   .proposal-bar,
   .proposal-bar[data-review='true'],
   .proposal-bar__error,
+  .proposal-bar__not-ready[data-entering],
   .canvas-undo-notice {
     animation: notice-fade-in 180ms ease-out both;
     transition: none;
