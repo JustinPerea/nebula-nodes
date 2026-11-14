@@ -18,7 +18,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
+import { canvasGeneration, useGraphStore, wiresDeletedWith } from '../store/graphStore';
 import { noteCanvasSelectionDrag } from '../lib/canvasSelectionDrag';
 import { RUN_LOCK_VERBS, canvasWaitLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
@@ -33,6 +33,7 @@ import { AgentCursorLayer, AgentNodeMarks, ArrangeController, PinComposer, PinLa
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
 import { useCardHold } from '../lib/cardHold';
+import { FADE_END_MARGIN_MS } from '../lib/cardFallback';
 import { useCanvasRevealStore } from '../store/canvasRevealStore';
 import { springCssVars, springLinear, SPRING_SOFT } from '../lib/springs';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
@@ -220,7 +221,9 @@ const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
 /** How long the reveal's opacity fade runs: the SOFT spring, or the reduced-motion fade. */
-const revealMs = (): number => (prefersReducedMotion() ? REDUCED_REVEAL_MS : springLinear(SPRING_SOFT).durationMs);
+const fadeMs = (): number => (prefersReducedMotion() ? REDUCED_REVEAL_MS : springLinear(SPRING_SOFT).durationMs);
+/** How long the reveal class stays: the fade plus the margin (lib/cardFallback.ts FADE_END_MARGIN_MS). */
+const revealMs = (): number => fadeMs() + FADE_END_MARGIN_MS;
 
 /**
  * Ends the cover over a whole graph that was held (lib/cardHold.ts): once the
@@ -406,7 +409,10 @@ export function Canvas() {
   // its own owner, so a fit that owes nothing (one for a node added to a shown graph) can end
   // without cancelling another's: an event stashed during a hold (fitAskedDuringHold, below),
   // that event being replayed until the handler has taken it, and instant fits not yet done.
-  const fitAskedDuringHold = useRef<Event | null>(null);
+  // It carries the canvasGeneration it was asked in: a fit asked for one graph is not run on the next.
+  const fitAskedDuringHold = useRef<{ event: Event; generation: number } | null>(null);
+  // Written in render, so it is gone before any effect of this render asks whether a fit is owed.
+  if (fitAskedDuringHold.current && fitAskedDuringHold.current.generation !== canvasGeneration()) fitAskedDuringHold.current = null;
   const replaying = useRef(false);
   const instantFits = useRef(0);
   const fitOwed = useCallback(
@@ -529,8 +535,9 @@ export function Canvas() {
   const replayed = useRef(new WeakSet<Event>());
   useEffect(() => {
     if (hold.holding || !fitAskedDuringHold.current) return;
-    const asked = fitAskedDuringHold.current;
+    const { event: asked, generation } = fitAskedDuringHold.current;
     fitAskedDuringHold.current = null;
+    if (generation !== canvasGeneration()) return;
     const replay = new CustomEvent('nebula:graph-nodes-added', {
       detail: asked instanceof CustomEvent ? asked.detail : undefined,
     });
@@ -605,7 +612,8 @@ export function Canvas() {
         // A whole graph is held: the fit would frame a graph that is not on
         // screen yet. It is owed (fitOwed), and runs when the hold lets go.
         if (holdingNow.current) {
-          fitAskedDuringHold.current = event;
+          // The store dispatches the event before it moves canvasGeneration; the timer runs after, so this is the graph the event belongs to.
+          fitAskedDuringHold.current = { event, generation: canvasGeneration() };
           return;
         }
         runFit(event, at);

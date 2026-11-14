@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
+import { moodboardName } from '../../lib/cardTitles';
 import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
@@ -36,8 +37,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
   const board = entry?.summary ?? null;
   const status = boardId ? entry?.status ?? 'loading' : 'empty';
 
-  const name = board?.name.trim()
-    || (status === 'empty' ? 'No board chosen' : status === 'missing' ? 'Board not found' : 'Moodboard');
+  const name = moodboardName(boardId, entry);
   const meta = board
     ? `${moodboardImagesLabel(board.imageCount ?? 0, board.setAsideCount)} · ${board.mode ?? 'look'}`
     : status === 'empty' ? 'Choose one in the Inspector'

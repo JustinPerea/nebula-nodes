@@ -91,6 +91,16 @@ export function fallbackNode(node: Node): Node {
  */
 const CARD_SWAPS = new Map<string, number>();
 
+/**
+ * The margin a timer that ends a fade adds to the fade's length. The CSS
+ * animation starts a frame or two after the class that runs it lands, so a
+ * timer of exactly the fade's length removes the class before the animation
+ * ends (measured in Chrome: a 180 ms reduced-motion fade cut at about 152 ms).
+ * The animations fill both ways, so keeping the class a little longer shows
+ * nothing different.
+ */
+export const FADE_END_MARGIN_MS = 100;
+
 /** How long after the hold marked a swap the card may still crossfade over its frame. */
 export const SWAP_WINDOW_MS = 1000;
 

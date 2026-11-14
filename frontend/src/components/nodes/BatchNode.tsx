@@ -9,6 +9,7 @@ import { NodeError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/batch-node.css';
+import { batchName } from '../../lib/cardTitles';
 import { LineText } from '../LineText';
 
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
@@ -21,8 +22,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const items = parseBatchItems(nodeData.params);
   const cap = batchSizeCap(nodeData.params);
   const authoringError = batchAuthoringError(nodeData.params);
-  const name = typeof nodeData.params.display_name === 'string' && nodeData.params.display_name.trim()
-    ? nodeData.params.display_name : 'Batch';
+  const name = batchName(nodeData.params);
   const isSelected = selected || selectedInUi;
   // The run stopped at the cap check (error copy round 3e): its error says
   // the cap with the field's label, so the card's own warning, which says

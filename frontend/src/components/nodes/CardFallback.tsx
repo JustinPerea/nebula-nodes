@@ -5,6 +5,8 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { CARD_CHUNK_BY_TYPE } from '../../lib/cardChunks';
 import { fallbackSize, heldCardOf, type HeldCard } from '../../lib/cardFallback';
 import { handleIds } from '../../lib/cardHandleIds';
+import { frameTitle } from '../../lib/cardTitles';
+import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { QuietIcon } from './NodeCardBoundary';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import '../../styles/node-card-boundary.css';
@@ -20,6 +22,8 @@ const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.o
 interface FrameProps {
   data: Record<string, unknown>;
   held: HeldCard | null;
+  /** The node's real type when `held` is absent (the crossfade ghost sits over a real card, whose data carries no held card). */
+  type?: string;
   selected?: boolean;
   /** The line under the title; none for a card that is still loading. */
   line?: string | null;
@@ -28,11 +32,17 @@ interface FrameProps {
 }
 
 /** The frame: the card's size, its name as the title, and its ports spread down the sides. */
-export function CardFallbackFrame({ data, held, selected, line, ghost }: FrameProps) {
-  const label = typeof data.label === 'string' && data.label ? data.label : null;
+export function CardFallbackFrame({ data, held, type, selected, line, ghost }: FrameProps) {
+  const nodeType = held?.type ?? type;
   const definition = typeof data.definitionId === 'string' ? NODE_DEFINITIONS[data.definitionId] : undefined;
   let ports: { inputs: string[]; outputs: string[] } = { inputs: [], outputs: [] };
   try { ports = handleIds(data); } catch { /* a frame with no handles is still the node */ }
+  // A Character or Moodboard frame shows the stored name its card shows (the hooks are unconditional; an empty id does nothing).
+  const params = data.params && typeof data.params === 'object' ? data.params as Record<string, unknown> : undefined;
+  const characterEntry = useStoredAsset('character', nodeType === 'characterNode' ? storedAssetId('character', params) : '');
+  const boardId = nodeType === 'moodboardNode' ? storedAssetId('moodboard', params) : '';
+  const moodboardEntry = useStoredAsset('moodboard', boardId);
+  const title = frameTitle({ type: nodeType, data, definition, characterEntry, moodboardEntry, boardId });
   const size = fallbackSize(held);
   const style = {
     width: size.width,
@@ -49,8 +59,8 @@ export function CardFallbackFrame({ data, held, selected, line, ghost }: FramePr
       style={style} data-card-fallback={ghost ? 'ghost' : ''} aria-hidden={ghost || undefined}>
       {ghost ? null : spread(ports.inputs, 'target')}
       <div className="node-card-boundary__header">
-        {definition ? <QuietIcon><NodeTypeIcon definition={definition} /></QuietIcon> : null}
-        <span className="node-card-boundary__label">{label ?? definition?.displayName ?? 'Node'}</span>
+        {title.typeIcon && definition ? <QuietIcon><NodeTypeIcon definition={definition} /></QuietIcon> : null}
+        <span className="node-card-boundary__label">{title.text}</span>
       </div>
       {line ? <p className="node-card-boundary__line card-fallback__line">{line}</p> : null}
       {ghost ? null : spread(ports.outputs, 'source')}

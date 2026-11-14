@@ -18,6 +18,7 @@ import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/reference-set-node.css';
+import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
@@ -101,7 +102,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
-      <div className="reference-set-node__title">▤ Reference Set</div>
+      <div className="reference-set-node__title">{fixedCardTitle('referenceSetNode')}</div>
       <p className="reference-set-node__guidance">
         Connect to Cinema Scene. Reference priority sets image order; 0 excludes.
       </p>

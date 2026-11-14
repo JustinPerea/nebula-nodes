@@ -48,12 +48,13 @@ import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { DeferredChatPanel } from '../src/lib/deferredChunks';
 import { useUIStore } from '../src/store/uiStore';
 import { useProjectStore } from '../src/store/projectStore';
+import { resetCardHold } from '../src/lib/cardHold';
 
 // App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
 beforeAll(regionNoticesReady);
 const initialUI = useUIStore.getState();
 const initialProjects = useProjectStore.getState();
-beforeEach(() => { useUIStore.setState(initialUI, true); useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
+beforeEach(() => { resetCardHold(); useUIStore.setState(initialUI, true); useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useProjectStore.setState(initialProjects, true); });
 
 it('lazy navigation retains the shared chat instance and inerts its hidden controls until returning', async () => {

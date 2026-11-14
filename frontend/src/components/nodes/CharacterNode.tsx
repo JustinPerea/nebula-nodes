@@ -9,6 +9,7 @@ import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
+import { characterName, glyphTitle } from '../../lib/cardTitles';
 import { pendingAttr } from '../../lib/pendingNodes';
 import { agentLauncher } from '../../lib/agentAnchors';
 import type { NodeData } from '../../types';
@@ -28,7 +29,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
   const entry = useStoredAsset('character', characterId);
   const character = entry?.summary ?? null;
   const status = characterId ? entry?.status ?? 'loading' : 'empty';
-  const name = character?.name.trim() || (status === 'missing' ? 'Character not found' : 'Character');
+  const name = characterName(entry);
   // Only Nebula's own files are loaded (lib/storedImage.ts).
   const thumb = storedImageView(character?.thumbnail);
   const thumbUrl = thumb.src;
@@ -48,7 +49,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
     <div ref={cardRef} className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-pending={pendingAttr(data.pending)}
       data-node-inspector-anchor={id} data-agent-launcher={agentLauncher('character', characterId)}
       title={canOpen ? 'Double-click to open in Character Studio' : undefined}>
-      <div className="character-node__title">◐ {name}</div>
+      <div className="character-node__title">{glyphTitle('characterNode', name)}</div>
       <NodeSettingsAction id={id} />
 
       <div className="character-node__thumb">

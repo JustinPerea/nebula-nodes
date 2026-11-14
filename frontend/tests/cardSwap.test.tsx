@@ -7,10 +7,11 @@
  * into view, an id that returns after an undo) must not crossfade over a card
  * that was never seen as a frame.
  */
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodeProps } from '@xyflow/react';
-import { SWAP_WINDOW_MS, markSwap, takeSwap } from '../src/lib/cardFallback';
+import { springLinear, SPRING_SOFT } from '../src/lib/springs';
+import { FADE_END_MARGIN_MS, SWAP_WINDOW_MS, markSwap, takeSwap } from '../src/lib/cardFallback';
 import { withCardSwap } from '../src/components/nodes/withCardSwap';
 
 let clock = 0;
@@ -83,5 +84,39 @@ describe('a card that mounts after a swap was marked', () => {
     clock += 4000;
     render(<Card {...props('a')} />);
     expect(ghost()).toBeNull();
+  });
+});
+
+describe('the ghost\'s timer', () => {
+  const reduce = () => vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {},
+    addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }));
+
+  it('under reduced motion the ghost is still there at 180 ms and gone after the margin', () => {
+    reduce();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      markSwap('a');
+      render(<Card {...props('a')} />);
+      expect(ghost()).not.toBeNull();
+      act(() => { vi.advanceTimersByTime(180); });
+      expect(ghost()).not.toBeNull();
+      act(() => { vi.advanceTimersByTime(FADE_END_MARGIN_MS - 1); });
+      expect(ghost()).not.toBeNull();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(ghost()).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('on the spring the ghost lasts the spring plus the margin', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const spring = springLinear(SPRING_SOFT).durationMs;
+      markSwap('a');
+      render(<Card {...props('a')} />);
+      act(() => { vi.advanceTimersByTime(spring + FADE_END_MARGIN_MS - 1); });
+      expect(ghost()).not.toBeNull();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(ghost()).toBeNull();
+    } finally { vi.useRealTimers(); }
   });
 });

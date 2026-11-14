@@ -4,6 +4,7 @@ import { droppedRenameLine } from '../../lib/canvasUndo';
 import { NODE_RENAME_EVENT } from '../../lib/keyboardShortcuts';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { shownNodeTitle } from '../../lib/cardTitles';
 import { followingSwitch, refuseEditWhileFollowing } from '../../lib/canvasFollow';
 
 interface NodeLabelProps {
@@ -30,11 +31,10 @@ interface NodeLabelProps {
  * agent renamed the node meanwhile. Then the draft is dropped, so the
  * agent's name isn't overwritten, and GM's toast says so (no refocus). */
 export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabelProps) {
-  const fallback = defaultTitle ?? displayName;
   // Unnamed: the saved label is either form of the default title (GM - Design,
   // round 18), the catalog name or the canvas title; it shows the canvas title.
-  const custom = Boolean(displayName) && label !== displayName && label !== fallback;
-  const shown = displayName && !custom && fallback ? fallback : label;
+  // The rule is lib/cardTitles.ts shownNodeTitle, which the frame uses too.
+  const { shown, custom, fallback } = shownNodeTitle(label, displayName, defaultTitle);
   const renameNode = useGraphStore((state) => state.renameNode);
   const noteRenameDraft = useGraphStore((state) => state.noteRenameDraft);
   // Offline or following an agent's switch: one read-only state (GM round 22, A).

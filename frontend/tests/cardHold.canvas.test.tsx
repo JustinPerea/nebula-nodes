@@ -84,7 +84,8 @@ import { useUIStore } from '../src/store/uiStore';
 import { useStoredAssetsStore } from '../src/store/storedAssetsStore';
 import { useCanvasRevealStore } from '../src/store/canvasRevealStore';
 import { JEV_DECIDE } from '../src/lib/jev';
-import { HOLD_CEILING_MS } from '../src/lib/cardHold';
+import { HOLD_CEILING_MS, resetCardHold } from '../src/lib/cardHold';
+import { FADE_END_MARGIN_MS } from '../src/lib/cardFallback';
 
 // React Flow measures a node when its ResizeObserver reports it; jsdom has no
 // layout, so every observed element reports 100 x 60.
@@ -143,6 +144,7 @@ const initialGraph = useGraphStore.getState();
 const initialUI = useUIStore.getState();
 
 beforeEach(() => {
+  resetCardHold();
   chunkLoads.renew();
   chunkLoads.character.length = 0;
   chunkLoads.jev.length = 0;
@@ -248,7 +250,7 @@ describe('a node added to a graph that is already shown', () => {
     expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
     expect(fallbacks()).toEqual(['n2']);
     const frame = document.querySelector('.react-flow__node[data-id="n2"] [data-card-fallback=""]') as HTMLElement;
-    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('◐ Mara');
     expect(frame.querySelector('.react-flow__handle[data-handleid="character"]')).not.toBeNull();
     expect(frame.querySelector('.card-fallback__line')).toBeNull();
     // Sized (this test's observer reports 100 x 60 for everything; the sizes by type are in tests/cardFallback.test.tsx).
@@ -281,7 +283,7 @@ describe('a node added to a graph that is already shown', () => {
       const ghost = node.querySelector(':scope > [data-card-fallback="ghost"]');
       expect(ghost).not.toBeNull();
       expect(ghost?.querySelector('.react-flow__handle')).toBeNull();
-      expect(ghost?.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+      expect(ghost?.querySelector('.node-card-boundary__label')?.textContent).toBe('◐ Mara');
       advance(1000);
       expect(node.querySelector('[data-card-fallback]')).toBeNull();
       expect(node.firstElementChild?.classList.contains('character-node')).toBe(true);
@@ -320,7 +322,7 @@ describe('a chunk that fails to load', () => {
     expect(holdLine()).toBeNull();
     expect(document.querySelector('.character-node')).toBeNull();
     const frame = frameOf('n2')!;
-    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('◐ Mara');
     expect(frame.querySelector('.react-flow__handle[data-handleid="character"]')).not.toBeNull();
     expect(frame.querySelector('.card-fallback__line')?.textContent).toBe(ONLINE_LINE);
     // The wire into the shown card is drawn.
@@ -520,7 +522,7 @@ describe('the hold line and the reveal of a whole graph', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('under reduced motion the fade lasts 180 ms', async () => {
+  it('under reduced motion the fade runs its full 180 ms, and the class is dropped a margin later', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {},
       addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -530,7 +532,10 @@ describe('the hold line and the reveal of a whole graph', () => {
       await settle();
       await loadCharacter();
       expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
-      advance(179);
+      advance(180);
+      // The class stays past the fade's own length: the CSS animation starts a frame or two after the class lands (Chrome cut a 180 ms fade at about 152 ms).
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
+      advance(FADE_END_MARGIN_MS - 1);
       expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
       advance(1);
       expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(false);
@@ -577,6 +582,62 @@ describe('the hold line and the reveal of a whole graph', () => {
       expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
       expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
       expect(useCanvasRevealStore.getState().covered).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('leaving the canvas and coming back mid-load', () => {
+  it('does not hide a graph that was already shown: every node is there at once, the added one a frame, and the card replaces it when its chunk lands', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const first = mount();
+      act(() => useGraphStore.getState().loadGraph([text(), shown()], []));
+      await settle();
+      act(() => useGraphStore.setState((state) => ({ nodes: [...state.nodes, character('n2')] })));
+      await settle();
+      expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
+      expect(fallbacks()).toEqual(['n2']);
+      // A view switch and back: the Canvas unmounts and a new one mounts, the character's chunk still pending.
+      first.unmount();
+      const watch = watchNodeCounts();
+      mount();
+      await settle();
+      advance(HOLD_CEILING_MS);
+      watch.stop();
+      expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
+      expect(fallbacks()).toEqual(['n2']);
+      // Never covered: no frame of the remount had fewer than every node, and no line or cover.
+      expect(watch.counts.filter((count) => count > 0 && count < 3)).toEqual([]);
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
+      expect(holdStatus()).toBeNull();
+      expect(holdLine()).toBeNull();
+      await loadCharacter();
+      expect(document.querySelector('.character-node')).not.toBeNull();
+      expect(fallbacks()).toEqual([]);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('a fit stashed during one graph\'s hold', () => {
+  it('is not run on the next graph: hold A, stash a fit, open B (not held); no fit runs on B and the reveal is not left waiting', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      act(() => { window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: 2 } })); });
+      advance(10);
+      expect(fitView).not.toHaveBeenCalled();
+      // The person opens project B, which needs no pending chunk, before A is handed over.
+      act(() => useGraphStore.getState().loadGraph([{ ...text(), id: 'b1' }], []));
+      await settle();
+      advance(2000);
+      expect(domNodes()).toEqual(['b1']);
+      expect(fitView).not.toHaveBeenCalled();
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
     } finally { vi.useRealTimers(); }
   });
 });

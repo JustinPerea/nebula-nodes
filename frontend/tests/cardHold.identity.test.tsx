@@ -5,12 +5,13 @@
  * every drag (lib/cardHold.ts).
  */
 import { renderHook } from '@testing-library/react';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
-import { holdCards, useCardHold } from '../src/lib/cardHold';
+import { holdCards, resetCardHold, useCardHold } from '../src/lib/cardHold';
 
 beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
+beforeEach(resetCardHold);
 
 /** A node that fails the test if anything reads it. */
 const untouchable = (id: string): Node => new Proxy({ id } as Node, {

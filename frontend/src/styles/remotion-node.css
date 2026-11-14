@@ -15,7 +15,7 @@ body.app-slava-restraint .remotion-node {
 }
 
 body.app-slava-restraint .remotion-node--selected {
-  border-color: var(--sr-accent);
+  border-color: var(--node-category-color, var(--sr-accent));
 }
 
 body.app-slava-restraint .remotion-node__title {

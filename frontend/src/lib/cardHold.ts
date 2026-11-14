@@ -131,17 +131,33 @@ export interface CardHold {
 
 const START: HoldState = { generation: -1, handed: NO_NODES, placeholders: NO_IDS };
 
+/**
+ * The last hold state, kept across mounts: leaving the canvas (a view switch)
+ * and coming back mounts a new Canvas for a graph the store still holds, and
+ * a hook that started from START would take that shown graph for a new one
+ * and cover it again while any chunk is pending. A mount starts from what the
+ * last one handed over, for the generation it handed it over for; a different
+ * generation is a new graph, as it is without a remount.
+ */
+let remembered: { state: HoldState; ceilingOf: number } = { state: START, ceilingOf: -1 };
+
+/** Forgets what was handed over (tests call this before each mount; the app never needs to). */
+export function resetCardHold(): void {
+  remembered = { state: START, ceilingOf: -1 };
+}
+
 /** The hold as a hook: re-renders when a chunk it watches settles, and asks for the chunks it waits on to load. */
 export function useCardHold(nodes: Node[], edges: Edge[]): CardHold {
   const [settled, onSettled] = useReducer((count: number) => count + 1, 0);
-  const state = useRef<HoldState>(START);
+  const state = useRef<HoldState>(remembered.state);
   const generation = canvasGeneration();
   // The generation whose whole-graph hold has reached its ceiling.
-  const [ceilingOf, setCeilingOf] = useState(-1);
+  const [ceilingOf, setCeilingOf] = useState(remembered.ceilingOf);
   const ceilingPassed = ceilingOf === generation;
   const held = useMemo(() => {
     const result = holdCards(nodes, edges, generation, state.current, ceilingPassed);
     state.current = result.state;
+    remembered = { ...remembered, state: result.state };
     for (const id of result.swapped) markSwap(id);
     return result;
     // `settled` is the chunk settle signal; the chunks are read inside.
@@ -152,7 +168,10 @@ export function useCardHold(nodes: Node[], edges: Edge[]): CardHold {
   const holdingWhole = held.wholeGraph;
   useEffect(() => {
     if (!holdingWhole) return undefined;
-    const timer = window.setTimeout(() => setCeilingOf(generation), HOLD_CEILING_MS);
+    const timer = window.setTimeout(() => {
+      remembered = { ...remembered, ceilingOf: generation };
+      setCeilingOf(generation);
+    }, HOLD_CEILING_MS);
     return () => window.clearTimeout(timer);
   }, [holdingWhole, generation]);
 

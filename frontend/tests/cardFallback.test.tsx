@@ -7,18 +7,24 @@
 import { cleanup, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ReactFlow, ReactFlowProvider, type Node } from '@xyflow/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
+import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import type { NodeData } from '../src/types';
 import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 
+const api = vi.hoisted(() => ({ lookupStoredAsset: vi.fn() }));
+vi.mock('../src/lib/api', async (importOriginal) => ({ ...await importOriginal<object>(), lookupStoredAsset: api.lookupStoredAsset }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(), subscribe: vi.fn(() => () => {}),
 } }));
 
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
-import { CARD_FALLBACK_TYPE, FALLBACK_SIZE_BY_TYPE, HELD_CARD, fallbackNode, fallbackSize, heldCardOf } from '../src/lib/cardFallback';
+import { CARD_FALLBACK_TYPE, FALLBACK_SIZE_BY_TYPE, HELD_CARD, fallbackNode, markSwap, fallbackSize, heldCardOf } from '../src/lib/cardFallback';
 import { CARD_CHUNK_BY_TYPE } from '../src/lib/cardChunks';
+import { useStoredAssetsStore } from '../src/store/storedAssetsStore';
+import { CardFallbackFrame } from '../src/components/nodes/CardFallback';
+import { withCardSwap } from '../src/components/nodes/withCardSwap';
 
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;
@@ -78,8 +84,8 @@ describe('the fallback card draws the real card\'s ports, so its wires stay atta
   });
 
   it('the frame carries the node\'s name as its title', () => {
-    handlesOf([fallbackNode(card('characterNode', 'character'))]);
-    expect(document.querySelector('.card-fallback .node-card-boundary__label')?.textContent).toBe('characterNode name');
+    handlesOf([fallbackNode(card('dynamic-node', 'dynamic-test'))]);
+    expect(document.querySelector('.card-fallback .node-card-boundary__label')?.textContent).toBe('dynamic-node name');
   });
 });
 
@@ -140,5 +146,118 @@ describe('fallbackNode', () => {
   it('uses the node\'s own size when it has one, else its type\'s usual', () => {
     expect(fallbackSize(heldCardOf(fallbackNode({ ...card('batchNode', 'batch'), measured: { width: 301, height: 99 } }).data))).toEqual({ width: 301, height: 99 });
     expect(fallbackSize(heldCardOf(fallbackNode(card('batchNode', 'batch')).data))).toEqual(FALLBACK_SIZE_BY_TYPE.batchNode);
+  });
+});
+
+/** The title text of each real card, and the glyph its frame shows, by node type. */
+const TITLE_SELECTOR: Record<string, string> = {
+  'model-node': '.model-node__label',
+  'dynamic-node': '.model-node__label',
+  characterNode: '.character-node__title',
+  moodboardNode: '.moodboard-node__name',
+  referenceSetNode: '.reference-set-node__title',
+  cameraRigNode: '.camera-rig-node__title',
+  cinemaSceneNode: '.cinema-scene-node__name',
+  paperSourceNode: '.paper-source-node__header',
+  batchNode: '.batch-node__name',
+  editNode: '.edit-node__title',
+  remotionNode: '.remotion-node__title',
+};
+
+const GROK = 'krea-image-xai-grok-imagine-2';
+
+function titles(nodes: Node[]): { real: string; frame: string; icons: number } {
+  const take = (list: Node[]) => {
+    handlesOf(list);
+    const type = list[0].type === CARD_FALLBACK_TYPE ? (heldCardOf(list[0].data)?.type ?? '') : list[0].type!;
+    const real = list[0].type !== CARD_FALLBACK_TYPE;
+    const text = (document.querySelector(real ? TITLE_SELECTOR[type] : '.card-fallback .node-card-boundary__label')?.textContent ?? '').trim();
+    const icons = document.querySelectorAll('.card-fallback .model-node__type-icon').length;
+    cleanup();
+    return { text, icons };
+  };
+  const real = take(nodes);
+  const frame = take(nodes.map(fallbackNode));
+  return { real: real.text, frame: frame.text, icons: frame.icons };
+}
+
+describe('a frame\'s title is the title of its card', () => {
+  const DATA: Array<[type: string, definitionId: string, params: Record<string, unknown>, label?: string]> = [
+    ['characterNode', 'character', {}],
+    ['characterNode', 'character', { character: 'c1' }],
+    ['characterNode', 'character', { character: 'gone' }],
+    ['moodboardNode', 'nebula-moodboard', {}],
+    ['moodboardNode', 'nebula-moodboard', { moodboard: 'b1' }],
+    ['moodboardNode', 'nebula-moodboard', { moodboard: 'gone' }],
+    ['referenceSetNode', 'reference-set', {}],
+    ['cameraRigNode', 'camera-rig', {}],
+    ['cinemaSceneNode', 'cinema-scene', {}],
+    ['editNode', 'video-edit', {}],
+    ['remotionNode', 'remotion-node', {}],
+    ['paperSourceNode', 'paper-source', {}],
+    ['batchNode', 'batch', { items_text: 'one' }],
+    ['batchNode', 'batch', { items_text: 'one', display_name: 'Shots' }],
+    ['model-node', GROK, {}],
+    ['model-node', GROK, {}, 'My render'],
+    ['dynamic-node', 'dynamic-test', {}, 'Custom thing'],
+  ];
+
+  beforeEach(() => {
+    api.lookupStoredAsset.mockReset().mockReturnValue(new Promise(() => {}));
+    useStoredAssetsStore.setState({ entries: {
+      'character:c1': { status: 'ready', summary: { id: 'c1', name: 'Mara', thumbnail: '' } },
+      'character:gone': { status: 'missing', summary: null },
+      'moodboard:b1': { status: 'ready', summary: { id: 'b1', name: 'Dusk', thumbnail: '', imageCount: 3, mode: 'look' } },
+      'moodboard:gone': { status: 'missing', summary: null },
+    } });
+  });
+
+  it.each(DATA)('%s %s %j %s', (type, definitionId, params, label) => {
+    const node = card(type, definitionId, params);
+    if (label) (node.data as { label: string }).label = label;
+    else if (type === 'model-node') (node.data as { label: string }).label = NODE_DEFINITIONS[definitionId].displayName;
+    const { real, frame } = titles([node]);
+    expect(real).not.toBe('');
+    expect(frame).toBe(real);
+  });
+
+  it('a Character frame for a stored character shows its glyph and name; with no entry yet, what the card shows while loading', () => {
+    const named = fallbackNode(card('characterNode', 'character', { character: 'c1' }));
+    handlesOf([named]);
+    expect(document.querySelector('.card-fallback .node-card-boundary__label')?.textContent).toBe('◐ Mara');
+    cleanup();
+    useStoredAssetsStore.setState({ entries: {} });
+    handlesOf([fallbackNode(card('characterNode', 'character', { character: 'c2' }))]);
+    expect(document.querySelector('.card-fallback .node-card-boundary__label')?.textContent).toBe('◐ Character');
+  });
+
+  it('only a Model or Dynamic frame draws the node type\'s icon, and nothing draws a wrench', () => {
+    for (const [type, definitionId, params] of DATA) {
+      const node = fallbackNode(card(type, type === 'dynamic-node' ? GROK : definitionId, params));
+      handlesOf([node]);
+      const icons = document.querySelectorAll('.card-fallback .model-node__type-icon').length;
+      const wrenches = document.querySelectorAll('.card-fallback .lucide-wrench, .card-fallback [data-lucide="wrench"]').length;
+      cleanup();
+      expect(icons, type).toBe(type === 'model-node' || type === 'dynamic-node' ? 1 : 0);
+      expect(wrenches, type).toBe(0);
+    }
+  });
+
+  it('an unknown type shows its definition\'s name and no icon', () => {
+    render(<ReactFlowProvider><CardFallbackFrame data={{ definitionId: GROK, label: 'x' }} held={null} type="mystery" /></ReactFlowProvider>);
+    expect(document.querySelector('.node-card-boundary__label')?.textContent).toBe(NODE_DEFINITIONS[GROK].displayName);
+    expect(document.querySelector('.model-node__type-icon')).toBeNull();
+  });
+
+  it('the crossfade ghost over a real card shows the title of the frame it replaces', () => {
+    const Swapped = withCardSwap(() => <div data-testid="real" />);
+    const data = { definitionId: 'character', label: 'x', params: { character: 'c1' } };
+    markSwap('g1');
+    render(<ReactFlowProvider><Swapped {...({ id: 'g1', type: 'characterNode', data, selected: false } as unknown as NodeProps)} /></ReactFlowProvider>);
+    const ghost = document.querySelector('[data-card-fallback="ghost"] .node-card-boundary__label')?.textContent;
+    expect(ghost).toBe('◐ Mara');
+    cleanup();
+    handlesOf([fallbackNode(card('characterNode', 'character', { character: 'c1' }))]);
+    expect(document.querySelector('.card-fallback .node-card-boundary__label')?.textContent).toBe(ghost);
   });
 });

@@ -106,6 +106,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from '../src/components/Canvas';
+import { resetCardHold } from '../src/lib/cardHold';
 import { useGraphStore } from '../src/store/graphStore';
 import { useArrangeStore, selectMeasuring } from '../src/store/arrangeStore';
 import { DeferredArrangeController } from '../src/lib/deferredChunks';
@@ -152,6 +153,7 @@ const initialUI = useUIStore.getState();
 
 beforeAll(async () => { await DeferredArrangeController.preload(); });
 beforeEach(() => {
+  resetCardHold();
   chunkLoads.renew();
   chunkLoads.character.length = 0;
   chunkLoads.jev.length = 0;

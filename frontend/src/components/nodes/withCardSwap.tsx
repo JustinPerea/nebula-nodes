@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, type ComponentType } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { heldCardOf, takeSwap } from '../../lib/cardFallback';
+import { FADE_END_MARGIN_MS, heldCardOf, takeSwap } from '../../lib/cardFallback';
 import { springLinear, SPRING_SOFT } from '../../lib/springs';
 import { CardFallbackFrame } from './CardFallback';
 import '../../styles/card-fallback.css';
@@ -20,18 +20,18 @@ function prefersReducedMotion(): boolean {
  */
 export function withCardSwap<P extends NodeProps>(Card: ComponentType<P>): ComponentType<P> {
   function Swapped(props: P) {
-    const { id, data, selected } = props;
+    const { id, type, data, selected } = props;
     // Read and deleted on the first render: a mark is for one mount, and an old one is not honoured.
     const [fading, setFading] = useState(() => takeSwap(id));
     useEffect(() => {
       if (!fading) return undefined;
-      const timer = window.setTimeout(() => setFading(false), prefersReducedMotion() ? 180 : springLinear(SPRING_SOFT).durationMs);
+      const timer = window.setTimeout(() => setFading(false), (prefersReducedMotion() ? 180 : springLinear(SPRING_SOFT).durationMs) + FADE_END_MARGIN_MS);
       return () => window.clearTimeout(timer);
     }, [fading]);
     return (
       <>
         <Card {...props} />
-        {fading ? <CardFallbackFrame data={(data ?? {}) as Record<string, unknown>} held={heldCardOf(data)} selected={selected} ghost /> : null}
+        {fading ? <CardFallbackFrame data={(data ?? {}) as Record<string, unknown>} held={heldCardOf(data)} type={type} selected={selected} ghost /> : null}
       </>
     );
   }
