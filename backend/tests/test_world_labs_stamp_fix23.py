@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import main as main_module  # noqa: E402
 from services.provider_recovery import ProviderRecoveryStore  # noqa: E402
-from tests.conftest import PERSON  # noqa: E402
+from tests.conftest import PERSON, timeless  # noqa: E402
 from tests.test_project_catalog_restore_fix2 import _add_text, _create, app  # noqa: E402,F401
 from tests.test_project_catalog_restore_fix12 import CODEX  # noqa: E402
 from tests.test_project_catalog_restore_fix16 import _node  # noqa: E402
@@ -460,7 +460,9 @@ def test_the_verdict_places_a_stamped_record_by_its_stamp(app, recoveries):
 # -- 6. The stamp stays internal; the person gets the places ---------------------------------------
 
 def _agent_reads(client):
-    return {path: client.get(path, headers=CODEX).json()
+    # Presence left by earlier tests ages between two reads (``secondsAgo``):
+    # the stamp is what must not show, so the clock's fields are left out.
+    return {path: timeless(client.get(path, headers=CODEX).json())
             for path in ("/api/graph", "/api/graph/export", "/api/canvas/snapshot")}
 
 
