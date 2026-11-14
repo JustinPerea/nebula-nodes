@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 import { clampToClip, type Box, type ResolverEnv } from '../src/lib/agentAnchorResolve';
-import { arrowExitPx, parkChevron, PARK_CHEVRON_GAP_PX, PARK_CHEVRON_PX } from '../src/lib/agentCursorPark';
+import { arrowExitPx, parkChevron, parkLabelNudge, PARK_CHEVRON_GAP_PX, PARK_CHEVRON_PX, PARK_LABEL_CLEAR_PX, PARK_LABEL_INSET_PX } from '../src/lib/agentCursorPark';
+import { AGENT_CURSOR_ARROW_TOP, AGENT_CURSOR_PILL } from '../src/lib/agentCursorLook';
 import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_STROKE, AGENT_CURSOR_ARROW_TIP } from '../src/lib/agentCursorLook';
 import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
@@ -369,5 +370,88 @@ describe('the whole drawn cursor stays 12 px inside the clip (slice 10b)', () =>
     send(event());
     flush();
     expect(tipOf(cursors()[0])!.x).toBeCloseTo(LIST.left + 12, 0);
+  });
+});
+
+describe('a parked cursor\'s pills stay inside the panel and clear of the chevron (GM r136, ruling 4)', () => {
+  const NAME_W = 52;
+  const SAY_W = 191; // "Added 3 images to “Desert light”"
+  /** The pills' box after the nudge, the arrow's box and the chevron's, all client px. */
+  function placed(origin: { x: number; y: number }, toward: { x: number; y: number }, over: { clip?: Box; nameShown?: boolean; sayW?: number } = {}) {
+    const area = over.clip ?? LIST;
+    const clipBox = { left: area.left, top: area.top, right: area.left + area.width, bottom: area.top + area.height };
+    const { angle, distance } = parkChevron(origin, toward);
+    const chevronAt = { x: origin.x + AGENT_CURSOR_ARROW_TIP.x + Math.cos(angle) * distance, y: origin.y + AGENT_CURSOR_ARROW_TIP.y + Math.sin(angle) * distance };
+    const nameShown = over.nameShown ?? true;
+    const sayW = over.sayW ?? SAY_W;
+    const nudge = parkLabelNudge({ origin, clip: clipBox, nameShown, nameW: NAME_W, sayW, chevron: chevronAt });
+    const { left, top, height, gap, ring } = AGENT_CURSOR_PILL;
+    const width = Math.max(nameShown ? NAME_W + ring : 0, sayW);
+    const h = (nameShown ? height + gap : 0) + height;
+    const box = { left: origin.x + left + nudge.x, top: origin.y + top + nudge.y, right: origin.x + left + nudge.x + width, bottom: origin.y + top + nudge.y + h };
+    const half = AGENT_CURSOR_ARROW_STROKE / 2;
+    const arrow = {
+      left: origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half, right: origin.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half,
+      top: origin.y + AGENT_CURSOR_ARROW_TOP, bottom: origin.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) + half,
+    };
+    const reach = PARK_CHEVRON_PX / 2 + 0.75;
+    const chev = { left: chevronAt.x - reach, right: chevronAt.x + reach, top: chevronAt.y - reach, bottom: chevronAt.y + reach };
+    return { nudge, box, arrow, chev, clipBox };
+  }
+  const meets = (a: { left: number; right: number; top: number; bottom: number }, b: { left: number; right: number; top: number; bottom: number }, pad: number) =>
+    a.left < b.right + pad && a.right > b.left - pad && a.top < b.bottom + pad && a.bottom > b.top - pad;
+  const inside = (r: ReturnType<typeof placed>) => {
+    expect(r.box.left).toBeGreaterThanOrEqual(r.clipBox.left + PARK_LABEL_INSET_PX - 0.01);
+    expect(r.box.right).toBeLessThanOrEqual(r.clipBox.right - PARK_LABEL_INSET_PX + 0.01);
+    expect(r.box.top).toBeGreaterThanOrEqual(r.clipBox.top + PARK_LABEL_INSET_PX - 0.01);
+    expect(r.box.bottom).toBeLessThanOrEqual(r.clipBox.bottom - PARK_LABEL_INSET_PX + 0.01);
+    // Where it already is clears the arrow by design (the boxes touch at a corner by a fraction of a px).
+    if (r.nudge.x !== 0 || r.nudge.y !== 0) expect(meets(r.box, r.arrow, 0)).toBe(false);
+    expect(meets(r.box, r.chev, PARK_LABEL_CLEAR_PX - 0.01)).toBe(false);
+  };
+
+  it('a bottom park in the shot\'s panel (a 191 px say, 346 px wide): moved above the arrow and in from the right', () => {
+    // The shot: a tip 31 px above the 884 px edge of a panel from x 70 to 416, at x 243.
+    const clip = { left: 70, top: 16, width: 346, height: 868 };
+    const r = placed({ x: 243, y: 826 }, { x: 200, y: 1500 }, { clip });
+    expect(r.nudge.y).toBeLessThan(0);
+    inside(r);
+    // Unmoved, it would have run past the right edge and under the bottom.
+    const home = { right: 243 + AGENT_CURSOR_PILL.left + SAY_W, bottom: 826 + AGENT_CURSOR_PILL.top + 44 };
+    expect(home.right).toBeGreaterThan(416 - PARK_LABEL_INSET_PX);
+    expect(home.bottom).toBeGreaterThan(884 - PARK_LABEL_INSET_PX);
+  });
+
+  it('with the name hidden (the say alone) it is still inside and clear', () => {
+    inside(placed({ x: 243, y: 826 }, { x: 200, y: 1500 }, { clip: { left: 70, top: 16, width: 346, height: 868 }, nameShown: false }));
+  });
+
+  it('a right park, a top park and a left park', () => {
+    inside(placed({ x: 1150 - 30, y: 300 }, { x: 3000, y: 300 })); // right edge of LIST
+    inside(placed({ x: 1000, y: LIST.top + 12 }, { x: 1000, y: -500 }));
+    inside(placed({ x: LIST.left + 12, y: 300 }, { x: -500, y: 300 }));
+  });
+
+  it('leaves a pill alone where it already fits', () => {
+    expect(placed({ x: 900, y: 200 }, { x: 900, y: 1500 }, { sayW: 90 }).nudge).toEqual({ x: 0, y: 0 });
+  });
+
+  it('on the page: a bottom park\'s label carries the offset, set from the say\'s measured width', () => {
+    put('anchor', 'moodboard:b1/i1', tile(900));
+    renderLayer();
+    send(event({ say: 'Added 3 images to “Desert light”' }));
+    flush();
+    const el = cursors()[0];
+    expect(el.style.getPropertyValue('--label-dy')).not.toBe('');
+    expect(Number.parseFloat(el.style.getPropertyValue('--label-dy'))).toBeLessThan(0);
+  });
+
+  it('a cursor on its item (not parked) has no offset', () => {
+    put('anchor', 'moodboard:b1/i1', tile(150));
+    renderLayer();
+    send(event({ say: 'Added 3 images to “Desert light”' }));
+    flush();
+    expect(cursors()[0].style.getPropertyValue('--label-dy')).toBe('');
+    expect(cursors()[0].style.getPropertyValue('--label-dx')).toBe('');
   });
 });

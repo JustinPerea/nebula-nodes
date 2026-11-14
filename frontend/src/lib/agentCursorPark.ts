@@ -1,5 +1,5 @@
 import type { Point } from './agentCursorMotion';
-import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_STROKE, AGENT_CURSOR_ARROW_TIP } from './agentCursorLook';
+import { AGENT_CURSOR_ARROW_POINTS, AGENT_CURSOR_ARROW_STROKE, AGENT_CURSOR_ARROW_TIP, AGENT_CURSOR_ARROW_TOP, AGENT_CURSOR_PILL } from './agentCursorLook';
 
 /**
  * The edge park's chevron (Phase 3 slice 7; design section 5): a target in
@@ -56,4 +56,77 @@ export function parkReachPx(angle: number): { right: number; down: number } {
     right: Math.max(ARROW_RIGHT_PX + half, Math.cos(angle) * distance + chevronHalf),
     down: Math.max(ARROW_DOWN_PX + half, Math.sin(angle) * distance + chevronHalf),
   };
+}
+
+interface Rect { left: number; top: number; right: number; bottom: number }
+
+/** How far inside the panel's edge the pills keep, and from the arrow and chevron. */
+export const PARK_LABEL_INSET_PX = 8;
+export const PARK_LABEL_CLEAR_PX = 4;
+/** A say wraps to two lines at this width (agentCursor.css `.agent-cursor__say`). */
+const SAY_TWO_LINES_AT_PX = 260;
+const SAY_TWO_LINES_PX = 36;
+
+const overlap = (a: Rect, b: Rect, pad = 0) =>
+  a.left < b.right + pad && a.right > b.left - pad && a.top < b.bottom + pad && a.bottom > b.top - pad;
+
+/**
+ * Where a parked cursor's pills go so they stay inside the panel and clear
+ * of the arrow and the chevron (GM r136, ruling 4). The pills sit right of
+ * the arrow and below its top by default; a say wider than the room to the
+ * panel's edge, or one that would run under the panel's bottom, is moved:
+ * slid left to fit, and when that puts it on the arrow or the chevron, or
+ * under the bottom, set above the arrow instead. The offset is the label's
+ * own (`translate`), in px; `{ x: 0, y: 0 }` leaves it where it is. Pure:
+ * the pills' widths are the ones the field measured, never a layout read.
+ */
+export function parkLabelNudge(o: {
+  /** The cursor's origin (its drawn position), client px. */
+  origin: Point;
+  /** The panel box the cursor is parked at the edge of. */
+  clip: Rect;
+  nameShown: boolean;
+  nameW: number;
+  /** 0 when no say shows. */
+  sayW: number;
+  /** The chevron's middle, client px. */
+  chevron: Point | null;
+}): Point {
+  const { origin, clip, nameShown, nameW, sayW } = o;
+  const { left, top, height, gap, ring } = AGENT_CURSOR_PILL;
+  if (!nameShown && sayW <= 0) return { x: 0, y: 0 };
+  const sayH = sayW >= SAY_TWO_LINES_AT_PX ? SAY_TWO_LINES_PX : height;
+  const width = Math.max(nameShown ? nameW + ring : 0, sayW);
+  const blockH = (nameShown && sayW > 0 ? height + gap : 0) + (sayW > 0 ? sayH : height);
+  const home: Rect = { left: origin.x + left, top: origin.y + top, right: origin.x + left + width, bottom: origin.y + top + blockH };
+  const half = AGENT_CURSOR_ARROW_STROKE / 2;
+  const arrow: Rect = {
+    left: origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half,
+    right: origin.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half,
+    top: origin.y + AGENT_CURSOR_ARROW_TOP,
+    bottom: origin.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) + half,
+  };
+  const reach = PARK_CHEVRON_PX / 2 + 0.75;
+  const chevron: Rect | null = o.chevron
+    ? { left: o.chevron.x - reach, right: o.chevron.x + reach, top: o.chevron.y - reach, bottom: o.chevron.y + reach }
+    : null;
+  const inset = PARK_LABEL_INSET_PX;
+  const slid = (box: Rect, dy: number): { box: Rect; x: number; y: number } => {
+    let dx = 0;
+    if (box.right > clip.right - inset) dx = clip.right - inset - box.right;
+    if (box.left + dx < clip.left + inset) dx = clip.left + inset - box.left;
+    return { box: { left: box.left + dx, right: box.right + dx, top: box.top + dy, bottom: box.bottom + dy }, x: dx, y: dy };
+  };
+  // Tried in order: where it is; above the arrow; below the arrow and the
+  // chevron; above both. Each slid sideways to fit the panel.
+  const clear = PARK_LABEL_CLEAR_PX;
+  const aboveArrow = arrow.top - clear - blockH - home.top;
+  const belowAll = Math.max(arrow.bottom, chevron?.bottom ?? -Infinity) + clear - home.top;
+  const aboveAll = Math.min(arrow.top, chevron?.top ?? Infinity) - clear - blockH - home.top;
+  const candidates = [slid(home, 0), slid(home, aboveArrow), slid(home, belowAll), slid(home, aboveAll)];
+  // Where it already is clears the arrow by design (its box and the arrow's overlap by a fraction of a px at the corner).
+  const fits = (c: { box: Rect; x: number; y: number }) => c.box.top >= clip.top + inset && c.box.bottom <= clip.bottom - inset
+    && (c.x === 0 && c.y === 0 || !overlap(c.box, arrow)) && !(chevron && overlap(c.box, chevron, clear));
+  const chosen = candidates.find(fits) ?? candidates[1];
+  return { x: chosen.x, y: chosen.y };
 }

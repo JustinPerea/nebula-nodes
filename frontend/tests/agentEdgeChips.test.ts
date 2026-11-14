@@ -292,3 +292,26 @@ describe('the chip width reckoned from the name', () => {
     expect(estimateChipWidth('x'.repeat(60))).toBe(AGENT_CURSOR_CHIP.maxWidthPx);
   });
 });
+
+describe('the 6 px gap between stacked chips (GM r136, ruling 5)', () => {
+  // A chip stands at the point where the line from the pane's middle to its cursor crosses the edge; the
+  // stack moves it only when that would put it closer than gapPx to the chip before it. So chips whose own
+  // crossing points are further apart than a chip and a gap keep them (the shot's 23 px), and ones that are
+  // closer are pushed to exactly gapPx.
+  const alone = (tip: { x: number; y: number }) => plan([cur(tip)]).chips[0].box;
+  it('crossing points further apart than a chip and a gap are kept, not pulled in to 6 px', () => {
+    const tips = [{ x: 1100, y: 150 }, { x: 1100, y: 300 }, { x: 1100, y: 450 }];
+    const own = tips.map(alone);
+    const stacked = plan(tips.map((t) => cur(t))).chips.map((c) => c.box).sort((a, b) => a.top - b.top);
+    expect(own[1].top - bottom(own[0])).toBeGreaterThan(gapPx);
+    stacked.forEach((box, i) => expect(box.top).toBeCloseTo(own[i].top, 5));
+  });
+  it('crossing points closer than that are pushed apart to exactly gapPx', () => {
+    const tips = [{ x: 4000, y: 330 }, { x: 4000, y: 340 }, { x: 4000, y: 350 }];
+    const own = tips.map(alone);
+    expect(own[1].top - bottom(own[0])).toBeLessThan(gapPx);
+    const stacked = plan(tips.map((t) => cur(t))).chips.map((c) => c.box).sort((a, b) => a.top - b.top);
+    expect(stacked[1].top - bottom(stacked[0])).toBeCloseTo(gapPx, 5);
+    expect(stacked[2].top - bottom(stacked[1])).toBeCloseTo(gapPx, 5);
+  });
+});

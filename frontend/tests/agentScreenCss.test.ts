@@ -85,11 +85,23 @@ describe('the store keeps what a surface target is called', () => {
     for (const name of ['.agent-launcher-dot', '.agent-launcher-dot__more']) expect(rule(name)).toMatch(/pointer-events:\s*none/);
     // The corner badge (slice 10c): a 1.5 px ring in the rail's background, "+N" at the smallest label token.
     expect(rule('.agent-launcher-dot')).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
-    expect(rule('.agent-launcher-dot__more')).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
+    expect(rule('.agent-launcher-dot__more')).not.toMatch(/box-shadow/);
     expect(rule('.agent-launcher-dot__more')).toMatch(/font:[^;]*var\(--sr-type-micro/);
     expect(rule('.agent-launcher-dots')).toMatch(/--agent-badge-ring:\s*rgb\(24,\s*24,\s*26\)/);
     expect(rule('.agent-launcher-dot__more')).toMatch(/transition:[^;]*var\(--agent-cursor-soft\)/);
     const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(reduced).toMatch(/\.agent-launcher-dot,\s*\.agent-launcher-dot__more\s*\{[^}]*animation:\s*none/);
+  });
+
+  it('a "+N" belongs to no agent: the host\'s surface fill, a 1px border and secondary ink, on the rail and on the ring (GM r136, ruling 3)', () => {
+    for (const name of ['.agent-launcher-dot__more', '.agent-item-outline__more']) {
+      const body = rule(name);
+      expect(body).toMatch(/background:\s*var\(--agent-badge-ring\)/);
+      expect(body).toMatch(/border:\s*1px solid var\(--agent-count-border\)/);
+      expect(body).toMatch(/color:\s*var\(--agent-count-ink\)/);
+      expect(body).not.toMatch(/--agent-color/);
+    }
+    expect(rule('.agent-launcher-dots')).toMatch(/--agent-count-ink:\s*var\(--sr-ink-light/);
+    expect(rule('.agent-item-outlines')).toMatch(/--agent-count-ink:\s*var\(--sr-ink-light/);
   });
 });

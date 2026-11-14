@@ -20,6 +20,9 @@
 }
 
 .agent-item-outlines {
+  --agent-badge-ring: rgb(24, 24, 26);
+  --agent-count-border: rgb(255 255 255 / 0.14);
+  --agent-count-ink: var(--sr-ink-light, rgb(255 255 255 / 0.6));
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -45,13 +48,18 @@
   position: absolute;
   right: -1.5px;
   top: -20px;
+  box-sizing: border-box;
   padding: 0 6px;
   height: 16px;
   display: inline-flex;
   align-items: center;
   border-radius: 8px;
-  background: var(--agent-color);
-  font: 600 11px/16px var(--sr-font-sans, system-ui, sans-serif);
+  /* A count belongs to no agent: the column's neutral count pill, the host's
+     surface fill, a 1px hairline and secondary ink (GM r136, ruling 3). */
+  background: var(--agent-badge-ring);
+  border: 1px solid var(--agent-count-border);
+  color: var(--agent-count-ink);
+  font: 600 11px/14px var(--sr-font-sans, system-ui, sans-serif);
   white-space: nowrap;
 }
 
@@ -88,6 +96,8 @@
    on the soft spring; a dot that arrives fades in on it. A mark, never a control. */
 .agent-launcher-dots {
   --agent-badge-ring: rgb(24, 24, 26);
+  --agent-count-border: rgb(255 255 255 / 0.14);
+  --agent-count-ink: var(--sr-ink-light, rgb(255 255 255 / 0.6));
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -112,15 +122,18 @@
 
 .agent-launcher-dot__more {
   position: absolute;
+  box-sizing: border-box;
   height: 12px;
   padding: 0 4px;
   display: inline-flex;
   align-items: center;
   transform: translate(-100%, -50%);
   border-radius: 6px;
-  background: var(--agent-color);
-  box-shadow: 0 0 0 1.5px var(--agent-badge-ring);
-  font: 600 var(--sr-type-micro, 9px)/12px var(--sr-font-sans, system-ui, sans-serif);
+  /* Neutral, as the ring's count: the host's surface, a 1px hairline, secondary ink. */
+  background: var(--agent-badge-ring);
+  border: 1px solid var(--agent-count-border);
+  color: var(--agent-count-ink);
+  font: 600 var(--sr-type-micro, 9px)/10px var(--sr-font-sans, system-ui, sans-serif);
   white-space: nowrap;
   pointer-events: none;
   transition: opacity var(--agent-cursor-soft);

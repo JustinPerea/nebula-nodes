@@ -57,7 +57,8 @@ import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
  * rendered before it in the run. It is renumbered by first appearance
  * (HALO_1, HALO_2 ...) in both its definition and its url(#...) uses, so two
  * cursors still have to keep two different ids. Frames run on the test's own
- * clock (1/60 s apart) and no wall time reaches the DOM, so nothing else varies.
+ * clock (1/60 s apart) and Date.now and performance.now are held still, so no wall time reaches
+ * the DOM and nothing else varies.
  */
 
 let frames: FrameRequestCallback[] = [];
@@ -102,6 +103,11 @@ beforeEach(() => {
   frames = [];
   frameIds = [];
   clock = 0;
+  // Wall time must not reach the DOM: on a loaded machine the real time between `send` and the first
+  // frame made the event stale (it snaps: no gesture) and outlasted the caret's blink window, so the
+  // golden differed. Both clocks are held still: nothing is older than its own arrival here.
+  vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
+  vi.spyOn(performance, 'now').mockImplementation(() => 1_000);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     nextFrameId += 1;
     frames.push(callback);
@@ -124,6 +130,7 @@ beforeEach(() => {
   lookupRef.current = lookup;
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   vi.unstubAllGlobals();
   window.matchMedia = realMatchMedia;

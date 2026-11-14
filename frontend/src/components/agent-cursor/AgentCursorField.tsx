@@ -49,7 +49,7 @@ import {
 } from '../../lib/agentCursorPlanner';
 import { cursorHandoff } from '../../lib/agentCursorHandoff';
 import type { CursorLayer } from '../../lib/agentCursorLayerOf';
-import { parkChevron, PARK_CHEVRON_PX } from '../../lib/agentCursorPark';
+import { parkChevron, parkLabelNudge, PARK_CHEVRON_PX } from '../../lib/agentCursorPark';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
   AGENT_CURSOR_ARROW_PATH,
@@ -1166,6 +1166,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   const [parked, setParked] = useState(false);
   const parkedRef = useRef(false);
   const parkRef = useRef<SVGSVGElement | null>(null);
+  const placeLabelRef = useRef<(toward: Point | null) => void>(() => {});
   const leavingRef = useRef(leaving);
   // What put it on its spot last frame (StackSpot.sig), and the events that
   // moved the targets of the members above it: the spot moving with neither
@@ -1312,6 +1313,8 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontVersion: the fonts changed under the same text
     [name, say, countText, fontVersion],
   );
+  const widthsRef = useRef(widths);
+  useLayoutEffect(() => { widthsRef.current = widths; });
   // The pills' text in the font they draw in: a subset not loaded yet loads
   // now, and the layer measures again when it has (fontVersion).
   useEffect(() => {
@@ -1561,6 +1564,43 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         layer: space.layer, at, velocity: { x: m.vel.x * z, y: m.vel.y * z }, opacity: m.opacity.x, lean: m.lean.x,
       }, handoffEpoch.current);
     };
+    // A cursor parked at the edge of its panel keeps its pills inside the
+    // panel and clear of the arrow and the chevron (lib/agentCursorPark.ts
+    // parkLabelNudge): the label's own offset, as CSS variables. Widths are
+    // the measured ones, never a layout read; a cursor that isn't parked
+    // has no offset.
+    let labelOffset = '';
+    const placeLabel = (toward: Point | null) => {
+      const el = cursorRef.current;
+      const m = motion.current;
+      if (!el || !m) return;
+      const clip = toward !== null && !leavingRef.current && el.dataset.saySide !== 'left' ? space.labelClip?.(cursor.target, cursor.key) ?? null : null;
+      let x = 0;
+      let y = 0;
+      if (clip) {
+        const layout = el.dataset.label ?? '';
+        const { angle, distance } = parkChevron(m.pos, toward!);
+        const nudge = parkLabelNudge({
+          origin: m.pos, clip,
+          nameShown: layout.startsWith('name'), nameW: widthsRef.current.nameW,
+          sayW: layout.endsWith('say') ? widthsRef.current.sayW : 0,
+          chevron: { x: m.pos.x + AGENT_CURSOR_ARROW_TIP.x + Math.cos(angle) * distance, y: m.pos.y + AGENT_CURSOR_ARROW_TIP.y + Math.sin(angle) * distance },
+        });
+        x = nudge.x;
+        y = nudge.y;
+      }
+      const next = `${x}px ${y}px`;
+      if (next === labelOffset) return;
+      labelOffset = next;
+      if (x === 0 && y === 0) {
+        el.style.removeProperty('--label-dx');
+        el.style.removeProperty('--label-dy');
+      } else {
+        el.style.setProperty('--label-dx', `${x}px`);
+        el.style.setProperty('--label-dy', `${y}px`);
+      }
+    };
+    placeLabelRef.current = placeLabel;
     const apply = () => {
       const el = cursorRef.current;
       const m = motion.current;
@@ -1584,6 +1624,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         parkRef.current.style.setProperty('--park-x', `${AGENT_CURSOR_ARROW_TIP.x + Math.cos(angle) * distance}px`);
         parkRef.current.style.setProperty('--park-y', `${AGENT_CURSOR_ARROW_TIP.y + Math.sin(angle) * distance}px`);
       }
+      placeLabel(toward);
       // Set outside React so a re-render never hides a placed cursor again.
       el.dataset.placed = 'true';
       // Gliding past or under the member above it: drawn under it, so the
@@ -1704,6 +1745,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const layout = labelLayout(shown, sayShownRef.current);
       if (el.dataset.label !== layout) hoverBoxes = null; // the pills changed: their boxes too
       el.dataset.label = layout;
+      placeLabelRef.current(leaving ? null : space.edgeToward?.(cursor.target, cursor.key) ?? null);
       // The count cursor lists its names on hover (r17 item 1).
       if (hovered.current) el.dataset.hover = 'true';
       else delete el.dataset.hover;
@@ -1882,8 +1924,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
           : handed ?? createMotion(entranceStart(goal, start ? { from: start, to: target } : null, z), 0);
         field.motions.set(cursor.key, motion.current);
         cursorHandoff.claim(cursor.key, space.layer);
-        // A hand-off isn't a first sighting: its name doesn't flash again.
-        firstSightAt.current = handed ? performance.now() - AGENT_CURSOR_NAME_FIRST_SIGHT_MS : performance.now();
+        // A hand-off lands like any first arrival: the name hides while it
+        // flies and shows for its first-sight moment where it rests, so the
+        // rest is the one the reduced-motion snap draws (GM r136, ruling 2).
+        firstSightAt.current = performance.now();
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
         if (!reduced) planMove(motion.current, goal, { zoom: z, pointer, others });
       } else if (planPending.current && !reduced) {
@@ -2078,8 +2122,9 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   // Held for the other layer: its entry for the cursor is written as it goes
   // to hold, so the receiving layer's first frame still carries it on.
   useLayoutEffect(() => {
-    if (held) writeHandoff.current(true);
-  }, [held]);
+    // Unless the other layer has already drawn it: its frames are the truth now.
+    if (held && cursorHandoff.claimedBy(cursor.key) !== otherLayer(space.layer)) writeHandoff.current(true);
+  }, [held, cursor.key, space.layer]);
   useEffect(() => () => {
     wake.current = () => {};
     if (frame.current !== null) cancelAnimationFrame(frame.current);

@@ -31,6 +31,8 @@ export interface OutlineEntry {
   /** When it came to the item (the backend's arrival): earliest is innermost. */
   arrivedAt: number;
   box: Box;
+  /** The host's surface colour (the "+N" pill's fill); '' or absent when none. */
+  surface?: string;
 }
 
 export interface OutlineRing {
@@ -45,6 +47,8 @@ export interface OutlineRing {
   grow: number;
   /** On the outermost ring of an item with more agents than rings drawn: how many more ("+N"). */
   more: number;
+  /** The host's surface colour, for the "+N" pill's fill; absent when the host sets none. */
+  surface?: string;
 }
 
 /**
@@ -76,6 +80,7 @@ export function outlineRings(entries: readonly OutlineEntry[]): OutlineRing[] {
         index,
         grow,
         more: index === drawn.length - 1 ? group.length - drawn.length : 0,
+        ...(entry.surface ? { surface: entry.surface } : {}),
       });
     });
   }
@@ -88,6 +93,7 @@ export interface OutlineSources {
   landings: { readonly targets: ReadonlyMap<string, { since: number }>; readonly landedListeners: Set<(key: string) => void> };
   space: {
     outlineOf(anchor: AgentCursorAnchor): Box | null;
+    surfaceOf?(anchor: AgentCursorAnchor): string;
     subscribe(listener: () => void): () => void;
   };
   now?: () => number;
@@ -189,7 +195,7 @@ export class OutlineBook {
     const entries: OutlineEntry[] = [];
     for (const held of live.values()) {
       const box = this.sources.space.outlineOf(held.anchor);
-      if (box) entries.push({ ...held.entry, box });
+      if (box) entries.push({ ...held.entry, box, surface: this.sources.space.surfaceOf?.(held.anchor) ?? '' });
     }
     const next = outlineRings(entries);
     this.clear();

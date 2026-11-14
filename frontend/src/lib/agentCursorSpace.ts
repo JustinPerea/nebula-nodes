@@ -3,6 +3,7 @@ import type { NodeData } from '../types';
 import { chainPoint, resolveAnchor, type AnchorLookup, type Point } from './agentCursorMotion';
 import { area, intersect, type AnchorResolver, type Box, type Resolution } from './agentAnchorResolve';
 import { watchBoardView } from './agentBoardView';
+import { surfaceOf } from './agentLauncherDots';
 import type { CursorLayer } from './agentCursorLayerOf';
 import type { AgentCursorAnchor } from './wsClient';
 
@@ -74,6 +75,9 @@ export interface CursorSpace {
    *  of its panel because the item is scrolled or panned out of view (the
    *  chevron points there); null otherwise. Absent on a surface with none. */
   edgeToward?(anchor: AgentCursorAnchor, owner?: string): Point | null;
+  /** The panel box (client px) a parked cursor's pills must stay inside:
+   *  the clip it is parked at the edge of; null when it isn't parked. */
+  labelClip?(anchor: AgentCursorAnchor, owner?: string): { left: number; top: number; right: number; bottom: number } | null;
   /** The drag wire's path from a port to the free end; absent on a surface
    *  with no wires. */
   wire?(from: Point, to: Point): string;
@@ -176,6 +180,9 @@ export interface ScreenSpace extends CursorSpace {
    *  outline; null while the item isn't drawn, is clipped out, or the cursor
    *  parks at a launcher or an edge. */
   outlineOf(anchor: AgentCursorAnchor): Box | null;
+  /** The surface colour of the host the item sits in (`--agent-launcher-surface`
+   *  on it or an ancestor), '' when none sets one: the "+N" pill's fill. */
+  surfaceOf(anchor: AgentCursorAnchor): string;
   /** The launcher `anchor` resolves to right now (read afresh, not from a
    *  frame's resolve), when the cursor parks at one: the launcher dots. */
   launcherOf(anchor: AgentCursorAnchor): { element: Element; box: Box } | null;
@@ -361,6 +368,12 @@ export function screenSpace({ resolver, measure, watch, pane, canvasMounted, gon
       const resolution = read(anchor, owner)?.resolution;
       return resolution?.kind === 'edge' ? resolution.toward : null;
     },
+    labelClip: (anchor, owner) => {
+      const resolution = read(anchor, owner)?.resolution;
+      if (resolution?.kind !== 'edge') return null;
+      const { left, top, width, height } = resolution.clip;
+      return { left, top, right: left + width, bottom: top + height };
+    },
     nodeInfo: () => undefined,
     labels: () => new Map(),
     fromClient: (client) => client,
@@ -380,6 +393,10 @@ export function screenSpace({ resolver, measure, watch, pane, canvasMounted, gon
     },
     // Read afresh, as the launcher is: a container that resized clips the item
     // differently now, before the cursor's own frame has read it again.
+    surfaceOf(anchor) {
+      const resolution = locate(anchor);
+      return resolution.kind === 'anchor' ? surfaceOf(resolution.element) : '';
+    },
     outlineOf(anchor) {
       const resolution = locate(anchor);
       if (resolution.kind !== 'anchor') return null;

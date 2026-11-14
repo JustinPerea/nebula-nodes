@@ -70,6 +70,14 @@ const step = (n = 1) => act(() => {
 });
 const flush = (max = 600) => step(max);
 
+/** The clocks the view reads: performance.now (the name's first-sight moment) follows the test's
+ *  frames, and Date.now (how old an event is) is held still, so a slow machine can't make an event
+ *  stale. On a loaded one the flight tests read the event as old and snapped (PR #233 r136). */
+const deterministicClocks = () => {
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
+};
+
 const boxes = new Map<Element, Box>();
 const VIEW: Box = { left: 0, top: 0, width: 1440, height: 900 };
 const env: ResolverEnv = {
@@ -164,10 +172,12 @@ beforeEach(() => {
   lookupRef.current = lookup;
   cursorHandoff.reset();
   cursorHandoff.now = () => clock;
+  deterministicClocks();
   useAgentPresenceStore.getState().clear();
   useUIStore.setState({ viewMode: 'canvas' });
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
@@ -287,6 +297,113 @@ describe('the panel to the canvas', () => {
     expect(document.querySelector('[data-leaving="true"]')).toBeNull();
     flush();
     expect(tipOf(canvasCursor()!)).toEqual(N1);
+  });
+});
+
+describe('the way back flies as one cursor from where it rests (GM r136, ruling 1)', () => {
+  /** The live ordering: the canvas layer's first frame takes the registry
+   *  before the screen layer's own hold write lands, so what it finds is the
+   *  screen cursor's last resting frame, long since written. */
+  function restInPanelThenSendToNodeWithAnOldEntry() {
+    putTile(TILE);
+    renderBoth(true);
+    send(event(onTile()));
+    flush(); // ten seconds of rest: its last frame is far older than HANDOFF_FRESH_MS
+    const write = CursorHandoff.prototype.write;
+    const spy = vi.spyOn(cursorHandoff, 'write').mockImplementation((key, entry, epoch) => {
+      if (entry.layer === 'screen') return; // the hold write arrives after the take
+      write.call(cursorHandoff, key, entry, epoch);
+    });
+    send(event());
+    return spy;
+  }
+
+  it('starts at the resting spot, not at an entrance 64 px up-left of the node', () => {
+    restInPanelThenSendToNodeWithAnOldEntry();
+    step(1);
+    const first = tipOf(canvasCursor()!)!;
+    expect(dist(first, toFlow(aim(TILE)))).toBeLessThan(25 / pane.transform[2] + 1);
+    expect(dist(first, N1)).toBeGreaterThan(150);
+    expect(opacityOf(canvasCursor()!)).toBeGreaterThan(0.9);
+  });
+
+  it('is one cursor in every frame of the flight, never a gap, a second one or a jump', () => {
+    restInPanelThenSendToNodeWithAnOldEntry();
+    let previous: { x: number; y: number } | null = null;
+    for (let frame = 0; frame < 120; frame += 1) {
+      step(1);
+      expect(allCursors()).toHaveLength(1);
+      const el = allCursors()[0];
+      expect(opacityOf(el)).toBeGreaterThan(0.9);
+      const at = tipOf(el)!;
+      if (previous) expect(dist(at, previous) * pane.transform[2]).toBeLessThan(120);
+      previous = at;
+      if (dist(at, N1) < 0.5 && frame > 10) break;
+    }
+    expect(dist(previous!, N1)).toBeLessThan(1);
+  });
+
+  it('is not taken once the screen layer no longer holds the cursor and its entry is old', () => {
+    const registry = new CursorHandoff(() => 0);
+    let t = 0;
+    registry.now = () => t;
+    registry.write('a', { layer: 'screen', at: { x: 1, y: 2 }, velocity: { x: 0, y: 0 }, opacity: 1, lean: 0 });
+    registry.claim('a', 'screen');
+    t = HANDOFF_FRESH_MS * 50;
+    expect(registry.take('a', 'canvas')).not.toBeNull(); // it still rests there
+    registry.write('a', { layer: 'screen', at: { x: 1, y: 2 }, velocity: { x: 0, y: 0 }, opacity: 1, lean: 0 });
+    registry.claim('a', 'canvas'); // the other layer drew it since
+    t += HANDOFF_FRESH_MS * 50;
+    expect(registry.take('a', 'canvas')).toBeNull();
+  });
+});
+
+describe('the name shows where a flight rests, in both motion modes (GM r136, ruling 2)', () => {
+  const labelOf = (el: HTMLElement | null) => el?.dataset.label;
+
+  it('canvas to the panel: the name shows at the panel rest, as it did on the canvas', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event());
+    flush();
+    expect(labelOf(canvasCursor())).toMatch(/^name/); // the canvas's own first-sight moment
+    send(event(onTile()));
+    flush(40);
+    expect(labelOf(screenCursor())).toMatch(/^name/);
+  });
+
+  it('the panel to the canvas: the name shows at the node rest', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event(onTile()));
+    flush(40);
+    send(event());
+    flush(40);
+    expect(labelOf(canvasCursor())).toMatch(/^name/);
+  });
+
+  it('it is hidden while the cursor flies', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event());
+    flush(40);
+    send(event(onTile()));
+    step(4);
+    expect(labelOf(screenCursor())).not.toMatch(/^name/);
+  });
+
+  it('reduced motion draws the same rest', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event());
+    flush();
+    reduceMotion(true);
+    send(event(onTile()));
+    flush(40);
+    expect(labelOf(screenCursor())).toMatch(/^name/);
+    send(event());
+    flush(40);
+    expect(labelOf(canvasCursor())).toMatch(/^name/);
   });
 });
 

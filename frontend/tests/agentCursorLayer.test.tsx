@@ -90,6 +90,17 @@ const flush = (max = 400) => act(() => {
 });
 /** Run just a few frames. */
 const tickFrames = (count: number) => flush(count);
+/**
+ * The clocks the view reads: Date.now (how stale an event is) held still, performance.now (the
+ * say's wait cap and the name's moment) following the test's own frames. Without it a loaded
+ * machine spends real time between `send` and the first frame, so the event reads as stale and
+ * snaps (no gesture plays), or a say's wait caps early and the column meets: the two tests that
+ * failed only under load (PR #233 r136).
+ */
+const pinClocks = () => {
+  vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
+};
 
 const event = (overrides: Partial<AgentPresenceEvent> = {}): AgentPresenceEvent => ({
   type: 'agentPresence',
@@ -146,6 +157,7 @@ beforeEach(() => {
   lookupRef.current = lookup;
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   vi.unstubAllGlobals();
   window.matchMedia = realMatchMedia;
@@ -154,6 +166,7 @@ afterEach(() => {
 
 describe('each action draws its own look (Phase 2, spec §2)', () => {
   it.each(['click', 'run', 'error'])('%s plays its gesture on arrival, not before', (action) => {
+    pinClocks();
     render(<AgentCursorLayer />);
     send(event({ action }));
     tickFrames(2);
@@ -2427,6 +2440,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }) : [])],
   ];
   const zoomGlide = (zoomAt: (f: number) => [number, number, number][]) => {
+    pinClocks();
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));

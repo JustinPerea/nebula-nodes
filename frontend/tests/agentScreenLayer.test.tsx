@@ -87,6 +87,9 @@ beforeEach(() => {
   clock = 0;
   boxes.clear();
   clipOf = () => VIEW;
+  // An event is never older than its own arrival: on a loaded machine the real time between `send` and
+  // the first frame made it stale, and a stale event snaps (the flight test saw no flight).
+  vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     nextFrameId += 1;
     frames.push(callback);
@@ -110,6 +113,7 @@ beforeEach(() => {
   useBoardCanvasStore.setState({ studioBoard: null });
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
@@ -494,6 +498,10 @@ describe('item outlines: type solid, propose dashed, nested 2 px for two agents,
     expect(rings()).toHaveLength(2);
     const outer = rings().find((ring) => ring.dataset.ring === '1')!;
     expect(outer.querySelector('.agent-item-outline__more')?.textContent).toBe('+1');
+    // A count belongs to no agent: no agent colour or ink on it (GM r136, ruling 3).
+    const pill = outer.querySelector<HTMLElement>('.agent-item-outline__more')!;
+    expect(pill.style.color).toBe('');
+    expect(pill.style.getPropertyValue('--agent-color')).toBe('');
     expect(rings().find((ring) => ring.dataset.ring === '0')!.querySelector('.agent-item-outline__more')).toBeNull();
   });
 

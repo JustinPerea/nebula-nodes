@@ -93,7 +93,7 @@ export { AGENT_CURSOR_IDLE_OPACITY as DOT_IDLE_OPACITY };
 
 /** The CSS variable each launcher host sets to its own background (the rail, a dock row). */
 export const LAUNCHER_SURFACE_VAR = '--agent-launcher-surface';
-const surfaceOf = (element: Element): string => {
+export const surfaceOf = (element: Element): string => {
   try { return window.getComputedStyle(element).getPropertyValue(LAUNCHER_SURFACE_VAR).trim(); } catch { return ''; }
 };
 

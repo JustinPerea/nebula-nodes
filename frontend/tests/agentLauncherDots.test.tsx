@@ -164,6 +164,22 @@ describe('the dot on a launcher (PR #233 slice 8)', () => {
     expect(dots()).toHaveLength(2);
     expect(more()?.textContent).toBe('+1');
   });
+
+  it('the "+1" carries no agent colour: it takes the launcher\'s surface and the neutral count style', () => {
+    const rail = put('launcher', 'moodboard', RAIL_BOX);
+    rail.style.setProperty('--agent-launcher-surface', 'rgb(24, 24, 26)');
+    renderLayer();
+    send(event(0));
+    send(event(1));
+    send(event(2));
+    settle();
+    const pill = more()!;
+    expect(pill.style.getPropertyValue('--agent-color')).toBe('');
+    expect(pill.style.color).toBe('');
+    expect(pill.style.getPropertyValue('--agent-badge-ring')).toBe('rgb(24, 24, 26)');
+    // The dots keep their agents' colours.
+    expect(dots()[0].style.getPropertyValue('--agent-color')).not.toBe('');
+  });
 });
 
 describe('the badge ring takes the launcher\'s own surface colour', () => {

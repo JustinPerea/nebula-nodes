@@ -78,14 +78,19 @@ export class CursorHandoff {
 
   /**
    * The hand-off `layer` starts `key`'s flight from, or null: the entry is
-   * from the other layer, no older than `HANDOFF_FRESH_MS`, and from this
-   * screen epoch. Taking it consumes it.
+   * from the other layer, from this screen epoch, and either no older than
+   * `HANDOFF_FRESH_MS` or from the layer that still holds the cursor. Taking it consumes it.
    */
   take(key: string, layer: CursorLayer): HandoffEntry | null {
     const entry = this.entries.get(key);
     if (!entry || entry.layer === layer) return null;
     this.entries.delete(key);
-    if (entry.epoch !== this.epoch || this.now() - entry.t > HANDOFF_FRESH_MS) return null;
+    // A cursor that rested in its layer wrote its last frame long ago; it is
+    // still exactly there while that layer holds it (its claim), so the
+    // entry is as good as a fresh one. Once the other layer has drawn it, or
+    // the screen changed, it is not.
+    const holds = this.claims.get(key) === entry.layer;
+    if (entry.epoch !== this.epoch || (!holds && this.now() - entry.t > HANDOFF_FRESH_MS)) return null;
     return entry;
   }
 

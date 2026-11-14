@@ -5,7 +5,6 @@ import { AnchorResolver, domEnv, type ResolverEnv } from '../../lib/agentAnchorR
 import { useStoreApi } from '@xyflow/react';
 import { screenSpace, watchFlowStore, type FlowStoreLike, type ScreenSpace } from '../../lib/agentCursorSpace';
 import { layerOf } from '../../lib/agentCursorLayerOf';
-import { inkFor } from '../../lib/agentCursorLook';
 import { OutlineBook } from '../../lib/agentCursorOutlines';
 import { DOT_IDLE_OPACITY, DotBook } from '../../lib/agentLauncherDots';
 import { cursorSpringVars } from '../../lib/agentCursorSpringVars';
@@ -161,7 +160,7 @@ function ItemOutlines({ agents, space, landings }: { agents: Record<string, Agen
             ['--agent-color' as string]: ring.color,
           }}
         >
-          {ring.more > 0 ? <span className="agent-item-outline__more" style={{ color: inkFor(ring.color) }}>{`+${ring.more}`}</span> : null}
+          {ring.more > 0 ? <span className="agent-item-outline__more" style={ringStyle(ring.surface ?? '')}>{`+${ring.more}`}</span> : null}
         </div>
       ))}
     </div>
@@ -201,14 +200,14 @@ function LauncherDots({ agents, space, landings }: { agents: Record<string, Agen
           {group.moreAt ? (
             <span
               className="agent-launcher-dot__more"
-              style={{ left: group.moreAt.x, top: group.moreAt.y, ['--agent-color' as string]: group.moreColor, color: inkFor(group.moreColor), ...ringStyle(group.ring) }}
+              style={{ left: group.moreAt.x, top: group.moreAt.y, ...ringStyle(group.ring) }}
             >{`+${group.more}`}</span>
           ) : null}
         </div>
       ))}
       {ghosts.map((ghost) => (ghost.more > 0 ? (
         <span key={ghost.id} className="agent-launcher-dot__more" data-leaving="true"
-          style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, color: inkFor(ghost.color), ...ringStyle(ghost.ring) }}>{`+${ghost.more}`}</span>
+          style={{ left: ghost.at.x, top: ghost.at.y, ...ringStyle(ghost.ring) }}>{`+${ghost.more}`}</span>
       ) : (
         <span key={ghost.id} className="agent-launcher-dot" data-leaving="true"
           style={{ left: ghost.at.x, top: ghost.at.y, ['--agent-color' as string]: ghost.color, ...ringStyle(ghost.ring) }} />
