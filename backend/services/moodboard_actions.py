@@ -29,7 +29,7 @@ from typing import Any, Mapping
 from services.cursor_actions import PART_LABELS
 from services.moodboard_edits import (board_where, cover_words, field_label, image_count_words, journal_entry,
                                       listed_words, quoted)
-from services.text_cut import safe_cut
+from services.text_cut import clean_name
 
 
 def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
@@ -140,8 +140,8 @@ def board_anchor(board: Mapping[str, Any] | None, image_id: str | None = None, p
     (``agent_presence.parse_surface_target``'s two results). ``also`` is the
     board as it was, for the number of an image that is no longer on it."""
     board_id = str((board or also or {}).get("id") or "")
-    name = " ".join(str((board or {}).get("name") or (also or {}).get("name") or board_id).split())
-    name = name[:safe_cut(name, 80)]
+    name = (clean_name((board or {}).get("name"), 80) or clean_name((also or {}).get("name"), 80)
+            or clean_name(board_id, 80))
     target: dict[str, Any] = {"surface": "moodboard", "itemId": f"{board_id}/{image_id}" if image_id else board_id}
     names: dict[str, Any] = {"board": name}
     if image_id:

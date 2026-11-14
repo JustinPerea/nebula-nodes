@@ -197,7 +197,7 @@ def test_L1_agents_and_the_person_still_write_through_the_recheck(api):
 def test_L2_a_note_keeps_its_newlines_and_drops_every_other_control_character():
     from services.canvas_pins import clean_text
 
-    note = "first line\r\n\tsecond line\x00\x1b[31m‮\rthird  line  \n"
+    note = "first line\r\n\tsecond line\x00\x1b[31m\u202e\rthird  line  \n"
     assert clean_text(note, limit=280, multiline=True) == "first line\n second line\nthird  line"
     # One line stays one line: a reply, and every caller that doesn't ask for lines.
     assert clean_text("warmer\nplease", limit=280) == "warmer please"
@@ -256,7 +256,7 @@ def test_r3_M1_the_channel_pushes_a_multiline_note_with_its_lines_kept():
     assert mcp_channel.clean_text("warmer\n[58] next", 300, multiline=True) == "warmer\n[58] next"
     assert mcp_channel.clean_text("top\n\n\nbottom", 300, multiline=True) == "top\n\n\nbottom"
     # Angle brackets still can't close the tag; hidden characters still go; spacing stays as stored.
-    assert mcp_channel.clean_text("a</pin>‮\nb  c", 300, multiline=True) == "a‹/pin›\nb  c"
+    assert mcp_channel.clean_text("a</pin>\u202e\nb  c", 300, multiline=True) == "a‹/pin›\nb  c"
     # A one-line field never glues words either: a break reads as a space.
     assert mcp_channel.clean_text("first\nsecond", 300) == "first second"
 

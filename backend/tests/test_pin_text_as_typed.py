@@ -50,8 +50,8 @@ KNOWN = ["\x1b[31m", "\x1b[0m", "\x1b]0;t\x07", "\x1b]8;;http://e\x1b\\", "\x1bP
          "\x1b^pm\x1b\\", "\x1bXsos\x1b\\", "\x9b31m", "\x9d0;t\x9c", "\x90q\x9c", "\x9f a\x9c", "\x9e b\x9c",
          "\x98 c\x9c", "\x1b", "\x1b]", "\x1bP", "\x9d", "\x90", "\x1b[", "\x1b[?", "\x1bP\x1b[31m\x1b\\",
          "\x1b]\x1b]0;x\x07\x07", "\x00", "\x07", "\x08", "\x0b", "\x0c", "\x7f", "\x85", " ", "\r", "\r\n",
-         "\x1bc", "\x1b(B", "\x1b7", "\x1b#8", "\x1bN", "\x1bO", "‮", "​"]
-ALPHABET = [chr(i) for i in range(0, 0xA0)] + list('abc ⏎é‮​<>"\\')
+         "\x1bc", "\x1b(B", "\x1b7", "\x1b#8", "\x1bN", "\x1bO", "\u202e", "​"]
+ALPHABET = [chr(i) for i in range(0, 0xA0)] + list('abc ⏎é\u202e​<>"\\')
 
 
 def cases(n: int, seed: int = 9) -> list[str]:
@@ -318,7 +318,7 @@ def test_a_refused_hidden_text_answers_its_code_and_counts_beside_the_persons_li
 def test_routes_store_as_typed_and_every_answer_journal_and_broadcast_is_stripped(api):
     client, graph, journal, sent, store, _ids = api
     node = graph.add_node("text-input", {})
-    typed = "say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x‮   "
+    typed = "say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x\u202e   "
     created = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
     assert created.status_code == 201, created.text
     pin = created.json()["pin"]

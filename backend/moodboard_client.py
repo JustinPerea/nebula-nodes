@@ -53,6 +53,7 @@ import httpx
 
 from commons import net
 from nebula_api import NebulaAPI, NebulaAPIError
+from services.text_cut import clean_name
 
 # The backend's own cap for an uploaded image (MAX_CHAT_UPLOAD_BYTES).
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -491,12 +492,12 @@ def get_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -
     candidates = list_boards(api, headers=headers)
     for project_id in projects:
         candidates.extend(list_boards(api, project=project_id, include_global=False, headers=headers))
-    matches = [board for board in candidates if str(board.get("name", "")).casefold() == ref.casefold()]
+    matches = [board for board in candidates if same_name(board.get("name"), ref)]
     if not matches:
-        raise MoodboardError(f"no board “{ref}” (`nebula moodboard list` shows them)")
+        raise MoodboardError(f"no board “{clean_name(ref, 60, ellipsis=True)}” (`nebula moodboard list` shows them)")
     if len(matches) > 1:
         ids = ", ".join(str(board.get("id")) for board in matches)
-        raise MoodboardError(f"{len(matches)} boards are named “{ref}” ({ids}); use the id")
+        raise MoodboardError(f"{len(matches)} boards are named “{clean_name(ref, 60, ellipsis=True)}” ({ids}); use the id")
     # A list leaves out what only a board read gives (an old board's layout),
     # so read the one that matched.
     return api.request("GET", f"/api/moodboards/{matches[0]['id']}", headers=headers)
@@ -553,9 +554,26 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
     return board, skipped
 
 
+def shown_name(item: dict[str, Any]) -> str:
+    """A stored item's name (a board's, a Character's, a Style's) as a line
+    for an agent or a person says it (services/text_cut.clean_name: no control
+    or bidi character); its id when the name is empty once cleaned. The one
+    form for MCP and CLI text. Ids and the JSON `name` fields are not names
+    in this sense and stay as stored."""
+    return clean_name(item.get("name"), fallback=clean_name(item.get("id")))
+
+
+def same_name(stored: Any, ref: str) -> bool:
+    """Whether `ref` is the exact name of an item stored as `stored`
+    (case-insensitive): as stored, or as every line shows it (clean_name), so a
+    name read from a line and sent back finds the item."""
+    return (str(stored or "").casefold() == ref.casefold()
+            or clean_name(stored).casefold() == clean_name(ref).casefold() != "")
+
+
 def repeated_line(board: dict[str, Any]) -> str:
     """What a create says when its request id had already made the board."""
-    return f"Board \u201c{board.get('name')}\u201d was already made by an earlier call with this request id."
+    return f"Board \u201c{shown_name(board)}\u201d was already made by an earlier call with this request id."
 
 
 EDITS_UNSUPPORTED = ("this version of Nebula has no board edits (POST /api/moodboards/{id}/edits), so nothing "
@@ -659,10 +677,10 @@ def _card_of(board: dict[str, Any], ref: str) -> tuple[dict[str, Any], dict[str,
         frame = next((f for f in frames if f.get("id") == frame_ref), None) or next(
             (f for f in frames if str(f.get("name", "")).casefold() == frame_ref.casefold()), None)
         if frame is None:
-            raise MoodboardError(f"no look “{frame_ref}” on this board")
+            raise MoodboardError(f"no look “{clean_name(frame_ref, 60, ellipsis=True)}” on this board")
         card = next((c for c in cards if c.get("frameId") == frame.get("id")), None)
         if card is None:
-            raise MoodboardError(f"#{number} has no card in {frame.get('name')}")
+            raise MoodboardError(f"#{number} has no card in {clean_name(frame.get('name'), 60, fallback=clean_name(frame.get('id'), 60), ellipsis=True)}")
         return image, card
     if len(cards) != 1:
         raise MoodboardError(f"#{number} has {len(cards)} cards: name one as {number}@<look>")

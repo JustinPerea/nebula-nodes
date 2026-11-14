@@ -39,7 +39,7 @@ describe('GM r12 answer 3: the note counts what shows', () => {
   it('noteLength counts the shown text: escape codes and control bytes are not characters', () => {
     expect(noteLength('\x1b[31mred\x1b[0m')).toBe(3);
     expect(noteLength(`${'\x1b]0;hidden\x07'.repeat(50)}ok`)).toBe(2);
-    expect(noteLength('a‮b')).toBe(2);
+    expect(noteLength('a\u202eb')).toBe(2);
   });
 
   it('fitNote keeps 280 shown characters, whatever their code points, and trims past it', () => {

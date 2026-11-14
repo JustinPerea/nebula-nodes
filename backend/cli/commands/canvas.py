@@ -7,6 +7,8 @@ from typing import Any, Callable, TextIO
 
 import httpx
 
+from services.text_cut import clean_name
+
 from ..client import NebulaClient
 from ..formatter import format_event, format_snapshot
 
@@ -73,7 +75,8 @@ def run_point(
         result = client.point_cursor(body, agent_name=agent_name)
         agent = result.get("agent", {}).get("name", "agent")
         names = result.get("anchorNames") or {}
-        where = f"{surface} \u201c{names.get('board' if surface == 'moodboard' else surface) or ref}\u201d"
+        shown = clean_name(names.get("board" if surface == "moodboard" else surface)) or clean_name(ref)
+        where = f"{surface} \u201c{shown}\u201d"
         if image is not None:
             where += f", image {names.get('image') or image}"
         if view is not None:

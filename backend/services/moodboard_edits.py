@@ -55,6 +55,7 @@ from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from services import moodboard_layout as layout
+from services.text_cut import clean_name
 
 MAX_OPS = 500
 # Over this many ops the broadcast leaves ``undo`` out (the Studio refetches,
@@ -239,7 +240,8 @@ class _Batch:
 
     def frame_label(self, frame_id: Any) -> str:
         frame = next((f for f in self.frames if f.get("id") == frame_id), None)
-        return str(frame.get("name")) if frame else str(frame_id)
+        # A look's name is free text too: cleaned as a board's is (clean_name).
+        return clean_name(frame.get("name"), 60, fallback=str(frame_id), ellipsis=True) if frame else str(frame_id)
 
     def card(self, op: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         """The (image, placement) an op names with ``placement``, or with
@@ -1283,12 +1285,12 @@ def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] |
     ``fallbacks`` with a name (a deleted board's record, the board before a
     rename), else its id."""
     boards = [item for item in (board, *fallbacks) if item]
-    name = next((str(item["name"]) for item in boards if item.get("name")), None)
+    # A name that is empty once cleaned (only control characters) counts as no name.
+    name = next((shown for item in boards if item.get("name")
+                 and (shown := clean_name(item["name"], MAX_BOARD_NAME_CHARS, ellipsis=True))), None)
     if name is None:
-        name = next((str(item["id"]) for item in boards if item.get("id")), "Untitled board")
-    name = " ".join(name.split())
-    if len(name) > MAX_BOARD_NAME_CHARS:
-        name = name[: MAX_BOARD_NAME_CHARS - 1].rstrip() + "\u2026"
+        name = next((clean_name(item["id"], MAX_BOARD_NAME_CHARS, ellipsis=True) for item in boards if item.get("id")),
+                    "Untitled board")
     return quoted(name)
 
 

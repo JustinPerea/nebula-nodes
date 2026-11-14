@@ -58,7 +58,7 @@ def run(client: NebulaClient, args) -> None:
                 return
             names = boards.project_names(client.api, headers) if any(c.get("projectId") for c in listing) else {}
             for character in listing:
-                print(f"{character.get('id')}  {character.get('name')}  ({character.get('subjectType')}, "
+                print(f"{character.get('id')}  {boards.shown_name(character)}  ({character.get('subjectType')}, "
                       f"{_views(character)}, {_where(character, names)})")
             return
         if args.character_cmd == "show":
@@ -67,7 +67,7 @@ def run(client: NebulaClient, args) -> None:
                 print(json.dumps(character, indent=2, ensure_ascii=False))
                 return
             names = boards.project_names(client.api, headers) if character.get("projectId") else {}
-            print(f"{character.get('id')}  {character.get('name')}  ({character.get('subjectType')}, "
+            print(f"{character.get('id')}  {boards.shown_name(character)}  ({character.get('subjectType')}, "
                   f"{_where(character, names)}, version {character.get('version')})")
             print(f"  frozen trait string: {character.get('frozenTraitString') or '(none)'}")
             print(f"  seed: {character.get('seed') if character.get('seed') is not None else '(none)'}")
