@@ -1,5 +1,6 @@
 import {
   DeferredAgentCursorLayer,
+  DeferredArrangeController,
   DeferredAgentNodeMarkLayer,
   DeferredPinComposer,
   DeferredPinLayer,
@@ -29,6 +30,8 @@ export const ProposalLayer = deferredAtOnce(DeferredProposalLayer, 'ProposalLaye
 export const PinLayer = deferredAtOnce(DeferredPinLayer, 'PinLayer');
 /** The note dialog and the kept-notes stack: drawn only after a person's action. */
 export const PinComposer = deferredAtOnce(DeferredPinComposer, 'PinComposer');
+/** Lays out an agent edit's new nodes (draws nothing; picks up a waiting request when it lands). */
+export const ArrangeController = deferredAtOnce(DeferredArrangeController, 'ArrangeController');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
 /** Agents on the nodes: each one's mark, and the placeholders' outlines (Q125 item 3). */
 export const AgentNodeMarks = deferredAtOnce(DeferredAgentNodeMarkLayer, 'AgentNodeMarks');

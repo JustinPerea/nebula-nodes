@@ -8,6 +8,7 @@ import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/camera-rig-node.css';
+import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
 
 // The CameraRigNode is the canvas card for the camera-rig utility node. It
@@ -219,7 +220,7 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`camera-rig-node ${selected ? 'camera-rig-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
-      <div className="camera-rig-node__title">◈ Camera Rig</div>
+      <div className="camera-rig-node__title">{fixedCardTitle('cameraRigNode')}</div>
       <p className="camera-rig-node__guidance">
         Connect to Cinema Scene for camera prompt guidance. Models may interpret it differently.
       </p>

@@ -30,6 +30,7 @@ import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { canonicalBackendAssetUrls, rewriteBackendAssetUrls } from '../lib/backend';
 import { holdsPersonCredential } from '../lib/personSession';
+import { preloadCardChunks } from './projectFlowsLoader';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import type { ProjectSwitch } from '../lib/wsClient';
 import type { HandoffPending } from './graphStore';
@@ -551,6 +552,9 @@ function followReopenLineNow(current: NonNullable<typeof core.shownReopen>): voi
 async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
   then?: () => Promise<void>, inPlace = false, quiet = false): Promise<boolean> {
   const state = useProjectStore.getState();
+  // The canvas holds a graph back until its card chunks are in (lib/cardHold.ts):
+  // ask for them now, so that wait is no longer than the project's own fetch.
+  if (retry.action === 'open') preloadCardChunks();
   // GM r20 on PR #199: nothing replaces a kept canvas.
   if (refuseLeavingKeptCanvas()) return false;
   if (!state.initialized || state.busy) return false;
@@ -1760,6 +1764,8 @@ export async function loadWorkspace(): Promise<void> {
   if (generation === core.listingGeneration) set({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list) });
   set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
+    // Restoring into a canvas: its card chunks load beside the project's own fetch (lib/cardHold.ts).
+    preloadCardChunks();
     let project = await api.getProject(list.activeProjectId);
     // Adopt browser-only legacy run records exactly once during migration.
     // The backend's recovered graph is the authority for canvas contents.

@@ -354,3 +354,76 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 .canvas-wrapper:not(.canvas-wrapper--slava-empty) .nn-splash {
   display: none;
 }
+
+/* While the canvas holds a whole graph back for its card chunks
+   (lib/cardHold.ts), its node layer is covered, and "Loading canvas…" shows
+   once the hold has lasted 400 ms. The line sits in a live region
+   (.canvas-hold-status, role="status") that is in the DOM, empty, from the
+   start of the cover, so a screen reader announces the text when it arrives.
+   Neither has a background of its own: the line
+   sits on the canvas's background and dot grid, so nothing but the nodes, the
+   wires and the line changes at the reveal. It fades in and out on the SOFT
+   spring (--spring-soft, set on the wrapper); under reduced motion the fades
+   are 180 ms opacity, as the proposal bar's. */
+.canvas-hold-status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.canvas-hold-line {
+  color: var(--sr-ink-light, #8d8d8d);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  animation: canvas-hold-line-in var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+.canvas-hold-line--out {
+  animation: canvas-hold-line-out var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes canvas-hold-line-in {
+  from { opacity: 0; }
+}
+
+@keyframes canvas-hold-line-out {
+  to { opacity: 0; }
+}
+
+/* The node layer: nodes and wires are the React Flow viewport. Covered nodes
+   are not live: visibility hidden takes them out of clicks, drags and the tab
+   order (React Flow still measures a hidden element; only display: none gives
+   it no size). React Flow sets `visibility: visible` inline on each measured
+   node, which would win over a value inherited from the layer, so the rule
+   names every descendant and is !important. */
+.canvas-wrapper--reveal-wait .react-flow__viewport {
+  opacity: 0;
+}
+
+.canvas-wrapper--reveal-wait .react-flow__viewport,
+.canvas-wrapper--reveal-wait .react-flow__viewport * {
+  visibility: hidden !important;
+}
+
+.canvas-wrapper--reveal-in .react-flow__viewport {
+  animation: canvas-reveal-in var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes canvas-reveal-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-hold-line {
+    animation: notice-fade-in 180ms ease-out both;
+  }
+  .canvas-hold-line--out {
+    animation: canvas-hold-line-out 180ms ease-out both;
+  }
+  .canvas-wrapper--reveal-in .react-flow__viewport {
+    animation: notice-fade-in 180ms ease-out both;
+  }
+}

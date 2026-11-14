@@ -6,13 +6,13 @@ import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
-import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
+import { drawsMediaOrText, spatialOutputOf, worldOutputOf } from '../../lib/resultViews';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
 import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './DeferredViewers';
-import { RepresentationViewer } from './RepresentationViewer';
+import { RepresentationViewer } from './DeferredOutputViews';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';
 import { PlaceholderLine } from './PlaceholderLine';
@@ -28,7 +28,7 @@ import { nodeWaitHeaderProps, useNodeWait } from '../../lib/nodeWaitHeader';
 import { useCardWidthSpring, useNodeRemeasure } from '../../lib/cardWidthSpring';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
-import { StructuredOutputs } from './StructuredValuePreview';
+import { StructuredOutputs } from './DeferredOutputViews';
 import { canvasTitle } from '../../lib/directRoute';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
@@ -65,11 +65,11 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const imageOutput = Object.values(previewOutputs).find((o) => o.type === 'Image' && o.value);
   const textOutput = Object.values(previewOutputs).find((o) => o.type === 'Text' && o.value);
   const meshOutput = Object.values(previewOutputs).find((o) => o.type === 'Mesh' && o.value);
-  const worldOutput = Object.values(previewOutputs).find((o) => o.type === 'World' && o.value);
+  const worldOutput = worldOutputOf(previewOutputs);
   const videoOutput = Object.values(previewOutputs).find((o) => o.type === 'Video' && o.value);
   const audioOutput = Object.values(previewOutputs).find((o) => o.type === 'Audio' && o.value);
   const svgOutput = Object.values(previewOutputs).find((o) => o.type === 'SVG' && o.value);
-  const spatialOutput = findStructuredRepresentation(previewOutputs, { includeWorld: false });
+  const spatialOutput = spatialOutputOf(previewOutputs);
   const outputText = textOutput && typeof textOutput.value === 'string' ? textOutput.value : null;
   const displayText = batchPreview.browsing ? outputText : nodeData.streamingText ?? outputText;
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
@@ -100,7 +100,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
     || shouldRenderSpatial
     || (videoOutput !== undefined && typeof videoOutput.value === 'string')
     || (meshOutput !== undefined && typeof meshOutput.value === 'string')
-    || (audioOutput !== undefined && typeof audioOutput.value === 'string');
+    || (audioOutput !== undefined && typeof audioOutput.value === 'string')
+    // The same test lib/cardChunks.ts asks the result views' chunks by.
+    || drawsMediaOrText(previewOutputs, nodeData.streamingText != null);
   const structuredOutputs = previewComplete && !drewOutput ? Object.entries(previewOutputs) : [];
   const isStructuredSurface = structuredOutputs.length > 0;
 

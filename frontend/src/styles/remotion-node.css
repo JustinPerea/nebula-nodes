@@ -1,0 +1,66 @@
+/* The Remotion node's card on the canvas (components/nodes/RemotionNode.tsx).
+ * These rules were in remotion-editor.css, which only the Remotion editor's
+ * chunk imports, so the card drew unstyled until the editor had been opened
+ * once. The card imports this file itself. */
+
+body.app-slava-restraint .remotion-node {
+  width: 220px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+}
+
+/* One selection style, the model card's, in the card's category colour (GM -
+   Design, PR #198 r7 item 2, as node-card-boundary.css): the border alone in a
+   dark category colour is too faint to read as selected. */
+body.app-slava-restraint .remotion-node--selected {
+  border-color: var(--node-category-color, var(--sr-accent));
+  border-width: var(--sr-node-card-selected-border-width);
+  animation: slava-select-breathe var(--sr-node-selected-duration) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .remotion-node--selected {
+    animation: none;
+    box-shadow:
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-reduced-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-reduced-mix), transparent),
+      var(--sr-shadow-node);
+  }
+}
+
+body.app-slava-restraint .remotion-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+body.app-slava-restraint .remotion-node__summary {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .remotion-node__open {
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+body.app-slava-restraint .remotion-node__open:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}

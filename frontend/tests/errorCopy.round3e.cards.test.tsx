@@ -12,7 +12,8 @@
  * The cases cover every type in CANVAS_NODE_TYPES, so a new card type fails
  * here until it shows its run error too.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 import { act, cleanup, render } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import type { Node, NodeProps } from '@xyflow/react';
@@ -28,6 +29,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 }));
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+import { CARD_FALLBACK_TYPE } from '../src/lib/cardFallback';
 import { CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
@@ -88,9 +90,13 @@ afterEach(() => {
   useUIStore.setState(initialUi, true);
 });
 
+// The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
+
 describe('every card on the canvas shows its run error', () => {
   it('covers every card type the canvas draws', () => {
-    expect(Object.keys(CASES).sort()).toEqual(Object.keys(CANVAS_NODE_TYPES).sort());
+    // The fallback card stands in for a card while it loads (lib/cardFallback.ts); it has no run error to show.
+    expect(Object.keys(CASES).sort()).toEqual(Object.keys(CANVAS_NODE_TYPES).filter((type) => type !== CARD_FALLBACK_TYPE).sort());
   });
 
   for (const type of Object.keys(CASES)) {

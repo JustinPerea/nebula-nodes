@@ -22,6 +22,7 @@ import { pendingAttr } from '../../lib/pendingNodes';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
+import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
 
@@ -179,7 +180,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`paper-source-node ${selected ? 'paper-source-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
-      <div className="paper-source-node__header"><Link2 size={15} aria-hidden="true" /> Paper source</div>
+      <div className="paper-source-node__header"><Link2 size={15} aria-hidden="true" /> {fixedCardTitle('paperSourceNode')}</div>
       <div className="paper-source-node__status" role="status">{stateLabel}</div>
       {snapshot ? (
         <figure className="paper-source-node__preview">

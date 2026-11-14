@@ -11,6 +11,7 @@ import * as execution from '../src/lib/api';
 import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+import { registerCardPreloads } from '../src/store/projectFlowsLoader';
 
 // These tests are the person's own tab, whose zoom and pan are the project's
 // saved view (a tab without the person link saves edits only, gap 19).
@@ -76,6 +77,19 @@ describe('saved project coordinator', () => {
     expect(useUIStore.getState().canvasViewport).toEqual({ x: 20, y: 30, zoom: 0.8 });
     expect(execution.executeGraph).not.toHaveBeenCalled();
     expect(projects.openProject).not.toHaveBeenCalled();
+  });
+  it('asks for the node-card chunks as a restore reaches a canvas and as a project open starts, before either fetch', async () => {
+    const preload = vi.fn(async () => undefined);
+    registerCardPreloads([preload]);
+    try {
+      await useProjectStore.getState().initialize();
+      expect(preload).toHaveBeenCalledTimes(1);
+      expect(preload.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(projects.getProject).mock.invocationCallOrder[0]);
+
+      await useProjectStore.getState().open('beta');
+      expect(preload).toHaveBeenCalledTimes(2);
+      expect(preload.mock.invocationCallOrder[1]).toBeLessThan(vi.mocked(projects.openProject).mock.invocationCallOrder[0]);
+    } finally { registerCardPreloads([]); }
   });
   it('picks up an agent arrange that waited for a canvas, which the connect-time graphSync can\'t deliver', async () => {
     useArrangeStore.setState({ pending: [] });

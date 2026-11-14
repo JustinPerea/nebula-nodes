@@ -1,30 +1,11 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
-import { CATEGORY_COLORS, shotPortId } from '../../constants/ports';
-import { sceneCardView } from '../../lib/cinemaScene';
+import { CATEGORY_COLORS } from '../../constants/ports';
+import { handleIds } from '../../lib/cardHandleIds';
 import { drawFailedLogLine, nodeCardBoundaryLine, nodeDataProblem, studioBoundaryLogLine, type DataProblem } from '../../lib/studioBoundary';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import '../../styles/node-card-boundary.css';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-/** The handle ids a node has, read from its definition and whatever ports
- * its data still lists, so the wires into a card that can't draw stay drawn. */
-function handleIds(data: Record<string, unknown>): { inputs: string[]; outputs: string[] } {
-  const definitionId = typeof data.definitionId === 'string' ? data.definitionId : '';
-  const definition = NODE_DEFINITIONS[definitionId];
-  const ids = (ports: unknown) => (Array.isArray(ports) ? ports : [])
-    .flatMap((port) => (isRecord(port) && typeof port.id === 'string' ? [port.id] : []));
-  const inputs = [...ids(definition?.inputPorts), ...ids(data.dynamicInputPorts)];
-  const outputs = [...ids(definition?.outputPorts), ...ids(data.dynamicOutputPorts)];
-  if (definitionId === 'cinema-scene') {
-    const params = isRecord(data.params) ? data.params : {};
-    outputs.push(...sceneCardView(params.scene).shots.map((shot) => shotPortId(shot.id)));
-  }
-  return { inputs: [...new Set(inputs)], outputs: [...new Set(outputs)] };
-}
 
 /** The data check, which never throws: a check that can't read the data
  * calls it damaged (it can't say the data is fine), and can't tell missing
@@ -35,7 +16,7 @@ function dataProblem(data: unknown): DataProblem | null {
 
 /** The card's own icon, drawn quietly: an icon that throws leaves the header
  * with its label, never the canvas blank. */
-class QuietIcon extends Component<{ children: ReactNode }, { failed: boolean }> {
+export class QuietIcon extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError(): { failed: boolean } {

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../../src/lib/deferredChunks';
 import type { Node, NodeProps } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../src/types';
 import { BatchNode } from '../../src/components/nodes/BatchNode';
@@ -61,6 +62,9 @@ beforeEach(() => {
   useUIStore.setState({ skin: 'slava-restraint', selectedNodeId: null });
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('Batch authoring card', () => {
   it('shows the seven-color count/list, legacy Text output and an explicit editing path without requests', () => {

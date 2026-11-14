@@ -1,6 +1,6 @@
 import { deferredModule, lazyWithPreload } from './lazyWithPreload';
 import { placeholderRunDialogModule } from './placeholderRunDialogModule';
-import { projectFlowsModule } from '../store/projectFlowsLoader';
+import { projectFlowsModule, registerCardPreloads } from '../store/projectFlowsLoader';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
@@ -163,6 +163,15 @@ export const DeferredPinComposer = lazyWithPreload(
   (module) => module.PinComposer,
 );
 
+// Lays out an agent edit's new nodes once they have rendered (components/canvas/ArrangeController.tsx).
+// It draws nothing and reads the arrange store (store/arrangeStore.ts, in the
+// entry) when it mounts, so a request that arrives before the chunk is taken
+// up as soon as the chunk lands; mounted at once inside Canvas.
+export const DeferredArrangeController = lazyWithPreload(
+  () => import('../components/canvas/ArrangeController'),
+  (module) => module.ArrangeController,
+);
+
 export const DeferredAgentCursorLayer = lazyWithPreload(
   () => import('../components/canvas/AgentCursorLayer'),
   (module) => module.AgentCursorLayer,
@@ -192,6 +201,107 @@ export const DeferredRegionNotices = lazyWithPreload(
   () => import('../components/RegionNotices'),
   (module) => module.RegionNotices,
 );
+
+// Node cards for the kinds a canvas holds only sometimes (components/canvasTypes.ts
+// mounts each one through deferredAtOnce, inside its card boundary). A card
+// never draws empty while its chunk loads: the canvas keeps a node back until
+// its chunks have settled (lib/cardHold.ts, with the list in lib/cardChunks.ts),
+// and opening a project asks for these chunks at once (DEFERRED_CARD_PRELOADS
+// in store/projectFlows.ts); the idle preload below covers the rest. Model,
+// reroute and Video QC cards stay in the entry; Dynamic is deferred with the
+// rare kinds. A new deferred card goes in lib/cardChunks.ts too (tests/cardChunks.test.tsx
+// fails if it is missing).
+export const DeferredEditNode = lazyWithPreload(
+  () => import('../components/nodes/EditNode'),
+  (module) => module.EditNode,
+);
+
+export const DeferredRemotionNode = lazyWithPreload(
+  () => import('../components/nodes/RemotionNode'),
+  (module) => module.RemotionNode,
+);
+
+export const DeferredCinemaSceneNode = lazyWithPreload(
+  () => import('../components/nodes/CinemaSceneNode'),
+  (module) => module.CinemaSceneNode,
+);
+
+export const DeferredCharacterNode = lazyWithPreload(
+  () => import('../components/nodes/CharacterNode'),
+  (module) => module.CharacterNode,
+);
+
+export const DeferredCameraRigNode = lazyWithPreload(
+  () => import('../components/nodes/CameraRigNode'),
+  (module) => module.CameraRigNode,
+);
+
+export const DeferredReferenceSetNode = lazyWithPreload(
+  () => import('../components/nodes/ReferenceSetNode'),
+  (module) => module.ReferenceSetNode,
+);
+
+export const DeferredMoodboardNode = lazyWithPreload(
+  () => import('../components/nodes/MoodboardNode'),
+  (module) => module.MoodboardNode,
+);
+
+export const DeferredPaperSourceNode = lazyWithPreload(
+  () => import('../components/nodes/PaperSourceNode'),
+  (module) => module.PaperSourceNode,
+);
+
+export const DeferredDynamicNode = lazyWithPreload(
+  () => import('../components/nodes/DynamicNode'),
+  (module) => module.DynamicNode,
+);
+
+export const DeferredBatchNode = lazyWithPreload(
+  () => import('../components/nodes/BatchNode'),
+  (module) => module.BatchNode,
+);
+
+// What a finished node card shows in its result area for a Jev answer, a
+// world or spatial value, or structured output (components/nodes/DeferredOutputViews.tsx
+// mounts each at once; the card's own classes and size come from the
+// startup-side classification, so the slot keeps its place). They draw only
+// for a node that has a result; the canvas holds such a node back until the
+// chunk it needs has settled (lib/cardChunks.ts asks by lib/resultViews.ts,
+// the predicates the cards use); preloaded with the cards above.
+export const DeferredJevResultView = lazyWithPreload(
+  () => import('../components/nodes/JevResult'),
+  (module) => module.JevResultView,
+);
+
+export const DeferredRepresentationViewer = lazyWithPreload(
+  () => import('../components/nodes/RepresentationViewer'),
+  (module) => module.RepresentationViewer,
+);
+
+export const DeferredStructuredOutputs = lazyWithPreload(
+  () => import('../components/nodes/StructuredValuePreview'),
+  (module) => module.StructuredOutputs,
+);
+
+/** The node-card chunks above, for the idle preload and for tests that render a card synchronously. */
+export const DEFERRED_CARD_PRELOADS: readonly (() => Promise<unknown>)[] = [
+  DeferredEditNode.preload,
+  DeferredRemotionNode.preload,
+  DeferredCinemaSceneNode.preload,
+  DeferredCharacterNode.preload,
+  DeferredCameraRigNode.preload,
+  DeferredReferenceSetNode.preload,
+  DeferredMoodboardNode.preload,
+  DeferredPaperSourceNode.preload,
+  DeferredBatchNode.preload,
+  DeferredDynamicNode.preload,
+  DeferredJevResultView.preload,
+  DeferredRepresentationViewer.preload,
+  DeferredStructuredOutputs.preload,
+];
+
+// The project flows start these the moment a project opens (store/projectFlowsLoader.ts).
+registerCardPreloads(DEFERRED_CARD_PRELOADS);
 
 // Graph save / open (lib/graphFile.ts): used only inside those two actions,
 // so GraphFileActions.tsx awaits it at the moment of use.
@@ -241,6 +351,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredPinComposer.preload,
+  DeferredArrangeController.preload,
   DeferredAgentCursorLayer.preload,
   DeferredAgentScreenLayer.preload,
   DeferredAgentNodeMarkLayer.preload,
@@ -250,10 +361,25 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   placeholderRunDialogModule.preload,
   DeferredSettingsTopNotice.preload,
   projectFlowsModule.preload,
+  ...DEFERRED_CARD_PRELOADS,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
+  // Node cards for the kinds a canvas holds only sometimes (components/canvasTypes.ts).
+  'components/nodes/EditNode.tsx',
+  'components/nodes/RemotionNode.tsx',
+  'components/nodes/CinemaSceneNode.tsx',
+  'components/nodes/CharacterNode.tsx',
+  'components/nodes/CameraRigNode.tsx',
+  'components/nodes/ReferenceSetNode.tsx',
+  'components/nodes/MoodboardNode.tsx',
+  'components/nodes/PaperSourceNode.tsx',
+  'components/nodes/BatchNode.tsx',
+  'components/nodes/DynamicNode.tsx',
+  'components/nodes/JevResult.tsx',
+  'components/nodes/RepresentationViewer.tsx',
+  'components/nodes/StructuredValuePreview.tsx',
   'lib/settingsWrites.ts',
   // Every key's URL, notes and token instructions: Settings' rows and search read them.
   'lib/providerCatalog.ts',
@@ -345,6 +471,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/canvas/PinLayer.tsx',
   'components/canvas/PinComposer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
+  'components/canvas/ArrangeController.tsx',
   // The cursors' shared view and field, and the screen layer (Phase 3).
   'components/agent-cursor/AgentCursorField.tsx',
   'components/agent-cursor/AgentScreenLayer.tsx',

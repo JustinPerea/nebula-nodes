@@ -5,6 +5,7 @@ import { SceneUnsavedMark } from './SceneUnsavedMark';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS, shotPortId } from '../../constants/ports';
+import { fixedCardTitle } from '../../lib/cardTitles';
 import { missingKeyTitle } from '../../lib/nodeKeys';
 import type { NodeData } from '../../types';
 import { sceneCardView } from '../../lib/cinemaScene';
@@ -65,7 +66,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title" {...nodeWaitHeaderProps(id, nodeWait)}>
-        <span className="cinema-scene-node__name">⛭ Cinema Scene</span>
+        <span className="cinema-scene-node__name">{fixedCardTitle('cinemaSceneNode')}</span>
         {keyStatus === 'missing' && (
           <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
             title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], (params ?? {}) as Record<string, unknown>)}>&#x26A0;</span>

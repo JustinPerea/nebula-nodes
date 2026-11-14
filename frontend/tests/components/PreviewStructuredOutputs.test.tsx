@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../../src/lib/deferredChunks';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { Node, NodeProps } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../src/types';
@@ -78,6 +79,9 @@ function renderPreview(value: PortValue, patch: Partial<NodeData> = {}) {
   useGraphStore.setState({ nodes: [node], edges: [] });
   return render(<ModelNode {...({ id: node.id, data: node.data, selected: false } as NodeProps)} />);
 }
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('Preview card with a Moodboard bundle', () => {
   it('shows the board as a generator sees it: name, brief palette and accents, images, brief and status', () => {

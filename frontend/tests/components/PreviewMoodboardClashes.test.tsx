@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../../src/lib/deferredChunks';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import type { Node, NodeProps } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../src/types';
@@ -122,6 +123,9 @@ function statusItems(root: HTMLElement): string[] {
 function titles(list: HTMLElement): (string | null)[] {
   return within(list).getAllByRole('listitem').map((item) => item.getAttribute('title'));
 }
+
+// The result views a card draws load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('Preview of a Moodboard bundle after brief precedence (#90)', () => {
   it('says notes are off when the board keeps them (sendNotes off, the default), notes or none', () => {

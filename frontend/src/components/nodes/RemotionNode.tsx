@@ -4,7 +4,11 @@ import type { VideoGraphManifest } from '../../types/video';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
+import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+import { CATEGORY_COLORS } from '../../constants/ports';
+import { fixedCardTitle } from '../../lib/cardTitles';
 import { pendingAttr } from '../../lib/pendingNodes';
+import '../../styles/remotion-node.css';
 
 interface RemotionNodeData {
   params?: {
@@ -27,15 +31,20 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
     0,
   );
 
+  // The selected border takes the node's category colour, as the model card's does.
+  const definition = NODE_DEFINITIONS[typeof data.definitionId === 'string' ? data.definitionId : 'remotion-node'];
+  const categoryColor = (definition && CATEGORY_COLORS[definition.category]) ?? '#424242';
+
   const summary =
     layerCount === 0
       ? 'no layers yet'
       : `${layerCount} layer${layerCount === 1 ? '' : 's'} · ${totalFrames}f`;
 
   return (
-    <div className={`remotion-node ${selected ? 'remotion-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
+    <div className={`remotion-node ${selected ? 'remotion-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
+      style={{ ['--node-category-color' as string]: categoryColor }}>
       <Handle type="target" position={Position.Left} id="sources" />
-      <div className="remotion-node__title">▶ Remotion Composition</div>
+      <div className="remotion-node__title">{fixedCardTitle('remotionNode')}</div>
       <div className="remotion-node__summary">{summary}</div>
       <PlaceholderLine pending={data.pending} />
       {selected && (

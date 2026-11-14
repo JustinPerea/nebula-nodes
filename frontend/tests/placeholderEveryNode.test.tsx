@@ -10,7 +10,8 @@
  * card type without the line fails here.
  */
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFERRED_CARD_PRELOADS } from '../src/lib/deferredChunks';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ReactFlow, ReactFlowProvider, type Node } from '@xyflow/react';
@@ -91,6 +92,9 @@ beforeEach(() => {
   useUIStore.setState({ skin: 'slava-restraint', selectedNodeId: null, canvasZoomedOut: false });
 });
 afterEach(cleanup);
+
+// The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
+beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
 describe('the placeholder line on every card', () => {
   for (const [type] of CARDS) {
