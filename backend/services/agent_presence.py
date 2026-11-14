@@ -43,7 +43,8 @@ from typing import Any, Callable, Collection, Iterator, Mapping
 
 from services import node_route, universal_ports
 from services.cursor_actions import (
-    ACTIONS, BOARD_PARTS, IMAGE_PARTS, PART_LABELS, SESSION_RE as _SESSION_RE, SURFACES, echoed as _echoed,
+    ACTIONS, CHARACTER_DROPPED_PARTS, PART_LABELS, SESSION_RE as _SESSION_RE, SURFACE_TABLE, SURFACES_TEXT, SurfaceInfo,
+    echoed as _echoed,
     refusal as action_refusal,
 )
 from services.file_param_preview import file_param_keys
@@ -281,12 +282,15 @@ def _finite(value: Any, label: str) -> float:
 
 
 def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target", *,
-                 boards: Collection[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+                 boards: Collection[Mapping[str, Any]] | None = None,
+                 characters: Collection[Mapping[str, Any]] | None = None,
+                 styles: Collection[Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """Validate a cursor target: ``{"nodeId", "handle"?}``, flow ``{"x", "y"}``,
     or a surface item ``{"surface": "moodboard", "board", "image"?, "part"?}``
-    (``parse_surface_target``; ``boards`` is the boards it may name)."""
+    (``parse_surface_target``; ``boards``, ``characters`` and ``styles`` are
+    what it may name)."""
     if isinstance(raw, dict) and "surface" in raw:
-        return parse_surface_target(raw, boards, label)[0]
+        return parse_surface_target(raw, boards, label, characters=characters, styles=styles)[0]
     if not isinstance(raw, dict):
         raise PresenceError(f"{label} must be an object with nodeId or x/y")
     if "nodeId" in raw:
@@ -307,7 +311,8 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
     raise PresenceError(f"{label} must include nodeId or x and y")
 
 
-# A surface item's ids (a board's, an image's): what the DOM attribute allows.
+# A surface item's ids (a board's, an image's, a character's, a style's): what
+# the DOM attribute allows.
 _ITEM_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
 _BOARDS_LISTED = 6
 
@@ -316,56 +321,72 @@ def _quoted(text: Any) -> str:
     return f"\u201c{_echoed(text)}\u201d"
 
 
-def _board_list(boards: Collection[Mapping[str, Any]]) -> str:
-    names = [_quoted(str(board.get("name") or board.get("id"))) for board in boards]
+def _shown_name(name: Any) -> str:
+    """An item's name as a cursor stores it: whitespace folded, cut to 80
+    characters without splitting a joined emoji or a combining mark
+    (services/text_cut.safe_cut), whichever path writes it (a point or a rename)."""
+    text = " ".join(str(name).split())
+    # A name that is one long character (a letter under more than 80 marks)
+    # has no safe cut: it is cut plainly rather than stored as no name.
+    return text[:safe_cut(text, 80) or 80]
+
+
+def _item_list(info: SurfaceInfo, items: Collection[Mapping[str, Any]]) -> str:
+    names = [_quoted(str(item.get("name") or item.get("id"))) for item in items]
     if not names:
-        return "There are no moodboards yet."
+        return f"There are no {info.plural} yet."
     more = f" and {len(names) - _BOARDS_LISTED} more" if len(names) > _BOARDS_LISTED else ""
-    return f"The boards here: {', '.join(names[:_BOARDS_LISTED])}{more}."
+    return f"The {info.group} here: {', '.join(names[:_BOARDS_LISTED])}{more}."
 
 
-def _find_board(ref: str, boards: Collection[Mapping[str, Any]], label: str) -> Mapping[str, Any]:
-    """A board by id, else by exact name (whitespace folded), which must be
-    one board's."""
-    by_id = [board for board in boards if board.get("id") == ref]
+def _find_item(info: SurfaceInfo, ref: str, items: Collection[Mapping[str, Any]],
+               label: str) -> Mapping[str, Any]:
+    """An item (a board, a character, a style) by id, else by exact name
+    (whitespace folded), which must be one item's."""
+    by_id = [item for item in items if item.get("id") == ref]
     if by_id:
         return by_id[0]
     folded = " ".join(ref.split())
-    named = [board for board in boards if " ".join(str(board.get("name") or "").split()) == folded]
+    named = [item for item in items if " ".join(str(item.get("name") or "").split()) == folded]
     if len(named) == 1:
         return named[0]
     if len(named) > 1:
-        ids = ", ".join(str(board.get("id")) for board in named[:_BOARDS_LISTED])
-        raise PresenceError(f"{_quoted(ref)} names {len(named)} moodboards. Use an id: {ids}.")
-    raise PresenceError(f"No moodboard {_quoted(ref)} here. {_board_list(boards)}")
+        ids = ", ".join(str(item.get("id")) for item in named[:_BOARDS_LISTED])
+        raise PresenceError(f"{_quoted(ref)} names {len(named)} {info.plural}. Use an id: {ids}.")
+    raise PresenceError(f"No {info.noun} {_quoted(ref)} here. {_item_list(info, items)}")
 
 
 _IMAGE_REF_CHARS = 64
 
 
+def _sub_text(ref: Any, label: str, key: str, what: str) -> str:
+    """A sub-item reference as text, or a refusal. Ids are at most 64
+    characters and a number is far shorter: anything longer is refused before
+    it is parsed (``int()`` raises past 4,300 digits, a 500) and before it is
+    echoed. An int is checked by size, not by ``str()``, which raises for the
+    same reason."""
+    if isinstance(ref, bool) or not isinstance(ref, (str, int)):
+        raise PresenceError(f"{label}.{key} must be {what}")
+    if isinstance(ref, int):
+        if abs(ref) >= 10 ** _IMAGE_REF_CHARS:
+            raise PresenceError(f"{label}.{key} must be {what}")
+        return str(ref)
+    text = ref.strip()
+    if len(text) > _IMAGE_REF_CHARS:
+        raise PresenceError(f"{label}.{key} must be {what}")
+    return text
+
+
 def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, int]:
     """An image of ``board`` by id, else by its number (``12`` or ``#12``,
     1-based, as the Studio numbers them): its id and its number."""
-    if isinstance(ref, bool) or not isinstance(ref, (str, int)):
-        raise PresenceError(f"{label}.image must be an image's number or id")
-    # Ids are at most 64 characters and a number is far shorter: anything longer
-    # is refused before it is parsed (``int()`` raises past 4,300 digits, a 500)
-    # and before it is echoed. An int is checked by size, not by ``str()``, which
-    # raises for the same reason.
-    if isinstance(ref, int):
-        if abs(ref) >= 10 ** _IMAGE_REF_CHARS:
-            raise PresenceError(f"{label}.image must be an image's number or id")
-        text = str(ref)
-    else:
-        text = ref.strip()
-        if len(text) > _IMAGE_REF_CHARS:
-            raise PresenceError(f"{label}.image must be an image's number or id")
+    text = _sub_text(ref, label, "image", "an image's number or id")
     images = [image for image in board.get("images") or [] if isinstance(image, Mapping)]
     for index, image in enumerate(images):
         if str(image.get("id")) == text:
             return text, index + 1
     digits = text[1:] if text.startswith("#") else text
-    # ASCII digits only: "²" and "①" pass str.isdigit() but int() refuses them.
+    # ASCII digits only: "\u00b2" and "\u2460" pass str.isdigit() but int() refuses them.
     if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(images):
         number = int(digits)
         return str(images[number - 1].get("id")), number
@@ -375,73 +396,132 @@ def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, in
     raise PresenceError(f"Board {where} has no image {_quoted(text)}. Use its number (1-{len(images)}) or its id.")
 
 
+def _find_view(ref: Any, character: Mapping[str, Any], label: str) -> tuple[str, int]:
+    """A reference view of ``character`` by its number (``2`` or ``#2``,
+    1-based; views have no ids): its number as the sub-item id, and as a number."""
+    text = _sub_text(ref, label, "view", "a view's number")
+    views = [view for view in character.get("referenceViews") or []]
+    digits = text[1:] if text.startswith("#") else text
+    if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(views):
+        return str(int(digits)), int(digits)
+    where = _quoted(str(character.get("name") or character.get("id")))
+    if not views:
+        raise PresenceError(f"Character {where} has no reference views, so there is no view {_quoted(text)}.")
+    raise PresenceError(f"Character {where} has no view {_quoted(text)}. Use its number (1-{len(views)}).")
+
+
 def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
-                         label: str = "target") -> tuple[dict[str, Any], dict[str, Any]]:
-    """A surface target (the Moodboard panel and Studio), as the canonical
-    anchor and the names to show for it: ``({"surface", "itemId", "part"?},
-    {"board", "image"?, "part"?})``.
+                         label: str = "target", *,
+                         characters: Collection[Mapping[str, Any]] | None = None,
+                         styles: Collection[Mapping[str, Any]] | None = None,
+                         ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A surface target (the Moodboard panel and Studio, the Character Studio
+    and the Assets dock's lists), as the canonical anchor and the names to
+    show for it: ``({"surface", "itemId", "part"?}, {<name key>, <sub key>?,
+    "part"?})``.
 
     Asked as ``{"surface": "moodboard", "board": <id or exact name>,
-    "image"?: <id, N or #N>, "part"?: <part>}`` (or the anchor's own
-    ``itemId``), checked against ``boards`` (each ``{"id", "name",
-    "images": [{"id"}]}``) and turned into ids, so the anchor an event
-    carries is the same whatever the agent called the item. Parts: name,
-    direction, avoid, colors or colors-out on a board; note or weight on an image. A
-    drag's ``from`` is never a surface."""
-    if label != "target":
-        raise PresenceError(f"{label} can't be a moodboard: a drag starts at a node or a spot (nodeId, or x and y)")
+    "image"?: <id, N or #N>, "part"?: <part>}``, ``{"surface": "character",
+    "character": <id or exact name>, "view"?: <N or #N>, "part"?}`` or
+    ``{"surface": "style", "style": <id or exact name>, "part"?}`` (or the
+    anchor's own ``itemId``), checked against ``boards`` (each ``{"id",
+    "name", "images": [{"id"}]}``), ``characters`` (each ``{"id", "name",
+    "referenceViews": [...]}``) and ``styles`` (each ``{"id", "name"}``) and
+    turned into ids, so the anchor an event carries is the same whatever the
+    agent called the item. Parts: ``SURFACE_TABLE``. A drag's ``from`` is
+    never a surface."""
     surface = raw.get("surface")
-    if surface not in SURFACES:
-        raise PresenceError(f"{_quoted(surface)} isn\u2019t a surface Nebula knows. Use {' or '.join(SURFACES)}.")
+    info = SURFACE_TABLE.get(surface) if isinstance(surface, str) else None
+    if label != "target":
+        noun = info.noun if info else "moodboard"
+        raise PresenceError(f"{label} can't be a {noun}: a drag starts at a node or a spot (nodeId, or x and y)")
+    if info is None:
+        raise PresenceError(f"{_quoted(surface)} isn\u2019t a surface Nebula knows. Use {SURFACES_TEXT}.")
     if any(key in raw for key in ("nodeId", "x", "y", "handle")):
-        raise PresenceError(f"{label} is a moodboard or a node or a spot, not more than one")
+        raise PresenceError(f"{label} is a {info.noun} or a node or a spot, not more than one")
+    # A moodboard has always ignored a stray `view`; the newer surfaces refuse a sub-item key that isn't theirs.
+    other_subs = [key for key in ("image", "view") if surface != "moodboard" and key != info.sub_key and key in raw]
+    if other_subs:
+        raise PresenceError(f"{label}.{other_subs[0]} isn\u2019t for a {info.noun}."
+                            + (f" Use {info.sub_key}." if info.sub_key else f" A {info.noun} has no {other_subs[0]}s."))
     if "itemId" in raw:
         item = raw.get("itemId")
         if not isinstance(item, str) or item.count("/") > 1:
             raise PresenceError(f"{label}.itemId is invalid")
-        board_ref, slash, image_ref = item.partition("/")
-        if not _ITEM_ID_RE.fullmatch(board_ref) or (slash and not _ITEM_ID_RE.fullmatch(image_ref)):
+        item_ref, slash, sub_ref = item.partition("/")
+        if not _ITEM_ID_RE.fullmatch(item_ref) or (slash and not _ITEM_ID_RE.fullmatch(sub_ref)):
             raise PresenceError(f"{label}.itemId is invalid")
-        image_given: Any = image_ref if slash else None
+        if slash and info.sub_key is None:
+            raise PresenceError(f"{label}.itemId is invalid")
+        sub_given: Any = sub_ref if slash else None
     else:
-        board_ref = raw.get("board")
-        image_given = raw.get("image")
-    if not isinstance(board_ref, str) or not board_ref.strip():
-        raise PresenceError("A moodboard target needs `board`: a board's id or its exact name.")
-    known = list(boards or [])
-    board = _find_board(board_ref.strip(), known, label)
-    board_id = str(board.get("id"))
-    if not _ITEM_ID_RE.fullmatch(board_id):
-        raise PresenceError(f"{label}.board is invalid")
-    names: dict[str, Any] = {"board": " ".join(str(board.get("name") or board_id).split())[:80]}
-    item_id = board_id
-    if image_given is not None:
-        image_id, number = _find_image(image_given, board, label)
-        if not _ITEM_ID_RE.fullmatch(image_id):
-            raise PresenceError(f"{label}.image is invalid")
-        item_id = f"{board_id}/{image_id}"
-        names["image"] = number
-    target: dict[str, Any] = {"surface": "moodboard", "itemId": item_id}
+        item_ref = raw.get(info.name_key)
+        sub_given = raw.get(info.sub_key) if info.sub_key else None
+    if not isinstance(item_ref, str) or not item_ref.strip():
+        raise PresenceError(f"A {info.noun} target needs `{info.name_key}`: {info.item_of}'s id or its exact name.")
+    pool = {"moodboard": boards, "character": characters, "style": styles}[surface]
+    found = _find_item(info, item_ref.strip(), list(pool or []), label)
+    item_id = str(found.get("id"))
+    if not _ITEM_ID_RE.fullmatch(item_id):
+        raise PresenceError(f"{label}.{info.name_key} is invalid")
+    names: dict[str, Any] = {info.name_key: _shown_name(found.get("name") or item_id)}
+    anchor_id = item_id
+    if sub_given is not None:
+        if surface == "character":
+            sub_id, number = _find_view(sub_given, found, label)
+        else:
+            sub_id, number = _find_image(sub_given, found, label)
+        if not _ITEM_ID_RE.fullmatch(sub_id):
+            raise PresenceError(f"{label}.{info.sub_key} is invalid")
+        anchor_id = f"{item_id}/{sub_id}"
+        names[info.sub_key] = number
+    target: dict[str, Any] = {"surface": surface, "itemId": anchor_id}
     part = raw.get("part")
     if part is not None:
-        allowed = IMAGE_PARTS if image_given is not None else BOARD_PARTS
+        allowed = info.sub_parts if sub_given is not None else info.parts
+        if surface == "character" and sub_given is None and part in CHARACTER_DROPPED_PARTS:
+            return target, names  # not pointable: the cursor is at the character itself
         if not isinstance(part, str) or part not in allowed:
-            of = "an image" if image_given is not None else "a board"
+            of = info.sub_of if sub_given is not None else info.item_of
+            if not allowed:  # a character's view (GM - Design's words; any action can send it)
+                raise PresenceError(f"Nebula couldn\u2019t point at {info.sub_key} {names[info.sub_key]} because "
+                                    f"{of} has no parts. Leave out the part.")
             raise PresenceError(f"{_quoted(part)} isn\u2019t a part of {of}. Use "
                                 f"{', '.join(allowed[:-1])} or {allowed[-1]}.")
         target["part"] = part
-        names["part"] = PART_LABELS[part]
+        labels = info.labels
+        if sub_given is not None and surface == "moodboard":
+            labels = PART_LABELS
+        names["part"] = labels[part] if labels else part
     return target, names
 
 
 def surface_ids(target: Mapping[str, Any]) -> tuple[str, str | None] | None:
-    """(board id, image id or None) of a surface anchor, or None for any
-    other target."""
+    """(item id, sub-item id or None) of a surface anchor, or None for any
+    other target. The item is a board, a character or a style: ask
+    ``target["surface"]`` which."""
     item = target.get("surface") and target.get("itemId")
     if not isinstance(item, str):
         return None
-    board, _, image = item.partition("/")
-    return board, image or None
+    head, _, sub = item.partition("/")
+    return head, sub or None
+
+
+def changing_refusal(target: Mapping[str, Any], names: Mapping[str, Any]) -> str:
+    """The refusal for a point whose item was written during every look at it
+    (main._settled_surface_names): nothing was stored, and the agent can point again."""
+    info = SURFACE_TABLE[str(target.get("surface"))]
+    item = names.get(info.name_key) or (surface_ids(target) or ("",))[0]
+    # GM - Design's wording (2026-11-14): what happened and why, then what to do.
+    return (f"Nebula couldn\u2019t point at the {info.noun} {_quoted(item)} because it kept changing while "
+            "Nebula checked it. Point at it again.")
+
+
+def _ids_on(target: Mapping[str, Any] | None, surface: str) -> tuple[str, str | None] | None:
+    """``surface_ids`` of ``target`` when it is on ``surface``, else None."""
+    if target is None or target.get("surface") != surface:
+        return None
+    return surface_ids(target)
 
 
 def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -453,7 +533,7 @@ def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "verb": verb,
         "nodeId": node_id if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) else None,
-        "label": " ".join(label.split())[:80] if isinstance(label, str) and label.strip() else None,
+        "label": _shown_name(label) if isinstance(label, str) and label.strip() else None,
     }
 
 
@@ -481,6 +561,18 @@ def clean_log(raw: Any, *, whole: bool = False) -> str:
         raise PresenceError("log must be text")
     text = " ".join(raw.split())
     return text if whole else text[:safe_cut(text, MAX_LOG_CHARS)]
+@dataclass(eq=False)
+class ItemWatch:
+    """A point in flight at a surface item (main.point_agent_cursor): what it
+    is about to point at, and how many writes to it the store heard of since
+    (``AgentPresence.watch``). The point stores no cursor until a look at the
+    item has passed with none."""
+    surface: str
+    item_id: str
+    sub_id: str | None
+    touched: int = 0
+
+
 @dataclass
 class _SessionSlot:
     """One live session's cursor, as the person's tabs draw it."""
@@ -593,6 +685,10 @@ class AgentPresence:
         # agent id -> raw session ('' for none) -> its live slot, oldest first.
         # The one source of every session's number: tabs show it as given.
         self._slots: OrderedDict[str, OrderedDict[str, _SessionSlot]] = OrderedDict()
+        # Points in flight at a surface item (watch): each is told of a forget
+        # or a rename of its item, which would otherwise miss a cursor that is
+        # not stored yet.
+        self._watches: list[ItemWatch] = []
         # The last arrival handed out (ms): each new one is later, so no two
         # sessions share one and a clock stepped back never puts a new
         # arrival ahead of the old ones (#211 review 9, LOW-2, NIT-3).
@@ -1054,20 +1150,27 @@ class AgentPresence:
                             slot.anchor = dict(fallback)
 
     def rename_board(self, board_id: str, name: Any) -> int:
-        """A board's name changed (the person renamed it, an edit batch or an
-        undo did): every cursor on the board or one of its images keeps the
-        new name in its stored names, which agents read in ``look``,
-        ``context`` and ``agents``. Returns how many were changed."""
-        shown = " ".join(str(name or board_id).split())[:80]
+        """A board's name changed: ``rename_item("moodboard", ...)``."""
+        return self.rename_item("moodboard", board_id, name)
+
+    def rename_item(self, surface: str, item_id: str, name: Any) -> int:
+        """An item's name changed (the person renamed it, an edit batch or an
+        undo did): every cursor on the item (a board, a character or a style)
+        or one of its sub-items keeps the new name in its stored names, which
+        agents read in ``look``, ``context`` and ``agents``. Returns how many
+        were changed."""
+        shown = _shown_name(name or item_id)
+        key = SURFACE_TABLE[surface].name_key
         changed = 0
+        self._touch(surface, item_id)
 
         def renamed(target: Mapping[str, Any] | None, names: Any) -> bool:
-            ids = surface_ids(target) if target is not None else None
-            if ids is None or ids[0] != board_id or not isinstance(names, dict) or "board" not in names:
+            ids = _ids_on(target, surface)
+            if ids is None or ids[0] != item_id or not isinstance(names, dict) or key not in names:
                 return False
-            if names["board"] == shown:
+            if names[key] == shown:
                 return False
-            names["board"] = shown
+            names[key] = shown
             return True
 
         for value in self._agents.values():
@@ -1079,50 +1182,86 @@ class AgentPresence:
         return changed
 
     def forget_board(self, board_id: str, gone: list[dict[str, Any]] | None = None) -> int:
-        """Cursors on a deleted board, or on one of its images, leave, as a
-        cursor on a node with no place to fall back to does (forget_node):
-        the agent's cursor and every session's, their numbers free. Returns
-        how many left. ``gone`` collects each one as the open tabs name it
-        (``{"agentId", "key"}``, key None for an agent's plain cursor), so
-        the caller can tell them: a tab holds its cursors until told."""
+        """A board was deleted: ``forget_item("moodboard", ...)``."""
+        return self.forget_item("moodboard", board_id, gone)
+
+    def forget_item(self, surface: str, item_id: str, gone: list[dict[str, Any]] | None = None) -> int:
+        """Cursors on a deleted item (a board, a character or a style), or on
+        one of its sub-items, leave, as a cursor on a node with no place to
+        fall back to does (forget_node): the agent's cursor and every
+        session's, their numbers free. Returns how many left. ``gone``
+        collects each one as the open tabs name it (``{"agentId", "key"}``,
+        key None for an agent's plain cursor), so the caller can tell them: a
+        tab holds its cursors until told."""
+        self._touch(surface, item_id)
         left = 0
         for key, value in list(self._agents.items()):
-            ids = surface_ids(value["target"])
-            if ids is not None and ids[0] == board_id:
+            ids = _ids_on(value["target"], surface)
+            if ids is not None and ids[0] == item_id:
                 del self._agents[key]
                 left += 1
                 if gone is not None:
                     gone.append({"agentId": key, "key": None})
         for agent_id, slots in self._slots.items():
             for raw, slot in list(slots.items()):
-                ids = surface_ids(slot.target) if slot.target is not None else None
-                if ids is not None and ids[0] == board_id:
+                ids = _ids_on(slot.target, surface)
+                if ids is not None and ids[0] == item_id:
                     del slots[raw]
                     if gone is not None:
                         gone.append({"agentId": agent_id, "key": slot.key})
         return left
 
+    def watch(self, target: Mapping[str, Any]) -> ItemWatch:
+        """Start watching the surface item ``target`` names, for a point that
+        has read it and not stored its cursor yet. Until ``unwatch``, a
+        ``forget_item`` or ``rename_item`` of the item, or a ``forget_subs``
+        that takes the image or view the target is on, counts on the watch:
+        the writes that fix up stored cursors and can't see this one."""
+        item_id, sub_id = surface_ids(target) or ("", None)
+        watch = ItemWatch(str(target.get("surface")), item_id, sub_id)
+        self._watches.append(watch)
+        return watch
+
+    def unwatch(self, watch: ItemWatch) -> None:
+        self._watches = [kept for kept in self._watches if kept is not watch]
+
+    def _touch(self, surface: str, item_id: str, sub_ids: Collection[str] | None = None) -> None:
+        """Tell the points in flight at this item (or, with ``sub_ids``, at one
+        of those sub-items) that it was written."""
+        for watch in self._watches:
+            if watch.surface == surface and watch.item_id == item_id and (sub_ids is None or watch.sub_id in sub_ids):
+                watch.touched += 1
+
     def forget_image(self, board_id: str, image_ids: Collection[str], *,
                      holder: tuple[str, str | None] | None = None,
                      fell: list[dict[str, Any]] | None = None) -> int:
-        """Cursors on removed images fall back to their board (the image
-        part gone with the image), the removal made elsewhere (the person's,
-        or another agent's). ``holder`` is (agent id, session) of the agent
-        that made the removal: its own cursor is on the image it just
-        removed and holds that spot, never flying to the board because its
-        own target went (GM - Design, PR #233 r4). Returns how many fell back.
-        ``fell`` collects each as the open tabs name it (``{"agentId", "key",
+        """Images were removed from a board: ``forget_subs("moodboard", ...)``."""
+        return self.forget_subs("moodboard", board_id, image_ids, holder=holder, fell=fell)
+
+    def forget_subs(self, surface: str, item_id: str, sub_ids: Collection[str], *,
+                    holder: tuple[str, str | None] | None = None,
+                    fell: list[dict[str, Any]] | None = None) -> int:
+        """Cursors on removed sub-items (a board's images, a character's
+        reference views, by position) fall back to their item (the part gone
+        with the sub-item), the removal made elsewhere (the person's, or
+        another agent's). ``holder`` is (agent id, session) of the agent that
+        made the removal: its own cursor is on the sub-item it just removed
+        and holds that spot, never flying to the item because its own target
+        went (GM - Design, PR #233 r4). Returns how many fell back. ``fell``
+        collects each as the open tabs name it (``{"agentId", "key",
         "target", "anchorNames"?}``, key None for an agent's plain cursor),
         so the caller can move them there too."""
-        gone = {str(image_id) for image_id in image_ids}
-        board = {"surface": "moodboard", "itemId": board_id}
+        gone = {str(sub_id) for sub_id in sub_ids}
+        self._touch(surface, item_id, gone)
+        name_key = SURFACE_TABLE[surface].name_key
+        board = {"surface": surface, "itemId": item_id}
 
         def on_gone(target: Mapping[str, Any] | None) -> bool:
-            ids = surface_ids(target) if target is not None else None
-            return ids is not None and ids[0] == board_id and ids[1] in gone
+            ids = _ids_on(target, surface)
+            return ids is not None and ids[0] == item_id and ids[1] in gone
 
         def board_names(names: Any) -> dict[str, Any] | None:
-            return {"board": names["board"]} if isinstance(names, Mapping) and names.get("board") else None
+            return {name_key: names[name_key]} if isinstance(names, Mapping) and names.get(name_key) else None
 
         held_raw = holder[1] if holder is not None and holder[1] is not None and _valid_session(holder[1]) else ""
         moved = 0

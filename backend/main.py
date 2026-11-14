@@ -177,6 +177,7 @@ from services.agent_presence import (
     RequestHeadersContext,
     MAX_LOG_CHARS,
     agent_presence,
+    changing_refusal,
     clean_log,
     clean_say,
     current_request_headers,
@@ -197,7 +198,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, moodboard_clash, moodboard_clash_refusal,
+from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, SURFACES, surface_clash, surface_clash_refusal,
                                      refusal as cursor_action_refusal)
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
@@ -4077,6 +4078,19 @@ def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Bu
         app_daily_usd=connected["dailyUsd"] if connected else None, daily_spent=daily)
 
 
+def _reserve_spend(key: str, label: str, ask: str,
+                   check: Callable[[], agent_spend.Decision]) -> tuple[agent_spend.Decision, float | None]:
+    """SpendLedger.reserve, with a ledger another Nebula on this data folder
+    held past the wait, or one that can't be locked, opened or read
+    (LedgerBusy), refused as an unreadable pricing table is, with a 503:
+    nothing was checked or counted, so the run never starts on what this
+    backend last saw. GM - Design's words (review of PR #242)."""
+    try:
+        return agent_spend_ledger.reserve(key, label, check)
+    except agent_spend.LedgerBusy as exc:
+        raise HTTPException(status_code=503, detail=agent_spend.busy_refusal(exc.why, ask)) from exc
+
+
 class _WaitForOk(Exception):
     """A run that isn't the person's would pass the daily total, on a route
     that turns it into a proposal (``propose`` in _require_spend_approval):
@@ -4348,9 +4362,7 @@ def _require_spend_approval(
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError) as exc:
-        raise HTTPException(
-            status_code=503, detail=f"Can't check this run's cost (pricing table unavailable: {exc}). {ask}",
-        ) from exc
+        raise HTTPException(status_code=503, detail=agent_spend.pricing_refusal(exc, ask)) from exc
     key, label = _spend_session(headers)
     items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
     run_nodes = {n.id: n for n in nodes}
@@ -4363,7 +4375,7 @@ def _require_spend_approval(
     size_inputs = {node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
                                     for source, handle in sources])
                    for node_id, (port, sources) in measured.connected.items()}
-    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
+    decision, at = _reserve_spend(key, label, ask, lambda: agent_spend.decide(
         items, [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=definitions,
         budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
@@ -6964,9 +6976,25 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     # agent without a Nebula chat or app token shares, over the last 24 hours.
     # "app": an outside app's own line, which also counts inside "shared".
     budget = "chat" if not agent_spend.is_outside(key) else "app" if key.startswith(agent_spend.APP_PREFIX) else "shared"
+    here = agent_spend_ledger.spent(key)
     result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
-                              "spent": view(agent_spend_ledger.spent(key)),
+                              "spent": view(here),
                               "dailyTotal": _daily_total_view(caps)}
+    if here.until is not None:
+        # The ledger was found unreadable in the last 24 hours: a run is
+        # checked with every limit used up (agent_spend._counted), so the view
+        # says so, in the sentence the refusal and the waiting run end with
+        # (weekday form), and gives the hold's end beside it. ``known`` comes
+        # from the same read as ``until``, so a stand-in end is never shown
+        # as a time (review of PR #242 round 2, L2).
+        if not here.known:
+            # Not the hold: the ledger can't be read at all right now, so
+            # paid runs are refused until it can and no end time is known.
+            result["ledgerNote"] = agent_spend.LEDGER_CANT_READ
+            result["ledgerBlocked"] = True
+        else:
+            result["ledgerNote"] = agent_spend.ledger_unreadable(here.until)
+            result["ledgerHold"] = {"until": here.until}
     if budget != "chat":
         result["window"] = "24h"
         result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
@@ -6980,9 +7008,11 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
 
 def _daily_total_view(caps: Mapping[str, Any]) -> dict[str, Any]:
     """The daily total: its limit (None for no limit), what everything that
-    isn't the person spent in the last 24 hours, and what's left, exact."""
+    isn't the person spent in the last 24 hours, and what's left, exact.
+    Counted as a run is checked (agent_spend.daily_budget): used up while an
+    unreadable ledger holds the limits, never "$5 left" beside a run that waits."""
     limit = caps.get(agent_spend.DAILY_TOTAL_KEY)
-    used = round(agent_spend_ledger.spent_daily().total, 6)
+    used = round(agent_spend.daily_budget(agent_spend_ledger.spent_daily(), caps).spent.total, 6)
     return {"limitUsd": limit, "usedUsd": used,
             "leftUsd": None if limit is None else max(0.0, round(limit - used, 6)), "window": "24h"}
 
@@ -6999,8 +7029,20 @@ def _outside_view() -> dict[str, Any]:
     for agent_id, name in personal_agents.known_names(_STATE_DIR):
         spent = agent_spend_ledger.spent(f"{agent_spend.PERSONAL_AGENT_PREFIX}{agent_id}")
         personal.append({"id": agent_id, "name": name, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
-    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
-            "personal": personal, "daily": {"spentUsd": round(agent_spend_ledger.spent_daily().total, 4)}}
+    view: dict[str, Any] = {
+        "outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
+        "personal": personal, "daily": {"spentUsd": round(agent_spend_ledger.spent_daily().total, 4)}}
+    if outside.until is not None:
+        # An unreadable ledger holds every limit until then: Settings shows
+        # each limit's usage as used up and says why, in its live form.
+        # ``known`` is from the same read as ``until`` (L2).
+        if not outside.known:
+            # The ledger can't be read at all: no amount is known and no end
+            # time either, so Settings says that and shows no figure.
+            view["ledgerBlocked"] = True
+        else:
+            view["ledgerHold"] = {"until": outside.until}
+    return view
 
 
 @app.get("/api/agent/spend/apps")
@@ -8484,7 +8526,7 @@ _POINTED_AT_SPOT = {"look": "Looked around"}
 def _pointed(action: str, target: Mapping[str, Any], names: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     if isinstance(target, Mapping) and "surface" in target:
         verb = _POINTED_AT_NODE.get(action)
-        label = (names or {}).get("board")
+        label = next((names[key] for key in ("board", "character", "style") if (names or {}).get(key)), None)
         return {"verb": verb, "nodeId": None, "label": label} if verb and label else None
     node_id = target.get("nodeId") if isinstance(target, Mapping) else None
     if isinstance(node_id, str):
@@ -8511,6 +8553,89 @@ def _boards_to_point_at() -> list[dict[str, Any]]:
     return [*boards, *store.list(scope="global")]
 
 
+def _characters_to_point_at() -> list[dict[str, Any]]:
+    """The characters a cursor may point at: those of the open project, then
+    Global, as the Characters tab lists them."""
+    store = _char_store()
+    project_id = _open_project_id()
+    characters = store.list("project", project_id) if project_id else []
+    return [*characters, *store.list("global")]
+
+
+def _styles_to_point_at() -> list[dict[str, Any]]:
+    """The styles a cursor may point at: those of the open project, then
+    Global, as the Styles tab lists them."""
+    project_id = _open_project_id()
+    styles = preset_store.list("project", project_id) if project_id else []
+    return [*styles, *preset_store.list("global")]
+
+
+def _look_again(raw: Mapping[str, Any], target: Mapping[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    """A second read of the item a surface target names, by its ids: (None,
+    its names as they are now) while the item (and its image or view) is
+    there, else (the refusal the first lookup gives for it, {}). Runs in a
+    thread, as the first lookup does. By the ids, so an item renamed meanwhile
+    still passes; the refusal's words are those of the agent's own reference
+    when that no longer resolves."""
+    surface = target["surface"]
+    boards = _boards_to_point_at() if surface == "moodboard" else None
+    characters = _characters_to_point_at() if surface == "character" else None
+    styles = _styles_to_point_at() if surface == "style" else None
+    try:
+        _, names = parse_surface_target({"surface": surface, "itemId": target["itemId"]}, boards,
+                                        characters=characters, styles=styles)
+        return None, names
+    except PresenceError as by_id:
+        refusal = str(by_id)
+    try:
+        parse_surface_target(raw, boards, characters=characters, styles=styles)
+    except PresenceError as by_ref:
+        refusal = str(by_ref)
+    return refusal, {}
+
+
+# How many times a point looks at its item while writes to it keep landing.
+# Any save of the item counts (its route calls rename_item), so more than one
+# look means it is being edited as the agent points. An item written during
+# every one of them is not pointed at: the point is refused, to be made again.
+_SURFACE_LOOKS = 4
+
+
+async def _settled_surface_names(raw: Mapping[str, Any], target: Mapping[str, Any],
+                                 names: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The names for a surface target once its item is known to be there at
+    the moment the caller stores the cursor (with no await in between), else
+    a PresenceError with the first lookup's refusal.
+
+    The first lookup read the item off the loop, so a delete, a cut of its
+    views or a rename may have landed since. Those writes fix up the cursors
+    already stored (forget_item, forget_subs, rename_item) and can't see one
+    that isn't. So nothing is stored yet: the item is watched and read again.
+    A write that finished before this read shows in it. One that lands after
+    it either reaches the watch before this returns, and the item is read
+    again (up to _SURFACE_LOOKS reads, then the point is refused), or runs
+    after the cursor is stored and fixes it up like any other.
+    A refused point has therefore written nothing: the agent's cursor and the
+    session's are where they were, and the tabs were sent nothing."""
+    watch = agent_presence.watch(target)
+    fresh: dict[str, Any] = {}
+    try:
+        for _ in range(_SURFACE_LOOKS):
+            seen = watch.touched
+            refusal, fresh = await asyncio.to_thread(_look_again, raw, target)
+            if refusal:
+                raise PresenceError(refusal)
+            if watch.touched == seen:
+                break
+        else:
+            # Never store on a look a write landed in: that write's fix-up has run and missed this cursor.
+            raise PresenceError(changing_refusal(target, fresh))
+    finally:
+        agent_presence.unwatch(watch)
+    # The item's name (and its image's or view's) as the last look read it; a part is the first lookup's.
+    return {**(names or {}), **fresh}
+
+
 @app.post("/api/canvas/cursor")
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, a canvas spot, or
@@ -8529,6 +8654,9 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     already is, without moving it; an agent with no cursor yet gets one at
     the middle of the person's view (when the browser reported one), else
     at (0, 0). `placed` says which: cursor, view or origin.
+
+    A Character can only be looked at: `type` and `click` at a Character (or
+    one of its views or controls) are stored, shown and answered as `look`.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -8549,17 +8677,29 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             target, placed = agent_presence.here(identity)
             names = agent_presence.here_names(identity) if placed == "cursor" else None
         elif isinstance(body.get("target"), dict) and "surface" in body["target"]:
-            # A moodboard item: the boards it may name are read off the loop.
-            clash = moodboard_clash(**{"from": body.get("from")})  # a moodboard item is a target of its own
+            # A surface item: the items it may name are read off the loop.
+            surface = body["target"].get("surface")
+            clash = surface_clash(**{"from": body.get("from")})  # a surface item is a target of its own
             if clash:
-                raise PresenceError(moodboard_clash_refusal(clash))
-            target, names = parse_surface_target(body["target"], await asyncio.to_thread(_boards_to_point_at))
+                raise PresenceError(surface_clash_refusal(clash, surface if surface in SURFACES else "moodboard"))
+            target, names = parse_surface_target(
+                body["target"],
+                await asyncio.to_thread(_boards_to_point_at) if surface == "moodboard" else None,
+                characters=await asyncio.to_thread(_characters_to_point_at) if surface == "character" else None,
+                styles=await asyncio.to_thread(_styles_to_point_at) if surface == "style" else None,
+            )
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
         action = body.get("action") or "move"
         if not isinstance(action, str) or action not in CURSOR_ACTIONS:
             raise PresenceError(cursor_action_refusal(action))
+        if "surface" in target and target["surface"] == "character" and action in ("type", "click"):
+            # An agent can't write a Character, so nothing is typed or pressed
+            # there: it is shown, stored and told to every reader as a look.
+            action = "look"
+        if placed == "target" and "surface" in target:
+            names = await _settled_surface_names(body["target"], target, names)
         event = _point(
             identity,
             target=target,
@@ -8575,6 +8715,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # The person's tabs draw this session's own cursor; the response and the
     # agent form are what they were (a line said in place keeps `target`).
+    # No await between the agent's cursor (_point) and the session's.
     person = _person_form(event, identity, headers, in_place=placed != "target")
     await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
@@ -9444,7 +9585,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
         snapshot["pins"] = []
     # Proposals waiting for the person (one line each; never their accept keys).
     await _sweep_proposals()
-    snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    snapshot["proposals"] = [_proposal_brief(p) for p in canvas_proposals.open_list()]
     snapshot["providerHolds"] = _provider_holds_for_agents()
     # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
     # this agent has read these scenes now (services/scene_keys.py).
@@ -9588,7 +9729,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     except (PinError, ProjectStoreError):
         pins = []
     await _sweep_proposals()
-    briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    briefs = [_proposal_brief(p) for p in canvas_proposals.open_list()]
     # Asset proposals too (a cover, Send notes, Commons curation), with the
     # Update each posted; a commons one only where the caller sees it.
     await _sweep_asset_proposals()
@@ -10740,8 +10881,31 @@ def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
     # Priced with the keys set now (GM, PR #203 r15 item 1): who bills a
     # node, and whether Idol is "free" or "may cost", follow them.
-    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
+    view = canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
                                  api_keys=load_settings().get("apiKeys", {}) or {})
+    if isinstance(view.get("wait"), dict) and "ledgerHold" in view["wait"]:
+        view["wait"] = agent_spend.ledger_hold_now(view["wait"], _ledger_hold_until())
+    return view
+
+
+def _ledger_hold_until() -> float | None:
+    """When the spend ledger's hold ends, while one is on (a display read
+    that never waits). None with no hold, and on a ledger that can't be
+    read at all, which has no end to name: a stored proposal then keeps
+    the end it stored."""
+    return agent_spend_ledger.hold_until()
+
+
+def _proposal_brief(proposal: Proposal) -> dict[str, Any]:
+    """canvas_proposals.brief, with a run that waited during an unreadable
+    ledger's hold carrying ``ledgerHold`` as _proposal_view serves it, so
+    `nebula context`, `nebula look` and start_here can add its line while
+    it holds."""
+    brief = canvas_proposals.brief(proposal)
+    wait = proposal.wait if isinstance(proposal.wait, dict) else None
+    if wait and "ledgerHold" in wait:
+        brief["ledgerHold"] = agent_spend.ledger_hold_now(wait, _ledger_hold_until())["ledgerHold"]
+    return brief
 
 
 # What each open proposal's card last showed for its nodes' names: a rename
@@ -25899,6 +26063,10 @@ async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) ->
         for item in removed.get(kind) or ():
             if kind == "style":
                 _journal_style("purged", item, style_id=item["id"])
+            # Cursors on it leave, as on a delete (the kinds are the cursor's
+            # surface names): `look`, `context` and `agents` must not go on
+            # naming an item whose project is gone for good.
+            await _forget_item_cursors(kind, item["id"])
             await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
 
 
@@ -27558,15 +27726,16 @@ async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, as
         message["projectId"] = (asset or {}).get("projectId") or None
     if edit is not None:
         message.update({"version": (asset or {}).get("version"), "edit": _graph_edit_origin(), **edit})
-    if kind == "moodboard" and not deleted and asset and asset.get("id"):
-        # Every write that saves a board passes here, so a rename by any path
-        # (the PUT, an edits batch, an undo, an accepted proposal) reaches the
-        # names agents read off the cursors on it. The tabs are not told: a
-        # tab's default line is worked out once per event and fades in seconds.
+    if kind in SURFACES and not deleted and asset and asset.get("id"):
+        # Every write that saves a board, a character or a Style passes here,
+        # so a rename by any path (the PUT, an edits batch, an undo, an
+        # accepted proposal) reaches the names agents read off the cursors on
+        # it. The tabs are not told: a tab's default line is worked out once
+        # per event and fades in seconds.
         try:
-            agent_presence.rename_board(str(asset["id"]), asset.get("name"))
+            agent_presence.rename_item(kind, str(asset["id"]), asset.get("name"))
         except Exception:  # noqa: BLE001 - decoration must not break a saved write
-            logging.getLogger("nebula.presence").exception("renaming a board on its cursors failed")
+            logging.getLogger("nebula.presence").exception("renaming an item on its cursors failed")
     try:
         if holds_private_note(message.get("undo")):
             await manager.broadcast_browser(message)
@@ -27640,6 +27809,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
+    views_before: int | None = None
     if "referenceViews" in updates:
         try:
             stored = store.get(char_id)
@@ -27649,6 +27819,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         # any check (a Studio sends the views it read, held links too).
         if stored is None:
             return _asset_not_found("character", char_id)
+        views_before = len(stored.get("referenceViews") or [])
         # A version behind (versions only grow): the update below is the 409
         # the Studio merges from and writes nothing, so the views aren't
         # checked against a Character they can't land on.
@@ -27673,6 +27844,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     except ValueError:
         raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
+    await _forget_removed_views(character, views_before)
     return character
 
 
@@ -27686,6 +27858,8 @@ async def delete_character(char_id: str) -> dict:
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
+    # Cursors on the deleted Character leave: there is no place left to point at.
+    await _forget_item_cursors("character", char_id)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
 
@@ -27853,6 +28027,18 @@ async def _tell_tabs(event: dict[str, Any], cursors: list[dict[str, Any]]) -> No
 _CURSOR_TELL_MAX = 64  # bounded like the live set: 8 sessions an agent over the agents seen
 
 
+async def _forget_item_cursors(surface: str, item_id: str) -> None:
+    """A board, character or Style was deleted: cursors on it leave (the
+    caller's too), and the tabs are told. Never fails the route."""
+    gone: list[dict[str, Any]] = []
+    try:
+        agent_presence.forget_item(surface, item_id, gone)
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("forgetting a deleted item's cursors failed")
+        return
+    await _tell_tabs({"type": "agentPresenceLeave"}, gone)
+
+
 async def _forget_removed_images(after: dict, changes: dict) -> None:
     """A board write took images off the board: cursors on them fall back to
     the board, except the cursor of the agent that made the write, which
@@ -27872,6 +28058,23 @@ async def _forget_removed_images(after: dict, changes: dict) -> None:
         return
     # The tabs move the same cursors to the board, rather than hold them on a
     # tile that is gone until the 120 s prune.
+    await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
+
+
+async def _forget_removed_views(character: Mapping[str, Any], before: int | None) -> None:
+    """A Character's reference views were cut down: cursors on a view past the
+    new count fall back to the Character, and the tabs move them there too.
+    Views are positions, so nothing else is kept. Never fails the route."""
+    after = len(character.get("referenceViews") or [])
+    if before is None or after >= before:
+        return
+    fell: list[dict[str, Any]] = []
+    try:
+        agent_presence.forget_subs("character", str(character.get("id")),
+                                   [str(number) for number in range(after + 1, before + 1)], fell=fell)
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        logging.getLogger("nebula.presence").exception("forgetting removed views failed")
+        return
     await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
 
 
@@ -28142,7 +28345,7 @@ def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any],
            f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
            "(MCP: moodboard_analyze with estimate_only).")
     key, label = _spend_session(current_request_headers())
-    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
+    decision, at = _reserve_spend(key, label, ask, lambda: agent_spend.decide(
         items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
         budgets=_spend_budgets(key, settings), how_to_ask=ask))
     if decision.refusal:
@@ -28742,7 +28945,7 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     from services.style_actions import changed_fields
 
-    await _style_written("updated", preset, fields=changed_fields(before, preset))
+    await _style_written("updated", preset, fields=changed_fields(before, preset), before=before)
     return preset
 
 
@@ -28755,6 +28958,8 @@ async def delete_preset(preset_id: str) -> dict:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Style {preset_id} not found", "style", "styles")
+    # As a board's delete: the cursors on it leave, then the line is said.
+    await _forget_item_cursors("style", preset_id)
     await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 
@@ -28828,28 +29033,38 @@ def _style_params_keeping_internal(before: Mapping[str, Any], params: Any) -> An
 
 
 def _journal_style(change: str, style: Mapping[str, Any] | None, *, style_id: str = "",
-                   fields: list[str] | None = None) -> str:
-    """One ``style.*`` journal event in the caller's name; returns its line."""
+                   fields: list[str] | None = None, before: Mapping[str, Any] | None = None) -> str:
+    """One ``style.*`` journal event in the caller's name; returns its line.
+    ``before`` is the Style as it was before an update, for a rename's line."""
     from services import style_actions
 
-    line = style_actions.describe(change, style, fields=fields, style_id=style_id)
+    line = style_actions.describe(change, style, fields=fields, style_id=style_id, before=before)
     _journal(f"style.{change}", data=style_actions.journal_data(style, fields=fields, style_id=style_id),
              summary=line)
     return line
 
 
 async def _style_written(change: str, style: Mapping[str, Any], *, fields: list[str] | None = None,
+                         before: Mapping[str, Any] | None = None,
                          deleted: bool = False, broadcast: bool = True) -> None:
     """After a Style write: the journal, ``storedAssetChanged`` (kind
     "style") so the Assets panel and Create's Styles list again, and, for an
-    agent, the same line in the Agent log."""
+    agent, the same line in the Agent log. An agent's create or update also
+    moves its cursor to the Style (with the part when one field changed), as
+    a board write does (_board_point), when the Style is the open project's or
+    Global's; a delete or a restore moves none (a delete's cursors leave)."""
     from services import style_actions
 
     style_id = str(style.get("id") or "")
-    line = _journal_style(change, style, style_id=style_id, fields=fields)
+    line = _journal_style(change, style, style_id=style_id, fields=fields, before=before)
     if broadcast:
         await _broadcast_stored_asset("style", None if deleted else style, style_id, deleted=deleted)
-    await _say_agent_action(style_actions.sentence(line))
+    point: dict[str, Any] = {}
+    scope = style.get("projectId")
+    if change in ("created", "updated") and style_id and not (scope and scope != _open_project_id()):
+        target, names = style_actions.style_anchor(style, fields if change == "updated" else None, style_id=style_id)
+        point = {"target": target, "action": "type", "names": names}
+    await _say_agent_action(style_actions.sentence(line), **point)
 
 
 # ---------- Preset seeding (first-run starter styles) ----------

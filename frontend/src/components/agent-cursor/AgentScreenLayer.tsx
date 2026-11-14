@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useAgentPresenceStore, type AgentCursor } from '../../store/agentPresenceStore';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
+import { useStudioCharacterStore } from '../../store/studioCharacterStore';
+import { itemIsGone } from '../../lib/agentSurfaceGone';
 import { AnchorResolver, domEnv, type ResolverEnv } from '../../lib/agentAnchorResolve';
 import { useStoreApi } from '@xyflow/react';
 import { canvasSpace, screenSpace, watchFlowStore, type FlowStoreLike, type ScreenSpace } from '../../lib/agentCursorSpace';
@@ -33,15 +35,13 @@ import '../../styles/agentCursorAnywhere.css';
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
-/** The image's item no longer exists: a removed image the cursor holds the
- *  spot of (GM - Design 4). Only while its board is open in the Studio and
- *  the image is not among its images: a panel that closed isn't a removal. */
-function removedImage(anchor: AgentCursorAnchor): boolean {
-  if (!('surface' in anchor)) return false;
-  const [board, image] = anchor.itemId.split('/');
-  if (!image) return false;
-  const studio = useBoardCanvasStore.getState().studioBoard;
-  return studio !== null && studio.boardId === board && !studio.imageIds.includes(image);
+/** The item no longer exists: a removed image or reference view the cursor
+ *  holds the spot of (lib/agentSurfaceGone.ts). */
+function removedItem(anchor: AgentCursorAnchor): boolean {
+  return itemIsGone(anchor, {
+    board: useBoardCanvasStore.getState().studioBoard,
+    character: useStudioCharacterStore.getState().studioCharacter,
+  });
 }
 
 /** What the screen space reads of the layer: its box and whether the canvas is on screen. */
@@ -127,23 +127,31 @@ export function AgentScreenLayer({ canvasMounted, env }: {
     const resolverEnv = env ?? domEnv();
     const paneBox = new FrameBox();
     const onCanvas = flowApi ? canvasSpace(flowApi as unknown as Parameters<typeof canvasSpace>[0]) : null;
+    // Where a canvas node is on screen, while it is inside the canvas's box.
+    const onPane = (flow: { x: number; y: number } | null | undefined) => {
+      const dom = onCanvas?.pane();
+      if (!onCanvas || !dom || !flow) return null;
+      const box = paneBox.of(dom);
+      const at = onCanvas.toClient(flow, box);
+      const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
+      return inside ? at : null;
+    };
+    const canvasPoint = (anchor: AgentCursorAnchor, waitRest = false) =>
+      onPane(waitRest ? onCanvas?.waitRest?.(anchor) : onCanvas?.resolve(anchor));
     return screenSpace({
-      // Where a canvas node is on screen, while it is inside the canvas's box.
-      canvasPoint: (anchor, waitRest = false) => {
-        const dom = onCanvas?.pane();
-        const flow = waitRest ? onCanvas?.waitRest?.(anchor) : onCanvas?.resolve(anchor);
-        if (!onCanvas || !dom || !flow) return null;
-        const box = paneBox.of(dom);
-        const at = onCanvas.toClient(flow, box);
-        const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
-        return inside ? at : null;
+      canvasPoint,
+      // A Character or Moodboard node on the canvas is the launcher of its item: the cursor rests in the
+      // card's title row, by its icon or first glyph (beside the node its tip touched the output port).
+      launcherRest: (launcher) => {
+        const nodeId = launcher.closest<HTMLElement>('.react-flow__node')?.dataset.id;
+        return nodeId ? onPane(onCanvas?.launcherRest?.({ nodeId })) : null;
       },
       resolver: new AnchorResolver(resolverEnv),
       measure: resolverEnv.measure,
       watch: resolverEnv.watch,
       pane: () => context.pane,
       canvasMounted: () => context.canvasMounted,
-      gone: removedImage,
+      gone: removedItem,
     });
   });
   // The canvas mounting or going changes what a canvas anchor resolves to:

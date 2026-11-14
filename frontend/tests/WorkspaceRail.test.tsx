@@ -34,7 +34,7 @@ describe('WorkspaceRail', () => {
 
   it('marks Open assets as the launcher an agent cursor parks beside', () => {
     render(<WorkspaceRail />);
-    expect(screen.getByRole('button', { name: 'Open assets' }).getAttribute('data-agent-launcher')).toBe('moodboard');
+    expect(screen.getByRole('button', { name: 'Open assets' }).getAttribute('data-agent-launcher')).toBe('moodboard character style');
     expect(document.querySelectorAll('[data-agent-launcher]')).toHaveLength(1);
   });
 

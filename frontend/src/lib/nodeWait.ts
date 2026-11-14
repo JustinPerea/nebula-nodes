@@ -1,4 +1,5 @@
 import type { useCanvasProposalsStore } from '../store/canvasProposalsStore';
+import { proposalHoldLine, withHoldLine } from './ledgerHold';
 
 /** What a node's header shows while a run the daily total holds waits on it. */
 export interface NodeWait {
@@ -9,8 +10,12 @@ export interface NodeWait {
   count: number;
   color: string;
   /** The full reason, for the header's accessible description: each waiting
-   * proposal's line (the bar's), the newest first. */
+   * proposal's line (the bar's), the newest first, each with the spend
+   * record's hold sentence after it while that hold is on, as the bar shows it. */
   reason: string;
+  /** The soonest end (epoch seconds) of a hold sentence in `reason`: the
+   * reason is read again then (useNodeWait). Absent with none. */
+  holdEnd?: number;
 }
 
 type ProposalsState = ReturnType<typeof useCanvasProposalsStore.getState>;
@@ -20,14 +25,25 @@ type ProposalsState = ReturnType<typeof useCanvasProposalsStore.getState>;
  * proposals whose held run waits on it. The reason line itself stays off the
  * node: the bar and the Updates card show it.
  */
-export function waitFor(state: Pick<ProposalsState, 'proposals'>, nodeId: string): NodeWait | null {
+export function waitFor(state: Pick<ProposalsState, 'proposals'>, nodeId: string, now: number = Date.now()): NodeWait | null {
   const waiting = Object.values(state.proposals)
     .filter((entry) => !entry.closing && entry.view.wait?.nodeIds.includes(nodeId))
     .map((entry) => entry.view)
     .sort((a, b) => b.createdAt - a.createdAt);
   if (waiting.length === 0) return null;
-  const lines = [...new Set(waiting.map((view) => view.wait?.barLine ?? '').filter(Boolean))];
-  return { proposalId: waiting[0].id, count: waiting.length, color: waiting[0].agent.color, reason: lines.join(' ') };
+  const lines: string[] = [];
+  let holdEnd: number | undefined;
+  for (const view of waiting) {
+    const bar = view.wait?.barLine ?? '';
+    if (!bar) continue;
+    // The hold sentence the bar adds for sighted readers (review of PR #242 round 2, L6).
+    const held = proposalHoldLine(view.wait?.ledgerHold, now);
+    if (held) holdEnd = Math.min(holdEnd ?? Infinity, view.wait!.ledgerHold!.until);
+    const line = withHoldLine(bar, held);
+    if (!lines.includes(line)) lines.push(line);
+  }
+  return { proposalId: waiting[0].id, count: waiting.length, color: waiting[0].agent.color, reason: lines.join(' '),
+    ...(holdEnd !== undefined ? { holdEnd } : {}) };
 }
 
 /** One string per wait, so a node re-renders only when its own wait changes. */

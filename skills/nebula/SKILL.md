@@ -443,6 +443,14 @@ already sent. Without `NEBULA_AGENT_NAME` (or `--as`) it is refused instead,
 and so is a run when your 3 proposal slots are full, or Nebula's 12 are. `nebula spend` and
 `nebula context` show the total, what's used and what's left.
 Only the person changes it.
+A run refused with "Nebula couldn’t check this run’s cost because another
+Nebula on this computer is updating the spending record. Try again in a
+moment." (or another reason before "Try again in a moment.") counted
+nothing: try it again in a moment. A refusal or wait that ends "Nebula
+couldn’t read its record of what agents have spent, so it counts every
+spending limit as used up until 3:40 PM on Sunday." means every paid run
+needs the person until that time: propose it, and tell the person.
+`nebula spend` and `nebula context` print the same sentence while it holds.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
 per megapixel of the larger of input and output, rounded up; `nebula info`
 says so on its PRICE line). Nebula measures the file the run will send, but
@@ -908,6 +916,11 @@ nebula moodboard delete <board>
   prints the command that moves it back. A board or Character in Recently
   deleted is refused: restore it first. MCP: `moodboard_move`,
   `character_move`.
+- `nebula character list` (the Global Characters plus the open project's; `--project`,
+  `--global`, `--json`) and `nebula character show <character>` (id or exact name) read
+  Characters: id, name, scope, subject type, reference views (URLs, in order),
+  frozen trait string, seed and version. Read-only. MCP: `character_list`,
+  `character_get`. Use a name or id with `nebula point --character Mara`.
 - An open Character Studio follows a Character you change with
   `PUT /api/characters/{id}` (there is no MCP tool for its fields): send
   only the fields you change, with `baseVersion` (the `version` you read)
@@ -1056,6 +1069,7 @@ nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
 nebula point --say "Reading your board"   # no target: said where your cursor is, it doesn't move
 nebula point --moodboard "Desert light" --image 12 --part note --action type   # a moodboard item (below)
+nebula point --character Mara --view 2 --action look   # a Character, or a Style with --style (below)
 nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
@@ -1100,11 +1114,22 @@ your session as listening.
 `--moodboard BOARD` (its id or exact name) points at a moodboard instead of a
 node or a spot, with `--image N` (a number, `#12` or an id) and `--part`
 (`name`, `direction`, `avoid`, `colors` or `colors-out` on a board; `note` or `weight` on
-an image). It takes no target and no `--from`. Nebula never opens a panel or
-scrolls for the person: if the Moodboard panel is closed or the item is out of
-view, your cursor parks at the button that opens it or at the edge of what
-they see. Your board writes (`nebula moodboard add`, `set`, `edit`, ...) move
-your cursor to what they touched on their own.
+an image). `--character NAME_OR_ID` points at a Character, with `--view N` (its
+reference view by number, `2` or `#2`; 1 is the cover) and `--part` (`name`,
+`subject-type`, `views`, `traits` or `seed`; a view takes none).
+`--style NAME_OR_ID` points at a Style, with `--part` (`name`, `category`,
+`prompt`, `settings`, `model`, `references` or `thumbnail`; no screen draws a
+Style's fields, so the part only changes the default line). Give one of the
+three; it takes no target and no `--from`. `nebula character list` and `nebula
+character show NAME_OR_ID` (read-only) give a Character's id, name, reference
+views, trait string and seed; `nebula style list` names Styles. Nebula never
+opens a panel or scrolls for the person: if the Moodboard panel or the Assets
+dock is closed or the item is out of view, your cursor parks at the button that
+opens it or at the edge of what they see. Your board writes (`nebula moodboard
+add`, `set`, `edit`, ...) and Style writes (`nebula style new`, `set`) move your
+cursor to what they touched on their own. A Character can only be looked at, so
+`type` and `click` at one are shown as `look`. MCP: `point_at(character=..., view=...,
+style=...)`, `character_list`, `character_get`.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

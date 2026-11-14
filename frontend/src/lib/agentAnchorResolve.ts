@@ -1,32 +1,40 @@
-import { agentAnchor } from './agentAnchors';
+import { surfaceAnchor } from './agentAnchors';
 import { boardView } from './agentBoardView';
 import { parkReachPx } from './agentCursorPark';
 import type { AgentCursorAnchor } from './wsClient';
 
 /**
  * Where an agent cursor on a surface beside the canvas (the Moodboard panel
- * and Studio) goes, found in the DOM (Phase 3, "Anywhere"; plan section 3).
+ * and Studio, the Characters and Styles lists and the Character Studio) goes, found in the DOM (Phase 3, "Anywhere"; plan section 3).
  * Pure over an injected environment, so the whole chain is tested with fake
  * rects. In the cursor chunk (lib/deferredChunks.ts DEFERRED_MODULES).
  *
  * The chain, first step that works wins:
  *  1. **The exact anchor** `data-agent-anchor`: a part that isn't drawn falls
- *     back to its item (`b/i:note` to `b/i`, `b:colors` to `b`). Among
+ *     back to its item (`b/i:note` to `b/i`, `b:colors` to `b`). An item with
+ *     no part and no sub-item (a Character) first looks for a `data-agent-aim`
+ *     of its value: an element the cursor rests on, tip in its lower right
+ *     (the Character Studio's cover thumbnail). Among
  *     matches, one visible in its clip, then the largest visible area, then
  *     DOM order. Inside its clip the cursor aims at the item's top (its
  *     middle across, 24 px down or half its height); out of it, it parks at
  *     the clip's edge on the item's side (an edge park).
- *  2. **The board's launcher** `moodboard:<board>`: its row in the Assets
- *     dock, or its Moodboard node on the canvas, when at least half of it is
- *     visible.
- *  3. **The surface's launcher** `moodboard`: the dock's tab when the dock is
- *     open, else the rail's "Open assets".
+ *  2. **The item's launcher** `<surface>:<item>` (`moodboard:<board>`,
+ *     `character:<id>`, `style:<id>`): its row in the Assets dock, or its
+ *     node on the canvas, when at least half of it is visible.
+ *  3. **The surface's launcher** `<surface>`: the dock's tab when the dock
+ *     is open, else the rail's "Open assets" (one button, launcher for every
+ *     surface: a launcher is space-separated tokens, matched with `~=`).
  *  4. **The canvas launcher** `canvas` (a Studio's "Back to Canvas"), for a
  *     canvas target when no canvas is mounted.
  *  5. **Nothing:** the caller holds the cursor's last spot (GM r6).
  *
  * Steps 2 to 4 are launcher parks: the tip sits 6 px right of the launcher,
- * at its middle. Nothing here opens, scrolls or pans anything: it reads
+ * at its middle; when the launcher is one of a row of controls (a control sits
+ * on, or within 6 px of, the spot beside it on either side: the Assets dock's
+ * tabs, the composer's Styles button) it goes inside the launcher's own box,
+ * at its lower right, so every tab of a row parks the same way. The rail's
+ * parks stay beside. Nothing here opens, scrolls or pans anything: it reads
  * rects only (tests/agentCursorNoOpen.test.ts, slice 5, scans the chunk).
  */
 
@@ -77,6 +85,10 @@ export const EDGE_INSET_PX = 12;
 export const AIM_DOWN_PX = 24;
 /** A launcher counts as visible when this much of it is. */
 export const LAUNCHER_VISIBLE_SHARE = 0.5;
+/** A park inside its launcher, or a rest on an aim element, keeps the tip this far in from the box's right and bottom. */
+export const CORNER_INSET_PX = 6;
+/** The elements a person presses: what a launcher's beside spot must not land on. */
+const CONTROLS = 'button, [role="tab"], [role="button"], a[href], input, select, textarea, summary';
 
 const RAIL = '[data-rail-item]';
 
@@ -88,6 +100,14 @@ export function intersect(a: Box, b: Box): Box {
   const right = Math.min(a.left + a.width, b.left + b.width);
   const bottom = Math.min(a.top + a.height, b.top + b.height);
   return { left, top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
+/** Where a cursor rests on an aim element: its lower right, `CORNER_INSET_PX` in (its middle on a box too small for that). */
+export function cornerPoint(box: Box): Point {
+  return {
+    x: Math.max(box.left + box.width / 2, box.left + box.width - CORNER_INSET_PX),
+    y: Math.max(box.top + box.height / 2, box.top + box.height - CORNER_INSET_PX),
+  };
 }
 
 /** Where a cursor aims at an item: across its middle, `AIM_DOWN_PX` down or half its height. */
@@ -127,11 +147,12 @@ export function clampToClip(target: Point, clip: Box): { point: Point; angle: nu
 }
 
 /** The anchor values to try for a surface anchor, most exact first: a part
- *  that isn't drawn falls back to its item. */
+ *  that isn't drawn falls back to its item (a Style's part is never drawn,
+ *  so its DOM anchor has none). */
 export function anchorValues(anchor: Extract<AgentCursorAnchor, { surface: string }>): string[] {
-  const [board, image] = anchor.itemId.split('/');
-  const values = [agentAnchor(board, image, anchor.part)];
-  if (anchor.part) values.push(agentAnchor(board, image));
+  const [item, sub] = anchor.itemId.split('/');
+  const values = [surfaceAnchor(anchor.surface, item, sub, anchor.part)];
+  if (anchor.part) values.push(surfaceAnchor(anchor.surface, item, sub));
   return values.filter((value): value is string => value !== undefined);
 }
 
@@ -192,6 +213,14 @@ export class AnchorResolver {
 
   private exact(anchor: Extract<AgentCursorAnchor, { surface: string }>): Resolution | null {
     let parked: Resolution | null = null;
+    // The item itself (no part, no sub-item) may name an element to rest on.
+    const [item, sub] = anchor.itemId.split('/');
+    const itemValue = !anchor.part && !sub ? surfaceAnchor(anchor.surface, item) : undefined;
+    const aimed = itemValue ? this.best(this.seen(`[data-agent-aim="${itemValue}"]`).filter((seen) => area(seen.visible) > 0)) : null;
+    if (aimed) {
+      const corner = cornerPoint(aimed.box);
+      return { kind: 'anchor', point: inside(corner, aimed.visible) ? corner : cornerPoint(aimed.visible), element: aimed.element, clip: aimed.clip };
+    }
     for (const value of anchorValues(anchor)) {
       const pick = this.best(this.seen(`[data-agent-anchor="${value}"]`));
       if (!pick) continue;
@@ -208,8 +237,8 @@ export class AnchorResolver {
     if (parked) return parked;
     // Not in the DOM at all: an image card the Board view culled (panned out
     // of its pane) is still on the board, so it parks at the pane's edge.
-    const [board, image] = anchor.itemId.split('/');
-    const culled = image ? this.env.culled?.(board, image) : null;
+    const [board, image] = [item, sub];
+    const culled = anchor.surface === 'moodboard' && image ? this.env.culled?.(board, image) : null;
     if (!culled || area(culled.box) === 0) return null;
     const aim = aimPoint(culled.box);
     const { point, angle } = clampToClip(aim, culled.clip);
@@ -217,14 +246,40 @@ export class AnchorResolver {
   }
 
   private launcher(key: string, step: LauncherStep, share = LAUNCHER_VISIBLE_SHARE): Resolution | null {
-    const matches = this.seen(`[data-agent-launcher="${key}"]`)
+    // `~=`: one button can be the launcher for several surfaces (space-separated tokens).
+    const matches = this.seen(`[data-agent-launcher~="${key}"]`)
       .filter((seen) => area(seen.visible) >= area(seen.box) * share);
     // The Assets dock's own tab beats the rail's button: it is where the person looks once the dock is open.
     const pick = this.best(step === 'surface' && matches.some((seen) => !seen.element.closest(RAIL))
       ? matches.filter((seen) => !seen.element.closest(RAIL)) : matches);
     if (!pick) return null;
-    const point = { x: pick.box.left + pick.box.width + LAUNCHER_GAP_PX, y: pick.box.top + pick.box.height / 2 };
+    const beside = { x: pick.box.left + pick.box.width + LAUNCHER_GAP_PX, y: pick.box.top + pick.box.height / 2 };
+    // A surface's own button in a row of controls (a dock tab, the composer's Styles): the tip goes inside it.
+    // The spot on its other side counts too, so the last tab of a row parks as the others do.
+    const mirrored = { x: pick.box.left - LAUNCHER_GAP_PX, y: beside.y };
+    const point = step === 'surface' && !pick.element.closest(RAIL)
+      && (this.covers(beside, pick.element) || this.covers(mirrored, pick.element))
+      ? { x: pick.box.left + pick.box.width - CORNER_INSET_PX, y: pick.box.top + pick.box.height - CORNER_INSET_PX }
+      : beside;
     return { kind: 'launcher', step, point, element: pick.element, box: pick.box };
+  }
+
+  /** Whether `point` sits on, or within `LAUNCHER_GAP_PX` of, a control other
+   *  than `host` (or its own parts), among those in the host's parent: its neighbours. */
+  private covers(point: Point, host: Element): boolean {
+    const scope = host.parentElement;
+    if (!scope) return false;
+    for (const element of this.lookup(CONTROLS)) {
+      if (element === host || host.contains(element) || element.contains(host) || !scope.contains(element)) continue;
+      const box = this.env.measure(element);
+      if (!box || area(box) === 0) continue;
+      // On the control, or within the park's gap of it (the arrow's body hangs past its tip): too close to be beside.
+      const near = intersect(box, this.env.clip(element));
+      const reach = LAUNCHER_GAP_PX;
+      if (inside(point, { left: near.left - reach, top: near.top - reach, width: near.width + 2 * reach, height: near.height + 2 * reach })
+        && area(near) > 0) return true;
+    }
+    return false;
   }
 
   /**
@@ -232,7 +287,7 @@ export class AnchorResolver {
    * canvas anchor then is the canvas layer's, not this one's). `gone`: the
    * caller knows the anchor's item no longer exists (an image removed), so
    * an exact anchor that isn't there is `{kind: 'gone'}`, not a fall back to
-   * its board.
+   * its board or character.
    */
   resolve(anchor: AgentCursorAnchor, { canvasMounted = false, gone = false }: { canvasMounted?: boolean; gone?: boolean } = {}): Resolution {
     if (!('surface' in anchor)) {
@@ -241,10 +296,10 @@ export class AnchorResolver {
     const exact = this.exact(anchor);
     if (exact) return exact;
     if (gone) return { kind: 'gone' };
-    const [board] = anchor.itemId.split('/');
-    const launcherKey = agentAnchor(board) && `moodboard:${board}`;
+    const [item] = anchor.itemId.split('/');
+    const launcherKey = surfaceAnchor(anchor.surface, item);
     return (launcherKey ? this.launcher(launcherKey, 'board') : null)
-      ?? this.launcher('moodboard', 'surface')
+      ?? this.launcher(anchor.surface, 'surface')
       ?? { kind: 'none' };
   }
 }

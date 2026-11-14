@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from typing import NamedTuple
 
 from services.text_cut import ZWJ, safe_cut
 
@@ -23,18 +24,40 @@ _ECHO_CHARS = 40
 SESSION_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 
-def moodboard_clash(**given: object) -> list[str]:
-    """Which of a moodboard target's forbidden companions were given (a node,
-    a port, a spot, a drag's start): a moodboard item is a target of its own.
-    The one check for the route, MCP point_at and the CLI's `nebula point`;
-    an empty string or None counts as not given."""
+def surface_clash(**given: object) -> list[str]:
+    """Which of a surface target's forbidden companions were given (a node,
+    a port, a spot, a drag's start): a surface item (a moodboard, a character,
+    a style) is a target of its own. The one check for the route, MCP
+    point_at and the CLI's `nebula point`; an empty string or None counts as
+    not given."""
     return [name for name, value in given.items() if value is not None and value != ""]
 
 
+moodboard_clash = surface_clash  # the name the moodboard code has always used
+
+
+def surface_clash_refusal(names: list[str], surface: str = "moodboard") -> str:
+    """The refusal for ``surface_clash``'s result, in one wording everywhere."""
+    return (f"{surface} can't be combined with {', '.join(names)}. "
+            f"Point at a {surface}, or at a node or a spot, in one call.")
+
+
 def moodboard_clash_refusal(names: list[str]) -> str:
-    """The refusal for ``moodboard_clash``'s result, in one wording everywhere."""
-    return (f"moodboard can't be combined with {', '.join(names)}. "
-            "Point at a moodboard, or at a node or a spot, in one call.")
+    """``surface_clash_refusal`` for a moodboard."""
+    return surface_clash_refusal(names, "moodboard")
+
+
+def surface_exclusive(**given: object) -> list[str]:
+    """Which surface arguments were given (moodboard, character, style):
+    more than one is refused, since a cursor is at one thing. An empty string
+    or None counts as not given."""
+    return [name for name, value in given.items() if value is not None and value != ""]
+
+
+def surface_exclusive_refusal(names: list[str]) -> str:
+    """The refusal for ``surface_exclusive`` when it names more than one."""
+    return (f"{' and '.join(names)} can't be given together. "
+            "Point at a moodboard, a character or a style in one call.")
 
 
 def session_ok(raw: object) -> bool:
@@ -81,9 +104,13 @@ def refusal(value: object) -> str:
 
 
 # Surfaces a cursor can point at besides the canvas (Phase 3, "Anywhere"):
-# the Moodboard panel and Studio are one surface, `moodboard`. The anchor is
-# {"surface": "moodboard", "itemId": "<board>" | "<board>/<image>", "part"?}.
-SURFACES = ("moodboard",)
+# the Moodboard panel and Studio are one surface, `moodboard`; the Character
+# Studio and the Assets dock's Characters list are `character`; the Assets
+# dock's Styles list is `style`. The anchor is {"surface": <surface>, "itemId":
+# "<item>" | "<item>/<sub>", "part"?}: a board's sub is an image's id, a
+# character's a reference view's 1-based position, a style has none.
+SURFACES = ("moodboard", "character", "style")
+SURFACES_TEXT = ", ".join(SURFACES[:-1]) + " or " + SURFACES[-1]
 # `colors` is the "Colors that must appear" row, `colors-out` the "Colors to keep out" row.
 BOARD_PARTS = ("name", "direction", "avoid", "colors", "colors-out")
 IMAGE_PARTS = ("note", "weight")
@@ -91,3 +118,37 @@ IMAGE_PARTS = ("note", "weight")
 # the frontend's AGENT_SURFACE_PART_LABELS holds the same, pinned by a test).
 PART_LABELS = {"name": "Name", "direction": "Direction", "avoid": "Avoid", "colors": "Colors",
                "colors-out": "Colors to keep out", "note": "Note", "weight": "Weight"}
+# A character's controls, labelled as the Character Studio's definition panel
+# labels them (pinned by a test). `consistency` is accepted from an agent and
+# dropped: that control reads "unavailable", so it is not pointable.
+CHARACTER_PARTS = ("name", "subject-type", "views", "traits", "seed")
+CHARACTER_DROPPED_PARTS = ("consistency",)
+CHARACTER_LABELS = {"name": "Name", "subject-type": "Subject type", "views": "Reference views",
+                    "traits": "Frozen trait string", "seed": "Seed"}
+# No screen draws a style's fields; the part only chooses the default line.
+STYLE_PARTS = ("name", "category", "prompt", "settings", "model", "references", "thumbnail")
+
+
+class SurfaceInfo(NamedTuple):
+    """What one surface is, in one place: the key its names are stored under,
+    the key of its sub-item (None when it has none), the words for the thing
+    and its sub-item, its parts and (when it has them) their labels."""
+    name_key: str
+    sub_key: str | None
+    noun: str          # "moodboard"
+    plural: str        # "moodboards"
+    group: str         # "boards": the list a refusal names ("The boards here:")
+    item_of: str       # "a board": the item in "isn't a part of a board"
+    sub_of: str        # "an image": its sub-item there ("" when it has none)
+    parts: tuple[str, ...]
+    sub_parts: tuple[str, ...]
+    labels: dict[str, str] | None  # None: names keep the part id
+
+
+SURFACE_TABLE: dict[str, SurfaceInfo] = {
+    "moodboard": SurfaceInfo("board", "image", "moodboard", "moodboards", "boards", "a board", "an image",
+                             BOARD_PARTS, IMAGE_PARTS, PART_LABELS),
+    "character": SurfaceInfo("character", "view", "character", "characters", "characters", "a character", "a view",
+                             CHARACTER_PARTS, (), CHARACTER_LABELS),
+    "style": SurfaceInfo("style", None, "style", "styles", "styles", "a style", "", STYLE_PARTS, (), None),
+}

@@ -189,8 +189,8 @@ def test_style_changes_are_journaled_with_their_actor(styles):
         ("style.restored", "person"), ("style.deleted", "person"), ("style.purged", "person")]
     assert events[1]["data"] == {"styleId": style["id"], "styleName": "Neon noir", "scope": "global",
                                  "fields": ["prompt"]}
-    assert events[1]["summary"] == "changed the prompt of Style Neon noir"
-    assert events[2]["summary"] == "deleted Style Neon noir (in Recently deleted)"
+    assert events[1]["summary"] == "changed the prompt of the style “Neon noir”"
+    assert events[2]["summary"] == "moved the style “Neon noir” to “Recently deleted”"
 
 
 def test_an_update_with_an_old_base_version_is_refused_with_the_style_as_it_is(styles):

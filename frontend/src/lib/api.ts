@@ -294,6 +294,10 @@ export interface OutsideSpend {
   personal?: Array<{ id: string; name: string; spentUsd: number; kreaPlanRuns: number }>;
   /** Everything that isn't the person, chats included, over the last 24 hours: the daily total's use. */
   daily?: { spentUsd: number };
+  /** While the spend record was found unreadable: every limit counts as used up until `until` (epoch seconds). Absent otherwise. */
+  ledgerHold?: { until: number };
+  /** The spend record can't be read at all right now (not the hold: no end time): agents' paid runs are refused until it can. */
+  ledgerBlocked?: boolean;
 }
 
 /** The exact config for one agent app (backend services/agent_connect.py). It names the token's

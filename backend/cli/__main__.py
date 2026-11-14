@@ -6,7 +6,8 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, moodboard_clash, refusal as cursor_action_refusal
+from services.cursor_actions import (ACTIONS as CURSOR_ACTIONS, surface_clash, surface_exclusive,
+                                     refusal as cursor_action_refusal)
 
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
@@ -232,9 +233,22 @@ def build_parser() -> argparse.ArgumentParser:
                               "target string, because a node id may hold a colon. Not with a target or --from")
     point_p.add_argument("--image", default=None, metavar="N",
                          help="With --moodboard: one of its images, by number (12 or #12) or id")
+    point_p.add_argument("--character", default=None, metavar="NAME_OR_ID",
+                         help="Point at a Character instead of a node or a spot: its id or exact name "
+                              "(`nebula character list`). Nebula never opens a panel or scrolls for the person: "
+                              "your cursor parks at the button that opens the Assets dock, or at the edge of what "
+                              "they see. Not with a target or --from, or with --moodboard or --style")
+    point_p.add_argument("--view", default=None, metavar="N",
+                         help="With --character: one of its reference views, by number (2 or #2; 1 is the cover)")
+    point_p.add_argument("--style", default=None, metavar="NAME_OR_ID",
+                         help="Point at a Style instead of a node or a spot: its id or exact name "
+                              "(`nebula style list`). Not with a target or --from, or with --moodboard or "
+                              "--character")
     point_p.add_argument("--part", default=None, metavar="PART",
-                         help="With --moodboard: a control: name, direction, avoid, colors or colors-out (the keep-out colors) on a board; note "
-                              "or weight on an --image")
+                         help="With --moodboard, --character or --style: a control: name, direction, avoid, colors "
+                              "or colors-out (the keep-out colors) on a board; note or weight on an --image; name, "
+                              "subject-type, views, traits or seed on a character; name, category, prompt, "
+                              "settings, model, references or thumbnail on a style")
     point_p.add_argument("--say", default="",
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
@@ -777,19 +791,34 @@ def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentP
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "point" and (args.moodboard is not None or args.image is not None
-                                    or args.part is not None):
+    if args.command == "point" and any(value is not None for value in (
+            args.moodboard, args.image, args.part, args.character, args.view, args.style)):
         # One actionable line, with that command's usage (cli/parser.py).
         point = _subparser(parser, "point")
-        if args.moodboard is None:
+        surfaces = (("moodboard", args.moodboard), ("character", args.character), ("style", args.style))
+        for name, value in surfaces:
+            if value is not None and not value.strip():
+                point.error(f"--{name} needs an id or an exact name")
+        given = surface_exclusive(**{f"--{name}": value for name, value in surfaces})
+        if len(given) > 1:
+            point.error(f"{' and '.join(given)} can't go together: point at a moodboard, a character or a style "
+                        "in one call")
+        if args.moodboard is None and args.image is not None:
+            if given:
+                point.error("--image goes with --moodboard BOARD; a character's reference view is --view N")
             point.error("--image and --part go with --moodboard BOARD (its id or exact name)")
-        # The same check as the route and MCP (services/cursor_actions.moodboard_clash), in flag words.
-        clash = moodboard_clash(target=args.target, origin=args.origin or None)
+        if args.character is None and args.view is not None:
+            point.error("--view goes with --character NAME_OR_ID (its id or exact name)")
+        if not given:
+            point.error("--part goes with --moodboard BOARD, --character NAME_OR_ID or --style NAME_OR_ID")
+        flag = given[0]
+        # The same check as the route and MCP (services/cursor_actions.surface_clash), in flag words.
+        clash = surface_clash(target=args.target, origin=args.origin or None)
         if "target" in clash:
-            point.error("--moodboard is a target of its own: give it or a node, port or spot "
+            point.error(f"{flag} is a target of its own: give it or a node, port or spot "
                         f"({args.target!r}), not both")
         if "origin" in clash:
-            point.error("--from can't go with --moodboard: a drag starts at a node or a spot")
+            point.error(f"--from can't go with {flag}: a drag starts at a node or a spot")
     elif args.command == "point" and args.target is None:
         # One actionable line, with that command's usage (cli/parser.py).
         if args.origin:
@@ -856,7 +885,8 @@ def main() -> None:
         "look": lambda: canvas.run_look(client, as_json=args.json),
         "point": lambda: canvas.run_point(client, args.target, say=args.say, origin=args.origin,
                                           action=args.action, agent_name=args.agent_name,
-                                          moodboard=args.moodboard, image=args.image, part=args.part),
+                                          moodboard=args.moodboard, image=args.image, part=args.part,
+                                          character=args.character, view=args.view, style=args.style),
         "watch": lambda: canvas.run_watch(
             client, once=args.once, timeout=args.timeout, as_json=args.json, since=args.since,
             journal=args.journal, kinds=args.kinds, include_self=args.include_self,

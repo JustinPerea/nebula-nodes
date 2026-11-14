@@ -134,7 +134,8 @@ export function WorkspaceRail() {
           <div className="workspace-rail__divider" aria-hidden="true" />
           <RailItem
             label="Open assets"
-            launcher={agentLauncher('moodboard')}
+            // The dock this opens holds the Characters, Moodboards and Styles lists.
+            launcher={agentLauncher(['moodboard', 'character', 'style'])}
             icon={FolderHeart}
             active={leftDock === 'assets'}
             onClick={() => toggleDock('assets')}

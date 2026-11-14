@@ -1,12 +1,19 @@
-import { type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { springCssVars } from './springs';
 import { useCanvasProposalsStore } from '../store/canvasProposalsStore';
+import { useNowUntil } from '../hooks/useBefore';
 import { waitFor, waitKey, waitReasonId, type NodeWait } from './nodeWait';
 
-/** The node's wait, re-read only when its own changes (null when none). */
+/** The node's wait, re-read only when its own changes (null when none), and when a hold sentence
+ * in its reason ends (one timer, through useNowUntil), so the description drops it then. */
 export function useNodeWait(nodeId: string): NodeWait | null {
-  const key = useCanvasProposalsStore((state) => waitKey(waitFor(state, nodeId)));
-  return key ? (JSON.parse(key) as NodeWait) : null;
+  const [holdEnd, setHoldEnd] = useState<number | null>(null);
+  const now = useNowUntil(holdEnd);
+  const key = useCanvasProposalsStore((state) => waitKey(waitFor(state, nodeId, now)));
+  const wait = key ? (JSON.parse(key) as NodeWait) : null;
+  const next = wait?.holdEnd ?? null;
+  if (next !== holdEnd) setHoldEnd(next);
+  return wait;
 }
 
 /**
