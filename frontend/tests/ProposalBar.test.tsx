@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ProposalView } from '../src/lib/wsClient';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 import { reasonFor } from './helpers/notReadyReasons';
+import { keptLockTitle, resetKeptCanvasForTests, setCanvasKept } from '../src/lib/keptCanvas';
 
 const flow = vi.hoisted(() => ({ fitBounds: vi.fn(), getInternalNode: vi.fn() }));
 const graph = vi.hoisted(() => ({
@@ -77,6 +78,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  resetKeptCanvasForTests();
   vi.unstubAllGlobals();
   useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
 });
@@ -578,6 +580,66 @@ describe('ProposalBar', () => {
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
     expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
     expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('a kept canvas hides the Accept key row and Accept says the kept line; the row returns with the canvas (GM, #203 follow-up r240)', () => {
+    const KEY_LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1, notReady: [
+      { ref: '+idol', nodeId: null, name: 'Idol', missing: ROW, person: ROW },
+    ] };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const view = render(<ProposalBar />);
+    // Not kept: unchanged, the key row and the key line on Accept.
+    expect(screen.getByRole('list', { name: 'Can’t run here' })).toHaveTextContent(KEY_LINE);
+    expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAttribute('title', KEY_LINE);
+    expect(view.container.querySelector('.proposal-bar__not-ready')).not.toHaveAttribute('data-entering');
+
+    // Kept: no row (no node row in its place either), Accept holds with the kept line.
+    act(() => setCanvasKept(true));
+    const accept = screen.getByRole('button', { name: /^Accept/ });
+    expect(accept).toHaveAttribute('title', keptLockTitle('proposal'));
+    expect(accept).not.toHaveAttribute('title', KEY_LINE);
+    expect(accept).not.toHaveAccessibleDescription(KEY_LINE);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    // The row leaves as the bar's rows do (noticeLeave 'row'); with no animation running here it is gone at once.
+    expect(screen.queryByText(KEY_LINE)).toBeNull();
+    expect(screen.queryByText(ROW)).toBeNull();
+
+    // The canvas is back: the key row returns, entering the way the bar's rows do.
+    act(() => setCanvasKept(false));
+    expect(screen.getByRole('list', { name: 'Can’t run here' })).toHaveTextContent(KEY_LINE);
+    expect(view.container.querySelector('.proposal-bar__not-ready')).toHaveAttribute('data-entering');
+    expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAttribute('title', KEY_LINE);
+  });
+
+  it('the returned Accept key row is not remounted when the node it stands for changes, so its entrance plays once (review of #241, LOW-1)', () => {
+    const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const withRows = (refs: string[]) => {
+      const idol = proposal('p_a', {
+        nodes: refs.map((ref) => ({ ...proposal('p_a').nodes[0], ref, definitionId: 'speridlabs-idol', name: 'Idol' })),
+        run: refs,
+      });
+      idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: refs.length,
+        notReady: refs.map((ref) => ({ ref, nodeId: null, name: 'Idol', missing: ROW, person: ROW })) };
+      return idol;
+    };
+    open(withRows(['+a', '+b']));
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const view = render(<ProposalBar />);
+    act(() => setCanvasKept(true));
+    act(() => setCanvasKept(false));
+    const row = view.container.querySelector('.proposal-bar__not-ready[data-entering]');
+    expect(row).not.toBeNull();
+    // The first key-locked node leaves the proposal: another node's row is now the Accept row.
+    act(() => open(withRows(['+b'])));
+    expect(view.container.querySelector('.proposal-bar__not-ready')).toBe(row);
   });
 
   it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {
