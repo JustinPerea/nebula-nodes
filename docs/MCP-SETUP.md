@@ -1250,7 +1250,9 @@ A reference view is its 1-based position in the Character's list (`2` or `#2`),
 since views have no ids; position 1 is the cover. `character_list` and
 `character_get` (CLI: `nebula character list`, `nebula character show`; read-only)
 give a Character's id, name, scope, subject type, reference views, trait string
-and seed. `consistency` is accepted as a Character part and dropped: that
+and seed. A Character can only be looked at, so `type` and `click` at one (or
+at its views or controls) are shown as `look`: the route stores `look`, and the
+result's `action` says so. `consistency` is accepted as a Character part and dropped: that
 control reads "unavailable", so the cursor goes to the Character. No screen
 draws a Style's fields, so a Style's `part` only chooses the default line
 ("Writing the prompt for “Dusk grain”"). A board, Character or Style that isn't

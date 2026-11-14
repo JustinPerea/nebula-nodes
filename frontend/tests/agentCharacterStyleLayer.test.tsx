@@ -283,3 +283,36 @@ describe('the rail button, the launcher for every surface', () => {
     expect(cursors().map((el) => tipOf(el))).toEqual([{ x: 196, y: 95 }, { x: 396, y: 95 }]);
   });
 });
+
+describe('GM round 1: a type or a click at a Character is drawn as a look', () => {
+  const targets: [string, AgentPresenceEvent['target'], AgentPresenceEvent['anchorNames'], string][] = [
+    ['the Character', { surface: 'character', itemId: 'c1' }, { character: 'Mara' }, 'Looking at “Mara”'],
+    ['a view', { surface: 'character', itemId: 'c1/2' }, { character: 'Mara', view: 2 }, 'Looking at view 2 of “Mara”'],
+    ['the traits', { surface: 'character', itemId: 'c1', part: 'traits' }, { character: 'Mara', part: 'Frozen trait string' },
+      'Looking at “Frozen trait string” on “Mara”'],
+  ];
+
+  it.each(['type', 'click'] as const)('%s: the look line, the look action, no outline and no caret', (action) => {
+    put('anchor', 'character:c1', TILE);
+    put('anchor', 'character:c1/2', CARD);
+    put('anchor', 'character:c1:traits', { left: 300, top: 500, width: 200, height: 60 });
+    renderLayer();
+    for (const [what, target, anchorNames, line] of targets) {
+      send(event({ action, target, anchorNames }));
+      flush();
+      expect(say(), what).toBe(line);
+      expect(cursors()[0].dataset.action, what).toBe('look');
+      expect(rings(), what).toHaveLength(0);
+      expect(document.querySelector('.agent-cursor__field-mark'), what).toBeNull();
+    }
+  });
+
+  it('a Style type still outlines (the rule is the Character\'s)', () => {
+    put('anchor', 'style:s1', TILE);
+    renderLayer();
+    send(event({ action: 'type' }));
+    flush();
+    expect(cursors()[0].dataset.action).toBe('type');
+    expect(rings()).toHaveLength(1);
+  });
+});

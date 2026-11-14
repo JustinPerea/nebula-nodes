@@ -91,7 +91,8 @@ export function CharacterDefinitionPanel({
   return (
     <div className="character-def" data-agent-anchor={anchor()}>
       <section className="character-def__head">
-        <div className="character-def__thumb">
+        {/* `data-agent-aim`: a cursor on the Character itself rests here, tip in the lower right (lib/agentAnchorResolve). */}
+        <div className="character-def__thumb" data-agent-aim={anchor()}>
           {cover.src ? (
             <img src={cover.src} alt="" draggable={false} />
           ) : cover.outside ? (

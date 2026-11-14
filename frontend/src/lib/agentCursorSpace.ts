@@ -1,6 +1,6 @@
 import { getBezierPath, Position, type Node, type useStoreApi } from '@xyflow/react';
 import type { NodeData } from '../types';
-import { chainPoint, resolveAnchor, restPoints, type AnchorLookup, type Point } from './agentCursorMotion';
+import { chainPoint, launcherRestPoint, resolveAnchor, restPoints, type AnchorLookup, type Point } from './agentCursorMotion';
 import { area, intersect, type AnchorResolver, type Box, type Resolution } from './agentAnchorResolve';
 import { watchBoardView } from './agentBoardView';
 import { surfaceOf } from './agentLauncherDots';
@@ -61,6 +61,10 @@ export interface CursorSpace {
    *  cover the words. It still counts for its chain at chainPoint. Null if the
    *  node isn't drawn. Absent on a space with no node headers. */
   waitRest?(anchor: AgentCursorAnchor): Point | null;
+  /** Where a cursor rests on a node that is a surface item's launcher (a
+   *  Character or Moodboard node): the icon or first glyph of the card's own
+   *  title row (launcherRestPoint). Absent on a space with no nodes. */
+  launcherRest?(anchor: AgentCursorAnchor): Point | null;
   nodeInfo(id: string): CursorNodeInfo | undefined;
   labels(): CursorLabels;
   /** A client-pixel point (inside `box`, the pane's rect) in this space, or
@@ -103,6 +107,8 @@ export function canvasSpace(store: FlowStoreApi): CursorSpace {
     chainPoint: (anchor) => chainPoint(anchor, lookup()),
     waitRest: (anchor) => restPoints(anchor, lookup(), true,
       { dom: store.getState().domNode ?? null, zoom: store.getState().transform?.[2] ?? 1 })?.drawn ?? null,
+    launcherRest: (anchor) => launcherRestPoint(anchor, lookup(),
+      { dom: store.getState().domNode ?? null, zoom: store.getState().transform?.[2] ?? 1 }),
     nodeInfo: (id) => {
       const node = store.getState().nodeLookup.get(id) as
         { internals?: { positionAbsolute?: Point }; dragging?: boolean; position?: Point; data?: unknown } | undefined;
@@ -166,6 +172,12 @@ export interface ScreenSpaceOptions {
    *  the canvas aims here while the canvas is mounted (GM r137). Absent: a
    *  canvas anchor resolves to nothing while the canvas is mounted. */
   canvasPoint?: (anchor: AgentCursorAnchor, waitRest?: boolean) => Point | null;
+  /** Where a cursor rests on a launcher that is a canvas node (a Character
+   *  or Moodboard node), in client px, instead of beside it: the icon or first
+   *  glyph of the card's own title row (the canvas's `launcherRest`). null: the
+   *  launcher isn't such a node, or the canvas can't place it; the park stays
+   *  beside it. */
+  launcherRest?: (launcher: Element) => Point | null;
   /** The item this anchor names no longer exists (a removed image): the
    *  cursor holds its spot, GM r4. Decided by the caller; the resolver only
    *  takes it as an input. */
@@ -300,7 +312,7 @@ export function watchFlowStore(store: FlowStoreLike, wake: () => void): () => vo
  * runs its loop then) and once on each wake while it rests. A resting cursor
  * rides its item's own move (`carried`) and flies only to a different element.
  */
-export function screenSpace({ resolver, measure, watch, pane, canvasMounted, canvasPoint, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
+export function screenSpace({ resolver, measure, watch, pane, canvasMounted, canvasPoint, launcherRest, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
   const listeners = new Set<() => void>();
   // What each cursor last read, by the cursor (its key, and `${key}>from` for
   // a drag's start): the second of two cursors resting on one item compares
@@ -341,7 +353,15 @@ export function screenSpace({ resolver, measure, watch, pane, canvasMounted, can
       const point = canvasPoint(anchor);
       return point ? { kind: 'canvas', point } : { kind: 'none' };
     }
-    return resolver.resolve(anchor, { canvasMounted: canvasMounted(), gone: gone(anchor) });
+    const resolution = resolver.resolve(anchor, { canvasMounted: canvasMounted(), gone: gone(anchor) });
+    // A launcher that is a canvas node: the cursor rests in the card's title
+    // row (by its icon or first glyph), not beside the node at its output port.
+    // The element and box stay the launcher's, so the corner dot is unmoved.
+    if (resolution.kind === 'launcher' && resolution.step === 'board') {
+      const rest = launcherRest?.(resolution.element);
+      if (rest) return { ...resolution, point: rest };
+    }
+    return resolution;
   };
   const sameSpot = (a: Resolution | undefined, b: Resolution): boolean =>
     a !== undefined && a.kind === b.kind && 'element' in a && 'element' in b && a.element === b.element;

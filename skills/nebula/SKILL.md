@@ -1119,7 +1119,8 @@ opens a panel or scrolls for the person: if the Moodboard panel or the Assets
 dock is closed or the item is out of view, your cursor parks at the button that
 opens it or at the edge of what they see. Your board writes (`nebula moodboard
 add`, `set`, `edit`, ...) and Style writes (`nebula style new`, `set`) move your
-cursor to what they touched on their own. MCP: `point_at(character=..., view=...,
+cursor to what they touched on their own. A Character can only be looked at, so
+`type` and `click` at one are shown as `look`. MCP: `point_at(character=..., view=...,
 style=...)`, `character_list`, `character_get`.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`

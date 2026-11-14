@@ -116,6 +116,13 @@ export function cursorAction(raw: unknown): AgentCursorAction {
   return AGENT_CURSOR_ACTIONS.includes(raw as AgentCursorAction) ? (raw as AgentCursorAction) : 'move';
 }
 
+/** What a cursor draws: an agent can't write a Character, so a `type` or a
+ *  `click` at one (the Character, a view or a control) is drawn as a `look`
+ *  (the backend stores `look` too; this covers a backend that doesn't). */
+export function shownAction(action: AgentCursorAction, target: AgentCursorAnchor): AgentCursorAction {
+  return 'surface' in target && target.surface === 'character' && (action === 'type' || action === 'click') ? 'look' : action;
+}
+
 // cleanSession lives with the cursor's label (agentCursorLabel), which the
 // Agent log, loaded with the app, uses without pulling in this store.
 export { cleanSession };
@@ -227,7 +234,7 @@ function withEvent(
     target,
     anchorNames: cleanAnchorNames(event.anchorNames, target),
     from: !replayed && isAnchor(event.from) ? event.from : undefined,
-    action: cursorAction(event.action),
+    action: shownAction(cursorAction(event.action), target),
     say: typeof event.say === 'string' ? event.say : '',
     receivedAt,
     seq: nextSeq(key, previous?.seq),

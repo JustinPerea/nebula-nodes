@@ -714,7 +714,9 @@ def point_at(
     one of its reference views with `view` (its number, `2` or `#2`; 1 is
     the cover), and at a control with `part`: `name`, `subject-type`
     ("Subject type"), `views` ("Reference views"), `traits` ("Frozen trait
-    string") or `seed`; a view takes no part. Point at a Style with `style`
+    string") or `seed`; a view takes no part. A Character can only be looked
+    at, so `type` and `click` at one are shown as `look` (the result's
+    `action` says what was stored). Point at a Style with `style`
     (its id or exact name; style_list names them) and `part` `name`,
     `category`, `prompt`, `settings`, `model`, `references` or `thumbnail`
     (no screen draws a Style's fields, so a part only changes the default

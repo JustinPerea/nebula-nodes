@@ -8528,6 +8528,29 @@ def _styles_to_point_at() -> list[dict[str, Any]]:
     return [*styles, *preset_store.list("global")]
 
 
+def _surface_target_missing(raw: Mapping[str, Any], target: Mapping[str, Any]) -> str | None:
+    """None when the item (and its image or view) a stored surface target
+    names is still there, else the refusal the first lookup gives for it.
+    Runs in a thread, as the first lookup does. The check is by the stored
+    ids, so an item renamed meanwhile still passes; the words are those of the
+    agent's own reference when that no longer resolves."""
+    surface = target["surface"]
+    boards = _boards_to_point_at() if surface == "moodboard" else None
+    characters = _characters_to_point_at() if surface == "character" else None
+    styles = _styles_to_point_at() if surface == "style" else None
+    try:
+        parse_surface_target({"surface": surface, "itemId": target["itemId"]}, boards,
+                             characters=characters, styles=styles)
+        return None
+    except PresenceError as by_id:
+        refusal = str(by_id)
+    try:
+        parse_surface_target(raw, boards, characters=characters, styles=styles)
+    except PresenceError as by_ref:
+        return str(by_ref)
+    return refusal
+
+
 @app.post("/api/canvas/cursor")
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, a canvas spot, or
@@ -8546,6 +8569,9 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     already is, without moving it; an agent with no cursor yet gets one at
     the middle of the person's view (when the browser reported one), else
     at (0, 0). `placed` says which: cursor, view or origin.
+
+    A Character can only be looked at: `type` and `click` at a Character (or
+    one of its views or controls) are stored, shown and answered as `look`.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -8583,6 +8609,11 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         action = body.get("action") or "move"
         if not isinstance(action, str) or action not in CURSOR_ACTIONS:
             raise PresenceError(cursor_action_refusal(action))
+        if "surface" in target and target["surface"] == "character" and action in ("type", "click"):
+            # An agent can't write a Character, so nothing is typed or pressed
+            # there: it is shown, stored and told to every reader as a look.
+            action = "look"
+        before_plain = agent_presence.plain_cursor(identity)
         event = _point(
             identity,
             target=target,
@@ -8599,6 +8630,17 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     # The person's tabs draw this session's own cursor; the response and the
     # agent form are what they were (a line said in place keeps `target`).
     person = _person_form(event, identity, headers, in_place=placed != "target")
+    if placed == "target" and "surface" in target:
+        # The item was read before the cursor was stored. A delete (or a save
+        # that cut the views) between the two forgot cursors before this one
+        # existed, so look again now: either its forget saw this cursor, or its
+        # store call finished before this read.
+        missing = await asyncio.to_thread(_surface_target_missing, body["target"], target)
+        if missing:
+            gone: list[dict[str, Any]] = []
+            agent_presence.forget_cursor(identity, presence_session(headers), gone, restore=before_plain)
+            await _tell_tabs({"type": "agentPresenceLeave"}, gone)
+            raise HTTPException(status_code=422, detail=missing)
     await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed, **({"anchorNames": names} if names else {})}

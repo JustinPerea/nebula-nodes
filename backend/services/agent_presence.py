@@ -321,6 +321,14 @@ def _quoted(text: Any) -> str:
     return f"\u201c{_echoed(text)}\u201d"
 
 
+def _shown_name(name: Any) -> str:
+    """An item's name as a cursor stores it: whitespace folded, cut to 80
+    characters without splitting a joined emoji or a combining mark
+    (services/text_cut.safe_cut), whichever path writes it (a point or a rename)."""
+    text = " ".join(str(name).split())
+    return text[:safe_cut(text, 80)]
+
+
 def _item_list(info: SurfaceInfo, items: Collection[Mapping[str, Any]]) -> str:
     names = [_quoted(str(item.get("name") or item.get("id"))) for item in items]
     if not names:
@@ -454,7 +462,7 @@ def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
     item_id = str(found.get("id"))
     if not _ITEM_ID_RE.fullmatch(item_id):
         raise PresenceError(f"{label}.{info.name_key} is invalid")
-    names: dict[str, Any] = {info.name_key: " ".join(str(found.get("name") or item_id).split())[:80]}
+    names: dict[str, Any] = {info.name_key: _shown_name(found.get("name") or item_id)}
     anchor_id = item_id
     if sub_given is not None:
         if surface == "character":
@@ -513,7 +521,7 @@ def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "verb": verb,
         "nodeId": node_id if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) else None,
-        "label": " ".join(label.split())[:80] if isinstance(label, str) and label.strip() else None,
+        "label": _shown_name(label) if isinstance(label, str) and label.strip() else None,
     }
 
 
@@ -1123,7 +1131,7 @@ class AgentPresence:
         or one of its sub-items keeps the new name in its stored names, which
         agents read in ``look``, ``context`` and ``agents``. Returns how many
         were changed."""
-        shown = " ".join(str(name or item_id).split())[:80]
+        shown = _shown_name(name or item_id)
         key = SURFACE_TABLE[surface].name_key
         changed = 0
 
@@ -1171,6 +1179,30 @@ class AgentPresence:
                     del slots[raw]
                     if gone is not None:
                         gone.append({"agentId": agent_id, "key": slot.key})
+        return left
+
+    def plain_cursor(self, identity: AgentIdentity) -> dict[str, Any] | None:
+        """The agent's plain cursor as stored now (what ``forget_cursor`` puts back)."""
+        return self._agents.get(identity.id)
+
+    def forget_cursor(self, identity: AgentIdentity, session: str | None,
+                      gone: list[dict[str, Any]] | None = None, *,
+                      restore: dict[str, Any] | None = None) -> bool:
+        """One cursor leaves: the agent's plain cursor and the slot of
+        ``session`` (the one a point just stored), its number free. For a
+        point whose item went while the route was reading (main.point_agent_cursor);
+        other sessions' cursors stay. ``gone`` collects it as the open tabs
+        name it, as ``forget_item`` does. Returns whether a cursor left."""
+        raw = session if session is not None and _valid_session(session) else ""
+        left = self._agents.pop(identity.id, None) is not None
+        if restore is not None:
+            # The plain cursor is one per agent: it goes back to what another session left there.
+            self._agents[identity.id] = restore
+        slot = (self._slots.get(identity.id) or {}).pop(raw, None)
+        if slot is not None:
+            left = True
+            if gone is not None:
+                gone.append({"agentId": identity.id, "key": slot.key})
         return left
 
     def forget_image(self, board_id: str, image_ids: Collection[str], *,

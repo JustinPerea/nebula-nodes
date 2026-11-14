@@ -105,3 +105,40 @@ Left as they are, with the reason:
 - **A Character or Style moved to a project that isn't open keeps its cursors** (they park at the launcher), as the build notes above say.
 - **Two cursors on one row step down in a column**, so the second sits over the next row. Board rows on main do the same (design signed that off in PR #233).
 - **In the Studio a Character's cursor lands on the definition panel, not the rail row**: of several matches the resolver takes the largest visible one, as it takes an open board over its row.
+
+## GM round 1 (design rulings, final review items)
+
+- **A Character rests on its cover thumbnail in the Studio.** The thumbnail carries `data-agent-aim="character:<id>"`
+  (`CharacterDefinitionPanel`). For an item with no part and no sub-item, the resolver first looks for a visible aim
+  element of that value and rests the tip at its lower right (`cornerPoint`, `CORNER_INSET_PX` = 6 in). A part, a view, or
+  no thumbnail on screen resolves as before. A retarget back to the Character lands on the same spot, since it resolves
+  the same anchor.
+- **A Character node on the canvas rests in its title row.** `screenSpace` takes `launcherRest`: for a step-2 launcher
+  whose element is inside a `.react-flow__node`, the tip is the canvas's `launcherRest` for that node
+  (`agentCursorMotion.launcherRestPoint`): the icon or first glyph of the card's own title row, read from the page. The
+  first build used the wait rest's fallback (18 px in, 44 px down), which assumes the category label above a model card;
+  a Character node has none, so the tip landed on the thumbnail (found by the re-shoot). The fallback is used only when
+  there is nothing to measure. The element and box stay the launcher's, so the corner dot does not move.
+- **The Moodboard node rests the same way.** The ruling names Characters, but its reason holds for the Moodboard node on
+  main: beside the node the tip touched the same output port. Both read their own title row
+  (`.character-node__title`, `.moodboard-node__title`). GM was told.
+- **`type` and `click` at a Character are `look`.** Frontend: `shownAction` in `agentPresenceStore` (applies to `apply`
+  and `replay`; every reader reads `cursor.action`). Backend: `POST /api/canvas/cursor` stores and sends `look`; the
+  result's `action` says so; `nebula point` prints "(shown as look)"; one line each in `point_at`, MCP-SETUP.md, SKILL.md.
+  The MCP server instructions are untouched.
+- **A park that would cover a control goes inside its host.** Decided by the resolver from measurements: for a
+  non-rail `surface` launcher, if the beside spot (6 px right, middle) lies on, or within 6 px of, the visible box of another
+  button, tab, link or field in the host's parent (the arrow's body hangs past its tip; the composer's Enhance is 8 px
+  from Styles), the tip goes inside the host at its lower right. No host list or attribute. The
+  rail's parks and item rows stay beside. The spot on the host's other side (6 px left) counts too, so the last tab
+  of a row, which has a neighbour only on its left, parks inside as the others do (GM ruled for all three tabs). A
+  host with no control within reach on either side stays beside.
+- **R1 (delete during the point's lookup).** After the cursor is stored, the route looks the target up again in a thread
+  by the stored ids; if the item, view or image is gone it forgets that one cursor (`AgentPresence.forget_cursor`, which
+  puts the agent's plain cursor back to what it was), tells the tabs `agentPresenceLeave` and answers the first lookup's
+  refusal (the agent's own reference when it still fails, else the id's). A rename in the window passes.
+- **R2 (80-character cut).** `_shown_name` (`safe_cut`) in `parse_surface_target`, `rename_item` and `_clean_did`; also
+  `moodboard_actions.board_point`'s board name. No other name slices in the surface code.
+- **R3 (checked, no change).** `useAssetStudioDraft` returns `draft` and `savedId` from one store entry
+  (`entries[key]`), replaced by one `patch`/`initialize`; a switch to another Character reads the new key's entry whole
+  (or the empty fallback, which publishes null). No render sees one Character's id with another's count.

@@ -1001,3 +1001,174 @@ def test_nebula_character_list_and_show(api, monkeypatch, capsys):
     assert "reference views (4;" in shown and "    1. /api/outputs/" in shown and "    4. /api/outputs/" in shown
     assert '"viewCount": 4' in run("show", made["id"], "--json")
     assert '"scope": "global"' in run("list", "--json", "--global")
+
+
+# -- GM round 1: a Character can only be looked at ------------------------------------------------------
+
+@pytest.mark.parametrize("action", ["type", "click"])
+@pytest.mark.parametrize("extra", [{}, {"view": 2}, {"part": "traits"}])
+def test_a_type_or_a_click_at_a_character_is_stored_and_told_as_a_look(api, action, extra):
+    client, sent, heard, presence, _ = api
+    character = _make_character(client)
+    made = _point(client, {"surface": "character", "character": character["id"], **extra}, LANE_A, action=action,
+                  say="Checking")
+    assert made.status_code == 200, made.text
+    assert made.json()["action"] == "look"
+    assert _cursors(sent)[-1]["action"] == "look"
+    assert [live["action"] for live in presence.active()] == ["look"]
+    assert [value["action"] for value in presence._agents.values()] == ["look"]
+    (slot,) = [slot for slots in presence._slots.values() for slot in slots.values()]
+    assert slot.event["action"] == "look"
+    # The Agents panel's line reads as a look, as it does for `look`.
+    assert presence.active()[0]["did"]["verb"] == "Looked at"
+
+
+def test_a_style_and_a_board_keep_their_type_and_click(api):
+    client, _, _, presence, _ = api
+    style = _make_style(client)
+    board = client.post("/api/moodboards", json={"name": "Desert light", "images": [{"url": _url()}]}).json()
+    for target in ({"surface": "style", "style": style["id"]}, {"surface": "moodboard", "board": board["id"]}):
+        for action in ("type", "click"):
+            assert _point(client, target, LANE_A, action=action).json()["action"] == action
+
+
+def test_point_at_and_the_cli_say_what_was_stored_for_a_character(api):
+    client, _, _, _, _ = api
+    character = _make_character(client)
+    assert mcp_server.point_at(character=character["id"], action="type")["action"] == "look"
+    from cli.commands.canvas import run_point
+
+    class Echo:
+        def point_cursor(self, body, agent_name=None):
+            stored = "look" if body["action"] in ("type", "click") else body["action"]
+            return {"agent": {"name": "Claude"}, "say": "", "action": stored, "anchorNames": {"character": "Mara"}}
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        run_point(Echo(), None, character="Mara", action="click")
+        run_point(Echo(), None, character="Mara", action="look")
+    assert out.getvalue().splitlines() == ["Claude \u2192 character \u201cMara\u201d (shown as look)",
+                                           "Claude \u2192 character \u201cMara\u201d"]
+
+
+# -- GM round 1, R1: an item deleted while the point route reads ------------------------------------
+
+def _delete_during_first_lookup(monkeypatch, name, act):
+    """The route's first lookup reads the item, then `act` changes it before the
+    cursor is stored (the window a person's delete can land in)."""
+    import main as main_module
+
+    real = getattr(main_module, name)
+    calls: list[int] = []
+
+    def lookup():
+        found = real()
+        if not calls:
+            calls.append(1)
+            act(main_module)
+        return found
+
+    monkeypatch.setattr(main_module, name, lookup)
+
+
+def _nothing_left(presence, sent, heard):
+    assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
+    assert _cursors(sent) == []
+    (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
+    assert len(leave["cursors"]) == 1 and leave["cursors"][0]["key"] is not None
+
+
+def test_a_character_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
+    client, sent, heard, presence, _ = api
+    character = _make_character(client)
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().delete(character["id"]))
+    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A, action="look")
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"].startswith("No character “Mara” here."), refused.text
+    _nothing_left(presence, sent, heard)
+
+
+def test_a_view_cut_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
+    client, sent, heard, presence, _ = api
+    character = _make_character(client, views=5)
+    kept = _make_character(client, name="Other", views=3)  # another cursor, which stays
+    assert _point(client, {"surface": "character", "character": kept["id"]},
+                  {**AGENT, "X-Nebula-Agent-Session": "lane-c"}).status_code == 200
+    sent.clear()
+    heard.clear()
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()]))
+    refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A)
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == "Character “Mara” has no view “5”. Use its number (1-3)."
+    assert _cursors(sent) == []
+    assert [live["anchorNames"] for live in presence.active()] == [{"character": "Other"}]
+    (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
+    assert len(leave["cursors"]) == 1 and leave["cursors"][0]["key"] is not None
+
+
+def test_a_style_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
+    import main as main_module
+
+    client, sent, heard, presence, _ = api
+    style = _make_style(client)
+    _delete_during_first_lookup(monkeypatch, "_styles_to_point_at", lambda main: main.preset_store.delete(style["id"]))
+    refused = _point(client, {"surface": "style", "style": "Dusk grain"}, LANE_A, action="type")
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"].startswith("No style “Dusk grain” here."), refused.text
+    _nothing_left(presence, sent, heard)
+    assert main_module.preset_store.trashed(style["id"]) is not None
+
+
+def test_a_board_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
+    client, sent, heard, presence, _ = api
+    board = client.post("/api/moodboards", json={"name": "Desert light", "images": [{"url": _url()}]}).json()
+    _delete_during_first_lookup(monkeypatch, "_boards_to_point_at",
+                                lambda main: main._moodboard_store().delete(board["id"]))
+    refused = _point(client, {"surface": "moodboard", "board": "Desert light", "image": 1}, LANE_A)
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"].startswith("No moodboard “Desert light” here."), refused.text
+    _nothing_left(presence, sent, heard)
+
+
+def test_a_rename_while_the_point_reads_does_not_refuse_it(api, monkeypatch):
+    """The second look is by the stored ids: an item renamed in the window is still there."""
+    client, sent, _, presence, _ = api
+    character = _make_character(client)
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().update(character["id"], name="Mara Vance"))
+    made = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    assert made.status_code == 200, made.text
+    assert len(presence.active()) == 1 and len(_cursors(sent)) == 1
+
+
+# -- GM round 1, R2: a name cut at 80 characters keeps a joined emoji whole ----------------------------
+
+FAMILY = "\U0001F468‍\U0001F469‍\U0001F467"  # man, ZWJ, woman, ZWJ, girl: characters 79 to 83
+LONG_NAME = "a" * 78 + FAMILY + "tail"
+
+
+def test_a_cut_name_never_splits_a_joined_emoji_through_a_point(api):
+    client, _, _, presence, _ = api
+    character = _make_character(client, name=LONG_NAME)
+    assert _point(client, {"surface": "character", "character": character["id"]}, LANE_A).status_code == 200
+    names = _live_names(presence)
+    assert names and all(shown == {"character": "a" * 78} for shown in names)
+
+
+def test_a_cut_name_never_splits_a_joined_emoji_through_a_rename(api):
+    client, _, _, presence, _ = api
+    character = _make_character(client)
+    _point(client, {"surface": "character", "character": character["id"], "view": 2}, LANE_A)
+    assert client.put(f"/api/characters/{character['id']}", json={"name": LONG_NAME}).status_code == 200
+    assert {"character": "a" * 78, "view": 2} in _live_names(presence)
+
+
+def test_the_parse_and_the_rename_cut_the_same_way():
+    names = [parse_surface_target({"surface": "character", "character": "c1"}, None,
+                                  characters=[{"id": "c1", "name": LONG_NAME, "referenceViews": []}])[1]["character"]]
+    presence, _ = _presence_with({"surface": "character", "itemId": "c1"}, {"character": "x"})
+    presence.rename_item("character", "c1", LONG_NAME)
+    names.append(presence.active()[0]["anchorNames"]["character"])
+    assert names == ["a" * 78, "a" * 78]

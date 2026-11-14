@@ -127,16 +127,24 @@ export function AgentScreenLayer({ canvasMounted, env }: {
     const resolverEnv = env ?? domEnv();
     const paneBox = new FrameBox();
     const onCanvas = flowApi ? canvasSpace(flowApi as unknown as Parameters<typeof canvasSpace>[0]) : null;
+    // Where a canvas node is on screen, while it is inside the canvas's box.
+    const onPane = (flow: { x: number; y: number } | null | undefined) => {
+      const dom = onCanvas?.pane();
+      if (!onCanvas || !dom || !flow) return null;
+      const box = paneBox.of(dom);
+      const at = onCanvas.toClient(flow, box);
+      const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
+      return inside ? at : null;
+    };
+    const canvasPoint = (anchor: AgentCursorAnchor, waitRest = false) =>
+      onPane(waitRest ? onCanvas?.waitRest?.(anchor) : onCanvas?.resolve(anchor));
     return screenSpace({
-      // Where a canvas node is on screen, while it is inside the canvas's box.
-      canvasPoint: (anchor, waitRest = false) => {
-        const dom = onCanvas?.pane();
-        const flow = waitRest ? onCanvas?.waitRest?.(anchor) : onCanvas?.resolve(anchor);
-        if (!onCanvas || !dom || !flow) return null;
-        const box = paneBox.of(dom);
-        const at = onCanvas.toClient(flow, box);
-        const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
-        return inside ? at : null;
+      canvasPoint,
+      // A Character or Moodboard node on the canvas is the launcher of its item: the cursor rests in the
+      // card's title row, by its icon or first glyph (beside the node its tip touched the output port).
+      launcherRest: (launcher) => {
+        const nodeId = launcher.closest<HTMLElement>('.react-flow__node')?.dataset.id;
+        return nodeId ? onPane(onCanvas?.launcherRest?.({ nodeId })) : null;
       },
       resolver: new AnchorResolver(resolverEnv),
       measure: resolverEnv.measure,

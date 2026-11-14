@@ -80,6 +80,9 @@ def run_point(
             where += f", view {names.get('view') or view}"
         if part is not None:
             where += f" ({part})"
+        # A Character can only be looked at: the route stores `look` for a type or a click.
+        if result.get("action") not in (None, body["action"]):
+            where += f" (shown as {result['action']})"
         said = f": {result.get('say')}" if result.get("say") else ""
         print(f"{agent} \u2192 {where}{said}")
         return

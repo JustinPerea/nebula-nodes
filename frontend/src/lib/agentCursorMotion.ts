@@ -174,12 +174,38 @@ export function restPoints(
   return { drawn, chain };
 }
 
-/** The centre of the waiting header's icon (or its first glyph), in flow
- *  coordinates; null when the page has no laid-out header to read. */
-function headerMark(dom: HTMLElement | null, nodeId: string, origin: Point, zoom: number): Point | null {
+/** A card's title row while it shows a wait. */
+const WAITING_HEADS = '.model-node__header[data-waiting="true"], .cinema-scene-node__title[data-waiting="true"]';
+/** Any card's title row, whichever card it is (a Character or Moodboard node
+ *  has no category label above it, so its row is not 44 px down). */
+const CARD_HEADS = '.model-node__header, .cinema-scene-node__title, .character-node__title, .moodboard-node__title';
+
+/**
+ * Where a cursor rests on a canvas node that is the launcher of a surface
+ * item (a Character or Moodboard node; GM - Design, PR #243 round 1): the
+ * icon or first glyph of the card's own title row, read from the page, so it
+ * sits in the header on every kind of card and never at the output port. With
+ * nothing to measure it is the wait rest's fallback.
+ */
+export function launcherRestPoint(
+  anchor: AgentCursorAnchor,
+  nodeLookup: AnchorLookup,
+  pane?: { dom: HTMLElement | null; zoom: number },
+): Point | null {
+  if (!('nodeId' in anchor) || anchor.handle) return null;
+  const node = nodeLookup.get(anchor.nodeId);
+  if (!node) return null;
+  const measured = pane ? headerMark(pane.dom, anchor.nodeId, node.internals.positionAbsolute, pane.zoom, CARD_HEADS) : null;
+  return measured ?? waitRestPoint(anchor, nodeLookup, pane);
+}
+
+/** The centre of a header's icon (or its first glyph), in flow coordinates;
+ *  null when the page has no laid-out header to read. `heads`: which title
+ *  rows count (the waiting ones by default). */
+function headerMark(dom: HTMLElement | null, nodeId: string, origin: Point, zoom: number, heads = WAITING_HEADS): Point | null {
   if (!dom || !(zoom > 0)) return null;
   const card = [...dom.querySelectorAll<HTMLElement>('.react-flow__node')].find((el) => el.dataset.id === nodeId);
-  const head = card?.querySelector<HTMLElement>('.model-node__header[data-waiting="true"], .cinema-scene-node__title[data-waiting="true"]');
+  const head = card?.querySelector<HTMLElement>(heads);
   if (!card || !head) return null;
   const box = card.getBoundingClientRect();
   const row = head.getBoundingClientRect();
