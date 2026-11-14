@@ -8569,9 +8569,10 @@ def _styles_to_point_at() -> list[dict[str, Any]]:
     return [*styles, *preset_store.list("global")]
 
 
-def _surface_target_missing(raw: Mapping[str, Any], target: Mapping[str, Any]) -> str | None:
+def _surface_target_missing(raw: Mapping[str, Any], target: Mapping[str, Any]) -> tuple[str, bool] | None:
     """None when the item (and its image or view) a stored surface target
-    names is still there, else the refusal the first lookup gives for it.
+    names is still there, else the refusal the first lookup gives for it and
+    whether the item itself is gone (False: only its image or view is).
     Runs in a thread, as the first lookup does. The check is by the stored
     ids, so an item renamed meanwhile still passes; the words are those of the
     agent's own reference when that no longer resolves."""
@@ -8585,11 +8586,33 @@ def _surface_target_missing(raw: Mapping[str, Any], target: Mapping[str, Any]) -
         return None
     except PresenceError as by_id:
         refusal = str(by_id)
+    item_id = str(target["itemId"]).partition("/")[0]
+    item_gone = not any(str(item.get("id")) == item_id for item in (boards or characters or styles or []))
     try:
         parse_surface_target(raw, boards, characters=characters, styles=styles)
     except PresenceError as by_ref:
-        return str(by_ref)
-    return refusal
+        refusal = str(by_ref)
+    return refusal, item_gone
+
+
+async def _forget_missing_cursors(target: Mapping[str, Any], item_gone: bool) -> None:
+    """A point found its item, image or view gone: every cursor still on it
+    leaves (the item) or falls back to the item (an image or a view), and the
+    tabs are told, as the write that removed it does. That write forgets the
+    cursors it finds; one stored before it and read after, or put back by a
+    refused point, is caught here. Never fails the route."""
+    surface = str(target["surface"])
+    item_id, _, sub_id = str(target["itemId"]).partition("/")
+    if item_gone or not sub_id:
+        await _forget_item_cursors(surface, item_id)
+        return
+    fell: list[dict[str, Any]] = []
+    try:
+        agent_presence.forget_subs(surface, item_id, [sub_id], fell=fell)
+    except Exception:  # noqa: BLE001 - decoration must not break the refusal
+        logging.getLogger("nebula.presence").exception("forgetting a missing sub-item's cursors failed")
+        return
+    await _tell_tabs({"type": "agentPresenceRetarget"}, fell)
 
 
 @app.post("/api/canvas/cursor")
@@ -8666,22 +8689,25 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             did=None if placed == "cursor" else _pointed(action, target, names),
             names=names,
         )
+        stored_plain = agent_presence.plain_cursor(identity)
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # The person's tabs draw this session's own cursor; the response and the
-    # agent form are what they were (a line said in place keeps `target`).
-    person = _person_form(event, identity, headers, in_place=placed != "target")
     if placed == "target" and "surface" in target:
         # The item was read before the cursor was stored. A delete (or a save
         # that cut the views) between the two forgot cursors before this one
         # existed, so look again now: either its forget saw this cursor, or its
-        # store call finished before this read.
+        # store call finished before this read. This comes before the session's
+        # cursor is written, so a refused point leaves that where it was and
+        # the tabs, which were sent nothing, need no word about it.
         missing = await asyncio.to_thread(_surface_target_missing, body["target"], target)
         if missing:
-            gone: list[dict[str, Any]] = []
-            agent_presence.forget_cursor(identity, presence_session(headers), gone, restore=before_plain)
-            await _tell_tabs({"type": "agentPresenceLeave"}, gone)
-            raise HTTPException(status_code=422, detail=missing)
+            refusal, item_gone = missing
+            agent_presence.undo_point(identity, stored_plain, before_plain)
+            await _forget_missing_cursors(target, item_gone)
+            raise HTTPException(status_code=422, detail=refusal)
+    # The person's tabs draw this session's own cursor; the response and the
+    # agent form are what they were (a line said in place keeps `target`).
+    person = _person_form(event, identity, headers, in_place=placed != "target")
     await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed, **({"anchorNames": names} if names else {})}

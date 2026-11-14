@@ -1071,11 +1071,16 @@ def _delete_during_first_lookup(monkeypatch, name, act):
     monkeypatch.setattr(main_module, name, lookup)
 
 
+def _told(heard):
+    """What the person's tabs were told about cursors leaving or moving."""
+    return [event for event in heard if event.get("type") in ("agentPresenceLeave", "agentPresenceRetarget")]
+
+
 def _nothing_left(presence, sent, heard):
     assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
-    assert _cursors(sent) == []
-    (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
-    assert len(leave["cursors"]) == 1 and leave["cursors"][0]["key"] is not None
+    assert presence.replay() == [] and _cursors(sent) == []
+    # The refused point wrote no session cursor and sent none, so no tab has one to drop.
+    assert _told(heard) == []
 
 
 def test_a_character_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
@@ -1102,10 +1107,9 @@ def test_a_view_cut_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
     refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A)
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"] == "Character “Mara” has no view “5”. Use its number (1-3)."
-    assert _cursors(sent) == []
+    assert _cursors(sent) == [] and _told(heard) == []
     assert [live["anchorNames"] for live in presence.active()] == [{"character": "Other"}]
-    (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
-    assert len(leave["cursors"]) == 1 and leave["cursors"][0]["key"] is not None
+    assert [cursor["anchorNames"] for cursor in presence.replay()] == [{"character": "Other"}]
 
 
 def test_a_style_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
@@ -1130,6 +1134,113 @@ def test_a_board_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"].startswith("No moodboard “Desert light” here."), refused.text
     _nothing_left(presence, sent, heard)
+
+
+def _forget_before_the_second_look(monkeypatch, forget):
+    """The deleting route's own forget runs between the store of the cursor and
+    the route's second look (it awaits there)."""
+    import main as main_module
+
+    real = main_module._surface_target_missing
+
+    def look_again(raw, target):
+        forget(main_module.agent_presence)
+        return real(raw, target)
+
+    monkeypatch.setattr(main_module, "_surface_target_missing", look_again)
+
+
+@pytest.mark.parametrize("forget_runs_meanwhile", [False, True])
+def test_a_refused_point_never_puts_back_a_cursor_on_the_deleted_item(api, monkeypatch, forget_runs_meanwhile):
+    """The agent is on the Character already and points at it again as it is
+    deleted: its earlier cursor there goes too, the plain one and the session's."""
+    client, sent, heard, presence, _ = api
+    character = _make_character(client)
+    assert _point(client, {"surface": "character", "character": "Mara"}, LANE_A).status_code == 200
+    (before,) = presence.replay()
+    sent.clear()
+    heard.clear()
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().delete(character["id"]))
+    if forget_runs_meanwhile:
+        _forget_before_the_second_look(monkeypatch, lambda held: held.forget_item("character", character["id"]))
+    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A, action="look")
+    assert refused.status_code == 422, refused.text
+    assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
+    assert presence.replay() == [] and _cursors(sent) == []
+    if not forget_runs_meanwhile:  # else the deleting route tells the tabs itself
+        (leave,) = _told(heard)
+        assert leave["type"] == "agentPresenceLeave"
+        assert [cursor["key"] for cursor in leave["cursors"] if cursor["key"] is not None] == [before["session"]["key"]]
+
+
+def test_a_refused_point_leaves_the_sessions_cursor_where_it_was(api, monkeypatch):
+    """A cursor at a spot stays there, in the roster and on the tabs alike."""
+    client, sent, heard, presence, _ = api
+    spot = {"x": 120.0, "y": 80.0}
+    assert _point(client, spot, LANE_A).status_code == 200
+    character = _make_character(client)
+    sent.clear()
+    heard.clear()
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().delete(character["id"]))
+    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A, action="look")
+    assert refused.status_code == 422, refused.text
+    assert [live["target"] for live in presence.active()] == [spot]
+    assert [cursor["target"] for cursor in presence.replay()] == [spot]
+    assert _cursors(sent) == [] and _told(heard) == []
+
+
+def test_a_refused_point_at_a_cut_view_moves_the_earlier_cursor_on_it_to_the_character(api, monkeypatch):
+    client, sent, heard, presence, _ = api
+    character = _make_character(client, views=5)
+    on_character = {"surface": "character", "itemId": character["id"]}
+    assert _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A).status_code == 200
+    (before,) = presence.replay()
+    sent.clear()
+    heard.clear()
+    _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
+                                lambda main: main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()]))
+    refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A, action="look")
+    assert refused.status_code == 422, refused.text
+    assert [live["target"] for live in presence.active()] == [on_character]
+    assert [cursor["target"] for cursor in presence.replay()] == [on_character]
+    assert _cursors(sent) == []
+    (retarget,) = _told(heard)
+    assert retarget["type"] == "agentPresenceRetarget"
+    assert [(cursor["key"], cursor["target"]) for cursor in retarget["cursors"] if cursor["key"] is not None] == [
+        (before["session"]["key"], on_character)]
+
+
+def test_a_newer_point_is_not_undone_by_a_refused_one():
+    from services.agent_presence import identify
+
+    presence, identity = AgentPresence(), identify({"X-Nebula-Agent": "Claude Code"})
+    spot, later = {"x": 1.0, "y": 2.0}, {"x": 9.0, "y": 9.0}
+    presence.point(identity, target=spot)
+    before = presence.plain_cursor(identity)
+    presence.point(identity, target={"surface": "character", "itemId": "c1"}, names={"character": "Mara"})
+    stored = presence.plain_cursor(identity)
+    presence.point(identity, target=later)
+    presence.undo_point(identity, stored, before)
+    assert [live["target"] for live in presence.active()] == [later]
+    presence.undo_point(identity, presence.plain_cursor(identity), before)
+    assert [live["target"] for live in presence.active()] == [spot]
+    presence.undo_point(identity, presence.plain_cursor(identity), None)
+    assert presence.active() == []
+
+
+def test_a_name_that_is_one_long_character_is_still_a_name():
+    """A letter under a hundred combining marks has no safe cut: it is cut plainly, never to nothing."""
+    from services.agent_presence import _clean_did, _shown_name
+
+    name = "a" + "\u0301" * 100
+    assert _shown_name(name) == name[:80]
+    assert _clean_did({"verb": "Added", "label": name})["label"] == name[:80]
+    assert _shown_name("  ") == "" and _clean_did({"verb": "Added", "label": "  "})["label"] is None
+    _, names = parse_surface_target({"surface": "character", "character": "c1"}, None,
+                                    characters=[{"id": "c1", "name": name, "referenceViews": []}])
+    assert names == {"character": name[:80]}
 
 
 def test_a_rename_while_the_point_reads_does_not_refuse_it(api, monkeypatch):

@@ -134,11 +134,42 @@ Left as they are, with the reason:
   of a row, which has a neighbour only on its left, parks inside as the others do (GM ruled for all three tabs). A
   host with no control within reach on either side stays beside.
 - **R1 (delete during the point's lookup).** After the cursor is stored, the route looks the target up again in a thread
-  by the stored ids; if the item, view or image is gone it forgets that one cursor (`AgentPresence.forget_cursor`, which
-  puts the agent's plain cursor back to what it was), tells the tabs `agentPresenceLeave` and answers the first lookup's
-  refusal (the agent's own reference when it still fails, else the id's). A rename in the window passes.
+  by the stored ids; if the item, view or image is gone it refuses the point with the first lookup's refusal (the
+  agent's own reference when it still fails, else the id's). A rename in the window passes. How the refused point is
+  undone changed in the round check below.
 - **R2 (80-character cut).** `_shown_name` (`safe_cut`) in `parse_surface_target`, `rename_item` and `_clean_did`; also
   `moodboard_actions.board_point`'s board name. No other name slices in the surface code.
 - **R3 (checked, no change).** `useAssetStudioDraft` returns `draft` and `savedId` from one store entry
   (`entries[key]`), replaced by one `patch`/`initialize`; a switch to another Character reads the new key's entry whole
   (or the empty fallback, which publishes null). No render sees one Character's id with another's count.
+
+## Round check (one reviewer on the GM round 1 commit)
+
+Three findings, all in the backend, no visual change.
+
+- **A refused point could put back a cursor on the deleted item (medium).** The round 1 undo restored the agent's
+  earlier plain cursor without asking where it was. An agent already on a Character that pointed at it again while it
+  was deleted ended with its old cursor on the deleted Character in `nebula agents`. Now the route does two things on a
+  refusal. `AgentPresence.undo_point` puts the plain cursor back to what it was, unless a newer point has replaced the
+  refused one. Then `_forget_missing_cursors` runs the same forget a delete runs for what the route found missing:
+  `forget_item` when the item is gone, `forget_subs` when only its image or view is. That removes the restored cursor
+  when it is on the item, moves it to the item when it is on the cut view, and tells the tabs. It also catches any other
+  cursor still on the missing thing, so the result is the same whether the deleting route's own forget ran before the
+  point stored its cursor, during the second look, or after.
+- **The roster and the tabs disagreed after a refusal (low).** The round 1 route wrote the session's cursor before the
+  second look, so a refusal dropped the session's cursor from the tabs while the roster went back to its earlier place.
+  The second look now comes before the session's cursor is written. A refused point writes nothing for the session and
+  sends nothing, so a session at a node or a spot stays there for both readers.
+- **A name of one long character was stored as no name (low).** `safe_cut` backs up to 0 for a letter under more than
+  80 combining marks. `_shown_name` now cuts such a name plainly at 80.
+
+Tradeoffs and limits:
+
+- Between the store of the plain cursor and the session's cursor there is now an await for surface targets. Two points
+  from one session that overlap in that window can leave the roster on the later point and the tabs on the earlier
+  one. The round 1 order had the same overlap in its broadcast order. Agents send one call at a time, so this is left.
+- `_forget_missing_cursors` trusts the second look. If the person switches project inside the window, the item reads as
+  gone and its cursors leave. Cursors are listed per project, so the only cost is that they are not there on a switch
+  back.
+- A view refusal forgets cursors on that one view number. Views past it that went in the same save are handled by the
+  save's own route (`_forget_removed_views`).

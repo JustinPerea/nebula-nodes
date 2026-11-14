@@ -326,7 +326,9 @@ def _shown_name(name: Any) -> str:
     characters without splitting a joined emoji or a combining mark
     (services/text_cut.safe_cut), whichever path writes it (a point or a rename)."""
     text = " ".join(str(name).split())
-    return text[:safe_cut(text, 80)]
+    # A name that is one long character (a letter under more than 80 marks)
+    # has no safe cut: it is cut plainly rather than stored as no name.
+    return text[:safe_cut(text, 80) or 80]
 
 
 def _item_list(info: SurfaceInfo, items: Collection[Mapping[str, Any]]) -> str:
@@ -1182,28 +1184,28 @@ class AgentPresence:
         return left
 
     def plain_cursor(self, identity: AgentIdentity) -> dict[str, Any] | None:
-        """The agent's plain cursor as stored now (what ``forget_cursor`` puts back)."""
+        """The agent's plain cursor as stored now: what a point replaces, and
+        what it stored (``undo_point`` takes both)."""
         return self._agents.get(identity.id)
 
-    def forget_cursor(self, identity: AgentIdentity, session: str | None,
-                      gone: list[dict[str, Any]] | None = None, *,
-                      restore: dict[str, Any] | None = None) -> bool:
-        """One cursor leaves: the agent's plain cursor and the slot of
-        ``session`` (the one a point just stored), its number free. For a
-        point whose item went while the route was reading (main.point_agent_cursor);
-        other sessions' cursors stay. ``gone`` collects it as the open tabs
-        name it, as ``forget_item`` does. Returns whether a cursor left."""
-        raw = session if session is not None and _valid_session(session) else ""
-        left = self._agents.pop(identity.id, None) is not None
-        if restore is not None:
-            # The plain cursor is one per agent: it goes back to what another session left there.
-            self._agents[identity.id] = restore
-        slot = (self._slots.get(identity.id) or {}).pop(raw, None)
-        if slot is not None:
-            left = True
-            if gone is not None:
-                gone.append({"agentId": identity.id, "key": slot.key})
-        return left
+    def undo_point(self, identity: AgentIdentity, stored: dict[str, Any] | None,
+                   before: dict[str, Any] | None) -> None:
+        """A point the route refused after storing it never happened (its item
+        went while the route was reading, main.point_agent_cursor): the
+        agent's plain cursor goes back to ``before``, what it was when the
+        point came. ``stored`` is what the point put there. A newer point that
+        replaced it meanwhile stays. A delete that took it meanwhile leaves
+        nothing there, and ``before`` still goes back: it may be on the same
+        item, so the caller forgets every cursor on what is missing next
+        (forget_item or forget_subs), ``before`` among them. No session cursor
+        is touched: the route refuses before it writes one."""
+        current = self._agents.get(identity.id)
+        if current is not None and current is not stored:
+            return
+        if before is None:
+            self._agents.pop(identity.id, None)
+        else:
+            self._agents[identity.id] = before
 
     def forget_image(self, board_id: str, image_ids: Collection[str], *,
                      holder: tuple[str, str | None] | None = None,
