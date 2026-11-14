@@ -89,6 +89,9 @@ export interface AgentPresenceEvent {
    * label) still has its line here. Absent: the log uses `say` (and a bare
    * cursor move has none). */
   log?: string;
+  /** "muted": a line the Agent log shows neutral, not as an action or an
+   * error (a run that waited with no proposal slot left, round 2 of PR #212). */
+  tone?: 'muted';
   /** Backend wall-clock milliseconds. */
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
@@ -429,10 +432,36 @@ export interface ProposalView {
   reason: string | null;
   idMap: Record<string, string> | null;
   runNodeIds: string[] | null;
+  /** A run the daily total held (backend main._propose_waiting_run): its
+   * lines and exact numbers. Absent on a proposal an agent made. */
+  wait?: ProposalWait;
   /** The card's plan line under the note, by node name: "Changes and runs
    * “Hero shot” · Krea 2 on your Krea plan · no list price" (backend
    * canvas_proposals.plan_line; agents read the same words). */
   plan?: string;
+}
+
+/** Why a run waits for the person's OK: it would pass the daily total
+ * (backend agent_spend.DailyWait.as_dict, with its waiting nodes). */
+export interface ProposalWait {
+  limitUsd: number;
+  usedUsd: number;
+  leftUsd: number;
+  runUsd: number;
+  /** The other reason it needs an OK, when it has one (agent_spend.ALSO_*). */
+  also: 'perRun' | 'modelPerRun' | 'unpriced' | 'limit' | 'planRuns' | null;
+  /** That reason's amount: the per-run limit, a model's own, or the budget's. */
+  alsoLimitUsd: number | null;
+  alsoModel: string | null;
+  alsoFor: string | null;
+  alsoPlanRuns: number | null;
+  /** GM's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
+  barLine: string;
+  /** False when the run fits under the total and waits only for a node with
+   * no list price (Justin's Q165; absent on older proposals: true). */
+  over?: boolean;
+  nodeIds: string[];
+  names: string[];
 }
 
 /**

@@ -11,6 +11,8 @@ import { sceneCardView } from '../../lib/cinemaScene';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
+import { NodeWaitSwap } from './NodeWaitSwap';
+import { nodeWaitHeaderProps, useNodeWait } from '../../lib/nodeWaitHeader';
 import '../../styles/cinema-node.css';
 
 interface CinemaSceneNodeData {
@@ -34,6 +36,9 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const unsaved = kept ? live ?? kept : null;
   // A [Try again] on its way keeps the mark's popover and its button (GM r29 call 2).
   const stopped = useGraphStore((s) => s.stoppedScenes[id] === true || id in s.sceneTries);
+  // A run the daily total holds waits on this scene: its title row says so, as
+  // a model card's header does (NodeWaitSwap; the card never changes size).
+  const nodeWait = useNodeWait(id);
   const { params, keyStatus } = data as CinemaSceneNodeData;
   // Read through a guard (PR #198 review 3, L4): a scene whose data is
   // damaged still draws its card.
@@ -59,12 +64,13 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     // colour as ModelNode does, and cinema-node.css selects it in that colour.
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
-      <div className="cinema-scene-node__title">
+      <div className="cinema-scene-node__title" {...nodeWaitHeaderProps(id, nodeWait)}>
         <span className="cinema-scene-node__name">⛭ Cinema Scene</span>
         {keyStatus === 'missing' && (
           <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
             title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], (params ?? {}) as Record<string, unknown>)}>&#x26A0;</span>
         )}
+        <NodeWaitSwap nodeId={id} wait={nodeWait} />
       </div>
       {/* GM r9: "Unsaved", under the header so it never wraps the title; its
           tooltip is the sentence of the toast that said why. Stopped, a

@@ -21,6 +21,7 @@ import {
 import { defaultSay, errorCause, heldDefault, sayHoldMs, surfaceSay, type SayContext } from '../../lib/agentCursorSays';
 import { isSettled } from '../../lib/agentCursorSettled';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { waitFor } from '../../lib/nodeWait';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { fieldBox, fieldTextChanged, findTypeField, onScreen, type FieldBox, type TypeField } from '../../lib/agentCursorField';
 import {
@@ -103,7 +104,7 @@ interface SayInfo {
 }
 
 /** The cursor's line for this event: its own say, or its action's default (r54). */
-function sayFor(cursor: AgentCursor, lookup: CursorLabels | undefined): SayInfo {
+function sayFor(cursor: AgentCursor, lookup: CursorLabels | undefined, headerWaits = false): SayInfo {
   const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
   const handle = 'nodeId' in cursor.target ? cursor.target.handle : undefined;
   const field = cursor.action === 'type' && nodeId ? findTypeField(nodeId, handle) : null;
@@ -134,6 +135,10 @@ function sayFor(cursor: AgentCursor, lookup: CursorLabels | undefined): SayInfo 
     field: field ? (field.kind === 'param' ? { kind: 'param', label: field.label } : { kind: 'text' }) : null,
     cause: cursor.action === 'error' ? errorCause(cursor.did, nodeId, cursor.receivedAt) : null,
   };
+  // The node's header already says "Waiting for your OK" (a run the daily
+  // total holds): the default line would repeat it, so it is dropped; the
+  // dashed halo and the mark stay (GM - Design, PR #212 round 2, item 8).
+  if (headerWaits && cursor.action === 'propose') return { text: '', isDefault: true, field };
   return { text: defaultSay(cursor.action, context), isDefault: true, field };
 }
 
@@ -1208,9 +1213,21 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   // default line (GM - Design r54, lib/agentCursorSays), worked out once per
   // event from the canvas as it is then. A default is display only: the
   // accessible name and the Agent log keep the agent's own words.
-  const sayInfo = useMemo(() => sayFor(cursor, space.labels()),
+  const targetNode = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+  const headerWaits = useCanvasProposalsStore((state) => {
+    const entry = cursor.proposalId ? state.proposals[cursor.proposalId] : undefined;
+    return Boolean(entry && !entry.closing && targetNode && entry.view.wait?.nodeIds.includes(targetNode));
+  });
+  // While the node's header shows a wait (any agent's held run on it), every
+  // cursor on that node is drawn at the header's left end (space.waitRest), a
+  // proposer's or not: its loop reads this each frame. The wait is the
+  // node's, so a cursor that only looks at the node must not cover it either.
+  const nodeWaits = useCanvasProposalsStore((state) => Boolean(targetNode && waitFor(state, targetNode)));
+  const headerWaitsRef = useRef(nodeWaits);
+  headerWaitsRef.current = nodeWaits;
+  const sayInfo = useMemo(() => sayFor(cursor, space.labels(), headerWaits),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
-    [cursor.seq, cursor.say, cursor.action]);
+    [cursor.seq, cursor.say, cursor.action, headerWaits]);
   const say = sayInfo.text;
   // How long it shows before its exit (r54): max(3 s, 60 ms × characters),
   // capped at 8 s; a default tied to a held state (think, propose, wait)
@@ -1738,7 +1755,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const sinceFirstSightMs = firstSightAt.current === null ? 0 : performance.now() - firstSightAt.current;
       const shown = nameVisible({
         moving: !reduced && m !== null && isMoving(m, zoomRef.current),
-        peers: peersRef.current,
+        // A say under a wait-state header keeps the name's slot, as with two
+        // or more cursors: with the name hidden the say pill moves up into the
+        // name's row, onto the header's "Waiting for your OK" (GM r3, item 2).
+        peers: headerWaitsRef.current && sayShownRef.current ? Math.max(2, peersRef.current) : peersRef.current,
         hovered: hovered.current,
         sinceFirstSightMs,
       });
@@ -1806,7 +1826,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         request();
         return;
       }
-      const resolved = space.resolve(cursor.target, cursor.key);
+      // Drawn at the header's left end while the node's header shows a wait,
+      // counted for its target chain where it always is (PR #212, restPoints).
+      const counted = space.resolve(cursor.target, cursor.key);
+      const resolved = counted && headerWaitsRef.current ? space.waitRest?.(cursor.target) ?? counted : counted;
       const start = dragging && cursor.from ? space.resolve(cursor.from, `${cursor.key}>from`) : null;
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
@@ -1833,7 +1856,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const nodeAt = nodeState?.at ?? null;
       const nodeDragged = nodeState?.dragging ?? false;
       field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y }, arrivedRef.current, knownRef.current, nodeDragged,
-        space.chainPoint(cursor.target, cursor.key) ?? resolved);
+        space.chainPoint(cursor.target, cursor.key) ?? counted!);
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
       // Its layout changed (a say, a join, a leave), or a member above it
@@ -2137,6 +2160,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   useEffect(() => {
     wake.current();
   }, [idle, drawsSay]);
+  // The header's wait starting or ending moves where it is drawn: it glides.
+  useEffect(() => {
+    wake.current();
+  }, [nodeWaits]);
   // A new backend arrival with no new event (a node move carried it,
   // agentPresenceArrival): the loop reads it and takes its new place.
   useEffect(() => {

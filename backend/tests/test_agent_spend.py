@@ -231,7 +231,15 @@ def test_cli_run_under_the_threshold_goes_ahead(client):
     main.execute_graph.assert_awaited_once()
 
 
+def total_off(client):
+    """The daily total off (No limit): the other limits stand on their own."""
+    saved = client.put("/api/settings", json={"agentSpend": {"dailyTotalUsd": None, "models": {}}}, headers=PERSON)
+    assert saved.status_code == 200, saved.text
+
+
 def test_cli_run_of_an_unpriced_node_is_refused(client):
+    # With the daily total off; with it on, an unpriced node waits instead (Justin's Q165, test_daily_total*).
+    total_off(client)
     price(None)
     node_id = add_paid_node(client)
     response = client.post("/api/graph/run", json={})
@@ -275,7 +283,13 @@ def test_an_agent_with_the_person_token_is_still_held_to_it(client):
     node_id = add_paid_node(client)
     response = client.post("/api/graph/run", json={"targetNodeId": node_id},
                            headers={**PERSON, "X-Nebula-Agent": "Claude Code"})
-    assert response.status_code == 403
+    # Held to the daily total, which an unpriced node always waits on: a proposal (Justin's Q165).
+    assert response.status_code == 202 and response.json()["status"] == "waiting"
+    total_off(client)
+    client.put("/api/settings", json={"runCostConfirmUsd": 1}, headers=PERSON)
+    again = client.post("/api/graph/run", json={"targetNodeId": node_id},
+                        headers={**PERSON, "X-Nebula-Agent": "Codex"})
+    assert again.status_code == 403
 
 
 def test_turning_the_threshold_off_lets_agents_run(client):
@@ -283,7 +297,8 @@ def test_turning_the_threshold_off_lets_agents_run(client):
 
     price(None)
     node_id = add_paid_node(client)
-    assert client.put("/api/settings", json={"runCostConfirmUsd": None}, headers=PERSON).status_code == 200
+    assert client.put("/api/settings", json={"runCostConfirmUsd": None, "agentSpend": {"dailyTotalUsd": None, "models": {}}},
+                      headers=PERSON).status_code == 200
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
     main.execute_graph.assert_awaited_once()
 
@@ -671,6 +686,7 @@ def test_shot_variations_are_counted_per_variation(client, variations, allowed):
 
 def test_a_scene_on_a_base_without_a_list_price_needs_a_proposal(client):
     # cinema-scene itself is a utility node; it used to pass the check as free.
+    total_off(client)
     _price_base(0.3)
     for base in (None, "seedream-4-5"):  # None: the handler's default base
         response = client.post("/api/cinema/generate-shot", json=_shot_request(1, base=base))
@@ -1137,4 +1153,5 @@ def test_a_personal_agent_token_spends_in_the_shared_outside_budget(monkeypatch)
     assert key == "outside:personal:claude" and label == "Claude (your setup)"
     assert key.startswith(agent_spend.PERSONAL_AGENT_PREFIX) and agent_spend.is_outside(key)
     budgets = main._spend_budgets(key, {})
-    assert [b.who for b in budgets] == ["agents outside Nebula chats"]
+    # The daily total every key shares comes first (it is the umbrella).
+    assert [b.who for b in budgets] == ["everything that isn't the person", "agents outside Nebula chats"]

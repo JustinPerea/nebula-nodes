@@ -5,6 +5,7 @@ from typing import Any
 from services import money
 
 from ..client import NebulaClient
+from ..formatter import daily_total_line
 
 
 def _usd(value: Any) -> str:
@@ -30,6 +31,11 @@ def run(client: NebulaClient) -> None:
     spent = view.get("spent") or {}
     budget = view.get("budget")
     print("Spending limits (set by the person in Settings > Preferences):")
+    daily = view.get("dailyTotal") or {}
+    if daily:
+        # The umbrella every agent, script and unlinked tab shares: the limit
+        # as Settings writes it ("$5"), used and left to the cent.
+        print(f"  {daily_total_line(daily)}")
     print(f"  Per run:      {_usd(limits.get('perRunUsd'))}")
     used = spent.get("totalUsd", 0)
     plan_cap = limits.get("kreaPlanRuns")
@@ -64,5 +70,8 @@ def run(client: NebulaClient) -> None:
             parts.append(f"{_usd(cap['sessionUsd'])} {'per session' if budget == 'chat' else 'per 24 hours'}, "
                          f"{_usd(model_used)} used")
         print(f"  {model}: {', '.join(parts)}")
-    print("\nAmounts are upper estimates at list prices. Nodes without a published price always need")
-    print("a proposal. Over a limit: `nebula propose --run <node>` and the person decides.")
+    print("\nAmounts are upper estimates at list prices. Nodes without a list price always need the")
+    print("person's OK, since Nebula can't count them toward the daily total: with the total on, a run")
+    print("of one is sent as a proposal for you and waits. Over another limit: `nebula propose --run")
+    print("<node>` and the person decides. A run that would pass the daily total is sent as a proposal")
+    print("for you and waits for the person's OK.")

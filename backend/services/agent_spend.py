@@ -18,6 +18,15 @@ The person sets these in Settings > Preferences:
 - ``agentSpend.models[<definitionId>]``: per-model limits, ``perRunUsd`` (it
   replaces the general per-run threshold for that model) and ``sessionUsd``
   (per chat session, and over 24 hours for the outside agents).
+- ``agentSpend.dailyTotalUsd``: the daily total, what everything that isn't
+  the person (agent chats, agents outside Nebula, scripts, tabs not opened
+  from the link) may spend together over the last 24 hours (Justin decided,
+  2026-10-31). Left unset it is DEFAULT_DAILY_TOTAL_USD ($5), and so is an
+  unreadable value; only the person's explicit null ("No limit") lifts it.
+  The other limits stay as finer ones inside it. A run that would pass it
+  isn't refused like the others: it becomes a proposal the person accepts
+  on the canvas (``DailyWait``, main._propose_waiting_run), as Justin put it,
+  "runs wait for your OK like a run over $1 does".
 
 Agents can't be asked, so the backend refuses an agent's run that would break
 a limit and points it at a proposal, which the person accepts on the canvas.
@@ -45,7 +54,9 @@ Whose total a run counts against (``main._spend_session``):
   stricter wins, so issuing tokens never adds headroom.
 
 Outside totals are rolling: each run is an event with its time, and only the
-last 24 hours count (``WINDOW_SECONDS``). A give-back lands at the time of the
+last 24 hours count (``WINDOW_SECONDS``). A chat's runs are also kept as
+events, under CHATS_DAILY, so the daily total rolls the same way over every
+key (``SpendLedger.spent_daily``). A give-back lands at the time of the
 run it gives back, so it never reaches into a later window.
 
 Rules, with any limit set:
@@ -139,7 +150,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from services import model_pricing, money, node_route
-from services.node_names import quoted
+from services.node_names import node_name_list, quoted
 from services.retired_nodes import merged_into
 
 SETTING_KEY = "runCostConfirmUsd"
@@ -167,6 +178,26 @@ PERSONAL_AGENT_BUDGET = "outside"
 # Keys from before the outside budget had a stable name: one per backend
 # launch. Folded into OUTSIDE_SHARED once (SpendLedger._migrate).
 _LEGACY_PREFIX = "unverified:"
+
+# The daily total (Justin decided, 2026-10-31: "Add a default daily total for
+# everything that isn't you ... $5 a day is a starting point").
+DAILY_TOTAL_KEY = "dailyTotalUsd"
+DEFAULT_DAILY_TOTAL_USD = 5.0
+# The most a daily total may be. Settings offers $1 to $50 a day and "No
+# limit"; a typed amount above this isn't a limit anyone means (No limit says
+# that), and keeping it here keeps every sum and the "$100,000 / day" label
+# finite: a hand-written 1e308 or 10**400 is read as unreadable ($5), never
+# an OverflowError (review 1 of PR #212, N-2). frontend lib/dailyTotal.ts
+# MAX_DAILY_TOTAL_USD is the same.
+MAX_DAILY_TOTAL_USD = 100_000.0
+DAILY_WHO = "everything that isn't the person"
+# Every chat's runs as events with their time, so the daily total counts
+# chats over the same rolling 24 hours as the outside agents. Never a chat's
+# own budget, and never dropped for room.
+CHATS_DAILY = "daily:chats"
+CHATS_DAILY_LABEL = "Nebula chats"
+# Set in the file once chats' spend from before the daily total was counted in it.
+_CHATS_DAILY_SEEDED = "chatsDailySeeded"
 
 
 # -- settings ----------------------------------------------------------------------
@@ -214,9 +245,21 @@ def validate_threshold(value: Any) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("a spending limit must be a positive number of USD or null")
-    amount = float(value)
+    try:
+        amount = float(value)
+    except OverflowError:  # an integer too large for a float (10**400): unreadable, not a 500
+        raise ValueError("a spending limit must be a positive number of USD or null") from None
     if not math.isfinite(amount) or amount <= 0:
         raise ValueError("a spending limit must be a positive number of USD or null")
+    return amount
+
+
+def validate_daily_total(value: Any) -> float | None:
+    """The daily total: validate_threshold, at most MAX_DAILY_TOTAL_USD."""
+    amount = validate_threshold(value)
+    if amount is not None and amount > MAX_DAILY_TOTAL_USD:
+        raise ValueError(f"{CAPS_KEY}.{DAILY_TOTAL_KEY} must be at most {limit_usd(MAX_DAILY_TOTAL_USD)} a day, "
+                         "or null for no limit")
     return amount
 
 
@@ -244,12 +287,13 @@ def threshold_from_settings(settings: Mapping[str, Any]) -> float | None:
 def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize ``agentSpend`` from a request; raise ValueError when it's malformed.
 
-    ``outsideDailyUsd`` and ``kreaPlanRuns`` are kept only when the request
-    names them: left out, the outside agents share the per-session amount and
-    plan runs are held to DEFAULT_PLAN_RUNS (see caps_from_settings)."""
+    ``outsideDailyUsd``, ``kreaPlanRuns`` and ``dailyTotalUsd`` are kept only
+    when the request names them: left out, the outside agents share the
+    per-session amount, plan runs are held to DEFAULT_PLAN_RUNS and the daily
+    total is DEFAULT_DAILY_TOTAL_USD (see caps_from_settings)."""
     if not isinstance(value, dict):
         raise ValueError(f"{CAPS_KEY} must be an object")
-    unknown = set(value) - {"sessionUsd", "outsideDailyUsd", "kreaPlanRuns", "models"}
+    unknown = set(value) - {"sessionUsd", "outsideDailyUsd", "kreaPlanRuns", DAILY_TOTAL_KEY, "models"}
     if unknown:
         raise ValueError(f"{CAPS_KEY} has unknown fields: {', '.join(sorted(unknown))}")
     models_in = value.get("models", {})
@@ -271,6 +315,8 @@ def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str,
         caps["outsideDailyUsd"] = validate_threshold(value["outsideDailyUsd"])
     if "kreaPlanRuns" in value:
         caps["kreaPlanRuns"] = validate_plan_runs(value["kreaPlanRuns"])
+    if DAILY_TOTAL_KEY in value:
+        caps[DAILY_TOTAL_KEY] = validate_daily_total(value[DAILY_TOTAL_KEY])
     caps["models"] = _fold_models(models)
     return caps
 
@@ -280,12 +326,16 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
     unreadable outside budget, which falls back to the per-session one, and
     plan runs: unset is DEFAULT_PLAN_RUNS and unreadable is 0 (every plan run
     needs a proposal). Krea doesn't price plan runs, so no USD limit stands
-    behind them; only an explicit null (the person's "No limit") lifts it."""
+    behind them; only an explicit null (the person's "No limit") lifts it.
+    The daily total is the same: unset or unreadable is
+    DEFAULT_DAILY_TOTAL_USD, and only an explicit null lifts it."""
     if CAPS_KEY not in settings:
-        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": DEFAULT_PLAN_RUNS, "models": {}}
+        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": DEFAULT_PLAN_RUNS,
+                DAILY_TOTAL_KEY: DEFAULT_DAILY_TOTAL_USD, "models": {}}
     raw = settings.get(CAPS_KEY)
     if not isinstance(raw, dict):
-        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": 0, "models": {}}
+        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": 0,
+                DAILY_TOTAL_KEY: DEFAULT_DAILY_TOTAL_USD, "models": {}}
     try:
         session = validate_threshold(raw.get("sessionUsd"))
     except ValueError:
@@ -302,6 +352,12 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
             plan_runs = validate_plan_runs(raw["kreaPlanRuns"])
         except ValueError:
             plan_runs = 0
+    daily: float | None = DEFAULT_DAILY_TOTAL_USD
+    if DAILY_TOTAL_KEY in raw:
+        try:
+            daily = validate_daily_total(raw[DAILY_TOTAL_KEY])
+        except ValueError:
+            daily = DEFAULT_DAILY_TOTAL_USD
     models: dict[str, dict[str, float | None]] = {}
     for definition_id, limits in (raw.get("models") or {}).items() if isinstance(raw.get("models"), dict) else []:
         if not isinstance(limits, dict):
@@ -314,7 +370,8 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
                 entry[key] = None
         if entry["perRunUsd"] is not None or entry["sessionUsd"] is not None:
             models[str(definition_id)] = entry
-    return {"sessionUsd": session, "outsideDailyUsd": outside, "kreaPlanRuns": plan_runs, "models": _fold_models(models)}
+    return {"sessionUsd": session, "outsideDailyUsd": outside, "kreaPlanRuns": plan_runs, DAILY_TOTAL_KEY: daily,
+            "models": _fold_models(models)}
 
 
 # -- what a session has spent ------------------------------------------------------
@@ -330,6 +387,12 @@ def is_outside(key: str) -> bool:
     return key.startswith(OUTSIDE_PREFIX)
 
 
+def _keeps_events(key: str) -> bool:
+    """A key whose runs are events in time: an outside budget, or every chat's
+    runs for the daily total (CHATS_DAILY)."""
+    return is_outside(key) or key == CHATS_DAILY
+
+
 def personal_agent_spend_key(agent_id: str, chat_id: str) -> str:
     """The budget a personal agent's session token names (see PERSONAL_AGENT_BUDGET)."""
     if PERSONAL_AGENT_BUDGET == "chat":
@@ -343,27 +406,72 @@ class SpendLedger:
 
     A chat key keeps running totals: {agent, total, models, planRuns}. An
     outside key keeps events, [time, definitionId, usd, planRuns], and counts
-    only the last 24 hours of them; events older than that are dropped on save."""
+    only the last 24 hours of them; events older than that are dropped on save.
+    Every chat run is also an event under CHATS_DAILY, for the daily total.
+
+    ``reserve`` is the one way a run is checked and counted: the check and
+    the count happen under one lock, so two runs that each fit alone can't
+    both pass a total they pass together."""
 
     def __init__(self, path: Path | None, *, clock: Callable[[], float] = time.time) -> None:
         self._path = path
         self._clock = clock
         self._lock = threading.Lock()
+        self._reserve_lock = threading.RLock()
         self._sessions: dict[str, dict[str, Any]] | None = None
 
     def _load(self) -> dict[str, dict[str, Any]]:
         if self._sessions is None:
             self._sessions = {}
+            # A file from before the daily total kept chats as running totals
+            # only: their last 24 hours go into CHATS_DAILY once (_seed_chats_daily).
+            seeded = True
             if self._path is not None and self._path.exists():
                 try:
                     data = json.loads(self._path.read_text(encoding="utf-8"))
                     if isinstance(data, dict) and isinstance(data.get("sessions"), dict):
                         self._sessions = {str(k): v for k, v in data["sessions"].items() if isinstance(v, dict)}
+                        seeded = data.get(_CHATS_DAILY_SEEDED) is True
                 except (OSError, ValueError):
                     self._sessions = {}
-            if self._migrate(self._sessions):
+            changed = self._migrate(self._sessions)
+            if not seeded:
+                self._seed_chats_daily(self._sessions)
+                changed = True
+            if changed:
                 self._save(self._sessions)
         return self._sessions
+
+    def _seed_chats_daily(self, sessions: dict[str, dict[str, Any]]) -> None:
+        """Chat spend from before the daily total counts toward it from the
+        start (review 1 of PR #212, L-4): each chat entry updated in the last
+        24 hours counts as spent at that time, as _migrate folds legacy keys
+        (it was spent then or earlier, so this can only overcount). Once per
+        file; a file that already has CHATS_DAILY counted its chats itself."""
+        if CHATS_DAILY in sessions:
+            return
+        since = self._clock() - WINDOW_SECONDS
+        events: list[list[Any]] = []
+        for key, entry in sessions.items():
+            if _keeps_events(key):
+                continue
+            try:
+                at = float(entry.get("updated") or 0)
+                total = float(entry.get("total") or 0)
+                models = {str(k): float(v) for k, v in (entry.get("models") or {}).items()}
+                plan_runs = int(entry.get("planRuns") or 0)
+            except (TypeError, ValueError, AttributeError, OverflowError):
+                continue
+            if at <= since or not math.isfinite(at):
+                continue
+            for definition_id, amount in models.items():
+                if amount > 0 and math.isfinite(amount):
+                    events.append([at, definition_id, round(amount, 6), 0])
+            rest = round(total - sum(a for a in models.values() if a > 0 and math.isfinite(a)), 6)
+            if rest > 0 and math.isfinite(rest) or plan_runs > 0:
+                events.append([at, "", max(0.0, rest) if math.isfinite(rest) else 0.0, max(0, plan_runs)])
+        if events:
+            sessions[CHATS_DAILY] = {"agent": CHATS_DAILY_LABEL, "events": events, "updated": self._clock()}
 
     def _migrate(self, sessions: dict[str, dict[str, Any]]) -> bool:
         """Fold the per-launch budgets older versions kept for agents without a
@@ -436,7 +544,7 @@ class SpendLedger:
     def spent(self, key: str) -> Spent:
         with self._lock:
             entry = self._load().get(key) or {}
-            if is_outside(key):
+            if _keeps_events(key):
                 return self._sum(self._events(entry))
         models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
         spent_models: dict[str, float] = {}
@@ -451,6 +559,40 @@ class SpendLedger:
             events = [event for key, entry in self._load().items() if is_outside(key) for event in self._events(entry)]
             return self._sum(events)
 
+    def spent_daily(self) -> Spent:
+        """Everything that isn't the person spent in the last 24 hours, for the
+        daily total: every outside key's events and every chat's (CHATS_DAILY).
+        Each key is summed and held at 0 on its own before they're added, so a
+        give-back larger than its own key's charge can't erase another key's
+        spend (review 1 of PR #212, N-1)."""
+        with self._lock:
+            parts = [self._sum(self._events(entry)) for key, entry in self._load().items() if _keeps_events(key)]
+        models: dict[str, float] = {}
+        for part in parts:
+            for model, amount in part.models.items():
+                models[model] = round(models.get(model, 0.0) + amount, 6)
+        return Spent(round(sum(part.total for part in parts), 6), models, sum(part.plan_runs for part in parts))
+
+    def reserve(self, key: str, label: str, check: Callable[[], "Decision"]) -> tuple["Decision", float | None]:
+        """Run ``check`` (which reads what was spent and decides) and, when it
+        doesn't refuse, count its charge, all under one lock: no other run is
+        checked between the read and the count. Returns the decision and the
+        time it was counted (None when it refused)."""
+        with self._reserve_lock:
+            decision = check()
+            if decision.refusal:
+                return decision, None
+            return decision, self.record(key, label, decision.charge, decision.plan_charge)
+
+    @staticmethod
+    def _add_events(entry: dict[str, Any], at: float, by_model: Mapping[str, float],
+                    plan_runs: Mapping[str, int], sign: int) -> None:
+        events = SpendLedger._events(entry)
+        for definition_id in set(by_model) | set(plan_runs):
+            events.append([at, definition_id, sign * round(by_model.get(definition_id, 0.0), 6),
+                           sign * int(plan_runs.get(definition_id, 0))])
+        entry["events"] = events
+
     def record(self, key: str, label: str, by_model: Mapping[str, float],
                plan_runs: Mapping[str, int] | None = None) -> float:
         """Count a run that is starting; returns its time, which a give-back passes as ``at``."""
@@ -460,23 +602,24 @@ class SpendLedger:
             return now
         with self._lock:
             sessions = self._load()
-            if is_outside(key):
+            if _keeps_events(key):
                 entry = sessions.pop(key, None) or {"agent": label, "events": []}
-                events = self._events(entry)
-                for definition_id in set(by_model) | set(plan_runs):
-                    events.append([now, definition_id, round(by_model.get(definition_id, 0.0), 6),
-                                   int(plan_runs.get(definition_id, 0))])
-                entry["events"] = events
+                self._add_events(entry, now, by_model, plan_runs, 1)
             else:
                 entry = sessions.pop(key, None) or {"agent": label, "total": 0.0, "models": {}}
                 for definition_id, amount in by_model.items():
                     entry["models"][definition_id] = round(entry["models"].get(definition_id, 0.0) + amount, 6)
                     entry["total"] = round(entry["total"] + amount, 6)
                 entry["planRuns"] = int(entry.get("planRuns") or 0) + sum(plan_runs.values())
+                # The same run, in time, for the daily total.
+                daily = sessions.get(CHATS_DAILY) or {"agent": CHATS_DAILY_LABEL, "events": []}
+                self._add_events(daily, now, by_model, plan_runs, 1)
+                daily["updated"] = now
+                sessions[CHATS_DAILY] = daily
             entry["agent"] = label
             entry["updated"] = now
             sessions[key] = entry  # most recent last
-            chats = [k for k in sessions if not is_outside(k)]
+            chats = [k for k in sessions if not _keeps_events(k)]
             # Outside keys are never dropped for room: one per app plus the
             # shared one, and saving prunes their old events.
             for dropped in chats[:max(0, len(chats) - MAX_SESSIONS)]:
@@ -495,15 +638,16 @@ class SpendLedger:
             entry = sessions.get(key)
             if entry is None:
                 return
-            if is_outside(key):
+            if _keeps_events(key):
                 if at is None:
                     return
-                events = self._events(entry)
-                for definition_id in set(by_model) | set(plan_runs):
-                    events.append([at, definition_id, -round(by_model.get(definition_id, 0.0), 6),
-                                   -int(plan_runs.get(definition_id, 0))])
-                entry["events"] = events
+                self._add_events(entry, at, by_model, plan_runs, -1)
             else:
+                # The daily total's copy lands at the run's own time too; with
+                # no time it stays counted, rather than guess a window.
+                daily = sessions.get(CHATS_DAILY)
+                if at is not None and daily is not None:
+                    self._add_events(daily, at, by_model, plan_runs, -1)
                 for definition_id, amount in by_model.items():
                     left = round(entry["models"].get(definition_id, 0.0) - amount, 6)
                     if left > 0:
@@ -517,7 +661,7 @@ class SpendLedger:
 
     def _save(self, sessions: dict[str, Any]) -> None:
         since = self._clock() - WINDOW_SECONDS
-        for key in [k for k in sessions if is_outside(k)]:
+        for key in [k for k in sessions if _keeps_events(k)]:
             kept = [event for event in self._events(sessions[key]) if float(event[0]) > since]
             if kept:
                 sessions[key]["events"] = kept
@@ -527,7 +671,7 @@ class SpendLedger:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"sessions": sessions}), encoding="utf-8")
+        tmp.write_text(json.dumps({"sessions": sessions, _CHATS_DAILY_SEEDED: True}), encoding="utf-8")
         os.replace(tmp, self._path)
 
 
@@ -539,7 +683,10 @@ class Budget:
 
     ``who`` names it in a refusal ("this session", "agents outside Nebula
     chats"); ``window`` follows the amount (" in the last 24 hours");
-    ``model_caps`` says whether the per-model session limits apply to it."""
+    ``model_caps`` says whether the per-model session limits apply to it.
+    ``daily`` marks the daily total, the umbrella over the others: a run
+    that would pass it waits for the person's OK (DailyWait) instead of
+    being refused like the rest."""
     who: str
     spent: Spent
     usd: float | None
@@ -548,6 +695,7 @@ class Budget:
     plural: bool = False
     window: str = ""
     noun: str = "budget"
+    daily: bool = False
 
     def _has(self) -> str:
         return f"{self.who} {'have' if self.plural else 'has'} already used"
@@ -556,19 +704,222 @@ class Budget:
         return "their" if self.plural else "its"
 
 
+def daily_budget(daily_spent: Spent, caps: Mapping[str, Any]) -> Budget:
+    """The daily total, shared by every key that isn't the person."""
+    return Budget(DAILY_WHO, daily_spent, caps.get(DAILY_TOTAL_KEY), None, model_caps=False,
+                  window=" in the last 24 hours", noun="daily total", daily=True)
+
+
 def session_budgets(key: str, spent: Spent, caps: Mapping[str, Any], *, outside_spent: Spent | None = None,
-                    app_name: str | None = None, app_daily_usd: float | None = None) -> list[Budget]:
-    """The budgets a run from ``key`` counts against (see the module docstring)."""
+                    app_name: str | None = None, app_daily_usd: float | None = None,
+                    daily_spent: Spent | None = None) -> list[Budget]:
+    """The budgets a run from ``key`` counts against (see the module docstring).
+    With ``daily_spent`` (SpendLedger.spent_daily), the daily total comes
+    first: every key counts against it."""
+    daily = [daily_budget(daily_spent, caps)] if daily_spent is not None else []
     if not is_outside(key):
-        return [Budget("this session", spent, caps.get("sessionUsd"), caps.get("kreaPlanRuns"))]
+        return [*daily, Budget("this session", spent, caps.get("sessionUsd"), caps.get("kreaPlanRuns"))]
     window = " in the last 24 hours"
     shared = Budget("agents outside Nebula chats", outside_spent if outside_spent is not None else spent,
                     caps.get("outsideDailyUsd"), caps.get("kreaPlanRuns"), plural=True, window=window)
     if not key.startswith(APP_PREFIX):
-        return [shared]
+        return [*daily, shared]
     own = Budget(app_name or "this app", spent, app_daily_usd, None, model_caps=False, window=window,
                  noun="daily limit")
-    return [own, shared]
+    return [*daily, own, shared]
+
+
+def limit_usd(amount: float) -> str:
+    """A limit the person picked, as Settings writes it: "$5", "$7.50", "$0.50"
+    (whole dollars bare, anything else to the cent). frontend
+    lib/dailyTotal.ts limitUsd is the same."""
+    cents = int(math.floor(float(amount) * 100 + 0.5))
+    if cents % 100 == 0:
+        return f"${cents // 100:,}"
+    return f"${cents // 100:,}.{cents % 100:02d}"
+
+
+# Why a run that passes the daily total also needs the person's OK
+# (DailyWait.also): the reason the guard gives first without the total.
+ALSO_PER_RUN = "perRun"            # over the per-run limit (Settings > Run cost)
+ALSO_MODEL_PER_RUN = "modelPerRun"  # over one model's own per-run limit
+ALSO_UNPRICED = "unpriced"          # a node with no list price, with a USD limit set
+ALSO_LIMIT = "limit"                # over a chat's, the outside agents', an app's or a model's budget
+ALSO_PLAN_RUNS = "planRuns"         # over a Krea plan-run limit
+
+
+def limit_owner(who: str) -> str:
+    """Whose limit a Budget is, as the bar names it (GM - Design, 2026-10-31):
+    "this chat", "agents outside Nebula chats", or an app by name."""
+    if who == "this session":
+        return "this chat"
+    if who in ("agents outside Nebula chats", "this app"):
+        return who
+    return quoted(who)
+
+
+@dataclass
+class DailyWait:
+    """A run that would pass the daily total: it waits for the person's OK as
+    a proposal, with these as its reasons (GM - Design, 2026-10-31,
+    verbatim). ``limit`` is the total, ``used`` what everything that isn't
+    the person spent in the last 24 hours before this run, ``run`` this run's
+    upper bound.
+
+    ``also`` is the other reason it needs an OK, when it has one: the one the
+    guard would give first without the total, since accepting overrides both
+    (GM: "Accepting overrides both, so the person should know"). With it:
+    ``per_run_limit`` (the per-run limit, a model's own, or the budget's
+    amount), ``model`` (that model's display name), ``owner`` (whose budget,
+    limit_owner), ``plan_runs_limit``, and ``unpriced`` (the nodes with no
+    list price, named through ``names``: their canvas names, filled in when
+    the proposal is made, else their titles)."""
+    limit: float
+    used: float
+    run: float
+    also: str | None = None
+    per_run_limit: float | None = None
+    model: str | None = None
+    owner: str | None = None
+    plan_runs_limit: int | None = None
+    unpriced: tuple[str, ...] = ()
+    names: dict[str, str] = field(default_factory=dict)
+    # False when the run itself fits under the total and waits only because a
+    # node has no list price, which Nebula can't count toward it (Justin's
+    # Q165): every line then says that, never "would pass".
+    over: bool = True
+
+    @property
+    def left(self) -> float:
+        return max(0.0, round(self.limit - self.used, 6))
+
+    def bar_line(self) -> str:
+        """The proposal bar's line (and the Updates card's second sentence)."""
+        total = f"the {limit_usd(self.limit)} daily total"
+        if not self.over:
+            return self._cannot_count()
+        if self.also == ALSO_PER_RUN and self.per_run_limit is not None:
+            return f"This would pass {total} and cost more than {limit_usd(self.per_run_limit)} per run."
+        if self.also == ALSO_MODEL_PER_RUN and self.per_run_limit is not None and self.model:
+            return (f"This would pass {total} and cost more than the {limit_usd(self.per_run_limit)} per-run "
+                    f"limit for {quoted(self.model)}.")
+        if self.also == ALSO_UNPRICED and self.unpriced:
+            names = [self.names.get(node_id) or node_id for node_id in self.unpriced]
+            verb = "has" if len(names) == 1 else "have"
+            return f"This would pass {total}, and {node_name_list(names)} {verb} no list price."
+        if self.also == ALSO_UNPRICED:
+            return f"This would pass {total} and has a node with no list price."
+        if self.also == ALSO_LIMIT and self.per_run_limit is not None and self.owner:
+            amount = limit_usd(self.per_run_limit)
+            cap = f"the {amount} {quoted(self.model)} limit" if self.model else f"the {amount} limit"
+            return f"This would pass {total} and {cap} for {self.owner}."
+        if self.also == ALSO_PLAN_RUNS and self.plan_runs_limit is not None and self.owner:
+            return f"This would pass {total} and the {self.plan_runs_limit}-run Krea plan limit for {self.owner}."
+        if money.usd_spent(self.left) == "$0.00":
+            return f"This would pass {total}, which is used up."
+        return f"This would pass {total}, which has {money.usd_spent(self.left)} left."
+
+    def _unpriced_names(self) -> list[str]:
+        return [self.names.get(node_id) or node_id for node_id in self.unpriced]
+
+    def _cannot_count(self) -> str:
+        """GM - Design (PR #212 r2, item 4), verbatim: the line when only a node
+        with no list price makes the run wait. "“Sketch” has no list price, so
+        Nebula can\u2019t count it toward the $5 daily total." (several: "have
+        no list price" and "them")."""
+        names = self._unpriced_names() or ["A node"]
+        one = len(names) == 1
+        return (f"{node_name_list(names) if self.unpriced else names[0]} {'has' if one else 'have'} no list price, "
+                f"so Nebula can\u2019t count {'it' if one else 'them'} toward the {limit_usd(self.limit)} daily total.")
+
+    def update_line(self, run_names: list[str]) -> str:
+        """The Updates card's second sentence. Beside the bar's line except
+        when only the unpriced nodes make the run wait: "It has no list
+        price, so Nebula can\u2019t count it toward the $5 daily total." (GM
+        item 4). When the run holds other nodes too, the nodes are named
+        (the bar's line), since "It" would be unclear."""
+        names = self._unpriced_names()
+        if self.over or not names or sorted(names) != sorted(run_names):
+            return self.bar_line()
+        one = len(names) == 1
+        return (f"{'It has' if one else 'They have'} no list price, so Nebula can\u2019t count "
+                f"{'it' if one else 'them'} toward the {limit_usd(self.limit)} daily total.")
+
+    def _agents(self) -> str:
+        return (f"this run (about {money.usd_amount(self.run)}) would pass their {limit_usd(self.limit)} daily "
+                f"total for everything that isn\u2019t them ({money.usd_spent(self.used)} used in the last 24 hours)")
+
+    def agent_line(self, proposal_id: str) -> str:
+        """What an agent reads (run results, the CLI, HTTP), in GM's words.
+        MCP's run_nodes words the last sentence for its reader (for_mcp)."""
+        if not self.over:
+            return (f"{self._cannot_count()} Proposing {'it' if len(self.unpriced) < 2 else 'them'} for the "
+                    f"person\u2019s OK. Sent as proposal {proposal_id}. {CHECK_CLI}")
+        return (f"Waiting for the person\u2019s OK: {self._agents()}. Sent as proposal {proposal_id}. "
+                f"{CHECK_CLI}")
+
+    def _reason(self) -> str:
+        """Why the run waits, as the lines that give no node name say it."""
+        return f"This would pass the {limit_usd(self.limit)} daily total" if self.over else self._cannot_count()[:-1]
+
+    def nameless_line(self) -> str:
+        """A caller that didn't name itself (a script, curl) over the total:
+        refused, since only a caller with a name gets a proposal (GM - Design,
+        2026-10-31). A tab not opened from the link reads its own lock line."""
+        if not self.over:
+            return f"{self._cannot_count()} Name yourself with NEBULA_AGENT_NAME or --as to send it as a proposal."
+        return (f"This would pass the {limit_usd(self.limit)} daily total. Name yourself with "
+                "NEBULA_AGENT_NAME or --as to send it as a proposal.")
+
+    def slots_full_line(self, open_count: int) -> str:
+        """The agent's line when its proposal slots are full (GM - Design, 2026-10-31)."""
+        return (f"{self._reason()}, and you already have {open_count} "
+                "open proposals. Wait until the person accepts or rejects one, then propose it again.")
+
+    def total_full_line(self, open_count: int) -> str:
+        """The agent's line when Nebula's open proposals are at the cap (GM -
+        Design, PR #212 r2, item 3), verbatim: "This would pass the $5 daily
+        total, and Nebula already has 12 open proposals. Wait until the person
+        accepts or rejects one, then propose it again."""
+        return (f"{self._reason()}, and Nebula already has {open_count} "
+                "open proposals. Wait until the person accepts or rejects one, then propose it again.")
+
+    def _log_reason(self, names: list[str]) -> str:
+        if self.over:
+            return f"it would pass the {limit_usd(self.limit)} daily total"
+        mine = self._unpriced_names()
+        if not mine or sorted(mine) == sorted(names):
+            return "it has no list price"
+        return f"{node_name_list(mine)} {'has' if len(mine) == 1 else 'have'} no list price"
+
+    def slots_full_log(self, names: list[str], open_count: int) -> str:
+        """The person's Agent log line for it. The log's source column names the
+        agent, so the sentence reads whole without it (GM - Design, PR #212 r2,
+        item 2)."""
+        return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and all "
+                f"{open_count} proposal slots are full.")
+
+    def total_full_log(self, names: list[str], open_count: int) -> str:
+        """The person's Agent log line when Nebula's open proposals are at the
+        cap (GM item 3), verbatim: "Couldn\u2019t run \u201cWriter\u201d because it would pass
+        the $5 daily total and Nebula already has 12 open proposals."""
+        return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and Nebula "
+                f"already has {open_count} open proposals.")
+
+    def refusal(self, how_to_ask: str) -> str:
+        """For a run Nebula can't make a proposal of (a run off the canvas,
+        such as `nebula quick` or a moodboard read): refused as the other
+        limits refuse, in the same words."""
+        if not self.over:
+            return f"Needs the person's approval: {self._cannot_count()} {how_to_ask}"
+        return f"Needs the person's approval: {self._agents()}. {how_to_ask}"
+
+    def as_dict(self) -> dict[str, Any]:
+        """The exact numbers, for agents and the canvas."""
+        return {"limitUsd": self.limit, "usedUsd": round(self.used, 6), "leftUsd": self.left,
+                "runUsd": round(self.run, 6), "also": self.also, "alsoLimitUsd": self.per_run_limit,
+                "alsoModel": self.model, "alsoFor": self.owner, "alsoPlanRuns": self.plan_runs_limit,
+                "over": self.over, "barLine": self.bar_line()}
 
 
 @dataclass
@@ -578,6 +929,22 @@ class Decision:
     per_node: dict[str, tuple[str, float]] = field(default_factory=dict)  # node id -> (definition, USD)
     plan_charge: dict[str, int] = field(default_factory=dict)  # Krea plan runs per node definition
     plan_per_node: dict[str, tuple[str, int]] = field(default_factory=dict)  # node id -> (definition, runs)
+    # Set when the run would pass the daily total: it waits for the person's OK.
+    wait: DailyWait | None = None
+
+
+# How each surface checks on a waiting run's proposal (GM - Design,
+# 2026-10-31: "MCP gets get_proposal("<id>") and the CLI gets “nebula proposals”").
+CHECK_CLI = "Check it with nebula proposals."
+CHECK_MCP = 'Check it with get_proposal("{id}").'
+
+
+def for_mcp(message: str, proposal_id: str) -> str:
+    """A waiting run's agent line (DailyWait.agent_line) in MCP's words."""
+    check = CHECK_MCP.format(id=proposal_id)
+    if message.endswith(CHECK_CLI):
+        return message[: -len(CHECK_CLI)] + check
+    return message
 
 
 def _usd(amount: float) -> str:
@@ -746,6 +1113,55 @@ def _awaiting_reasons(
     return sentences
 
 
+def _first_other_reason(wait: DailyWait, *, usd_limited: bool, estimate: Mapping[str, Any],
+                        by_model: Mapping[str, float], model_caps: Mapping[str, Any], threshold: float | None,
+                        finer: list[Budget], run_total: float, plan_charge: Mapping[str, int],
+                        definitions: Mapping[str, Any]) -> None:
+    """Set ``wait.also`` to the reason ``decide`` would give first for this
+    run without the daily total, in the same order and on the same terms:
+    a node with no list price, a model's own per-run limit, the per-run
+    limit, then each finer budget (its USD amount, a model's budget in it,
+    its Krea plan runs). Nothing when the run would otherwise go ahead."""
+    if not usd_limited and not any(budget.plan_runs is not None for budget in finer):
+        return
+    if usd_limited and estimate["unpriced"]:
+        awaiting = set(estimate.get("awaitingInput") or [])
+        unlisted = [str(node_id) for node_id in estimate["unpriced"] if node_id not in awaiting]
+        wait.also = ALSO_UNPRICED
+        wait.unpriced = tuple(unlisted or [str(node_id) for node_id in estimate["unpriced"]])
+        return
+
+    def model_name(def_id: str) -> str:
+        return (definitions.get(def_id) or {}).get("displayName") or def_id
+
+    for def_id, amount in sorted(by_model.items(), key=lambda kv: -kv[1]):
+        cap = (model_caps.get(def_id) or {}).get("perRunUsd")
+        if cap is not None and amount >= cap:
+            wait.also, wait.per_run_limit, wait.model = ALSO_MODEL_PER_RUN, cap, model_name(def_id)
+            return
+    general = sum(amount for def_id, amount in by_model.items() if (model_caps.get(def_id) or {}).get("perRunUsd") is None)
+    if threshold is not None and general > 0 and general >= threshold:
+        wait.also, wait.per_run_limit = ALSO_PER_RUN, threshold
+        return
+    run_plan = sum(plan_charge.values())
+    for budget in finer:
+        used = budget.spent
+        owner = limit_owner(budget.who)
+        if budget.usd is not None and run_total > 0 and used.total + run_total > budget.usd:
+            wait.also, wait.per_run_limit, wait.owner = ALSO_LIMIT, budget.usd, owner
+            return
+        if budget.model_caps:
+            for def_id, amount in by_model.items():
+                model_budget = (model_caps.get(def_id) or {}).get("sessionUsd")
+                if model_budget is not None and amount > 0 and used.models.get(def_id, 0.0) + amount > model_budget:
+                    wait.also, wait.per_run_limit, wait.owner = ALSO_LIMIT, model_budget, owner
+                    wait.model = model_name(def_id)
+                    return
+        if budget.plan_runs is not None and run_plan > 0 and used.plan_runs + run_plan > budget.plan_runs:
+            wait.also, wait.plan_runs_limit, wait.owner = ALSO_PLAN_RUNS, budget.plan_runs, owner
+            return
+
+
 def decide(
     items: list[Mapping[str, Any]],
     edges: list[tuple[str, str, str | None]],
@@ -827,10 +1243,40 @@ def decide(
 
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
+    # The daily total is a USD limit (Justin's Q165, 2026-10-31): with it on,
+    # a node with no list price always waits for the person's OK, since
+    # Nebula can't count it toward the total, even with no other limit set.
+    finer = [budget for budget in budgets if not budget.daily]
+    daily_on = any(budget.daily and budget.usd is not None for budget in budgets)
     usd_limited = (threshold is not None
-                   or any(budget.usd is not None for budget in budgets)
+                   or daily_on
+                   or any(budget.usd is not None for budget in finer)
                    or any(v is not None for limits in model_caps.values() for v in limits.values()))
-    if not usd_limited and not any(budget.plan_runs is not None for budget in budgets):
+
+    # The daily total, first: a run that would pass it waits for the
+    # person's OK as a proposal, whatever else it would need; so does one that
+    # fits but has a node with no list price (``over`` False). Its other
+    # reason, if it has one, is the one the checks below would give first.
+    run_total = sum(by_model.values())
+    for budget in budgets:
+        if not (budget.daily and budget.usd is not None):
+            continue
+        over = run_total > 0 and budget.spent.total + run_total > budget.usd
+        # A node with no list price asks, with room or not. One priced by an
+        # input's size that can't be measured yet keeps its own refusal below
+        # (it says why), as it did.
+        awaiting = set(estimate.get("awaitingInput") or [])
+        unlisted = [node_id for node_id in estimate["unpriced"] if node_id not in awaiting]
+        if not over and not unlisted:
+            continue
+        wait = DailyWait(budget.usd, budget.spent.total, run_total,
+                         names={str(node_id): label for node_id, label in labels.items()}, over=over)
+        _first_other_reason(wait, usd_limited=usd_limited, estimate=estimate, by_model=by_model,
+                            model_caps=model_caps, threshold=threshold, finer=finer, run_total=run_total,
+                            plan_charge=plan_charge, definitions=definitions)
+        return Decision(wait.refusal(how_to_ask), by_model, per_node, plan_charge, plan_per_node, wait=wait)
+
+    if not usd_limited and not any(budget.plan_runs is not None for budget in finer):
         return decision(None)
 
     if usd_limited and estimate["unpriced"]:
@@ -860,10 +1306,9 @@ def decide(
         return refuse(f"this run could cost up to {_usd(general)} (mostly {_names(priced[:2], labels)}), "
                       f"at or over the {_usd(threshold)} per-run limit set in Nebula Settings.")
 
-    # Per budget: every total this run counts against.
-    run_total = sum(by_model.values())
+    # Per budget: every finer total this run counts against.
     run_plan = sum(plan_charge.values())
-    for budget in budgets:
+    for budget in finer:
         used = budget.spent
         if budget.usd is not None and run_total > 0 and used.total + run_total > budget.usd:
             return refuse(f"this run could cost up to {_usd(run_total)}, and {budget._has()} "

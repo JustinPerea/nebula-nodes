@@ -399,7 +399,12 @@ def spend_part(spend: Mapping[str, Any]) -> dict[str, Any]:
     in-app chat against its own session; every outside agent against the
     shared 24-hour budget, which an app's and a personal agent's runs count
     in too (`outsideSpent`); an app also against its own daily line, so it
-    gets both. Krea plan runs count in the shared budget for outside agents."""
+    gets both. Krea plan runs count in the shared budget for outside agents.
+
+    ``daily`` is the daily total over all of them (everything that isn't the
+    person, the last 24 hours): its limit (None for no limit), used and left.
+    It applies on top of the budget above, so an outside agent with no
+    budget limit of its own (``limitUsd`` None) is still held to it."""
     limits = spend.get("limits") or {}
     if not spend.get("limited"):
         return {"limited": False, "perRunUsd": limits.get("perRunUsd")}
@@ -422,6 +427,9 @@ def spend_part(spend: Mapping[str, Any]) -> dict[str, Any]:
     part["kreaPlanRuns"] = {"used": plan.get("kreaPlanRuns"), "limit": limits.get("kreaPlanRuns")}
     if limits.get("models"):
         part["modelLimits"] = len(limits["models"])
+    daily = spend.get("dailyTotal")
+    if isinstance(daily, Mapping):
+        part["daily"] = {key: daily.get(key) for key in ("limitUsd", "usedUsd", "leftUsd")}
     return part
 
 

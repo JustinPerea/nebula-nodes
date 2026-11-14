@@ -1,6 +1,6 @@
 import { getBezierPath, Position, type Node, type useStoreApi } from '@xyflow/react';
 import type { NodeData } from '../types';
-import { chainPoint, resolveAnchor, type AnchorLookup, type Point } from './agentCursorMotion';
+import { chainPoint, resolveAnchor, restPoints, type AnchorLookup, type Point } from './agentCursorMotion';
 import { area, intersect, type AnchorResolver, type Box, type Resolution } from './agentAnchorResolve';
 import { watchBoardView } from './agentBoardView';
 import { surfaceOf } from './agentLauncherDots';
@@ -56,6 +56,11 @@ export interface CursorSpace {
   forget?(owner: string): void;
   /** The point a cursor counts as for its target chain (see chainPoint). */
   chainPoint(anchor: AgentCursorAnchor, owner?: string): Point | null;
+  /** Where a cursor on a node is drawn while that node's header shows a wait
+   *  ("Waiting for your OK", PR #212): the header's left end, so it doesn't
+   *  cover the words. It still counts for its chain at chainPoint. Null if the
+   *  node isn't drawn. Absent on a space with no node headers. */
+  waitRest?(anchor: AgentCursorAnchor): Point | null;
   nodeInfo(id: string): CursorNodeInfo | undefined;
   labels(): CursorLabels;
   /** A client-pixel point (inside `box`, the pane's rect) in this space, or
@@ -96,6 +101,8 @@ export function canvasSpace(store: FlowStoreApi): CursorSpace {
     subscribe: (listener) => store.subscribe(() => listener()),
     resolve: (anchor) => resolveAnchor(anchor, lookup()),
     chainPoint: (anchor) => chainPoint(anchor, lookup()),
+    waitRest: (anchor) => restPoints(anchor, lookup(), true,
+      { dom: store.getState().domNode ?? null, zoom: store.getState().transform?.[2] ?? 1 })?.drawn ?? null,
     nodeInfo: (id) => {
       const node = store.getState().nodeLookup.get(id) as
         { internals?: { positionAbsolute?: Point }; dragging?: boolean; position?: Point; data?: unknown } | undefined;
