@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
@@ -49,8 +49,9 @@ import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
+import './store/settingsChangedSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { projectErrorDetails, projectRetryOffer, projectRetryPersonOnly, useProjectStore } from './store/projectStore';
+import { projectErrorDetails, projectRetryOffer, projectRetryPersonOnly, reopenHoldNow as readReopenHold, subscribeReopenHold, useProjectStore, watchOpenHold } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -58,6 +59,7 @@ import './styles/layouts.css';
 import './styles/slava-restraint.css';
 // GM r24 item 2: one disabled look for every button, whatever the reason.
 import './styles/disabled-buttons.css';
+import './styles/agent-name.css';
 
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load
@@ -296,6 +298,13 @@ export default function App() {
   const isCreate = viewMode === 'create';
   const isBrandShowcase = viewMode === 'brand-showcase';
   const homeSettings = useHomeSettingsDock(isHome);
+  // Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen in place
+  // that can't go yet (a run, a World Labs hold) says when it can, under its card.
+  // The card's lock line goes the moment the hold ends (GM r31, 2).
+  const reopenHoldNow = useSyncExternalStore(subscribeReopenHold, readReopenHold);
+  // While Projects shows, Nebula's verdict on that reopen is kept current
+  // (review 19 item 1): the lock is Nebula's own, read before the press.
+  useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
   let mainView;
   if (isHome) {
@@ -303,13 +312,21 @@ export default function App() {
       error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
-      onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
+      onRestore={(id, from) => void projects.restore(id, from)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
-      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} retryPersonOnly={projectRetryPersonOnly(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
+      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} retryPersonOnly={projectRetryPersonOnly(projects)}
+      openFollowedName={projects.errorRetry?.action === 'openFollowed' ? projects.errorRetry.name : null}
+      reopenHold={reopenHoldNow} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
       loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}
       unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
+      catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore} projectLimit={projects.projectLimit}
+      canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
+      editsRecoveredAs={projects.editsRecoveredAs} onDismissEditsRecovered={projects.dismissEditsRecovered}
+      agentClosedNote={projects.agentClosedNote} onDismissAgentClosedNote={projects.dismissAgentClosedNote}
+      canvasHeldUnreadable={projects.canvasHeldUnreadable}
+      onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable}
       copyNotice={projects.copyNotice} onRestoreCopy={() => void projects.restoreCopyNotice()}
       onDismissCopy={projects.dismissCopyNotice} onOpenCopy={() => void projects.openCopyNotice()} />;
   } else if (isCanvas) {
@@ -342,7 +359,9 @@ export default function App() {
     <ReactFlowProvider>
       <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
-      <ProviderRecoveryStatus />
+      {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
+      <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'
+        ? { line: projects.heldReopenLine.line, onDismiss: projects.dismissHeldReopenLine } : null} />
       <ProjectCoordinator />
       <ProjectSwitchToast />
       {!isHome && !commonsOffRoute && <GraphFileActions />}

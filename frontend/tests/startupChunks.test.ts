@@ -88,7 +88,7 @@ describe('check-build-budget startup limit', () => {
     dirs.push(root);
     mkdirSync(path.join(root, 'scripts'));
     const src = path.resolve(__dirname, '../scripts');
-    for (const f of ['check-build-budget.mjs', 'check-built-fonts.mjs']) {
+    for (const f of ['check-build-budget.mjs', 'check-built-fonts.mjs', 'check-chunk-cycles.mjs']) {
       writeFileSync(path.join(root, 'scripts', f), readFileSync(path.join(src, f)));
     }
     mkdirSync(path.join(root, 'scripts', 'lib'));

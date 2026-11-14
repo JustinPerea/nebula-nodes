@@ -395,6 +395,7 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/zoom-manifest/entry"): "dev zoom recorder file; no graph",
     ("PUT", "/api/settings"): "settings; no graph",
     ("DELETE", "/api/settings/api-keys/{provider}"): "settings; no graph",
+    ("POST", "/api/settings/notice/dismiss"): "the person read Settings' top line; no graph",
     ("POST", "/api/credentials/update"): "settings; no graph",
     # Runs already going: Stop must work while the tab follows an agent's switch.
     ("DELETE", "/api/executions/{run_id}"): "Stop: cancels a run by its id, works while following a switch",
@@ -405,6 +406,9 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/universal/ports"): "a model's ports without a node; reads only",
     # Projects: each names its project by id or checks the body's workspaceRevision (_project_revision).
     ("POST", "/api/projects/recover"): "saves a recovered copy as a new project; never the live graph",
+    ("POST", "/api/projects/catalog-restore/dismiss"): "closes the restore notice on the Projects home; writes no graph",
+    ("POST", "/api/projects/canvas-held-unreadable/dismiss"): (
+        "closes the notice that held canvases couldn't be read; writes no graph"),
     ("POST", "/api/projects"): "the person's or an agent's create: checked by the body's workspaceRevision",
     ("POST", "/api/projects/{project_id}/open"): "the person's or an agent's open: checked by the body's workspaceRevision",
     ("PUT", "/api/projects/{project_id}"): (

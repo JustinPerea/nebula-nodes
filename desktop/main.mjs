@@ -922,9 +922,11 @@ if (refuseDebugLaunch) {
       // The credential service uses safeStorage's async API to encrypt
       // API keys and stores encrypted blobs (v1:<base64>) in
       // credentials.json under App Support. The renderer can set, check,
-      // and clear keys but can never read plaintext values (no get
-      // channel). Every handler validates the sender and provider name
-      // against the 18-key allowlist.
+      // and clear keys, and undo or commit its own write in flight by the
+      // one-time write id set and clear answer (credentials:revert,
+      // credentials:commit), but can never read plaintext values (no get
+      // channel). Every handler validates the sender, and set, has and
+      // clear the provider name against the allowlist.
       const credentialsPath = join(appDataRoot, CREDENTIALS_FILE_NAME);
       const migrationStatePath = join(appDataRoot, MIGRATION_STATE_FILE_NAME);
       const credentialService = createCredentialService({

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MaskPainterModal, RunHistoryPanel } from '../../src/components/DeferredPanels';
+import { RunHistoryPanel } from '../../src/components/DeferredPanels';
+import { MaskPainterModal } from '../../src/components/panels/DeferredMaskPainter';
 import { useUIStore } from '../../src/store/uiStore';
 
 // A deferred panel whose chunk fails more than once (still offline on the

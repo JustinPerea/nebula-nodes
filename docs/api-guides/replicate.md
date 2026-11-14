@@ -35,7 +35,7 @@ Notes grounded in `backend/data/node_definitions.json` and `backend/handlers/rep
 **API-key setup:** Replicate authenticates with a personal API token.
 
 1. Create a token at <https://replicate.com/account/api-tokens>.
-2. Open Nebula **Settings** → **Providers**, choose **Add key** on the **Replicate** row (`REPLICATE_API_TOKEN`), paste it and choose **Save key**. Saving checks the key without generating anything.
+2. Open Nebula **Settings > Providers**, choose **Add token** on the **Replicate** row (`REPLICATE_API_TOKEN`), paste it and choose **Save token**. Saving checks the token without generating anything.
 3. Nebula stores it under `apiKeys.REPLICATE_API_TOKEN` in the project-root `settings.json`; no restart is required. The handler will refuse to run with a clear error if the token is missing.
 
 **Before you run a model:** open the model's page on replicate.com (e.g. <https://replicate.com/stability-ai/sdxl>) and look at its **Inputs** section. Those field names (`prompt`, `width`, `negative_prompt`, `image`, …) are exactly the names you give the node's input ports / params, because Nebula forwards them unchanged. File inputs (like an `image` field) are passed as URLs or data URLs.

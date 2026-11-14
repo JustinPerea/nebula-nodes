@@ -40,6 +40,25 @@ type Line = (names: string, several: boolean) => string;
 /** No list price for these settings (GM r7). */
 export const NO_LISTED_PRICE: Line = (names, several) => `${names} ${several ? 'have' : 'has'} no listed price.`;
 
+/** Line 1 and a reason line naming the same nodes, merged (GM, PR #203 r20
+ * item 2, verbatim: "“Writer” and “Editor” call paid providers that have no
+ * listed price."; the singular is the builder's). */
+export const PAID_NO_LISTED_PRICE: Line = (names, several) => (several
+  ? `${names} call paid providers that have no listed price.`
+  : `${names} calls a paid provider that has no listed price.`);
+
+/** Line 1 and any other reason line naming the same nodes, merged: "“A”
+ * calls a paid provider and can’t be priced until its fal.ai API key is
+ * added." `rest` is the reason line after its names. Builder's, by GM r20
+ * item 2's rule. */
+export const PAID_AND = (names: string, several: boolean, rest: string) =>
+  `${names} ${several ? 'call paid providers' : 'calls a paid provider'} and ${rest}`;
+
+/** A run on the person's Krea plan, never "billed" (GM, PR #203 r19 item 1,
+ * verbatim: "“Krea 2” runs on your Krea plan."; the plural is the
+ * builder's). */
+export const ON_KREA_PLAN: Line = (names, several) => `${names} ${several ? 'run' : 'runs'} on your Krea plan.`;
+
 /** The chosen route's key isn't set. `key` is the key as the node's own
  * route line names it ("fal.ai API key", "Black Forest Labs or fal.ai API
  * key"; directRoute.keyPhrase), so the two agree (GM r7; the plural, GM r8). */

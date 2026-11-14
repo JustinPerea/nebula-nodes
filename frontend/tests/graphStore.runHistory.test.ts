@@ -1081,6 +1081,8 @@ describe('graphStore run-history lifecycle', () => {
       undoStack: [guardedSnapshot],
       redoStack: [guardedSnapshot],
       providerRecoveries: [checkpoint],
+      // This project's run (review 20 of PR #199, LOW-2).
+      runHistory: [{ id: 'recoverable-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
       isExecuting: false,
     });
 
@@ -1197,7 +1199,8 @@ describe('graphStore run-history lifecycle', () => {
       ...worldEnvironmentNode('world-source'),
       selected: true,
     };
-    useGraphStore.setState({ nodes: [source], edges: [] });
+    // This project's run (review 20 of PR #199, LOW-2).
+    useGraphStore.setState({ nodes: [source], edges: [], runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], });
     useGraphStore.getState().copySelected();
 
     useGraphStore.getState().hydrateProviderRecoveries([{
@@ -1228,6 +1231,8 @@ describe('graphStore run-history lifecycle', () => {
     useGraphStore.setState({
       nodes: [source],
       edges: [],
+      // This project's run (review 20 of PR #199, LOW-2).
+      runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: source.id,
@@ -1309,6 +1314,8 @@ describe('graphStore run-history lifecycle', () => {
       nodes: [worldEnvironmentNode(operation.nodeId)],
       edges: [],
       providerRecoveries: [operation],
+      // This project's run (review 20 of PR #199, LOW-2).
+      runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
     });
     useGraphStore.getState().hydrateProviderRecoveries([operation]);
     let finishDelete!: () => void;

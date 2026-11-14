@@ -52,8 +52,9 @@ RECOVERY_FIELD_LABELS = {
     ("worldlabs-environment", "existing_world_id"): "Existing World ID",
     ("worldlabs-world-export", "resume_operation_id"): "Resume Export Operation ID",
 }
-# The status bar's button, by its round 13 label (GM).
-UNLOCK_BUTTON = "“I've checked Marble”"
+# The status bar's button, by its round 13 label (GM; curly apostrophe, GM r33
+# on PR #199). The frontend's UNLOCK_LABEL is the same text.
+UNLOCK_BUTTON = "“I’ve checked Marble”"
 PERSON_LINES = {
     # The answer to the paid request never came (or can't prove World Labs
     # didn't take it): the node is held until the person checks Marble.
@@ -1532,10 +1533,12 @@ def _validated_world_input(inputs: dict[str, PortValueDict]) -> tuple[dict[str, 
         # Session provenance is user-importable descriptive metadata. It cannot
         # authorize a provider request against an arbitrary World-v2 id. A
         # future adapter must supply a backend-verified resource binding.
-        raise ValueError(
+        # Idol's splats (World v2) reach here too: they were never on World Labs.
+        raise with_person_line(ValueError(
             "World Labs Export requires a verified provider-resource binding "
             "for World v2; use the original Marble World v1 output"
-        )
+        ), "World Labs Export only takes a world made by World Labs Environment. "
+           "To keep this splat, download it from its card.")
     else:
         raise ValueError("World Labs Export requires World schemaVersion 1 or 2")
     world_id = _provider_id(raw_world_id, "World Labs world ID")

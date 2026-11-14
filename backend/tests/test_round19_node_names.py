@@ -32,8 +32,8 @@ def _defs():
 
 def test_every_definition_names_an_unnamed_node_by_its_canvas_title(monkeypatch):
     defs = _defs()
-    # 308 + OmniHuman 1.5, OmniHuman 2.0 and Kling AI Avatar v2 (talking heads).
-    assert len(defs) == 311
+    # 308 + OmniHuman 1.5, OmniHuman 2.0 and Kling AI Avatar v2 (talking heads). +1 Idol (speridlabs-idol), 2026-10-29.
+    assert len(defs) == 312
     graph = CLIGraph()
     monkeypatch.setattr(main_module, "cli_graph", graph)
     wrong = []

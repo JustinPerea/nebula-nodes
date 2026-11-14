@@ -186,8 +186,8 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     const root = resolve(__dirname, '../src/components');
     const sites: [string, RegExp][] = [
       ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting, runTitle: runFinishesLine\(OFFLINE_VERBS\.rerun\) \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
-      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting, runTitle: runFinishesLine\(RUN_LOCK_VERBS\.forgetRun\) \}\)/],
-      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: running, runTitle: line, shown: \{ id: lineId, text: line \} \}\)/],
+      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' \}, \{ run: isExecuting, runTitle: runFinishesLine\(RUN_LOCK_VERBS\.forgetRun\) \}\)/],
+      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{ kept: 'run' \}, \{ run: running, runTitle: line, shown: \{ id: lineId, text: line \} \}\)/],
     ];
     for (const [file, pattern] of sites) {
       const source = readFileSync(resolve(root, file), 'utf8');

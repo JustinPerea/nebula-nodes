@@ -12,7 +12,8 @@ import sys
 import project_client
 
 from ..client import NebulaClient
-from ..formatter import format_project
+from ..formatter import catalog_restore_lines, format_project
+from services.wording import counted
 
 
 def _print_json(data) -> None:
@@ -26,13 +27,43 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     listing = client.list_projects()
     active = listing.get("activeProjectId")
     projects = listing.get("projects") or []
+    restore = listing.get("catalogRestore")
+    if isinstance(restore, dict) and restore.get("note"):
+        # Nebula restored a damaged project list (until the person closes its notice).
+        print(f"Note: {restore['note']}")
+        # The CANVAS NOT SAVED note below says the waiting canvas (GM r23 e).
+        for line in catalog_restore_lines(restore, canvas_block=isinstance(listing.get("canvasNotFiled"), dict)):
+            print(line)
+        print()
+    waiting = listing.get("canvasNotFiled")
+    if isinstance(waiting, dict):
+        # main._canvas_not_filed_note, the same words start_here carries.
+        print(f"Note: {waiting.get('note') or 'the live canvas is not saved as a project yet: the project list is at its ' + str(waiting.get('reason')) + ' limit.'}")
+        print()
+    saved = listing.get("canvasSaved")
+    if isinstance(saved, dict) and saved.get("id"):
+        print(f"Note: the live canvas was saved as its own project, \"{saved.get('name')}\" ({saved['id']}), "
+              "once the list had room.")
+        print()
+    hold = listing.get("openHold")
+    if isinstance(hold, dict):
+        # The open's own guards, read (GET /api/projects/open-hold).
+        print(f"Note: {project_client.open_hold_note(hold, active)}")
+        print()
     if not projects:
         print("No saved projects.")
         return
     for project in projects:
         mark = "*" if project.get("id") == active else " "
         updated = str(project.get("updatedAt", ""))[:16].replace("T", " ")
-        print(f"{mark} {project.get('id')}  {project.get('name', '')}  (updated {updated})")
+        source = ""
+        if "sourceName" in project:
+            # A recovered copy: its source as Nebula keeps it, never read from its name.
+            source = (f"  recovered copy of \"{project['sourceName']}\"" if project.get("sourceName")
+                      else "  recovered copy (its source isn't known)")
+            if project.get("sourceProjectId"):
+                source += f" ({project['sourceProjectId']})"
+        print(f"{mark} {project.get('id')}  {project.get('name', '')}  (updated {updated}){source}")
     print("\n* is open on the canvas. `nebula project open <id>` switches to another.")
 
 
@@ -51,6 +82,12 @@ def run_open(client: NebulaClient, project_id: str) -> None:
     # `nebula load` prints its own.
     for warning in result.get("warnings") or []:
         print(f"note: {warning}", file=sys.stderr)
+    renumbered = result.get("renumbered") or {}
+    if renumbered:
+        # Nodes the person's Duplicate or Paste made got Nebula's ids (PR #199 round 17).
+        moved = ", ".join(f"{old} -> {new}" for old, new in list(renumbered.items())[:10])
+        print(f"note: Nebula gave {counted(len(renumbered), 'node')} its own ids at this open ({moved}). "
+              "Read the canvas again (`nebula graph`) and use the ids you see.", file=sys.stderr)
 
 
 def run_new(client: NebulaClient, name: str) -> None:
@@ -75,7 +112,7 @@ def run_rename(client: NebulaClient, project_id: str, name: str, *, as_json: boo
     """Rename a saved project ("current" is the open one) through the canvas
     header's route: it journals `project.renamed` as this agent
     ($NEBULA_AGENT_NAME) and the person's canvas shows the name at once."""
-    result = client.shared(project_client.rename_project, project_id, name, via="cli")
+    result = client.shared(project_client.rename_project, project_id, name)
     if as_json:
         _print_json(result)
         return
@@ -92,7 +129,7 @@ def run_rename(client: NebulaClient, project_id: str, name: str, *, as_json: boo
 
 def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) -> None:
     """A saved project without opening it: MCP get_project."""
-    view = client.shared(project_client.get_project, project_id, via="cli")
+    view = client.shared(project_client.get_project, project_id)
     if as_json:
         _print_json(view)
         return
@@ -102,7 +139,7 @@ def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) ->
 def run_size(client: NebulaClient, project_id: str = "current", *, as_json: bool = False) -> None:
     """A project's size against the save limit and what takes the space: MCP
     project_size (Q118)."""
-    result = client.shared(project_client.project_size, project_id, via="cli")
+    result = client.shared(project_client.project_size, project_id)
     if as_json:
         _print_json(result)
         return

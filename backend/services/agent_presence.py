@@ -54,6 +54,14 @@ from services.text_cut import safe_cut
 PRESENCE_TTL_SECONDS = 120.0
 VIEW_STALE_SECONDS = 30.0
 MAX_SAY_CHARS = 140
+# The Agent log's own line (``log``) is a list entry, not a bubble, so it gets
+# more room than a bubble. A line that carries what an agent sent (the raw
+# keys of "Set “Seed” and seed_mode") is cut at MAX_LOG_CHARS, never through
+# a character. Nebula's own whole line (a refused run's: clean_log ``whole``)
+# is never cut (GM, PR #203 r33 item 2): main._refused_run_log_line switches
+# to its count form past MAX_LOG_CHARS instead, and a line still longer than
+# that is shown whole.
+MAX_LOG_CHARS = 600
 MAX_NAME_CHARS = 32
 MAX_VIEW_NODES = 2000
 MAX_SNAPSHOT_NODES = 300
@@ -445,10 +453,20 @@ def _clean_say(raw: Any) -> str:
     return text[:safe_cut(text, MAX_SAY_CHARS)]
 
 
-# The same cleaning for words said alongside the cursor's (main._show_agent's `log`).
+# The same cleaning for words said alongside the cursor's.
 clean_say = _clean_say
 
 
+def clean_log(raw: Any, *, whole: bool = False) -> str:
+    """The Agent log's line (main._show_agent's ``log``): cleaned as a bubble
+    is, with MAX_LOG_CHARS of room. ``whole``: Nebula's own line, which is
+    never cut (MAX_LOG_CHARS)."""
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        raise PresenceError("log must be text")
+    text = " ".join(raw.split())
+    return text if whole else text[:safe_cut(text, MAX_LOG_CHARS)]
 @dataclass
 class _SessionSlot:
     """One live session's cursor, as the person's tabs draw it."""
@@ -573,6 +591,20 @@ class AgentPresence:
         # Every node's box as the last graph sync had it (carry_nodes): what
         # the next one's moves are measured from.
         self._boxes: dict[str, dict[str, float]] | None = None
+        # While this says so, the browser's view isn't read (PR #199 round
+        # 17, review 15 kept-wires-ui LOW-1): a tab keeping edits Nebula
+        # couldn't save shows a canvas that isn't the server's, and reports
+        # no view; the one it reported before is stale. main sets it to
+        # ConnectionManager.kept_in_tab.
+        self.hide_view: Callable[[], bool] | None = None
+
+    def _shown_view(self) -> dict[str, Any] | None:
+        """The browser's last view, or None while it is hidden."""
+        try:
+            hidden = bool(self.hide_view and self.hide_view())
+        except Exception:  # noqa: BLE001 - a read never fails on the gate; it hides
+            hidden = True
+        return None if hidden else self._view
 
     # -- cursors --------------------------------------------------------
     def point(
@@ -587,6 +619,7 @@ class AgentPresence:
         project_id: str | None = None,
         log: Any = None,
         names: Mapping[str, Any] | None = None,
+        log_whole: bool = False,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -606,6 +639,8 @@ class AgentPresence:
         lists a cursor only in its own project. ``log`` is the Agent log's
         line when it isn't ``say`` (PR #198 r1): an action whose bubble says
         nothing still has one; the event carries it only when given.
+        ``log_whole``: ``log`` is Nebula's own whole line, never cut
+        (clean_log).
         """
         if not isinstance(action, str) or action not in ACTIONS:
             raise PresenceError(action_refusal(action))
@@ -618,7 +653,7 @@ class AgentPresence:
             "at": int(now * 1000),
             "projectId": project_id,
         }
-        logged = _clean_say(log)
+        logged = clean_log(log, whole=log_whole)
         if logged:
             event["log"] = logged
         if target is None:
@@ -667,7 +702,7 @@ class AgentPresence:
         return dict(names) if names and "surface" in current["target"] else None
 
     def _view_middle(self) -> tuple[dict[str, Any], str]:
-        view = self._view or {}
+        view = self._shown_view() or {}
         viewport, screen = view.get("viewport"), view.get("screen")
         if viewport and screen:
             zoom = viewport["zoom"]
@@ -969,7 +1004,7 @@ class AgentPresence:
 
     def last_point(self, node_id: str) -> dict[str, float] | None:
         """Where the browser last drew a node (its centre), for pointing at a deleted node."""
-        reported = ((self._view or {}).get("nodes") or {}).get(node_id)
+        reported = ((self._shown_view() or {}).get("nodes") or {}).get(node_id)
         if reported is None:
             return None
         return {
@@ -1173,9 +1208,10 @@ class AgentPresence:
         graph_nodes: Mapping[str, Any] = getattr(graph, "nodes", {})
         graph_edges = list(getattr(graph, "edges", []))
         definitions = registry.get_all()
-        view = self._view or {}
+        shown = self._shown_view()
+        view = shown or {}
         view_nodes: Mapping[str, Any] = view.get("nodes", {})
-        age = round(now - self._view_at, 1) if self._view else None
+        age = round(now - self._view_at, 1) if shown else None
 
         visible_area = None
         viewport = view.get("viewport")
@@ -1214,7 +1250,7 @@ class AgentPresence:
 
         return {
             "view": {
-                "reported": self._view is not None,
+                "reported": shown is not None,
                 "secondsAgo": age,
                 "stale": age is None or age > VIEW_STALE_SECONDS,
                 "viewport": viewport,

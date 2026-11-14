@@ -1139,7 +1139,9 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(label).toMatch(new RegExp(`gap: ${AGENT_CURSOR_PILL.gap}px;`));
     const say = css.match(/^\.agent-cursor__say \{([^}]*)\}/m)![1];
     expect(Number(say.match(/line-height: (\d+)px/)![1]) + 2 * Number(say.match(/padding: (\d+)px/)![1])).toBe(AGENT_CURSOR_PILL.height);
-    expect(say).toMatch(/border-radius: 999px;/);
+    // GM, PR #203 r39 item 5: the say pill wraps to two lines, so its radius is half one line's height
+    // (the tag's pill for one line, the same corners for two), not a round end.
+    expect(say).toMatch(/border-radius: 10px;/);
     // The arrow's stroke, and the ring on an edge fill.
     expect(css).toMatch(new RegExp(`stroke-width: ${AGENT_CURSOR_ARROW_STROKE};`));
     expect(css).toMatch(new RegExp(`box-shadow: 0 0 0 ${AGENT_CURSOR_PILL.ring}px rgb`));

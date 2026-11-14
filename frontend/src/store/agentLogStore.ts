@@ -112,9 +112,23 @@ wsClient.subscribe((event) => {
 // line, arrive as window events.
 if (typeof window !== 'undefined') {
   window.addEventListener('nebula:agent-log-entry', (e: Event) => {
-    const detail = (e as CustomEvent).detail as { source?: unknown; message?: string } | undefined;
+    const detail = (e as CustomEvent).detail as { source?: unknown; message?: string; agent?: unknown } | undefined;
     const message = String(detail?.message ?? '').trim();
     if (!message) return;
-    useAgentLogStore.getState().add({ ts: Date.now(), source: normalizeAgentEventSource(detail?.source), message });
+    useAgentLogStore.getState().add({
+      ts: Date.now(), source: normalizeAgentEventSource(detail?.source), message, ...lineAgent(detail?.agent),
+    });
   });
+}
+
+/** A window line that names its agent (the waiting canvas's held or
+ * refused line, review 6 of PR #199, N-3): the row is that agent's, with
+ * its cursor's name and colour, as its other actions are. */
+function lineAgent(raw: unknown): { agent?: AgentLogEntry['agent'] } {
+  if (!raw || typeof raw !== 'object') return {};
+  const { id, name, color } = raw as { id?: unknown; name?: unknown; color?: unknown };
+  if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) return {};
+  // The same cursor naming and shade as its other actions (GM - Design, PR #211 r19, r20).
+  const tones = agentLogTones(typeof color === 'string' && SAFE_COLOR.test(color) ? color : AGENT_FALLBACK_COLOR, null);
+  return { agent: { id, name: cursorLabel(name, null), color: tones.dot, ink: tones.name } };
 }

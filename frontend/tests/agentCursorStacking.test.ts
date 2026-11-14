@@ -60,6 +60,12 @@ const inSkin = (selector: string, skin: Skin) => {
 /** Slava's layer tokens (--sr-layer-*), for resolving z-indexes. */
 const tokens = new Map<string, number>();
 for (const m of read('styles/slava-restraint.css').matchAll(/(--sr-layer-[\w-]+)\s*:\s*(-?\d+)\s*;/g)) tokens.set(m[1], Number(m[2]));
+// And the layers written from another (PR #203's proposal bar and the ambient chrome under it):
+// --sr-layer-x: calc(var(--sr-layer-y) - 1).
+for (const m of read('styles/slava-restraint.css').matchAll(/(--sr-layer-[\w-]+)\s*:\s*calc\(var\((--sr-layer-[\w-]+)\)\s*([-+])\s*(\d+)\)\s*;/g)) {
+  const base = tokens.get(m[2]);
+  if (base !== undefined) tokens.set(m[1], m[3] === '-' ? base - Number(m[4]) : base + Number(m[4]));
+}
 
 /** A z-index value as a number: a plain integer, a layer token (or its
  *  fallback) or a calc() sum of those. */

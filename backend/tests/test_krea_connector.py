@@ -633,7 +633,7 @@ async def test_a_session_with_no_connection_stops_before_krea_as_a_missing_crede
 
     with respx.mock(assert_all_called=False) as router:
         krea = router.route(host="api.krea.ai")
-        with pytest.raises(MissingCredentialError, match="Connect your Krea account first") as raised:
+        with pytest.raises(MissingCredentialError, match="Sign in to Krea in Settings first") as raised:
             async with connector.session():
                 pass
     assert isinstance(raised.value, service.ConnectorError)

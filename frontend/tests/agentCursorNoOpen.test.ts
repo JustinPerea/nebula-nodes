@@ -48,6 +48,8 @@ const SHARED_APP_CODE: Readonly<Record<string, string>> = {
   'lib/viewportSpring.ts': 'the camera spring: the chip press\'s pan (PRESS_HANDLERS) uses it, nothing else here',
   'lib/graphFileShared.ts': 'graph file helpers, reached through graphStore',
   'lib/jobNotifications.ts': 'job notifications, reached through graphStore',
+  'lib/canvasFocus.ts': 'the person\'s canvas focus marks and the canvas\'s own focus call, reached through graphStore (PR #199); no cursor code calls it',
+  'store/graphStore.ts': 'the graph store: restoreFocusMark puts the person\'s own focus back after their undo (PR #199); the cursor code only reads it',
   'store/boardCanvasStore.ts': 'the Board view\'s own store; its viewport setter is the Studio\'s',
   'store/uiStore.ts': 'the UI store, which owns the dock and editor openers the cursor code never calls',
 };
@@ -72,6 +74,16 @@ describe('the cursor chunk never opens or scrolls anything for the person', () =
     expect(panning).toEqual(PRESS_HANDLERS);
     const importers = CHUNK.filter((path) => /agentChipPress/.test(code(path)));
     expect(importers).toEqual(['components/canvas/CanvasEdgeChips.tsx']);
+  });
+
+  it('no cursor module of its own asks for canvas focus: none imports lib/canvasFocus', () => {
+    // lib/canvasFocus.ts and store/graphStore.ts are exempt from the scan above because they hold the person's own
+    // focus calls. That exemption is safe only while the cursor's own code cannot reach those calls: the store's
+    // restoreFocusMark is private to it, and focusCanvasSoon is importable, so its importers are pinned here.
+    const own = CHUNK.filter((path) => !(path in SHARED_APP_CODE));
+    const asking = own.filter((path) => /from\s+['"][^'"]*\/canvasFocus['"]|\bfocusCanvasSoon\b/.test(code(path)));
+    expect(asking).toEqual([]);
+    expect(code('store/graphStore.ts')).not.toMatch(/export\s+(?:function|const)\s+restoreFocusMark/);
   });
 
   it('is derived from the real import graph: the entries, their modules, and the ones the old list never named', () => {

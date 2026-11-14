@@ -123,7 +123,7 @@ export async function cancelExecution(runId: string, signal?: AbortSignal): Prom
   return response.json();
 }
 
-/** The headings for the status bar's "I've checked Marble" and Run
+/** The headings for the status bar's "I’ve checked Marble" and Run
  * History's "Forget ID" (round 3, GM: named after what the button does);
  * the store and the screens use these. */
 export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
@@ -134,7 +134,7 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  // Round 3 (GM): what the person clicked. The status bar's "I've checked
+  // Round 3 (GM): what the person clicked. The status bar's "I’ve checked
   // Marble" unlocks one node.
   await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
@@ -254,7 +254,7 @@ export async function promoteCinemaShotVariation(
 }
 
 export async function getSettings(): Promise<Record<string, unknown>> {
-  const response = await apiRequest("Couldn't load your API keys.", '/api/settings');
+  const response = await apiRequest('Couldn’t load your API keys.', '/api/settings');
   return response.json();
 }
 
@@ -367,11 +367,13 @@ export async function deleteSettingsApiKey(provider: string): Promise<{ status: 
  * the backend's `_INJECTED_KEYS` dict without a sidecar restart. An empty
  * key string removes the provider from the in-memory store.
  */
-export async function updateCredential(provider: string, key: string): Promise<{ status: string }> {
+/** Tell the backend about a key the desktop app stored. With `check`, it
+ * only answers whether it would take it, and changes nothing. */
+export async function updateCredential(provider: string, key: string, options: { check?: boolean } = {}): Promise<{ status: string }> {
   const response = await apiRequest("Couldn't save the API key.", '/api/credentials/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, key }),
+    body: JSON.stringify({ provider, key, ...(options.check ? { check: true } : {}) }),
   });
   return response.json();
 }

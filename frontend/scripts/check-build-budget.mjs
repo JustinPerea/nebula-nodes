@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts } from './check-built-fonts.mjs';
+import { sparkImportCycles } from './check-chunk-cycles.mjs';
 import { chunkLabel, startupSet } from './lib/startupChunks.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -39,8 +40,16 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // `npm run build` (1,885,863 / 488,271 once jszip loaded on download); the
 // limits are that plus about 8 KB raw / 3.5 KB gzip. Raise
 // them only with the reason in the PR (the same rule as the entry limits).
-const MAX_STARTUP_BYTES = 1_894_000;
-const MAX_STARTUP_GZIP_BYTES = 492_000;
+// Raised by PR #199 (project catalog backup) by its own measured cost, +33,454
+// raw / +12,309 gzip (1,919,292 / 500,565 with it): a canvas kept in the tab
+// after a restore is only in that tab, so what keeps it safe loads with the app
+// (the kept unload guard and fallback line, the kept edit steps in graphStore,
+// keptWires' refusals, Projects home's kept notice, the bottom bar's kept
+// state). Its round 28 notes measured lazy splits of these; a kept edit that
+// waits for a chunk is refused for good when that chunk can't load, which is
+// when a canvas is kept, so they stay.
+const MAX_STARTUP_BYTES = 1_928_000;
+const MAX_STARTUP_GZIP_BYTES = 505_000;
 const startup = await startupSet(distDir);
 const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
 
@@ -57,6 +66,15 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   if (source.includes('eval(') || source.includes('new Function(')) {
     throw new Error(`Runtime code generation found in production asset: ${assetName}`);
   }
+}
+
+// Spark must not share an import cycle with another chunk (check-chunk-cycles.mjs says why).
+const jsChunks = new Map();
+for (const name of assetNames.filter((asset) => asset.endsWith('.js'))) {
+  jsChunks.set(name, await readFile(path.join(distDir, 'assets', name), 'utf8'));
+}
+for (const { spark, back } of sparkImportCycles(jsChunks)) {
+  throw new Error(`${spark} is in an import cycle with ${back.join(', ')}; Spark would run before what it imports`);
 }
 
 // The app ships its own fonts; nothing in the build may ask a font CDN.

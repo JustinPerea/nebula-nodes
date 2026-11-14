@@ -1,5 +1,6 @@
 import { deferredModule, lazyWithPreload } from './lazyWithPreload';
 import { placeholderRunDialogModule } from './placeholderRunDialogModule';
+import { projectFlowsModule } from '../store/projectFlowsLoader';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
@@ -84,6 +85,13 @@ export const DeferredWorldPreview = lazyWithPreload(
   (module) => module.WorldPreview,
 );
 
+// A World v2 card's "Explore in 3D" button and its viewer dialog (Idol's
+// splats). Spark still loads only when the dialog opens.
+export const DeferredWorldSplatPreview = lazyWithPreload(
+  () => import('../components/nodes/WorldSplatPreview'),
+  (module) => module.WorldSplatPreview,
+);
+
 // The Moodboard line on a node card (components/nodes/MoodboardAdapterRow.tsx
 // draws its empty box until it arrives), with the adapter table's store.
 export const DeferredMoodboardAdapterLine = lazyWithPreload(
@@ -115,6 +123,13 @@ export const DeferredAssetsPanel = lazyWithPreload(
 
 // The ⌘K palette: mounted at once, draws nothing until opened; a ⌘K or a rail
 // open that beats the chunk is held by the wrapper (lib/heldIntents.ts).
+// The "?" dialog: the keys stay eager (components/KeyboardShortcuts.tsx), the dialog
+// and the focus machinery it brings in (ModalPortal) load on first open.
+export const DeferredKeyboardShortcutsDialog = lazyWithPreload(
+  () => import('../components/KeyboardShortcutsDialog'),
+  (module) => module.KeyboardShortcutsDialog,
+);
+
 export const DeferredCommandPalette = lazyWithPreload(
   () => import('../components/CommandPalette'),
   (module) => module.CommandPalette,
@@ -137,6 +152,15 @@ export const DeferredProposalLayer = lazyWithPreload(
 export const DeferredPinLayer = lazyWithPreload(
   () => import('../components/canvas/PinLayer'),
   (module) => module.PinLayer,
+);
+
+// The note dialog and the kept-notes stack (components/canvas/PinComposer.tsx):
+// both draw only after a person's action (a note opened, a send refused or
+// kept), never at the first paint, so it is mounted at once and appears when
+// its chunk lands. It brings the prompt dialog (PromptDialog) with it.
+export const DeferredPinComposer = lazyWithPreload(
+  () => import('../components/canvas/PinComposer'),
+  (module) => module.PinComposer,
 );
 
 export const DeferredAgentCursorLayer = lazyWithPreload(
@@ -173,6 +197,20 @@ export const DeferredRegionNotices = lazyWithPreload(
 // so GraphFileActions.tsx awaits it at the moment of use.
 export const graphFileModule = deferredModule(() => import('./graphFile'));
 
+// Settings' writes (lib/settingsWrites.ts): the notice bar the Settings dock
+// draws at once uses them only when a notice times out or Undo is pressed, so
+// it awaits them at that moment; the tabs, loaded on open, import them as
+// usual.
+export const settingsWritesModule = deferredModule(() => import('./settingsWrites'));
+
+// Settings' "restored at start" line (components/panels/settings/SettingsTopNotice.tsx):
+// it draws only what a fetch brings in (never at the first paint), so
+// Settings mounts it at once (deferredAtOnce) and it appears when it lands.
+export const DeferredSettingsTopNotice = lazyWithPreload(
+  () => import('../components/panels/settings/SettingsTopNotice'),
+  (module) => module.SettingsTopNotice,
+);
+
 // jszip, for the selection toolbar's download zip (lib/canvasSelection.ts): only
 // inside that action, so it loads at the moment of use, with the chunk retry.
 export const jszipModule = deferredModule(() => import('jszip'));
@@ -191,27 +229,41 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredConnectionPopup.preload,
   DeferredMeshPreview.preload,
   DeferredWorldPreview.preload,
+  DeferredWorldSplatPreview.preload,
   DeferredMaskPainterModal.preload,
   DeferredMoodboardAdapterLine.preload,
   DeferredChatPanel.preload,
   DeferredNodeInspectorPopover.preload,
   DeferredAssetsPanel.preload,
   DeferredCommandPalette.preload,
+  DeferredKeyboardShortcutsDialog.preload,
   DeferredProposalBar.preload,
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
+  DeferredPinComposer.preload,
   DeferredAgentCursorLayer.preload,
   DeferredAgentScreenLayer.preload,
   DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
   graphFileModule.preload,
+  settingsWritesModule.preload,
   placeholderRunDialogModule.preload,
+  DeferredSettingsTopNotice.preload,
+  projectFlowsModule.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
+  'lib/settingsWrites.ts',
+  // Every key's URL, notes and token instructions: Settings' rows and search read them.
+  'lib/providerCatalog.ts',
+  'components/panels/settings/SettingsTopNotice.tsx',
+  'lib/settingsNotice.ts',
+  'components/KeyboardShortcutsDialog.tsx',
   'components/PlaceholderRunDialog.tsx',
   'components/askPlaceholderRun.tsx',
+  // The project store's flows (PR #199 round 25): store/projectFlowsLoader.ts.
+  'store/projectFlows.ts',
   'components/panels/AgentLog.tsx',
   'components/agent-notes/AgentNotesCorner.tsx',
   'components/agent-notes/AgentNoteCard.tsx',
@@ -242,8 +294,11 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/onboarding/OnboardingOverlay.tsx',
   'components/ConnectionPopup.tsx',
   'components/panels/MaskPainterModal.tsx',
+  // The mask painter's wrapper and the shell it draws while its chunk loads.
+  'components/panels/DeferredMaskPainter.tsx',
   'components/nodes/MeshPreview.tsx',
   'components/nodes/WorldPreview.tsx',
+  'components/nodes/WorldSplatPreview.tsx',
   'components/nodes/MoodboardAdapterLine.tsx',
   'lib/moodboardAdapters.ts',
   'store/moodboardAdapterStore.ts',
@@ -288,6 +343,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/RegionNotices.tsx',
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
+  'components/canvas/PinComposer.tsx',
   'components/canvas/AgentCursorLayer.tsx',
   // The cursors' shared view and field, and the screen layer (Phase 3).
   'components/agent-cursor/AgentCursorField.tsx',

@@ -439,6 +439,30 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   line-height: 1.45;
 }
 
+/* A splat the viewer can't show: GM's line, centred in the stage in body
+ * text and the neutral colour (PR #203 r2), with Try again when the file
+ * didn't load (r3). */
+.world-modal__failure {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.world-modal__failure p {
+  max-width: 420px;
+  margin: 0;
+  color: rgba(226, 232, 240, 0.74);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .world-modal__footer {
   justify-content: space-between;
   border-top: 1px solid rgba(148, 163, 184, 0.14);
@@ -655,6 +679,12 @@ body.app-slava-restraint :is(
   background: var(--sr-canvas-elevated);
 }
 
+body.app-slava-restraint .world-modal__failure p {
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-body);
+  line-height: var(--sr-line-body);
+}
+
 body.app-slava-restraint .world-modal__help {
   border-color: var(--sr-edge);
   border-radius: var(--sr-radius-control);
@@ -784,4 +814,16 @@ body.app-slava-restraint :is(
   .world-environment-viewer__spinner {
     animation-duration: 1600ms;
   }
+}
+
+/* A World v2 splat the viewer can't show says why in the status line
+   (WorldSplatPreview, GM PR #203 r1): a sentence, so not the status's
+   uppercase mono micro type. */
+.world-modal__status[data-splat-failure],
+body.app-slava-restraint .world-modal__status[data-splat-failure] {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: right;
 }

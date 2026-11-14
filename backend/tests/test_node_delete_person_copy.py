@@ -120,7 +120,7 @@ def test_a_node_already_gone_says_written_copy_to_the_canvas(api):
     assert canvas.json()["detail"] == GONE_PERSON
     agent = api.client.delete("/api/graph/node/n9", headers=AGENT)
     assert agent.status_code == 404
-    assert agent.json()["detail"] == "Node n9 not found"
+    assert agent.json()["detail"].startswith("Node n9 not found. ") and "read the canvas again" in agent.json()["detail"]
 
 
 def test_the_canvas_undo_that_would_remove_a_node_with_paid_state_says_written_copy(api, monkeypatch):

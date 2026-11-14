@@ -1,7 +1,7 @@
 import { getProjectContext, type ProjectContext } from './projectContext';
 import { refuseWriteWhileOffline } from './backendConnection';
 import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
-import { TAB_HEADER, TAB_ID } from './tabId';
+import { TAB_HEADER, TAB_ID, tabIdConfirmed, tabIdReady } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import {
@@ -305,8 +305,9 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // only matters if that changes. See desktop_renderer_cors in backend/main.py.)
 const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
 // Settings answers saved keys' endings only to the person (Justin, Q55 a);
-// everyone else learns which keys are set.
-const PERSON_READ_PATHS = ['/api/settings'];
+// everyone else learns which keys are set. The line at the top of Settings
+// (settings.restored's, GM, PR #203 r38 item 5) is the person's only.
+const PERSON_READ_PATHS = ['/api/settings', '/api/settings/notice'];
 
 function wantsPersonHeader(path: string, method: string): boolean {
   if (getInjectedApiBaseUrl()) return true;
@@ -424,8 +425,12 @@ export async function apiFetch(path: string, init?: RequestInit,
     if (project.canvas !== undefined) headers.set('X-Nebula-Canvas-Revision', project.canvas);
   }
   // Which tab wrote, so this tab can tell its own edits' graphSync echoes
-  // from edits made elsewhere (lib/tabId.ts).
-  if (method !== 'GET' && method !== 'HEAD') headers.set(TAB_HEADER, TAB_ID);
+  // from edits made elsewhere (lib/tabId.ts). Never an id the page doesn't
+  // hold yet (review 21 LOW-1 on PR #199): a write waits for the claim.
+  if (method !== 'GET' && method !== 'HEAD') {
+    if (!tabIdConfirmed()) await tabIdReady();
+    headers.set(TAB_HEADER, TAB_ID);
+  }
   let requestInit: RequestInit = { ...init, headers };
   // The graph goes back with the relative asset links the backend gave it,
   // whatever this tab shows (canonicalBackendAssetUrls).

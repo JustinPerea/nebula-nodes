@@ -58,7 +58,7 @@ def test_future_node_connection_preference_persists_without_changing_graph_or_ge
     from services import settings
     import main
     import respx
-    monkeypatch.setattr(settings, 'SETTINGS_PATH', tmp_path / 'settings.json')
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(tmp_path / 'settings.json'))
     import copy
     before = copy.deepcopy((main.cli_graph.nodes, main.cli_graph.edges))
     with TestClient(app, client=('127.0.0.1', 54321), headers=person.headers) as client, respx.mock:

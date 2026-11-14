@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { AgentLog, MaskPainterModal, OnboardingOverlay, RunHistoryPanel, ConnectionPopup } from '../../src/components/DeferredPanels';
+import { AgentLog, OnboardingOverlay, RunHistoryPanel, ConnectionPopup } from '../../src/components/DeferredPanels';
+import { MaskPainterModal } from '../../src/components/panels/DeferredMaskPainter';
 import { MeshPreview, WorldPreview } from '../../src/components/nodes/DeferredViewers';
 import { useUIStore } from '../../src/store/uiStore';
 

@@ -29,6 +29,9 @@ import { SHORTCUTS_OPEN_EVENT } from '../src/lib/keyboardShortcuts';
 import { moveFocusFromLeave } from '../src/lib/noticeLeave';
 import { useUIStore } from '../src/store/uiStore';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
+import { DeferredKeyboardShortcutsDialog } from '../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 // The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
 beforeAll(regionNoticesReady);
@@ -39,7 +42,9 @@ const initialUI = useUIStore.getState();
 /** Notices like the app's: each a slot child with its own "Dismiss" (×),
  * leaving as a real one does (focus moved first, then gone). */
 function notices(count: number) {
-  const slot = document.querySelector('[data-notice-slot]')!;
+  // The canvas notice's slot: the first slot is the proposal bar's, which is
+  // behind an open dialog, not one of its notices (PR #203 review r5 MEDIUM-1).
+  const slot = document.querySelector('[data-notice-slot="notice"]')!;
   return Array.from({ length: count }, (_, index) => {
     const notice = document.createElement('div');
     notice.setAttribute('role', 'status');

@@ -1,0 +1,17 @@
+/* An agent's name, wherever it sits in a row with other content: the
+   proposal bar, the Updates rows and arrival cards, the Agents panel, the
+   cursor tag, pins and node marks. GM, PR #203 r11 item 6: agent names never
+   wrap. "Claude Code" stays on one line beside "proposes" and the pager, and
+   the rest of the row (the title, a label) gives up the room. The cap only
+   meets a very long custom name, which ends in an ellipsis rather than
+   wrapping. Inside a sentence ("Added Codex's nodes.", "proposed by
+   Codex", a permission card's "asks to", the questions form's heading)
+   the name is an inline span: only the no-wrap applies there, and the
+   sentence wraps around it. tests/agentNameNoWrap.test.ts pins every place. */
+.agent-name {
+  flex-shrink: 0;
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

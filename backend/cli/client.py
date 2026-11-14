@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sys
 from typing import Any, Callable
@@ -8,7 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
-from nebula_api import NebulaAPI, NebulaAPIError, never_reached, offline_read_only
+from nebula_api import AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError, never_reached, offline_read_only
 from services.agent_params import internal_keys, internal_refusal
 from services.cursor_actions import session_ok
 
@@ -71,6 +72,10 @@ class NebulaClient:
         session = os.environ.get("NEBULA_AGENT_SESSION")
         if session:
             headers.setdefault("X-Nebula-Agent-Session", session)
+        # Which words a refusal or a hint uses for the next call: `nebula`
+        # commands (services/agent_words). Not an agent marker: who the
+        # caller is stays the person gate's to decide (services/person_gate).
+        headers.setdefault("X-Nebula-Surface", "cli")
         if not session_ok(session):
             cursor = cursor_session()
             if cursor:
@@ -84,7 +89,24 @@ class NebulaClient:
             message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
                        "backend; `nebula graph` shows what finished.")
         else:
+            # Printed as the backend wrote it: every request says it comes
+            # from the CLI (X-Nebula-Surface), so a refusal names `nebula`
+            # commands where it is written (services/agent_words; review 9 of
+            # PR #203, keys MEDIUM-1), never rewritten here.
             message = exc.detail
+            payload = exc.payload if isinstance(exc.payload, dict) else {}
+            if payload.get("code") in AGENT_REFUSAL_CODES:
+                # The canvas waits to be saved as a project and the list is at
+                # its limit (review 5 of PR #199, M-3), it is too big to keep
+                # aside (review 7, L-3), or the person's tab keeps edits after
+                # a restore (GM r16): the code, for scripts.
+                message = f"{message} ({payload['code']})"
+            elif exc.status == 413 and payload.get("limit") in ("projects", "storage"):
+                # The project list's limit, whole, as MCP's new_project says it
+                # (mcp_server._limit_said_whole; review 13 of PR #199, LOW-3):
+                # which limit and how many projects it holds.
+                fields = {key: payload[key] for key in ("limit", "projectLimit", "projectCount", "deletes", "scope", "code") if key in payload}
+                message = f"{message} (413, {json.dumps(fields)})"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)
 
@@ -98,8 +120,9 @@ class NebulaClient:
     def shared(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Run one of the reads and writes the MCP tools share (project_client)
         as this client: its identity headers, and a refusal printed as
-        `error: <detail>` with exit 1, as every other command does. Pass
-        via="cli" to calls that word a hint."""
+        `error: <detail>` with exit 1, as every other command does. A hint
+        is in `nebula` words: the identity headers say the CLI
+        (X-Nebula-Surface), which project_client reads."""
         import project_client
 
         try:
@@ -125,8 +148,10 @@ class NebulaClient:
 
     # -- Discovery --
     def get_start(self) -> dict[str, Any]:
-        """An agent's first call (services/agent_start.py), its hints in `nebula` words."""
-        return self._request("GET", "/api/agent/start", params={"via": "cli"})
+        """An agent's first call (services/agent_start.py), its hints in
+        `nebula` words: every request says it comes from the CLI
+        (_identity_headers' X-Nebula-Surface)."""
+        return self._request("GET", "/api/agent/start")
 
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")
@@ -346,6 +371,18 @@ class NebulaClient:
         try:
             return self.api.request("GET", f"/api/graph/node/{node_id}/path", timeout=10,
                                     headers=self._identity_headers())
+        except NebulaAPIError as exc:
+            if exc.kind == "connect":
+                raise RuntimeError(connect_failure(self.base_url, exc)) from exc
+            raise RuntimeError(exc.detail) from exc
+
+    def get_splat_summary(self, node_id: str, port: str | None = None) -> dict[str, Any]:
+        """Call GET /api/graph/node/{id}/splat-summary (a World output's PLY
+        splats as numbers). Raises RuntimeError with a message for stderr."""
+        try:
+            # Quoted whole: a "/" or "?" in the id never reaches another route.
+            return self.api.request("GET", f"/api/graph/node/{quote(node_id, safe='')}/splat-summary", timeout=30,
+                                    params={"port": port} if port else None, headers=self._identity_headers())
         except NebulaAPIError as exc:
             if exc.kind == "connect":
                 raise RuntimeError(connect_failure(self.base_url, exc)) from exc

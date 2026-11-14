@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
-import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
+import { editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyFallback, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
+import { ProjectCounts } from './projectFacts';
+import { editedDate } from './editedDate';
+import { UndoToast } from './UndoToast';
+import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
+import { removalNote } from './trashDays';
 import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } from '../../lib/projectPurgeCopy';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
-import { InNoticeRegion } from '../InNoticeRegion';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
@@ -15,12 +21,12 @@ import { editsSavedLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
-import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
+import { useKeptCanvas } from '../../lib/keptCanvas';
+import { NoticeLeave } from '../../lib/noticeLeave';
 import { LineText } from '../LineText';
 import { PersonLockLine, type PersonLock } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
-import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
   id: string;
@@ -65,8 +71,19 @@ export interface ProjectHomeProps {
   /** What Try again does for `error` (error copy round 3b, store/projectStore
    * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
    * line), 'reload' only reloads the saved projects (the whole line stays),
-   * 'none' hides Try again (the whole line). */
-  retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
+   * 'save' is [Save as a project] (GM r12 on PR #199, 1: the edits a
+   * restore stopped, kept in this tab; the whole line), and
+   * 'none' hides Try again (the whole line). 'openFollowed' (GM r29 on
+   * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
+   * neutral box (nothing was lost) with [Open “<openFollowedName>”].
+   * 'partLoad' (GM r24, c): a flow's chunk didn't load; the same box with
+   * [Try again]. */
+  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad';
+  /** The project [Open “…”] opens, with retry 'openFollowed'. */
+  openFollowedName?: string | null;
+  /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
+   * item 2): its card says when it can (store/projectStore reopenHoldLine). */
+  reopenHold?: { id: string; line: string } | null;
   /** PR #204 round 11: Try again redoes a "Delete forever" or "Empty" (DELETE
    * /api/projects/trash/{id}, POST /api/projects/trash/empty: require_person), so on a tab that
    * isn't connected as the person it locks as those buttons do. */
@@ -85,8 +102,12 @@ export interface ProjectHomeProps {
    * nothing rather than a 0 nobody counted. */
   workLoaded?: boolean;
   trash?: TrashedProject[];
+  /** The project the person just moved to Recently deleted (the Undo
+   * toast). Its Undo may pass the project limit (Justin, 2026-10-29), so it
+   * is never refused by it. */
   lastDeleted?: { id: string; name: string } | null;
-  onRestore?: (id: string) => void;
+  /** `from` 'undo' when the Undo toast's button asked. */
+  onRestore?: (id: string, from?: 'undo') => void;
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
@@ -105,9 +126,36 @@ export interface ProjectHomeProps {
   /** Cover picker: the project's images, and pinning one (null = automatic). */
   loadCoverChoices?: (id: string) => Promise<CoverChoices>;
   onPinCover?: (id: string, url: string | null) => void;
+  /** Nebula restored a damaged project list: GM's line (catalogRestoreCopy),
+   * shown until the person closes it with ×. */
+  catalogRestore?: CatalogRestore | null;
+  /** How many projects the list may hold (the listing's `projectLimit`): the
+   * restore notice's left-out line names it (GM r18 on PR #199). */
+  projectLimit?: number;
+  onDismissCatalogRestore?: () => void;
+  /** The live canvas isn't a project and the list had no room to save it
+   * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
+  /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
+   * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
+  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
+    filed?: SavedCanvas[] } | null;
+  /** The project [Save as a project] saved this tab's edits as (GM r12 on
+   * PR #199, 1): its toast names it. */
+  editsRecoveredAs?: { id: string; name: string; dropped?: string } | null;
+  onDismissEditsRecovered?: () => void;
+  /** GM r14 on PR #199, 3: the line for a tab sent home after an agent's
+   * write closed its project ("Codex cleared the canvas. “X” is kept as its
+   * own project."), so it never goes home silently. */
+  agentClosedNote?: { id: string; text: string } | null;
+  onDismissAgentClosedNote?: () => void;
+  /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
+  canvasHeldUnreadable?: { count: number | null } | null;
+  /** Its × (GM r9: a one-time report, closed like the restore notice). */
+  onDismissCanvasHeldUnreadable?: () => void;
+  onDismissCanvasSaved?: () => void;
 }
 
-const UNDO_VISIBLE_MS = 8000;
 
 const monochromeMark = [
   { t: 0, rgb: [235, 236, 235] as [number, number, number] },
@@ -197,12 +245,6 @@ function coverTitle(project: ProjectSummary): string {
   return project.coverBy && project.coverBy.kind !== 'person' ? `Cover: set by ${actorLabel(project.coverBy)}` : 'Cover: pinned';
 }
 
-function editedDate(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Saved project';
-  return `Edited ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date)}`;
-}
-
 function recentTimestamp(project: ProjectSummary) {
   const opened = Date.parse(project.lastOpenedAt ?? '');
   if (Number.isFinite(opened)) return opened;
@@ -210,7 +252,7 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean }) {
+function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover, lockLine = null }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean; lockLine?: string | null }) {
   // GM r18: the icons disabled offline carry the offline mark (the
   // not-allowed cursor, and a press pulses the banner).
   const off = offlineMark(offline);
@@ -228,15 +270,14 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
 
   return (
     <article className="project-home__card" aria-label={project.name}>
-      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
+      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}
+        aria-describedby={lockLine ? `project-lock-${project.id}` : undefined}>
         <ProjectPreview key={coverImages(project).images.join('|') || 'placeholder'} project={project} />
         <span className="project-home__card-name">{project.name}</span>
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
-        {counts
-          ? <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
-          : <span data-testid="project-card-no-counts" />}
+        {counts ? <ProjectCounts project={project} /> : <span data-testid="project-card-no-counts" />}
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
@@ -253,6 +294,9 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
       </div>
       {/* An agent asking to change the cover the person pinned (Q60 a). */}
       <ProposalsFor kind="project" targetId={project.id} />
+      {/* Review 18 MEDIUM-2, GM r30 item 2: the open project's reopen can't go
+          yet; Open still goes back to the canvas, and this says when it can. */}
+      {lockLine && <p id={`project-lock-${project.id}`} className="project-home__card-lock" data-reopen-hold="">{lockLine}</p>}
       {choosingCover && loadCoverChoices && onPinCover && (
         <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
           onClose={() => { setChoosingCover(false); requestAnimationFrame(() => coverButton.current?.focus()); }} />
@@ -274,16 +318,6 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
       )}
     </article>
   );
-}
-
-function daysLeft(purgeAt: string, now: number): number {
-  const remaining = Date.parse(purgeAt) - now;
-  return Number.isFinite(remaining) ? Math.max(0, Math.ceil(remaining / 86_400_000)) : 0;
-}
-
-function removalNote(purgeAt: string, now: number): string {
-  const days = daysLeft(purgeAt, now);
-  return days <= 1 ? 'Removed for good within a day' : `Removed for good in ${days} days`;
 }
 
 function deletedDate(value: string): string {
@@ -341,8 +375,10 @@ const TRASH_CONFIRM_CLOSE_MS = 360 + 120;
  * Cancel and Delete forever after it (on their own line when the text needs
  * the width). It opens on the layout spring and closes back on Cancel.
  */
-function TrashRow({ entry, now, busy, onRestore, onPurge, lock }: {
+function TrashRow({ entry, now, busy, fromNotice, onRestore, onPurge, lock }: {
   entry: TrashedProject; now: number; busy: boolean;
+  /** The restore notice opened the list to this one (GM r4): marked, and the first scrolled into view. */
+  fromNotice: boolean;
   onRestore: (id: string) => void; onPurge: (id: string) => void;
   /** The one lock for deleting for good (components/PersonLock): it never arms while locked. */
   lock: PersonLock;
@@ -372,9 +408,10 @@ function TrashRow({ entry, now, busy, onRestore, onPurge, lock }: {
     if (prefersReducedMotion()) setShown(false);
   };
   return (
-    <li className="project-home__trash-row" data-project-id={entry.id} aria-label={entry.name}>
+    <li className="project-home__trash-row" data-project-id={entry.id} aria-label={entry.name}
+      data-from-notice={fromNotice ? 'true' : undefined}>
       <span className="project-home__trash-name">{entry.name}</span>
-      <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
+      <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.deletedAt, entry.purgeAt, now)}</span>
       <span className="project-home__trash-actions">
         <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
         {/* It arms a Delete forever: red on hover (GM r13), neutral at rest. */}
@@ -399,13 +436,43 @@ function TrashRow({ entry, now, busy, onRestore, onPurge, lock }: {
   );
 }
 
-function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [] }: {
   trash: TrashedProject[]; busy: boolean;
+  /** The restore notice's items it opened the list to (GM r4): marked, and
+   * the first scrolled into view. */
+  fromNotice?: string[];
   onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
+  /** When the person last asked the list open (the restore notice's
+   * "Open Recently deleted"), as the clock at that click; 0 for none. A new
+   * value opens the list and moves focus to it, then `onOpened` clears it,
+   * so the list coming back later (an agent deletes a project after the
+   * trash emptied) never reopens it or takes focus (review 2 of PR #199, L6). */
+  openRequest?: number;
+  onOpened?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
-  const [now, setNow] = useState(() => Date.now());
+  const [openedAt, setNow] = useState(() => Date.now());
+  // A project deleted while the list is open was deleted after the clock was
+  // read: the clock is at least the newest delete (GM r7, bug 2).
+  const now = Math.max(openedAt, ...trash.map((entry) => Date.parse(entry.deletedAt)).filter(Number.isFinite));
+  const toggle = useRef<HTMLButtonElement>(null);
+  // A new request opens the list in this render (React's "adjust state when
+  // a prop changes"), so the effect below only moves focus.
+  const [seenRequest, setSeenRequest] = useState(0);
+  if (openRequest !== seenRequest) {
+    setSeenRequest(openRequest);
+    if (openRequest) { setNow(openRequest); setOpen(true); }
+  }
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!openRequest) return;
+    toggle.current?.focus();
+    toggle.current?.scrollIntoView?.({ block: 'nearest' });
+    // "Opens to those" (GM r4): the notice's first item in view, focus kept on the toggle.
+    list.current?.querySelector<HTMLElement>('[data-from-notice="true"]')?.scrollIntoView?.({ block: 'nearest' });
+    onOpened();
+  }, [openRequest, onOpened]);
   // PR #204 round 10 (GM r15, r17 item 1): deleting for good is the person's alone (DELETE
   // /api/projects/trash/{id}, POST .../trash/empty: require_person). Empty and every Delete
   // forever lock as one group with one line under the heading.
@@ -414,7 +481,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
         <h2 id="recently-deleted-title">
-          <button type="button" className="project-home__trash-toggle" aria-expanded={open} aria-controls="recently-deleted-list" onClick={() => {
+          <button ref={toggle} type="button" className="project-home__trash-toggle" aria-expanded={open} aria-controls="recently-deleted-list" onClick={() => {
             if (!open) setNow(Date.now());
             setOpen(!open);
           }}>
@@ -429,37 +496,13 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
       {open && (
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">{PROJECT_TRASH_NOTE}</p>
-          <ul className="project-home__trash-list">
-            {trash.map((entry) => <TrashRow key={entry.id} entry={entry} now={now} busy={busy} onRestore={onRestore} onPurge={onPurge} lock={purgeLock} />)}
+          <ul className="project-home__trash-list" ref={list}>
+            {trash.map((entry) => <TrashRow key={entry.id} entry={entry} now={now} busy={busy} fromNotice={fromNotice.includes(entry.id)}
+              onRestore={onRestore} onPurge={onPurge} lock={purgeLock} />)}
           </ul>
         </div>
       )}
     </section>
-  );
-}
-
-function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
-  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
-}) {
-  const [paused, setPaused] = useState(false);
-  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
-  const waiting = useSlotWaiting('project-home');
-  useEffect(() => {
-    if (paused || waiting) return;
-    const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [paused, waiting, onDismiss, project.id]);
-  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
-  return (
-    <InNoticeRegion slot="project-home">
-      <div className="project-home__toast" role="status" aria-live="polite" {...leave}
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
-        <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-      </div>
-    </InNoticeRegion>
   );
 }
 
@@ -485,10 +528,73 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 
 const noop = () => {};
 
+// Review 21 LOW-1 (the entry chunk's budget): the notices that only show
+// when something happened load the first time one shows, and show nothing
+// while they load (no wrong line; each is a polite status that announces on
+// arrival).
+const CanvasWaitingNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasWaitingNotice })));
+const CanvasHeldUnreadableNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasHeldUnreadableNotice })));
+const CanvasSavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasSavedToast })));
+const SavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.SavedToast })));
+
+/** The notice after Nebula restored a damaged project list (GM's lines,
+ * catalogRestoreCopy). Its status region is in the page from the start and
+ * filled after it mounts, so screen readers announce it (a live region
+ * reads changes, not what it held when it appeared: review 1 of PR #199,
+ * L8). × closes it, and focus follows the notice stack's rule (PR #200 GM
+ * r16; review 13 of PR #199, MEDIUM-1): the notice now in its place, else
+ * "Recent projects". */
+function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
+  /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
+  copy: RestoreCopy | null;
+  /** Its chunk failed to load (it is tried again at the next focus or
+   * reconnect): the notice says RESTORE_COPY_FALLBACK meanwhile, or, while
+   * this tab keeps edits, GM r23's full sentence (restoreCopyFallback). */
+  copyFailed?: boolean;
+  restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
+  /** GM r9: held canvases that couldn't be read, merged in as one more line. */
+  heldUnreadable?: { count: number | null } | null;
+  onOpenRecentlyDeleted: (ids: string[]) => void;
+}) {
+  // Filled once the region is in the page: the callback ref runs after it
+  // is attached, and the content follows in the next render.
+  const [ready, setReady] = useState(false);
+  const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
+  // Only the lines that still hold against the list now (GM r4), so a
+  // restore or delete by the person or an agent updates it as it lands.
+  const notice = ready && restore && copy ? copy.catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
+  // GM r23 (3) on PR #199: the short fallback only when nothing is kept.
+  const kept = useKeptCanvas();
+  return (
+    // A polite live region rather than role="status": the page keeps one
+    // status per notice it shows (the loading line, the saved-file line),
+    // and this empty region stays in the page the whole time.
+    <div ref={attached} className={notice || (ready && restore && copyFailed) ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
+      {!notice && ready && restore && copyFailed && <>
+        <span className="project-home__restore-text" data-restore-fallback="">{restoreCopyFallback(kept)}</span>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </>}
+      {notice && <>
+        {/* GM r3's B layout: more than one outcome, one per line (no bullets). */}
+        {notice.lines
+          ? <div className="project-home__restore-text project-home__restore-lines">{notice.lines.map((line) => <p key={line}>{line}</p>)}</div>
+          : <span className="project-home__restore-text">{notice.text}</span>}
+        {/* Only while Recently deleted holds one of the notice's items (GM r4; L6). */}
+        {notice.openRecentlyDeleted && current.trash.length > 0 && <button type="button" className="project-home__restore-action project-home__restore-action--neutral"
+          onClick={() => onOpenRecentlyDeleted(notice.recentlyDeletedIds)}>{OPEN_RECENTLY_DELETED}</button>}
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </>}
+    </div>
+  );
+}
+
 /** Which notice in the stack focus was in, by its key, and the keys of the
  * stack as it was. React's focus events bubble through portals, so focus in
  * a notice's own dialog (the held edits' confirm) counts as in the notice. */
-type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
+// Review 13 of PR #199 (MEDIUM-1): the restore notices above the stack
+// follow its rule too, in page order: the restore notice, the waiting line,
+// the held canvases that couldn't be read, then the stack.
+type NoticeKey = 'restore' | 'waiting' | 'unreadable' | 'copy' | 'held' | 'saved' | 'error';
 
 /** The notice stack's focus rule (GM pr200 r16 #2, which replaced GM r15's
  * "first control"): when a notice goes and takes focus with it, focus moves
@@ -502,6 +608,8 @@ type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
  * frame to wait for (a frame never comes in a background tab). */
 /** The × every dismissable notice carries (CopyNotice). */
 const NOTICE_DISMISS = 'button.project-home__notice-close';
+/** Any notice's × as the rule looks for it: the stack's, or the restore notices'. */
+const ANY_NOTICE_DISMISS = `${NOTICE_DISMISS}:not(:disabled), button.project-home__toast-close:not(:disabled)`;
 
 function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | null>,
   fallback: RefObject<HTMLElement | null>) {
@@ -517,11 +625,11 @@ function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | n
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
     const index = before.indexOf(was);
-    const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>(':scope > [data-notice]') ?? []);
+    const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>('[data-notice]') ?? []);
     const target = notices[Math.min(index, notices.length - 1)];
     if (!target) { fallback.current?.focus(); return; }
     // Its ×, else the notice itself by its tabindex: never one of its actions.
-    const control = target.querySelector<HTMLElement>(`${NOTICE_DISMISS}:not(:disabled)`)
+    const control = target.querySelector<HTMLElement>(ANY_NOTICE_DISMISS)
       ?? target.querySelector<HTMLElement>('[tabindex="-1"]');
     (control ?? fallback.current)?.focus();
     // keys is read through `joined`: a new array each render, the same stack.
@@ -540,9 +648,13 @@ function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | n
   };
 }
 
-export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
+export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo', openFollowedName = null, reopenHold = null,
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
+  catalogRestore = null, onDismissCatalogRestore = noop, projectLimit,
+  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, editsRecoveredAs = null, onDismissEditsRecovered = noop,
+  agentClosedNote = null, onDismissAgentClosedNote = noop,
+  canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
   copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
   const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
@@ -557,7 +669,19 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
   const errorKept = useOfflineFirstBecause(error ?? null);
   const showError = !unsavedEdits && Boolean(errorKept);
+  const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
+  // The waiting line, unless the restore notice already says the limit.
+  // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its
+  // notices has something to say, not with the entry chunk.
+  const { copy, failed: copyFailed } = useRestoreCopyState(Boolean(catalogRestore || canvasNotFiled || canvasHeldUnreadable || canvasSaved));
+  const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled && copy
+    && copy.catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
+  const showWaiting = Boolean(canvasNotFiled && copy) && !restoreSaysLimit;
+  const showUnreadable = Boolean(canvasHeldUnreadable && copy) && !catalogRestore;
   const noticeKeys: NoticeKey[] = [
+    ...(catalogRestore ? ['restore' as const] : []),
+    ...(showWaiting ? ['waiting' as const] : []),
+    ...(showUnreadable ? ['unreadable' as const] : []),
     ...(copyNotice ? ['copy' as const] : []),
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
     ...(showError ? ['error' as const] : []),
@@ -576,6 +700,13 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       && !stack.current?.contains(active)) return;
     stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
   }, [savedAsCopy]);
+  const [trashOpenRequest, setTrashOpenRequest] = useState(0);
+  const [trashFromNotice, setTrashFromNotice] = useState<string[]>([]);
+  const trashOpened = useCallback(() => setTrashOpenRequest(0), []);
+  const openTrash = useCallback((ids: string[] = []) => {
+    setTrashFromNotice(ids);
+    setTrashOpenRequest((last) => Math.max(Date.now(), last + 1));
+  }, []);
   // After Delete forever or Empty, focus goes to the next row's Restore (the
   // row before when it was the last), else to the Recently deleted heading,
   // else to "Recent projects": never left on the page once the row is gone.
@@ -635,12 +766,23 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
+        {/* Every notice on the home, in page order, under one focus rule
+            (useNoticeStackFocus; review 13 of PR #199, MEDIUM-1). */}
+        <div ref={stack} className="project-home__notice-area">
+        {/* The same element with or without a restore: its live region stays in the page. */}
+        <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} copyFailed={copyFailed} restore={catalogRestore} current={current}
+          onDismiss={onDismissCatalogRestore} heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} /></div>
+        {showWaiting && canvasNotFiled && copy && <div {...track('waiting')}><Suspense fallback={null}><CanvasWaitingNotice copy={copy} waiting={canvasNotFiled} trashCount={trash.length}
+          onOpenRecentlyDeleted={() => openTrash()} /></Suspense></div>}
+        {showUnreadable && canvasHeldUnreadable && copy && <div {...track('unreadable')}><Suspense fallback={null}><CanvasHeldUnreadableNotice copy={copy} count={canvasHeldUnreadable.count}
+          onDismiss={onDismissCanvasHeldUnreadable} /></Suspense></div>}
+
         {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
             then the held edits or the line that says where they went, then
             the error. GM's WRAP rule: where "Try again" redoes the failure it
             is the retry, so the reason drops its own; where it only reloads,
             or can't help, the line stays whole. */}
-        {noticeKeys.length > 0 && <div ref={stack} className="project-home__notices">
+        {(copyNotice || unsavedEdits || editsSavedAs || showError) && <div className="project-home__notices">
           {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
             onRestore={onRestoreCopy} onOpen={onOpenCopy} onDismiss={onDismissCopy} /></div>}
           {unsavedEdits ? <div {...track('held')}><UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
@@ -649,15 +791,24 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
+          {showError && (retry === 'openFollowed' || retry === 'partLoad') ? <div {...track('error')}>
+            <div className="project-home__notice project-home__notice--copy" role="alert" tabIndex={-1} data-followed-notice="" data-line-box="">
+              {errorDetails ? <div className="project-home__notice-text project-home__error-text"><LineText text={error} className="project-home__error-line" />
+                <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+                : <span className="project-home__notice-text"><LineText text={error} /></span>}
+              <span className="project-home__notice-actions">
+                <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
+                  {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
+          : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}
+              {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}
             <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
+        </div>
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
@@ -665,15 +816,23 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover}
+              lockLine={reopenHold?.id === project.id ? reopenHold.line : null} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>
       {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
-        onUndo={() => onRestore(last.id)} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
+        onUndo={() => onRestore(last.id, 'undo')} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
+      <Suspense fallback={null}>
+        {canvasSaved && copy && <CanvasSavedToast key={canvasSaved.id} copy={copy} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
+        {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={filedCopyLine(editsRecoveredToast(editsRecoveredAs.name), editsRecoveredAs)}
+          onDismiss={onDismissEditsRecovered} />}
+        {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}
+          onDismiss={onDismissAgentClosedNote} />}
+      </Suspense>
     </div>
   );
 }

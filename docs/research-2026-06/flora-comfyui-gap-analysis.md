@@ -123,7 +123,7 @@ Found by a second pass that asked "which capability *areas* did the facet resear
 | id | Gap | F/C/N |
 |---|---|---|
 | `g-headless-jobs-api` | Unified headless `/api/jobs` create/list/delete + `/view` download (we have `/ws` + `/api/execute`, no addressable job API) | y/y/partial |
-| `g-3d-gaussian-splats` | Interactive 3D **Gaussian-splat / point-cloud** preview (mesh viewer via `<model-viewer>` already shipped) | n/y/partial |
+| `g-3d-gaussian-splats` | Interactive 3D **Gaussian-splat / point-cloud** preview (mesh viewer via `<model-viewer>` already shipped). **2026-10-29: splat preview in review (PR #203).** World v2 PLY and SPZ splats open in the Spark World viewer from the card ("Explore in 3D"), and the Idol node makes them from one image; no live Idol run yet, and point clouds still show a summary card only. Close it after the first live run. | n/y/partial |
 | `g-i18n` | Internationalization / localization (ComfyUI ships 5 languages; Nebula is hardcoded English) | n/y/none |
 | `g-edu-community-surfaces` | Education program + curated community/templates gallery + LLM-queryable docs | y/na/none |
 

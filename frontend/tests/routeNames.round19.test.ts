@@ -70,7 +70,7 @@ describe('L-A: a node on the gateway is named "via" the gateway when its route d
       const summary = summarizeRunScope(nodes, edges, { kind: 'graph' }, { pricing: PRICING, apiKeys: KREA, sizes: {} });
       expect(runNodeName(nodes[1], summary.routes?.n2)).toBe('Grok Imagine 2.0 via Krea');
       expect(summary.cost?.unpriced).toEqual(['Grok Imagine 2.0 via Krea']);
-      expect(describeRunScope(summary)).toContain('No list price for Grok Imagine 2.0 via Krea');
+      expect(describeRunScope(summary)).toContain('“Grok Imagine 2.0 via Krea” calls a paid provider that has no listed price.');
       expect(describeRunScope(summary)).not.toContain('(Krea)');
       expect(summary.paid).toEqual(['Grok Imagine 2.0 via Krea']);
     }

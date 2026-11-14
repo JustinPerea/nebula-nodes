@@ -4,6 +4,9 @@ import { KeyboardShortcuts } from '../../src/components/KeyboardShortcuts';
 import { displayKey, SHORTCUTS_OPEN_EVENT } from '../../src/lib/keyboardShortcuts';
 import { useUIStore } from '../../src/store/uiStore';
 import { usePersonThreadStore } from '../../src/store/personThreadStore';
+import { DeferredKeyboardShortcutsDialog } from '../../src/lib/deferredChunks';
+// The dialog is its own chunk: in hand before a test opens it.
+await DeferredKeyboardShortcutsDialog.preload();
 
 const initialUI = useUIStore.getState();
 const initialThread = usePersonThreadStore.getState();

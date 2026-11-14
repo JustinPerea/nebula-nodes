@@ -84,13 +84,27 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
 
 
 @pytest.fixture
-def agent_log():
-    """The in-app chat turn's Agent Log lines (publish_action's `thinking`
-    events, which the canvas's Agent Log panel shows as they are)."""
+def agent_log(monkeypatch):
+    """What the canvas's Agent log lists, from both of its sources: an
+    in-app chat turn's lines (publish_action's `thinking` events, shown as
+    they are) and each agent cursor event's line, its `log` else its `say`
+    (frontend agentLogStore.agentActionEntry). GM, PR #203 r30 item 1: a
+    refused run is one line there, whoever asked."""
+    import main
     from services.chat_actions import register_action_handler, unregister_action_handler
 
     lines: list[str] = []
     register_action_handler(lambda event: lines.append(event["text"]) if event.get("type") == "thinking" else None)
+    original = main.manager.broadcast_raw
+
+    async def heard(data, **kwargs):
+        if isinstance(data, dict) and data.get("type") == "agentPresence" and data.get("agent"):
+            text = str(data.get("log") or data.get("say") or "").strip()
+            if text:
+                lines.append(text)
+        await original(data, **kwargs)
+
+    monkeypatch.setattr(main.manager, "broadcast_raw", heard)
     yield lines
     unregister_action_handler()
 
@@ -105,9 +119,10 @@ def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch,
     body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
 
     assert "OPENAI_API_KEY" in body["error"] and image in body["error"]
-    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-    assert line == (f"Run stopped before it started. {main._node_label(image)} can't run. "
-                    "Add your OpenAI API key in Settings, then run the node again.")
+    # GM, PR #203 r29 item 3: the card's heading and the bar's reason.
+    [line] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
+    assert line == (f"Nebula couldn’t start the run. “{main._node_label(image)}” needs your OpenAI API key. "
+                    "Add it in Settings, then run the node again.")
     assert "OPENAI_API_KEY" not in line and image not in line and "Missing API key" not in line
 
 
@@ -123,8 +138,8 @@ def test_a_graph_wide_refusal_tells_the_agent_log_in_words(canvas, monkeypatch, 
     body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
 
     assert "Graph contains a cycle" in body["error"]
-    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-    assert line == "Run stopped before it started. Couldn't run the canvas."
+    [line] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
+    assert line == "Nebula couldn’t start the run."
 
 
 def test_every_node_of_an_agent_run_shows_on_the_canvas_and_a_failure_fails_the_run(canvas, monkeypatch):

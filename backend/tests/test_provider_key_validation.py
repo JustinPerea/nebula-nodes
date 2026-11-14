@@ -57,6 +57,7 @@ PROVIDER_KEYS = {
     "World Labs": "WORLDLABS_API_KEY",
     "BytePlus": "BYTEPLUS_API_KEY",
     "Black Forest Labs": "BFL_API_KEY",
+    "Hugging Face": "HF_TOKEN",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
@@ -163,7 +164,7 @@ def _isolate(monkeypatch):
 def test_provider_credentials_do_not_fallback_to_process_environment(
     monkeypatch, tmp_path
 ):
-    monkeypatch.setattr(settings_service, "SETTINGS_PATH", tmp_path / "missing-settings.json")
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(tmp_path / "missing-settings.json"))
     monkeypatch.setenv("OPENAI_API_KEY", "environment-only-key")
 
     assert settings_service.get_api_key("OPENAI_API_KEY") is None
@@ -603,6 +604,10 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
     world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
     assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"
 
+    # Hugging Face: the free, read-only whoami (never a Space, never quota).
+    hugging_face = by_url["https://huggingface.co/api/whoami-v2"]
+    assert hugging_face == {"Authorization": "Bearer key-for-HF_TOKEN"}
+
     nous = by_url["https://inference-api.nousresearch.com/v1/models"]
     assert nous["Authorization"] == "Bearer nous-test-token"
 
@@ -619,6 +624,9 @@ def test_provider_checks_cover_every_catalog_credential():
         if isinstance(names, str):
             names = [names]
         catalog_keys.update(name for name in names if name)
+        # A keyless route's optional key (HF_TOKEN) is checked once saved too.
+        for route in definition.get("routes") or []:
+            catalog_keys.update(name for name in route.get("optionalKeys") or [] if name)
 
     health_keys = {
         key

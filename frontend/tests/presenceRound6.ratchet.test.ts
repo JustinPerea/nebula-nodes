@@ -380,6 +380,7 @@ const UNTRACED: Record<string, string> = {
   'lib/backend.ts /api/krea/': 'PERSON_READ_PREFIXES',
   'lib/backend.ts /api/personal-agents': 'PERSON_READ_PREFIXES',
   'lib/backend.ts /api/settings': 'PERSON_READ_PATHS',
+  'lib/backend.ts /api/settings/notice': 'PERSON_READ_PATHS',
   'lib/backend.ts /api/outputs/': 'BACKEND_ASSET_PREFIXES: media paths rewritten to the backend origin',
   'lib/backend.ts /api/presets/thumbnails/': 'BACKEND_ASSET_PREFIXES',
   'lib/backend.ts /api/paper/snapshots/': 'BACKEND_ASSET_PREFIXES',

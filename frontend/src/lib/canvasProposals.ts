@@ -3,13 +3,9 @@ import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError, copyForAnswer, warnFailure } from './errorCopy';
-import { formatChipEstimate } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
-import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
-import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
-import { PROVIDER_PARAM } from './directRoute';
-import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { missingKeyTitle } from './nodeKeys';
+import type { ProposalNotReady, ProposalView } from './wsClient';
+import { nodeKeyStatus, type CredentialReadiness } from './kreaConnection';
 
 export type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 
@@ -208,19 +204,6 @@ export function ghostBoxes(
 }
 
 /**
- * A ghost's ⚠, as a real node's card shows it (ModelNode): the key check
- * against the saved settings, with the same title. Null when it can run.
- */
-export function ghostKeyWarning(
-  definition: ModelNodeDefinition | undefined,
-  params: Record<string, unknown>,
-  cache: CredentialReadiness,
-): string | null {
-  if (!definition || nodeKeyStatus(definition, params, cache) !== 'missing') return null;
-  return usesKreaAccount(definition, params) ? 'Krea sign-in required' : missingKeyTitle(definition, params);
-}
-
-/**
  * The proposal's run nodes that can't run here (cost.notReady, read when the
  * agent proposed), less the ones the person has set up since: a "needs …"
  * reason whose key check now passes. Route reasons stay, since the canvas
@@ -230,45 +213,22 @@ export function stillNotReady(
   view: ProposalView,
   cache: CredentialReadiness,
   nodeFor: (row: ProposalNotReady) => { definition: ModelNodeDefinition | undefined; params: Record<string, unknown> } | null,
-): ProposalNotReady[] {
-  return (view.cost.notReady ?? []).filter((row) => {
-    if (!cache.loaded || !row.missing.startsWith('needs ')) return true;
+): Array<ProposalNotReady & { routeKeyLine?: true }> {
+  return (view.cost.notReady ?? []).flatMap((row) => {
     const node = nodeFor(row);
-    return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing';
+    // A route's own missing-key line (RouteSpec.missingKeyLine, a keyed
+    // route: "You can run X after you add your Hugging Face token in
+    // Settings."): Accept is locked for it, so the bar says the Accept line
+    // in its place (notReadyBarLines).
+    const routeKeyLine = Boolean(node?.definition?.routes?.some((route) => route.missingKeyLine && route.missingKeyLine === row.missing));
+    const kept = routeKeyLine ? [{ ...row, routeKeyLine: true as const }] : [row];
+    if (!cache.loaded) return kept;
+    // A missing key, in either wording: find_nodes' "needs <key>", or a
+    // route's own line. PR #203 round 6: with the key added, the line stayed
+    // beside an unlocked Accept.
+    if (!row.missing.startsWith('needs ') && !routeKeyLine) return kept;
+    return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing' ? kept : [];
   });
-}
-
-/** The person's line ("GPT Image 2 needs your OpenAI API key. Add it in
- * Settings.", round 3f); from a backend older than 3f, find_nodes' words:
- * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
-export function notReadyLine(row: ProposalNotReady): string {
-  if (row.person?.trim()) return row.person.trim();
-  // Route messages already start with the node's name.
-  return row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`;
-}
-
-/** A ghost card's warning for its not-ready row: the person's line (round 3f), else find_nodes' words. */
-export function notReadyWarning(row: ProposalNotReady | undefined): string | null {
-  if (!row) return null;
-  return row.person?.trim() || row.missing;
-}
-
-/** The card's plan line under the note (GM - Design, 2026-11-01): what
- * Accept changes and runs, by node name; the model and who pays for a single
- * paid run; the run chip's price. The backend writes it (services/
- * canvas_proposals.plan_line), so agents read the same words in `nebula
- * proposal` and MCP. */
-export function proposalPlan(view: ProposalView): string {
-  return view.plan ?? '';
-}
-
-/** The proposal card's chip, as the Run chip writes it (lib/pricing
- * formatChipEstimate): "~$0.07", "Up to $0.43", "$0.07 + unpriced" when part
- * of the run has no known price. The card has no tooltip for it. */
-export function proposalEstimateLabel(view: ProposalView): string | null {
-  const estimate = view.cost.estimate;
-  if (!estimate || view.run.length === 0) return null;
-  return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
 
 /** A proposal whose whole run waits on agents' placeholders: its run skips
@@ -276,186 +236,8 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
  * no run for it (canvasProposalsStore.accept; review 5, L1). */
 export function runsNothing(view: ProposalView): boolean {
   const { paidRuns, freeRuns, pendingSkipped } = view.cost;
-  return view.run.length > 0 && paidRuns === 0 && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
-}
-
-/** The primary button's words. "Accept" when accepting runs nothing (GM -
- * Design, round 5, item 3): Accept starts no run for it (it would skip every
- * node: backend main._skip_placeholders), and nothing is queued for when the
- * agent finishes. The paid count left the label (GM - Design, 2026-11-01):
- * the plan line right above it says what's paid. */
-export function acceptLabel(view: ProposalView): string {
-  if (view.run.length === 0 || runsNothing(view)) return 'Accept';
-  return 'Accept and run';
-}
-
-/** "3:05" until the proposal expires. */
-export function countdown(expiresAt: number, now = Date.now()): string {
-  const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-/** Short text for a proposed param value. */
-export function briefValue(value: unknown, limit = 36): string {
-  const text = typeof value === 'string' ? value : JSON.stringify(value) ?? '';
-  const single = text.replace(/\s+/g, ' ').trim();
-  return single.length > limit ? `${single.slice(0, limit - 1)}…` : single;
-}
-
-/** A proposed value written out in full (the backend already marks anything it shortened). */
-export function fullValue(value: unknown): string {
-  if (value === null || value === undefined) return '(empty)';
-  if (typeof value === 'string') return value === '' ? '(empty)' : value;
-  return JSON.stringify(value) ?? String(value);
-}
-
-/** Who bills a run (lib/billingParams.ts) is the only internal state a
- * proposal may change (backend main._refuse_agent_billing_change), so the bar
- * names it plainly: a route-table node's provider, a Krea node's billing mode. */
-const KREA_BILLING_KEY = '_kreaAuth';
-const KREA_BILLING_VALUES: Record<string, string> = { 'api-token': 'API token balance', mcp: 'Krea plan' };
-
-function changeLine(key: string, to: unknown, from?: unknown, hasFrom = false): ChangeLine {
-  if (key === PROVIDER_PARAM) {
-    // A node that never set it runs on Auto, the default.
-    return { key: BILLING_PARAM_LABELS[PROVIDER_PARAM], to: providerChoiceLabel(to),
-      ...(hasFrom ? { from: providerChoiceLabel(from) } : {}) };
-  }
-  if (key === KREA_BILLING_KEY) {
-    // A node that never set it bills the API token, the default.
-    const name = (value: unknown) => (value === null || value === undefined || value === ''
-      ? KREA_BILLING_VALUES['api-token']
-      : (typeof value === 'string' && KREA_BILLING_VALUES[value]) || fullValue(value));
-    return { key: 'Billed to', to: name(to), ...(hasFrom ? { from: name(from) } : {}) };
-  }
-  return { key, to: fullValue(to), ...(hasFrom ? { from: fullValue(from) } : {}) };
-}
-
-export interface ChangeLine {
-  key: string;
-  /** Present for a change to an existing node: the value at proposal time. */
-  from?: string;
-  to: string;
-}
-
-/** One wire in the panel: “Prompt” → “Second take” · Prompt, the target's
- * port muted (GM - Design, PR #216 r2-r3). */
-export interface WireLine {
-  id: string;
-  from: string;
-  to: string;
-  port: string;
-}
-
-export interface ChangeGroup {
-  id: string;
-  title: string;
-  /** `wires`: "New connections"; `unwired`: "Removed connections", struck through. */
-  kind: 'new' | 'edit' | 'wires' | 'unwired';
-  lines: ChangeLine[];
-  wires?: WireLine[];
-}
-
-const QUOTE_MARKS = '“”"\'‘’';
-
-/** A node's name on the card, in curly quotes once: quotes the name carries
- * itself come off first (review 2 L4; the plan line's rule, backend
- * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
-export function cardQuoted(name: string): string {
-  let text = name.trim();
-  // Only quotes that wrap it, at both ends: an apostrophe the name ends in
-  // stays ("Artists'", review 3 NIT-3), as the backend's plan_name.
-  while (text.length >= 2 && QUOTE_MARKS.includes(text[0]) && QUOTE_MARKS.includes(text[text.length - 1])) {
-    text = text.slice(1, -1).trim();
-  }
-  return `“${text || name}”`;
-}
-
-function wireLines(edges: ProposalView['edges'] | undefined, names: Record<string, string>,
-  ports: Record<string, string> = {}): WireLine[] {
-  return (edges ?? []).map((edge) => ({
-    id: `${edge.source}.${edge.sourceHandle}>${edge.target}.${edge.targetHandle}`,
-    from: cardQuoted(edge.sourceName ?? names[edge.source] ?? edge.source),
-    to: cardQuoted(edge.targetName ?? names[edge.target] ?? edge.target),
-    port: edge.targetLabel ?? ports[`${edge.target}.${edge.targetHandle}`] ?? edge.targetHandle,
-  }));
-}
-
-/**
- * Every value Accept will write, grouped by node, for the decision bar.
- * Uses the browser-only person values when present (full text), else the
- * view's agent-facing values.
- */
-export function proposalChanges(view: ProposalView, values?: ProposalPersonValues): ChangeGroup[] {
-  const groups: ChangeGroup[] = [];
-  for (const node of view.nodes) {
-    const params = values?.nodes[node.ref] ?? node.params ?? {};
-    groups.push({
-      id: node.ref,
-      // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
-      // the agent gave it (`rename`) shows with the model it is.
-      title: `New ${cardQuoted(node.name)}${node.model ? ` · ${node.model}` : ''}`,
-      kind: 'new',
-      lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
-    });
-  }
-  for (const change of view.params) {
-    const exact = values?.params[change.nodeId];
-    const entries = Object.entries(exact ?? change.changes);
-    groups.push({
-      id: change.nodeId,
-      // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
-      // node's id for agents; a backend without `title` falls back to it.
-      title: change.title
-        ? `${cardQuoted(change.title)}${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
-        : change.name,
-      kind: 'edit',
-      // The same model set again: its inputs are read again, never "X → X"
-      // (GM - Design, PR #216 r4 8: "Krea 2 · inputs updated").
-      lines: entries.map(([key, diff]) => (change.inputsUpdated?.key === key
-        ? { key, to: `${change.inputsUpdated.name} · inputs updated` }
-        : changeLine(key, diff.to, diff.from, true))),
-    });
-  }
-  // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).
-  // The backend names both ends on each wire; an older view's own names fill in.
-  const names: Record<string, string> = {
-    ...Object.fromEntries(view.params.filter((change) => change.title).map((change) => [change.nodeId, change.title!])),
-    ...Object.fromEntries(view.nodes.map((node) => [node.ref, node.name])),
-    ...view.names,
-  };
-  const ports = Object.fromEntries(view.nodes.flatMap((node) =>
-    (node.ports?.inputs ?? []).map((port) => [`${node.ref}.${port.id}`, port.label])));
-  const made = wireLines(view.edges, names, ports);
-  if (made.length > 0) groups.push({ id: 'wires', title: 'New connections', kind: 'wires', lines: [], wires: made });
-  const removed = wireLines(view.removedEdges, names);
-  if (removed.length > 0) {
-    groups.push({ id: 'unwired', title: 'Removed connections', kind: 'unwired', lines: [], wires: removed });
-  }
-  return groups;
-}
-
-/**
- * How many changes Accept makes: the backend's `changeCount`, the one number
- * the card, the Update and MCP read (GM - Design, PR #216 r3): each new node,
- * changed node, new wire and removed wire. An older backend's view without it
- * counts the panel the same way: one per node group, one per wire line.
- */
-export function proposalChangeCount(view: ProposalView, groups: ChangeGroup[]): number {
-  if (typeof view.changeCount === 'number') return view.changeCount;
-  return groups.reduce((sum, group) => sum + (group.wires ? group.wires.length : 1), 0);
-}
-
-/** "2 changes", "1 change", for the disclosure row. */
-export function changeCountLabel(count: number): string {
-  return `${count} change${count === 1 ? '' : 's'}`;
-}
-
-/** "value: a → b; seed: 1 → 2" for the ring around a changed node. */
-export function changeTag(changes: Record<string, { from: unknown; to: unknown }>, limit = 24): string {
-  return Object.entries(changes)
-    .map(([key, diff]) => `${key}: ${briefValue(fullValue(diff.from), limit)} → ${briefValue(fullValue(diff.to), limit)}`)
-    .join('; ');
+  return view.run.length > 0 && paidRuns === 0 && (view.cost.mayCostRuns ?? 0) === 0 && (view.cost.planRuns ?? 0) === 0
+    && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
 }
 
 /** Run targets plus their ancestors on the local canvas, so a multi-target run gets its inputs. */
@@ -475,11 +257,4 @@ export function withAncestors(targets: string[], edges: Array<{ source: string; 
     for (const source of upstream.get(id) ?? []) queue.push(source);
   }
   return [...seen];
-}
-
-/** What the notice region's polite line says once a keyboard Accept or
- * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
- * is (ProposalBar). */
-export function decisionLine(kind: 'accept' | 'reject', agent: string): string {
-  return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agent}.`;
 }

@@ -174,10 +174,10 @@ def test_secret_files_are_denied_by_absolute_path(tmp_path):
 
 def test_default_secret_paths_cover_settings_and_env():
     from services.agent_profiles import default_secret_paths
-    from services.settings import SETTINGS_PATH
+    from services.settings import settings_path
 
     paths = default_secret_paths()
-    assert SETTINGS_PATH in paths
+    assert settings_path() in paths
     assert any(p.name == ".env" for p in paths)
 
 
@@ -286,7 +286,7 @@ def test_protected_agent_dirs_follow_the_commons_root(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_STATE_DIR", str(tmp_path / "state"))
     state = tmp_path / "state"
     assert agent_profiles.protected_agent_dirs() == [
-        state / "commons", state / "krea", state / "app-tokens", state / "agent-tokens"]
+        state / "commons", state / "krea", state / "app-tokens", state / "agent-tokens", state / "settings-copy"]
 
 
 def _toml_overrides(args):

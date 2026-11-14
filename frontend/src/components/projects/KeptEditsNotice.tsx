@@ -1,0 +1,138 @@
+import { useEffect, useRef, useState } from 'react';
+import { isKeptUpdateLine, keptEditsLine, useProjectStore } from '../../store/projectStore';
+import { useGraphStore } from '../../store/graphStore';
+import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/keptCanvas';
+import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
+import { runFinishesLine } from '../../lib/runLock';
+import { LineText } from '../LineText';
+import { CHOOSE_A_PROJECT_TO_DELETE, KEPT_ROOM_LINE, KEPT_ROOM_WAIT_LINE, keptLimitLine, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { KeptDeleteChooser } from './KeptDeleteChooser';
+import { NoticeLeave } from '../../lib/noticeLeave';
+import { UndoToast } from './UndoToast';
+import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
+import './KeptEditsNotice.css';
+
+/** Each button's own offline line (GM r19, 4: Save as a project shows its own). */
+export const SAVE_KEPT_OFFLINE = 'You can save it as a project when Nebula reconnects.';
+export const DISCARD_KEPT_OFFLINE = 'You can discard the kept edits when Nebula reconnects.';
+
+/**
+ * GM r15 on PR #199 (review 11, HIGH-1): the line a restore (or an
+ * agent's write that closed the project) leaves where the person is, when
+ * the tab's latest edits weren't saved: GM r12, 1's "Nebula restored its
+ * project list before your latest edits were saved. They're kept in this
+ * tab." (or GM r14, 3's agent form) with [Save as a project] and, GM r20,
+ * [Discard edits] (after its confirm). It stays until resolved (no Dismiss,
+ * no timer); the person can keep typing meanwhile, and the unload warning
+ * holds. A failed save or discard says why under the line. GM r19, 4: each
+ * button names what holds it: a run (its line, as the run lock gives it),
+ * then offline (its own line).
+ */
+export function KeptEditsNotice() {
+  const kept = useProjectStore((state) => state.keptEdits);
+  const onWorkspace = useProjectStore((state) => state.screen === 'workspace');
+  // GM r22 (2): Nebula was updated while kept. The line goes under the kept
+  // line (the canvas has no other place for it) until kept mode ends.
+  const update = useProjectStore((state) => (isKeptUpdateLine(state.error) ? state.error : null));
+  const [pulses, setPulses] = useState(0);
+  useEffect(() => subscribeKeptPulse(() => setPulses((count) => count + 1)), []);
+  // GM r16, 4: a press on a control the kept canvas disabled (lib/canvasLock's
+  // kept mark) pulses this line, as following pulses the project bar.
+  const canvasKept = useKeptCanvas();
+  useEffect(() => {
+    if (!canvasKept) return undefined;
+    const pressed = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(`[${KEPT_MARK}]`)) pulseKeptCanvas();
+    };
+    document.addEventListener('pointerdown', pressed, true);
+    return () => document.removeEventListener('pointerdown', pressed, true);
+  }, [canvasKept]);
+  // Offline as every canvas surface reads it (lib/canvasLock).
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const running = useGraphStore((state) => !state.canSwitchProject({ exceptSaves: true }));
+  // The confirm belongs to the kept canvas it was asked for: it goes with it.
+  // PR #199 r26: the refusal's line follows the live list, and the one automatic save once deleting
+  // has made room (the project limit: fewer projects than the limit; the storage cap, which the client
+  // can't measure: Recently deleted got smaller, so something was freed).
+  const liveCount = useProjectStore((state) => state.projects.length);
+  const trashCount = useProjectStore((state) => state.trash.length);
+  const lastTrash = useRef(trashCount);
+  // PR #199 r27: the Delete that made room keeps its Undo toast (drawn below, outside the chooser), and the
+  // automatic save waits until that Undo goes away; [Save as a project] doesn't wait.
+  const lastDeleted = useProjectStore((state) => state.lastDeleted);
+  const projectBusy = useProjectStore((state) => state.busy);
+  const undoShowing = lastDeleted !== null;
+  const limitCounts = kept?.chooseToDelete === 'projects' ? kept.limitCounts ?? null : null;
+  const room = limitCounts !== null && liveCount < limitCounts.limit;
+  const blocked = running || lock.following || offline;
+  useEffect(() => {
+    const shrank = trashCount < lastTrash.current;
+    lastTrash.current = trashCount;
+    if (!kept || !kept.error || kept.saving || kept.discarding || kept.autoRetried || blocked) return;
+    if (!(room || (kept.chooseToDelete === 'storage' && shrank))) return;
+    if (undoShowing) return;
+    useProjectStore.setState({ keptEdits: { ...kept, autoRetried: true } });
+    void useProjectStore.getState().saveKeptEdits();
+  }, [kept, room, trashCount, blocked, undoShowing]);
+  const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  // GM r24 (b): the chooser belongs to the kept canvas it was opened for, as the confirm does.
+  const [choosingFor, setChoosingFor] = useState<typeof kept>(null);
+  const chooseButton = useRef<HTMLButtonElement>(null);
+  // Room made: the chooser has done its work and closes for good (an Undo that takes the room back
+  // doesn't open it again by itself).
+  if (room && choosingFor !== null) setChoosingFor(null);
+  if (!onWorkspace) return null;
+  // The toast outlives the chooser (and kept mode, when [Save as a project] went first).
+  const undoToast = (
+    <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={projectBusy}
+      onUndo={() => void useProjectStore.getState().restore(last.id, 'undo')}
+      onDismiss={() => useProjectStore.getState().dismissUndo()} leave={leave} />}</NoticeLeave>
+  );
+  if (!kept) return undoToast;
+  const confirming = confirmingFor !== null && confirmingFor.sourceId === kept.sourceId;
+  const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
+  const choosing = choosingFor !== null && choosingFor.sourceId === kept.sourceId;
+  // The cure for a refusal the person fixes by deleting: only while that line shows.
+  const offerChooser = Boolean(kept.error && kept.chooseToDelete && !room);
+  const refusal = limitCounts && kept.error ? (room ? (undoShowing && !kept.autoRetried ? KEPT_ROOM_WAIT_LINE : KEPT_ROOM_LINE)
+    : keptLimitLine(liveCount, limitCounts.limit, liveCount === limitCounts.count ? limitCounts.deletes : null))
+    : limitCounts && kept.saving && kept.autoRetried ? KEPT_ROOM_LINE : kept.error;
+  // Review 14 (lock-order NIT-3): kept leaves these two on, so the next
+  // locks apply in the app's order: the run, following, then offline.
+  // GM r37 and r39 (lib/runLock): the run's line says what unlocks the button, by its verb.
+  const held = (runVerb: string): ({ disabled: boolean; title?: string } & Record<string, unknown>) | null => running ? { disabled: true, title: runFinishesLine(runVerb) }
+    : lock.following ? { disabled: true, ...lock.mark, title: lock.title() }
+      : offline ? { disabled: true, ...lock.mark } : null;
+  // One busy state for both (review 14, kept-hold LOW-1).
+  const busy = kept.saving || kept.discarding === true;
+  const savingHeld = held('save your edits as a project');
+  const discardingHeld = held('discard your edits');
+  const saveHeld = savingHeld ? { ...savingHeld, ...(savingHeld.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: busy };
+  const discardHeld = discardingHeld ? { ...discardingHeld, ...(discardingHeld.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: busy };
+  return (
+    <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}${offerChooser ? ' kept-edits-notice--choose' : ''}`}
+      role="status" aria-live="polite" data-kept-edits="">
+      <span key={pulses} className="canvas-undo-notice__text">
+        {keptEditsLine(kept)}
+        {update && <span className="kept-edits-notice__error" data-kept-update="">{update}</span>}
+        {refusal && <span className="kept-edits-notice__error" role="alert"><LineText text={refusal} /></span>}
+      </span>
+      {offerChooser && <button type="button" ref={chooseButton} className="canvas-undo-notice__action kept-edits-notice__choose--neutral" disabled={lock.offline}
+        data-kept-choose-delete="" onClick={() => setChoosingFor(kept)}>{CHOOSE_A_PROJECT_TO_DELETE}</button>}
+      <button type="button" className="canvas-undo-notice__action" {...saveHeld} aria-busy={kept.saving || undefined}
+        data-kept-save="" onClick={() => {
+          useProjectStore.setState({ keptEdits: { ...kept, autoRetried: false } });
+          void useProjectStore.getState().saveKeptEdits();
+        }}>{SAVE_AS_A_PROJECT}</button>
+      <button type="button" ref={discardButton} className="canvas-undo-notice__action kept-edits-notice__discard" {...discardHeld}
+        aria-busy={kept.discarding || undefined} data-kept-discard-button=""
+        onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>
+      {choosing && offerChooser && <KeptDeleteChooser returnTo={chooseButton} onClose={() => setChoosingFor(null)} />}
+      {undoToast}
+      {confirming && <KeptDiscardConfirm returnTo={discardButton} onKeep={() => setConfirming(false)}
+        onDiscard={() => { setConfirming(false); void useProjectStore.getState().discardKeptEdits(); }} />}
+    </div>
+  );
+}

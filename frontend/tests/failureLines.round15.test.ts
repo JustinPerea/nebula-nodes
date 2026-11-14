@@ -13,7 +13,7 @@ describe("GM round 15, item 1: the model pickers' lines", () => {
     expect(modelKeyMissingText('X', keysOf('openrouter-universal'))).toBe("Couldn't set up “X”. Add your OpenRouter API key in Settings.");
   });
   it('Replicate', () => {
-    expect(modelKeyMissingText('X', keysOf('replicate-universal'))).toBe("Couldn't set up “X”. Add your Replicate API key in Settings.");
+    expect(modelKeyMissingText('X', keysOf('replicate-universal'))).toBe("Couldn't set up “X”. Add your Replicate token in Settings.");
   });
   it('the key there, the read failed', () => {
     expect(modelSettingsFailedText('X')).toBe("Couldn't load the model settings for “X”.");

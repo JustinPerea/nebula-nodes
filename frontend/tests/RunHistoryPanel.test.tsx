@@ -13,6 +13,7 @@ import {
   type RunRecord,
 } from '../src/lib/runHistory';
 import { noticeSpy } from './helpers/noticeSpy';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -32,6 +33,10 @@ function record(id: string, status: RunRecord['status'], targetNodeId?: string):
   };
 }
 
+/** Runs of the open project: a record of one is this project's (review 20
+ * of PR #199, LOW-2), so its row is named by its node. */
+const ownRuns = (...ids: string[]) => ids.map((id) => record(id, 'complete'));
+
 describe('RunHistoryPanel replay actions', () => {
   beforeEach(() => {
     forgetNodeLabelsForTests();
@@ -48,6 +53,10 @@ describe('RunHistoryPanel replay actions', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  // The key-lock tests run on a keyed route: Idol made keyed for the test
+  // (tests/helpers/keyedSpace.ts); Idol is keyless from PR #203 round 7.
+  keyIdolInEachTest();
 
   it('routes complete and failed records to the correct exact-replay actions', () => {
     const rerunHistoryRecord = vi.fn(async () => undefined);
@@ -67,6 +76,91 @@ describe('RunHistoryPanel replay actions', () => {
 
     expect(retryFailedRun).toHaveBeenCalledWith('failed-run');
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
+  });
+
+  it("locks Rerun and Retry while the replay would run a keyed route without its key, focusable (GM, PR #203 r8 item 3)", () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const idol = (run: RunRecord): RunRecord => ({ ...run, snapshot: {
+      nodes: [{ id: 'img', definitionId: 'image-input', params: { filePath: '/x.png' }, outputs: {} },
+        { id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }],
+      edges: [{ id: 'e1', source: 'img', sourceHandle: 'image', target: 'idol', targetHandle: 'image' }],
+    } });
+    const rerunHistoryRecord = vi.fn(async () => undefined);
+    const retryFailedRun = vi.fn(async () => undefined);
+    useGraphStore.setState({
+      runHistory: [idol(record('failed-run', 'failed', 'idol')), idol(record('complete-run', 'complete'))],
+      isExecuting: false,
+      rerunHistoryRecord,
+      retryFailedRun,
+    });
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const { unmount } = render(<RunHistoryPanel />);
+    for (const name of ['Retry failed Single node run', 'Rerun Full canvas']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveAttribute('data-key-locked', '');
+      expect(button).toHaveAttribute('title', LINE);
+      expect(button).toHaveAccessibleDescription(LINE);
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      fireEvent.click(button);
+    }
+    expect(retryFailedRun).not.toHaveBeenCalled();
+    expect(rerunHistoryRecord).not.toHaveBeenCalled();
+    unmount();
+
+    // With the token they replay as before.
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<RunHistoryPanel />);
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
+    expect(rerun).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(rerun);
+    expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
+  });
+
+  it('relocks Rerun when the token is removed after it showed unlocked (review r5 LOW-2)', () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
+      nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
+    useGraphStore.setState({ runHistory: [run], isExecuting: false });
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<RunHistoryPanel />);
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).not.toHaveAttribute('aria-disabled');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } }));
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
+    expect(rerun).toHaveAttribute('aria-disabled', 'true');
+    expect(rerun).toHaveAccessibleDescription(LINE);
+  });
+
+  // GM, PR #203 r11 item 3: a reason only the person can fix comes first,
+  // or the person waits out the run only to be refused. While a run goes,
+  // the missing key still leads; offline and following too.
+  it('the missing key leads a run going, following and offline; once the key is added the run\'s line is the reason', () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
+      nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
+    useGraphStore.setState({ runHistory: [run], isExecuting: true });
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    resetBackendConnectionForTests();
+    render(<RunHistoryPanel />);
+    const going = screen.getByRole('button', { name: 'Rerun Full canvas' });
+    expect(going).toHaveAttribute('title', LINE);
+    expect(going).toHaveAttribute('data-key-locked', '');
+    expect(going).toHaveAttribute('aria-disabled', 'true');
+    expect(going).not.toBeDisabled();
+    act(() => noteBackendConnection('offline'));
+    const offline = screen.getByRole('button', { name: 'Rerun Full canvas' });
+    expect(offline).toHaveAttribute('title', LINE);
+    expect(offline).not.toHaveAttribute('data-offline-disabled');
+    act(() => noteBackendConnection('online'));
+    resetBackendConnectionForTests();
+    // The key added: the run's own line is the reason now.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    const keyed = screen.getByRole('button', { name: 'Rerun Full canvas' });
+    expect(keyed).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(keyed).not.toHaveAttribute('data-key-locked');
+    expect(keyed).toBeDisabled();
   });
 
   it('disables every replay while another run is active', () => {
@@ -213,6 +307,7 @@ describe('RunHistoryPanel replay actions', () => {
 
   it('renders each exact World Labs recovery safeguard', () => {
     useGraphStore.setState({
+      runHistory: ownRuns('generation-run', 'completed-run'),
       providerRecoveries: [
         {
           runId: 'generation-run',
@@ -253,6 +348,7 @@ describe('RunHistoryPanel replay actions', () => {
     useGraphStore.setState({
       nodes: [{ id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
         data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } }] as never,
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -292,6 +388,7 @@ describe('RunHistoryPanel replay actions', () => {
   it('Escape is Cancel, and Tab stays inside the dialog', () => {
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved',
         existingWorldId: null, durable: true }],
       deleteProviderRecovery,
@@ -326,6 +423,7 @@ describe('RunHistoryPanel replay actions', () => {
       }));
     });
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run', 'other-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -356,6 +454,7 @@ describe('RunHistoryPanel replay actions', () => {
       new Error('Backend still has an active provider task.'),
     );
     useGraphStore.setState({
+      runHistory: ownRuns('paid-run'),
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -383,7 +482,7 @@ describe('RunHistoryPanel replay actions', () => {
     const world = { id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
       data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [world] as never });
-    useGraphStore.setState({ nodes: [] as never,
+    useGraphStore.setState({ nodes: [] as never, runHistory: ownRuns('paid-run'),
       providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'op-1', existingWorldId: null, durable: true }] });
     render(<RunHistoryPanel />);
     const row = screen.getByRole('button', { name: 'Forget the recovery ID for “Harbor world”, no longer on the canvas' });

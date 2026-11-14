@@ -173,22 +173,42 @@ def paths_overlap(a: Path, b: Path) -> bool:
 
 def protected_agent_dirs() -> list[Path]:
     """Directories no agent may be granted or read directly: the Commons store,
-    the Krea connector's vault and the token-file folders.
+    the Krea connector's vault, the token-file folders and the settings copy
+    folder.
 
     The Commons blobs and database hold quarantined and other brands'
     references; the HTTP gate (scope + quarantine) is the only way agents may
     reach them. ``app-tokens`` and ``agent-tokens`` hold bearer tokens at
     predictable paths (services/app_token_file.py, agent_token_file.py): only
     the MCP server a token file was made for reads it, never a graph or media
-    path or an in-app agent.
+    path or an in-app agent. ``settings-copy`` holds the copy of settings.json
+    an in-place save keeps, the file a restore replaced, and their temp files,
+    keys in plain text (services/settings.settings_copy_folder; review 17 of
+    PR #203, settings MEDIUM-1).
     """
     from commons.paths import commons_root
     from services import agent_token_file, app_token_file
+    from services.settings import settings_copy_folder
 
     # Derive paths only; importing the connector would construct its real vault.
     state_root = Path(os.environ.get("NEBULA_STATE_DIR", Path.home() / ".nebula"))
     return [commons_root(), state_root / "krea",
-            app_token_file.root(state_root), agent_token_file.root(state_root)]
+            app_token_file.root(state_root), agent_token_file.root(state_root), settings_copy_folder()]
+
+
+def secret_dirs() -> list[Path]:
+    """Folders no agent may read, beside the settings file and in the state
+    folder, that are no grant's concern (never in protected_agent_dirs, so a
+    grant of the folder holding settings.json works as before): the judging
+    folders, where a save without the lock moves another save's temp file
+    for a moment to check it before removing it, keys included
+    (services/settings.judging_folders; round 20 of PR #203), and the private
+    temp folder every save writes its temp file in (services/settings.
+    temp_folders; round 23b): the folder is on every deny list, so a temp made
+    after an agent's profile is built is inside a denied folder."""
+    from services.settings import judging_folders, temp_folders
+
+    return [*judging_folders(), *temp_folders()]
 
 
 def agent_read_grants(*, output_root: Path, workdir: Path, protected: list[Path]) -> list[Path]:
@@ -245,18 +265,40 @@ def agent_workspace_env(workdir: Path) -> dict[str, str]:
 
 
 def default_secret_paths() -> list[Path]:
-    """Files holding credentials that no agent may read."""
-    from services.settings import SETTINGS_PATH
+    """Files holding credentials that no agent may read: settings.json, the
+    temp file a save writes beside it (services/settings.secret_temp_paths;
+    review 17 of PR #203, settings MEDIUM-1) and the .env files."""
+    from services.settings import secret_temp_paths, settings_path
 
     project_root = Path(__file__).resolve().parent.parent.parent
-    return [SETTINGS_PATH, project_root / ".env", project_root / "backend" / ".env"]
+    return [settings_path(), *secret_temp_paths(), project_root / ".env", project_root / "backend" / ".env"]
+
+
+def is_secret_temp_name(name: str) -> bool:
+    """Whether ``name`` is one save's own temp file (services/settings)."""
+    from services.settings import is_secret_temp_name as named
+
+    return named(name)
 
 
 def secret_deny_rules(secret_paths: list[Path]) -> list[str]:
-    """Read-deny rules for secret files, as absolute (`//`) paths."""
+    """Read-deny rules for secret files, as absolute (`//`) paths. A save's
+    shared temp name also gets its pattern (`<name>-*`): every save writes a
+    temp file of its own under that name plus a process id and a token
+    (services/settings.new_temp_path_for; round 23 of PR #203)."""
     # A single leading slash anchors at the settings source, not the
     # filesystem root; `//` is the absolute form.
-    return [f"Read(/{path.resolve()})" for path in secret_paths]
+    from services.settings import TEMP_FOLDER, TEMP_SUFFIX_FIXED
+
+    rules: list[str] = []
+    for path in secret_paths:
+        resolved = path.resolve()
+        rules.append(f"Read(/{resolved})")
+        if resolved.name == TEMP_FOLDER:  # the temp folder: anything made in it later
+            rules.append(f"Read(/{resolved}/**)")
+        if resolved.name.endswith(TEMP_SUFFIX_FIXED):
+            rules.append(f"Read(/{resolved}-*)")
+    return rules
 
 
 def dir_deny_rules(directories: list[Path]) -> list[str]:

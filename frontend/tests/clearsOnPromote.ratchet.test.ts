@@ -94,6 +94,7 @@ function gatedFunctions(): string[] {
 
 /** Every registration, by its marker: the file it is in. */
 const SITES: Record<string, string> = {
+  'project.kept-save': 'store/projectFlows.ts',
   banner: 'components/PersonRequiredBanner.tsx',
   'create.enhance': 'components/create-studio/CreateComposer.tsx',
   'chat.codex-login': 'components/panels/ChatPanel.tsx',
@@ -113,6 +114,8 @@ const SITES: Record<string, string> = {
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.agents': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.write': 'lib/settingsWrites.ts',
+  // PR #203: the restored-settings notice's dismissal (GET/POST /api/settings/notice are the person's only).
+  'settings.notice': 'components/panels/settings/SettingsTopNotice.tsx',
   // Round 10 (GM r17 item 5): the Inspector's star, whose refused save used to drop silently.
   'inspector.favorite': 'components/panels/Inspector.tsx',
   'krea.connection': 'components/panels/settings/useKreaConnection.ts',
@@ -135,10 +138,10 @@ const SITES: Record<string, string> = {
   'canvas-proposals.refusal': 'store/canvasProposalsStore.ts',
   'canvas-proposals.accept': 'store/canvasProposalsStore.ts',
   'canvas-proposals.reject': 'store/canvasProposalsStore.ts',
-  'project.error': 'store/projectStore.ts',
-  'project.save': 'store/projectStore.ts',
-  'project.save-retry': 'store/projectStore.ts',
-  'project.load-retry': 'store/projectStore.ts',
+  'project.error': 'store/projectFlows.ts',
+  'project.save': 'store/projectFlows.ts',
+  'project.save-retry': 'store/projectFlows.ts',
+  'project.load-retry': 'store/projectFlows.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
   'graph.refusal': 'store/graphStore.ts',
   'graph.notify': 'store/graphStore.ts',
@@ -184,12 +187,18 @@ const GATED: Record<string, Surface> = {
   _decidable_asset_proposal: ['asset-proposals.decide'],
   start_codex_chatgpt_login: ['chat.codex-login', 'chat.codex-login-check'],
   update_settings: ['settings.write', 'inspector.favorite'],
+  get_settings_notice: NO_LINE('a refused read shows nothing: SettingsTopNotice asks again on the promote (its PERSON_PROMOTED_EVENT listener)'),
+  dismiss_settings_notice: ['settings.notice'],
   remove_settings_api_key: ['settings.write'],
   credentials_update: ['settings.write'],
   configure_universal_node: ['graph.notify', 'graph.refusal'],
   _set_project_cover: ['project.error'],
   purge_trashed_project: ['project.error'],
   empty_project_trash: ['project.error'],
+  // PR #199: the person's × on the project list's two notices; a refused close is swallowed
+  // (.catch(() => undefined)) and the notice stays, so there is no line to clear.
+  dismiss_catalog_restore: NO_LINE('the × on the restore notice: a refused close shows nothing, the notice stays'),
+  dismiss_canvas_held_unreadable: NO_LINE('the × on the unreadable-canvases notice: a refused close shows nothing, the notice stays'),
   enhance_prompt_route: ['create.enhance'],
   _refuse_override_change: ['studio.save-board', 'studio.undo-redo', 'studio.brief', 'studio.draft'],
   purge_trashed: ['trash'],
@@ -218,6 +227,7 @@ const GATED: Record<string, Surface> = {
 
 /** Registrations not for one gated function: why each is there. */
 const OTHER_SITES: Record<string, string> = {
+  'project.kept-save': 'the kept tab\'s Save as a project (POST /api/projects/recover): its refusal line, through saveKeptEdits',
   banner: 'the person-gate banner itself (PersonRequiredBanner)',
   'chat.transcript': 'the chat socket\'s own person_required refusal (/ws/chat), by its code',
   'chat.session': 'a chat turn with no person token for the Commons (commonsChatAuthority)',
@@ -268,6 +278,7 @@ const PROMOTE_LISTENERS: Record<string, string> = {
   'store/canvasProposalsStore.ts': 'releases approvals dismissed while the gate held (a request, not a line)',
   // PR #204 round 11: person-only work the app starts on its own waits for the promote (no line).
   'lib/personWork.ts': 'runs the person-only work a held tab held back (a request, not a line)',
+  'store/settingsChangedSocket.ts': 'reads the settings again after the promote (a request, not a line)',
 };
 
 /** Round 5: what a route the trace can't find by its path is (none may be left unexplained).
@@ -310,6 +321,8 @@ const CALLERS: Record<string, Caller> = {
   'components/panels/ChatPanel.tsx#ChatPanel': ['settings.agent-warning'],
   // No line.
   'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: sent only from a tab connected as the person (lib/personWork); a refusal waits for the next promote, another failure logs and goes again on the next read'),
+  'components/panels/settings/SettingsTopNotice.tsx#SettingsTopNotice': ['settings.notice'],
+  'components/panels/settings/SettingsTopNotice.tsx#load': NO_LINE('a failed read shows nothing; the notice asks again on the promote (its PERSON_PROMOTED_EVENT listener)'),
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
   'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
@@ -320,19 +333,24 @@ const CALLERS: Record<string, Caller> = {
   'store/graphStore.ts#flushCinemaScenePersistence': ['cinema.scene-save-retry'],
   'store/graphStore.ts#renameNode': NO_LINE('a refused rename puts the old name back, with no line of its own (the banner says why)'),
   'store/graphStore.ts#sendRestoredWire': NO_LINE('Keep mine\'s wire put back: a refused one stays off the card and the info line names its shot (shotBackWithoutLine), what came back, not why'),
-  'store/projectStore.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
+  'store/projectFlows.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
   // GM r7 (2): the load screens retry on the promote (showNotConnectedLoad in each catch).
   // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
   // which throws on), whose refusal lands in this function's outer catch (GM r7 2).
-  'store/projectStore.ts#followProjectSwitch': ['project.load-retry'],
+  'store/projectFlows.ts#followProjectSwitch': ['project.load-retry'],
+  // PR #199: the kept tab's Save as a project (POST /api/projects/recover) reaches the gate through
+  // the kept-save check; its refusal's line goes on the promote.
+  'store/projectFlows.ts#saveKeptEdits': ['project.kept-save'],
+  'store/projectFlows.ts#dismissCatalogRestore': NO_LINE('the × on the restore notice: .catch(() => undefined), the notice stays'),
+  'store/projectFlows.ts#dismissCanvasHeldUnreadable': NO_LINE('the × on the unreadable-canvases notice: .catch(() => undefined), the notice stays'),
   // Round 14 (GM r23 item 5): the Updates mark-read is never the person's own press.
   'store/agentNotesStore.ts#sendRead': NO_LINE('a mark-read refused for this tab shows nothing: the updates stay unread, the page\'s because line says why, and the read waits for the promote (lib/personWork)'),
 };
 
 /** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
 const RETRIES: Record<string, string> = {
-  'project.save-retry': 'store/projectStore.ts',
-  'project.load-retry': 'store/projectStore.ts',
+  'project.save-retry': 'store/projectFlows.ts',
+  'project.load-retry': 'store/projectFlows.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
   'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',

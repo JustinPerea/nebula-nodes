@@ -36,7 +36,7 @@
 
 Three Krea copies of Runway's models also run on Runway's own API when
 `RUNWAY_API_KEY` is saved. The Krea plan wins when chosen, then your Runway key
-(Runway bills), then your Krea API token.
+(Runway bills), then your Krea API key.
 
 | Krea node | Runway model and endpoint | Notes |
 |---|---|---|

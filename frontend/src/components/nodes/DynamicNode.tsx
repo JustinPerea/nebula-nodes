@@ -128,6 +128,8 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
+          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // param edit stays on this tab as typing does; its writes are gated.
           title="Show node settings"
         >
           {inToolbar
@@ -275,6 +277,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           person={nodeData.errorPerson}
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
+          notStarted={nodeData.errorNotStarted}
           raw={nodeData.error}
         />
       )}
