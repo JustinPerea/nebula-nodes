@@ -1,10 +1,10 @@
 import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
-import { noteLabel, noteText } from '../../lib/agentNotesView';
+import { noteLabel } from '../../lib/agentNotesView';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
-import { AuthorDot, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
+import { AuthorDot, NoteButtons, NoteText, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
 import { heldVerbFor } from './heldLock';
 
 interface HoldHandlers {
@@ -83,7 +83,7 @@ export function AgentNoteCard({
       {askVerb === null && <PersonLockLine lock={ownDismissLock} place="control" className="agent-note-card__held-line" />}
       <p className="agent-note-card__text" data-agent-text="" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
         <RunOutcomeIcon run={note.run} />
-        {noteText(note, adapter.numberFor)}
+        <NoteText note={note} numberFor={adapter.numberFor} />
       </p>
       <RunThumbnail run={note.run} />
       <NoteButtons

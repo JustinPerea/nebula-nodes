@@ -38,7 +38,7 @@ def run(client: NebulaClient) -> None:
         print(f"  {daily_total_line(daily)}")
     if view.get("ledgerNote"):
         # The spend ledger was found unreadable: every limit below counts as
-        # used up for now, whatever its "used" figure says.
+        # used up until the time it names, whatever its "used" figure says.
         print(f"  {view['ledgerNote']}")
     print(f"  Per run:      {_usd(limits.get('perRunUsd'))}")
     used = spent.get("totalUsd", 0)

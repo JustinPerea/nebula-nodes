@@ -462,7 +462,9 @@ def start_here(ctx: Context | None = None) -> str:
       `openCount`. Each is a request: act on it, then resolve_pin. A note
       keeps the person's lines (newlines in `text`) and its spacing, as
       look_at_canvas has it.
-    - `proposals`: open proposals waiting for the person, and `count`.
+    - `proposals`: open proposals waiting for the person, and `count`. One
+      that waits because the spending record couldn't be read has
+      `ledgerHold` ({until, line}): `line` holds only until `until`.
     - `boards`: every moodboard, the current project's first, then Global,
       then other projects (`where`), with its image count, whether it is
       analyzed and its Direction; `read` is the moodboard_get call that
@@ -478,8 +480,10 @@ def start_here(ctx: Context | None = None) -> str:
       `daily`: the daily total over everything that isn't the person
       (`limitUsd`, null for no limit, `usedUsd` and `leftUsd`, the last 24
       hours), which holds on top of the budget (get_spend_limits has
-      per-model limits). `ledgerNote`, when present: Nebula couldn't read
-      its spending record, so every limit counts as used up for 24 hours.
+      per-model limits). `ledgerNote`, when present, is the sentence "Nebula
+      couldn’t read its record of what agents have spent, so it counts every
+      spending limit as used up until 3:40 PM on Sunday.", with that time in
+      `ledgerHold.until` (epoch seconds).
     - `next`: `events` (cursor and journal for wait_for_canvas_change), then
       the exact calls, arguments named as each tool takes them: `describe`,
       `build` (a whole edit_canvas plan), `propose`, `point` (with or
@@ -993,7 +997,10 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     stays open: a proposal.accept_refused event gives the `limit`
     ({"kind": "depth", "max": 64}, {"kind": "values", "max": 1000000} or
     {"kind": "size", "max": 16777216}, in bytes). Withdraw it and propose
-    something smaller.
+    something smaller. A run that waits for the person's OK has `wait`
+    (the daily total's numbers and `barLine`); one that waited because the
+    spending record couldn't be read also has `wait.ledgerHold`
+    ({until, line}), and `line` holds only until `until` (epoch seconds).
     An invalidated one can be open
     again: when the person (or you) undoes the delete and it still fits, it
     reopens with the same id and expiry (event proposal.reopened). When accepted, `idMap` maps
@@ -2247,8 +2254,12 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     null for no limit), `usedUsd` and `leftUsd`, exact. A run that would pass
     it, or has a node with no list price while it is on, waits for their OK
     as a proposal. Only the person changes it. `ledgerNote`, when present,
-    says Nebula couldn't read its spending record: every limit counts as
-    used up for 24 hours, so each paid run needs the person (propose it)."""
+    says Nebula couldn’t read its spending record: "… so it counts every
+    spending limit as used up until 3:40 PM on Sunday." Until then
+    (`ledgerHold.until`, epoch seconds; 24 hours after the record was found
+    unreadable) each paid run needs the person (propose it). With
+    `ledgerBlocked`, the record can’t be read at all right now: paid runs
+    are refused until it can, and the note says so with no time."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

@@ -46,8 +46,11 @@ A save that fails leaves the unreadable file in place and refuses (LedgerBusy); 
 the kept name by its inode and adds no second copy. For 24 hours from
 `since`, every `Spent` is `full`, and `session_budgets`/`daily_budget` count each budget as at least
 its own limit (`_counted`: USD, plan runs, per-model session limits), so `decide`'s existing
-comparisons put any priced run over. Nothing in `decide`'s checks changed. Then the mark is dropped:
-everything the lost file held would have aged out. If the file can't be kept aside, LedgerBusy.
+comparisons put any priced run over. Nothing in `decide`'s checks changed. Then the mark is dropped.
+The windowed totals the lost file held (daily total, outside budget, apps) have aged out by then, but
+a chat session's running total has no window: it restarts from $0 when the hold ends, and only the
+daily total still caps that chat's day (corrected in round 2: an earlier version of this note said
+everything ages out). If the file can't be kept aside, LedgerBusy.
 
 The person "acts" today by accepting proposals (their runs aren't counted) or deleting
 `agent-spend.json` by hand. No new surface was added.
@@ -93,3 +96,53 @@ moved to `lib/spendLimits.ts` (no imports, so the settings store doesn't pull in
 - Frontend: `tsc -b --noEmit` OK, `npm run lint` OK. `check:ratchets` and `npm run build` were
   stopped at 1,500 s twice under load, so neither finished; CI runs both. The apostrophe ratchet
   passed when run on its own.
+
+## Round 2 (review of PR #242, GM - Design rulings)
+
+Backend:
+
+- **Three states for the file** (review M1, L3). `_read_file` now returns `unopenable` for a file that
+  exists but can't be opened or read (permissions, an I/O error, a dangling symlink, found with
+  `os.path.lexists`). Under the lock that raises LedgerBusy ("it can’t read the spending record or set
+  it aside"); nothing is kept aside or replaced, and the run works again once the file reads. A display
+  read returns nothing spent with the hold on. Only content that was read and isn't a ledger (not UTF-8,
+  not JSON, wrong shape, empty) is kept aside.
+- **Marks repaired once** (L1, L2). A malformed `unreadable` mark, or a `since` later than now, becomes
+  `since = now` (a string `keptAs` is kept) and `_parsed` reports a change, so the next locked read
+  saves it and the 24 hours start once.
+- **Display reads never wait.** The first read through a ledger object and the unreadable-file branch
+  in `_view` try the lock once (`_locked(wait=False)`) instead of waiting up to 2 s. A read that
+  can't take it works on its own copy and saves nothing; the next read tries again. This also shortens
+  review L4's worst case for display reads (checks and refunds still wait up to 2 s).
+- **The hold's end travels.** `Spent.full` is now a property of `Spent.until` (epoch seconds, None with
+  no hold). For a file that can't be read at all the start is unknown, so a display read reports
+  `until = now + 24 h` (it moves with each read until the file reads again).
+- **Sentence with a time.** `ledger_unreadable(until, tz=None)` builds GM's weekday form by hand
+  (fixed English weekday names, 12-hour clock, no leading zero), in the computer's local zone or `tz`.
+  Minutes are truncated ("3:40 PM" for 15:40:59), as a clock shows them; the app's live form should
+  do the same so both name one minute.
+- **Stored lines carry no time.** `DailyWait.bar_line` (the proposal's note, `barLine`, `updateLine`)
+  no longer has the sentence. `as_dict` adds `ledgerHold: {until, line}` when the run is over the
+  total during a hold. `main._proposal_view` (every canvas, HTTP, MCP and websocket view) and the new
+  `main._proposal_brief` (`nebula look`, `nebula context`, start_here) refresh it with
+  `agent_spend.ledger_hold_now`: while a hold is on, its current end and line; otherwise the stored
+  pair. The CLI prints the line after a waiting proposal only while `until` is ahead
+  (`formatter.ledger_hold_note`). The one-time lines (agent line, refusals, nameless line) keep the
+  sentence inline.
+- **Contract fields.** `_outside_view` (Settings) has `ledgerHold: {until}` while the hold is on;
+  `/api/agent/spend` keeps `ledgerNote` (weekday form) and adds `ledgerHold: {until}`;
+  `agent_start.spend_part` passes both.
+- **Refusal wording.** `LedgerBusy.why` holds the clause after "because" (`BUSY_OTHER`, `BUSY_LOCK`,
+  `BUSY_READ`, `BUSY_HERE`); `agent_spend.busy_refusal` and `pricing_refusal` build the lines. The
+  pricing line gives the reason in plain words and then the raw error as its own sentence: "… because
+  it can’t read the pricing table. Error: <error>." (a final period only when the error has none; no
+  Error part when there is no error text). Only agents get it.
+- **A record that can't be opened (coordinator review).** While the file can't be opened at all,
+  `SpendLedger.cant_read()` is true and `hold_until()` is None: the stand-in end a display read uses
+  to keep the limits strict is never shown as a time. `/api/agent/spend` and Settings' view carry
+  `ledgerBlocked` with GM's line "Nebula can’t open its record of what agents have spent, so agents
+  can’t start paid runs until it can."; Settings shows "Amount unknown" in every row. No proposal
+  stores that sentence, because a run is refused in this state and never waits.
+
+Not done here: the Updates card's stored text (`canvas_proposals.update_text`) has no hold field of
+its own; the app finds the hold through the proposal's `wait.ledgerHold`.

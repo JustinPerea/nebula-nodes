@@ -149,6 +149,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -212,14 +213,69 @@ UNREADABLE_NAME = "{stem}.unreadable-{stamp}{n}{suffix}"
 # Set in the file while a ledger found unreadable holds every budget at its
 # limit: {"since": time, "keptAs": file name}. Dropped 24 hours after.
 _UNREADABLE_KEY = "unreadable"
-# The sentence a refusal or a waiting run adds while that holds (a draft for
-# GM - Design, follow-up to PR #212): agents and the person read the same one.
-LEDGER_UNREADABLE = ("Nebula couldn\u2019t read its record of what agents have spent, so it counts every spending "
-                     "limit as used up for 24 hours.")
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def clock_time(when: datetime) -> str:
+    """"3:40 PM": 12-hour, no leading zero, built by hand so the process
+    locale never changes it. Seconds are dropped, as a clock shows them."""
+    return f"{when.hour % 12 or 12}:{when.minute:02d} {'AM' if when.hour < 12 else 'PM'}"
+
+
+def ledger_unreadable(until: float, *, tz: tzinfo | None = None) -> str:
+    """The sentence a refusal, a waiting run's line and the agents' spend
+    view add while an unreadable ledger holds every limit (GM - Design,
+    review of PR #242), with the hold's end (``until``, epoch seconds) in
+    the computer's local time, or ``tz``'s. The weekday form: these lines
+    are written once and read later, so "today" or "tomorrow" could be
+    wrong by then. The app draws its own live form in Settings."""
+    end = datetime.fromtimestamp(until, tz) if tz is not None else datetime.fromtimestamp(until)
+    return ("Nebula couldn\u2019t read its record of what agents have spent, so it counts every spending limit as "
+            f"used up until {clock_time(end)} on {_WEEKDAYS[end.weekday()]}.")
+
+
+# What Settings and the agents' spend view say while the ledger can't be
+# opened at all (SpendLedger.cant_read): no end time, since nothing known
+# says when it will open again. GM - Design's words ("open" sets it apart
+# from the unreadable hold); the app holds the same
+# (frontend/src/lib/ledgerHold.ts LEDGER_CANT_READ, pinned by a test).
+LEDGER_CANT_READ = ("Nebula can\u2019t open its record of what agents have spent, so agents can\u2019t start paid runs "
+                    "until it can.")
 
 
 def _finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+# Why a check couldn't read the ledger (LedgerBusy.why), each finishing GM's
+# refusal: "Nebula couldn’t check this run’s cost because <why>. Try again in
+# a moment." (main._reserve_spend; GM - Design, review of PR #242).
+BUSY_OTHER = "another Nebula on this computer is updating the spending record"
+BUSY_LOCK = "it can’t lock the spending record"
+BUSY_READ = "it can’t read the spending record or set it aside"
+BUSY_HERE = "the spending record is busy"
+
+
+def busy_refusal(why: str, ask: str) -> str:
+    """A run refused because the ledger couldn't be read or locked (main._reserve_spend)."""
+    return f"Nebula couldn’t check this run’s cost because {why}. Try again in a moment. {ask}".rstrip()
+
+
+def pricing_refusal(exc: BaseException, ask: str) -> str:
+    """A run refused because model_pricing.json couldn't be loaded, in the
+    same family with its own reason and no "Try again" (a broken table
+    stays broken). The reason in plain words, then the raw error as its own
+    sentence behind "Error:" (agents and logs use it; GM - Design, review
+    of PR #242), with a final period only when the error has none:
+    "… because it can’t read the pricing table. Error: Expecting value: line
+    1 column 1 (char 0). <hint>". Only agents get this (the person's runs
+    never reach the check); a version for the person would stop after
+    "pricing table."."""
+    detail = str(exc).strip()
+    if detail and not detail.endswith("."):
+        detail += "."
+    error = f" Error: {detail}" if detail else ""
+    return f"Nebula couldn’t check this run’s cost because it can’t read the pricing table.{error} {ask}".rstrip()
 
 
 # -- settings ----------------------------------------------------------------------
@@ -403,9 +459,15 @@ class Spent:
     total: float = 0.0
     models: dict[str, float] = field(default_factory=dict)
     plan_runs: int = 0
-    # The ledger was found unreadable in the last 24 hours (SpendLedger):
-    # every budget counts this as used up (_counted).
-    full: bool = False
+    # While the ledger counts as used up (it was found unreadable less than
+    # 24 hours ago, SpendLedger): when that hold ends, in epoch seconds.
+    # Every budget counts this Spent as used up until then (_counted). None
+    # when there is no hold.
+    until: float | None = None
+
+    @property
+    def full(self) -> bool:
+        return self.until is not None
 
 
 def is_outside(key: str) -> bool:
@@ -428,10 +490,10 @@ def personal_agent_spend_key(agent_id: str, chat_id: str) -> str:
 class LedgerBusy(OSError):
     """The ledger file's lock couldn't be taken within LOCK_WAIT_SECONDS
     (another Nebula backend on the same data folder holds it), or the file
-    can't be locked or kept aside at all. Nothing was checked or counted:
-    the caller refuses the run (main._reserve_spend), never lets it through
-    on what this backend last saw. ``why`` finishes "Can't check this run's
-    cost (...)"."""
+    can't be locked, opened, read or kept aside at all. Nothing was checked
+    or counted: the caller refuses the run (main._reserve_spend), never lets
+    it through on what this backend last saw. ``why`` finishes "Nebula
+    couldn’t check this run’s cost because ..." (BUSY_* below)."""
 
     def __init__(self, why: str, where: str | Path | None = None) -> None:
         super().__init__(errno.EAGAIN, why, str(where) if where is not None else None)
@@ -464,11 +526,21 @@ class SpendLedger:
     ``_SpendHold``) lives in memory, and a backend that dies leaves its runs
     counted until they age out of the 24 hours.
 
-    A file that exists but can't be read is kept aside under
-    UNREADABLE_NAME and never overwritten, and for WINDOW_SECONDS from then
-    every Spent this ledger returns is ``full``: each budget counts as used
-    up (``_counted``), so agents' paid runs wait for the person or are
-    refused as at any limit. A missing file is a new install: $0."""
+    A file whose content was read and isn't a ledger (not UTF-8, not JSON,
+    the wrong shape, empty) is kept aside under UNREADABLE_NAME and never
+    overwritten, and for WINDOW_SECONDS from then every Spent this ledger
+    returns is ``full`` (``until`` is when that ends): each budget counts as
+    used up (``_counted``), so agents' paid runs wait for the person or are
+    refused as at any limit. When the hold ends, the windowed totals (the
+    daily total, the outside budget, each app's) have aged out with it, but
+    a chat session's running total has no window: it restarts from $0, and
+    only the daily total still caps that chat's day. That is a known limit.
+
+    A file that exists but can't be opened or read (permissions, an I/O
+    error, a symlink to nothing) is neither: it may read again in a moment,
+    so it is never replaced. A check or change raises LedgerBusy (the run is
+    refused) and a display read counts every limit as used up, until it
+    reads again. Only a path with nothing at it is a new install: $0."""
 
     def __init__(self, path: Path | None, *, clock: Callable[[], float] = time.time) -> None:
         self._path = path
@@ -499,7 +571,7 @@ class SpendLedger:
             fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
                          | getattr(os, "O_CLOEXEC", 0), 0o600)
         except OSError as exc:
-            raise LedgerBusy("the spending record can't be locked", lock_path) from exc
+            raise LedgerBusy(BUSY_LOCK, lock_path) from exc
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -507,21 +579,24 @@ class SpendLedger:
             except BlockingIOError:
                 if time.monotonic() >= deadline:
                     os.close(fd)
-                    raise LedgerBusy("another Nebula on this computer is updating the spending record", lock_path) from None
+                    raise LedgerBusy(BUSY_OTHER, lock_path) from None
                 time.sleep(0.01)
             except OSError as exc:
                 os.close(fd)
-                raise LedgerBusy("the spending record can't be locked", lock_path) from exc
+                raise LedgerBusy(BUSY_LOCK, lock_path) from exc
 
     @contextmanager
-    def _locked(self) -> Iterator[None]:
+    def _locked(self, *, wait: bool = True) -> Iterator[None]:
         """Hold the ledger for one check or change: this process's lock, then
         the file's, then the file re-read into ``_sessions``. Taken again by
         the thread that holds it (``reserve``'s check reads, then records),
-        it is held already and nothing is re-read."""
-        deadline = time.monotonic() + LOCK_WAIT_SECONDS
-        if not self._io_lock.acquire(timeout=LOCK_WAIT_SECONDS):
-            raise LedgerBusy("the spending record is busy", self._path)
+        it is held already and nothing is re-read. With ``wait`` False (a
+        display read's first-load steps) it tries once and raises LedgerBusy
+        at once if either lock is taken."""
+        timeout = LOCK_WAIT_SECONDS if wait else 0.0
+        deadline = time.monotonic() + timeout
+        if not (self._io_lock.acquire(timeout=timeout) if wait else self._io_lock.acquire(blocking=False)):
+            raise LedgerBusy(BUSY_HERE, self._path)
         try:
             if self._holder == threading.get_ident():
                 yield
@@ -543,32 +618,46 @@ class SpendLedger:
             self._io_lock.release()
 
     def _read_file(self) -> tuple[str, Any]:
-        """("missing", None), ("unreadable", None) or ("ok", parsed JSON)."""
+        """("ok", parsed JSON), ("missing", None) when nothing is at the path,
+        ("unreadable", None) when the content was read and isn't a ledger,
+        or ("unopenable", None) when something is there that can't be opened
+        or read now (permissions, an I/O error, a symlink to nothing): that
+        one may read again, so it is never kept aside or replaced."""
         assert self._path is not None
         try:
-            text = self._path.read_text(encoding="utf-8")
+            raw = self._path.read_bytes()
         except FileNotFoundError:
-            return "missing", None
-        except (OSError, ValueError):
-            return "unreadable", None
+            # A dangling symlink raises this too, but isn't a new install.
+            return ("unopenable" if os.path.lexists(self._path) else "missing"), None
+        except OSError:
+            return "unopenable", None
         try:
-            data = json.loads(text)
-        except ValueError:
+            data = json.loads(raw.decode("utf-8"))
+        except ValueError:  # UnicodeDecodeError is a ValueError
             return "unreadable", None
         if not isinstance(data, dict) or not isinstance(data.get("sessions"), dict):
             return "unreadable", None
         return "ok", data
 
     def _parsed(self, data: Mapping[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, Any] | None, bool]:
-        """A readable file's sessions, migrated and seeded in place (the
-        caller saves when that changed anything), its unreadable mark, and
-        whether migrating changed anything."""
+        """A readable file's sessions, migrated and seeded in place, its
+        unreadable mark, and whether anything changed (the caller saves
+        under the lock when it did)."""
         sessions = {str(k): v for k, v in data["sessions"].items() if isinstance(v, dict)}
+        now = self._clock()
         mark = data.get(_UNREADABLE_KEY)
+        repaired = False
         if mark is not None and not (isinstance(mark, dict) and _finite(mark.get("since"))):
-            # A mark that can't be read stays a mark (strict), from now.
-            mark = {"since": self._clock(), "keptAs": None}
-        changed = self._migrate(sessions)
+            # A mark that can't be read stays a mark (strict), from now. Saved
+            # so, its 24 hours start once rather than at every read (review
+            # of PR #242, L1).
+            kept = mark.get("keptAs") if isinstance(mark, dict) and isinstance(mark.get("keptAs"), str) else None
+            mark, repaired = {"since": now, "keptAs": kept}, True
+        elif mark is not None and float(mark["since"]) > now:
+            # A start in the future (a hand edit, a clock that was ahead) would
+            # hold the limits past 24 hours: it starts now instead (L2).
+            mark, repaired = {**mark, "since": now}, True
+        changed = self._migrate(sessions) or repaired
         # A file from before the daily total kept chats as running totals
         # only: their last 24 hours go into CHATS_DAILY once (_seed_chats_daily).
         if data.get(_CHATS_DAILY_SEEDED) is not True:
@@ -580,10 +669,14 @@ class SpendLedger:
         """Under the file lock: the file as it is now becomes ``_sessions``.
         The first-load steps (_migrate, _seed_chats_daily) run here, so they
         run once for the file whichever backend gets the lock first; the next
-        reads a file that has them. An unreadable file is kept aside first."""
+        reads a file that has them. An unreadable file is kept aside first; a
+        file that can't be opened or read raises LedgerBusy and is left as
+        it is, so nothing is counted on numbers this backend can't see."""
         if self._path is None:
             return
         state, data = self._read_file()
+        if state == "unopenable":
+            raise LedgerBusy(BUSY_READ, self._path)
         if state == "ok":
             sessions, mark, changed = self._parsed(data)
         else:
@@ -600,7 +693,7 @@ class SpendLedger:
                 if state != "unreadable":
                     raise
                 # The unreadable file still has its name: found again next time.
-                raise LedgerBusy("the spending record can't be read or kept aside", self._path) from exc
+                raise LedgerBusy(BUSY_READ, self._path) from exc
 
     def _keep_aside(self) -> str:
         """Give an unreadable ledger a second name, UNREADABLE_NAME beside it,
@@ -620,7 +713,7 @@ class SpendLedger:
                     if (kept.st_dev, kept.st_ino) == (mine.st_dev, mine.st_ino):
                         return other.name
         except OSError as exc:
-            raise LedgerBusy("the spending record can't be read or kept aside", self._path) from exc
+            raise LedgerBusy(BUSY_READ, self._path) from exc
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(self._clock()))
         for attempt in range(100):
             name = UNREADABLE_NAME.format(stem=self._path.stem, stamp=stamp,
@@ -631,43 +724,54 @@ class SpendLedger:
             except FileExistsError:
                 continue
             except OSError as exc:
-                raise LedgerBusy("the spending record can't be read or kept aside", self._path) from exc
+                raise LedgerBusy(BUSY_READ, self._path) from exc
             return name
-        raise LedgerBusy("the spending record can't be read or kept aside", self._path)
+        raise LedgerBusy(BUSY_READ, self._path)
 
-    def _full(self, mark: Mapping[str, Any] | None) -> bool:
-        """Whether the ledger was found unreadable less than WINDOW_SECONDS ago."""
-        return mark is not None and self._clock() < float(mark["since"]) + WINDOW_SECONDS
+    def _until(self, mark: Mapping[str, Any] | None) -> float | None:
+        """When the hold an unreadable mark started ends (epoch seconds), while
+        it is still on; None once WINDOW_SECONDS have passed, or with no mark."""
+        if mark is None:
+            return None
+        until = float(mark["since"]) + WINDOW_SECONDS
+        return until if self._clock() < until else None
 
-    def _view(self) -> tuple[dict[str, dict[str, Any]], bool]:
-        """What was spent, for a read: the snapshot this thread holds the
-        lock for (a check inside ``reserve``), else the file as it is now,
-        read without waiting on another backend. The first read of a file
-        takes the lock once, to migrate it and keep an unreadable one aside."""
+    def _view(self) -> tuple[dict[str, dict[str, Any]], float | None, bool]:
+        """What was spent, for a read, and when the hold ends (None with no
+        hold): the snapshot this thread holds the lock for (a check inside
+        ``reserve``), else the file as it is now, read without waiting on
+        another backend. The first read of a file tries the lock once, without
+        waiting, to migrate it and keep an unreadable one aside; a read that
+        can't (another backend holds it) works on its own copy and saves
+        nothing. A file that can't be read, or that only the lock could set
+        aside, reads as held: nothing counted, every limit used up, with the
+        hold's end a full WINDOW_SECONDS from now since its start is unknown.
+        The third value says whether the end is a real one (False for that
+        stand-in: no line may name it as a time; see ``cant_read``)."""
         if self._path is None or self._holder == threading.get_ident():
             with self._io_lock:
-                return self._sessions, self._full(self._unreadable)
+                return self._sessions, self._until(self._unreadable), True
         if not self._first_done:
             try:
-                with self._locked():
+                with self._locked(wait=False):
                     pass
             except LedgerBusy:
                 pass
         state, data = self._read_file()
         if state == "missing":
-            return {}, False
+            return {}, None, True
         if state == "unreadable":
             # Kept aside under the lock when it can be; at the limits either way.
             try:
-                with self._locked():
+                with self._locked(wait=False):
                     pass
             except LedgerBusy:
-                return {}, True
+                return {}, self._clock() + WINDOW_SECONDS, False
             state, data = self._read_file()
-            if state != "ok":
-                return {}, True
+        if state != "ok":
+            return {}, self._clock() + WINDOW_SECONDS, False
         sessions, mark, _ = self._parsed(data)
-        return sessions, self._full(mark)
+        return sessions, self._until(mark), True
 
     def _seed_chats_daily(self, sessions: dict[str, dict[str, Any]]) -> None:
         """Chat spend from before the daily total counts toward it from the
@@ -769,24 +873,25 @@ class SpendLedger:
                      max(0, runs))
 
     def spent(self, key: str) -> Spent:
-        sessions, full = self._view()
+        sessions, until, _known = self._view()
         with self._lock:
             entry = sessions.get(key) or {}
             if _keeps_events(key):
-                return replace(self._sum(self._events(entry)), full=full)
+                return replace(self._sum(self._events(entry)), until=until)
             models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
             spent_models: dict[str, float] = {}
             for k, v in models.items():
                 model = merged_into(str(k))
                 spent_models[model] = spent_models.get(model, 0.0) + float(v)
-            return Spent(float(entry.get("total") or 0.0), spent_models, int(entry.get("planRuns") or 0), full=full)
+            return Spent(float(entry.get("total") or 0.0), spent_models, int(entry.get("planRuns") or 0),
+                         until=until)
 
     def spent_outside(self) -> Spent:
         """Everything every outside agent (shared or with an app token) spent in the last 24 hours."""
-        sessions, full = self._view()
+        sessions, until, _known = self._view()
         with self._lock:
             events = [event for key, entry in sessions.items() if is_outside(key) for event in self._events(entry)]
-            return replace(self._sum(events), full=full)
+            return replace(self._sum(events), until=until)
 
     def spent_daily(self) -> Spent:
         """Everything that isn't the person spent in the last 24 hours, for the
@@ -794,7 +899,7 @@ class SpendLedger:
         Each key is summed and held at 0 on its own before they're added, so a
         give-back larger than its own key's charge can't erase another key's
         spend (review 1 of PR #212, N-1)."""
-        sessions, full = self._view()
+        sessions, until, _known = self._view()
         with self._lock:
             parts = [self._sum(self._events(entry)) for key, entry in sessions.items() if _keeps_events(key)]
         models: dict[str, float] = {}
@@ -802,13 +907,30 @@ class SpendLedger:
             for model, amount in part.models.items():
                 models[model] = round(models.get(model, 0.0) + amount, 6)
         return Spent(round(sum(part.total for part in parts), 6), models, sum(part.plan_runs for part in parts),
-                     full=full)
+                     until=until)
+
+    def hold_until(self) -> float | None:
+        """When the hold an unreadable ledger started ends (epoch seconds),
+        while it is on; else None. None too while the ledger can't be read
+        at all (``cant_read``): that has no end to name. A display read: it
+        never waits."""
+        _sessions, until, known = self._view()
+        return until if known else None
+
+    def cant_read(self) -> bool:
+        """Whether the ledger can't be read right now (something is at its
+        path that can't be opened, or it is unreadable and couldn't be set
+        aside yet): agents' paid runs are refused (LedgerBusy) until it
+        reads again, and nothing known says when. Not the 24-hour hold,
+        which starts once unreadable content has been set aside."""
+        _sessions, until, known = self._view()
+        return until is not None and not known
 
     def unreadable_kept_as(self) -> str | None:
         """The name an unreadable ledger was kept aside as, while that still
         holds every budget at its limit; else None."""
-        sessions, full = self._view()
-        if not full:
+        _sessions, until, _known = self._view()
+        if until is None:
             return None
         if self._path is None or self._holder == threading.get_ident():
             mark = self._unreadable
@@ -914,8 +1036,11 @@ class SpendLedger:
                 sessions[key]["events"] = kept
             else:
                 sessions.pop(key)
-        if self._unreadable is not None and not self._full(self._unreadable):
-            self._unreadable = None  # 24 hours since: everything it held has aged out
+        if self._unreadable is not None and self._until(self._unreadable) is None:
+            # 24 hours since: the windowed totals it held have aged out. A
+            # chat session's running total restarts from $0 (the class's
+            # known limit); the daily total still caps that chat's day.
+            self._unreadable = None
         if self._path is None:
             return
         data: dict[str, Any] = {"sessions": sessions, _CHATS_DAILY_SEEDED: True}
@@ -960,8 +1085,8 @@ def _counted(spent: Spent, usd: float | None, plan_runs: int | None,
              model_caps: Mapping[str, Mapping[str, float | None]] | None = None) -> Spent:
     """What a budget counts as used: what was spent, or, while the ledger
     can't be trusted (``spent.full``: it was found unreadable in the last 24
-    hours), at least each of the budget's own limits, so any run that costs
-    something or bills a plan run is over it."""
+    hours, until ``spent.until``), at least each of the budget's own limits,
+    so any run that costs something or bills a plan run is over it."""
     if not spent.full:
         return spent
     models = dict(spent.models)
@@ -970,7 +1095,7 @@ def _counted(spent: Spent, usd: float | None, plan_runs: int | None,
         if cap is not None:
             models[definition_id] = max(models.get(definition_id, 0.0), cap)
     return Spent(spent.total if usd is None else max(spent.total, usd), models,
-                 spent.plan_runs if plan_runs is None else max(spent.plan_runs, plan_runs), full=True)
+                 spent.plan_runs if plan_runs is None else max(spent.plan_runs, plan_runs), until=spent.until)
 
 
 def daily_budget(daily_spent: Spent, caps: Mapping[str, Any]) -> Budget:
@@ -1061,22 +1186,29 @@ class DailyWait:
     # node has no list price, which Nebula can't count toward it (Justin's
     # Q165): every line then says that, never "would pass".
     over: bool = True
-    # The ledger was found unreadable (Spent.full): the total counts as used
-    # up, and the lines say why (LEDGER_UNREADABLE).
-    unreadable: bool = False
+    # While an unreadable ledger holds every limit (Spent.until): when that
+    # ends, in epoch seconds. The total counts as used up, and the lines an
+    # agent reads once say why (ledger_unreadable, weekday form). The bar's
+    # and the Updates card's lines leave it out: the app adds ``ledgerHold``'s
+    # line after them only until it ends (as_dict).
+    hold_until: float | None = None
+
+    def _held(self) -> float | None:
+        """The hold's end when the run is over the total during one."""
+        return self.hold_until if self.over else None
 
     def _why_full(self) -> str:
-        return f" {LEDGER_UNREADABLE}" if self.unreadable and self.over else ""
+        until = self._held()
+        return "" if until is None else f" {ledger_unreadable(until)}"
 
     @property
     def left(self) -> float:
         return max(0.0, round(self.limit - self.used, 6))
 
     def bar_line(self) -> str:
-        """The proposal bar's line (and the Updates card's second sentence)."""
-        return self._bar_line() + self._why_full()
-
-    def _bar_line(self) -> str:
+        """The proposal bar's line (and the Updates card's second sentence).
+        Stored with the proposal, so it never holds the ledger sentence, whose
+        end time would go stale: that is ``ledgerHold`` (as_dict)."""
         total = f"the {limit_usd(self.limit)} daily total"
         if not self.over:
             return self._cannot_count()
@@ -1197,11 +1329,47 @@ class DailyWait:
         return f"Needs the person's approval: {self._agents()}.{self._why_full()} {how_to_ask}"
 
     def as_dict(self) -> dict[str, Any]:
-        """The exact numbers, for agents and the canvas."""
-        return {"limitUsd": self.limit, "usedUsd": round(self.used, 6), "leftUsd": self.left,
-                "runUsd": round(self.run, 6), "also": self.also, "alsoLimitUsd": self.per_run_limit,
-                "alsoModel": self.model, "alsoFor": self.owner, "alsoPlanRuns": self.plan_runs_limit,
-                "over": self.over, "barLine": self.bar_line()}
+        """The exact numbers, for agents and the canvas. ``ledgerHold`` while
+        the run waits because an unreadable ledger holds the limits: its end
+        (``until``, epoch seconds) and the sentence for it (``line``, weekday
+        form), which the app shows after the bar's line until then. Served
+        proposals refresh it (ledger_hold_now)."""
+        details: dict[str, Any] = {
+            "limitUsd": self.limit, "usedUsd": round(self.used, 6), "leftUsd": self.left,
+            "runUsd": round(self.run, 6), "also": self.also, "alsoLimitUsd": self.per_run_limit,
+            "alsoModel": self.model, "alsoFor": self.owner, "alsoPlanRuns": self.plan_runs_limit,
+            "over": self.over, "barLine": self.bar_line()}
+        until = self._held()
+        if until is not None:
+            details["ledgerHold"] = ledger_hold(until)
+        return details
+
+
+def ledger_hold(until: float) -> dict[str, Any]:
+    """A waiting proposal's ``ledgerHold``: the hold's end and its sentence."""
+    return {"until": until, "line": ledger_unreadable(until)}
+
+
+def ledger_hold_now(wait: Mapping[str, Any], until_now: float | None) -> dict[str, Any]:
+    """A stored waiting proposal's details as served now (main._proposal_view
+    and its briefs): one that waited during a hold gets the hold's end now
+    and a line for it while a hold is on (``until_now``), so a hold that
+    started again shows its new end; otherwise it keeps what it stored, and
+    whoever prints it leaves the line out once ``until`` has passed
+    (hold_line)."""
+    wait = dict(wait)
+    if isinstance(wait.get("ledgerHold"), Mapping) and until_now is not None:
+        wait["ledgerHold"] = ledger_hold(until_now)
+    return wait
+
+
+def hold_line(hold: Any, now: float) -> str | None:
+    """A ``ledgerHold``'s sentence while it still holds at ``now``, else
+    None: what the CLI prints after a waiting proposal's note."""
+    if not isinstance(hold, Mapping) or not _finite(hold.get("until")) or now >= float(hold["until"]):
+        return None
+    line = hold.get("line")
+    return line if isinstance(line, str) and line else None
 
 
 @dataclass
@@ -1553,7 +1721,7 @@ def decide(
             continue
         wait = DailyWait(budget.usd, budget.spent.total, run_total,
                          names={str(node_id): label for node_id, label in labels.items()}, over=over,
-                         unreadable=budget.spent.full)
+                         hold_until=budget.spent.until)
         _first_other_reason(wait, usd_limited=usd_limited, estimate=estimate, by_model=by_model,
                             model_caps=model_caps, threshold=threshold, finer=finer, run_total=run_total,
                             plan_charge=plan_charge, definitions=definitions)
@@ -1593,7 +1761,7 @@ def decide(
     run_plan = sum(plan_charge.values())
     for budget in finer:
         used = budget.spent
-        why_full = f" {LEDGER_UNREADABLE}" if used.full else ""
+        why_full = f" {ledger_unreadable(used.until)}" if used.until is not None else ""
         if budget.usd is not None and run_total > 0 and used.total + run_total > budget.usd:
             return refuse(f"this run could cost up to {_usd(run_total)}, and {budget._has()} "
                           f"{_usd(used.total)} of {budget._its()} {_usd(budget.usd)} {budget.noun}{budget.window} "

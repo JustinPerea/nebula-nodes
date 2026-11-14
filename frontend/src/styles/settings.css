@@ -631,6 +631,8 @@ body.app-slava-restraint .settings-daily__meter {
   border-radius: 1px;
   background: var(--sr-edge);
 }
+/* The spend record's hold: the meter keeps its place, unshown. */
+body.app-slava-restraint .settings-daily__meter[data-held] { visibility: hidden; }
 body.app-slava-restraint .settings-daily__meter-fill {
   display: block;
   height: 100%;

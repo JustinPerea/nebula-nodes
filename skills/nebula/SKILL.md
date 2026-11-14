@@ -443,13 +443,14 @@ already sent. Without `NEBULA_AGENT_NAME` (or `--as`) it is refused instead,
 and so is a run when your 3 proposal slots are full, or Nebula's 12 are. `nebula spend` and
 `nebula context` show the total, what's used and what's left.
 Only the person changes it.
-A run refused with "Can't check this run's cost (another Nebula on this
-computer is updating the spending record)" counted nothing: try it again
-in a moment. A refusal or wait that ends "Nebula couldn’t read its record
-of what agents have spent, so it counts every spending limit as used up
-for 24 hours." means every paid run needs the person for now: propose it,
-and tell the person. `nebula spend` and `nebula context` print the same
-sentence while it holds.
+A run refused with "Nebula couldn’t check this run’s cost because another
+Nebula on this computer is updating the spending record. Try again in a
+moment." (or another reason before "Try again in a moment.") counted
+nothing: try it again in a moment. A refusal or wait that ends "Nebula
+couldn’t read its record of what agents have spent, so it counts every
+spending limit as used up until 3:40 PM on Sunday." means every paid run
+needs the person until that time: propose it, and tell the person.
+`nebula spend` and `nebula context` print the same sentence while it holds.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
 per megapixel of the larger of input and output, rounded up; `nebula info`
 says so on its PRICE line). Nebula measures the file the run will send, but

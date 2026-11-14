@@ -4078,16 +4078,14 @@ def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Bu
 def _reserve_spend(key: str, label: str, ask: str,
                    check: Callable[[], agent_spend.Decision]) -> tuple[agent_spend.Decision, float | None]:
     """SpendLedger.reserve, with a ledger another Nebula on this data folder
-    held past the wait (or one that can't be locked: LedgerBusy) refused as
-    an unreadable pricing table is, with a 503: nothing was checked or
-    counted, so the run never starts on what this backend last saw. The
-    line is a draft for GM - Design (follow-up to PR #212)."""
+    held past the wait, or one that can't be locked, opened or read
+    (LedgerBusy), refused as an unreadable pricing table is, with a 503:
+    nothing was checked or counted, so the run never starts on what this
+    backend last saw. GM - Design's words (review of PR #242)."""
     try:
         return agent_spend_ledger.reserve(key, label, check)
     except agent_spend.LedgerBusy as exc:
-        raise HTTPException(
-            status_code=503, detail=f"Can't check this run's cost ({exc.why}). Try again in a moment. {ask}",
-        ) from exc
+        raise HTTPException(status_code=503, detail=agent_spend.busy_refusal(exc.why, ask)) from exc
 
 
 class _WaitForOk(Exception):
@@ -4361,9 +4359,7 @@ def _require_spend_approval(
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError) as exc:
-        raise HTTPException(
-            status_code=503, detail=f"Can't check this run's cost (pricing table unavailable: {exc}). {ask}",
-        ) from exc
+        raise HTTPException(status_code=503, detail=agent_spend.pricing_refusal(exc, ask)) from exc
     key, label = _spend_session(headers)
     items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
     run_nodes = {n.id: n for n in nodes}
@@ -6980,11 +6976,19 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
                               "spent": view(here),
                               "dailyTotal": _daily_total_view(caps)}
-    if here.full:
+    if here.until is not None:
         # The ledger was found unreadable in the last 24 hours: a run is
         # checked with every limit used up (agent_spend._counted), so the view
-        # says so, in the sentence the refusal and the waiting run end with.
-        result["ledgerNote"] = agent_spend.LEDGER_UNREADABLE
+        # says so, in the sentence the refusal and the waiting run end with
+        # (weekday form), and gives the hold's end beside it.
+        if agent_spend_ledger.cant_read():
+            # Not the hold: the ledger can't be read at all right now, so
+            # paid runs are refused until it can and no end time is known.
+            result["ledgerNote"] = agent_spend.LEDGER_CANT_READ
+            result["ledgerBlocked"] = True
+        else:
+            result["ledgerNote"] = agent_spend.ledger_unreadable(here.until)
+            result["ledgerHold"] = {"until": here.until}
     if budget != "chat":
         result["window"] = "24h"
         result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
@@ -7019,8 +7023,19 @@ def _outside_view() -> dict[str, Any]:
     for agent_id, name in personal_agents.known_names(_STATE_DIR):
         spent = agent_spend_ledger.spent(f"{agent_spend.PERSONAL_AGENT_PREFIX}{agent_id}")
         personal.append({"id": agent_id, "name": name, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
-    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
-            "personal": personal, "daily": {"spentUsd": round(agent_spend_ledger.spent_daily().total, 4)}}
+    view: dict[str, Any] = {
+        "outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
+        "personal": personal, "daily": {"spentUsd": round(agent_spend_ledger.spent_daily().total, 4)}}
+    if outside.until is not None:
+        # An unreadable ledger holds every limit until then: Settings shows
+        # each limit's usage as used up and says why, in its live form.
+        if agent_spend_ledger.cant_read():
+            # The ledger can't be read at all: no amount is known and no end
+            # time either, so Settings says that and shows no figure.
+            view["ledgerBlocked"] = True
+        else:
+            view["ledgerHold"] = {"until": outside.until}
+    return view
 
 
 @app.get("/api/agent/spend/apps")
@@ -9417,7 +9432,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
         snapshot["pins"] = []
     # Proposals waiting for the person (one line each; never their accept keys).
     await _sweep_proposals()
-    snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    snapshot["proposals"] = [_proposal_brief(p) for p in canvas_proposals.open_list()]
     snapshot["providerHolds"] = _provider_holds_for_agents()
     # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
     # this agent has read these scenes now (services/scene_keys.py).
@@ -9561,7 +9576,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     except (PinError, ProjectStoreError):
         pins = []
     await _sweep_proposals()
-    briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    briefs = [_proposal_brief(p) for p in canvas_proposals.open_list()]
     # Asset proposals too (a cover, Send notes, Commons curation), with the
     # Update each posted; a commons one only where the caller sees it.
     await _sweep_asset_proposals()
@@ -10713,8 +10728,31 @@ def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
     # Priced with the keys set now (GM, PR #203 r15 item 1): who bills a
     # node, and whether Idol is "free" or "may cost", follow them.
-    return canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
+    view = canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
                                  api_keys=load_settings().get("apiKeys", {}) or {})
+    if isinstance(view.get("wait"), dict) and "ledgerHold" in view["wait"]:
+        view["wait"] = agent_spend.ledger_hold_now(view["wait"], _ledger_hold_until())
+    return view
+
+
+def _ledger_hold_until() -> float | None:
+    """When the spend ledger's hold ends, while one is on (a display read
+    that never waits). None with no hold, and on a ledger that can't be
+    read at all, which has no end to name: a stored proposal then keeps
+    the end it stored."""
+    return agent_spend_ledger.hold_until()
+
+
+def _proposal_brief(proposal: Proposal) -> dict[str, Any]:
+    """canvas_proposals.brief, with a run that waited during an unreadable
+    ledger's hold carrying ``ledgerHold`` as _proposal_view serves it, so
+    `nebula context`, `nebula look` and start_here can add its line while
+    it holds."""
+    brief = canvas_proposals.brief(proposal)
+    wait = proposal.wait if isinstance(proposal.wait, dict) else None
+    if wait and "ledgerHold" in wait:
+        brief["ledgerHold"] = agent_spend.ledger_hold_now(wait, _ledger_hold_until())["ledgerHold"]
+    return brief
 
 
 # What each open proposal's card last showed for its nodes' names: a rename
