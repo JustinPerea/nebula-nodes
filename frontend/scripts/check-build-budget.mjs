@@ -26,9 +26,11 @@ const entryBytes = await readFile(entryPath);
 const entrySize = (await stat(entryPath)).size;
 const entryGzipSize = gzipSync(entryBytes).byteLength;
 // Measured 2026-11-14 after the startup-set defer (docs/notes/2026-11-14-perf-startup-set-defer.md):
-// 394,268 raw / 125,652 gzip, down from 477,203 / 148,357; the limits are that plus about 8 KB / 3.5 KB.
-const MAX_ENTRY_BYTES = 403_000;
-const MAX_ENTRY_GZIP_BYTES = 129_500;
+// 394,268 raw / 125,652 gzip, down from 477,203 / 148,357. Design round 1 (the fallback card,
+// the reveal and the hold line) added +5,686 raw / +1,705 gzip to the entry: 405,278 / 129,329.
+// The limits are that plus about 8 KB / 3.5 KB.
+const MAX_ENTRY_BYTES = 413_300;
+const MAX_ENTRY_GZIP_BYTES = 132_900;
 
 if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
   throw new Error(
@@ -40,8 +42,8 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // The entry alone is not the startup cost: chunks it imports statically or
 // modulepreloads load before the first paint too. Measured on main with
 // `npm run build` after the 2026-11-14 defer: 1,841,464 raw / 481,238 gzip in 44
-// chunks (it was 1,923,389 / 502,295 in 40); the limits are that plus about
-// 8 KB raw / 3.5 KB gzip. What left the set: the node cards for the less common
+// chunks (it was 1,923,389 / 502,295 in 40); design round 1 measured 1,852,953 /
+// 485,068 in 44; the limits are that plus about 8 KB raw / 3.5 KB gzip. What left the set: the node cards for the less common
 // kinds (Edit, Remotion, Cinema scene, Character, Camera rig, Reference set,
 // Moodboard, Paper source, Batch, Dynamic), the Jev, spatial/world and
 // structured result views a finished card draws, and the canvas's arrange
@@ -56,8 +58,8 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // kept notice, the bottom bar's kept state). Its round 28 notes measured lazy
 // splits of these; a kept edit that waits for a chunk is refused for good when
 // that chunk can't load, which is when a canvas is kept, so they stay.
-const MAX_STARTUP_BYTES = 1_850_000;
-const MAX_STARTUP_GZIP_BYTES = 485_000;
+const MAX_STARTUP_BYTES = 1_861_000;
+const MAX_STARTUP_GZIP_BYTES = 488_600;
 const startup = await startupSet(distDir);
 const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
 

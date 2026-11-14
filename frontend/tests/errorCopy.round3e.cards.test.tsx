@@ -29,6 +29,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 }));
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+import { CARD_FALLBACK_TYPE } from '../src/lib/cardFallback';
 import { CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
@@ -94,7 +95,8 @@ beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) =
 
 describe('every card on the canvas shows its run error', () => {
   it('covers every card type the canvas draws', () => {
-    expect(Object.keys(CASES).sort()).toEqual(Object.keys(CANVAS_NODE_TYPES).sort());
+    // The fallback card stands in for a card while it loads (lib/cardFallback.ts); it has no run error to show.
+    expect(Object.keys(CASES).sort()).toEqual(Object.keys(CANVAS_NODE_TYPES).filter((type) => type !== CARD_FALLBACK_TYPE).sort());
   });
 
   for (const type of Object.keys(CASES)) {

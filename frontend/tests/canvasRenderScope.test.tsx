@@ -10,6 +10,7 @@
  */
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ModelNode } from '../src/components/nodes/ModelNode';
 import { DynamicNode } from '../src/components/nodes/DynamicNode';
 import { EditNode } from '../src/components/nodes/EditNode';
 import { RemotionNode } from '../src/components/nodes/RemotionNode';
@@ -76,9 +77,11 @@ function counting(Component: ComponentType<NodeProps>): ComponentType<NodeProps>
 // Each counted card inside its boundary, as CANVAS_NODE_TYPES draws it
 // (PR #198 review 3, L4): the count stays the card's own.
 // The less common cards load on demand in the canvas (lib/deferredChunks.ts);
-// the counter wraps the card's own component, so it is named here directly.
+// the counter wraps the card's own component, so it is named here directly (so
+// is the Model card, which the canvas wraps in withCardSwap, components/nodes/withCardSwap.tsx).
 const REAL_CARDS: NodeTypes = {
   ...CANVAS_CARDS,
+  'model-node': ModelNode,
   'dynamic-node': DynamicNode, editNode: EditNode, remotionNode: RemotionNode, cinemaSceneNode: CinemaSceneNode,
   characterNode: CharacterNode, cameraRigNode: CameraRigNode, referenceSetNode: ReferenceSetNode,
   moodboardNode: MoodboardNode, paperSourceNode: PaperSourceNode, batchNode: BatchNode,

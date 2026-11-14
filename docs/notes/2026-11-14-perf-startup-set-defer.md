@@ -126,3 +126,41 @@ With the hold the "Loading workspace…" line shows from 16.3 s to 19.8 s after 
 Build after round 2: startup set 1,844,908 raw / 482,465 gzip in 44 chunks (limits 1,850,000 / 485,000); entry 397,521 / 126,795 (limits 403,000 / 129,500).
 
 Tests added: tests/cardChunks.test.tsx (every deferred card is in the list; the cards' own result views are chunks the list asks for), tests/cardHold.identity.test.tsx, tests/cardHold.canvas.test.tsx (whole graph held, then drawn in one commit with its wires; a node added later; a failed chunk and its retry; the store untouched; a shown graph replaced by a held one; the fit after the hold), tests/cardHold.arrange.test.tsx (the layout waits for the held node), and a test in tests/projectStore.test.ts that a restore and an open ask for the chunks before their fetch.
+
+## Design round 1
+
+GM - Design's rulings of 2026-11-14 (A: the hold of a whole graph; B: a failed chunk; C: a node added to a canvas on screen). No change to the backend, MCP or CLI: the store and the agent's view of the graph are unchanged; everything below changes only what React Flow is given and draws.
+
+### A. The hold of a whole graph
+
+- The line is "Loading canvas…" in `.canvas-hold-line` (styles/canvas.css), inside `.canvas-wrapper`, with no background of its own, so it sits on the canvas's background and dot grid. The old `.workspace-loading--hold` rule (position fixed, #111) is gone.
+- The line mounts once the cover has lasted 400 ms (`HOLD_LINE_DELAY_MS` in Canvas.tsx) and fades in on SOFT (`springCssVars()` set on the wrapper). A hold that ends sooner never mounts it.
+- "Covered" runs from the start of the hold to the end of the fit, not only while chunks load. The node layer (`.react-flow__viewport`) has opacity 0 through it (`canvas-wrapper--reveal-wait`). When the graph is handed over, measured (`nodesInitialized`) and fitted, `onRevealed` swaps in `canvas-wrapper--reveal-in`: an opacity-only fade on SOFT, while the line takes `--out` on the same spring. Both end after the spring's duration. I used SOFT for the node layer too (critically damped, so an opacity animation has no overshoot to clip).
+- The fit has two sources. React Flow's own first fit resolves when its nodes are measured; the cover waits for `fitViewQueued` to clear. A fit asked by `nebula:graph-nodes-added` during the hold now runs when the hold ends with `duration: 0` and no 80 ms delay (the animated 400 ms fit is kept for the other cases), and the cover waits for its promise. A fallback timer (1.5 s) reveals the layer if neither reports, so a graph can never stay hidden.
+- The zoom readout: `store/canvasRevealStore.ts` carries `covered`; Toolbar shows four figure-width spaces instead of the number (the button keeps its box: it has a min-width) and drops the number from its aria-label.
+- Reduced motion: `@media (prefers-reduced-motion: reduce)` rules in canvas.css use `notice-fade-in 180ms ease-out both` (the proposal bar's), and the JS timers use 180 ms through `matchMedia`, the same detection `NodeWaitSwap` uses. I found no app-level reduced-motion class in this tree (grep for classList and CSS selectors), so there is only the media query.
+
+### B and C. The fallback card
+
+- lib/cardFallback.ts: `fallbackNode(node)` is a copy of the node with type `cardFallback` and its data plus `__heldCard` (the real type and the node's own size if it has one). The copy is cached per node object, so React Flow sees the same object until the node changes. The store node is never changed.
+- components/nodes/CardFallback.tsx draws it: the boundary card's frame (reusing node-card-boundary.css), the node's name, ports spread down the sides, and for a failed own chunk one line in the card's text colour, offline or online worded. Ports come from `handleIds` (lib/cardHandleIds.ts, moved out of NodeCardBoundary.tsx): the definition's ports, the data's dynamic ports and a cinema scene's shots. tests/cardFallback.test.tsx renders each of the ten deferred cards and its fallback and compares handle ids and sides: all ten match, so no card needs the edge-midpoint fallback.
+- The fallback card takes over DeferredBoundary's retry triggers (mount, focus, online) for its chunk, since the real card is not mounted while it shows.
+- lib/cardHold.ts: a node added to a shown graph, or whose own chunk failed, is handed over as a fallback card; the whole-graph hold is unchanged. `failed` means the own chunk is settled and not loaded. A failed result-view chunk (Jev, viewer, structured) still draws the card without the view, as before. The identity fast path now tests "every chunk loaded" instead of "every chunk settled", because a failed chunk needs a fallback card.
+- components/nodes/withCardSwap.tsx wraps the ten deferred cards and the Model card: a card that replaces a frame (`CARD_SWAPS`, set by the hold) renders a ghost of the frame (no handles) as its sibling inside the node element. The card, the node element's first child, fades in on SOFT (`.react-flow__node:has(> .card-fallback--ghost) > :first-child`, styles/card-fallback.css) while the ghost lies over it and fades out; under reduced motion both take 180 ms. No box is added around a card (an earlier version added `display: contents` wrappers; tests/placeholderEveryNode.test.tsx reads the node element's first child as the card root, and tests/canvasRenderScope.test.tsx counts the Model card's own body, so the test now names ModelNode directly as it does the other cards).
+- The fallback type is in CANVAS_NODE_TYPES (inside its own boundary) and not in CANVAS_CARDS; tests/errorCopy.round3e.cards.test.tsx lists every canvas type that shows a run error and now skips it.
+- The frame sizes (`FALLBACK_SIZE_BY_TYPE`): widths are the cards' CSS widths and a test reads them from the stylesheets. Heights are estimates: they were not measured, because measuring needs a running app and this round does not start one.
+- The placeholder's own measured size is written to the store by React Flow like any node's (a measured size, not a position or removal); the real card measures again when it arrives. A node that already has a size keeps it in the frame.
+- Idle preload (C1): `DEFERRED_PRELOADS` already holds `DEFERRED_CARD_PRELOADS` and App.tsx starts it through `whenIdle` after the first paint. tests/cardChunks.test.tsx now pins both.
+
+### A backend test that reads frontend source
+
+- backend/tests/test_reference_set.py::test_frontend_registrations reads canvasTypes.ts as text and expected `referenceSetNode: ReferenceSetNode`. The card is registered through its deferred handle now, so the test looks for a `referenceSetNode:` line that names ReferenceSetNode and for the card's import in lib/deferredChunks.ts. CI's backend part 2 failed on this after round 2; no backend code changed.
+
+### Two fixes from the coordinator's read of this round
+
+- The crossfade ghost carried the frame's usual minimum height (120 px when the node has no size of its own), so over a shorter card such as Edit it hung below the card for the length of the fade. `.card-fallback--ghost` now drops the frame's width and minimum height and takes the arriving card's box.
+- A held graph replaced by an empty canvas before its chunks arrived stayed covered until the 1.5 s fallback timer, with the zoom number blank and the line due at 400 ms. An empty graph has nothing to measure or fit, so `HoldRevealController` uncovers it at once (`empty`).
+
+### Build budget
+
+After this round: entry 405,278 raw / 129,329 gzip (was 399,592 / 127,624), startup set 1,852,953 / 485,068 in 44 chunks (was 1,847,267 / 483,364). The added bytes are the fallback card and its frame, the hold's placeholder and swap logic, the reveal controller and line in Canvas.tsx, the zoom-readout store, and CSS. Limits set to the measured size plus about 8,000 raw / 3,500 gzip: entry 413,300 / 132,900, startup 1,861,000 / 488,600 (main's are 512,000 / 160,000 and 1,928,000 / 505,000).

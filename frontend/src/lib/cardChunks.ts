@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
-import type { ChunkSettling } from './lazyWithPreload';
+import type { ChunkSettling, DeferredChunk } from './lazyWithPreload';
 import {
   DeferredBatchNode,
   DeferredCameraRigNode,
@@ -27,8 +27,9 @@ import { resultViewNeeds } from './resultViews';
  * Startup code: it imports the lazy handles, never the cards.
  */
 
-// Chunk objects hold their own props type; the hold only reads settling and asks to load.
-export type CardChunk = ChunkSettling & { readonly preload: () => Promise<unknown> };
+// Chunk objects hold their own props type; the hold reads settling and asks to load, and the
+// fallback card (components/nodes/CardFallback.tsx) retries a failed one.
+export type CardChunk = ChunkSettling & DeferredChunk;
 type Chunk = CardChunk;
 
 /** The deferred card of each node type (components/canvasTypes.ts CANVAS_CARDS). */
@@ -56,14 +57,20 @@ export const ALL_CARD_CHUNKS: readonly Chunk[] = [
   DeferredStructuredOutputs,
 ];
 
-export function allCardChunksSettled(): boolean {
-  return ALL_CARD_CHUNKS.every((chunk) => chunk.isSettled());
+/** Every card chunk is in: nothing is held back and no card needs its fallback. */
+export function allCardChunksLoaded(): boolean {
+  return ALL_CARD_CHUNKS.every((chunk) => chunk.isLoaded());
+}
+
+/** The card's own chunk (not its result views), if its card is deferred. */
+export function ownCardChunk(node: Pick<Node, 'type'>): Chunk | undefined {
+  return node.type ? CARD_CHUNK_BY_TYPE[node.type] : undefined;
 }
 
 /** The chunks this node's card will render. */
 export function cardChunksOf(node: Pick<Node, 'type' | 'data'>): Chunk[] {
   const chunks: Chunk[] = [];
-  const own = node.type ? CARD_CHUNK_BY_TYPE[node.type] : undefined;
+  const own = ownCardChunk(node);
   if (own) chunks.push(own);
   if (node.type && RESULT_VIEW_TYPES.has(node.type)) {
     const needs = resultViewNeeds(node.data as NodeData | undefined);

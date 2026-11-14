@@ -33,7 +33,9 @@ import { CANVAS_CARDS } from '../src/components/canvasTypes';
 import { ModelNode } from '../src/components/nodes/ModelNode';
 import { DynamicNode } from '../src/components/nodes/DynamicNode';
 import { ALL_CARD_CHUNKS, CARD_CHUNK_BY_TYPE, cardChunksOf } from '../src/lib/cardChunks';
-import { DEFERRED_CARD_PRELOADS, DeferredJevResultView, DeferredRepresentationViewer, DeferredStructuredOutputs } from '../src/lib/deferredChunks';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { DEFERRED_CARD_PRELOADS, DEFERRED_PRELOADS, DeferredJevResultView, DeferredRepresentationViewer, DeferredStructuredOutputs } from '../src/lib/deferredChunks';
 import { JEV_DECIDE, JEV_PICK_BEST } from '../src/lib/jev';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
@@ -155,5 +157,16 @@ describe('a result view a card mounts is a chunk the list asks for', () => {
   it('asks for a deferred card by its type', () => {
     expect(cardChunksOf({ type: 'characterNode', data: {} as NodeData, id: 'x', position: { x: 0, y: 0 } } as Node)).toEqual([CARD_CHUNK_BY_TYPE.characterNode]);
     expect(cardChunksOf({ type: 'model-node', data: {} as NodeData, id: 'x', position: { x: 0, y: 0 } } as Node)).toEqual([]);
+  });
+});
+
+describe('the idle preload brings the card chunks in before anyone adds a node', () => {
+  it('asks for every card chunk the canvas can wait on', () => {
+    for (const chunk of ALL_CARD_CHUNKS) expect(DEFERRED_PRELOADS, 'a card chunk missing from the idle preload').toContain(chunk.preload);
+  });
+
+  it('App starts the preload once the first paint is done, not at module load', () => {
+    const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
+    expect(app).toMatch(/useEffect\(\(\) => whenIdle\(\(\) => preloadAll\(DEFERRED_PRELOADS\)\), \[\]\)/);
   });
 });

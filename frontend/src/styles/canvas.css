@@ -355,12 +355,59 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
   display: none;
 }
 
-/* While the canvas holds a graph back for its card chunks (lib/cardHold.ts):
-   the app's own "Loading workspace…" line over the canvas, under nothing it
-   needs (the graph is not drawn yet). */
-.workspace-loading--hold {
-  position: fixed;
+/* While the canvas holds a whole graph back for its card chunks
+   (lib/cardHold.ts), its node layer is covered, and "Loading canvas…" shows
+   once the hold has lasted 400 ms. The line has no background of its own: it
+   sits on the canvas's background and dot grid, so nothing but the nodes, the
+   wires and the line changes at the reveal. It fades in and out on the SOFT
+   spring (--spring-soft, set on the wrapper); under reduced motion the fades
+   are 180 ms opacity, as the proposal bar's. */
+.canvas-hold-line {
+  position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
+  display: grid;
+  place-items: center;
   pointer-events: none;
+  color: var(--sr-ink-light, #8d8d8d);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  animation: canvas-hold-line-in var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+.canvas-hold-line--out {
+  animation: canvas-hold-line-out var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes canvas-hold-line-in {
+  from { opacity: 0; }
+}
+
+@keyframes canvas-hold-line-out {
+  to { opacity: 0; }
+}
+
+/* The node layer: nodes and wires are the React Flow viewport. */
+.canvas-wrapper--reveal-wait .react-flow__viewport {
+  opacity: 0;
+}
+
+.canvas-wrapper--reveal-in .react-flow__viewport {
+  animation: canvas-reveal-in var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes canvas-reveal-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-hold-line {
+    animation: notice-fade-in 180ms ease-out both;
+  }
+  .canvas-hold-line--out {
+    animation: canvas-hold-line-out 180ms ease-out both;
+  }
+  .canvas-wrapper--reveal-in .react-flow__viewport {
+    animation: notice-fade-in 180ms ease-out both;
+  }
 }

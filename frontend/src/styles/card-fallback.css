@@ -1,0 +1,46 @@
+/* The fallback card (components/nodes/CardFallback.tsx): the frame of a node
+ * whose card chunk is loading or failed, in the boundary card's look
+ * (node-card-boundary.css). The line stays in the card's text colour. */
+body.app-slava-restraint .card-fallback {
+  position: relative;
+  box-sizing: border-box;
+}
+
+body.app-slava-restraint .card-fallback__line {
+  color: var(--sr-ink-light);
+}
+
+/* The real card crossfades in over the frame (components/nodes/withCardSwap.tsx):
+ * a ghost of the frame lies over the card and fades out while the card, the
+ * node element's first child, fades in, on the same SOFT spring (the canvas
+ * wrapper sets --spring-soft). Opacity only. */
+.react-flow__node:has(> .card-fallback--ghost) > :first-child {
+  animation: card-swap-in var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+.card-fallback--ghost {
+  position: absolute;
+  inset: 0;
+  /* The ghost takes the arriving card's box, not the frame's usual size, so it never overhangs a shorter card. */
+  width: auto !important;
+  min-height: 0 !important;
+  pointer-events: none;
+  animation: card-swap-out var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes card-swap-in {
+  from { opacity: 0; }
+}
+
+@keyframes card-swap-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node:has(> .card-fallback--ghost) > :first-child {
+    animation: notice-fade-in 180ms ease-out both;
+  }
+  .card-fallback--ghost {
+    animation: card-swap-out 180ms ease-out both;
+  }
+}

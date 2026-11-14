@@ -24,7 +24,7 @@ describe('the hold with every chunk loaded', () => {
   it('returns its inputs by identity and reads no node', () => {
     const nodes = [untouchable('a'), untouchable('b')];
     const edges: Edge[] = [{ id: 'e', source: 'a', target: 'b' }];
-    const result = holdCards(nodes, edges, 3, { generation: -1, handed: [] });
+    const result = holdCards(nodes, edges, 3, { generation: -1, handed: [], placeholders: new Set() });
     expect(result.nodes).toBe(nodes);
     expect(result.edges).toBe(edges);
     expect(result.wholeGraph).toBe(false);

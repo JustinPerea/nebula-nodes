@@ -26,6 +26,7 @@ import { failureMessage, failureUnder } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
+import { useCanvasRevealStore } from '../../store/canvasRevealStore';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../../lib/runScope';
@@ -57,6 +58,7 @@ export function Toolbar() {
   const minZoom = useStore((s) => s.minZoom);
   const maxZoom = useStore((s) => s.maxZoom);
   const zoomPercent = Math.round(zoom * 100);
+  const zoomPending = useCanvasRevealStore((s) => s.covered);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
@@ -448,10 +450,11 @@ export function Toolbar() {
           <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
         <button type="button" className="toolbar__button toolbar__zoom-level toolbar__zoom-reset"
-          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title={`Reset zoom to 100% (${displayKey('Shift')}0)`}
+          aria-label={zoomPending ? 'Zoom, reset to 100%' : `Zoom ${zoomPercent}%, reset to 100%`} title={`Reset zoom to 100% (${displayKey('Shift')}0)`}
           aria-keyshortcuts="Shift+0"
           onClick={() => void zoomTo(1, { duration: CANVAS_ZOOM_DURATION })}>
-          {zoomPercent}%
+          {/* A whole graph still loading has no fitted zoom yet: no number, in blank figure-width space so the box keeps its size. */}
+          <span className="toolbar__zoom-value" data-pending={zoomPending || undefined}>{zoomPending ? '\u2007\u2007\u2007\u2007' : `${zoomPercent}%`}</span>
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
           aria-label="Zoom in" title={`Zoom in (${displayKey('Mod')}=)`} aria-keyshortcuts="Meta+= Control+=" disabled={zoom >= maxZoom - 0.001}

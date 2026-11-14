@@ -5,6 +5,8 @@
  * the card chunks under the test's control (each load is a promise the test
  * settles), and read the DOM and the graph store.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
@@ -80,6 +82,7 @@ import { Canvas } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useStoredAssetsStore } from '../src/store/storedAssetsStore';
+import { useCanvasRevealStore } from '../src/store/canvasRevealStore';
 import { JEV_DECIDE } from '../src/lib/jev';
 
 // React Flow measures a node when its ResizeObserver reports it; jsdom has no
@@ -114,7 +117,10 @@ const decided = (id = 'n3') => node(id, JEV_DECIDE, 'model-node', { state: 'comp
 const domNodes = () => [...document.querySelectorAll('.react-flow__node')].map((element) => element.getAttribute('data-id'));
 const domEdges = () => document.querySelectorAll('.react-flow__edge').length;
 const splash = () => document.querySelector('.nn-splash');
-const holdLine = () => document.querySelector('.workspace-loading--hold');
+const holdLine = () => document.querySelector('.canvas-hold-line');
+const wrapper = () => document.querySelector('.canvas-wrapper') as HTMLElement;
+const fallbacks = () => [...document.querySelectorAll('[data-card-fallback=""]')].map((el) => el.closest('.react-flow__node')?.getAttribute('data-id'));
+const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
 /** The counts of drawn nodes after each batch of DOM changes (one React commit is one batch). */
 function watchNodeCounts(): { counts: number[]; stop: () => void } {
@@ -145,8 +151,10 @@ beforeEach(() => {
   useUIStore.setState({ skin: 'slava-restraint', viewMode: 'canvas', onboardingActive: false, selectedNodeId: null, canvasFocusRequest: null,
     canvasViewport: { x: 0, y: 0, zoom: 1 }, canvasPerfMode: false });
   useGraphStore.setState({ nodes: [], edges: [], isExecuting: false, undoStack: [], redoStack: [] });
+  useCanvasRevealStore.setState({ covered: false });
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUI, true);
@@ -155,38 +163,44 @@ afterEach(() => {
 
 describe('a whole graph arrives while its card chunks are pending', () => {
   it('draws no node or wire and no empty-canvas splash, then everything in the same commit', async () => {
-    mount();
-    expect(splash()).not.toBeNull();
-    act(() => useGraphStore.getState().loadGraph([text(), character(), decided()], [wire('n1', 'text', 'n3', 'state'), wire('n2', 'character', 'n3', 'through')]));
-    await settle();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      expect(splash()).not.toBeNull();
+      act(() => useGraphStore.getState().loadGraph([text(), character(), decided()], [wire('n1', 'text', 'n3', 'state'), wire('n2', 'character', 'n3', 'through')]));
+      await settle();
 
-    expect(domNodes()).toEqual([]);
-    expect(domEdges()).toBe(0);
-    expect(splash()).toBeNull();
-    expect(holdLine()).not.toBeNull();
-    // The line the app shows while the workspace itself loads (App.tsx).
-    expect(holdLine()?.textContent).toBe('Loading workspace…');
-    expect(holdLine()?.getAttribute('role')).toBe('status');
-    // Both chunks were asked for by the hold itself.
-    expect(chunkLoads.character.length).toBeGreaterThan(0);
-    expect(chunkLoads.jev.length).toBeGreaterThan(0);
+      expect(domNodes()).toEqual([]);
+      expect(domEdges()).toBe(0);
+      expect(splash()).toBeNull();
+      // The line waits out its 400 ms, then reads "Loading canvas…".
+      expect(holdLine()).toBeNull();
+      advance(399);
+      expect(holdLine()).toBeNull();
+      advance(1);
+      expect(holdLine()).not.toBeNull();
+      expect(holdLine()?.textContent).toBe('Loading canvas…');
+      expect(holdLine()?.getAttribute('role')).toBe('status');
+      // Both chunks were asked for by the hold itself.
+      expect(chunkLoads.character.length).toBeGreaterThan(0);
+      expect(chunkLoads.jev.length).toBeGreaterThan(0);
 
-    const watch = watchNodeCounts();
-    await loadCharacter();
-    // One chunk in is not enough: the Jev card's view is still on its way.
-    expect(domNodes()).toEqual([]);
-    expect(domEdges()).toBe(0);
-    await loadJev();
-    watch.stop();
+      const watch = watchNodeCounts();
+      await loadCharacter();
+      // One chunk in is not enough: the Jev card's view is still on its way.
+      expect(domNodes()).toEqual([]);
+      expect(domEdges()).toBe(0);
+      await loadJev();
+      watch.stop();
 
-    expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
-    expect(holdLine()).toBeNull();
-    expect(splash()).toBeNull();
-    // No frame between nothing and everything.
-    expect(watch.counts.filter((count) => count > 0 && count < 3)).toEqual([]);
-    expect(watch.counts).toContain(3);
-    expect(domEdges()).toBe(2);
-    expect(document.querySelector('.character-node')).not.toBeNull();
+      expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
+      expect(splash()).toBeNull();
+      // No frame between nothing and everything.
+      expect(watch.counts.filter((count) => count > 0 && count < 3)).toEqual([]);
+      expect(watch.counts).toContain(3);
+      expect(domEdges()).toBe(2);
+      expect(document.querySelector('.character-node')).not.toBeNull();
+    } finally { vi.useRealTimers(); }
   });
 
   it('a graph that needs nothing deferred is not held', async () => {
@@ -208,12 +222,14 @@ describe('a whole graph arrives while its card chunks are pending', () => {
       await loadCharacter();
       act(() => { vi.advanceTimersByTime(200); });
       expect(fitView).toHaveBeenCalledTimes(1);
+      // A whole graph's fit runs without animation, before its layer fades in.
+      expect(fitView).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }));
     } finally { vi.useRealTimers(); }
   });
 });
 
 describe('a node added to a graph that is already shown', () => {
-  it('stays out until its chunk lands; the others keep their DOM nodes', async () => {
+  it('is handed over at once as a fallback frame with its name, ports and wires, and no line; the real card replaces it', async () => {
     mount();
     act(() => useGraphStore.getState().loadGraph([text(), shown()], []));
     await settle();
@@ -222,21 +238,69 @@ describe('a node added to a graph that is already shown', () => {
 
     act(() => useGraphStore.setState((state) => ({ nodes: [...state.nodes, character('n2')], edges: [wire('n2', 'character', 'n3', 'input')] })));
     await settle();
-    expect(domNodes().sort()).toEqual(['n1', 'n3']);
-    expect(domEdges()).toBe(0);
+    expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
+    expect(fallbacks()).toEqual(['n2']);
+    const frame = document.querySelector('.react-flow__node[data-id="n2"] [data-card-fallback=""]') as HTMLElement;
+    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+    expect(frame.querySelector('.react-flow__handle[data-handleid="character"]')).not.toBeNull();
+    expect(frame.querySelector('.card-fallback__line')).toBeNull();
+    // Sized (this test's observer reports 100 x 60 for everything; the sizes by type are in tests/cardFallback.test.tsx).
+    expect(frame.style.width).toMatch(/px$/);
+    expect(domEdges()).toBe(1);
     expect(document.querySelector('.react-flow__node[data-id="n1"]')).toBe(before);
     // Not a whole-graph hold: the canvas shows what it showed.
     expect(holdLine()).toBeNull();
+    expect(wrapper().className).not.toContain('reveal');
 
     await loadCharacter();
-    expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
-    expect(document.querySelector('.react-flow__node[data-id="n1"]')).toBe(before);
+    expect(document.querySelector('.character-node')).not.toBeNull();
+    expect(fallbacks()).toEqual([]);
     expect(domEdges()).toBe(1);
+    expect(document.querySelector('.react-flow__node[data-id="n1"]')).toBe(before);
+  });
+
+  it('crossfades: a ghost of the frame lies over the arriving card, then goes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), shown()], []));
+      await settle();
+      act(() => useGraphStore.setState((state) => ({ nodes: [...state.nodes, character('n2')] })));
+      await settle();
+      await loadCharacter();
+      const node = document.querySelector('.react-flow__node[data-id="n2"]') as HTMLElement;
+      // The card stays the node element's first child; the ghost is its sibling and has no handles of its own.
+      expect(node.firstElementChild?.classList.contains('character-node')).toBe(true);
+      const ghost = node.querySelector(':scope > [data-card-fallback="ghost"]');
+      expect(ghost).not.toBeNull();
+      expect(ghost?.querySelector('.react-flow__handle')).toBeNull();
+      expect(ghost?.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+      advance(1000);
+      expect(node.querySelector('[data-card-fallback]')).toBeNull();
+      expect(node.firstElementChild?.classList.contains('character-node')).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a node with a size of its own keeps it in the frame', async () => {
+    mount();
+    act(() => useGraphStore.getState().loadGraph([text()], []));
+    await settle();
+    act(() => useGraphStore.setState((state) => ({ nodes: [...state.nodes, { ...character('n2'), width: 333, height: 222 }] })));
+    await settle();
+    const frame = document.querySelector('.react-flow__node[data-id="n2"] [data-card-fallback=""]') as HTMLElement;
+    expect(frame.style.width).toBe('333px');
+    expect(frame.style.minHeight).toBe('222px');
   });
 });
 
+const frameOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] [data-card-fallback=""]`) as HTMLElement | null;
+const ONLINE_LINE = 'Nebula couldn’t load this node because part of the app didn’t download. Reload the page to try again.';
+const OFFLINE_LINE = 'Nebula couldn’t load this node because you’re offline. It’ll try again when you’re back online.';
+
 describe('a chunk that fails to load', () => {
-  it('ends the hold: the rest is drawn, the failed card draws nothing, a later retry that works draws it', async () => {
+  it('ends the hold: the rest is drawn, the failed card is a fallback card with its name, ports and the online line, a later retry that works draws the real card', async () => {
+    // Fake timers: a slow machine must not let the 400 ms line come due while the test runs.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     mount();
     act(() => useGraphStore.getState().loadGraph([text(), character(), shown()], [wire('n2', 'character', 'n3', 'input')]));
@@ -248,16 +312,48 @@ describe('a chunk that fails to load', () => {
     expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
     expect(holdLine()).toBeNull();
     expect(document.querySelector('.character-node')).toBeNull();
-    expect(document.querySelector('.react-flow__node[data-id="n2"]')?.textContent ?? '').toBe('');
+    const frame = frameOf('n2')!;
+    expect(frame.querySelector('.node-card-boundary__label')?.textContent).toBe('n2');
+    expect(frame.querySelector('.react-flow__handle[data-handleid="character"]')).not.toBeNull();
+    expect(frame.querySelector('.card-fallback__line')?.textContent).toBe(ONLINE_LINE);
+    // The wire into the shown card is drawn.
+    expect(domEdges()).toBe(1);
 
-    // The boundary retries on mount and on focus; fail any attempt in flight, then focus once.
+    // The fallback card retries on mount and on focus; fail any attempt in flight, then focus once.
     await act(async () => { for (const load of chunkLoads.character.slice(1)) load.reject(new Error('still offline')); await Promise.resolve(); });
+    await settle();
     const attempts = chunkLoads.character.length;
     await act(async () => { window.dispatchEvent(new Event('focus')); await Promise.resolve(); });
     expect(chunkLoads.character.length).toBeGreaterThan(attempts - 1);
     await loadCharacter(chunkLoads.character.length - 1);
     expect(document.querySelector('.character-node')).not.toBeNull();
+    expect(frameOf('n2')).toBeNull();
     expect(domNodes().sort()).toEqual(['n1', 'n2', 'n3']);
+    expect(domEdges()).toBe(1);
+    quiet.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('says so when the browser is offline, and tries again when it is back', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    mount();
+    act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+    await settle();
+    await act(async () => { chunkLoads.character[0].reject(new Error('offline')); await Promise.resolve(); });
+    await settle();
+    expect(frameOf('n2')?.querySelector('.card-fallback__line')?.textContent).toBe(OFFLINE_LINE);
+    // Neutral text, never the error red.
+    expect(frameOf('n2')?.querySelector('.card-fallback__line')?.getAttribute('class')).not.toMatch(/error|danger/);
+
+    online.mockReturnValue(true);
+    const attempts = chunkLoads.character.length;
+    await act(async () => { window.dispatchEvent(new Event('online')); await Promise.resolve(); });
+    expect(chunkLoads.character.length).toBe(attempts + 1);
+    await loadCharacter(chunkLoads.character.length - 1);
+    expect(document.querySelector('.character-node')).not.toBeNull();
+    expect(frameOf('n2')).toBeNull();
+    online.mockRestore();
     quiet.mockRestore();
   });
 });
@@ -319,13 +415,204 @@ describe('what the hold leaves alone', () => {
     act(() => useGraphStore.getState().loadGraph([node('n5', 'text-input', 'model-node'), character('n6')], []));
     await settle();
     expect(domNodes()).toEqual([]);
-    expect(holdLine()).not.toBeNull();
     expect(useGraphStore.getState().nodes.map((n) => n.id).sort()).toEqual(['n5', 'n6']);
 
     await loadCharacter();
     expect(domNodes().sort()).toEqual(['n5', 'n6']);
-    expect(holdLine()).toBeNull();
     expect(changes.filter((change) => change.type === 'remove')).toEqual([]);
     expect(useGraphStore.getState().nodes.map((n) => n.id).sort()).toEqual(['n5', 'n6']);
+  });
+});
+
+describe('what a fallback frame leaves alone', () => {
+  it('a loading frame and a failed one write nothing to the store: nodes, positions, selection and wires stay, no remove change', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const changes: Array<{ type: string; id?: string }> = [];
+    const original = useGraphStore.getState().onNodesChange;
+    useGraphStore.setState({ onNodesChange: (batch) => { changes.push(...(batch as typeof changes)); original(batch); } });
+    mount();
+    act(() => useGraphStore.getState().loadGraph([text(), shown()], []));
+    await settle();
+    act(() => useGraphStore.setState((state) => ({
+      nodes: [...state.nodes, { ...character('n2'), selected: true, position: { x: 123, y: 45 } }],
+      edges: [wire('n2', 'character', 'n3', 'input')],
+    })));
+    await settle();
+    expect(fallbacks()).toEqual(['n2']);
+    const check = () => {
+      const stored = useGraphStore.getState().nodes;
+      expect(stored.map((n) => n.id).sort()).toEqual(['n1', 'n2', 'n3']);
+      expect(stored.find((n) => n.id === 'n2')?.position).toEqual({ x: 123, y: 45 });
+      expect(stored.find((n) => n.id === 'n2')?.type).toBe('characterNode');
+      expect(stored.filter((n) => n.selected).map((n) => n.id)).toEqual(['n2']);
+      expect(useGraphStore.getState().edges).toHaveLength(1);
+      expect(changes.filter((change) => change.type === 'remove')).toEqual([]);
+    };
+    check();
+    // The frame is the selected one too.
+    expect(frameOf('n2')?.classList.contains('node-card-boundary--selected')).toBe(true);
+
+    // It fails: still the same store.
+    await act(async () => { chunkLoads.character[0].reject(new Error('offline')); await Promise.resolve(); });
+    await settle();
+    expect(frameOf('n2')?.querySelector('.card-fallback__line')).not.toBeNull();
+    check();
+    await act(async () => { for (const load of chunkLoads.character.slice(1)) load.reject(new Error('x')); await Promise.resolve(); });
+    await loadCharacter(chunkLoads.character.length - 1).catch(() => {});
+    quiet.mockRestore();
+  });
+});
+
+describe('the hold line and the reveal of a whole graph', () => {
+  const holdLinesEver = () => {
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => { const el = holdLine(); if (el) seen.push(el.textContent ?? ''); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return { seen, stop: () => observer.disconnect() };
+  };
+
+  it('a hold shorter than 400 ms never draws the line', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      const watch = holdLinesEver();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      advance(399);
+      await loadCharacter();
+      advance(2000);
+      watch.stop();
+      expect(watch.seen).toEqual([]);
+      expect(domNodes().sort()).toEqual(['n1', 'n2']);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('the node layer is covered through the hold and fades in on the spring once drawn, then the class goes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(true);
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      advance(400);
+      const line = holdLine()!;
+      expect(line.classList.contains('canvas-hold-line--out')).toBe(false);
+      await loadCharacter();
+      // Handed over, measured, no fit pending (the saved camera): the layer fades in and the line fades out together.
+      expect(domNodes().sort()).toEqual(['n1', 'n2']);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
+      expect(holdLine()?.classList.contains('canvas-hold-line--out')).toBe(true);
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+      // The spring comes from the wrapper's variables.
+      expect(wrapper().style.getPropertyValue('--spring-soft')).toMatch(/^linear\(/);
+      advance(1000);
+      expect(wrapper().className).not.toContain('reveal');
+      expect(holdLine()).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('under reduced motion the fade lasts 180 ms', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {},
+      addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      await loadCharacter();
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
+      advance(179);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
+      advance(1);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a held graph replaced by an empty canvas is uncovered at once, and the line never shows', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mount();
+      const watch = holdLinesEver();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      advance(100);
+      act(() => useGraphStore.getState().loadGraph([], []));
+      await settle();
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+      advance(2000);
+      watch.stop();
+      expect(watch.seen).toEqual([]);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a fit asked during the hold runs before the layer is shown, and the layer stays covered until it has', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finishFit: () => void = () => {};
+    fitView.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finishFit = () => resolve(true); }));
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), character()], []));
+      await settle();
+      act(() => { window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: 2 } })); });
+      await loadCharacter();
+      advance(10);
+      expect(fitView).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }));
+      // Nodes are in React Flow's tree but the fit has not finished: covered.
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(true);
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      await act(async () => { finishFit(); await Promise.resolve(); await Promise.resolve(); });
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(false);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-in')).toBe(true);
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('the hold line and reveal styles', () => {
+  const css = readFileSync(join(__dirname, '../src/styles/canvas.css'), 'utf8');
+  const rule = (selector: string, from = 0) => {
+    const at = css.indexOf(`\n${selector} {`, from);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('the line paints no background and does not use the app loading line that does', () => {
+    const line = rule('.canvas-hold-line');
+    expect(line).not.toBe('');
+    expect(line).not.toMatch(/background/);
+    expect(line).toMatch(/position:\s*absolute/);
+    expect(line).toMatch(/var\(--spring-soft\)/);
+    expect(css).not.toMatch(/workspace-loading--hold/);
+  });
+
+  it('the reduced-motion rules are 180 ms opacity fades, as the proposal bar', () => {
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)', css.indexOf('.canvas-hold-line')));
+    expect(reduced).toMatch(/\.canvas-hold-line \{\s*animation: notice-fade-in 180ms ease-out both;/);
+    expect(reduced).toMatch(/\.canvas-wrapper--reveal-in \.react-flow__viewport \{\s*animation: notice-fade-in 180ms ease-out both;/);
+    // Opacity only: no transform or scale in either fade.
+    expect(css.slice(css.indexOf('@keyframes canvas-reveal-in'), css.indexOf('@keyframes canvas-reveal-in') + 80)).not.toMatch(/transform|scale/);
+  });
+});
+
+describe('the crossfade styles', () => {
+  const css = readFileSync(join(__dirname, '../src/styles/card-fallback.css'), 'utf8');
+
+  it('fade the card in and the ghost out on the SOFT spring, opacity only, and 180 ms under reduced motion', () => {
+    expect(css).toMatch(/\.react-flow__node:has\(> \.card-fallback--ghost\) > :first-child \{\s*animation: card-swap-in var\(--spring-soft-ms\) var\(--spring-soft\) both;/);
+    expect(css).toMatch(/\.card-fallback--ghost \{[^}]*animation: card-swap-out var\(--spring-soft-ms\) var\(--spring-soft\) both;/);
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/animation: notice-fade-in 180ms ease-out both;/);
+    expect(reduced).toMatch(/animation: card-swap-out 180ms ease-out both;/);
+    expect(css.slice(css.indexOf('@keyframes card-swap-in'))).not.toMatch(/transform|scale/);
+  });
+
+  it('the ghost takes the arriving card\'s box: the frame\'s usual width and height are dropped', () => {
+    const ghost = css.match(/\n\.card-fallback--ghost \{([^}]*)\}/)?.[1] ?? '';
+    expect(ghost).toMatch(/inset: 0;/);
+    expect(ghost).toMatch(/width: auto !important;/);
+    expect(ghost).toMatch(/min-height: 0 !important;/);
   });
 });

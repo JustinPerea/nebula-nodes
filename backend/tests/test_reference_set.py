@@ -418,8 +418,11 @@ def test_frontend_component_structure() -> None:
 def test_frontend_registrations() -> None:
     """Canvas nodeTypes (canvasTypes.ts) + graphStore addNode fallback + main.py cli→RF mapping."""
     canvas = (REPO_ROOT / "frontend" / "src" / "components" / "canvasTypes.ts").read_text()
-    assert "referenceSetNode: ReferenceSetNode" in canvas
-    assert "import { ReferenceSetNode }" in canvas
+    # The card loads after first paint: canvasTypes registers its deferred
+    # handle and lib/deferredChunks.ts holds the import of the card itself.
+    assert re.search(r"referenceSetNode:[^\n]*ReferenceSetNode", canvas)
+    chunks = (REPO_ROOT / "frontend" / "src" / "lib" / "deferredChunks.ts").read_text()
+    assert "import('../components/nodes/ReferenceSetNode')" in chunks
 
     store = (REPO_ROOT / "frontend" / "src" / "store" / "graphStore.ts").read_text()
     assert "'reference-set'" in store

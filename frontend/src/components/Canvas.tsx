@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useFollowingReadOnly } from '../hooks/useFollowingReadOnly';
 import '../styles/canvas-follow.css';
 import {
@@ -33,6 +33,8 @@ import { AgentCursorLayer, AgentNodeMarks, ArrangeController, PinComposer, PinLa
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
 import { useCardHold } from '../lib/cardHold';
+import { useCanvasRevealStore } from '../store/canvasRevealStore';
+import { springCssVars, springLinear, SPRING_SOFT } from '../lib/springs';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { addDroppedFiles, fileDropInFlight } from '../lib/canvasFileDrop';
@@ -206,6 +208,51 @@ function ZoomLodController({
   return null;
 }
 
+/** The hold line shows only once the hold has lasted this long: a hold that ends sooner is never seen. */
+export const HOLD_LINE_DELAY_MS = 400;
+/** The reduced-motion fade of the reveal and the line (the proposal bar's, canvasProposals.css). */
+export const REDUCED_REVEAL_MS = 180;
+const REVEAL_SPRING_VARS = springCssVars() as CSSProperties;
+/** If a graph's fit never reports, it is shown anyway after this long (a graph must never stay hidden). */
+const REVEAL_FALLBACK_MS = 1500;
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
+/** How long the reveal's opacity fade runs: the SOFT spring, or the reduced-motion fade. */
+const revealMs = (): number => (prefersReducedMotion() ? REDUCED_REVEAL_MS : springLinear(SPRING_SOFT).durationMs);
+
+/**
+ * Ends the cover over a whole graph that was held (lib/cardHold.ts): once the
+ * graph is drawn and measured and its fit has run, `onRevealed` lets the
+ * node layer fade in. The fit is React Flow's own first fit (its queued fit
+ * resolves when the nodes are measured) or the fit an agent's edit asked for
+ * during the hold, which the handler for `nebula:graph-nodes-added` runs
+ * without animation while the layer is covered. So no frame shows nodes at a
+ * pre-fit position or zoom.
+ */
+function HoldRevealController({ pending, holding, empty, fitRunning, onRevealed }: {
+  pending: boolean;
+  holding: boolean;
+  /** The graph handed over has no node (a held graph replaced by an empty canvas): nothing to measure or fit. */
+  empty: boolean;
+  fitRunning: { current: boolean };
+  onRevealed: () => void;
+}) {
+  const nodesInitialized = useStore((s) => s.nodesInitialized);
+  const fitQueued = useStore((s) => s.fitViewQueued);
+  useEffect(() => {
+    if (!pending || holding) return undefined;
+    if (empty || (nodesInitialized && !fitQueued && !fitRunning.current)) {
+      onRevealed();
+      return undefined;
+    }
+    const timer = window.setTimeout(onRevealed, REVEAL_FALLBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [pending, holding, empty, nodesInitialized, fitQueued, fitRunning, onRevealed]);
+  return null;
+}
+
 /** Complete cross-workspace focus only after React Flow has measured the target. */
 export function CanvasFocusController() {
   const request = useUIStore((state) => state.canvasFocusRequest);
@@ -346,6 +393,35 @@ export function Canvas() {
   // still loading (lib/cardHold.ts). The store is never touched.
   const hold = useCardHold(nodes, edges);
   const drawnEdges = hold.edges as typeof edges;
+  // A whole graph that was held is covered (no nodes or wires, no zoom number)
+  // until it is drawn, measured and fitted, then its layer fades in while the
+  // hold line fades out. Written in render (set only; the reveal clears it).
+  const revealPending = useRef(false);
+  if (hold.holding) revealPending.current = true;
+  const [fading, setFading] = useState(false);
+  if (hold.holding && fading) setFading(false);
+  const covered = revealPending.current;
+  const fitRunning = useRef(false);
+  const onRevealed = useCallback(() => {
+    if (!revealPending.current) return;
+    revealPending.current = false;
+    setFading(true);
+  }, []);
+  useEffect(() => {
+    if (!fading) return undefined;
+    const timer = window.setTimeout(() => setFading(false), revealMs());
+    return () => window.clearTimeout(timer);
+  }, [fading]);
+  useLayoutEffect(() => { useCanvasRevealStore.getState().setCovered(covered); }, [covered]);
+  useLayoutEffect(() => () => useCanvasRevealStore.getState().setCovered(false), []);
+  // The line: only once the hold has lasted HOLD_LINE_DELAY_MS, and it stays through the fit.
+  const [lineDue, setLineDue] = useState(false);
+  useEffect(() => {
+    if (!covered) return undefined;
+    const timer = window.setTimeout(() => setLineDue(true), HOLD_LINE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [covered]);
+  useEffect(() => { if (!covered && !fading) setLineDue(false); }, [covered, fading]);
   const renderedEdges = useMemo(() => {
     if (!isSlavaSkin || !isExecuting) return drawnEdges;
     return drawnEdges.map((edge) => ({
@@ -453,27 +529,36 @@ export function Canvas() {
         fitAskedDuringHold.current = event;
         return;
       }
+      // The fit of a whole graph that was held runs at once, before its layer
+      // fades in, so no frame shows the nodes at a pre-fit zoom.
+      const instant = revealPending.current;
+      if (instant) fitRunning.current = true;
+      const done = () => {
+        if (!instant) return;
+        fitRunning.current = false;
+        onRevealed();
+      };
       // Driver-side flag (DEV demo runs only) to suppress the auto-fit
       // when subsequent nodes arrive. Lets the driver own the post-first-
       // node layout instead of getting clobbered by every fitView call.
       const suppressed =
         typeof window !== 'undefined' &&
         (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
-      if (suppressed) return;
+      if (suppressed) { done(); return; }
       // The person's own file drop: its nodes land where they dropped them,
       // so the camera stays put (lib/canvasFileDrop.ts).
-      if (fileDropInFlight()) return;
+      if (fileDropInFlight()) { done(); return; }
       const focusState = useUIStore.getState();
-      if (focusState.canvasFocusRequest) return;
+      if (focusState.canvasFocusRequest) { done(); return; }
       const scheduledRevision = focusState.canvasFocusRevision;
       const viewportRevision = focusState.canvasViewportRevision;
       const timer = window.setTimeout(() => {
         pendingFits.delete(timer);
         const currentFocus = useUIStore.getState();
-        if (currentFocus.canvasFocusRequest || currentFocus.canvasFocusRevision !== scheduledRevision) return;
-        if (currentFocus.canvasViewportRevision !== viewportRevision) return;
+        if (currentFocus.canvasFocusRequest || currentFocus.canvasFocusRevision !== scheduledRevision) { done(); return; }
+        if (currentFocus.canvasViewportRevision !== viewportRevision) { done(); return; }
         if (currentFocus.viewMode !== 'canvas'
-          && !(currentFocus.viewMode === 'commons' && !currentFocus.commonsEnabled)) return;
+          && !(currentFocus.viewMode === 'commons' && !currentFocus.commonsEnabled)) { done(); return; }
         const padding = computeCanvasFitPadding();
         const totalCount =
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
@@ -481,12 +566,12 @@ export function Canvas() {
             : useGraphStore.getState().nodes.length;
         // The canvas's own move: it never restarts the autosave wait.
         claimCameraMove();
-        fitView({
+        void Promise.resolve(fitView({
           padding,
-          duration: 400,
+          duration: instant ? 0 : 400,
           maxZoom: totalCount <= 1 ? FIRST_NODE_FIT_MAX_ZOOM : DEFAULT_FIT_MAX_ZOOM,
-        });
-      }, 80);
+        })).then(done, done);
+      }, instant ? 0 : 80);
       pendingFits.add(timer);
     }
     window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
@@ -494,7 +579,7 @@ export function Canvas() {
       window.removeEventListener('nebula:graph-nodes-added', onNodesAdded);
       pendingFits.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [fitView]);
+  }, [fitView, onRevealed]);
 
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
@@ -842,7 +927,8 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
-      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${readOnly ? ' canvas--read-only' : ''}`}
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${readOnly ? ' canvas--read-only' : ''}${covered ? ' canvas-wrapper--reveal-wait' : fading ? ' canvas-wrapper--reveal-in' : ''}`}
+      style={REVEAL_SPRING_VARS}
       data-read-only={readOnly || undefined}
       data-dock-open={leftDock !== null}
       tabIndex={0}
@@ -895,6 +981,7 @@ export function Canvas() {
           />
           <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
           <CanvasFocusController />
+          <HoldRevealController pending={covered} holding={hold.holding} empty={hold.nodes.length === 0} fitRunning={fitRunning} onRevealed={onRevealed} />
           {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
               floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
               panel, the toolbar's layout box: the toolbar's entry animation
@@ -918,10 +1005,12 @@ export function Canvas() {
           <ProposalBar />
         </ReactFlow>
       </NodeRemeasureContext.Provider>
-      {hold.holding ? (
-        // The same line the app shows while the workspace itself loads (App.tsx).
-        <div className="workspace-loading workspace-loading--hold" role="status" aria-live="polite">
-          Loading workspace…
+      {lineDue ? (
+        // On the canvas's own background and grid (no fill of its own): the
+        // title and node count are already up. It fades in on the SOFT spring
+        // once the hold has lasted HOLD_LINE_DELAY_MS, and out as the layer fades in.
+        <div className={`canvas-hold-line${covered ? '' : ' canvas-hold-line--out'}`} role="status" aria-live="polite">
+          Loading canvas…
         </div>
       ) : null}
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
