@@ -5884,14 +5884,15 @@ class ConnectionManager:
     async def broadcast_browser(self, data: dict[str, Any]) -> None:
         """Send only to the person's canvas sockets (never to CLI/MCP listeners)."""
         message = json.dumps(data)
-        disconnected: list[WebSocket] = []
-        for connection in list(self.browser_connections):
-            try:
-                await connection.send_text(message)
-            except Exception:
-                disconnected.append(connection)
-        for conn in disconnected:
-            self.disconnect(conn)
+        # Every socket's send at once, each bounded, as broadcast_raw does: a
+        # tab whose socket stalls can't hold the write route that told the tabs
+        # (the person's own board edit among them). One that times out or fails
+        # is closed and dropped; its tab reconnects (PR #233 pre-merge review).
+        connections = list(self.browser_connections)
+        results = await asyncio.gather(*(self._send_bounded(connection, message) for connection in connections))
+        for connection, sent in zip(connections, results):
+            if not sent:
+                self.disconnect(connection)
 
 
 manager = ConnectionManager(_STATE_DIR / KEPT_MARKER_NAME if _STATE_PATH is not None else None)
@@ -27557,6 +27558,15 @@ async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, as
         message["projectId"] = (asset or {}).get("projectId") or None
     if edit is not None:
         message.update({"version": (asset or {}).get("version"), "edit": _graph_edit_origin(), **edit})
+    if kind == "moodboard" and not deleted and asset and asset.get("id"):
+        # Every write that saves a board passes here, so a rename by any path
+        # (the PUT, an edits batch, an undo, an accepted proposal) reaches the
+        # names agents read off the cursors on it. The tabs are not told: a
+        # tab's default line is worked out once per event and fades in seconds.
+        try:
+            agent_presence.rename_board(str(asset["id"]), asset.get("name"))
+        except Exception:  # noqa: BLE001 - decoration must not break a saved write
+            logging.getLogger("nebula.presence").exception("renaming a board on its cursors failed")
     try:
         if holds_private_note(message.get("undo")):
             await manager.broadcast_browser(message)

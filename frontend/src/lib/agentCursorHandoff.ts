@@ -103,7 +103,10 @@ export class CursorHandoff {
 
   /** `layer` has `key`'s cursor on screen now: it resolved and drew it. */
   claim(key: string, layer: CursorLayer): void {
-    if (this.claims.get(key) === layer) return;
+    // Skipped only when both the layer and the screen epoch match: a view that
+    // outlives a screen change and draws on under the new epoch renews its
+    // claim, or `transits` would read it as made before the switch.
+    if (this.claims.get(key) === layer && this.claimEpochs.get(key) === this.epoch) return;
     this.claims.set(key, layer);
     this.claimEpochs.set(key, this.epoch);
     this.version += 1;

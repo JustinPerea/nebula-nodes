@@ -64,6 +64,25 @@ class LayerContext {
   }
 }
 
+/**
+ * The canvas pane's box, read once a frame however many cursors resolve in it
+ * (a layout read between transform writes forces a layout each time). The
+ * read is dropped on the next frame: the callback that clears it is queued
+ * before the cursor's own next frame, so it runs first.
+ */
+class FrameBox {
+  private box: DOMRect | null = null;
+  private element: Element | null = null;
+
+  of(dom: Element): DOMRect {
+    if (this.box && this.element === dom) return this.box;
+    this.box = dom.getBoundingClientRect();
+    this.element = dom;
+    requestAnimationFrame(() => { this.box = null; });
+    return this.box;
+  }
+}
+
 /** The canvas's React Flow store, when the layer sits inside its provider (the app's always does). */
 function useFlowStore(): FlowStoreLike | null {
   try {
@@ -106,14 +125,15 @@ export function AgentScreenLayer({ canvasMounted, env }: {
   const flowApi = useFlowStore();
   const [space] = useState<ScreenSpace>(() => {
     const resolverEnv = env ?? domEnv();
+    const paneBox = new FrameBox();
     const onCanvas = flowApi ? canvasSpace(flowApi as unknown as Parameters<typeof canvasSpace>[0]) : null;
     return screenSpace({
       // Where a canvas node is on screen, while it is inside the canvas's box.
-      canvasPoint: (anchor) => {
+      canvasPoint: (anchor, waitRest = false) => {
         const dom = onCanvas?.pane();
-        const flow = onCanvas?.resolve(anchor);
+        const flow = waitRest ? onCanvas?.waitRest?.(anchor) : onCanvas?.resolve(anchor);
         if (!onCanvas || !dom || !flow) return null;
-        const box = dom.getBoundingClientRect();
+        const box = paneBox.of(dom);
         const at = onCanvas.toClient(flow, box);
         const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
         return inside ? at : null;

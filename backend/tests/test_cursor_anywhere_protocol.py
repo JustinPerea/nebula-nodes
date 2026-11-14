@@ -502,3 +502,163 @@ def test_agent_start_passes_the_names_along():
         project=None, caller_id=None, via="mcp")
     assert part["agents"][0]["anchorNames"] == {"board": "Desert light"}
     assert "anchorNames" not in part["agents"][1]
+
+
+# -- pre-merge review (B1): an unbounded image reference is refused, never a 500 -----------
+
+_IMAGE_REFS = ["9" * 5000, "#" + "9" * 5000, "x" * 10_000, "9" * 65]
+
+
+def _through_the_route(client, monkeypatch):
+    """The MCP tool, with its HTTP call made on the test client: a 4xx raises as the live call does."""
+    def call(method, path, ctx, **kwargs):
+        response = client.request(method, path, headers=AGENT, **kwargs)
+        if response.status_code >= 400:
+            raise ValueError(response.json()["detail"])
+        return response.json()
+    monkeypatch.setattr(mcp_server, "_canvas_call", call)
+
+
+@pytest.mark.parametrize("ref", _IMAGE_REFS, ids=["digits", "hash-digits", "long-id", "just-over-64"])
+def test_a_long_image_reference_is_a_refusal_through_the_route_and_the_mcp_tool(api, monkeypatch, ref):
+    client, sent, _, _ = api
+    board = _create(client)
+    refused = client.post("/api/canvas/cursor", headers=AGENT,
+                          json={"target": {"surface": "moodboard", "board": board["id"], "image": ref}})
+    assert refused.status_code == 422, refused.text[:200]
+    assert refused.json()["detail"] == "target.image must be an image's number or id"
+    _through_the_route(client, monkeypatch)
+    with pytest.raises(ValueError) as said:
+        mcp_server.point_at(moodboard=board["id"], image=ref)
+    assert str(said.value) == "target.image must be an image's number or id"
+    assert [event for event in sent if event.get("type") == "agentPresence"] == []
+
+
+def test_a_long_item_id_is_a_refusal_too(api):
+    client, _, _, _ = api
+    board = _create(client)
+    for item in (board["id"] + "/" + "9" * 5000, "9" * 10_000):
+        refused = client.post("/api/canvas/cursor", headers=AGENT,
+                              json={"target": {"surface": "moodboard", "itemId": item}})
+        assert refused.status_code == 422, refused.text[:200]
+
+
+def test_an_image_reference_up_to_an_id_s_length_still_names_an_image():
+    long_id = "i" * 64
+    boards = [{"id": "b1", "name": "Desert light", "images": [{"id": long_id}]}]
+    assert parse_surface_target({"surface": "moodboard", "board": "b1", "image": long_id}, boards)[0]["itemId"] == f"b1/{long_id}"
+    assert parse_surface_target({"surface": "moodboard", "board": "b1", "image": 1}, boards)[0]["itemId"] == f"b1/{long_id}"
+
+
+def test_an_int_past_the_digit_limit_is_a_refusal_not_a_value_error():
+    with pytest.raises(PresenceError, match="image must be an image's number or id"):
+        parse_surface_target({"surface": "moodboard", "board": "b1", "image": 10 ** 5000}, BOARDS)
+
+
+# -- pre-merge review (B2): telling the tabs is bounded like every other broadcast ------------
+
+def test_a_stalled_tab_socket_does_not_hold_broadcast_browser_and_is_dropped(monkeypatch):
+    import asyncio
+    import json
+
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "SOCKET_SEND_TIMEOUT_SECONDS", 0.2)
+
+    class Socket:
+        headers: dict[str, str] = {}
+        query_params: dict[str, str] = {}
+
+        def __init__(self, stall: bool) -> None:
+            self.stall, self.sent, self.closed = stall, [], False
+
+        async def send_text(self, text: str) -> None:
+            if self.stall:
+                await asyncio.Event().wait()
+            self.sent.append(json.loads(text))
+
+        async def close(self) -> None:
+            self.closed = True
+
+    async def run():
+        manager = main_module.ConnectionManager()
+        stalled, healthy, other = Socket(True), Socket(False), Socket(False)
+        manager.active_connections = [stalled, healthy, other]
+        manager.browser_connections = {stalled, healthy}
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        # Its own ceiling, so an unbounded send fails this test rather than hanging it.
+        await asyncio.wait_for(manager.broadcast_browser({"type": "agentPresenceLeave", "cursors": []}), timeout=3)
+        return manager, stalled, healthy, other, loop.time() - started
+
+    manager, stalled, healthy, other, elapsed = asyncio.run(run())
+    assert healthy.sent == [{"type": "agentPresenceLeave", "cursors": []}]
+    assert other.sent == []  # never a CLI/MCP listener
+    assert stalled.closed and stalled.sent == []
+    assert stalled not in manager.active_connections and stalled not in manager.browser_connections
+    assert elapsed < 2.0
+
+
+def test_a_failing_tab_socket_is_dropped_by_broadcast_browser_as_before(monkeypatch):
+    import asyncio
+
+    import main as main_module
+
+    class Broken:
+        headers: dict[str, str] = {}
+        query_params: dict[str, str] = {}
+
+        async def send_text(self, text: str) -> None:
+            raise RuntimeError("gone")
+
+    async def run():
+        manager = main_module.ConnectionManager()
+        broken = Broken()
+        manager.active_connections = [broken]
+        manager.browser_connections = {broken}
+        await manager.broadcast_browser({"type": "x"})
+        return manager
+
+    manager = asyncio.run(run())
+    assert manager.active_connections == [] and manager.browser_connections == set()
+
+
+# -- pre-merge review (B3): a renamed board is renamed on the cursors on it -----------------
+
+def _names_agents_read(presence) -> list[dict]:
+    """What look, context and agents read off a cursor: the active list, and the tabs' replay."""
+    return [cursor["anchorNames"] for cursor in presence.active() + presence.replay() if cursor.get("anchorNames")]
+
+
+def test_a_renamed_board_is_renamed_on_the_cursors_on_it_by_the_put_and_by_an_undo(api):
+    client, _, presence, _ = api
+    board = _create(client)
+    image = board["images"][1]
+    assert _point(client, {"surface": "moodboard", "board": board["id"], "image": 2}).status_code == 200
+    other = _create(client, name="Elsewhere")
+    assert _point(client, {"surface": "moodboard", "board": other["id"]}, ).status_code == 200  # same agent: moves its cursor
+    assert _point(client, {"surface": "moodboard", "board": board["id"], "image": 2}).status_code == 200
+    assert _names_agents_read(presence) == [{"board": "Dusk dunes", "image": 2}] * 2
+    # The person renames it: no cursor event is made.
+    put = client.put(f"/api/moodboards/{board['id']}", json={"name": "Dawn   dunes", "baseVersion": board["version"]})
+    assert put.status_code == 200, put.text
+    assert _names_agents_read(presence) == [{"board": "Dawn dunes", "image": 2}] * 2
+    roster = client.get("/api/canvas/agents").json()["agents"]
+    assert [row["cursor"]["surface"]["anchorNames"] for row in roster] == [{"board": "Dawn dunes", "image": 2}]
+    # The undo of that rename, as an edits batch, renames it back.
+    undone = client.post(f"/api/moodboards/{board['id']}/edits",
+                         json={"ops": put.json()["undo"]["ops"], "baseVersion": put.json()["version"]})
+    assert undone.status_code == 200, undone.text
+    assert _names_agents_read(presence) == [{"board": "Dusk dunes", "image": 2}] * 2
+    assert image["id"]
+
+
+def test_renaming_one_board_leaves_the_cursors_on_another_alone():
+    presence = AgentPresence(clock=Clock())
+    presence.point(CLAUDE, target=IMAGE, names=NAMES)
+    codex = identify({"X-Nebula-Agent": "Codex"})
+    presence.point(codex, target={"surface": "moodboard", "itemId": "b2"}, names={"board": "Dusk"})
+    assert presence.rename_board("b1", "Desert dawn") == 1
+    assert presence.rename_board("b1", "Desert dawn") == 0  # nothing to change the second time
+    names = {cursor["name"]: cursor["anchorNames"] for cursor in presence.active()}
+    assert names == {"Claude Code": {"board": "Desert dawn", "image": 3, "part": "Note"}, "Codex": {"board": "Dusk"}}

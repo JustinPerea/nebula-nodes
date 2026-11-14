@@ -165,7 +165,7 @@ export interface ScreenSpaceOptions {
    *  drawn or is outside the canvas's box: the screen layer's flight back to
    *  the canvas aims here while the canvas is mounted (GM r137). Absent: a
    *  canvas anchor resolves to nothing while the canvas is mounted. */
-  canvasPoint?: (anchor: AgentCursorAnchor) => Point | null;
+  canvasPoint?: (anchor: AgentCursorAnchor, waitRest?: boolean) => Point | null;
   /** The item this anchor names no longer exists (a removed image): the
    *  cursor holds its spot, GM r4. Decided by the caller; the resolver only
    *  takes it as an input. */
@@ -381,6 +381,9 @@ export function screenSpace({ resolver, measure, watch, pane, canvasMounted, can
     },
     // The same read as this frame's resolve: a cursor's chain is its own.
     chainPoint: (anchor, owner) => read(anchor, owner)?.point ?? resolutionPoint(locate(anchor)),
+    // A node whose header waits: the point the canvas layer draws it at (the
+    // header's left end), so a flight back to it lands where it will rest.
+    waitRest: (anchor) => (!('surface' in anchor) && canvasMounted() && canvasPoint ? canvasPoint(anchor, true) : null),
     carried: (anchor, owner) => read(anchor, owner)?.same === true,
     edgeToward: (anchor, owner) => {
       const resolution = read(anchor, owner)?.resolution;

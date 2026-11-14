@@ -340,12 +340,26 @@ def _find_board(ref: str, boards: Collection[Mapping[str, Any]], label: str) -> 
     raise PresenceError(f"No moodboard {_quoted(ref)} here. {_board_list(boards)}")
 
 
+_IMAGE_REF_CHARS = 64
+
+
 def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, int]:
     """An image of ``board`` by id, else by its number (``12`` or ``#12``,
     1-based, as the Studio numbers them): its id and its number."""
     if isinstance(ref, bool) or not isinstance(ref, (str, int)):
         raise PresenceError(f"{label}.image must be an image's number or id")
-    text = str(ref).strip()
+    # Ids are at most 64 characters and a number is far shorter: anything longer
+    # is refused before it is parsed (``int()`` raises past 4,300 digits, a 500)
+    # and before it is echoed. An int is checked by size, not by ``str()``, which
+    # raises for the same reason.
+    if isinstance(ref, int):
+        if abs(ref) >= 10 ** _IMAGE_REF_CHARS:
+            raise PresenceError(f"{label}.image must be an image's number or id")
+        text = str(ref)
+    else:
+        text = ref.strip()
+        if len(text) > _IMAGE_REF_CHARS:
+            raise PresenceError(f"{label}.image must be an image's number or id")
     images = [image for image in board.get("images") or [] if isinstance(image, Mapping)]
     for index, image in enumerate(images):
         if str(image.get("id")) == text:
@@ -1038,6 +1052,31 @@ class AgentPresence:
                         # Where the node was is where it is now: its arrival stays.
                         if (slot.anchor or {}).get("nodeId") == node_id:
                             slot.anchor = dict(fallback)
+
+    def rename_board(self, board_id: str, name: Any) -> int:
+        """A board's name changed (the person renamed it, an edit batch or an
+        undo did): every cursor on the board or one of its images keeps the
+        new name in its stored names, which agents read in ``look``,
+        ``context`` and ``agents``. Returns how many were changed."""
+        shown = " ".join(str(name or board_id).split())[:80]
+        changed = 0
+
+        def renamed(target: Mapping[str, Any] | None, names: Any) -> bool:
+            ids = surface_ids(target) if target is not None else None
+            if ids is None or ids[0] != board_id or not isinstance(names, dict) or "board" not in names:
+                return False
+            if names["board"] == shown:
+                return False
+            names["board"] = shown
+            return True
+
+        for value in self._agents.values():
+            changed += renamed(value["target"], value.get("anchorNames"))
+        for slots in self._slots.values():
+            for slot in slots.values():
+                if slot.event is not None:
+                    changed += renamed(slot.target, slot.event.get("anchorNames"))
+        return changed
 
     def forget_board(self, board_id: str, gone: list[dict[str, Any]] | None = None) -> int:
         """Cursors on a deleted board, or on one of its images, leave, as a

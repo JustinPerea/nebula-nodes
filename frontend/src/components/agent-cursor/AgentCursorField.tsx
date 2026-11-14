@@ -1582,7 +1582,13 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       const z = zoomRef.current;
       const at = space.toClient(m.pos, field.paneRect(dom));
       if (!at) return;
-      if (!final) handoffEpoch.current = cursorHandoff.epoch;
+      if (!final) {
+        handoffEpoch.current = cursorHandoff.epoch;
+        // A view that outlives a screen change and draws on holds its claim
+        // under the new epoch (only if this layer still holds it: a held view
+        // never takes the cursor back from the layer that has it).
+        if (cursorHandoff.claimedBy(cursor.key) === space.layer) cursorHandoff.claim(cursor.key, space.layer);
+      }
       cursorHandoff.write(cursor.key, {
         layer: space.layer, at, velocity: { x: m.vel.x * z, y: m.vel.y * z }, opacity: m.opacity.x, lean: m.lean.x,
       }, handoffEpoch.current);

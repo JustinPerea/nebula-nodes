@@ -52,6 +52,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
 import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLayer';
 import { cursorHandoff, CursorHandoff, HANDOFF_FRESH_MS } from '../src/lib/agentCursorHandoff';
+import { HEADER_ICON_X } from '../src/lib/agentCursorMotion';
+import { useCanvasProposalsStore, type ProposalEntry } from '../src/store/canvasProposalsStore';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { useUIStore } from '../src/store/uiStore';
 
@@ -481,6 +483,120 @@ describe('the way back stays in the top layer over a dock (GM r137, ruling 1)', 
     run(40);
     expect(drawn()).toHaveLength(1);
     expect(tipOf(screenCursor()!)).toEqual(held);
+  });
+});
+
+describe('the way back after a screen change (PR #233 pre-merge review, F1)', () => {
+  const DOCK = { left: 900, top: 150, right: 1115, bottom: 700 };
+  const overDock = (p: { x: number; y: number }) => p.x >= DOCK.left && p.x <= DOCK.right && p.y >= DOCK.top && p.y <= DOCK.bottom;
+  const clientTip = (el: HTMLElement) => (el === screenCursor() ? tipOf(el)! : toClient(tipOf(el)!));
+
+  /** The cursor is on a moodboard tile while the person is in a Studio (the
+   *  screen layer claims it there); the person goes back to the canvas with
+   *  the Moodboard dock open, and the same view redraws it on the dock. */
+  function pointedInStudioThenBackOnCanvas() {
+    putTile(TILE);
+    act(() => { useUIStore.setState({ viewMode: 'moodboard-editor' }); });
+    const view = renderBoth(false);
+    send(event(onTile()));
+    flush();
+    act(() => { useUIStore.setState({ viewMode: 'canvas' }); });
+    view.rerender(<Both canvasMounted={true} />);
+    run(30);
+  }
+
+  it('still flies a cursor that was on a surface before the screen change under the dock', () => {
+    pointedInStudioThenBackOnCanvas();
+    expect(cursorHandoff.epoch).toBeGreaterThan(0);
+    send(event());
+    let overFrames = 0;
+    for (let frame = 0; frame < 150; frame += 1) {
+      step(1);
+      const cursors = drawn();
+      expect(cursors).toHaveLength(1);
+      if (overDock(clientTip(cursors[0]))) {
+        overFrames += 1;
+        expect(cursors[0]).toBe(screenCursor());
+      }
+    }
+    expect(overFrames).toBeGreaterThan(5);
+    expect(drawn()).toEqual([canvasCursor()]);
+  });
+
+  it('a claim renewed under a new epoch notifies once and does not make an old entry valid', () => {
+    const registry = new CursorHandoff(() => 0);
+    let t = 0;
+    registry.now = () => t;
+    let calls = 0;
+    registry.onClaim(() => { calls += 1; });
+    registry.write('a', { layer: 'screen', at: { x: 1, y: 2 }, velocity: { x: 0, y: 0 }, opacity: 1, lean: 0 });
+    registry.claim('a', 'screen');
+    registry.bump();
+    expect(registry.transits('a', 1)).toBe(false);
+    registry.claim('a', 'screen');
+    registry.claim('a', 'screen');
+    expect(calls).toBe(2);
+    expect(registry.transits('a', 1)).toBe(true);
+    t = HANDOFF_FRESH_MS * 50;
+    expect(registry.take('a', 'canvas')).toBeNull(); // written under the old epoch
+  });
+});
+
+describe('the way back to a node that waits (PR #233 pre-merge review, F2 and F3)', () => {
+  /** n1's header while it shows "Waiting for your OK": where the canvas layer draws a cursor on it. */
+  const WAIT = { x: 400 + HEADER_ICON_X, y: 300 + 44 };
+  const holdWait = (id: string) => act(() => {
+    const entry = {
+      view: { id, status: 'open', agent: { id: 'claude', name: 'Claude', color: '#E8825A', verified: true }, expiresAt: 1_700_000_000_000 + 60_000,
+        wait: { nodeIds: ['n1'], barLine: 'x', names: [] } },
+      acceptKey: 'k',
+    } as unknown as ProposalEntry;
+    useCanvasProposalsStore.setState({ synced: true, proposals: { [id]: entry } });
+  });
+  afterEach(() => { useCanvasProposalsStore.getState().clear(); });
+
+  it('lands at the wait rest in the screen layer, and the canvas layer takes it there with no second flight', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event(onTile()));
+    run(120);
+    holdWait('p1');
+    send(event({ action: 'propose', proposalId: 'p1' }));
+    let lastScreen: { x: number; y: number } | null = null;
+    const canvasFrames: { x: number; y: number }[] = [];
+    for (let frame = 0; frame < 160; frame += 1) {
+      step(1);
+      const el = drawn()[0];
+      if (!el) continue;
+      if (el === screenCursor()) lastScreen = tipOf(el);
+      else canvasFrames.push(toClient(tipOf(el)!));
+    }
+    expect(lastScreen).not.toBeNull();
+    expect(dist(lastScreen!, toClient(WAIT))).toBeLessThan(2);
+    expect(canvasFrames.length).toBeGreaterThan(5);
+    for (const at of canvasFrames) expect(dist(at, toClient(WAIT))).toBeLessThan(2);
+  });
+
+  it('reads the canvas pane\'s box once a frame with two cursors in transit', () => {
+    putTile(TILE);
+    renderBoth(true);
+    send(event(onTile()));
+    send(event({ agent: { id: 'codex', name: 'Codex', color: '#4B8BF5', verified: true }, ...onTile() }));
+    run(150);
+    const read = vi.fn(pane.dom!.getBoundingClientRect);
+    pane.dom!.getBoundingClientRect = read;
+    send(event());
+    send(event({ agent: { id: 'codex', name: 'Codex', color: '#4B8BF5', verified: true } }));
+    let inTransit = 0;
+    for (let frame = 0; frame < 40; frame += 1) {
+      read.mockClear();
+      step(1);
+      const flying = allCursors().filter((el) => el.closest('.agent-cursor-layer--screen') && el.style.transform !== '');
+      if (flying.length < 2) continue; // the canvas layer's own one read, when it takes a cursor, is not this layer's
+      inTransit += 1;
+      expect(read.mock.calls.length).toBeLessThanOrEqual(1);
+    }
+    expect(inTransit).toBeGreaterThan(5);
   });
 });
 
