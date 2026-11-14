@@ -236,15 +236,15 @@ function HoldRevealController({ pending, holding, empty, fitOwed, onRevealed }: 
   holding: boolean;
   /** The graph handed over has no node (a held graph replaced by an empty canvas): nothing to measure or fit. */
   empty: boolean;
-  /** A fit is owed or running (stashed during the hold, or scheduled to run before the reveal): no reveal until it is done. */
-  fitOwed: { current: boolean };
+  /** A fit is owed or running (stashed during the hold, being replayed, or scheduled to run before the reveal): no reveal until it is done. */
+  fitOwed: () => boolean;
   onRevealed: () => void;
 }) {
   const nodesInitialized = useStore((s) => s.nodesInitialized);
   const fitQueued = useStore((s) => s.fitViewQueued);
   useEffect(() => {
     if (!pending || holding) return undefined;
-    if (empty || (nodesInitialized && !fitQueued && !fitOwed.current)) {
+    if (empty || (nodesInitialized && !fitQueued && !fitOwed())) {
       onRevealed();
       return undefined;
     }
@@ -402,8 +402,15 @@ export function Canvas() {
   const [fading, setFading] = useState(false);
   if (hold.holding && fading) setFading(false);
   const covered = revealPending.current;
-  // A fit is owed or running (see HoldRevealController); the fit handler sets and clears it.
-  const fitOwed = useRef(false);
+  // A fit is owed or running (see HoldRevealController). Three things owe one, each cleared by
+  // its own owner, so a fit that owes nothing (one for a node added to a shown graph) can end
+  // without cancelling another's: an event stashed during a hold (fitAskedDuringHold, below),
+  // that event being replayed until the handler has taken it, and instant fits not yet done.
+  const fitAskedDuringHold = useRef<Event | null>(null);
+  const replaying = useRef(false);
+  const instantFits = useRef(0);
+  const fitOwed = useCallback(
+    () => fitAskedDuringHold.current !== null || replaying.current || instantFits.current > 0, []);
   const onRevealed = useCallback(() => {
     if (!revealPending.current) return;
     revealPending.current = false;
@@ -519,14 +526,18 @@ export function Canvas() {
   // render of that update has been flushed before a timer runs.
   const holdingNow = useRef(false);
   holdingNow.current = hold.holding;
-  const fitAskedDuringHold = useRef<Event | null>(null);
+  const replayed = useRef(new WeakSet<Event>());
   useEffect(() => {
     if (hold.holding || !fitAskedDuringHold.current) return;
     const asked = fitAskedDuringHold.current;
     fitAskedDuringHold.current = null;
-    window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', {
+    const replay = new CustomEvent('nebula:graph-nodes-added', {
       detail: asked instanceof CustomEvent ? asked.detail : undefined,
-    }));
+    });
+    // Owed until the handler takes it (it decides on a timer).
+    replayed.current.add(replay);
+    replaying.current = true;
+    window.dispatchEvent(replay);
   }, [hold.holding]);
   useEffect(() => {
     const pendingFits = new Set<number>();
@@ -537,10 +548,13 @@ export function Canvas() {
       // The fit of a whole graph that was held runs at once, before its layer
       // fades in, so no frame shows the nodes at a pre-fit zoom.
       const instant = revealPending.current;
-      if (instant) fitOwed.current = true;
+      if (instant) instantFits.current += 1;
+      let ended = false;
       const done = () => {
-        fitOwed.current = false;
-        if (instant) onRevealed();
+        if (!instant || ended) return;
+        ended = true;
+        instantFits.current -= 1;
+        onRevealed();
       };
       if (at.suppressed) { done(); return; }
       if (at.fileDrop) { done(); return; }
@@ -586,11 +600,12 @@ export function Canvas() {
       };
       const decide = window.setTimeout(() => {
         pendingFits.delete(decide);
+        // A replayed event is owed until here; from here its stash or its fit owes it.
+        if (replayed.current.has(event)) replaying.current = false;
         // A whole graph is held: the fit would frame a graph that is not on
-        // screen yet. It is owed, and runs when the hold lets go.
+        // screen yet. It is owed (fitOwed), and runs when the hold lets go.
         if (holdingNow.current) {
           fitAskedDuringHold.current = event;
-          fitOwed.current = true;
           return;
         }
         runFit(event, at);

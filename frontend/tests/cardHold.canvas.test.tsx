@@ -679,6 +679,40 @@ describe('the fit of a held graph', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('a fit that owes nothing ends without cancelling the fit a held graph is owed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finishFit: () => void = () => {};
+    const measured = { measured: { width: 100, height: 60 } };
+    try {
+      mount();
+      act(() => useGraphStore.getState().loadGraph([text(), shown()], []));
+      await settle();
+      advance(2000);
+      // A fit for the shown graph is waiting on its 80 ms timer...
+      act(() => { window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: 2 } })); });
+      advance(10);
+      // ...when a whole graph arrives, is held, and asks for its own fit.
+      act(() => useGraphStore.getState().loadGraph([{ ...text(), ...measured }, { ...character(), ...measured }], []));
+      await settle();
+      act(() => { window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: 2 } })); });
+      advance(10);
+      // The first fit's timer ends (it owes nothing): the held graph's fit is still owed.
+      advance(100);
+      fitView.mockClear();
+      fitView.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finishFit = () => resolve(true); }));
+      await loadCharacter();
+      expect(domNodes().sort()).toEqual(['n1', 'n2']);
+      expect(wrapper().classList.contains('canvas-wrapper--reveal-wait')).toBe(true);
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      advance(10);
+      expect(fitView).toHaveBeenCalledTimes(1);
+      expect(fitView).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }));
+      expect(useCanvasRevealStore.getState().covered).toBe(true);
+      await act(async () => { finishFit(); await Promise.resolve(); await Promise.resolve(); });
+      expect(useCanvasRevealStore.getState().covered).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('a fit asked for a node added to a shown graph runs as on main, at once, not after its chunk', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
@@ -742,7 +776,9 @@ describe('the hold line and reveal styles', () => {
   it('covered nodes are not live: the covered node layer is hidden, not only transparent', () => {
     const layer = rule('.canvas-wrapper--reveal-wait .react-flow__viewport');
     expect(layer).toMatch(/opacity:\s*0;/);
-    expect(layer).toMatch(/visibility:\s*hidden;/);
+    // React Flow puts `visibility: visible` inline on every measured node, so a value the
+    // nodes inherit from the layer loses: the rule names the descendants and is !important.
+    expect(css).toMatch(/\.canvas-wrapper--reveal-wait \.react-flow__viewport,\s*\.canvas-wrapper--reveal-wait \.react-flow__viewport \* \{\s*visibility: hidden !important;\s*\}/);
     // The reveal's fade is on the layer that is shown again.
     expect(rule('.canvas-wrapper--reveal-in .react-flow__viewport')).not.toMatch(/visibility:\s*hidden/);
   });

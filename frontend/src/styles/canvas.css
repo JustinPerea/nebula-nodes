@@ -396,10 +396,16 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 /* The node layer: nodes and wires are the React Flow viewport. Covered nodes
    are not live: visibility hidden takes them out of clicks, drags and the tab
    order (React Flow still measures a hidden element; only display: none gives
-   it no size). */
+   it no size). React Flow sets `visibility: visible` inline on each measured
+   node, which would win over a value inherited from the layer, so the rule
+   names every descendant and is !important. */
 .canvas-wrapper--reveal-wait .react-flow__viewport {
   opacity: 0;
-  visibility: hidden;
+}
+
+.canvas-wrapper--reveal-wait .react-flow__viewport,
+.canvas-wrapper--reveal-wait .react-flow__viewport * {
+  visibility: hidden !important;
 }
 
 .canvas-wrapper--reveal-in .react-flow__viewport {
