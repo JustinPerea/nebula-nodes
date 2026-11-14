@@ -766,6 +766,20 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   border-top: 1px solid var(--sr-edge, rgb(255 255 255 / 0.08));
 }
 
+/* The person lock's line under the buttons ("You can review this when this tab
+   is connected as you."). It sits in the card's column, so it takes the
+   footer's own inset (16 px a side) and its content height: the shared
+   .person-lock-line rule's `flex-basis: 100%` is a row wrapper's, and in this
+   column it asked for the card's whole height, squeezed the scrolling note
+   under the footer and left the line at the card's edge (GM PR #212 r6, ruling
+   3; tests/proposalBarHeldLine.test.ts). */
+/* One class more than .person-lock-line, which loads after this file. */
+.proposal-bar > .proposal-bar__held-line {
+  flex: 0 0 auto;
+  margin: -4px 0 0;
+  padding: 0 16px 12px;
+}
+
 .proposal-bar__decide {
   display: inline-flex;
   flex-shrink: 0;

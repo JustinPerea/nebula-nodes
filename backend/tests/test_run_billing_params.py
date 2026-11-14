@@ -60,7 +60,7 @@ def client(monkeypatch, person, tmp_path):
     monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
     monkeypatch.setattr(main.node_route, "route_unavailable", lambda *args, **kwargs: None)
     test_client = TestClient(main.app)
-    limits = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": None, "models": {}}}
+    limits = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": None, "dailyTotalUsd": None, "models": {}}}
     assert test_client.put("/api/settings", json=limits, headers=PERSON).status_code == 200
     yield test_client
     test_client.put("/api/settings", json={"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "models": {}}},

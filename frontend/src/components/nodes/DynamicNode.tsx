@@ -23,6 +23,8 @@ import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import { useCardSelection } from '../../hooks/useCardSelection';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
+import { NodeWaitSwap } from './NodeWaitSwap';
+import { nodeWaitHeaderProps, useNodeWait } from '../../lib/nodeWaitHeader';
 import { useCardWidthSpring, useNodeRemeasure } from '../../lib/cardWidthSpring';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
@@ -45,6 +47,8 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const { selectedInUi, inspectorOpen } = useCardSelection(id);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
+  // A run the daily total holds waits on this node: its header says so (NodeWaitSwap).
+  const nodeWait = useNodeWait(id);
   const actionSlot = useSelectionActionSlot(id);
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
@@ -161,7 +165,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
       {/* Card — visible content surface, only target of skin background/border. */}
       <div className="model-node__card" data-node-inspector-anchor={id} ref={cardRef}>
-      <div className="model-node__header">
+      <div className="model-node__header" {...nodeWaitHeaderProps(id, nodeWait)}>
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
@@ -169,6 +173,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           defaultTitle={definition ? canvasTitle(definition) : undefined} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
+        <NodeWaitSwap nodeId={id} wait={nodeWait} />
       </div>
 
       {/* Model badge */}

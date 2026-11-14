@@ -53,6 +53,8 @@ import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { NodeWaitSwap } from './NodeWaitSwap';
+import { nodeWaitHeaderProps, useNodeWait } from '../../lib/nodeWaitHeader';
 import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 
@@ -118,6 +120,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const { selectedInUi, inspectorOpen } = useCardSelection(id);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
+  // A run the daily total holds waits on this node: its header says so (NodeWaitSwap).
+  const nodeWait = useNodeWait(id);
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const entranceClass = useSlavaNodeEntranceClass();
   // A route-table node's provider chip (ProviderSwitcher): it counts the
@@ -459,7 +463,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
        * Restraint skin moves the dark-glass surface here so the type label
        * and settings bar can float above the card cleanly. */}
       <div className="model-node__card" data-node-inspector-anchor={id} ref={cardRef}>
-      <div className="model-node__header">
+      <div className="model-node__header" {...nodeWaitHeaderProps(id, nodeWait)}>
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
@@ -467,31 +471,33 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
-        {/* GM r23 (b) on PR #199: a node with a tab-local id (added while the
-            canvas is kept) has no id an agent can address yet, so the slot
-            stays empty, keeping its space (nodes.css) so the header doesn't
-            shift when the saved id arrives. Nothing to drag into the chat. */}
-        {isBackendNodeId(id) ? (
-          <span
-            className="model-node__id-chip nodrag"
-            title="Drag into the chat panel to reference this node"
-            draggable
-            onDragStart={(e) => {
-              e.stopPropagation();
-              e.dataTransfer.setData('application/nebula-node-ref', `@${id}`);
-              e.dataTransfer.setData('text/plain', `@${id}`);
-              e.dataTransfer.effectAllowed = 'copy';
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            {id}
-          </span>
-        ) : <span className="model-node__id-chip model-node__id-chip--pending" aria-hidden="true" />}
-        {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
-        {switchable && (
-          <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"
-            wired={wiredCounts} label={nodeData.label} onPick={onProviderPick} />
-        )}
+        <NodeWaitSwap nodeId={id} wait={nodeWait}>
+          {/* GM r23 (b) on PR #199: a node with a tab-local id (added while the
+              canvas is kept) has no id an agent can address yet, so the slot
+              stays empty, keeping its space (nodes.css) so the header doesn't
+              shift when the saved id arrives. Nothing to drag into the chat. */}
+          {isBackendNodeId(id) ? (
+            <span
+              className="model-node__id-chip nodrag"
+              title="Drag into the chat panel to reference this node"
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData('application/nebula-node-ref', `@${id}`);
+                e.dataTransfer.setData('text/plain', `@${id}`);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {id}
+            </span>
+          ) : <span className="model-node__id-chip model-node__id-chip--pending" aria-hidden="true" />}
+          {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
+          {switchable && (
+            <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"
+              wired={wiredCounts} label={nodeData.label} onPick={onProviderPick} />
+          )}
+        </NodeWaitSwap>
         {isSlavaSkin && downloadableOutput && (
           <button
             type="button"

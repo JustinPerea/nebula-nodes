@@ -1688,7 +1688,9 @@ describe('Settings — preferences', () => {
     fireEvent.change(select, { target: { value: 'off' } });
     expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ runCostConfirmUsd: null }));
-    expect(screen.getByText(/There is no per-run limit/)).toBeInTheDocument();
+    // GM - Design (PR #212 r2, item 5): "list price", and no "There is no per-run limit" (the bar cites per-run limits).
+    expect(screen.queryByText(/There is no per-run limit/)).toBeNull();
+    expect(document.body.textContent).toContain('before running any node without a list price. Your own runs aren\u2019t limited.');
     useUIStore.getState().setRunCostConfirmUsd(1);
   });
 
@@ -1751,22 +1753,26 @@ describe('Settings — preferences', () => {
     const rows = await screen.findAllByTestId('settings-personal-spend-row');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('Claude (your setup)');
-    expect(rows[0]).toHaveTextContent('$1.25 in the last 24 h, inside the budget above');
-    expect(rows[1]).toHaveTextContent('$0.00 in the last 24 h, 2 Krea plan runs, inside the budget above');
+    expect(rows[0]).toHaveTextContent('$1.25 in the last 24 hours, inside the budget above');
+    expect(rows[1]).toHaveTextContent('$0.00 in the last 24 hours, 2 Krea plan runs, inside the budget above');
     expect(screen.queryByText(/Codex \(your setup\)/)).not.toBeInTheDocument();
   });
   it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 3.4, kreaPlanRuns: 2 }, apps: [] });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
     openTab('Preferences');
-    expect(screen.getByText(/Shared by every agent that isn.t a Nebula chat: Claude Desktop, terminal tools, scripts/))
+    // findBy: the Preferences tab loads lazily, so this works run alone too.
+    expect(await screen.findByText(/Shared by every agent that isn.t a Nebula chat: Claude Desktop, terminal tools, scripts/))
       .toBeInTheDocument();
     expect(screen.getByText(/restarting Nebula doesn.t reset it/)).toBeInTheDocument();
-    expect(await screen.findByTestId('settings-agent-outside-spent')).toHaveTextContent('$3.40 in the last 24 h, 2 Krea plan runs');
+    expect(await screen.findByTestId('settings-agent-outside-spent')).toHaveTextContent('$3.40 in the last 24 hours, 2 Krea plan runs.');
     const outside = screen.getByRole('combobox', { name: 'Agents outside Nebula chats' });
     // Unset, it follows the per-session budget.
     expect(outside).toHaveValue('session');
-    expect(within(outside).getByRole('option', { name: 'Same as a chat ($10)' })).toBeInTheDocument();
+    expect(within(outside).getByRole('option', { name: 'Same as chats · $10' })).toBeInTheDocument();
+    // GM - Design, 2026-10-31: the select sits under its help at its own width, never cut off.
+    expect(outside.closest('.settings-pref')).toHaveClass('settings-pref--stacked');
+    expect(outside).toHaveClass('settings__select--fits');
     fireEvent.change(outside, { target: { value: '5' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
       agentSpend: { sessionUsd: 10, outsideDailyUsd: 5, models: {} },

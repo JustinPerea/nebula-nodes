@@ -172,7 +172,8 @@ def test_an_agents_cinema_shot_with_idol_upstream_stops_with_no_request(world, m
     what's upstream first, and an agent's stops at Idol. No spending limits,
     so the spend check (which has no list price for the scene) lets it start."""
     real = world.main.load_settings
-    no_limits = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": None, "models": {}}}
+    no_limits = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": None, "dailyTotalUsd": None,
+                                                    "models": {}}}
     monkeypatch.setattr(world.main, "load_settings", lambda *a, **k: {**real(*a, **k), **no_limits})
     scene = {"scene": {"version": 1, "base": {"model": "seedream-4-5"}, "aspectRatio": "16:9",
                        "shots": [{"id": "a", "prompt": "a chair"}]}}
