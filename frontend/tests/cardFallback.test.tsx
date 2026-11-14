@@ -99,16 +99,23 @@ describe('the sizes by type', () => {
     ['paperSourceNode', 'paper-source-node.css', 'paper-source-node'],
     ['batchNode', 'batch-node.css', 'batch-node'],
     ['editNode', 'slava-restraint.css', 'edit-node'],
-    ['remotionNode', 'remotion-editor.css', 'remotion-node'],
+    ['remotionNode', 'remotion-node.css', 'remotion-node'],
   ];
 
   it.each(WIDTHS)('%s is as wide as its card', (type, file, cls) => {
     expect(FALLBACK_SIZE_BY_TYPE[type].width).toBe(width(read(file), cls));
   });
 
-  it('the Model and Dynamic cards start at the model card\'s minimum width', () => {
-    expect(Number(/min-width:\s*(\d+)px/.exec(ruleOf(read('nodes.css'), 'model-node'))?.[1])).toBe(FALLBACK_SIZE_BY_TYPE['model-node'].width);
-    expect(FALLBACK_SIZE_BY_TYPE['dynamic-node'].width).toBe(FALLBACK_SIZE_BY_TYPE['model-node'].width);
+  it('the Dynamic card starts at the model card\'s minimum width, and the Model card (a finished card with a result) at its widest', () => {
+    const nodes = read('nodes.css');
+    expect(Number(/min-width:\s*(\d+)px/.exec(ruleOf(nodes, 'model-node'))?.[1])).toBe(FALLBACK_SIZE_BY_TYPE['dynamic-node'].width);
+    expect(Number(/\.model-node\.model-node--switchable \{ max-width: (\d+)px; \}/.exec(nodes)?.[1])).toBe(FALLBACK_SIZE_BY_TYPE['model-node'].width);
+  });
+
+  it('the Remotion card imports its own stylesheet, so it is styled before the editor has ever been opened', () => {
+    const card = readFileSync(join(__dirname, '../src/components/nodes/RemotionNode.tsx'), 'utf8');
+    expect(card).toMatch(/import '\.\.\/\.\.\/styles\/remotion-node\.css';/);
+    expect(read('remotion-editor.css')).not.toMatch(/\.remotion-node\b/);
   });
 
   it('every deferred card type has a size', () => {

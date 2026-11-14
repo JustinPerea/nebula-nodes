@@ -5,6 +5,7 @@ import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
+import '../../styles/remotion-node.css';
 
 interface RemotionNodeData {
   params?: {

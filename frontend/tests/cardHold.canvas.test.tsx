@@ -797,15 +797,35 @@ describe('the crossfade styles', () => {
 
   it('fade the card in and the ghost out on the SOFT spring, opacity only, and 180 ms under reduced motion', () => {
     expect(css).toMatch(/\.react-flow__node:has\(> \.card-fallback--ghost\) > :first-child \{\s*animation: card-swap-in var\(--spring-soft-ms\) var\(--spring-soft\) both;/);
-    expect(css).toMatch(/\.card-fallback--ghost \{[^}]*animation: card-swap-out var\(--spring-soft-ms\) var\(--spring-soft\) both;/);
+    expect(css).toMatch(/\.card-fallback\.card-fallback--ghost \{[^}]*animation: card-swap-out var\(--spring-soft-ms\) var\(--spring-soft\) both;/);
     const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(reduced).toMatch(/animation: notice-fade-in 180ms ease-out both;/);
     expect(reduced).toMatch(/animation: card-swap-out 180ms ease-out both;/);
     expect(css.slice(css.indexOf('@keyframes card-swap-in'))).not.toMatch(/transform|scale/);
   });
 
+  it('the ghost\'s rule outweighs every other rule that positions the fallback card, so it lies over the card and not under it', () => {
+    // Specificity as [ids, classes and pseudo-classes, elements]; :has() and :not() count their argument.
+    const specificity = (selector: string): number[] => {
+      const flat = selector.replace(/:(?:has|not|is|where)\(([^)]*)\)/g, ' $1 ');
+      const classes = (flat.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) ?? []).length;
+      const elements = (flat.replace(/\.[\w-]+|\[[^\]]*\]|::?[\w-]+|#[\w-]+/g, ' ').match(/[a-zA-Z][\w-]*/g) ?? []).length;
+      return [(flat.match(/#[\w-]+/g) ?? []).length, classes, elements];
+    };
+    const beats = (a: number[], b: number[]) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    const rules = [...css.split('@media')[0].matchAll(/(?:^|\n)([^\n{}@/*][^{}]*)\{([^}]*)\}/g)]
+      .map((match) => ({ selector: match[1].trim(), body: match[2] }))
+      .filter((found) => /\.card-fallback(?![\w-])/.test(found.selector) && /(?:^|\s)position:/.test(found.body));
+    const ghost = rules.find((found) => found.selector.includes('card-fallback--ghost'));
+    const others = rules.filter((found) => found !== ghost);
+    expect(ghost).toBeDefined();
+    expect(others.length).toBeGreaterThan(0);
+    for (const other of others) expect(beats(specificity(ghost!.selector), specificity(other.selector)), other.selector).toBeGreaterThan(0);
+  });
+
   it('the ghost takes the arriving card\'s box: the frame\'s usual width and height are dropped', () => {
-    const ghost = css.match(/\n\.card-fallback--ghost \{([^}]*)\}/)?.[1] ?? '';
+    const ghost = css.match(/\n\.react-flow__node > \.card-fallback\.card-fallback--ghost \{([^}]*)\}/)?.[1] ?? '';
+    expect(ghost).toMatch(/position: absolute;/);
     expect(ghost).toMatch(/inset: 0;/);
     expect(ghost).toMatch(/width: auto !important;/);
     expect(ghost).toMatch(/min-height: 0 !important;/);

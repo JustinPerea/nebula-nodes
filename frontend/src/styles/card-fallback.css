@@ -18,7 +18,10 @@ body.app-slava-restraint .card-fallback__line {
   animation: card-swap-in var(--spring-soft-ms) var(--spring-soft) both;
 }
 
-.card-fallback--ghost {
+/* The selector outweighs `body.app-slava-restraint .card-fallback` above (whose
+ * `position: relative` would otherwise put the ghost in the flow, under the
+ * card): tests/cardFallback.test.tsx compares the two. */
+.react-flow__node > .card-fallback.card-fallback--ghost {
   position: absolute;
   inset: 0;
   /* The ghost takes the arriving card's box, not the frame's usual size, so it never overhangs a shorter card. */
@@ -40,7 +43,7 @@ body.app-slava-restraint .card-fallback__line {
   .react-flow__node:has(> .card-fallback--ghost) > :first-child {
     animation: notice-fade-in 180ms ease-out both;
   }
-  .card-fallback--ghost {
+  .react-flow__node > .card-fallback.card-fallback--ghost {
     animation: card-swap-out 180ms ease-out both;
   }
 }

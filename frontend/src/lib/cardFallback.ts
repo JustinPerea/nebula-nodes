@@ -18,22 +18,25 @@ export interface FallbackSize { readonly width: number; readonly height: number 
 /**
  * Each card type's usual size, for a node whose size is not known yet (no
  * size saved with the node, none measured). The widths are the card's own CSS
- * width (tests/cardFallback.test.tsx reads them from the stylesheets); the
- * heights are the card's height with its common content, and a card whose
- * content differs lands on its own height when it replaces the frame.
+ * width (tests/cardFallback.test.tsx reads them from the stylesheets). The
+ * heights were measured in the running app (Chrome, 2026-11-14) on a card
+ * with its usual content: a card whose content differs lands on its own
+ * height when it replaces the frame. A Model card is only ever a frame while
+ * a result view of a finished node is loading, so its size is that of a
+ * finished card with a result (measured with a structured result).
  */
 export const FALLBACK_SIZE_BY_TYPE: Readonly<Record<string, FallbackSize>> = {
-  'model-node': { width: 200, height: 120 },
-  'dynamic-node': { width: 200, height: 120 },
-  editNode: { width: 160, height: 72 },
+  'model-node': { width: 300, height: 220 },
+  'dynamic-node': { width: 200, height: 145 },
+  editNode: { width: 160, height: 107 },
   remotionNode: { width: 220, height: 96 },
-  cinemaSceneNode: { width: 200, height: 120 },
-  characterNode: { width: 200, height: 140 },
-  cameraRigNode: { width: 232, height: 140 },
-  referenceSetNode: { width: 248, height: 150 },
-  moodboardNode: { width: 230, height: 210 },
-  paperSourceNode: { width: 286, height: 160 },
-  batchNode: { width: 240, height: 120 },
+  cinemaSceneNode: { width: 200, height: 268 },
+  characterNode: { width: 200, height: 250 },
+  cameraRigNode: { width: 232, height: 339 },
+  referenceSetNode: { width: 248, height: 275 },
+  moodboardNode: { width: 230, height: 223 },
+  paperSourceNode: { width: 286, height: 235 },
+  batchNode: { width: 240, height: 135 },
 };
 
 const GENERIC_SIZE: FallbackSize = { width: 200, height: 120 };
