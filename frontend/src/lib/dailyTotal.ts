@@ -7,6 +7,7 @@
  * verbatim.
  */
 import { formatSpentUsd } from './pricing';
+import { MAX_DAILY_TOTAL_USD } from './spendLimits';
 
 /** agent_spend.DEFAULT_DAILY_TOTAL_USD. */
 export const DEFAULT_DAILY_TOTAL_USD = 5;
@@ -38,8 +39,8 @@ export function dailyMeterShown(spent: number, limit: number | null): limit is n
   return limit !== null && spent > 0;
 }
 
-/** agent_spend.MAX_DAILY_TOTAL_USD: the most a typed total may be. */
-export const MAX_DAILY_TOTAL_USD = 100_000;
+/** agent_spend.MAX_DAILY_TOTAL_USD: the most a typed total may be (one source: lib/spendLimits). */
+export { MAX_DAILY_TOTAL_USD };
 
 /** A typed amount the field saves: a positive dollar figure, at most to the
  * cent, up to MAX_DAILY_TOTAL_USD. */

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { normalizeKreaMode, type KreaConnectionMode } from '../lib/kreaConnection';
+import { MAX_DAILY_TOTAL_USD } from '../lib/spendLimits';
 
 /** Settings as the backend reports them. API keys arrive masked ("***abcd"). */
 /** USD limits on what agents may spend without asking (backend/services/agent_spend.py). Null means no limit. */
@@ -151,9 +152,13 @@ export function readAgentSpend(value: unknown): AgentSpendLimits {
     limits.outsideDailyUsd = readLimit(raw.outsideDailyUsd);
   }
   // The daily total: only a saved amount or the person's null; an unreadable
-  // one is the default ($5), as on the backend (never no limit).
-  if ('dailyTotalUsd' in raw && (raw.dailyTotalUsd === null || readLimit(raw.dailyTotalUsd) !== null)) {
-    limits.dailyTotalUsd = readLimit(raw.dailyTotalUsd);
+  // one is the default ($5), as on the backend (never no limit). An amount
+  // over MAX_DAILY_TOTAL_USD (only a hand-edited file has one) is unreadable
+  // there too (agent_spend.validate_daily_total): shown and saved back, it
+  // would read as $5 and refuse every agent-spend save with a 400.
+  const daily = readLimit(raw.dailyTotalUsd);
+  if ('dailyTotalUsd' in raw && (raw.dailyTotalUsd === null || (daily !== null && daily <= MAX_DAILY_TOTAL_USD))) {
+    limits.dailyTotalUsd = daily;
   }
   return limits;
 }

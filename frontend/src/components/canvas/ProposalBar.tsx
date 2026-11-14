@@ -15,6 +15,8 @@ import { useLeave } from '../../lib/noticeLeave';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { LineText } from '../LineText';
+import { useHoldLine } from '../../hooks/useBefore';
+import { withHoldLine } from '../../lib/ledgerHold';
 import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD_ATTR, SHRINK_NAME_ATTR } from '../../lib/noticeStackPlace';
 import { useGraphStore } from '../../store/graphStore';
 import { canvasFocusTarget } from '../../lib/noticeFocus';
@@ -280,7 +282,10 @@ export function ProposalBar() {
   const shownViewId = current?.view.id ?? null;
   const detailsOpen = shownViewId !== null && detailsFor === shownViewId;
   const noteOpen = shownViewId !== null && noteFor === shownViewId;
-  const [noteRef, noteLong] = useLongNote(current?.view.note, noteOpen);
+  // A run held while the spend record was unreadable: the sentence follows the bar line until the hold ends.
+  const holdLine = useHoldLine(current?.view.wait?.ledgerHold);
+  const noteShown = current ? withHoldLine(current.view.note, holdLine) : undefined;
+  const [noteRef, noteLong] = useLongNote(noteShown, noteOpen);
   const bodyEl = useRef<HTMLDivElement | null>(null);
   const [cardMounted, setCardMounted] = useState(false);
   const scrolls = useScrollFades(bodyEl, cardMounted);
@@ -456,7 +461,7 @@ export function ProposalBar() {
                   data-long={noteLong ? 'true' : undefined}
                   data-open={noteOpen ? 'true' : undefined}
                 >
-                  {current.view.note}
+                  {noteShown}
                 </p>
               </div>
               {noteLong && (

@@ -460,6 +460,9 @@ export interface ProposalWait {
   /** False when the run fits under the total and waits only for a node with
    * no list price (Justin's Q165; absent on older proposals: true). */
   over?: boolean;
+  /** Present while the spend record's 24-hour hold is on (backend agent_spend): when it ends
+   * (epoch seconds) and the sentence the app adds after the bar line until then. */
+  ledgerHold?: { until: number; line: string };
   nodeIds: string[];
   names: string[];
 }
