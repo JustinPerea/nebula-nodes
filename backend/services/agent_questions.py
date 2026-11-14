@@ -65,6 +65,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Container, Iterable, Mapping
 
 from services.agent_presence import AgentIdentity
+from services.personal_agents import in_sentence
 from services.project_store import ProjectStore
 
 MAX_QUESTIONS = 5
@@ -856,7 +857,7 @@ def closed_update_text(text: str) -> str:
 
 def update_outcome(question_set: QuestionSet) -> str:
     if question_set.status == "withdrawn":
-        return f"Withdrawn by {question_set.agent.name}."
+        return f"Withdrawn by {in_sentence(question_set.agent.name)}."
     return _OUTCOMES.get(question_set.status, RESTART_OUTCOME)
 
 

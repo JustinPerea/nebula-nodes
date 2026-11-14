@@ -347,7 +347,7 @@ def test_the_analysis_leaves_an_outside_image_out_and_never_reads_it(root, monke
     first = analysis["images"][0]
     assert first["status"] == "outside" and first["palette"] == []
     assert analysis["representativeImages"] == [local]
-    assert any("#1" in warning and "outside Nebula" in warning for warning in analysis["warnings"])
+    assert any("Image 1" in warning and "outside Nebula" in warning for warning in analysis["warnings"])
     assert moodboard_analysis.resolve_moodboard_image_path(behind_host) is None
     assert moodboard_analysis.resolve_moodboard_image_path(local) is not None
 
@@ -512,7 +512,7 @@ async def test_a_board_whose_steering_images_are_all_outside_says_so_not_set_asi
 
 
 def test_undoing_an_outside_images_removal_names_the_image(client, root):
-    """Contract 07 §1.19: the skip reads "#1 is an image link from outside
+    """Contract 07 §1.19: the skip reads "Image 1 is an image link from outside
     Nebula, left as is", the number the image had, not "An image"."""
     local, _ = _image()
     _old_board(root, local=local)

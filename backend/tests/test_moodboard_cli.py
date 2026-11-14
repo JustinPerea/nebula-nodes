@@ -1381,7 +1381,7 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
 
     out = _cli(app, ["moodboard", "analyze", board["id"]], capsys)
     assert re.search(r"#111413\s+90%\s+#1 90%", out) and re.search(r"#e8593c\s+10%\s+#1 10%", out)
-    assert "#2 is too transparent to add colors." in out
+    assert "Image 2 is too transparent to add colors." in out
     assert "#040" not in out and "#000000" not in out
 
     analyzed = mcp_server.moodboard_analyze(board["id"])["analysis"]
