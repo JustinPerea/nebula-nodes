@@ -612,6 +612,70 @@ body.app-slava-restraint .settings-apps__token .settings-hint { margin: 0; }
 body.app-slava-restraint .settings-apps__token-row { display: flex; align-items: center; gap: var(--sr-space-2); }
 body.app-slava-restraint .settings-apps__token-row .settings-folder__input { flex: 1; height: 28px; }
 body.app-slava-restraint .settings-agent-spent { color: var(--sr-ink); }
+
+/* The daily total (GM - Design, 2026-10-31): the usage line on its own line
+   under the help, in the same weight, and right under it a 2 px meter the
+   width of the text column, 8 px below, only with a limit and something
+   spent. Neutral at every level: a track in the row's border tone behind a
+   light fill; the usage line carries the state. */
+body.app-slava-restraint .settings-daily__usage {
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+body.app-slava-restraint .settings-daily__meter {
+  display: block;
+  height: 2px;
+  /* 8 px above it, with the text column's 1 px row gap. */
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--sr-edge);
+}
+body.app-slava-restraint .settings-daily__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--sr-ink-light);
+  transform: scaleX(var(--daily-fill, 0));
+  transform-origin: left center;
+  transition: transform var(--settings-spring);
+}
+body.app-slava-restraint .settings-daily__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 7px;
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-meta);
+  font: var(--sr-type-label) var(--sr-ui);
+}
+body.app-slava-restraint .settings-daily__field:has(.settings-daily__input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
+/* The field and, when what's typed can't be saved, the plain line under it. */
+body.app-slava-restraint .settings-daily__edit {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 180px;
+}
+body.app-slava-restraint .settings-daily__invalid {
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+  text-align: right;
+}
+body.app-slava-restraint .settings-daily__input {
+  width: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sr-ink);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
 body.app-slava-restraint .settings-apps .settings-apps__client { flex: 1 1 100%; }
 body.app-slava-restraint .settings-apps__app-name { display: inline-flex; align-items: center; gap: 7px; }
 body.app-slava-restraint .settings-apps__colors { display: inline-flex; align-items: center; gap: 5px; flex: 1 1 100%; }
@@ -729,6 +793,11 @@ body.app-slava-restraint .settings-pref {
 
 body.app-slava-restraint .settings-pref:hover { background: rgba(255, 255, 255, 0.025); }
 body.app-slava-restraint .settings-pref--nested { padding-left: 28px; }
+/* A control too wide to sit beside its help goes under it, at its own width
+   ("Same as chats · No limit": GM - Design, 2026-10-31, never cut off). */
+body.app-slava-restraint .settings-pref--stacked { grid-template-columns: minmax(0, 1fr); }
+body.app-slava-restraint .settings-pref--stacked > .settings__select { justify-self: start; }
+body.app-slava-restraint .settings__select--fits { max-width: 100%; }
 body.app-slava-restraint .settings-pref--link:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
 body.app-slava-restraint .settings-pref--link svg { color: var(--sr-ink-meta); transition: transform var(--settings-spring); }
 body.app-slava-restraint .settings-pref--link:hover svg { color: var(--sr-ink); transform: translateX(2px); }
@@ -873,7 +942,8 @@ body.app-slava-restraint .settings-row--moved {
   body.app-slava-restraint .settings-row--moved { animation: none; }
   body.app-slava-restraint .settings-tabs__pill,
   body.app-slava-restraint .settings-switch::before,
-  body.app-slava-restraint .settings-pref--link svg { transition: none; }
+  body.app-slava-restraint .settings-pref--link svg,
+  body.app-slava-restraint .settings-daily__meter-fill { transition: none; }
   body.app-slava-restraint .settings-row__dot--busy { animation: none; border-top-color: var(--sr-ink-light); opacity: 0.6; }
 }
 

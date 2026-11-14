@@ -7,6 +7,7 @@ import {
   type ProposalPersonValues,
   type ProposalStatus,
   type ProposalView,
+  type ProposalWait,
 } from '../lib/wsClient';
 import {
   acceptProposal,
@@ -145,13 +146,24 @@ function clean(view: ProposalView): ProposalView | null {
   if (!view || typeof view.id !== 'string' || !Array.isArray(view.nodes) || !Array.isArray(view.edges)) return null;
   if (!view.nodes.every((node) => typeof node.ref === 'string' && finitePoint(node.position))) return null;
   const color = SAFE_COLOR.test(view.agent?.color ?? '') ? view.agent.color : '#5B9DFF';
+  const { wait, ...rest } = view;
+  const held = cleanWait(wait);
   return {
-    ...view,
+    ...rest,
     agent: { ...view.agent, name: String(view.agent?.name ?? 'Agent'), color },
     params: Array.isArray(view.params) ? view.params : [],
     run: Array.isArray(view.run) ? view.run : [],
     references: Array.isArray(view.references) ? view.references : [],
+    ...(held ? { wait: held } : {}),
   };
+}
+
+/** A daily-total hold, only when its lines and nodes are readable. */
+function cleanWait(wait: unknown): ProposalWait | undefined {
+  if (!isRecord(wait) || typeof wait.barLine !== 'string') return undefined;
+  const ids = Array.isArray(wait.nodeIds) ? wait.nodeIds.filter((id): id is string => typeof id === 'string') : [];
+  const names = Array.isArray(wait.names) ? wait.names.filter((name): name is string => typeof name === 'string') : [];
+  return { ...(wait as unknown as ProposalWait), nodeIds: ids, names };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

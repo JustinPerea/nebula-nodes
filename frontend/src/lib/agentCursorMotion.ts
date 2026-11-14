@@ -92,6 +92,80 @@ export function chainPoint(
   return nodeHeaderPoint(x, y, node.measured?.width ?? 0, node.measured?.height ?? 0);
 }
 
+/** How far into the header, from the card's left edge, the node's icon is
+ *  centred (the header's left padding, 12 px, and half the 13 px icon): the
+ *  fallback when the page can't be measured. */
+export const HEADER_ICON_X = 18;
+
+/** The header row's mark where a header has no icon (the Cinema scene's
+ *  title row starts with a glyph, 14 px in): measured from the row's left. */
+const GLYPH_X = 14;
+
+/**
+ * Where a cursor aimed at a node (no handle) is DRAWN while that node's
+ * header shows the waiting label (GM - Design, PR #212 round 3, item 2): the
+ * header's left end with the tip over the node's icon, so the mark and the
+ * name pill never cover "Waiting for your OK", which sits on the header's
+ * right. Only what is drawn moves: the point it counts as for its target
+ * chain stays the header's middle (`chainPoint`, as the backend counts it),
+ * the same split as a port's (drawn at the port, counted at its node's
+ * header; GM r62). Null for a cursor on a handle, a point or a node not drawn.
+ *
+ * The spot is read from the page when it can be (`pane`: React Flow's pane,
+ * `zoom`): the icon's centre, on the header's row, whichever card it is. With
+ * nothing to measure it is HEADER_ICON_X in, on the header's middle row.
+ */
+export function waitRestPoint(
+  anchor: AgentCursorAnchor,
+  nodeLookup: Map<string, InternalNode<Node<NodeData>>>,
+  pane?: { dom: HTMLElement | null; zoom: number },
+): Point | null {
+  if (!('nodeId' in anchor) || anchor.handle) return null;
+  const node = nodeLookup.get(anchor.nodeId);
+  if (!node) return null;
+  const { x, y } = node.internals.positionAbsolute;
+  const measured = pane ? headerMark(pane.dom, anchor.nodeId, { x, y }, pane.zoom) : null;
+  if (measured) return measured;
+  const middle = nodeHeaderPoint(x, y, node.measured?.width ?? 0, node.measured?.height ?? 0);
+  return { x: x + HEADER_ICON_X, y: middle.y };
+}
+
+/**
+ * The two points a cursor has on a node: where it is `drawn` and where it
+ * counts for its target chain. They are the same (the node's header middle)
+ * unless the node's header shows a wait: then it is drawn at the header's left
+ * end (waitRestPoint) and still counts at the middle (chainPoint, the
+ * backend's own point). Null if the node isn't drawn.
+ */
+export function restPoints(
+  anchor: AgentCursorAnchor,
+  nodeLookup: Map<string, InternalNode<Node<NodeData>>>,
+  waiting: boolean,
+  pane?: { dom: HTMLElement | null; zoom: number },
+): { drawn: Point; chain: Point } | null {
+  const counted = resolveAnchor(anchor, nodeLookup);
+  if (!counted) return null;
+  const chain = chainPoint(anchor, nodeLookup) ?? counted;
+  const drawn = waiting ? waitRestPoint(anchor, nodeLookup, pane) ?? counted : counted;
+  return { drawn, chain };
+}
+
+/** The centre of the waiting header's icon (or its first glyph), in flow
+ *  coordinates; null when the page has no laid-out header to read. */
+function headerMark(dom: HTMLElement | null, nodeId: string, origin: Point, zoom: number): Point | null {
+  if (!dom || !(zoom > 0)) return null;
+  const card = [...dom.querySelectorAll<HTMLElement>('.react-flow__node')].find((el) => el.dataset.id === nodeId);
+  const head = card?.querySelector<HTMLElement>('.model-node__header[data-waiting="true"], .cinema-scene-node__title[data-waiting="true"]');
+  if (!card || !head) return null;
+  const box = card.getBoundingClientRect();
+  const row = head.getBoundingClientRect();
+  if (box.width === 0 || row.width === 0) return null;
+  const icon = head.querySelector<HTMLElement>('.model-node__type-icon')?.getBoundingClientRect();
+  const cx = icon && icon.width > 0 ? icon.left + icon.width / 2 : row.left + GLYPH_X * zoom;
+  const cy = icon && icon.height > 0 ? icon.top + icon.height / 2 : row.top + row.height / 2;
+  return { x: origin.x + (cx - box.left) / zoom, y: origin.y + (cy - box.top) / zoom };
+}
+
 /** Where a cursor aimed at a node (no handle) points: into the card's
  *  header, where a person would click to pick the node. The node box starts
  *  at the small category label above the card, hence 44px. The backend
