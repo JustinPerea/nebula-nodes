@@ -678,6 +678,8 @@ def format_start(start: dict[str, Any]) -> str:
         daily = spend.get("daily")
         if isinstance(daily, dict):
             lines.append(f"  {daily_total_line(daily)}")
+        if spend.get("ledgerNote"):
+            lines.append(f"  {spend['ledgerNote']}")
         lines.append("  (a run over a limit goes through `nebula propose`; `nebula spend` has the detail)")
 
     nxt = start.get("next") or {}

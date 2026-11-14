@@ -478,7 +478,8 @@ def start_here(ctx: Context | None = None) -> str:
       `daily`: the daily total over everything that isn't the person
       (`limitUsd`, null for no limit, `usedUsd` and `leftUsd`, the last 24
       hours), which holds on top of the budget (get_spend_limits has
-      per-model limits).
+      per-model limits). `ledgerNote`, when present: Nebula couldn't read
+      its spending record, so every limit counts as used up for 24 hours.
     - `next`: `events` (cursor and journal for wait_for_canvas_change), then
       the exact calls, arguments named as each tool takes them: `describe`,
       `build` (a whole edit_canvas plan), `propose`, `point` (with or
@@ -2245,7 +2246,9 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     not opened from the link): `limitUsd` ($5 until the person picks another,
     null for no limit), `usedUsd` and `leftUsd`, exact. A run that would pass
     it, or has a node with no list price while it is on, waits for their OK
-    as a proposal. Only the person changes it."""
+    as a proposal. Only the person changes it. `ledgerNote`, when present,
+    says Nebula couldn't read its spending record: every limit counts as
+    used up for 24 hours, so each paid run needs the person (propose it)."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

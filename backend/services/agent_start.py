@@ -429,6 +429,9 @@ def spend_part(spend: Mapping[str, Any]) -> dict[str, Any]:
     daily = spend.get("dailyTotal")
     if isinstance(daily, Mapping):
         part["daily"] = {key: daily.get(key) for key in ("limitUsd", "usedUsd", "leftUsd")}
+    if spend.get("ledgerNote"):
+        # The spend ledger was found unreadable: every limit counts as used up.
+        part["ledgerNote"] = spend["ledgerNote"]
     return part
 
 

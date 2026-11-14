@@ -3849,6 +3849,21 @@ How it works (`backend/services/agent_spend.py`):
     checked and the stricter wins, so a token never adds headroom.
 
   Totals are kept in `~/.nebula/agent-spend.json`.
+  Every Nebula backend on the same data folder shares that file: each
+  check and count re-reads it under a lock between processes, so spend
+  through one backend counts in the other's next check. When another
+  backend holds the lock for more than 2 seconds, the run is refused with
+  a 503, "Can't check this run's cost (another Nebula on this computer is
+  updating the spending record). Try again in a moment.", followed by the
+  usual proposal hint; nothing was counted. A file Nebula can't read is
+  kept aside as `agent-spend.unreadable-<UTC time>.json` and never
+  overwritten, and for 24 hours every limit counts as used up: a paid run
+  waits for the person's OK or is refused as at any limit, with "Nebula
+  couldn't read its record of what agents have spent, so it counts every
+  spending limit as used up for 24 hours." A missing file starts at $0.
+  While that holds, `nebula spend`, `nebula context` and `get_spend_limits`
+  show the daily total as used up and carry the same sentence
+  (`ledgerNote`).
 - Krea plan runs: a node billed to the signed-in Krea plan has no per-call
   price (Krea charges compute units it doesn't publish per model), so it is
   counted as runs: batch runs times a cinema scene's shots times variations.

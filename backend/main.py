@@ -4075,6 +4075,21 @@ def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Bu
         app_daily_usd=connected["dailyUsd"] if connected else None, daily_spent=daily)
 
 
+def _reserve_spend(key: str, label: str, ask: str,
+                   check: Callable[[], agent_spend.Decision]) -> tuple[agent_spend.Decision, float | None]:
+    """SpendLedger.reserve, with a ledger another Nebula on this data folder
+    held past the wait (or one that can't be locked: LedgerBusy) refused as
+    an unreadable pricing table is, with a 503: nothing was checked or
+    counted, so the run never starts on what this backend last saw. The
+    line is a draft for GM - Design (follow-up to PR #212)."""
+    try:
+        return agent_spend_ledger.reserve(key, label, check)
+    except agent_spend.LedgerBusy as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Can't check this run's cost ({exc.why}). Try again in a moment. {ask}",
+        ) from exc
+
+
 class _WaitForOk(Exception):
     """A run that isn't the person's would pass the daily total, on a route
     that turns it into a proposal (``propose`` in _require_spend_approval):
@@ -4361,7 +4376,7 @@ def _require_spend_approval(
     size_inputs = {node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
                                     for source, handle in sources])
                    for node_id, (port, sources) in measured.connected.items()}
-    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
+    decision, at = _reserve_spend(key, label, ask, lambda: agent_spend.decide(
         items, [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=definitions,
         budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
@@ -6961,9 +6976,15 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     # agent without a Nebula chat or app token shares, over the last 24 hours.
     # "app": an outside app's own line, which also counts inside "shared".
     budget = "chat" if not agent_spend.is_outside(key) else "app" if key.startswith(agent_spend.APP_PREFIX) else "shared"
+    here = agent_spend_ledger.spent(key)
     result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
-                              "spent": view(agent_spend_ledger.spent(key)),
+                              "spent": view(here),
                               "dailyTotal": _daily_total_view(caps)}
+    if here.full:
+        # The ledger was found unreadable in the last 24 hours: a run is
+        # checked with every limit used up (agent_spend._counted), so the view
+        # says so, in the sentence the refusal and the waiting run end with.
+        result["ledgerNote"] = agent_spend.LEDGER_UNREADABLE
     if budget != "chat":
         result["window"] = "24h"
         result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
@@ -6977,9 +6998,11 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
 
 def _daily_total_view(caps: Mapping[str, Any]) -> dict[str, Any]:
     """The daily total: its limit (None for no limit), what everything that
-    isn't the person spent in the last 24 hours, and what's left, exact."""
+    isn't the person spent in the last 24 hours, and what's left, exact.
+    Counted as a run is checked (agent_spend.daily_budget): used up while an
+    unreadable ledger holds the limits, never "$5 left" beside a run that waits."""
     limit = caps.get(agent_spend.DAILY_TOTAL_KEY)
-    used = round(agent_spend_ledger.spent_daily().total, 6)
+    used = round(agent_spend.daily_budget(agent_spend_ledger.spent_daily(), caps).spent.total, 6)
     return {"limitUsd": limit, "usedUsd": used,
             "leftUsd": None if limit is None else max(0.0, round(limit - used, 6)), "window": "24h"}
 
@@ -28022,7 +28045,7 @@ def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any],
            f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
            "(MCP: moodboard_analyze with estimate_only).")
     key, label = _spend_session(current_request_headers())
-    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
+    decision, at = _reserve_spend(key, label, ask, lambda: agent_spend.decide(
         items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
         budgets=_spend_budgets(key, settings), how_to_ask=ask))
     if decision.refusal:
