@@ -790,3 +790,15 @@ def pytest_runtest_call(item):  # type: ignore[no-untyped-def]
             f"main._broadcast_presence, or a person-only frame reached another socket "
             f"(PR #211 review 4 and review 5, LOW-1): {stray[0]}")
     return result
+
+
+def timeless(value):
+    """A read with its clock-dependent fields dropped (``secondsAgo``,
+    ``activeSecondsAgo``: presence ages them on every read), for a test that
+    compares two reads taken at different moments. Without it the comparison
+    fails whenever an age crosses a tenth of a second between the reads."""
+    if isinstance(value, dict):
+        return {k: timeless(v) for k, v in value.items() if k not in ("secondsAgo", "activeSecondsAgo")}
+    if isinstance(value, list):
+        return [timeless(v) for v in value]
+    return value
