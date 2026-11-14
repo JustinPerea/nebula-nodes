@@ -47,6 +47,7 @@ from typing import Any, Iterable, Mapping
 
 from services import node_categories
 from services.canvas_pins import agent_text
+from services.text_cut import clean_name
 
 CHARS_PER_TOKEN = 4
 BUDGETS: dict[str, int] = {
@@ -306,7 +307,7 @@ def boards_part(summaries: Iterable[Mapping[str, Any]], *, active_project_id: st
             where, rank = _cut(project_names[project_id], NAME_CHARS), 2
         else:
             continue
-        row: dict[str, Any] = {"id": board.get("id"), "name": _cut(board.get("name"), NAME_CHARS), "where": where,
+        row: dict[str, Any] = {"id": board.get("id"), "name": clean_name(board.get("name"), NAME_CHARS, ellipsis=True), "where": where,
                                "images": int(board.get("images") or 0), "analyzed": bool(board.get("analyzed"))}
         if board.get("direction"):
             row["direction"] = _cut(board["direction"], DIRECTION_CHARS)

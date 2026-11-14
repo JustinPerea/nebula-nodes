@@ -37,6 +37,7 @@ from typing import Any, Callable, Mapping
 from services.agent_presence import AgentIdentity, identify
 from services.person_gate import is_person
 from services.selection_context import _safe_value as safe_value
+from services.text_cut import clean_name
 
 MAX_EVENTS = 500
 WAIT_CAP_SECONDS = 25.0
@@ -294,9 +295,17 @@ def _size(data: Any) -> int:
 MAX_STOP_ERROR_CHARS = 600
 
 
+# The data keys that carry a stored item's name (a moodboard's, a Character's,
+# a Style's): free text an agent can set, cleaned as every line shows it.
+ITEM_NAME_KEYS = ("boardName", "characterName", "styleName")
+
+
 def _bound_data(data: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Cap strings, then shrink anything still over MAX_EVENT_BYTES."""
+    """Clean the item names, cap strings, then shrink anything still over MAX_EVENT_BYTES."""
     data = dict(data or {})
+    for key in ITEM_NAME_KEYS:
+        if isinstance(data.get(key), str):
+            data[key] = clean_name(data[key], MAX_VALUE_CHARS)
     stop_error = data.pop("error", None) if data.get("proposalNeeded") is True else None
     bounded = _cap_strings(data)
     if isinstance(stop_error, str):
@@ -481,7 +490,8 @@ class CanvasEventJournal:
             "actor": dict(actor or ANONYMOUS),
             "projectId": tag,
             "data": _bound_data(data),
-            "summary": " ".join(str(summary or "").split())[:SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)],
+            # Whatever name a summary quotes is cleaned with it (clean_name).
+            "summary": clean_name(summary)[:SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)],
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]

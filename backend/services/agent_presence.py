@@ -50,7 +50,7 @@ from services.cursor_actions import (
 from services.file_param_preview import file_param_keys
 from services.upload_names import file_param_name
 from services.selection_context import _safe_value as safe_value
-from services.text_cut import safe_cut
+from services.text_cut import clean_name, safe_cut
 
 PRESENCE_TTL_SECONDS = 120.0
 VIEW_STALE_SECONDS = 30.0
@@ -322,17 +322,23 @@ def _quoted(text: Any) -> str:
 
 
 def _shown_name(name: Any) -> str:
-    """An item's name as a cursor stores it: whitespace folded, cut to 80
-    characters without splitting a joined emoji or a combining mark
-    (services/text_cut.safe_cut), whichever path writes it (a point or a rename)."""
-    text = " ".join(str(name).split())
-    # A name that is one long character (a letter under more than 80 marks)
-    # has no safe cut: it is cut plainly rather than stored as no name.
-    return text[:safe_cut(text, 80) or 80]
+    """An item's name as a cursor stores it: cleaned (control and bidi
+    characters out, whitespace folded: services/text_cut.clean_name), cut to
+    80 characters without splitting a joined emoji or a combining mark,
+    whichever path writes it (a point or a rename). Empty once cleaned: ""
+    (the callers fall back to the item's id before they get here)."""
+    return clean_name(name, 80)
+
+
+def _quoted_name(name: Any, fallback: Any = "") -> str:
+    """An item's name in curly quotes, as a refusal says it: cleaned as a
+    stored name is (``clean_name``) and cut to 40 characters; its id when the
+    name is empty once cleaned."""
+    return f"\u201c{clean_name(name, 40, fallback=clean_name(fallback, 40), ellipsis=True)}\u201d"
 
 
 def _item_list(info: SurfaceInfo, items: Collection[Mapping[str, Any]]) -> str:
-    names = [_quoted(str(item.get("name") or item.get("id"))) for item in items]
+    names = [_quoted_name(item.get("name"), item.get("id")) for item in items]
     if not names:
         return f"There are no {info.plural} yet."
     more = f" and {len(names) - _BOARDS_LISTED} more" if len(names) > _BOARDS_LISTED else ""
@@ -347,7 +353,13 @@ def _find_item(info: SurfaceInfo, ref: str, items: Collection[Mapping[str, Any]]
     if by_id:
         return by_id[0]
     folded = " ".join(ref.split())
-    named = [item for item in items if " ".join(str(item.get("name") or "").split()) == folded]
+    # By the name as stored, or as every line shows it (clean_name): an agent
+    # that reads a name in a journal line, a refusal or a cursor's label and
+    # sends it back finds the item.
+    shown = clean_name(ref)
+    named = [item for item in items
+             if " ".join(str(item.get("name") or "").split()) == folded
+             or clean_name(item.get("name")) == shown]
     if len(named) == 1:
         return named[0]
     if len(named) > 1:
@@ -390,7 +402,7 @@ def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, in
     if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(images):
         number = int(digits)
         return str(images[number - 1].get("id")), number
-    where = _quoted(str(board.get("name") or board.get("id")))
+    where = _quoted_name(board.get("name"), board.get("id"))
     if not images:
         raise PresenceError(f"Board {where} has no images, so there is no image {_quoted(text)}.")
     raise PresenceError(f"Board {where} has no image {_quoted(text)}. Use its number (1-{len(images)}) or its id.")
@@ -404,7 +416,7 @@ def _find_view(ref: Any, character: Mapping[str, Any], label: str) -> tuple[str,
     digits = text[1:] if text.startswith("#") else text
     if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(views):
         return str(int(digits)), int(digits)
-    where = _quoted(str(character.get("name") or character.get("id")))
+    where = _quoted_name(character.get("name"), character.get("id"))
     if not views:
         raise PresenceError(f"Character {where} has no reference views, so there is no view {_quoted(text)}.")
     raise PresenceError(f"Character {where} has no view {_quoted(text)}. Use its number (1-{len(views)}).")
@@ -464,7 +476,7 @@ def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
     item_id = str(found.get("id"))
     if not _ITEM_ID_RE.fullmatch(item_id):
         raise PresenceError(f"{label}.{info.name_key} is invalid")
-    names: dict[str, Any] = {info.name_key: _shown_name(found.get("name") or item_id)}
+    names: dict[str, Any] = {info.name_key: _shown_name(found.get("name")) or _shown_name(item_id)}
     anchor_id = item_id
     if sub_given is not None:
         if surface == "character":
@@ -513,7 +525,7 @@ def changing_refusal(target: Mapping[str, Any], names: Mapping[str, Any]) -> str
     info = SURFACE_TABLE[str(target.get("surface"))]
     item = names.get(info.name_key) or (surface_ids(target) or ("",))[0]
     # GM - Design's wording (2026-11-14): what happened and why, then what to do.
-    return (f"Nebula couldn\u2019t point at the {info.noun} {_quoted(item)} because it kept changing while "
+    return (f"Nebula couldn\u2019t point at the {info.noun} {_quoted_name(item)} because it kept changing while "
             "Nebula checked it. Point at it again.")
 
 
@@ -533,7 +545,7 @@ def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "verb": verb,
         "nodeId": node_id if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) else None,
-        "label": _shown_name(label) if isinstance(label, str) and label.strip() else None,
+        "label": (_shown_name(label) or None) if isinstance(label, str) else None,
     }
 
 
@@ -1159,7 +1171,7 @@ class AgentPresence:
         or one of its sub-items keeps the new name in its stored names, which
         agents read in ``look``, ``context`` and ``agents``. Returns how many
         were changed."""
-        shown = _shown_name(name or item_id)
+        shown = _shown_name(name) or _shown_name(item_id)
         key = SURFACE_TABLE[surface].name_key
         changed = 0
         self._touch(surface, item_id)

@@ -264,6 +264,7 @@ from services.agent_questions import (
     update_text as question_update_text,
 )
 from services.agent_presence import request_headers_scope
+from services.text_cut import clean_name
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services import channel_listeners
@@ -13154,8 +13155,9 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     if board is None:
         raise HTTPException(status_code=404, detail=f"No moodboard {target_id[:40]} (moodboard_list lists them)")
     if board.get("sendNotes") is True:
+        shown = clean_name(board.get("name"), 60, fallback=clean_name(target_id, 60), ellipsis=True)
         raise HTTPException(status_code=409, detail=(
-            f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
+            f'Send notes to generators is already on for board "{shown}"; nothing to propose.'))
     return str(board.get("name") or ""), {"sendNotes": False}, None, None
 
 

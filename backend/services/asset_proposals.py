@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from services.agent_presence import AgentIdentity
+from services.text_cut import clean_name
 from services.canvas_proposals import (
     OPEN,
     PROPOSAL_TTL_SECONDS,
@@ -211,7 +212,8 @@ class AssetProposal:
 def summary(proposal: AssetProposal) -> str:
     """The change in one line, for the journal, the Agent log and the CLI: X in
     "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4)."""
-    name = proposal.target_name or proposal.target_id
+    # A board's or a project's name is free text: cleaned as every line shows it.
+    name = clean_name(proposal.target_name, 120, fallback=clean_name(proposal.target_id, 120), ellipsis=True)
     if proposal.kind == "commons":
         from services import commons_proposals
 
@@ -228,7 +230,7 @@ def update_text(proposal: AssetProposal) -> str:
     where the person decides it: the strip's and the Commons line's. Names
     only: never the agent's note, a board's notes or Commons text."""
     agent = proposal.agent.name
-    name = " ".join((proposal.target_name or "").split())[:120]
+    name = clean_name(proposal.target_name, 120)
     if proposal.kind == "project":
         return f"{agent} asks to change the cover of {name or 'a project'}"
     if proposal.kind == "moodboard":
