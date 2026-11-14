@@ -34,6 +34,7 @@ export function ghostKeyWarning(
 export function notReadyBarLines(
   rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
   acceptLock: string | null,
+  acceptRowShown = true,
 ): Array<{ key: string; text: string; accept?: true }> {
   const lines: Array<{ key: string; text: string; accept?: true }> = [];
   // Nodes with the same reason say one line, whatever their names (GM, PR
@@ -45,7 +46,10 @@ export function notReadyBarLines(
   let said = false;
   for (const row of rows) {
     if (row.routeKeyLine && acceptLock) {
-      if (!said) lines.push({ key: row.ref, text: acceptLock, accept: true });
+      // A kept canvas holds Accept first (GM, #203 follow-up r240): its
+      // key row is not drawn until the canvas is back, and no node row
+      // says the same key in its place.
+      if (!said && acceptRowShown) lines.push({ key: row.ref, text: acceptLock, accept: true });
       said = true;
       continue;
     }
@@ -114,8 +118,9 @@ export function detailsDisclosure(
 export function notReadyShown(
   rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
   acceptLock: string | null,
-): { lines: Array<{ key: string; text: string }>; inDetails: Array<{ key: string; text: string }> } {
-  const lines = notReadyBarLines(rows, acceptLock);
+  acceptRowShown = true,
+): { lines: Array<{ key: string; text: string; accept?: true }>; inDetails: Array<{ key: string; text: string; accept?: true }> } {
+  const lines = notReadyBarLines(rows, acceptLock, acceptRowShown);
   if (!countsInstead(rows.length)) return { lines, inDetails: [] };
   // The Accept line stays in view whatever the count: it says why Accept is
   // locked (review 13 of PR #203, copy NIT-3).
