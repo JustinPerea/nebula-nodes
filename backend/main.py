@@ -8176,7 +8176,7 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
     shot_id = shots[0]
     run_id = run_ids[0]
     numbers = [order.index(shot) + 1 for shot in shots]
-    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema scene"))
     specific = (
         f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
         f"so it can’t be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
@@ -8218,7 +8218,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     numbers = [order.index(shot) + 1 for shot in shots]
     what, several = _shot_names(numbers)
     verb = "are" if several else "is"
-    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema scene"))
     runs = f"run {run_ids[0]}" if len(run_ids) == 1 else "runs " + ", ".join(run_ids[:-1]) + " and " + run_ids[-1]
     specific = f"Couldn’t delete {name}, node {node_id}. {what} {verb} still running, {runs}."
     if action in RESTORE_ACTIONS:
@@ -12734,7 +12734,7 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
     except ValueError:
         board = None
     if board is None:
-        return "the board was deleted"
+        return "the moodboard was deleted"
     if board.get("sendNotes") is True:
         return "Send notes to generators is already on"
     return None
@@ -13311,7 +13311,7 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
             detail = str(json.loads(bytes(answer.body)).get("detail") or "")
         except Exception:  # noqa: BLE001
             pass
-        raise HTTPException(status_code=409, detail=detail or "the board can't take it now")
+        raise HTTPException(status_code=409, detail=detail or "the moodboard can't take it now")
     return {"applied": {"sendNotes": True}, "board": answer}
 
 

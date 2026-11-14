@@ -342,3 +342,13 @@ def test_each_single_field_write_names_only_that_field(client, root, journal, pe
     write_board(root, fixture_board())
     _put(client, PERSON, **{field: value})
     assert [event["data"]["fields"] for event in _board_events(journal)] == [[field]]
+
+
+def test_a_rename_is_one_event_saying_both_names_and_the_other_fields_by_plain_name(client, root, journal, person):
+    write_board(root, fixture_board())
+    _put(client, PERSON, name="Coast")
+    _put(client, PERSON, name="Harbor", direction=DIRECTION, avoid=[AVOID])
+    first, second = _board_events(journal)
+    assert first["summary"] == "renamed “Placed” to “Coast”"
+    assert second["summary"] == "renamed “Coast” to “Harbor” and changed its direction and avoid list"
+    assert second["data"]["fields"] == ["name", "direction", "avoid"]

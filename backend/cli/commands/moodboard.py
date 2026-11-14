@@ -396,7 +396,7 @@ def _price_text(est: dict[str, Any]) -> str:
 
 
 # A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
-TRANSPARENT_ESTIMATE_LINE = "#{number} wasn’t read because it’s too transparent."
+TRANSPARENT_ESTIMATE_LINE = "Image {number} wasn’t read because it’s too transparent."
 
 
 def _print_estimate(est: dict[str, Any]) -> None:

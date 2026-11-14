@@ -167,10 +167,10 @@ def test_refusal_lines_quote_a_cleaned_name_for_each_kind():
     style = {"id": "s1", "name": HOSTILE}
     with pytest.raises(PresenceError) as raised:
         parse_surface_target({"surface": "moodboard", "board": "b1", "image": 3}, [board])
-    assert str(raised.value) == f"Board “{CLEAN}” has no images, so there is no image “3”."
+    assert str(raised.value) == f"Nebula couldn’t point at image 3 because “{CLEAN}” has no images."
     with pytest.raises(PresenceError) as raised:
         parse_surface_target({"surface": "character", "character": "c1", "view": 5}, None, characters=[character])
-    assert str(raised.value) == f"Character “{CLEAN}” has no view “5”. Use its number (1-1)."
+    assert str(raised.value) == f"Nebula couldn’t point at view 5 because “{CLEAN}” has 1 view. Use view 1."
     # The list a "no such style" refusal gives names every style, cleaned.
     with pytest.raises(PresenceError) as raised:
         parse_surface_target({"surface": "style", "style": "nope"}, None, styles=[style])
@@ -302,7 +302,7 @@ def test_a_characters_cursor_names_label_and_refusal_are_clean(api):
     refused = http.post("/api/canvas/cursor", headers=AGENT,
                         json={"target": {"surface": "character", "character": character["id"], "view": 9}})
     assert refused.status_code == 422
-    assert refused.json()["detail"] == f"Character “{CLEAN}” has no view “9”. Use its number (1-4)."
+    assert refused.json()["detail"] == f"Nebula couldn’t point at view 9 because “{CLEAN}” has 4 views. Use a number from 1 to 4."
 
 
 def test_the_journal_cleans_every_summary_and_the_item_name_keys_whatever_published_it():

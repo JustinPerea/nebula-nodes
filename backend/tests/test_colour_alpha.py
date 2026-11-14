@@ -624,7 +624,7 @@ def test_the_cli_estimate_names_clear_references(capsys) -> None:
     moodboard_cmd._print_estimate({"reader": {"name": "Argon"}, "thinkingLevel": "low", "count": 2, "batches": 1,
                                    "low": 0.01, "high": 0.02, "transparent": [2]})
     out = capsys.readouterr().out
-    assert "  #2 wasn’t read because it’s too transparent.\n" in out  # GM r5
+    assert "  Image 2 wasn’t read because it’s too transparent.\n" in out  # GM r5
     assert "Too transparent, so not read" not in out
 
 

@@ -28,12 +28,12 @@ from typing import Any, Mapping
 
 from services.cursor_actions import PART_LABELS
 from services.moodboard_edits import (board_where, cover_words, field_label, image_count_words, journal_entry,
-                                      listed_words, quoted)
+                                      listed_words, plain_label, quoted, rename_pair, rename_words)
 from services.text_cut import clean_name
 
 
 def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
-                 after: Mapping[str, Any]) -> list[str]:
+                 after: Mapping[str, Any], before: Mapping[str, Any] | None = None) -> list[str]:
     """The board fields the change set, from its ``fields`` slice, in the
     words of the ``board.fields`` journal event (moodboard_edits.fields_entry),
     except that the Agent log line also says which way Send notes went (an
@@ -51,7 +51,11 @@ def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
         if entry is None or entry.get("kind") != "board.cover":
             words.append(cover_words(after))
     changed = [key for key in keys if key != "sendNotes"]
-    if changed:
+    pair = rename_pair(before, after) if "name" in changed else None
+    if pair:  # "renamed “Desert light” to “Dusk” and changed its direction"
+        changed = [key for key in changed if key != "name"]
+        words.append(rename_words(pair, [plain_label(key) for key in changed]))
+    elif changed:
         words.append("changed " + listed_words([field_label(key) for key in changed]))
     if "sendNotes" in keys:
         words.append(f"turned {'on' if fields['expect']['sendNotes'] else 'off'} {field_label('sendNotes')}")
@@ -73,9 +77,11 @@ def describe_change(changes: Mapping[str, Any], before: Mapping[str, Any], after
     if undo:
         return f"Undid a change to {where}"
     entry = journal_entry(dict(changes), dict(before), dict(after))
-    fields = _field_words(changes, entry, after)
+    fields = _field_words(changes, entry, after, before)
     if entry is not None:
         said = _joined([entry["summary"], *fields])
+    elif fields and fields[0].startswith("renamed "):  # a rename names the board itself
+        said = _joined(fields)
     elif fields:  # the board named once, on the first clause
         said = _joined([f"{fields[0]} on {where}", *fields[1:]])
     else:  # a nudge under 8 px, a card's own change

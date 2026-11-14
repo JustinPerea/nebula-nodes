@@ -523,7 +523,7 @@ def test_undoing_an_outside_images_removal_names_the_image(client, root):
                          headers=PERSON)
 
     skipped = undone.json()["applied"][0]["skipped"]
-    assert [item["message"] for item in skipped] == ["#1 is an image link from outside Nebula, left as is"]
+    assert [item["message"] for item in skipped] == ["Image 1 is an image link from outside Nebula, left as is"]
     assert skipped[0]["number"] == 1
 
 
