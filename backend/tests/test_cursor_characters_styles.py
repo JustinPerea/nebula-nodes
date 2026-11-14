@@ -1285,14 +1285,69 @@ def test_a_rename_under_a_point_reaches_the_name_it_stores(api, monkeypatch):
     assert _cursors(sent)[0]["anchorNames"]["character"] == "Mara Vance" and len(looks) == 2
 
 
-def test_an_item_written_at_every_look_is_pointed_at_after_the_last_one(api, monkeypatch):
-    """The looks are bounded: an item still there after four is pointed at."""
-    client, sent, _, presence, _ = api
+def test_an_item_written_at_every_look_is_not_pointed_at(api, monkeypatch):
+    """Four looks, a write in each: the point is refused and nothing is stored."""
+    client, sent, heard, presence, _ = api
     character = _make_character(client)
-    looks = _at_look(monkeypatch, "every", after=lambda main, held: held.forget_item("character", character["id"]))
-    made = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
-    assert made.status_code == 200, made.text
-    assert len(looks) == 4 and len(presence.active()) == 1 and presence._watches == []
+    looks = _at_look(monkeypatch, "every",
+                     after=lambda main, held: held.rename_item("character", character["id"], "Mara"))
+    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A)
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == "Character “Mara” is changing right now. Point at it again."
+    _nothing_left(presence, sent, heard)
+    assert len(looks) == 4 and presence._watches == []
+
+
+@pytest.mark.parametrize("surface, made, said", [
+    ("moodboard", lambda client: client.post("/api/moodboards", json={"name": "Desert light"}).json(),
+     "Board “Desert light” is changing right now. Point at it again."),
+    ("style", lambda client: _make_style(client), "Style “Dusk grain” is changing right now. Point at it again."),
+])
+def test_the_changing_refusal_names_a_board_and_a_style(api, monkeypatch, surface, made, said):
+    client, sent, heard, presence, _ = api
+    item = made(client)
+    key = {"moodboard": "board", "style": "style"}[surface]
+    _at_look(monkeypatch, "every", after=lambda main, held: held.rename_item(surface, item["id"], item["name"]))
+    refused = _point(client, {"surface": surface, key: item["id"]}, LANE_A)
+    assert refused.status_code == 422 and refused.json()["detail"] == said, refused.text
+    _nothing_left(presence, sent, heard)
+
+
+def test_a_delete_in_the_last_look_leaves_no_cursor(api, monkeypatch):
+    """Saves land in the first three looks and the delete in the fourth: the
+    route never stores on a look a write landed in."""
+    client, sent, heard, presence, _ = api
+    character = _make_character(client)
+    seen: list[int] = []
+
+    def write(main, held):
+        seen.append(1)
+        if len(seen) < 4:
+            held.rename_item("character", character["id"], "Mara")
+        else:
+            main._char_store().delete(character["id"])
+            held.forget_item("character", character["id"])
+
+    looks = _at_look(monkeypatch, "every", after=write)
+    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    assert refused.status_code == 422, refused.text
+    _nothing_left(presence, sent, heard)
+    assert len(looks) == 4 and presence._watches == []
+
+
+def test_a_look_that_fails_drops_its_watch(api, monkeypatch):
+    import main as main_module
+
+    client, sent, _, presence, _ = api
+    _make_character(client)
+
+    def unreadable(raw, target):
+        raise RuntimeError("the store could not be read")
+
+    monkeypatch.setattr(main_module, "_look_again", unreadable)
+    with pytest.raises(RuntimeError):
+        _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    assert presence._watches == [] and presence.active() == [] and _cursors(sent) == []
 
 
 def test_a_watch_hears_only_writes_to_what_it_is_on():

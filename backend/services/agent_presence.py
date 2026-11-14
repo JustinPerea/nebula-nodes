@@ -507,6 +507,15 @@ def surface_ids(target: Mapping[str, Any]) -> tuple[str, str | None] | None:
     return head, sub or None
 
 
+def changing_refusal(target: Mapping[str, Any], names: Mapping[str, Any]) -> str:
+    """The refusal for a point whose item was written during every look at it
+    (main._settled_surface_names): nothing was stored, and the agent can point again."""
+    surface = str(target.get("surface"))
+    subject = {"moodboard": "Board"}.get(surface, surface.capitalize())
+    item = names.get(SURFACE_TABLE[surface].name_key) or (surface_ids(target) or ("",))[0]
+    return f"{subject} {_quoted(item)} is changing right now. Point at it again."
+
+
 def _ids_on(target: Mapping[str, Any] | None, surface: str) -> tuple[str, str | None] | None:
     """``surface_ids`` of ``target`` when it is on ``surface``, else None."""
     if target is None or target.get("surface") != surface:

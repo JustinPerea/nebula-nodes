@@ -159,8 +159,13 @@ until the item is verified:
   item (`AgentPresence.watch`: surface, item id, and the image or view if the target is on one) and reads the item
   again in a thread (`_look_again`). `forget_item` and `rename_item` of that item, and a `forget_subs` that takes that
   image or view, count on the watch. If the read finds the item gone, the point is refused. If a write counted during
-  the read, the item is read again (at most four reads). Otherwise the agent's cursor and the session's are stored
+  the read, the item is read again, up to four reads. Otherwise the agent's cursor and the session's are stored
   with no await between the read's return and the two stores.
+- **Four reads, then a refusal.** Any save of an item counts on the watch (`_broadcast_stored_asset` calls
+  `rename_item` on every write), so an item that is being edited can count during each read. A third check showed
+  that storing after the fourth read left a cursor on a Character deleted during that read. The route now refuses
+  with "Character “Mara” is changing right now. Point at it again." ("Board" and "Style" likewise) and stores
+  nothing. The line is new agent-facing copy, sent to GM - Design for the wording list.
 - **Why this closes the window.** A write that finished before the read shows in the read. A write after the read
   runs its forget either before the route goes on, which the watch sees, or after both cursors are stored, where the
   forget finds them like any others.
@@ -174,9 +179,11 @@ until the item is verified:
 
 Limits:
 
-- The bound of four reads matters only if the item is written during each of them and is still there after each: it was
-  removed and put back, or renamed, four times in a row within a few milliseconds. The point then stores its cursor after
-  the fourth read.
 - The check relies on every write that removes an item, an image or a view calling its forget after its store write,
   on the event loop. The routes on this branch do (`_forget_item_cursors`, `_forget_removed_images`,
-  `_forget_removed_views`, `_broadcast_assets_gone`).
+  `_forget_removed_views`, `_broadcast_assets_gone`); the third check read each of them.
+- A project switch between the last read and the store stamps the cursor with the new project's id while its item is
+  in the old one. Nothing is removed, and the first lookup had the same gap before this PR.
+- `forget_subs` keeps the cursor of the agent that removed the image (the PR #233 rule). A second point from the same
+  agent and session, sent while its own removal is between its store write and its forget, is kept on the removed
+  image. One agent sending one call at a time can't do this.

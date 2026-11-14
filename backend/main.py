@@ -177,6 +177,7 @@ from services.agent_presence import (
     RequestHeadersContext,
     MAX_LOG_CHARS,
     agent_presence,
+    changing_refusal,
     clean_log,
     clean_say,
     current_request_headers,
@@ -8593,10 +8594,10 @@ def _look_again(raw: Mapping[str, Any], target: Mapping[str, Any]) -> tuple[str 
     return refusal, {}
 
 
-# How many times a point looks at its item again while writes to it keep
-# landing. A write that lands during a look is followed by another look, which
-# refuses unless the item is back: more than one needs the item removed and
-# put back, or renamed, each time.
+# How many times a point looks at its item while writes to it keep landing.
+# Any save of the item counts (its route calls rename_item), so more than one
+# look means it is being edited as the agent points. An item written during
+# every one of them is not pointed at: the point is refused, to be made again.
 _SURFACE_LOOKS = 4
 
 
@@ -8612,7 +8613,8 @@ async def _settled_surface_names(raw: Mapping[str, Any], target: Mapping[str, An
     that isn't. So nothing is stored yet: the item is watched and read again.
     A write that finished before this read shows in it. One that lands after
     it either reaches the watch before this returns, and the item is read
-    again, or runs after the cursor is stored and fixes it up like any other.
+    again (up to _SURFACE_LOOKS reads, then the point is refused), or runs
+    after the cursor is stored and fixes it up like any other.
     A refused point has therefore written nothing: the agent's cursor and the
     session's are where they were, and the tabs were sent nothing."""
     watch = agent_presence.watch(target)
@@ -8625,6 +8627,9 @@ async def _settled_surface_names(raw: Mapping[str, Any], target: Mapping[str, An
                 raise PresenceError(refusal)
             if watch.touched == seen:
                 break
+        else:
+            # Never store on a look a write landed in: that write's fix-up has run and missed this cursor.
+            raise PresenceError(changing_refusal(target, fresh))
     finally:
         agent_presence.unwatch(watch)
     # The item's name (and its image's or view's) as the last look read it; a part is the first lookup's.
