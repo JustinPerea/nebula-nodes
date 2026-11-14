@@ -22,7 +22,13 @@ afterEach(cleanup);
 describe('the Remotion card\'s selected border', () => {
   it('the rule takes the category colour, with the accent only as a fallback', () => {
     const css = readFileSync(join(__dirname, '../src/styles/remotion-node.css'), 'utf8');
-    expect(css).toMatch(/\.remotion-node--selected \{\s*border-color: var\(--node-category-color, var\(--sr-accent\)\);\s*\}/);
+    // The model card's selection style in the category colour (r7), as the boundary and Cinema scene cards: colour, width and the breathe.
+    const rule = /\n(?:body\.app-slava-restraint )?\.remotion-node--selected \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/border-color: var\(--node-category-color, var\(--sr-accent\)\);/);
+    expect(rule).toMatch(/border-width: var\(--sr-node-card-selected-border-width\);/);
+    expect(rule).toMatch(/animation: slava-select-breathe var\(--sr-node-selected-duration\) ease-in-out infinite;/);
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.remotion-node--selected \{\s*animation: none;\s*box-shadow:/);
   });
 
   it('the rendered card carries the category colour of its definition', () => {

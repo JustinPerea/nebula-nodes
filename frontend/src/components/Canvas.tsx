@@ -612,7 +612,7 @@ export function Canvas() {
         // A whole graph is held: the fit would frame a graph that is not on
         // screen yet. It is owed (fitOwed), and runs when the hold lets go.
         if (holdingNow.current) {
-          // The store dispatches the event before it moves canvasGeneration; the timer runs after, so this is the graph the event belongs to.
+          // The store has moved canvasGeneration for the event's own graph by the time this timer runs (it does so in the same synchronous update that dispatches), so this is the graph the event belongs to.
           fitAskedDuringHold.current = { event, generation: canvasGeneration() };
           return;
         }
