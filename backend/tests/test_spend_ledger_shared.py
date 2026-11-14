@@ -494,7 +494,16 @@ def test_a_display_read_while_the_lock_is_held_reads_the_file_without_waiting(he
     """Settings and `nebula spend` read the file as it is: no wait on the
     other backend, the first-load steps applied to their own copy only, and
     the file left byte for byte as it was."""
-    monkeypatch.setattr(agent_spend, "LOCK_WAIT_SECONDS", 5.0)
+    # The read must never wait for the lock: every lock it tries is tried
+    # once (wait=False), so the check needs no wall-clock bound.
+    monkeypatch.setattr(agent_spend, "LOCK_WAIT_SECONDS", 30.0)
+    tried: list[bool] = []
+    locked = agent_spend.SpendLedger._locked
+
+    def spy(self, *, wait=True):
+        tried.append(wait)
+        return locked(self, wait=wait)
+    monkeypatch.setattr(agent_spend.SpendLedger, "_locked", spy)
     clock = Clock()
     # From before the daily total (not seeded) with a legacy key: the first
     # read would migrate and save it under the lock.
@@ -504,9 +513,8 @@ def test_a_display_read_while_the_lock_is_held_reads_the_file_without_waiting(he
     }}))
     before = held_lock.read_bytes()
     ledger = agent_spend.SpendLedger(held_lock, clock=clock)
-    started = time.monotonic()
     daily, outside = ledger.spent_daily(), ledger.spent_outside()
-    assert time.monotonic() - started < 2.0
+    assert tried and not any(tried)
     assert daily.total == pytest.approx(1.9) and outside.total == pytest.approx(0.9) and not daily.full
     assert ledger.spent("chat:c1").total == pytest.approx(1.0)
     assert held_lock.read_bytes() == before
@@ -538,6 +546,7 @@ def test_the_model_session_limit_and_an_apps_daily_limit_hold_during_the_hold(tm
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file with no permissions")
+@pytest.mark.unprivileged
 def test_a_file_that_cant_be_opened_is_never_replaced(tmp_path, monkeypatch):
     """A passing read error on a healthy ledger (here, no permission) is not
     an unreadable ledger: nothing is kept aside or replaced, the run is
@@ -662,10 +671,15 @@ def test_the_sentence_names_the_holds_end_in_local_time(zone, when, expected):
         f"used up until {expected}.")
 
 
-def test_the_sentence_uses_the_computers_zone_whatever_the_locale(monkeypatch):
+def test_the_sentence_uses_the_computers_zone_whatever_the_locale():
     import locale
 
-    monkeypatch.setenv("TZ", "America/New_York")
+    # TZ and the locale are restored exactly, with tzset, so the rest of the
+    # process isn't left on a changed zone (monkeypatch restores the
+    # variable without calling tzset).
+    zone_before = os.environ.get("TZ")
+    locale_before = locale.setlocale(locale.LC_TIME)
+    os.environ["TZ"] = "America/New_York"
     time.tzset()
     try:
         try:
@@ -675,8 +689,11 @@ def test_the_sentence_uses_the_computers_zone_whatever_the_locale(monkeypatch):
         until = datetime(2026, 11, 15, 20, 40, tzinfo=timezone.utc).timestamp()  # 3:40 PM in New York
         assert agent_spend.ledger_unreadable(until).endswith("until 3:40 PM on Sunday.")
     finally:
-        locale.setlocale(locale.LC_TIME, "C")
-        monkeypatch.delenv("TZ")
+        locale.setlocale(locale.LC_TIME, locale_before)
+        if zone_before is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = zone_before
         time.tzset()
 
 
@@ -746,3 +763,128 @@ def test_the_pricing_refusal_gives_the_reason_then_the_raw_error():
         "file or directory: '/x/model_pricing.json'. ASK.")
     assert agent_spend.pricing_refusal(ValueError(""), "ASK.") == (
         "Nebula couldn’t check this run’s cost because it can’t read the pricing table. ASK.")
+
+
+# -- round 3 (check of round 2: L2, L3, L4) ----------------------------------------------------------
+
+def _fails_once(ledger: agent_spend.SpendLedger, monkeypatch) -> None:
+    """The ledger's next file read finds something it can't open; the reads
+    after it read the file as it is."""
+    real = ledger._read_file
+    calls = []
+
+    def read():
+        calls.append(1)
+        return ("unopenable", None) if len(calls) == 1 else real()
+    monkeypatch.setattr(ledger, "_read_file", read)
+
+
+def test_a_view_takes_the_holds_end_and_whether_it_is_known_from_one_read(client, tmp_path, monkeypatch):
+    """L2: a file that can't be opened for one read and reads after it. The
+    stand-in end from the first read never reaches a view as a time
+    (``ledgerHold``, or ``ledgerNote`` with a time) without ``ledgerBlocked``."""
+    import main
+
+    path = tmp_path / "agent-spend.json"
+    _write_ledger(path, {})
+    ledger = agent_spend.SpendLedger(path)
+    assert ledger.spent_daily().until is None  # first load done
+    monkeypatch.setattr(main, "agent_spend_ledger", ledger)
+    _fails_once(ledger, monkeypatch)
+    stand_in = ledger.spent("outside:shared")
+    assert stand_in.until is not None and stand_in.known is False
+    assert ledger.spent("outside:shared").known is True and ledger.spent("outside:shared").until is None
+    for get in (lambda: client.get("/api/agent/spend").json(),
+                lambda: client.get("/api/agent/spend/apps", headers=PERSON).json()):
+        _fails_once(ledger, monkeypatch)
+        view = get()
+        assert "ledgerHold" not in view
+        assert view["ledgerBlocked"] is True
+        assert view.get("ledgerNote", agent_spend.LEDGER_CANT_READ) == agent_spend.LEDGER_CANT_READ
+
+
+@pytest.mark.parametrize("mark", [{}, {"since": "x"}, "future"])
+def test_a_mark_written_after_the_first_load_is_saved_by_a_display_read(tmp_path, mark):
+    """L3: a malformed or future-dated mark that appears after this ledger's
+    first load (a hand edit, an older backend) is saved by the next display
+    read that gets the lock, so the shown end stays put across reads."""
+    clock = Clock()
+    path = tmp_path / "agent-spend.json"
+    _write_ledger(path, {})
+    ledger = agent_spend.SpendLedger(path, clock=clock)
+    assert ledger.spent_daily().until is None
+    _write_ledger(path, {}, unreadable={"since": clock.now + 365 * 24 * HOUR} if mark == "future" else mark)
+    first = ledger.spent_daily()
+    assert first.until == clock.now + 24 * HOUR and first.known
+    assert json.loads(path.read_text())["unreadable"]["since"] == clock.now
+    clock.now += 600
+    assert ledger.spent_daily().until == first.until
+    assert ledger.hold_until() == first.until
+
+
+def test_a_display_read_without_the_lock_saves_no_repair(held_lock, monkeypatch):
+    """L3: a read that doesn't get the lock works on its own repaired copy
+    (strict) and leaves the file as it is."""
+    monkeypatch.setattr(agent_spend, "LOCK_WAIT_SECONDS", 30.0)
+    clock = Clock()
+    before = _write_ledger(held_lock, {}, unreadable={})
+    ledger = agent_spend.SpendLedger(held_lock, clock=clock)
+    assert ledger.spent_daily().until == clock.now + 24 * HOUR
+    assert held_lock.read_bytes() == before
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into a read-only folder")
+@pytest.mark.unprivileged
+def test_a_repair_that_cant_be_saved_refuses_with_busy_and_reads_strict(tmp_path, monkeypatch):
+    """L4: a malformed mark in a folder that can't be written. A check raises
+    LedgerBusy (the route answers 503, not 500) before it runs; a display
+    read doesn't raise and stays at the limits."""
+    monkeypatch.setattr(agent_spend, "LOCK_WAIT_SECONDS", 0.3)
+    clock = Clock()
+    folder = tmp_path / "data"
+    folder.mkdir()
+    path = folder / "agent-spend.json"
+    before = _write_ledger(path, {}, unreadable={})
+    (folder / ".agent-spend.json.lock").touch(mode=0o600)
+    folder.chmod(0o500)
+    try:
+        ledger = agent_spend.SpendLedger(path, clock=clock)
+        assert ledger.spent_daily().until == clock.now + 24 * HOUR  # no raise, strict
+        checked = []
+
+        def check():
+            checked.append(1)
+            return agent_spend.Decision(None, {"paid": 0.1})
+        with pytest.raises(agent_spend.LedgerBusy) as busy:
+            ledger.reserve("outside:shared", "Agent", check)
+        assert busy.value.why == agent_spend.BUSY_READ and checked == []
+        assert ledger.spent_daily().full
+    finally:
+        folder.chmod(0o700)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into a read-only folder")
+@pytest.mark.unprivileged
+def test_a_run_route_answers_503_when_a_repair_cant_be_saved(client, tmp_path, monkeypatch):
+    import main
+
+    monkeypatch.setattr(agent_spend, "LOCK_WAIT_SECONDS", 0.3)
+    folder = tmp_path / "data"
+    folder.mkdir()
+    path = folder / "agent-spend.json"
+    _write_ledger(path, {}, unreadable={})
+    (folder / ".agent-spend.json.lock").touch(mode=0o600)
+    monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(path))
+    price(0.2)
+    node_id = add_paid_node(client)
+    caps = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": 50, "models": {}}}
+    assert client.put("/api/settings", json=caps, headers=PERSON).status_code == 200
+    folder.chmod(0o500)
+    try:
+        response = client.post("/api/graph/run", json={"targetNodeId": node_id})
+    finally:
+        folder.chmod(0o700)
+    assert response.status_code == 503
+    assert response.json()["detail"].startswith(
+        f"Nebula couldn\u2019t check this run\u2019s cost because {agent_spend.BUSY_READ}. Try again in a moment.")

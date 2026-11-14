@@ -6980,8 +6980,10 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
         # The ledger was found unreadable in the last 24 hours: a run is
         # checked with every limit used up (agent_spend._counted), so the view
         # says so, in the sentence the refusal and the waiting run end with
-        # (weekday form), and gives the hold's end beside it.
-        if agent_spend_ledger.cant_read():
+        # (weekday form), and gives the hold's end beside it. ``known`` comes
+        # from the same read as ``until``, so a stand-in end is never shown
+        # as a time (review of PR #242 round 2, L2).
+        if not here.known:
             # Not the hold: the ledger can't be read at all right now, so
             # paid runs are refused until it can and no end time is known.
             result["ledgerNote"] = agent_spend.LEDGER_CANT_READ
@@ -7029,7 +7031,8 @@ def _outside_view() -> dict[str, Any]:
     if outside.until is not None:
         # An unreadable ledger holds every limit until then: Settings shows
         # each limit's usage as used up and says why, in its live form.
-        if agent_spend_ledger.cant_read():
+        # ``known`` is from the same read as ``until`` (L2).
+        if not outside.known:
             # The ledger can't be read at all: no amount is known and no end
             # time either, so Settings says that and shows no figure.
             view["ledgerBlocked"] = True

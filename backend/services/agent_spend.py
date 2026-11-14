@@ -464,6 +464,11 @@ class Spent:
     # Every budget counts this Spent as used up until then (_counted). None
     # when there is no hold.
     until: float | None = None
+    # Whether ``until`` is a real end (False for the stand-in a display read
+    # uses while the ledger can't be read at all, SpendLedger._view: no line
+    # may name it as a time). Read with ``until`` from the same read, so a
+    # view never pairs one read's end with another read's state (L2).
+    known: bool = True
 
     @property
     def full(self) -> bool:
@@ -690,9 +695,11 @@ class SpendLedger:
             try:
                 self._save(self._sessions)
             except OSError as exc:
-                if state != "unreadable":
-                    raise
-                # The unreadable file still has its name: found again next time.
+                # An unreadable file still has its name and is found again
+                # next time; a repaired mark or a migration that can't be
+                # saved is tried again by the next locked read. Either way the
+                # caller refuses (a check answers 503, not 500: review of
+                # PR #242 round 2, L4) and a display read stays strict.
                 raise LedgerBusy(BUSY_READ, self._path) from exc
 
     def _keep_aside(self) -> str:
@@ -747,31 +754,47 @@ class SpendLedger:
         aside, reads as held: nothing counted, every limit used up, with the
         hold's end a full WINDOW_SECONDS from now since its start is unknown.
         The third value says whether the end is a real one (False for that
-        stand-in: no line may name it as a time; see ``cant_read``)."""
+        stand-in: no line may name it as a time; see ``cant_read``).
+
+        A file that needs a change (a malformed or future-dated mark that
+        appeared after the first load, or an older backend's unmigrated
+        save) is saved once when this read gets the lock, as ``reserve``
+        would, so the shown end stops moving forward at each read (review of
+        PR #242 round 2, L3). A read that doesn't get the lock, or whose
+        save fails, works on its own repaired copy: strict, never $0."""
         if self._path is None or self._holder == threading.get_ident():
             with self._io_lock:
                 return self._sessions, self._until(self._unreadable), True
         if not self._first_done:
-            try:
-                with self._locked(wait=False):
-                    pass
-            except LedgerBusy:
-                pass
+            self._try_locked_refresh()
         state, data = self._read_file()
         if state == "missing":
             return {}, None, True
         if state == "unreadable":
             # Kept aside under the lock when it can be; at the limits either way.
-            try:
-                with self._locked(wait=False):
-                    pass
-            except LedgerBusy:
+            if not self._try_locked_refresh():
                 return {}, self._clock() + WINDOW_SECONDS, False
             state, data = self._read_file()
         if state != "ok":
             return {}, self._clock() + WINDOW_SECONDS, False
-        sessions, mark, _ = self._parsed(data)
+        sessions, mark, changed = self._parsed(data)
+        if changed and self._try_locked_refresh():
+            state, data = self._read_file()
+            if state != "ok":
+                return {}, self._clock() + WINDOW_SECONDS, False
+            sessions, mark, _ = self._parsed(data)
         return sessions, self._until(mark), True
+
+    def _try_locked_refresh(self) -> bool:
+        """For a display read: take the lock once without waiting, which
+        re-reads the file and saves any first-load step or repair it needs
+        (``_refresh``). False when the lock was taken or the save failed;
+        the read then goes on with what it read, and saves nothing."""
+        try:
+            with self._locked(wait=False):
+                return True
+        except LedgerBusy:
+            return False
 
     def _seed_chats_daily(self, sessions: dict[str, dict[str, Any]]) -> None:
         """Chat spend from before the daily total counts toward it from the
@@ -873,25 +896,25 @@ class SpendLedger:
                      max(0, runs))
 
     def spent(self, key: str) -> Spent:
-        sessions, until, _known = self._view()
+        sessions, until, known = self._view()
         with self._lock:
             entry = sessions.get(key) or {}
             if _keeps_events(key):
-                return replace(self._sum(self._events(entry)), until=until)
+                return replace(self._sum(self._events(entry)), until=until, known=known)
             models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
             spent_models: dict[str, float] = {}
             for k, v in models.items():
                 model = merged_into(str(k))
                 spent_models[model] = spent_models.get(model, 0.0) + float(v)
             return Spent(float(entry.get("total") or 0.0), spent_models, int(entry.get("planRuns") or 0),
-                         until=until)
+                         until=until, known=known)
 
     def spent_outside(self) -> Spent:
         """Everything every outside agent (shared or with an app token) spent in the last 24 hours."""
-        sessions, until, _known = self._view()
+        sessions, until, known = self._view()
         with self._lock:
             events = [event for key, entry in sessions.items() if is_outside(key) for event in self._events(entry)]
-            return replace(self._sum(events), until=until)
+            return replace(self._sum(events), until=until, known=known)
 
     def spent_daily(self) -> Spent:
         """Everything that isn't the person spent in the last 24 hours, for the
@@ -899,7 +922,7 @@ class SpendLedger:
         Each key is summed and held at 0 on its own before they're added, so a
         give-back larger than its own key's charge can't erase another key's
         spend (review 1 of PR #212, N-1)."""
-        sessions, until, _known = self._view()
+        sessions, until, known = self._view()
         with self._lock:
             parts = [self._sum(self._events(entry)) for key, entry in sessions.items() if _keeps_events(key)]
         models: dict[str, float] = {}
@@ -907,7 +930,7 @@ class SpendLedger:
             for model, amount in part.models.items():
                 models[model] = round(models.get(model, 0.0) + amount, 6)
         return Spent(round(sum(part.total for part in parts), 6), models, sum(part.plan_runs for part in parts),
-                     until=until)
+                     until=until, known=known)
 
     def hold_until(self) -> float | None:
         """When the hold an unreadable ledger started ends (epoch seconds),
@@ -1095,7 +1118,8 @@ def _counted(spent: Spent, usd: float | None, plan_runs: int | None,
         if cap is not None:
             models[definition_id] = max(models.get(definition_id, 0.0), cap)
     return Spent(spent.total if usd is None else max(spent.total, usd), models,
-                 spent.plan_runs if plan_runs is None else max(spent.plan_runs, plan_runs), until=spent.until)
+                 spent.plan_runs if plan_runs is None else max(spent.plan_runs, plan_runs), until=spent.until,
+                 known=spent.known)
 
 
 def daily_budget(daily_spent: Spent, caps: Mapping[str, Any]) -> Budget:

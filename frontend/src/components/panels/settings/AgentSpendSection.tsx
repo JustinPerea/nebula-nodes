@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
@@ -29,6 +29,8 @@ const SAME_AS_SESSION = 'session';
 const DEFAULT_CHOICE = 'default';
 const MODEL_RUN_CHOICES = [0.5, 1, 2, 5, 10, 20] as const;
 const MODEL_SESSION_CHOICES = [5, 10, 25, 50, 100] as const;
+/** How often the view is read again while the spend record's hold or can't-open state is on. */
+const RELOAD_WHILE_HELD_MS = 30_000;
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image', 'video-gen': 'Video', 'audio-gen': 'Audio', 'text-gen': 'Text and chat',
@@ -113,6 +115,17 @@ export function AgentSpendSection() {
   const blocked = outside.view?.ledgerBlocked === true;
   const counted = blocked || holdOn(hold, now);
   const holdLine = blocked ? LEDGER_CANT_READ : ledgerHoldLine(hold, now);
+  // While either is on, the view is read again every 30 s and when the window is shown again, so
+  // the line goes once the record reads (review of PR #242 round 2, L5). The last view stays until
+  // the new one arrives, so no row changes height or flickers.
+  const { reload } = outside;
+  useEffect(() => {
+    if (!counted) return undefined;
+    const timer = setInterval(reload, RELOAD_WHILE_HELD_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') reload(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [counted, reload]);
   // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
   // focus to the section's line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
@@ -168,7 +181,7 @@ export function AgentSpendSection() {
         MCP server or API. A program running as you with its own unrestricted shell could read the link&rsquo;s token,
         so these limits don&rsquo;t bind it.
       </p>
-      {holdLine && <p className="settings-hint" data-testid="settings-agent-ledger-hold">{holdLine}</p>}
+      {holdLine && <p className="settings-hint settings-hint--state" data-testid="settings-agent-ledger-hold">{holdLine}</p>}
       <div className="settings-list">
         <DailyTotalRow limits={limits} spentUsd={outside.view ? outside.view.daily?.spentUsd ?? 0 : null} counted={counted} unknown={blocked}
           disabled={pending} onChange={save} lock={lock.control} />

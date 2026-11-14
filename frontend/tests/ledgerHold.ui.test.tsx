@@ -39,7 +39,10 @@ const { useSettingsDraftStore } = await import('../src/store/settingsDraftStore'
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
 const { NoteText } = await import('../src/components/agent-notes/AgentNoteParts');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
-const { LEDGER_HOLD_SENTENCE, COUNTED_AS_USED_UP } = await import('../src/lib/ledgerHold');
+const { LEDGER_HOLD_SENTENCE, COUNTED_AS_USED_UP, holdOn } = await import('../src/lib/ledgerHold');
+const { useNowUntil, nextLocalMidnight } = await import('../src/hooks/useBefore');
+const { useNodeWait } = await import('../src/lib/nodeWaitHeader');
+const { waitFor, waitDescription } = await import('../src/lib/nodeWait');
 
 const NOON = new Date(2026, 10, 14, 12, 0, 0, 0);
 const UNTIL = new Date(2026, 10, 14, 15, 40, 0, 0).getTime() / 1000;
@@ -90,10 +93,11 @@ describe('Settings > Agent spending during the hold', () => {
   it('puts the line under the intro and reads "Counted as used up" in every usage row', async () => {
     const { container } = await mount({ until: UNTIL });
     const line = screen.getByTestId('settings-agent-ledger-hold');
+    // Drawn in the figure's ink with its own gap to the card, not as fine print.
+    expect(line.className).toBe('settings-hint settings-hint--state');
     expect(line.textContent).toBe(`${LEDGER_HOLD_SENTENCE} 3:40 PM.`);
     expect(line.tagName).toBe('P');
     expect(line.getAttribute('role')).toBeNull();
-    expect(line.className).toBe('settings-hint');
     // Directly under the intro paragraphs, above the limit rows.
     expect(line.previousElementSibling!.id).toBe('settings-agent-spend-who');
     expect(line.nextElementSibling!.className).toBe('settings-list');
@@ -161,7 +165,11 @@ describe('Settings > Agent spending during the hold', () => {
     expect(screen.getByTestId('settings-agent-daily-spent').textContent).toBe('$3.40 of $5 used in the last 24 hours.');
     expect(container.querySelector('[role="meter"]')).not.toBeNull();
     expect(screen.getByTestId('settings-agent-outside-spent').textContent).toContain('$1.25');
-    expect(api.getOutsideSpend).toHaveBeenCalledTimes(1);
+    // The view still says the hold is on: the line went at its end, not with a read. The reads
+    // every 30 s stop with it.
+    const reads = api.getOutsideSpend.mock.calls.length;
+    await pass(120_000);
+    expect(api.getOutsideSpend).toHaveBeenCalledTimes(reads);
   });
 
   it('is not a hold at all when the end has already passed', async () => {
@@ -175,6 +183,94 @@ describe('Settings > Agent spending during the hold', () => {
     const before = vi.getTimerCount();
     unmount();
     expect(vi.getTimerCount()).toBeLessThan(before);
+  });
+
+  it('drops "tomorrow" at local midnight while the panel stays open', async () => {
+    vi.setSystemTime(new Date(2026, 10, 14, 23, 50, 0, 0)); // Saturday
+    await mount({ until: new Date(2026, 10, 15, 15, 40, 0, 0).getTime() / 1000 });
+    expect(screen.getByTestId('settings-agent-ledger-hold').textContent).toBe(`${LEDGER_HOLD_SENTENCE} 3:40 PM tomorrow.`);
+    await pass(9 * 60_000);
+    expect(screen.getByTestId('settings-agent-ledger-hold').textContent).toBe(`${LEDGER_HOLD_SENTENCE} 3:40 PM tomorrow.`);
+    await pass(2 * 60_000);
+    expect(screen.getByTestId('settings-agent-ledger-hold').textContent).toBe(`${LEDGER_HOLD_SENTENCE} 3:40 PM.`);
+  });
+
+  const mountBlocked = async () => {
+    session.resetPersonSessionForTests();
+    api.getOutsideSpend.mockReset().mockResolvedValue({ ...view(), ledgerBlocked: true });
+    api.fetchPersonalAgents.mockReset().mockResolvedValue({ warningAcknowledged: true, agents: [] });
+    useSettingsDraftStore.setState({
+      saved: { ...(useSettingsDraftStore.getState().saved ?? {}), agentSpend: { sessionUsd: 5, models: {} } } as never,
+    });
+    const result = render(<AgentSpendSection />);
+    await flush();
+    return result;
+  };
+
+  it('reads the view again every 30 s while the record can\'t be opened, keeping the last one until the next arrives', async () => {
+    await mountBlocked();
+    expect(screen.getByTestId('settings-agent-ledger-hold').textContent).toContain('can’t open its record');
+    let answer!: (value: unknown) => void;
+    api.getOutsideSpend.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await pass(29_000);
+    expect(api.getOutsideSpend).toHaveBeenCalledTimes(1);
+    await pass(1_000);
+    expect(api.getOutsideSpend).toHaveBeenCalledTimes(2);
+    // Still waiting on the read: the line and the rows are as they were.
+    expect(screen.getByTestId('settings-agent-ledger-hold').textContent).toContain('can’t open its record');
+    expect(screen.getByTestId('settings-agent-daily-spent').textContent).toBe('Amount unknown');
+    await act(async () => { answer(view()); });
+    await flush();
+    expect(screen.queryByTestId('settings-agent-ledger-hold')).toBeNull();
+    expect(screen.getByTestId('settings-agent-daily-spent').textContent).toBe('$3.40 of $5 used in the last 24 hours.');
+    // Neither state is on: no more reads.
+    await pass(120_000);
+    expect(api.getOutsideSpend).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the view again when the window is shown again, and stops on unmount', async () => {
+    const shown = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    try {
+      const { unmount } = await mountBlocked();
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      await flush();
+      expect(api.getOutsideSpend).toHaveBeenCalledTimes(2);
+      unmount();
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      await pass(120_000);
+      expect(api.getOutsideSpend).toHaveBeenCalledTimes(2);
+    } finally {
+      shown.mockRestore();
+    }
+  });
+});
+
+describe('the hold clock (useNowUntil)', () => {
+  function Probe({ until, seen }: { until?: number; seen: boolean[] }) {
+    const now = useNowUntil(until);
+    seen.push(holdOn(until === undefined ? null : { until }, now));
+    return null;
+  }
+
+  it('compares a hold that arrives after mount with the clock then, so an end already past never shows', () => {
+    const seen: boolean[] = [];
+    const { rerender } = render(<Probe seen={seen} />);
+    // Two hours on, with no timer run: the hold arrives with an end one hour after mount.
+    vi.setSystemTime(NOON.getTime() + 2 * 3_600_000);
+    rerender(<Probe seen={seen} until={(NOON.getTime() + 3_600_000) / 1000} />);
+    expect(seen).not.toContain(true);
+  });
+
+  it('finds the next local midnight on every day of the year, the days the clocks change included', () => {
+    // From 1 AM it is 23 wall-clock hours to midnight, plus whatever the zone's offset changed by
+    // on the way (an hour on the days the clocks change, in a zone that changes them).
+    for (let day = 1; day <= 365; day++) {
+      const at = new Date(2026, 0, day, 1, 0, 0, 0);
+      const midnight = new Date(nextLocalMidnight(at.getTime()));
+      expect([midnight.getHours(), midnight.getMinutes()]).toEqual([0, 0]);
+      const shift = (at.getTimezoneOffset() - midnight.getTimezoneOffset()) * 60_000;
+      expect(midnight.getTime() - at.getTime()).toBe(23 * 3_600_000 - shift);
+    }
   });
 });
 
@@ -211,7 +307,7 @@ describe('the Daily total row, counted as used up', () => {
 
 describe('a held run on the proposal bar and the Updates card', () => {
   const BAR = 'This would pass the $5 daily total, which has $0.20 left.';
-  const LINE = `${LEDGER_HOLD_SENTENCE} Sunday at 3:40 PM.`;
+  const LINE = `${LEDGER_HOLD_SENTENCE} 3:40 PM on Sunday.`;
   const wait = (ledgerHold?: ProposalWait['ledgerHold']): ProposalWait => ({
     limitUsd: 5, usedUsd: 4.8, leftUsd: 0.2, runUsd: 0.4, also: null, alsoLimitUsd: null, alsoModel: null,
     alsoFor: null, alsoPlanRuns: null, barLine: BAR, nodeIds: ['n3'], names: ['Writer'],
@@ -264,6 +360,20 @@ describe('a held run on the proposal bar and the Updates card', () => {
     expect(container.textContent).toBe(`${note().text} ${LINE}`);
     await pass(61_000);
     expect(container.textContent).toBe(note().text);
+  });
+
+  it('gives the node header\'s screen-reader reason the sentence too, and drops it at the end', async () => {
+    useCanvasProposalsStore.getState().open(proposal({ until: endsIn(60_000), line: LINE }), 'key-a');
+    expect(waitFor(useCanvasProposalsStore.getState(), 'n3', NOON.getTime())!.reason).toBe(`${BAR} ${LINE}`);
+    expect(waitFor(useCanvasProposalsStore.getState(), 'n3', NOON.getTime() + 60_000)!.reason).toBe(BAR);
+    function Reason() {
+      const wait = useNodeWait('n3');
+      return <span>{wait ? waitDescription(wait) : ''}</span>;
+    }
+    const { container } = render(<Reason />);
+    expect(container.textContent).toBe(`A proposal is waiting for your OK. ${BAR} ${LINE}`);
+    await pass(61_000);
+    expect(container.textContent).toBe(`A proposal is waiting for your OK. ${BAR}`);
   });
 
   it('leaves an Update of another proposal, or with no hold, as it is', () => {

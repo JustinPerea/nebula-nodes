@@ -5,7 +5,7 @@
  * goes the moment the hold does.
  */
 
-/** The start of the sentence the backend writes (agent_spend.LEDGER_UNREADABLE minus its time),
+/** The start of the sentence the backend writes (agent_spend.ledger_unreadable() minus its time),
  * with the curly apostrophe. A backend test reads it from this file. */
 export const LEDGER_HOLD_SENTENCE = 'Nebula couldn’t read its record of what agents have spent, so it counts every spending limit as used up until';
 

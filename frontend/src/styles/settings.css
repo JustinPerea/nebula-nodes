@@ -145,6 +145,12 @@ body.app-slava-restraint .settings-hint {
 
 body.app-slava-restraint .settings-hint + .settings-hint { margin-top: 6px; }
 
+/* A hint that states what the section is doing right now, such as the
+   spending record's hold (GM - Design, 2026-11-14): the ink a row's figure
+   uses, still neutral, the hints' own gap above and 12 px to the card below,
+   so it doesn't read as one more paragraph of the fine print. */
+body.app-slava-restraint .settings-hint--state { margin-bottom: 12px; color: var(--sr-ink); }
+
 body.app-slava-restraint .settings-hint a {
   color: var(--sr-ink);
   text-decoration: underline;
