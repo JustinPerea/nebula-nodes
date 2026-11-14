@@ -25922,6 +25922,10 @@ async def _broadcast_assets_gone(removed: Mapping[str, list[dict[str, Any]]]) ->
         for item in removed.get(kind) or ():
             if kind == "style":
                 _journal_style("purged", item, style_id=item["id"])
+            # Cursors on it leave, as on a delete (the kinds are the cursor's
+            # surface names): `look`, `context` and `agents` must not go on
+            # naming an item whose project is gone for good.
+            await _forget_item_cursors(kind, item["id"])
             await _broadcast_stored_asset(kind, None, item["id"], deleted=True)
 
 
@@ -28813,8 +28817,9 @@ async def delete_preset(preset_id: str) -> dict:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise refusal_copy.not_found(f"Style {preset_id} not found", "style", "styles")
-    await _style_written("deleted", record, deleted=True)
+    # As a board's delete: the cursors on it leave, then the line is said.
     await _forget_item_cursors("style", preset_id)
+    await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 
 

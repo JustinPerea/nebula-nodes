@@ -15,6 +15,7 @@ from typing import Any
 import moodboard_client as boards
 from moodboard_client import MoodboardError
 from nebula_api import NebulaAPI, NebulaAPIError
+from services.cursor_actions import echoed
 
 _CHARACTER_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -38,10 +39,11 @@ def find_character(api: NebulaAPI, ref: str, headers: dict[str, str] | None = No
         candidates.extend(_list(api, "project", project_id, headers))
     matches = [item for item in candidates if str(item.get("name", "")).casefold() == ref.casefold()]
     if not matches:
-        raise MoodboardError(f"no Character “{ref}” (Character Studio lists them; use its id or exact name)")
+        # The caller's text is echoed cleaned and cut to 40 characters, as a cursor refusal echoes it.
+        raise MoodboardError(f"no Character “{echoed(ref)}” (Character Studio lists them; use its id or exact name)")
     if len(matches) > 1:
         ids = ", ".join(str(item.get("id")) for item in matches)
-        raise MoodboardError(f"{len(matches)} Characters are named “{ref}” ({ids}); use the id")
+        raise MoodboardError(f"{len(matches)} Characters are named “{echoed(ref)}” ({ids}); use the id")
     return matches[0]
 
 

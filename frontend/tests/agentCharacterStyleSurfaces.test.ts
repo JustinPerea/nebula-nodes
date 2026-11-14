@@ -305,6 +305,11 @@ describe('the default lines (GM - Design), word for word', () => {
 
   it('a style\'s write with no part, several parts or one it does not know is the plain line; its click has none', () => {
     expect(surfaceSay('type', { surface: 'style', style: 'Dusk grain', part: 'whatever' })).toBe('Changing “Dusk grain”');
+    // A part that names something every object has reads as an unknown part (review of PR #243).
+    for (const part of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(surfaceSay('type', { surface: 'style', style: 'Dusk grain', part })).toBe('Changing “Dusk grain”');
+      expect(surfaceSay('look', { surface: 'character', character: 'Mara', part })).toBe('Looking at “Mara”');
+    }
     expect(surfaceSay('click', { surface: 'style', style: 'Dusk grain' })).toBeNull();
     expect(surfaceSay('look', { surface: 'style', style: 'Dusk grain', part: 'prompt' })).toBe('Looking at “Dusk grain”');
   });

@@ -408,15 +408,93 @@ def test_the_route_refuses_in_the_house_voice_and_sends_nothing(api):
     assert _cursors(sent) == []
 
 
-def test_a_project_item_of_another_project_can_not_be_named_but_global_can(api):
+def test_a_project_item_of_another_project_can_not_be_named_but_global_can(api, monkeypatch):
+    import main as main_module
+
     client, _, _, _, project_id = api
-    other = client.post("/api/characters", json={
-        "name": "Elsewhere", "subjectType": "human", "referenceViews": [_url(), _url(), _url()],
-        "frozenTraitString": "", "seed": 1, "consistencyStrength": 0.5, "projectId": project_id})
-    assert other.status_code == 200, other.text
-    assert _point(client, {"surface": "character", "character": "Elsewhere"}).status_code == 200  # the open project's
-    glob = _make_character(client, name="House")
-    assert _point(client, {"surface": "character", "character": glob["id"]}).status_code == 200
+    theirs = _make_character(client, name="Elsewhere", projectId=project_id)
+    far = _make_style(client, name="Far style", scope="project", projectId=project_id)
+    house = _make_character(client, name="House")
+    shared = _make_style(client, name="Shared style")
+    own = [({"surface": "character", "character": "Elsewhere"}, "character"),
+           ({"surface": "character", "character": theirs["id"]}, "character"),
+           ({"surface": "style", "style": "Far style"}, "style"),
+           ({"surface": "style", "style": far["id"]}, "style")]
+    for target, _ in own:  # while their project is the open one
+        assert _point(client, target).status_code == 200, target
+    # Another project is open: neither the name nor the id reaches them, and
+    # the refusal lists only what is here (review of PR #243: the earlier test
+    # never left the project).
+    monkeypatch.setattr(main_module, "_open_project_id", lambda: "some-other-project")
+    for target, kind in own:
+        refused = _point(client, target)
+        assert refused.status_code == 422, target
+        said = refused.json()["detail"]
+        assert said.startswith(f"No {kind} “") and "Elsewhere”," not in said.split("here.", 1)[1], said
+        assert "Far style" not in said.split("here.", 1)[1], said
+    assert _point(client, {"surface": "character", "character": house["id"]}).status_code == 200
+    assert _point(client, {"surface": "character", "character": "House"}).status_code == 200
+    assert _point(client, {"surface": "style", "style": shared["id"]}).status_code == 200
+
+
+def test_an_item_in_recently_deleted_can_not_be_pointed_at(api):
+    client, _, _, _, _ = api
+    character = _make_character(client)
+    style = _make_style(client)
+    assert client.delete(f"/api/characters/{character['id']}").status_code == 200
+    assert client.delete(f"/api/presets/{style['id']}").status_code == 200
+    for target in ({"surface": "character", "character": "Mara"},
+                   {"surface": "character", "character": character["id"]},
+                   {"surface": "style", "style": "Dusk grain"},
+                   {"surface": "style", "style": style["id"]}):
+        refused = _point(client, target)
+        assert refused.status_code == 422 and refused.json()["detail"].startswith("No "), refused.text
+
+
+def test_items_that_go_with_a_project_deleted_for_good_take_their_cursors(api):
+    """A project purged for good deletes its characters and styles (and
+    boards): cursors on them leave and the tabs are told, as on a delete
+    (review of PR #243)."""
+    import main as main_module
+
+    client, _, heard, presence, _ = api
+    character = _make_character(client)
+    style = _make_style(client)
+    for target, removed in (
+            ({"surface": "character", "character": character["id"], "view": 2},
+             {"character": [{"id": character["id"], "name": "Mara"}]}),
+            ({"surface": "style", "style": style["id"]}, {"style": [{"id": style["id"], "name": "Dusk grain"}]})):
+        assert _point(client, target).status_code == 200
+        assert len(presence.active()) == 1
+        heard.clear()
+        asyncio.run(main_module._broadcast_assets_gone(removed))
+        assert presence.active() == [], target
+        assert [event["type"] for event in heard].count("agentPresenceLeave") == 1, heard
+
+
+def test_a_style_delete_clears_its_cursors_before_its_line_is_said(api, monkeypatch):
+    """As a board's delete: a tab must not draw the delete's line at a cursor
+    that is about to leave (review of PR #243)."""
+    import main as main_module
+
+    client, _, _, _, _ = api
+    order: list[tuple[str, dict]] = []
+
+    async def raw(data, **_kw):
+        order.append(("raw", data))
+
+    async def tabs(data):
+        order.append(("tabs", data))
+
+    monkeypatch.setattr(main_module.manager, "broadcast_raw", raw)
+    monkeypatch.setattr(main_module.manager, "broadcast_browser", tabs)
+    style = _make_style(client, LANE_A)
+    order.clear()
+    assert client.delete(f"/api/presets/{style['id']}", headers=LANE_A).status_code == 200
+    left = [n for n, (where, data) in enumerate(order) if data.get("type") == "agentPresenceLeave"]
+    said = [n for n, (where, data) in enumerate(order)
+            if data.get("say") == "Moved the style “Dusk grain” to “Recently deleted”"]
+    assert left and said and max(left) < min(said), [(where, data.get("type")) for where, data in order]
 
 
 # -- renames and deletes keep the cursors true ------------------------------------------------------
@@ -638,6 +716,19 @@ def test_style_actions_words_for_every_verb():
     long = style_actions.describe("updated", {"id": "s1", "name": "N" * 80},
                                   fields=["name", "category", "refImages", "thumbnail"], before={"name": "O" * 80})
     assert len(long) <= 140 and long.endswith("and changed its category, references and thumbnail")
+    # Two long names that are cut to the same text would read “XXX…” to “XXX…”,
+    # which names nothing: that rename takes the plain form (review of PR #243).
+    start = "X" * 100
+    twins = {"fields": ["name", "prompt", "params"], "before": {"name": start + "a"}}
+    assert style_actions.describe("updated", {"id": "s1", "name": start + "b"}, **twins) == \
+        f"changed the name, the prompt and the settings of the style “{'X' * 59}…”"
+    assert style_actions.describe("updated", {"id": "s1", "name": start + "b"}, fields=["name"],
+                                  before={"name": start + "a"}) == f"changed the name of the style “{'X' * 59}…”"
+    # A cut never splits a character: a joined emoji stays whole or goes.
+    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467"
+    cut = style_actions.describe("created", {"id": "s1", "name": family * 20})
+    assert "\u200d\u2026" not in cut and not cut.rstrip("…”").endswith("\u200d")
+    assert not style_actions.style_anchor({"id": "s1", "name": family * 20})[1]["style"].endswith("\u200d")
     assert style_actions.describe("restored", style) == "restored the style “Dusk grain”"
     assert style_actions.describe("purged", style) == "deleted the style “Dusk grain” for good"
     assert style_actions.describe("created", None, style_id="s9") == "made the style “s9”"
@@ -791,6 +882,12 @@ def test_character_list_and_get_over_mcp(api):
         mcp_server.character_get("Nobody")
 
 
+def test_character_get_echoes_a_long_name_cut(api):
+    with pytest.raises(Exception) as refused:
+        mcp_server.character_get("N" * 10_000)
+    assert "N" * 41 not in str(refused.value) and len(str(refused.value)) < 200
+
+
 def test_character_get_says_a_deleted_one_is_in_recently_deleted(api):
     client, _, _, _, _ = api
     character = _make_character(client)
@@ -846,6 +943,10 @@ def test_nebula_point_refuses_the_new_flags_misused(monkeypatch):
         "--view goes with --character NAME_OR_ID (its id or exact name)")
     assert _cli(monkeypatch, "--character", "Mara", "--image", "1").endswith(
         "--image goes with --moodboard BOARD; a character's reference view is --view N")
+    # An empty value is a mistake to name, not a flag that wasn't given.
+    assert _cli(monkeypatch, "--character", "", "--part", "name").endswith(
+        "--character needs an id or an exact name")
+    assert _cli(monkeypatch, "--style", " ").endswith("--style needs an id or an exact name")
 
 
 def test_nebula_point_character_and_style_send_the_surface_target_and_print_where():

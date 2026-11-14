@@ -1238,8 +1238,11 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   const headerWaitsRef = useRef(nodeWaits);
   headerWaitsRef.current = nodeWaits;
   const sayInfo = useMemo(() => sayFor(cursor, space.labels(), headerWaits),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event: cursor.seq names it
-    [cursor.seq, cursor.say, cursor.action, headerWaits]);
+    // A retarget (the backend moved the cursor off a removed image or view,
+    // same seq) changes the target and its names: a default line is worked
+    // out again so it names where the cursor is now, not what it left.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per event or retarget: cursor.seq and cursor.target name them
+    [cursor.seq, cursor.say, cursor.action, cursor.target, headerWaits]);
   const say = sayInfo.text;
   // How long it shows before its exit (r54): max(3 s, 60 ms × characters),
   // capped at 8 s; a default tied to a held state (think, propose, wait)

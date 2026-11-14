@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from services.text_cut import safe_cut
+
 # The Style fields a write can change, as the app labels them.
 FIELD_LABELS = {
     "name": "the name",
@@ -56,7 +58,7 @@ def _name(style: Mapping[str, Any] | None, style_id: str = "", limit: int = 60) 
     style = style or {}
     name = " ".join(str(style.get("name") or "").split()) or str(style.get("id") or style_id or "Untitled")
     if len(name) > limit:
-        name = name[:limit - 1].rstrip() + "\u2026"
+        name = name[:safe_cut(name, limit - 1)].rstrip() + "\u2026"
     return f"\u201c{name}\u201d"
 
 
@@ -73,7 +75,8 @@ def style_anchor(style: Mapping[str, Any] | None, fields: list[str] | None = Non
     several has none)."""
     style = style or {}
     item = str(style.get("id") or style_id)
-    name = " ".join(str(style.get("name") or item).split())[:80]
+    name = " ".join(str(style.get("name") or item).split())
+    name = name[:safe_cut(name, 80)]
     target: dict[str, Any] = {"surface": "style", "itemId": item}
     names: dict[str, Any] = {"style": name}
     if fields and len(fields) == 1 and fields[0] in FIELD_PARTS:
@@ -95,8 +98,11 @@ def _updated(style: Mapping[str, Any] | None, fields: list[str], style_id: str,
     where = style_where(style, style_id, limit)
     if not fields:
         return f"saved {where} with no changes"
-    if "name" in fields and before is not None and before.get("name"):
-        # A rename gives both names: "changed the name" doesn't say which it was.
+    # A rename gives both names: "changed the name" doesn't say which it was.
+    # Two long names that are cut to the same text would say nothing either
+    # (“Xxxx…” to “Xxxx…”), so those take the plain form below.
+    if ("name" in fields and before is not None and before.get("name")
+            and _name(before, style_id, limit) != _name(style, style_id, limit)):
         said = f"renamed {style_where(before, style_id, limit)} to {_name(style, style_id, limit)}"
         others = [key for key in fields if key != "name"]
         if not others:

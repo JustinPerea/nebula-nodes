@@ -85,3 +85,23 @@ because a view has no parts. Leave out the part." ("point at", since any action 
 - The frontend test that pins labels reads `PART_LABELS = {...}` from `cursor_actions.py` with a regex; the
   Character labels live in `CHARACTER_LABELS` so that regex still sees one object. The frontend can mirror
   `CHARACTER_LABELS` separately.
+
+## Review round (two reviewers, backend and frontend)
+
+Neither found a high finding. What changed:
+
+- **A rename whose two names shorten to the same text.** Two long names that share their first 59 (or 29) characters were both cut to the same text, so the line read "renamed the style “XXX…” to “XXX…”". That rename now takes the plain form, "changed the name[, the prompt and the settings] of the style “XXX…”". Names are cut with `text_cut.safe_cut`, so a joined emoji is never split.
+- **The project boundary is tested for real.** The earlier test never left the open project. It now opens another project and checks that a project's Character and Style can't be named by name or by id, that the refusal lists none of them, and that Global's still can. A second test checks that an item in "Recently deleted" can't be pointed at.
+- **A Style delete clears its cursors before its line is said**, as a board delete does, so a tab never draws the delete's line on a cursor that is about to leave.
+- **Items that go with a project deleted for good take their cursors.** `_broadcast_assets_gone` now forgets the cursors on each board, Character and Style it reports, and tells the tabs. Before, `look`, `context` and `agents` went on naming them. This gap was on main for boards.
+- **A retarget works the default line out again.** When the backend moves a cursor off a removed view or image (`agentPresenceRetarget`, same event number), the cursor's default line used to keep its old words for the few seconds it shows: "Looking at view 3 of “Mara”" on a cursor now at the Character. It now reads "Looking at “Mara”". An agent's own say is left as it is. This also changes boards: a cursor that falls back from a removed image reads "Looking at “Desert light”".
+- `character_get` and `nebula character show` echo a name they can't find cut to 40 characters, as a cursor refusal does. `nebula point --character ""` (or `--style`, `--moodboard`) says "--character needs an id or an exact name".
+- Part lookups on the frontend read own keys only, so a part named "constructor" or "toString" reads as an unknown part.
+
+Left as they are, with the reason:
+
+- **A view is a position.** Views have no ids, so removing view 1 of 3 leaves a cursor on view 2 over what was view 3. The backend's contract is the position, and a saved cut moves cursors past the new end back to the Character.
+- **The Studio publishes its draft's view count.** The count describes what is drawn. A cursor on a view the draft no longer shows holds its spot until the draft is saved or reloaded, when the backend's retarget moves it.
+- **A Character or Style moved to a project that isn't open keeps its cursors** (they park at the launcher), as the build notes above say.
+- **Two cursors on one row step down in a column**, so the second sits over the next row. Board rows on main do the same (design signed that off in PR #233).
+- **In the Studio a Character's cursor lands on the definition panel, not the rail row**: of several matches the resolver takes the largest visible one, as it takes an open board over its row.

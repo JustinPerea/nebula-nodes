@@ -795,8 +795,11 @@ def main() -> None:
             args.moodboard, args.image, args.part, args.character, args.view, args.style)):
         # One actionable line, with that command's usage (cli/parser.py).
         point = _subparser(parser, "point")
-        given = surface_exclusive(**{f"--{name}": value for name, value in (
-            ("moodboard", args.moodboard), ("character", args.character), ("style", args.style))})
+        surfaces = (("moodboard", args.moodboard), ("character", args.character), ("style", args.style))
+        for name, value in surfaces:
+            if value is not None and not value.strip():
+                point.error(f"--{name} needs an id or an exact name")
+        given = surface_exclusive(**{f"--{name}": value for name, value in surfaces})
         if len(given) > 1:
             point.error(f"{' and '.join(given)} can't go together: point at a moodboard, a character or a style "
                         "in one call")

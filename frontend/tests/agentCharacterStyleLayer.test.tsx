@@ -155,6 +155,29 @@ describe('the default lines ride on the cursor', () => {
       .toBe('Looking at “Frozen trait string” on “Mara”');
   });
 
+  it('a retarget works the default line out again: a cut view\'s cursor names the character it fell back to', () => {
+    put('anchor', 'character:c1', TILE);
+    renderLayer();
+    send(event({ action: 'look', target: { surface: 'character', itemId: 'c1/3' }, anchorNames: { character: 'Mara', view: 3 } }));
+    flush();
+    expect(say()).toBe('Looking at view 3 of “Mara”');
+    act(() => { useAgentPresenceStore.getState().retarget([
+      { agentId: 'claude', key: null, target: { surface: 'character', itemId: 'c1' }, anchorNames: { character: 'Mara' } }]); });
+    flush();
+    expect(say()).toBe('Looking at “Mara”');
+  });
+
+  it('a retarget leaves the agent\'s own say as it is', () => {
+    put('anchor', 'character:c1', TILE);
+    renderLayer();
+    send(event({ action: 'look', say: 'Checking the third view', target: { surface: 'character', itemId: 'c1/3' }, anchorNames: { character: 'Mara', view: 3 } }));
+    flush();
+    act(() => { useAgentPresenceStore.getState().retarget([
+      { agentId: 'claude', key: null, target: { surface: 'character', itemId: 'c1' }, anchorNames: { character: 'Mara' } }]); });
+    flush();
+    expect(say()).toBe('Checking the third view');
+  });
+
   it('the agent\'s own say still wins', () => {
     put('anchor', 'style:s1', TILE);
     renderLayer();

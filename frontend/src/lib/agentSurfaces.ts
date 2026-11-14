@@ -6,7 +6,8 @@
  * validation, the resolver, the default lines), so a surface is one entry
  * here, not another copy of the moodboard branch.
  *
- * Imports nothing: the store (entry) validates against it. The words are
+ * Imports nothing, so anything may read it (the presence store validates
+ * against it; this file loads with the cursor's deferred chunks). The words are
  * pinned to the Studios' visible text and to the backend's
  * (cursor_actions.PART_LABELS) by tests/agentSurfaceProtocol.test.ts.
  */

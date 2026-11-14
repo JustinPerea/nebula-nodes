@@ -131,6 +131,8 @@ const STYLE_WRITES: Readonly<Record<string, readonly [string, string]>> = {
   thumbnail: ['Changing the thumbnail of ', ''],
 };
 
+const own = (table: object, key: string): boolean => Object.prototype.hasOwnProperty.call(table, key);
+
 function characterSay(action: AgentCursorAction, { character, view = null, hasView = false, part = null }: SurfaceSayContext): string | null {
   // An agent can't write a Character yet, so only `look` has lines.
   if (!character || action !== 'look') return null;
@@ -138,7 +140,8 @@ function characterSay(action: AgentCursorAction, { character, view = null, hasVi
     if (view === 1) return compose(['Looking at the cover of ', ''], [character]);
     return view !== null ? compose([`Looking at view ${view} of `, ''], [character]) : compose(['Looking at a view of ', ''], [character]);
   }
-  const label = part ? AGENT_SURFACES.character.parts[part] : null;
+  // Own keys only: a part such as "constructor" must not read Object's (review of PR #243).
+  const label = part && own(AGENT_SURFACES.character.parts, part) ? AGENT_SURFACES.character.parts[part] : null;
   if (label) return compose(['Looking at ', ' on ', ''], [label, character]);
   return compose(['Looking at ', ''], [character]);
 }
@@ -147,7 +150,7 @@ function styleSay(action: AgentCursorAction, { style, part = null }: SurfaceSayC
   if (!style) return null;
   if (action === 'look') return compose(['Looking at ', ''], [style]);
   if (action !== 'type') return null;
-  return compose(STYLE_WRITES[part ?? ''] ?? ['Changing ', ''], [style]);
+  return compose(part && own(STYLE_WRITES, part) ? STYLE_WRITES[part] : ['Changing ', ''], [style]);
 }
 
 /**
