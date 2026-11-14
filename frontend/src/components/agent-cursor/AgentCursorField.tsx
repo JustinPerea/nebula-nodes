@@ -1125,7 +1125,7 @@ const COUNT_FILL = '#52525b';
 /** The count cursor's list: up to this many names, then how many more. */
 const COUNT_LIST_NAMES = 3;
 
-function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, leaving = false, held = false, nameTaken = false, onExited }: {
+function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, leaving = false, held = false, transit = false, nameTaken = false, onExited }: {
   /** The surface it is drawn on. */
   space: CursorSpace;
   cursor: AgentCursor;
@@ -1139,6 +1139,10 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   /** Handed to the other layer, which has not drawn it yet: this layer holds
    *  the last spot (GM - Design 6) until that one claims it. */
   held?: boolean;
+  /** On its way back to the canvas, flown by this (the screen) layer to the
+   *  node's place on screen: no gesture and no say here, and the canvas layer
+   *  takes it at the landing (`cursorHandoff.land`; GM r137). */
+  transit?: boolean;
   /** While leaving, a live cursor shows the same name: the pill hides at once. */
   nameTaken?: boolean;
   onExited?: (key: string) => void;
@@ -1173,6 +1177,8 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
   const parkRef = useRef<SVGSVGElement | null>(null);
   const placeLabelRef = useRef<(toward: Point | null) => void>(() => {});
   const leavingRef = useRef(leaving);
+  const transitRef = useRef(transit);
+  transitRef.current = transit;
   // What put it on its spot last frame (StackSpot.sig), and the events that
   // moved the targets of the members above it: the spot moving with neither
   // changed is a ride (a zoom, a node carried), not a re-layout.
@@ -1834,6 +1840,9 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
       if (!resolved) {
         // Its node deleted mid-drag: that drag ends here (field.nodeGone).
         if ('nodeId' in cursor.target) field.nodeGone(cursor.target.nodeId);
+        // A flight back to a node that is off screen or gone has nowhere to
+        // land on this layer: the canvas layer takes the cursor now.
+        if (transitRef.current) cursorHandoff.land(cursor.key, cursor.seq);
         if (motion.current && !field.stalled.has(cursor.key)) {
           // Its loop stops where it is (its node gone mid-glide or
           // mid-flight): no crossing, column order or place on top outlives
@@ -1905,6 +1914,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
           field.motions.set(cursor.key, motion.current);
         }
         cursorHandoff.claim(cursor.key, space.layer);
+        if (transitRef.current) cursorHandoff.land(cursor.key, cursor.seq);
         const m = motion.current;
         // Back mid-exit: it is put on its spot, and the fade reverses on the
         // same spring from where it is.
@@ -2000,6 +2010,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         field.holdBelow(cursor.key, z, time);
         updateWire(null);
         field.landed(cursor.key);
+        if (transitRef.current) cursorHandoff.land(cursor.key, cursor.seq);
         arrive.current(false);
         updateLabel.current();
         lastTime.current = null;
@@ -2022,8 +2033,11 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
         // The tip is at the target (within 2 px): the action fires and the
         // wire lets go here, never at the hand-off.
         phase.current = 'rest';
-        // Its expression begins here (§2: the action fires at the tip).
-        arrive.current(true);
+        // Its expression begins here (§2: the action fires at the tip). A
+        // flight back to the canvas has none on this layer: the canvas layer
+        // takes the cursor here and plays the arrival.
+        if (transitRef.current) cursorHandoff.land(cursor.key, cursor.seq);
+        else arrive.current(true);
         field.landed(cursor.key);
         // No layout invalidation here: nothing else moved, and this
         // cursor's own hover boxes go when it comes to rest (boxesMoved).
@@ -2338,7 +2352,7 @@ export interface CursorLandings {
  * item outlines drawn `beside` the cursors. Draws nothing while there is
  * nothing to draw.
  */
-export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass = 'agent-cursor-layer', inLayer, beside }: {
+export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass = 'agent-cursor-layer', inLayer, beside, transit }: {
   /** The cursors this surface draws (already filtered by layerOf). */
   agents: Record<string, AgentCursor>;
   /** Every cursor in the presence store. One in it that this surface no
@@ -2352,6 +2366,8 @@ export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass =
   inLayer?: (layer: ReactElement) => ReactNode;
   /** Marks drawn beside the cursors, under them. */
   beside?: (field: CursorLandings) => ReactNode;
+  /** The keys of cursors this surface flies back to the canvas (GM r137). */
+  transit?: ReadonlySet<string>;
 }) {
   const prune = useAgentPresenceStore((s) => s.prune);
   // One zoom for the draw order, the space's, read when it is worked out
@@ -2493,6 +2509,7 @@ export function AgentCursorSurface({ agents, everyone, space, zoom, layerClass =
           fontVersion={fontVersion}
           leaving={out}
           held={holds}
+          transit={transit?.has(cursor.key) === true}
           nameTaken={out && names.has(cursorLabel(cursor.name, cursor.session))}
           onExited={onExited}
         />

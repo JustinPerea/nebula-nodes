@@ -50,7 +50,14 @@ export class CursorHandoff {
   /** Which layer last drew each cursor (it set its view's first spot): the
    *  layer that had it holds it until the other has claimed it. */
   private claims = new Map<string, CursorLayer>();
+  /** The screen epoch each claim was made under. */
+  private claimEpochs = new Map<string, number>();
+  /** The flights back to the canvas the screen layer has finished: the event
+   *  (`seq`) it flew for, and the wall time it landed. */
+  private landings = new Map<string, { seq: number; at: number }>();
   private claimListeners = new Set<() => void>();
+  /** Bumped whenever a claim or a landing changes: what a layer's filter reads. */
+  version = 0;
   private watching: (() => void) | null = null;
   /** The clock the entries are dated by (a test's own). */
   now: () => number;
@@ -98,7 +105,36 @@ export class CursorHandoff {
   claim(key: string, layer: CursorLayer): void {
     if (this.claims.get(key) === layer) return;
     this.claims.set(key, layer);
+    this.claimEpochs.set(key, this.epoch);
+    this.version += 1;
     for (const listener of [...this.claimListeners]) listener();
+  }
+
+  /**
+   * The cursor is on its way back to the canvas (GM r137): the screen layer
+   * drew it last, under this screen, and has not yet landed it for event `seq`.
+   * The screen layer then flies it the whole way and the canvas layer takes
+   * it at the landing, so a dock never covers a cursor that left it (the
+   * canvas layer sits under the docks). The forward flight, reversed.
+   */
+  transits(key: string, seq: number): boolean {
+    return this.claims.get(key) === 'screen'
+      && this.claimEpochs.get(key) === this.epoch
+      && this.landings.get(key)?.seq !== seq;
+  }
+
+  /** The screen layer's flight back to the canvas for event `seq` is over (it landed, or can't go on): the canvas layer takes it now. */
+  land(key: string, seq: number): void {
+    if (this.landings.get(key)?.seq === seq) return;
+    this.landings.set(key, { seq, at: Date.now() });
+    this.version += 1;
+    for (const listener of [...this.claimListeners]) listener();
+  }
+
+  /** When the screen layer landed event `seq`'s flight, if it did: the canvas layer's arrival is dated by it, not by the event. */
+  landedAt(key: string, seq: number): number | null {
+    const landed = this.landings.get(key);
+    return landed?.seq === seq ? landed.at : null;
   }
 
   /** The layer that drew `key` last, if any. */
@@ -116,13 +152,26 @@ export class CursorHandoff {
   forget(key: string): void {
     this.entries.delete(key);
     this.claims.delete(key);
+    this.claimEpochs.delete(key);
+    this.landings.delete(key);
+  }
+
+  /** Forget the cursors that are no longer in the presence store: a claim
+   *  left from a cursor that went (a prune, a clear) must not make a new one
+   *  of that key start as a flight back from the screen layer. */
+  retain(live: readonly string[]): void {
+    const keep = new Set(live);
+    for (const key of [...this.claims.keys()]) if (!keep.has(key)) this.forget(key);
   }
 
   /** Tests: forget everything and stop watching. */
   reset(): void {
     this.entries.clear();
     this.claims.clear();
+    this.claimEpochs.clear();
+    this.landings.clear();
     this.epoch = 0;
+    this.version = 0;
     this.watching?.();
     this.watching = null;
   }
@@ -146,3 +195,20 @@ export class CursorHandoff {
 
 /** This tab's registry. */
 export const cursorHandoff = new CursorHandoff();
+
+/** This tab's subscription for `useSyncExternalStore`: a claim or a landing changed. */
+export const subscribeHandoff = (listener: () => void): (() => void) => cursorHandoff.onClaim(listener);
+export const handoffVersion = (): number => cursorHandoff.version;
+
+const reducedMotion = (): boolean =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
+/**
+ * Is this cursor's flight to a canvas node the screen layer's? Only while the
+ * canvas is on screen and motion is on (a reduced-motion hand-off is a snap,
+ * the canvas layer's). Both layers filter by it, so one of them draws the
+ * cursor at a time.
+ */
+export function flyingBack(cursor: { key: string; seq: number; target: object }, canvasMounted: boolean): boolean {
+  return canvasMounted && !('surface' in cursor.target) && !reducedMotion() && cursorHandoff.transits(cursor.key, cursor.seq);
+}

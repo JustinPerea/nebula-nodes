@@ -3,6 +3,7 @@ import { act, cleanup, render } from '@testing-library/react';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 import type { Box, ResolverEnv } from '../src/lib/agentAnchorResolve';
 import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLayer';
+import { cursorHandoff } from '../src/lib/agentCursorHandoff';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { useBoardCanvasStore } from '../src/store/boardCanvasStore';
 import { AGENT_SAY_FADE_MS } from '../src/store/agentPresenceStore';
@@ -110,6 +111,7 @@ beforeEach(() => {
   (window as unknown as Record<string, unknown>).scrollTo = scrolled;
   reduceMotion(false);
   useAgentPresenceStore.getState().clear();
+  cursorHandoff.reset(); // a process-wide registry: a claim left by one test is not the next one's
   useBoardCanvasStore.setState({ studioBoard: null });
 });
 afterEach(() => {

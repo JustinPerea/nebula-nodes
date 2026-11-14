@@ -69,6 +69,8 @@ const step = (n = 1) => act(() => {
   }
 });
 const flush = (max = 600) => step(max);
+/** Frame by frame, one `act` each, so a layer that lets go of a cursor (React state) has rendered before the next frame. */
+const run = (max = 200) => { for (let i = 0; i < max; i += 1) step(1); };
 
 /** The clocks the view reads: performance.now (the name's first-sight moment) follows the test's
  *  frames, and Date.now (how old an event is) is held still, so a slow machine can't make an event
@@ -96,14 +98,10 @@ const TILE: Box = { left: 900, top: 120, width: 160, height: 120 };
 const aim = (box: Box) => ({ x: box.left + box.width / 2, y: box.top + Math.min(box.height / 2, 24) });
 /** The pane's box in the window: its own origin, so flow and client differ. */
 const PANE = { left: 100, top: 50 };
-/** A flow point as client px, and back (the test's own copy of the maths). */
+/** A flow point as client px (the test's own copy of the maths). */
 const toClient = (p: { x: number; y: number }) => ({
   x: PANE.left + pane.transform[0] + p.x * pane.transform[2],
   y: PANE.top + pane.transform[1] + p.y * pane.transform[2],
-});
-const toFlow = (p: { x: number; y: number }) => ({
-  x: (p.x - PANE.left - pane.transform[0]) / pane.transform[2],
-  y: (p.y - PANE.top - pane.transform[1]) / pane.transform[2],
 });
 /** n1's header point, where a cursor on it aims. */
 const N1 = { x: 400 + 100, y: 300 + 44 };
@@ -122,6 +120,8 @@ const send = (e: AgentPresenceEvent) => act(() => { useAgentPresenceStore.getSta
 const canvasCursor = () => document.querySelector<HTMLElement>('.agent-cursor-layer:not(.agent-cursor-layer--screen) .agent-cursor');
 const screenCursor = () => document.querySelector<HTMLElement>('.agent-cursor-layer--screen .agent-cursor');
 const allCursors = () => [...document.querySelectorAll<HTMLElement>('.agent-cursor')];
+/** The cursors on screen: one not yet placed has no transform and is at opacity 0 (agentCursor.css). */
+const drawn = () => allCursors().filter((el) => el.style.transform !== '' && Number(el.style.opacity || 0) > 0);
 const tipOf = (el: HTMLElement) => {
   const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\)/.exec(el.style.transform);
   return m ? { x: +m[1], y: +m[2] } : null;
@@ -167,8 +167,8 @@ beforeEach(() => {
   reduceMotion(false);
   pane.transform = [10, 20, 2];
   pane.dom = document.createElement('div');
-  pane.dom.getBoundingClientRect = () => ({ left: PANE.left, top: PANE.top, right: PANE.left + 1000, bottom: PANE.top + 700,
-    width: 1000, height: 700, x: PANE.left, y: PANE.top, toJSON: () => ({}) });
+  pane.dom.getBoundingClientRect = () => ({ left: PANE.left, top: PANE.top, right: PANE.left + 1340, bottom: PANE.top + 800,
+    width: 1340, height: 800, x: PANE.left, y: PANE.top, toJSON: () => ({}) });
   lookupRef.current = lookup;
   cursorHandoff.reset();
   cursorHandoff.now = () => clock;
@@ -279,28 +279,28 @@ describe('canvas to the panel: one cursor travels (PR #233 slice 6)', () => {
 });
 
 describe('the panel to the canvas', () => {
-  it('starts the canvas layer\'s flight at the registry point, in flow coordinates', () => {
+  it('flies in the screen layer from the registry point and lands on the node in the canvas layer', () => {
     putTile(TILE);
     renderBoth(true);
     send(event(onTile()));
     flush();
     expect(tipOf(screenCursor()!)).toEqual(aim(TILE));
-    const registry = toFlow(aim(TILE));
     send(event());
-    expect(tipOf(screenCursor()!)).toEqual(aim(TILE)); // held until the canvas has drawn it
     step(1);
-    expect(screenCursor()).toBeNull();
-    const first = tipOf(canvasCursor()!)!;
-    expect(dist(first, registry)).toBeLessThan(25 / pane.transform[2] + 1);
-    expect(dist(first, N1)).toBeGreaterThan(150);
-    expect(opacityOf(canvasCursor()!)).toBeGreaterThan(0.9);
+    // Still the screen layer's: it flies the way back (GM r137), from where it rested.
+    expect(drawn()).toEqual([screenCursor()]);
+    const first = tipOf(screenCursor()!)!;
+    expect(dist(first, aim(TILE))).toBeLessThan(25);
+    expect(dist(first, toClient(N1))).toBeGreaterThan(150);
+    expect(opacityOf(screenCursor()!)).toBeGreaterThan(0.9);
     expect(document.querySelector('[data-leaving="true"]')).toBeNull();
-    flush();
+    run();
+    expect(drawn()).toEqual([canvasCursor()]);
     expect(tipOf(canvasCursor()!)).toEqual(N1);
   });
 });
 
-describe('the way back flies as one cursor from where it rests (GM r136, ruling 1)', () => {
+describe('the way back flies as one cursor from where it rests (GM r136, ruling 1; r137)', () => {
   /** The live ordering: the canvas layer's first frame takes the registry
    *  before the screen layer's own hold write lands, so what it finds is the
    *  screen cursor's last resting frame, long since written. */
@@ -321,10 +321,10 @@ describe('the way back flies as one cursor from where it rests (GM r136, ruling 
   it('starts at the resting spot, not at an entrance 64 px up-left of the node', () => {
     restInPanelThenSendToNodeWithAnOldEntry();
     step(1);
-    const first = tipOf(canvasCursor()!)!;
-    expect(dist(first, toFlow(aim(TILE)))).toBeLessThan(25 / pane.transform[2] + 1);
-    expect(dist(first, N1)).toBeGreaterThan(150);
-    expect(opacityOf(canvasCursor()!)).toBeGreaterThan(0.9);
+    const first = tipOf(screenCursor()!)!;
+    expect(dist(first, aim(TILE))).toBeLessThan(25);
+    expect(dist(first, toClient(N1))).toBeGreaterThan(150);
+    expect(opacityOf(screenCursor()!)).toBeGreaterThan(0.9);
   });
 
   it('is one cursor in every frame of the flight, never a gap, a second one or a jump', () => {
@@ -332,15 +332,15 @@ describe('the way back flies as one cursor from where it rests (GM r136, ruling 
     let previous: { x: number; y: number } | null = null;
     for (let frame = 0; frame < 120; frame += 1) {
       step(1);
-      expect(allCursors()).toHaveLength(1);
-      const el = allCursors()[0];
+      expect(drawn()).toHaveLength(1);
+      const el = drawn()[0];
       expect(opacityOf(el)).toBeGreaterThan(0.9);
-      const at = tipOf(el)!;
-      if (previous) expect(dist(at, previous) * pane.transform[2]).toBeLessThan(120);
+      const at = el === screenCursor() ? tipOf(el)! : toClient(tipOf(el)!);
+      if (previous) expect(dist(at, previous)).toBeLessThan(120);
       previous = at;
-      if (dist(at, N1) < 0.5 && frame > 10) break;
+      if (dist(at, toClient(N1)) < 0.5 && frame > 10) break;
     }
-    expect(dist(previous!, N1)).toBeLessThan(1);
+    expect(dist(previous!, toClient(N1))).toBeLessThan(1);
   });
 
   it('is not taken once the screen layer no longer holds the cursor and its entry is old', () => {
@@ -355,6 +355,132 @@ describe('the way back flies as one cursor from where it rests (GM r136, ruling 
     registry.claim('a', 'canvas'); // the other layer drew it since
     t += HANDOFF_FRESH_MS * 50;
     expect(registry.take('a', 'canvas')).toBeNull();
+  });
+});
+
+describe('the way back stays in the top layer over a dock (GM r137, ruling 1)', () => {
+  /** A dock panel across the flight's path, in client px: the canvas layer
+   *  draws under it, so a cursor drawn there while over it is hidden. */
+  const DOCK = { left: 900, top: 150, right: 1115, bottom: 700 };
+  const overDock = (p: { x: number; y: number }) => p.x >= DOCK.left && p.x <= DOCK.right && p.y >= DOCK.top && p.y <= DOCK.bottom;
+  const clientTip = (el: HTMLElement) => (el === screenCursor() ? tipOf(el)! : toClient(tipOf(el)!));
+
+  function restOnTile() {
+    putTile(TILE);
+    renderBoth(true);
+    send(event(onTile()));
+    run(120);
+  }
+
+  it('draws the cursor in the screen layer in every frame where its point is over a dock', () => {
+    restOnTile();
+    send(event());
+    let overFrames = 0;
+    for (let frame = 0; frame < 150; frame += 1) {
+      step(1);
+      const cursors = drawn();
+      expect(cursors).toHaveLength(1); // never none, never two
+      const at = clientTip(cursors[0]);
+      if (overDock(at)) {
+        overFrames += 1;
+        expect(cursors[0]).toBe(screenCursor());
+      }
+    }
+    expect(overFrames).toBeGreaterThan(5); // the path does cross the dock
+    expect(drawn()).toEqual([canvasCursor()]); // and the canvas layer took it at the landing
+  });
+
+  it('is the screen layer\'s until it lands on the node, then the canvas layer\'s, at the same spot', () => {
+    restOnTile();
+    send(event());
+    let lastScreen: { x: number; y: number } | null = null;
+    let firstCanvas: { x: number; y: number } | null = null;
+    for (let frame = 0; frame < 150; frame += 1) {
+      step(1);
+      const el = drawn()[0];
+      if (el === screenCursor()) lastScreen = tipOf(el);
+      else if (!firstCanvas) firstCanvas = toClient(tipOf(el)!);
+    }
+    expect(lastScreen).not.toBeNull();
+    expect(firstCanvas).not.toBeNull();
+    expect(dist(lastScreen!, firstCanvas!)).toBeLessThan(2);
+    expect(dist(lastScreen!, toClient(N1))).toBeLessThan(2);
+  });
+
+  it('follows a pan or zoom during the flight: it still lands on the node, with no jump', () => {
+    restOnTile();
+    send(event());
+    run(12);
+    pane.transform = [10, 20, 2];
+    pane.transform = [-60, 5, 1.5]; // the person panned and zoomed mid-flight
+    notifyStore();
+    let previous: { x: number; y: number } | null = null;
+    for (let frame = 0; frame < 160; frame += 1) {
+      step(1);
+      const cursors = drawn();
+      expect(cursors).toHaveLength(1);
+      const at = clientTip(cursors[0]);
+      if (previous) expect(dist(at, previous)).toBeLessThan(160);
+      previous = at;
+    }
+    expect(drawn()).toEqual([canvasCursor()]);
+    expect(dist(previous!, toClient(N1))).toBeLessThan(1);
+  });
+
+  it('plays its say and arrival in the canvas layer, at the landing, not on the way', () => {
+    restOnTile();
+    send(event({ say: 'Hello there' }));
+    run(10);
+    expect(drawn()[0]).toBe(screenCursor());
+    expect(screenCursor()!.querySelector('.agent-cursor__say')).toBeNull();
+    run(150);
+    expect(drawn()[0]).toBe(canvasCursor());
+    expect(canvasCursor()!.querySelector('.agent-cursor__say')?.textContent).toContain('Hello there');
+  });
+
+  it('a claim left by a cursor that went from the store does not start a new one as a flight back', () => {
+    restOnTile();
+    act(() => { useAgentPresenceStore.getState().clear(); });
+    run(5);
+    send(event());
+    step(2);
+    expect(screenCursor()?.style.transform ?? '').toBe('');
+  });
+
+  it('reduced motion is a snap on the canvas layer, as before', () => {
+    restOnTile();
+    reduceMotion(true);
+    send(event());
+    step(2);
+    expect(drawn()).toEqual([canvasCursor()]);
+    expect(tipOf(canvasCursor()!)).toEqual(N1);
+  });
+
+  it('a node outside the canvas\'s box is the canvas layer\'s at once (its edge chip, as before)', () => {
+    restOnTile();
+    lookupRef.current = new Map([['far', {
+      id: 'far', measured: { width: 200, height: 120 },
+      internals: { positionAbsolute: { x: 4000, y: 300 }, handleBounds: { source: [], target: [] } },
+    }]]);
+    send(event({ target: { nodeId: 'far' } }));
+    run(20);
+    // The screen layer never flew it (its held spot is gone once the canvas layer drew it).
+    expect(screenCursor()).toBeNull();
+    expect(canvasCursor()).not.toBeNull();
+  });
+
+  it('a node deleted during the flight ends it: the cursor holds the spot it reached, nothing keeps flying', () => {
+    restOnTile();
+    send(event());
+    run(10);
+    expect(drawn()[0]).toBe(screenCursor());
+    lookupRef.current = new Map();
+    notifyStore();
+    run(5);
+    const held = tipOf(screenCursor()!);
+    run(40);
+    expect(drawn()).toHaveLength(1);
+    expect(tipOf(screenCursor()!)).toEqual(held);
   });
 });
 

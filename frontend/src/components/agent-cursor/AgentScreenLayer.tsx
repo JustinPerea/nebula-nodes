@@ -3,7 +3,8 @@ import { useAgentPresenceStore, type AgentCursor } from '../../store/agentPresen
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { AnchorResolver, domEnv, type ResolverEnv } from '../../lib/agentAnchorResolve';
 import { useStoreApi } from '@xyflow/react';
-import { screenSpace, watchFlowStore, type FlowStoreLike, type ScreenSpace } from '../../lib/agentCursorSpace';
+import { canvasSpace, screenSpace, watchFlowStore, type FlowStoreLike, type ScreenSpace } from '../../lib/agentCursorSpace';
+import { cursorHandoff, flyingBack, handoffVersion, subscribeHandoff } from '../../lib/agentCursorHandoff';
 import { layerOf } from '../../lib/agentCursorLayerOf';
 import { OutlineBook } from '../../lib/agentCursorOutlines';
 import { DOT_IDLE_OPACITY, DotBook } from '../../lib/agentLauncherDots';
@@ -79,20 +80,44 @@ export function AgentScreenLayer({ canvasMounted, env }: {
   env?: ResolverEnv;
 }) {
   const everyone = useAgentPresenceStore((s) => s.agents);
-  const agents = useMemo(() => {
+  // A cursor flying back to a canvas node is this layer's until it lands
+  // (GM r137): the canvas layer sits under the docks, so a cursor that left a
+  // dock would fly behind it. It is drawn here as a flight only (no say, no
+  // gesture: the canvas layer plays those at the landing).
+  const handoff = useSyncExternalStore(subscribeHandoff, handoffVersion);
+  useEffect(() => { cursorHandoff.retain(Object.keys(everyone)); }, [everyone]);
+  const { agents, transit } = useMemo(() => {
     const own: typeof everyone = {};
+    const flying = new Set<string>();
     for (const [key, cursor] of Object.entries(everyone)) {
       if (layerOf(cursor.target, { canvasMounted }) === 'screen') own[key] = cursor;
+      else if (flyingBack(cursor, canvasMounted)) {
+        own[key] = { ...cursor, say: '', action: 'click', from: undefined };
+        flying.add(key);
+      }
     }
-    return own;
-  }, [everyone, canvasMounted]);
+    return { agents: own, transit: flying };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `handoff` is the registry's version: a claim or a landing changes who flies it
+  }, [everyone, canvasMounted, handoff]);
   // What the space reads is kept on one object the layer's effects update
   // (the box by its callback ref, the canvas flag when it changes), never
   // read from a ref in a render.
   const [context] = useState(() => new LayerContext(canvasMounted));
+  const flowApi = useFlowStore();
   const [space] = useState<ScreenSpace>(() => {
     const resolverEnv = env ?? domEnv();
+    const onCanvas = flowApi ? canvasSpace(flowApi as unknown as Parameters<typeof canvasSpace>[0]) : null;
     return screenSpace({
+      // Where a canvas node is on screen, while it is inside the canvas's box.
+      canvasPoint: (anchor) => {
+        const dom = onCanvas?.pane();
+        const flow = onCanvas?.resolve(anchor);
+        if (!onCanvas || !dom || !flow) return null;
+        const box = dom.getBoundingClientRect();
+        const at = onCanvas.toClient(flow, box);
+        const inside = at && at.x >= box.left && at.x <= box.right && at.y >= box.top && at.y <= box.bottom;
+        return inside ? at : null;
+      },
       resolver: new AnchorResolver(resolverEnv),
       measure: resolverEnv.measure,
       watch: resolverEnv.watch,
@@ -120,6 +145,7 @@ export function AgentScreenLayer({ canvasMounted, env }: {
         space={space}
         zoom={1}
         layerClass="agent-cursor-layer agent-cursor-layer--screen"
+        transit={transit}
         beside={(landings) => (
           <>
             <ItemOutlines agents={agents} space={space} landings={landings} />

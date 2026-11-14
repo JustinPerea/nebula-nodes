@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { useAgentPresenceStore } from '../../store/agentPresenceStore';
 import { canvasSpace } from '../../lib/agentCursorSpace';
 import { layerOf } from '../../lib/agentCursorLayerOf';
+import { cursorHandoff, flyingBack, handoffVersion, subscribeHandoff } from '../../lib/agentCursorHandoff';
 import { AgentCursorSurface } from '../agent-cursor/AgentCursorField';
 import { CanvasEdgeChips } from './CanvasEdgeChips';
 
@@ -20,13 +21,28 @@ export function AgentCursorLayer() {
   const everyone = useAgentPresenceStore((s) => s.agents);
   // This layer draws the cursors on the canvas; one on a surface beside it
   // (a moodboard) is the screen layer's (lib/agentCursorLayerOf.ts).
+  // One flying back from a panel is the screen layer's until it lands
+  // (GM r137), and then this layer's arrival is dated by the landing.
+  const handoff = useSyncExternalStore(subscribeHandoff, handoffVersion);
   const agents = useMemo(() => {
     const own: typeof everyone = {};
+    let same = true;
     for (const [key, cursor] of Object.entries(everyone)) {
-      if (layerOf(cursor.target, { canvasMounted: true }) === 'canvas') own[key] = cursor;
+      if (layerOf(cursor.target, { canvasMounted: true }) !== 'canvas' || flyingBack(cursor, true)) {
+        same = false;
+        continue;
+      }
+      const landedAt = cursorHandoff.landedAt(key, cursor.seq);
+      if (landedAt !== null && landedAt > cursor.receivedAt) {
+        own[key] = { ...cursor, receivedAt: landedAt };
+        same = false;
+      } else {
+        own[key] = cursor;
+      }
     }
-    return Object.keys(own).length === Object.keys(everyone).length ? everyone : own;
-  }, [everyone]);
+    return same ? everyone : own;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `handoff` is the registry's version: a claim or a landing changes who draws it
+  }, [everyone, handoff]);
   const zoom = useStore((s) => s.transform[2]);
   // The canvas as a CursorSpace: the one thing here that knows React Flow
   // (lib/agentCursorSpace.ts). The store's API is the same object for the

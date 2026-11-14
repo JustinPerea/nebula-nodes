@@ -145,7 +145,8 @@ export function resolutionPoint(resolution: Resolution): Point | null {
   switch (resolution.kind) {
     case 'anchor':
     case 'edge':
-    case 'launcher': return resolution.point;
+    case 'launcher':
+    case 'canvas': return resolution.point;
     default: return null;
   }
 }
@@ -160,6 +161,11 @@ export interface ScreenSpaceOptions {
   pane: () => Element | null;
   /** The canvas is on screen (a canvas anchor is then the canvas layer's). */
   canvasMounted: () => boolean;
+  /** Where a canvas anchor is on screen (client px), or null when it isn't
+   *  drawn or is outside the canvas's box: the screen layer's flight back to
+   *  the canvas aims here while the canvas is mounted (GM r137). Absent: a
+   *  canvas anchor resolves to nothing while the canvas is mounted. */
+  canvasPoint?: (anchor: AgentCursorAnchor) => Point | null;
   /** The item this anchor names no longer exists (a removed image): the
    *  cursor holds its spot, GM r4. Decided by the caller; the resolver only
    *  takes it as an input. */
@@ -294,7 +300,7 @@ export function watchFlowStore(store: FlowStoreLike, wake: () => void): () => vo
  * runs its loop then) and once on each wake while it rests. A resting cursor
  * rides its item's own move (`carried`) and flies only to a different element.
  */
-export function screenSpace({ resolver, measure, watch, pane, canvasMounted, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
+export function screenSpace({ resolver, measure, watch, pane, canvasMounted, canvasPoint, gone, events = domEvents }: ScreenSpaceOptions): ScreenSpace {
   const listeners = new Set<() => void>();
   // What each cursor last read, by the cursor (its key, and `${key}>from` for
   // a drag's start): the second of two cursors resting on one item compares
@@ -330,8 +336,13 @@ export function screenSpace({ resolver, measure, watch, pane, canvasMounted, gon
     return found && found.anchor === anchorKey(anchor) ? found : undefined;
   };
 
-  const locate = (anchor: AgentCursorAnchor): Resolution =>
-    resolver.resolve(anchor, { canvasMounted: canvasMounted(), gone: gone(anchor) });
+  const locate = (anchor: AgentCursorAnchor): Resolution => {
+    if (!('surface' in anchor) && canvasMounted() && canvasPoint) {
+      const point = canvasPoint(anchor);
+      return point ? { kind: 'canvas', point } : { kind: 'none' };
+    }
+    return resolver.resolve(anchor, { canvasMounted: canvasMounted(), gone: gone(anchor) });
+  };
   const sameSpot = (a: Resolution | undefined, b: Resolution): boolean =>
     a !== undefined && a.kind === b.kind && 'element' in a && 'element' in b && a.element === b.element;
 

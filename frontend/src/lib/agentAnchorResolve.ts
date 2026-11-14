@@ -61,6 +61,8 @@ export type Resolution =
   | { kind: 'edge'; point: Point; toward: Point; angle: number; element: Element; clip: Box }
   /** A launcher park: `point` is the tip, 6 px right of the launcher. */
   | { kind: 'launcher'; step: LauncherStep; point: Point; element: Element; box: Box }
+  /** A canvas node's place on screen (client px), for the screen layer's flight back to the canvas (GM r137): aim here. */
+  | { kind: 'canvas'; point: Point }
   /** The item itself is gone (the caller says so): hold the last spot, or fall back to the board. */
   | { kind: 'gone' }
   /** Nothing resolves: hold the last spot, and with none, draw no cursor. */
