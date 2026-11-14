@@ -34,7 +34,6 @@
   "components/panels/RunHistoryPanel.tsx": 1,
   "components/panels/Settings.tsx": 1,
   "components/panels/settings/AgentSpendSection.tsx": 1,
-  "components/panels/settings/ConnectedApps.tsx": 1,
   "components/panels/settings/KreaSignInRow.tsx": 3,
   "components/panels/settings/NousRow.tsx": 2,
   "components/panels/settings/PersonalAgentsSection.tsx": 1,

@@ -134,7 +134,7 @@ function SetupPanel({ name, setup, onDone, onError }: {
       )}
       {setup.cli && (
         <CopyBlock label={`${setup.label} nebula command`}
-          where="Or let Nebula's CLI do it (it checks the token first and asks before changing anything)"
+          where="Or let Nebula’s CLI do it. It checks the token first and asks before changing anything."
           text={setup.cli} onError={onError} />
       )}
       <ul className="settings-apps__warnings" aria-label="Before you paste it">

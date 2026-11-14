@@ -1148,9 +1148,9 @@ def test_a_personal_agent_token_spends_in_the_shared_outside_budget(monkeypatch)
     from commons import actors
     monkeypatch.setattr(actors, "agent_registry", actors.AgentRegistry())
     token = actors.agent_registry.mint("personal:claude", [Path("/tmp")], spend_key="outside:personal:claude",
-                                       display_name="Claude (your setup)", color="#D97757")
+                                       display_name="Your Claude", color="#D97757")
     key, label = main._spend_session({"Authorization": f"Agent {token}"})
-    assert key == "outside:personal:claude" and label == "Claude (your setup)"
+    assert key == "outside:personal:claude" and label == "Your Claude"
     assert key.startswith(agent_spend.PERSONAL_AGENT_PREFIX) and agent_spend.is_outside(key)
     budgets = main._spend_budgets(key, {})
     # The daily total every key shares comes first (it is the umbrella).

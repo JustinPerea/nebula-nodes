@@ -56,7 +56,7 @@ const FAKE = {
   id: 'fake', kind: 'custom', displayName: 'Fake Agent', color: '#123456', enabled: true, command: '/bin/fake',
   args: [], status: 'ready', resolvedPath: '/bin/fake', note: '', startable: true,
 };
-const OFF = { ...FAKE, id: 'gemini', kind: 'preset', displayName: 'Gemini (your setup)', enabled: false, status: 'disabled' };
+const OFF = { ...FAKE, id: 'gemini', kind: 'preset', displayName: 'Your Gemini', enabled: false, status: 'disabled' };
 
 beforeEach(() => {
   vi.clearAllMocks(); ChatSocket.instances = []; vi.stubGlobal('WebSocket', ChatSocket);

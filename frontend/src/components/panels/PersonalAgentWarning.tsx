@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { ModalPortal } from '../ModalPortal';
 import { LineText } from '../LineText';
@@ -57,7 +58,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
         }
       }}>
       <div className="personal-warning__card" ref={card}>
-        <h2 id="personal-warning-title" className="personal-warning__title">Before you start {agentName}</h2>
+        <h2 id="personal-warning-title" className="personal-warning__title">Before you start {agentNameInSentence(agentName)}</h2>
         <p className="personal-warning__lead">
           This is your own agent, running with your own setup. Nebula starts it and shows it here, but it isn&rsquo;t
           sandboxed.

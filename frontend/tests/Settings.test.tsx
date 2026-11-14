@@ -1721,7 +1721,7 @@ describe('Settings — preferences', () => {
   it('limits what agents spend per chat session and per model', async () => {
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: null, models: {} } });
     openTab('Preferences');
-    expect(screen.getByText(/The per-run limit above \(\$1\) applies to agents too/)).toBeInTheDocument();
+    expect(screen.getByText(/The \$1 per-run limit above applies to agents too/)).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Per chat session' }), { target: { value: '10' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
 
@@ -1743,8 +1743,8 @@ describe('Settings — preferences', () => {
       outside: { spentUsd: 4.5, kreaPlanRuns: 3 },
       apps: [],
       personal: [
-        { id: 'claude', name: 'Claude (your setup)', spentUsd: 1.25, kreaPlanRuns: 0 },
-        { id: 'codex', name: 'Codex (your setup)', spentUsd: 0, kreaPlanRuns: 0 },
+        { id: 'claude', name: 'Your Claude', spentUsd: 1.25, kreaPlanRuns: 0 },
+        { id: 'codex', name: 'Your Codex', spentUsd: 0, kreaPlanRuns: 0 },
         { id: 'fake', name: 'Fake Agent', spentUsd: 0, kreaPlanRuns: 2 },
       ],
     });
@@ -1752,17 +1752,17 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     const rows = await screen.findAllByTestId('settings-personal-spend-row');
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('Claude (your setup)');
+    expect(rows[0]).toHaveTextContent('Your Claude');
     expect(rows[0]).toHaveTextContent('$1.25 in the last 24 hours, inside the budget above');
     expect(rows[1]).toHaveTextContent('$0.00 in the last 24 hours, 2 Krea plan runs, inside the budget above');
-    expect(screen.queryByText(/Codex \(your setup\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your Codex/)).not.toBeInTheDocument();
   });
   it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 3.4, kreaPlanRuns: 2 }, apps: [] });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
     openTab('Preferences');
     // findBy: the Preferences tab loads lazily, so this works run alone too.
-    expect(await screen.findByText(/Shared by every agent that isn.t a Nebula chat: Claude Desktop, terminal tools, scripts/))
+    expect(await screen.findByText(/Shared by every agent that isn.t a Nebula chat, such as Claude Desktop, terminal tools and scripts/))
       .toBeInTheDocument();
     expect(screen.getByText(/restarting Nebula doesn.t reset it/)).toBeInTheDocument();
     expect(await screen.findByTestId('settings-agent-outside-spent')).toHaveTextContent('$3.40 in the last 24 hours, 2 Krea plan runs.');
@@ -1782,7 +1782,7 @@ describe('Settings — preferences', () => {
       agentSpend: { sessionUsd: 10, models: {} },
     }));
 
-    expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan; agents/)).toBeInTheDocument();
+    expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan\. Agents/)).toBeInTheDocument();
     // Unset, plan runs are held to the default, never to no limit.
     const planRuns = screen.getByRole('combobox', { name: 'Krea plan runs' });
     expect(planRuns).toHaveValue('default');

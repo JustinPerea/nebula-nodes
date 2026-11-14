@@ -11,6 +11,7 @@ import {
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
+import { agentNameInSentence } from '../../../lib/personalAgentName';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
 import { SettingsSwitch } from './Switch';
 import { LineBox } from '../../LineBox';
@@ -63,7 +64,7 @@ function KeyOption({ agent, busy, switching, run, lock }: { agent: PersonalAgent
   const option = agent.keyOption;
   if (!option) return null;
   const blocked = option.blocked ?? (!option.keySaved && !option.enabled
-    ? 'Save a Gemini API key in Settings > API keys (Google) to use this.' : null);
+    ? 'Save a Gemini API key in Settings > Providers > Google · Gemini API to use this.' : null);
   return (
     <span className="personal-agents__option" data-testid="personal-agent-key-option">
       <label className="personal-agents__option-label">
@@ -90,7 +91,7 @@ function DownloadAndSignIn({ agent, busy, run, lock }: { agent: PersonalAgent; b
       {install.state === 'downloading' && job ? (
         <span className="personal-agents__progress" role="status">
           <progress max={job.totalBytes || 1} value={job.receivedBytes ?? 0}
-            aria-label={`Downloading ${agent.displayName}`} />
+            aria-label={`Downloading ${agentNameInSentence(agent.displayName)}`} />
           {job.message} {megabytes(job.receivedBytes)} of {megabytes(job.totalBytes)}
         </span>
       ) : job?.state === 'failed' ? <span className="settings-row__error" role="alert">{job.message}</span> : null}
@@ -98,7 +99,7 @@ function DownloadAndSignIn({ agent, busy, run, lock }: { agent: PersonalAgent; b
         {(install.state === 'missing' || install.state === 'changed') && (
           <button type="button" className="settings__button settings__button--primary" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('install'))}>
-            {install.state === 'changed' ? 'Download again' : `Download ${install.version} (${megabytes(install.sizeBytes)})`}
+            {install.state === 'changed' ? 'Download again' : `Download ${install.version}, ${megabytes(install.sizeBytes)}`}
           </button>
         )}
         {install.state === 'downloading' && (
@@ -230,9 +231,9 @@ export function PersonalAgentsSection() {
       <div className="settings-label"><h3 id="settings-personal-agents-heading" tabIndex={-1}>Personal agents</h3></div>
       {agents.length > 0 && <PersonLockLine lock={rowLock} place="heading" />}
       <p className="settings-hint">
-        Chat with your own agent (your login, settings, memory and MCP servers) in the chat panel. Nebula adds its
+        Chat with your own agent in the chat panel, with your login, settings, memory and MCP servers. Nebula adds its
         canvas tools and counts their runs in the budget for agents outside Nebula&rsquo;s chats. The agent keeps its
-        own shell, network and files; Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
+        own shell, network and files, and Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
       </p>
       {/* Round 11 (GM r18 c): the section's own line, in the shared box (components/LineBox). */}
       <LineBox text={shownError} />
@@ -258,12 +259,12 @@ export function PersonalAgentsSection() {
             <span className="settings-model-limit__controls">
               {agent.startable && (
                 <SettingsSwitch {...switchState(busy, switching, agent.id, 'enabled', agent.enabled)} lock={rowLock.control()}
-                  aria-label={`Use ${agent.displayName} in chat`}
+                  aria-label={`Use ${agentNameInSentence(agent.displayName)} in chat`}
                   onChange={(to) => void run(() => updatePersonalAgent(agent.id, { enabled: to }), { id: agent.id, field: 'enabled', to })} />
               )}
               {agent.kind === 'custom' && (
                 <button type="button" className="settings__button settings__button--danger" disabled={busy}
-                  aria-label={`Remove ${agent.displayName}`} {...rowLock.control()}
+                  aria-label={`Remove ${agentNameInSentence(agent.displayName)}`} {...rowLock.control()}
                   onClick={() => void run(() => deletePersonalAgent(agent.id))}>
                   Remove
                 </button>
@@ -279,8 +280,8 @@ export function PersonalAgentsSection() {
           <span className="settings-pref__text">
             <span className="settings-pref__title">Add an ACP agent</span>
             <span className="settings-pref__description">
-              Any agent that speaks the Agent Client Protocol over stdio: an absolute path or a command name, plus its
-              arguments
+              Any agent that speaks the Agent Client Protocol over stdio. Give an absolute path or a command name, plus its
+              arguments.
             </span>
           </span>
           <span className="settings-model-limit__controls">

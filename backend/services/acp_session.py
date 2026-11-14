@@ -715,7 +715,7 @@ class AcpHostSession:
             return (f"{self.display_name} was switched off, removed or changed in Settings, so Nebula stopped it. "
                     "If it's still on there, send again to start a new conversation.")
         if reason == "commons_enabled":
-            return f"Commons is on, so Nebula stopped {self.display_name}."
+            return f"Commons is on, so Nebula stopped {personal_agents.in_sentence(self.display_name)}."
         return "This chat's agent has stopped. Send again to start a new conversation."
 
     async def cancel_turn(self, prompt_task: asyncio.Task | None = None) -> None:
