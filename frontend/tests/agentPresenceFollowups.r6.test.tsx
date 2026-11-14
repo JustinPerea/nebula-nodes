@@ -227,6 +227,7 @@ describe('GM r9 answer 2: motion by kind', () => {
     ['kept-notes stack (its first note)', 'styles/canvasPins.css', 'surface', '.canvas-pin-kept-stack'],
     ['a note kept into the showing stack', 'styles/canvasPins.css', 'row', '.canvas-pin-toast--kept[data-entering]'],
     ['the proposal bar\'s inline error line', 'styles/canvasProposals.css', 'row', '.proposal-bar__error'],
+    ['the proposal bar\'s Accept key row, back with the canvas', 'styles/canvasProposals.css', 'row', '.proposal-bar__not-ready[data-entering]'],
   ];
   // The five toasts, scaling on their own keyframes since round 5.
   const toasts: Array<[string, string, string]> = [
