@@ -80,7 +80,27 @@ export function fallbackNode(node: Node): Node {
 
 /**
  * Nodes whose real card has just replaced a fallback frame: the card
- * crossfades in over the frame (components/nodes/withCardSwap.tsx reads and
- * clears its id on mount).
+ * crossfades in over the frame (components/nodes/withCardSwap.tsx takes its
+ * id on mount). A mark is when it was made (the clock is performance.now());
+ * one older than SWAP_WINDOW_MS is not honoured, because the card that mounts
+ * later (an off-screen node scrolled into view, an id that returns after an
+ * undo) was never seen as a frame.
  */
-export const CARD_SWAPS = new Set<string>();
+const CARD_SWAPS = new Map<string, number>();
+
+/** How long after the hold marked a swap the card may still crossfade over its frame. */
+export const SWAP_WINDOW_MS = 1000;
+
+/** Marks `id` as just swapped; marks that have gone stale are dropped. */
+export function markSwap(id: string, now: number = performance.now()): void {
+  for (const [other, at] of CARD_SWAPS) if (now - at > SWAP_WINDOW_MS) CARD_SWAPS.delete(other);
+  CARD_SWAPS.set(id, now);
+}
+
+/** Whether `id`'s card should crossfade now; reads and deletes the mark. */
+export function takeSwap(id: string, now: number = performance.now()): boolean {
+  const at = CARD_SWAPS.get(id);
+  if (at === undefined) return false;
+  CARD_SWAPS.delete(id);
+  return now - at <= SWAP_WINDOW_MS;
+}

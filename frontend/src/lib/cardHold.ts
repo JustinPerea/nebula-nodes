@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
 import { allCardChunksLoaded, cardChunksOf, ownCardChunk, type CardChunk } from './cardChunks';
-import { CARD_SWAPS, fallbackNode } from './cardFallback';
+import { fallbackNode, markSwap } from './cardFallback';
 import { canvasGeneration } from '../store/graphStore';
 
 /**
@@ -20,6 +20,12 @@ import { canvasGeneration } from '../store/graphStore';
  *   the line that says why (components/nodes/CardFallback.tsx); it retries on
  *   focus and when the browser is back online, and the real card replaces the
  *   frame when a retry works.
+ * - A whole-graph hold has a ceiling (HOLD_CEILING_MS): a chunk request that
+ *   hangs, neither loading nor failing, must not keep a graph off the canvas
+ *   for as long as the browser lets it sit. Past the ceiling the graph is
+ *   handed over like a node added later: the nodes whose chunks are in draw as
+ *   their cards, the others as fallback frames, and each card replaces its
+ *   frame when its chunk arrives. A new graph starts a new ceiling.
  * - With every card chunk loaded (the ordinary case after the idle preload)
  *   the inputs come back by identity and no node is looked at.
  *
@@ -49,13 +55,20 @@ export interface HeldGraph {
   readonly state: HoldState;
 }
 
+/** How long a whole graph may be held back for card chunks before it is handed over with frames for what is still missing. */
+export const HOLD_CEILING_MS = 8000;
+
 const NO_NODES: Node[] = [];
 const NO_EDGES: Edge[] = [];
 const NO_CHUNKS: readonly CardChunk[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 
-/** Pure core of the hold; `generation` is the store's canvasGeneration() now. */
-export function holdCards(nodes: Node[], edges: Edge[], generation: number, previous: HoldState): HeldGraph {
+/**
+ * Pure core of the hold; `generation` is the store's canvasGeneration() now,
+ * and `ceilingPassed` is whether the whole-graph hold of this generation has
+ * lasted HOLD_CEILING_MS (the graph is then handed over with frames).
+ */
+export function holdCards(nodes: Node[], edges: Edge[], generation: number, previous: HoldState, ceilingPassed = false): HeldGraph {
   const swappedOf = (placeholders: ReadonlySet<string>, ids: readonly string[]): string[] =>
     previous.placeholders.size === 0 ? [] : ids.filter((id) => previous.placeholders.has(id) && !placeholders.has(id));
   if (allCardChunksLoaded()) {
@@ -89,7 +102,7 @@ export function holdCards(nodes: Node[], edges: Edge[], generation: number, prev
       real.push(node);
     }
   }
-  if (replaced && waiting.size > 0) {
+  if (replaced && waiting.size > 0 && !ceilingPassed) {
     // The whole graph waits; the previous graph's nodes are not this graph's.
     return {
       nodes: NO_NODES, edges: NO_EDGES, waiting: [...waiting], watching: [...watching], wholeGraph: true, swapped: [],
@@ -123,14 +136,25 @@ export function useCardHold(nodes: Node[], edges: Edge[]): CardHold {
   const [settled, onSettled] = useReducer((count: number) => count + 1, 0);
   const state = useRef<HoldState>(START);
   const generation = canvasGeneration();
+  // The generation whose whole-graph hold has reached its ceiling.
+  const [ceilingOf, setCeilingOf] = useState(-1);
+  const ceilingPassed = ceilingOf === generation;
   const held = useMemo(() => {
-    const result = holdCards(nodes, edges, generation, state.current);
+    const result = holdCards(nodes, edges, generation, state.current, ceilingPassed);
     state.current = result.state;
-    for (const id of result.swapped) CARD_SWAPS.add(id);
+    for (const id of result.swapped) markSwap(id);
     return result;
     // `settled` is the chunk settle signal; the chunks are read inside.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, generation, settled]);
+  }, [nodes, edges, generation, settled, ceilingPassed]);
+
+  // The ceiling: runs while a whole graph is held, ends with the hold, and starts over when the generation moves.
+  const holdingWhole = held.wholeGraph;
+  useEffect(() => {
+    if (!holdingWhole) return undefined;
+    const timer = window.setTimeout(() => setCeilingOf(generation), HOLD_CEILING_MS);
+    return () => window.clearTimeout(timer);
+  }, [holdingWhole, generation]);
 
   const { waiting, watching } = held;
   useEffect(() => {

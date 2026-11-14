@@ -357,18 +357,24 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 
 /* While the canvas holds a whole graph back for its card chunks
    (lib/cardHold.ts), its node layer is covered, and "Loading canvas…" shows
-   once the hold has lasted 400 ms. The line has no background of its own: it
+   once the hold has lasted 400 ms. The line sits in a live region
+   (.canvas-hold-status, role="status") that is in the DOM, empty, from the
+   start of the cover, so a screen reader announces the text when it arrives.
+   Neither has a background of its own: the line
    sits on the canvas's background and dot grid, so nothing but the nodes, the
    wires and the line changes at the reveal. It fades in and out on the SOFT
    spring (--spring-soft, set on the wrapper); under reduced motion the fades
    are 180 ms opacity, as the proposal bar's. */
-.canvas-hold-line {
+.canvas-hold-status {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: grid;
   place-items: center;
   pointer-events: none;
+}
+
+.canvas-hold-line {
   color: var(--sr-ink-light, #8d8d8d);
   font-size: 13px;
   letter-spacing: 0.02em;
@@ -387,9 +393,13 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
   to { opacity: 0; }
 }
 
-/* The node layer: nodes and wires are the React Flow viewport. */
+/* The node layer: nodes and wires are the React Flow viewport. Covered nodes
+   are not live: visibility hidden takes them out of clicks, drags and the tab
+   order (React Flow still measures a hidden element; only display: none gives
+   it no size). */
 .canvas-wrapper--reveal-wait .react-flow__viewport {
   opacity: 0;
+  visibility: hidden;
 }
 
 .canvas-wrapper--reveal-in .react-flow__viewport {

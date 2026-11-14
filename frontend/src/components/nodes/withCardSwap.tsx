@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, type ComponentType } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { CARD_SWAPS, heldCardOf } from '../../lib/cardFallback';
+import { heldCardOf, takeSwap } from '../../lib/cardFallback';
 import { springLinear, SPRING_SOFT } from '../../lib/springs';
 import { CardFallbackFrame } from './CardFallback';
 import '../../styles/card-fallback.css';
@@ -10,8 +10,8 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * A card that replaces a fallback frame (lib/cardHold.ts marks it in
- * CARD_SWAPS) fades in on the opacity spring while a ghost of the frame lies
+ * A card that replaces a fallback frame (lib/cardHold.ts marks it,
+ * lib/cardFallback.ts takeSwap) fades in on the opacity spring while a ghost of the frame lies
  * over it and fades out on the same one: a crossfade, no scale or movement
  * (styles/card-fallback.css; the spring comes from the canvas wrapper's
  * variables). Under reduced motion both take a 180 ms opacity fade. The card
@@ -21,8 +21,8 @@ function prefersReducedMotion(): boolean {
 export function withCardSwap<P extends NodeProps>(Card: ComponentType<P>): ComponentType<P> {
   function Swapped(props: P) {
     const { id, data, selected } = props;
-    const [fading, setFading] = useState(() => CARD_SWAPS.has(id));
-    useEffect(() => { CARD_SWAPS.delete(id); }, [id]);
+    // Read and deleted on the first render: a mark is for one mount, and an old one is not honoured.
+    const [fading, setFading] = useState(() => takeSwap(id));
     useEffect(() => {
       if (!fading) return undefined;
       const timer = window.setTimeout(() => setFading(false), prefersReducedMotion() ? 180 : springLinear(SPRING_SOFT).durationMs);

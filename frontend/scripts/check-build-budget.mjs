@@ -26,11 +26,13 @@ const entryBytes = await readFile(entryPath);
 const entrySize = (await stat(entryPath)).size;
 const entryGzipSize = gzipSync(entryBytes).byteLength;
 // Measured 2026-11-14 after the startup-set defer (docs/notes/2026-11-14-perf-startup-set-defer.md):
-// 394,268 raw / 125,652 gzip, down from 477,203 / 148,357. Design round 1 (the fallback card,
-// the reveal and the hold line) added +5,686 raw / +1,705 gzip to the entry: 405,278 / 129,329.
-// The limits are that plus about 8 KB / 3.5 KB.
-const MAX_ENTRY_BYTES = 413_300;
-const MAX_ENTRY_GZIP_BYTES = 132_900;
+// 394,268 raw / 125,652 gzip, down from 477,203 / 148,357. Merging main (417a238b) took the
+// entry to 399,592 / 127,624 (+5,324 / +1,972). Design round 1 (the fallback card, the reveal
+// and the hold line) added +5,686 / +1,705: 405,278 / 129,329. Review round 1 (the hold's
+// ceiling, the owed fit, the swap marks, the live region) added +650 / +274: 405,928 / 129,603.
+// The limits are that plus 8,000 raw / 3,500 gzip, rounded up to the next 100.
+const MAX_ENTRY_BYTES = 414_000;
+const MAX_ENTRY_GZIP_BYTES = 133_200;
 
 if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
   throw new Error(
@@ -40,10 +42,13 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 }
 
 // The entry alone is not the startup cost: chunks it imports statically or
-// modulepreloads load before the first paint too. Measured on main with
-// `npm run build` after the 2026-11-14 defer: 1,841,464 raw / 481,238 gzip in 44
-// chunks (it was 1,923,389 / 502,295 in 40); design round 1 measured 1,852,953 /
-// 485,068 in 44; the limits are that plus about 8 KB raw / 3.5 KB gzip. What left the set: the node cards for the less common
+// modulepreloads load before the first paint too. Measured with `npm run build`
+// after the 2026-11-14 defer: 1,841,464 raw / 481,238 gzip in 44 chunks (it was
+// 1,923,389 / 502,295 in 40). After merging main and the later rounds it was
+// 1,847,267 / 483,364; design round 1 added +5,686 / +1,704 (1,852,953 / 485,068);
+// review round 1 added +650 / +275: 1,853,603 / 485,343, still 44 chunks. The limits
+// are that plus 8,000 raw / 3,500 gzip, rounded up to the next 1,000 raw and 100 gzip.
+// What left the set: the node cards for the less common
 // kinds (Edit, Remotion, Cinema scene, Character, Camera rig, Reference set,
 // Moodboard, Paper source, Batch, Dynamic), the Jev, spatial/world and
 // structured result views a finished card draws, and the canvas's arrange
@@ -58,8 +63,8 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // kept notice, the bottom bar's kept state). Its round 28 notes measured lazy
 // splits of these; a kept edit that waits for a chunk is refused for good when
 // that chunk can't load, which is when a canvas is kept, so they stay.
-const MAX_STARTUP_BYTES = 1_861_000;
-const MAX_STARTUP_GZIP_BYTES = 488_600;
+const MAX_STARTUP_BYTES = 1_862_000;
+const MAX_STARTUP_GZIP_BYTES = 488_900;
 const startup = await startupSet(distDir);
 const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
 

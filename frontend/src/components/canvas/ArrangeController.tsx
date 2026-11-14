@@ -5,6 +5,7 @@ import { arrangeNewNodes, sizeSignature, type ArrangeRequest, type Box, type Pla
 import { viewportRevealing, visibleFlowBox } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
 import { claimCameraMove } from '../../lib/canvasCameraOwner';
+import { CARD_FALLBACK_TYPE } from '../../lib/cardFallback';
 import { useArrangeStore } from '../../store/arrangeStore';
 import { completeArrange, useGraphStore } from '../../store/graphStore';
 
@@ -84,10 +85,19 @@ export function ArrangeController() {
       stopReveal.current = springViewport(viewport, target, (next) => { claimCameraMove(); void setViewport(next); });
     };
 
-    const placed = (request: ArrangeRequest): { all: PlacedNode[]; mine: PlacedNode[]; measured: boolean } => {
+    // `expired`: the wait has run out (MAX_WAIT_MS), so a node of the request still drawn as a
+    // fallback frame (a chunk that never came) is laid out by the frame's size.
+    // Before that a frame counts as not measured: its size is the frame's, not
+    // the card's, and the card would land at another size after the layout.
+    const placed = (request: ArrangeRequest, expired: boolean): { all: PlacedNode[]; mine: PlacedNode[]; measured: boolean } => {
       const { nodeLookup } = store.getState();
+      const wanted = new Set(request.nodeIds);
       const all = useGraphStore.getState().nodes.map((node): PlacedNode => {
         const internal = nodeLookup.get(node.id);
+        // The store's own node never has the fallback type; React Flow's lookup says what is drawn.
+        if (internal?.type === CARD_FALLBACK_TYPE && !expired && wanted.has(node.id)) {
+          return { id: node.id, position: node.position, width: node.width, height: node.height };
+        }
         return {
           id: node.id,
           position: node.position,
@@ -95,7 +105,6 @@ export function ArrangeController() {
           height: internal?.measured?.height ?? node.measured?.height ?? node.height,
         };
       });
-      const wanted = new Set(request.nodeIds);
       const mine = all.filter((node) => wanted.has(node.id));
       const measured = mine.length > 0 && mine.every((node) => (node.width ?? 0) > 0 && (node.height ?? 0) > 0);
       return { all, mine, measured };
@@ -109,7 +118,7 @@ export function ArrangeController() {
           ?? { firstSeen: now, signature: '', stableSince: now, attempts: 0, busy: false };
         watches.set(request.id, watch);
         if (watch.busy) continue;
-        const { all, mine, measured } = placed(request);
+        const { all, mine, measured } = placed(request, now - watch.firstSeen >= MAX_WAIT_MS);
         if (mine.length === 0) {
           // Not merged into this canvas yet. If they never arrive, stop waiting,
           // or this tab would keep drawing every node (selectMeasuring) for good.
