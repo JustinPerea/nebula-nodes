@@ -6,7 +6,7 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, moodboard_clash, refusal as cursor_action_refusal
 
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
@@ -225,6 +225,16 @@ def build_parser() -> argparse.ArgumentParser:
     point_p.add_argument("target", nargs="?", default=None,
                          help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "
                               "something where your cursor is")
+    point_p.add_argument("--moodboard", default=None, metavar="BOARD",
+                         help="Point at a moodboard instead of a node or a spot: its id or exact name. Nebula "
+                              "never opens a panel or scrolls for the person: your cursor parks at the button "
+                              "that opens the Moodboard panel, or at the edge of what they see. Flags, not a "
+                              "target string, because a node id may hold a colon. Not with a target or --from")
+    point_p.add_argument("--image", default=None, metavar="N",
+                         help="With --moodboard: one of its images, by number (12 or #12) or id")
+    point_p.add_argument("--part", default=None, metavar="PART",
+                         help="With --moodboard: a control: name, direction, avoid, colors or colors-out (the keep-out colors) on a board; note "
+                              "or weight on an --image")
     point_p.add_argument("--say", default="",
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
@@ -767,7 +777,20 @@ def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentP
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "point" and args.target is None:
+    if args.command == "point" and (args.moodboard is not None or args.image is not None
+                                    or args.part is not None):
+        # One actionable line, with that command's usage (cli/parser.py).
+        point = _subparser(parser, "point")
+        if args.moodboard is None:
+            point.error("--image and --part go with --moodboard BOARD (its id or exact name)")
+        # The same check as the route and MCP (services/cursor_actions.moodboard_clash), in flag words.
+        clash = moodboard_clash(target=args.target, origin=args.origin or None)
+        if "target" in clash:
+            point.error("--moodboard is a target of its own: give it or a node, port or spot "
+                        f"({args.target!r}), not both")
+        if "origin" in clash:
+            point.error("--from can't go with --moodboard: a drag starts at a node or a spot")
+    elif args.command == "point" and args.target is None:
         # One actionable line, with that command's usage (cli/parser.py).
         if args.origin:
             _subparser(parser, "point").error("--from needs a target to drag to (n2, n2.prompt or 120,-40)")
@@ -832,7 +855,8 @@ def main() -> None:
         "selection": lambda: selection.run(client),
         "look": lambda: canvas.run_look(client, as_json=args.json),
         "point": lambda: canvas.run_point(client, args.target, say=args.say, origin=args.origin,
-                                          action=args.action, agent_name=args.agent_name),
+                                          action=args.action, agent_name=args.agent_name,
+                                          moodboard=args.moodboard, image=args.image, part=args.part),
         "watch": lambda: canvas.run_watch(
             client, once=args.once, timeout=args.timeout, as_json=args.json, since=args.since,
             journal=args.journal, kinds=args.kinds, include_self=args.include_self,

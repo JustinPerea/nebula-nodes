@@ -90,6 +90,17 @@ const flush = (max = 400) => act(() => {
 });
 /** Run just a few frames. */
 const tickFrames = (count: number) => flush(count);
+/**
+ * The clocks the view reads: Date.now (how stale an event is) held still, performance.now (the
+ * say's wait cap and the name's moment) following the test's own frames. Without it a loaded
+ * machine spends real time between `send` and the first frame, so the event reads as stale and
+ * snaps (no gesture plays), or a say's wait caps early and the column meets: the two tests that
+ * failed only under load (PR #233 r136).
+ */
+const pinClocks = () => {
+  vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
+};
 
 const event = (overrides: Partial<AgentPresenceEvent> = {}): AgentPresenceEvent => ({
   type: 'agentPresence',
@@ -146,6 +157,7 @@ beforeEach(() => {
   lookupRef.current = lookup;
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   vi.unstubAllGlobals();
   window.matchMedia = realMatchMedia;
@@ -154,6 +166,7 @@ afterEach(() => {
 
 describe('each action draws its own look (Phase 2, spec §2)', () => {
   it.each(['click', 'run', 'error'])('%s plays its gesture on arrival, not before', (action) => {
+    pinClocks();
     render(<AgentCursorLayer />);
     send(event({ action }));
     tickFrames(2);
@@ -233,6 +246,17 @@ describe('each action draws its own look (Phase 2, spec §2)', () => {
     expect(cursors()[0].dataset.placed).toBe('true');
     expect(cursors()[0].dataset.expr).toBeUndefined();
     expect(ripple()).toBeNull();
+  });
+
+  it('a cursor on a moodboard is the screen layer\'s: the canvas layer draws nothing for it', () => {
+    render(<AgentCursorLayer />);
+    send(event({ target: { surface: 'moodboard', itemId: 'b1/i3', part: 'note' }, action: 'type' }));
+    flush();
+    expect(cursors()).toHaveLength(0);
+    // One on the canvas beside it still draws.
+    send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, target: { nodeId: 'n1' } }));
+    flush();
+    expect(cursors()).toHaveLength(1);
   });
 
   it('a new action replaces the current one at once', () => {
@@ -2044,7 +2068,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     const rule = css.match(/^\.agent-cursor\[data-say-wait\] \.agent-cursor__say \{([^}]*)\}/m);
     expect(rule?.[1]).toMatch(/animation: none;/);
     expect(rule?.[1]).toMatch(/opacity: 0;/);
-    const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    const layer = readFileSync(resolve(__dirname, '../src/components/agent-cursor/AgentCursorField.tsx'), 'utf8');
     // Under reduced motion it takes its place at once (capped: no wait).
     expect(layer).toMatch(/if \(prefersReducedMotion\(\)\) \{\n\s+setSay\.current\('hold'\);\n\s+decideSay\.current\(true\);/);
   });
@@ -2416,6 +2440,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }) : [])],
   ];
   const zoomGlide = (zoomAt: (f: number) => [number, number, number][]) => {
+    pinClocks();
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
@@ -5304,7 +5329,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // syncOrder, which repaints through markers only (they read the field's
   // state) and returns at once when re-entered.
   it('no field method that calls views back can be reached again from apply (review 6, drag-live HIGH-1)', () => {
-    const src = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    const src = readFileSync(resolve(__dirname, '../src/components/agent-cursor/AgentCursorField.tsx'), 'utf8');
     const cls = src.slice(src.indexOf('class CursorField {'), src.indexOf('\n}\n', src.indexOf('class CursorField {')));
     const methods = [...cls.matchAll(/\n {2}(?:private |readonly )?([a-zA-Z]+)\([^)]*\)(?::[^{\n]+)? \{\n([\s\S]*?)\n {2}\}\n/g)].map((m) => ({ name: m[1], body: m[2] }));
     expect(methods.length).toBeGreaterThan(20);

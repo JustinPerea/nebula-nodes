@@ -1,4 +1,6 @@
 .panel {
+  /* The launcher badge's ring for a row or tab in this panel: its own surface, not the rail's. */
+  --agent-launcher-surface: #1a1a1a;
   position: fixed;
   display: flex;
   flex-direction: column;
@@ -966,7 +968,7 @@ body:not(.app-slava-restraint) .toolbar__divider {
 }
 
 body:not(.app-slava-restraint) .context-menu {
-  z-index: 20;
+  z-index: var(--sr-layer-transient, 59);
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 6px;
@@ -1029,7 +1031,7 @@ body:not(.app-slava-restraint) .context-menu__shortcut {
 }
 
 body:not(.app-slava-restraint) .connection-popup {
-  z-index: 25;
+  z-index: var(--sr-layer-transient, 59);
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 8px;

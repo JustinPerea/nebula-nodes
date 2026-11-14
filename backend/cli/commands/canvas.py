@@ -47,9 +47,32 @@ def run_point(
     origin: str | None = None,
     action: str | None = None,
     agent_name: str | None = None,
+    moodboard: str | None = None,
+    image: str | None = None,
+    part: str | None = None,
 ) -> None:
-    """Point the cursor; with no target, only `say`, shown where the cursor is (it doesn't move)."""
+    """Point the cursor; with no target, only `say`, shown where the cursor is (it doesn't move).
+    ``moodboard`` (with ``image`` and ``part``) points at a moodboard item instead."""
     body: dict = {"say": say}
+    if moodboard is not None:
+        item: dict = {"surface": "moodboard", "board": moodboard}
+        if image is not None:
+            item["image"] = image
+        if part is not None:
+            item["part"] = part
+        body = {"target": item, **body}
+        body["action"] = action or "move"
+        result = client.point_cursor(body, agent_name=agent_name)
+        agent = result.get("agent", {}).get("name", "agent")
+        names = result.get("anchorNames") or {}
+        where = f"moodboard \u201c{names.get('board') or moodboard}\u201d"
+        if image is not None:
+            where += f", image {names.get('image') or image}"
+        if part is not None:
+            where += f" ({part})"
+        said = f": {result.get('say')}" if result.get("say") else ""
+        print(f"{agent} \u2192 {where}{said}")
+        return
     if target is not None:
         body = {"target": _target(target), **body}
     if origin:

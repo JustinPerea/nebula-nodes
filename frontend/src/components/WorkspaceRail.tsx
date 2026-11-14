@@ -13,6 +13,7 @@ import { useUIStore, type LeftDock } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import type { OnboardingTarget } from '../lib/onboarding';
 import { COMMAND_PALETTE_OPEN_EVENT } from '../lib/commandPaletteKeys';
+import { agentLauncher } from '../lib/agentAnchors';
 import '../styles/workspace-rail.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
@@ -28,15 +29,18 @@ interface RailItemProps {
   primary?: boolean;
   shortcut?: string;
   onboardingTarget?: OnboardingTarget;
+  /** `data-agent-launcher`: the button an agent cursor parks beside when what it points at isn't on screen (lib/agentAnchors). */
+  launcher?: string;
 }
 
-function RailItem({ label, icon: Icon, onClick, active = false, primary = false, shortcut, onboardingTarget }: RailItemProps) {
+function RailItem({ label, icon: Icon, onClick, active = false, primary = false, shortcut, onboardingTarget, launcher }: RailItemProps) {
   const tooltip = shortcut ? `${label} · ${shortcut}` : label;
   return (
     <button
       type="button"
       className={`workspace-rail__item${primary ? ' workspace-rail__item--primary' : ''}${active ? ' workspace-rail__item--active' : ''}`}
       data-rail-item
+      data-agent-launcher={launcher}
       data-onboarding-target={onboardingTarget}
       data-tooltip={tooltip}
       aria-label={label}
@@ -130,6 +134,7 @@ export function WorkspaceRail() {
           <div className="workspace-rail__divider" aria-hidden="true" />
           <RailItem
             label="Open assets"
+            launcher={agentLauncher('moodboard')}
             icon={FolderHeart}
             active={leftDock === 'assets'}
             onClick={() => toggleDock('assets')}

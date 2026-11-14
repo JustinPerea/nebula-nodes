@@ -325,6 +325,13 @@ body.app-slava-restraint {
   --sr-layer-workspace: 50;
   --sr-layer-workspace-overlay: 55;
   --sr-layer-popover: 40;
+  /* Transient menus and popovers over the canvas (the context menu, the
+   * connection popup, an opened toolbar's actions, the move menu): above the
+   * agent edge chips (58), so a chip never covers a menu or takes its clicks
+   * (final review of PR #233, finding 5). Still below a modal (60). The chips
+   * and the screen layer sit above the docks (55): GM's ruling. */
+  --sr-layer-edge-chips: 58;
+  --sr-layer-transient: 59;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
   /* The proposal bar's layer. GM r10 (PR #203 round 6), the rule: anything
@@ -579,6 +586,7 @@ body.app-slava-restraint .chat-panel.chat-panel--exiting {
 }
 
 body.app-slava-restraint .panel {
+  --agent-launcher-surface: rgb(22, 22, 24);
   z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
@@ -783,7 +791,7 @@ body.app-slava-restraint :is(
  * panel palette while preserving their existing geometry from panels.css. */
 body.app-slava-restraint .context-menu,
 body.app-slava-restraint .connection-popup {
-  z-index: var(--sr-layer-popover);
+  z-index: var(--sr-layer-transient);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control-lg);
   background: var(--sr-glass-raised);

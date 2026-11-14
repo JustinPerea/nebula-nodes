@@ -398,11 +398,11 @@ def test_a_cover_change_is_journaled_said_in_the_agent_log_and_broadcast(client,
 
     events = _board_events(journal)
     assert [e["kind"] for e in events] == ["board.cover"] * 3
-    assert events[0]["summary"] == "made #3 the cover of board Placed"
+    assert events[0]["summary"] == "made image 3 the cover of “Placed”"
     assert events[0]["data"]["refs"] == [{"number": 3, "id": "img-c"}]
-    assert events[1]["summary"] == "set the cover of board Placed back to #1"
-    assert _said(sent) == ["Made #3 the cover of board Placed", "Set the cover of board Placed back to #1",
-                           "Undo: Made #3 the cover of board Placed"]
+    assert events[1]["summary"] == "set the cover of “Placed” back to image 1"
+    assert _said(sent) == ["Made image 3 the cover of “Placed”", "Set the cover of “Placed” back to image 1",
+                           "Undid a change to “Placed”"]
     changed = [m for m in sent if m.get("type") == "storedAssetChanged"]
     assert changed[0]["version"] == set_["version"]
     assert set(changed[0]["touched"]["images"]) == {"img-c"}
@@ -422,14 +422,14 @@ def test_removing_the_cover_says_both(client, root, journal, sent):
     _ok(_edit(client, [{"op": "remove", "images": [3]}], headers=AGENT))
     removal = _board_events(journal)[-1]
     assert removal["kind"] == "board.removed" and removal["data"]["kinds"] == ["board.removed", "board.cover"]
-    assert _said(sent) == ["Removed #3 from board Placed; the cover is #1 again"]
+    assert _said(sent) == ["Removed image 3 from “Placed” and the cover is image 1 again"]
 
 
 def test_a_put_cover_change_is_said_too(client, root, journal, sent):
     write_board(root, three_image_board())
     _ok(client.put(f"/api/moodboards/{BOARD_ID}", headers=AGENT, json={"coverImageId": "img-b"}))
-    assert _board_events(journal)[-1]["summary"] == "made #2 the cover of board Placed"
-    assert _said(sent) == ["Made #2 the cover of board Placed"]
+    assert _board_events(journal)[-1]["summary"] == "made image 2 the cover of “Placed”"
+    assert _said(sent) == ["Made image 2 the cover of “Placed”"]
 
 
 def test_a_cover_picked_with_another_change_isnt_listed_as_that_change(client, root, journal, sent):
@@ -439,11 +439,11 @@ def test_a_cover_picked_with_another_change_isnt_listed_as_that_change(client, r
     _ok(_edit(client, [{"op": "remove", "images": [1]}, {"op": "cover", "image": "img-c"}], headers=AGENT))
     _ok(_edit(client, [{"op": "weight", "image": 1, "value": 0.3}, {"op": "cover", "image": None}], headers=AGENT))
     events = _board_events(journal)
-    assert [e["summary"] for e in events] == ["removed #1 from board Placed", "resized #1 on board Placed"]
+    assert [e["summary"] for e in events] == ["removed image 1 from “Placed”", "resized image 1 on “Placed”"]
     # The refs still name the cover's image, for whatever lists the change.
     assert events[0]["data"]["refs"] == [{"number": 1, "id": "img-a"}, {"number": 2, "id": "img-c"}]
-    assert _said(sent) == ["Removed #1 from board Placed; made #2 the cover",
-                           "Resized #1 on board Placed; the cover is #1 again"]
+    assert _said(sent) == ["Removed image 1 from “Placed” and made image 2 the cover",
+                           "Resized image 1 on “Placed” and the cover is image 1 again"]
 
 
 # -- what generators, the reader and the node get: unchanged -----------------------------
@@ -596,7 +596,7 @@ def test_an_agent_cover_change_over_mcp_is_its_log_line(app, client, root, sent,
     write_board(root, three_image_board())
     monkeypatch.setattr(mcp_server, "_board_headers", lambda ctx=None: dict(AGENT))
     mcp_server.moodboard_update(BOARD_ID, cover=2)
-    assert _said(sent) == ["Made #2 the cover of board Placed"]
+    assert _said(sent) == ["Made image 2 the cover of “Placed”"]
 
 
 def test_the_client_view_has_no_cover_on_a_nebula_without_covers():
