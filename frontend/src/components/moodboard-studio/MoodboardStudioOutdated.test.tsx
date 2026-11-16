@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
   fetchMoodboards: vi.fn(), keepMoodboardBriefOverride: vi.fn(), lookupStoredAsset: vi.fn(),
   moveStoredAsset: vi.fn(), updateMoodboard: vi.fn(),
 }));
-vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the board." }));
+vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the moodboard." }));
 vi.mock('../../lib/backend', async (importOriginal) => ({
   ...(await importOriginal<object>()), apiFetch: vi.fn(), backendAssetUrlSync: (url: string) => url,
 }));

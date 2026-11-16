@@ -69,7 +69,7 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
         className="moodboard-board-toast"
         role="status"
         aria-live="polite"
-        aria-label="Board undo"
+        aria-label="Moodboard undo"
         {...leave}
         onPointerEnter={() => setHeld(true)}
         onPointerLeave={() => setHeld(false)}

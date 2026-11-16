@@ -224,9 +224,9 @@ describe('the Board / List switch', () => {
 
   it('with nothing selected the side panel holds the board: its fields, Direction and the brief', async () => {
     await openStudio({ view: 'board' });
-    const panel = screen.getByRole('complementary', { name: 'Board' });
+    const panel = screen.getByRole('complementary', { name: 'Moodboard' });
     expect(within(panel).getByDisplayValue('Global board')).toBeTruthy();
-    expect(within(panel).getByRole('textbox', { name: 'What the board is for' })).toBeTruthy();
+    expect(within(panel).getByRole('textbox', { name: 'What the moodboard is for' })).toBeTruthy();
     expect(within(panel).getByRole('button', { name: 'Analyze' })).toBeTruthy();
   });
 });
@@ -266,7 +266,7 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true });
     expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond."]);
     const restores = () => api.editMoodboard.mock.calls.filter(([, ops]) => (ops as MoodboardOp[])[0]?.op === 'restore');
@@ -287,7 +287,7 @@ describe('a drag on the board', () => {
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits).toHaveLength(2));
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true, shiftKey: true });
     expect(parts(await undoNotice())).toEqual(["Couldn't redo the change.", "Nebula didn't respond."]);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -299,7 +299,7 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true });
     await undoNotice();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
@@ -566,7 +566,7 @@ describe("the Studio's keys", () => {
     press('Delete');
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
     expect(screen.queryByText(/^card #\d at 0,0$/)).toBeNull();
-    const toast = await screen.findByRole('status', { name: 'Board undo' });
+    const toast = await screen.findByRole('status', { name: 'Moodboard undo' });
     expect(toast.textContent).toContain('Removed #1');
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
@@ -582,7 +582,7 @@ describe("the Studio's keys", () => {
     select('c-i1');
     press('Delete');
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
-    const toast = await screen.findByRole('status', { name: 'Board undo' });
+    const toast = await screen.findByRole('status', { name: 'Moodboard undo' });
     expect(toast.closest('[data-notice-slot="board"]')).not.toBeNull();
     expect(toast.closest('.moodboard-studio-view')).toBeNull();
     const dismiss = within(toast).getByRole('button', { name: 'Dismiss' });

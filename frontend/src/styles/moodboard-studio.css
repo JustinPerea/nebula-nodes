@@ -124,6 +124,7 @@ body.app-slava-restraint .moodboard-studio-toolbar__state--saved {
 
 body.app-slava-restraint .moodboard-studio-toolbar__state--error,
 body.app-slava-restraint .moodboard-studio__notice--error,
+body.app-slava-restraint .moodboard-studio__notice--warn,
 body.app-slava-restraint .moodboard-palette__empty--error,
 body.app-slava-restraint .moodboard-rail__empty--error {
   color: var(--line-warning, #e0796b);
@@ -195,10 +196,10 @@ body.app-slava-restraint .moodboard-studio-view__board-notices > .moodboard-stud
   background: linear-gradient(var(--mb-notice-fill), var(--mb-notice-fill)), var(--mb-board-bg);
 }
 
-body.app-slava-restraint .moodboard-studio__notice--warn {
-  color: var(--line-warning, #d9a441);
-}
-
+/* GM copy sweep (item 22): a notice line draws its text in the token the header
+   chip draws the same state in, so a quoted name looks the same in both. Warn and
+   error share the chip's error rule above; neutral and the chip's "Not saved" both
+   read var(--sr-ink-light). */
 /* GM r12 1 (PR #210): a board's send that failed on reconnect lost nothing
    (it waits in the draft), so its line is neutral, colour included: PR #204's
    because-line look (neutral ink, control fill, strong edge). The header chip

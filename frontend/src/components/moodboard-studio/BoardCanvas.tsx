@@ -1214,7 +1214,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(ZOOM_STEP)}
               aria-label="Zoom in" title="Zoom in">+</button>
             <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={() => fit(false)}
-              aria-label="Fit the board" title="Fit the board (Shift+1)">Fit</button>
+              aria-label="Fit the moodboard" title="Fit the moodboard (Shift+1)">Fit</button>
             {/* Live while files upload (GM): each upload is its own placeholder, so the toolbar has no status. */}
             <label className={`moodboard-board__control moodboard-board__control--text${offline ? ' moodboard-board__control--disabled' : ''}`}
               title={offline ? offlineDisabledReason('add images') : 'Add images to the middle of the view'} {...offlineMark(offline)}>

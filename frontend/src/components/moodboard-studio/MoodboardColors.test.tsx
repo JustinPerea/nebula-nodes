@@ -53,7 +53,7 @@ describe('MoodboardColors', () => {
     expect(within(detail).getAllByText(/^Image #/).map((row) => row.textContent)).toEqual(
       ['Image #3', 'Image #7', 'Image #1', 'Image #9']);
     expect(detail.textContent).toContain('0.35% of the image');
-    expect(detail.textContent).toContain('0.14% of the board');
+    expect(detail.textContent).toContain('0.14% of the moodboard');
   });
 
   it('shows an older analysis without sources and says to analyze again', () => {

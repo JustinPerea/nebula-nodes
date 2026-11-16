@@ -21,7 +21,7 @@ export function RestoreTrashedAsset({ kind, id, className }: { kind: StoredAsset
           setError(null);
           restoreTrashed(kind, id)
             .then(() => useStoredAssetsStore.getState().refresh(kind, id))
-            .catch((err) => setError(failureMessage(err, kind === 'moodboard' ? "Couldn't restore the board." : "Couldn't restore the character.")))
+            .catch((err) => setError(failureMessage(err, kind === 'moodboard' ? "Couldn't restore the moodboard." : "Couldn't restore the character.")))
             .finally(() => setBusy(false));
         }}
       >

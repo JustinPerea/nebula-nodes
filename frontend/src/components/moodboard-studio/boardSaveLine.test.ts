@@ -7,20 +7,20 @@ import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boa
   projectRestoreFailure, projectRestoredLine, changeNotSavedLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
-  new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
+  new RequestFailedError("Couldn't save the moodboard.", status, { reason: 'x', ...options });
 const offline = () => new ConnectionLostError(new TypeError('Failed to fetch'));
 
 // GM r16 (7a, 7b), verbatim.
 const LINES = {
-  noAnswer: 'Nebula couldn’t save the board because the server isn’t answering. Try again.',
-  busy: 'Nebula couldn’t save the board because the server is busy. Try again.',
-  noResponse: 'Nebula couldn’t save the board because the server didn’t respond. Try again.',
-  serverError: 'Nebula couldn’t save the board because the server hit an error. Try again.',
-  diskFull: 'Nebula couldn’t save the board because the disk is full. Free up some space, then try again.',
-  tooLarge: 'Nebula couldn’t save the board because it’s too large. Remove some images, then try again.',
-  signedOut: 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.',
-  changed: 'Nebula couldn’t save the board because it changed somewhere else. Reload to get the latest version.',
-  refused: 'Nebula couldn’t save the board because the server didn’t accept this save. Try again.',
+  noAnswer: 'Nebula couldn’t save the moodboard because the server isn’t answering. Try again.',
+  busy: 'Nebula couldn’t save the moodboard because the server is busy. Try again.',
+  noResponse: 'Nebula couldn’t save the moodboard because the server didn’t respond. Try again.',
+  serverError: 'Nebula couldn’t save the moodboard because the server hit an error. Try again.',
+  diskFull: 'Nebula couldn’t save the moodboard because the disk is full. Free up some space, then try again.',
+  tooLarge: 'Nebula couldn’t save the moodboard because it’s too large. Remove some images, then try again.',
+  signedOut: 'Nebula couldn’t save the moodboard because you’re signed out. Open the link Nebula printed when it started.',
+  changed: 'Nebula couldn’t save the moodboard because it changed somewhere else. Reload to get the latest version.',
+  refused: 'Nebula couldn’t save the moodboard because the server didn’t accept this save. Try again.',
 };
 
 describe('a board save that failed (GM r16 7a): the because form, ending with the step that works', () => {
@@ -44,7 +44,7 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
   ])('%s', (_label, error, reason, retry) => {
     expect(boardSaveLine(error)).toEqual({ failure: { heading: '', reason }, retry });
     expect(boardSaveFailure(error)).toEqual({ heading: '', reason });
-    expect(reason.startsWith(`Nebula couldn’t save the board because ${boardSaveCause(error)}. `)).toBe(true);
+    expect(reason.startsWith(`Nebula couldn’t save the moodboard because ${boardSaveCause(error)}. `)).toBe(true);
     // Neutral: nothing is lost.
     expect(isBoardNotSavedLine(boardSaveFailure(error))).toBe(true);
     expect(reason).not.toMatch(/creat/i);
@@ -84,8 +84,8 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
 // Round 6l (review 10 live MEDIUM-2, GM r21 Q3): a save that finds its board deleted says the deleted-board line,
 // never "didn’t accept this save. Try again.", and no Retry (it can't work).
 describe('a save that found its board deleted (GM r21 Q3)', () => {
-  const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change.';
-  const PURGED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else.';
+  const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted. Restore it to keep the change.';
+  const PURGED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted somewhere else.';
 
   it('in Recently deleted: the r18 line with its Restore step; gone for good: the red line; no Retry either way', () => {
     const inTrash = failed(404, { detail: { code: 'in_trash', trashed: { deletedAt: '2026-11-03T10:00:00Z' } } });
@@ -96,8 +96,8 @@ describe('a save that found its board deleted (GM r21 Q3)', () => {
     expect(boardGoneKind(purged)).toBe('purged');
     expect(boardSaveLine(purged, 'Rivers')).toEqual({ failure: { heading: '', reason: PURGED }, retry: 'reload' });
     expect(boardSaveFailure(purged, ' Rivers ')).toEqual({ heading: '', reason: PURGED });
-    expect(boardSaveCause(inTrash)).toBe('the board was deleted');
-    expect(boardSaveCause(purged)).toBe('the board was deleted somewhere else');
+    expect(boardSaveCause(inTrash)).toBe('the moodboard was deleted');
+    expect(boardSaveCause(purged)).toBe('the moodboard was deleted somewhere else');
     // Neither is a save line ("Not saved" for the trashed one comes from the Studio's gone state).
     expect(isBoardNotSavedLine(boardSaveFailure(inTrash, 'Rivers'))).toBe(false);
   });
@@ -127,7 +127,7 @@ describe('which line is the neutral one (GM r12 1, r16)', () => {
     expect(isBoardNotSavedLine(boardSaveFailure(failed(403)))).toBe(true);
     expect(isBoardNotSavedLine(lostAddLine(['a.png']))).toBe(false);
     expect(isBoardNotSavedLine({ heading: '', reason: 'Nebula didn’t respond. Try again.' })).toBe(false);
-    expect(isBoardNotSavedLine({ heading: "Couldn't save the board.", reason: LINES.busy })).toBe(false);
+    expect(isBoardNotSavedLine({ heading: "Couldn't save the moodboard.", reason: LINES.busy })).toBe(false);
     expect(isBoardNotSavedLine({ heading: '', reason: '' })).toBe(false);
     expect(isBoardNotSavedLine(LINES.busy)).toBe(false);
     expect(isBoardNotSavedLine(null)).toBe(false);
@@ -168,21 +168,21 @@ describe('joining names (GM r16): "and", no serial comma', () => {
 describe('the red line for a truly lost add (GM r16 7a)', () => {
   it('names up to three files, then counts them', () => {
     expect(lostAddLine(['river.png'])).toEqual({ heading: '',
-      reason: 'Nebula couldn’t add “river.png” because the board hadn’t loaded. Add it again.' });
+      reason: 'Nebula couldn’t add “river.png” because the moodboard hadn’t loaded. Add it again.' });
     expect(lostAddLine(['river.png', 'dune.jpg']).reason)
-      .toBe('Nebula couldn’t add “river.png” and “dune.jpg” because the board hadn’t loaded. Add them again.');
+      .toBe('Nebula couldn’t add “river.png” and “dune.jpg” because the moodboard hadn’t loaded. Add them again.');
     expect(lostAddLine(['a.png', 'b.png', 'c.png']).reason)
-      .toBe('Nebula couldn’t add “a.png”, “b.png” and “c.png” because the board hadn’t loaded. Add them again.');
+      .toBe('Nebula couldn’t add “a.png”, “b.png” and “c.png” because the moodboard hadn’t loaded. Add them again.');
     expect(lostAddLine(['a.png', 'b.png', 'c.png', 'd.png']).reason)
-      .toBe('Nebula couldn’t add 4 images because the board hadn’t loaded. Add them again.');
-    expect(lostAddLine([]).reason).toBe('Nebula couldn’t add the image because the board hadn’t loaded. Add it again.');
+      .toBe('Nebula couldn’t add 4 images because the moodboard hadn’t loaded. Add them again.');
+    expect(lostAddLine([]).reason).toBe('Nebula couldn’t add the image because the moodboard hadn’t loaded. Add it again.');
   });
 });
 
 describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
   it('in Recently deleted: one board by name, then up to three joined with "and", then a count', () => {
     expect(deletedBoardsLine(['Rivers'], 'trashed')).toEqual({
-      text: 'Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change.', title: '“Rivers”' });
+      text: 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted. Restore it to keep the change.', title: '“Rivers”' });
     expect(deletedBoardsLine(['Rivers', 'Dusk'], 'trashed').text)
       .toBe('Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted. Restore them to keep the changes.');
     expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'trashed').text)
@@ -193,7 +193,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
   });
 
   it('gone for good: the same names, deleted somewhere else, with no step', () => {
-    expect(deletedBoardsLine(['Rivers'], 'purged').text).toBe('Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else.');
+    expect(deletedBoardsLine(['Rivers'], 'purged').text).toBe('Nebula couldn’t save your change to “Rivers” because the moodboard was deleted somewhere else.');
     expect(deletedBoardsLine(['Rivers', 'Dusk'], 'purged').text)
       .toBe('Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted somewhere else.');
     expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'purged').text)
@@ -208,9 +208,9 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(line.text).toBe(`Nebula couldn’t save your changes to “${long.slice(0, 39)}…” and “Dusk” because they were deleted. Restore them to keep the changes.`);
     expect(line.title).toBe(`“${long}” and “Dusk”`);
     const forty = 'x'.repeat(40);
-    expect(deletedBoardsLine([forty], 'purged').text).toBe(`Nebula couldn’t save your change to “${forty}” because the board was deleted somewhere else.`);
+    expect(deletedBoardsLine([forty], 'purged').text).toBe(`Nebula couldn’t save your change to “${forty}” because the moodboard was deleted somewhere else.`);
     expect(deletedBoardsLine(['  '], 'purged')).toEqual({
-      text: 'Nebula couldn’t save your change to “Untitled” because the board was deleted somewhere else.', title: '“Untitled”' });
+      text: 'Nebula couldn’t save your change to “Untitled” because the moodboard was deleted somewhere else.', title: '“Untitled”' });
   });
 });
 
@@ -291,31 +291,31 @@ describe('a count of boards says "moodboards" in every line (GM r95.5)', () => {
 describe('a kept remove the board changed after (GM r90.5)', () => {
   it('names the numbers by the names rule, then counts them; by the agent\'s own label', () => {
     expect(changedAfterRemoveLine([], 'Claude')).toBe('');
-    expect(changedAfterRemoveLine([3], 'Claude')).toBe('Claude changed #3 after you removed it, so it’s still on the board.');
-    expect(changedAfterRemoveLine([3, 5], 'Claude')).toBe('Claude changed #3 and #5 after you removed them, so they’re still on the board.');
-    expect(changedAfterRemoveLine([3, 5, 7], 'Claude')).toBe('Claude changed #3, #5 and #7 after you removed them, so they’re still on the board.');
-    expect(changedAfterRemoveLine([1, 3, 5, 7], 'Claude')).toBe('Claude changed 4 images after you removed them, so they’re still on the board.');
+    expect(changedAfterRemoveLine([3], 'Claude')).toBe('Claude changed image 3 after you removed it, so it’s still on the moodboard.');
+    expect(changedAfterRemoveLine([3, 5], 'Claude')).toBe('Claude changed images 3 and 5 after you removed them, so they’re still on the moodboard.');
+    expect(changedAfterRemoveLine([3, 5, 7], 'Claude')).toBe('Claude changed images 3, 5 and 7 after you removed them, so they’re still on the moodboard.');
+    expect(changedAfterRemoveLine([1, 3, 5, 7], 'Claude')).toBe('Claude changed 4 images after you removed them, so they’re still on the moodboard.');
     // The agent's label, never a fixed "Claude".
-    expect(changedAfterRemoveLine([3], 'Codex')).toBe('Codex changed #3 after you removed it, so it’s still on the board.');
+    expect(changedAfterRemoveLine([3], 'Codex')).toBe('Codex changed image 3 after you removed it, so it’s still on the moodboard.');
     // Across boards, counted (a number names an image on one board only), and on their boards (round 6q, GM r95.2).
-    expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on their boards.');
+    expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on their moodboards.');
     expect(changedAfterRemoveLine([1, 2, 3, 4, 5], 'Claude Code', true))
-      .toBe('Claude Code changed 5 images after you removed them, so they’re still on their boards.');
-    expect(changedAfterRemoveLine([3, 3], null, true)).toBe('2 images changed after you removed them, so they’re still on their boards.');
-    expect(changedAfterRemoveLine([3, 5], 'Claude Code', false)).toBe('Claude Code changed #3 and #5 after you removed them, so they’re still on the board.');
+      .toBe('Claude Code changed 5 images after you removed them, so they’re still on their moodboards.');
+    expect(changedAfterRemoveLine([3, 3], null, true)).toBe('2 images changed after you removed them, so they’re still on their moodboards.');
+    expect(changedAfterRemoveLine([3, 5], 'Claude Code', false)).toBe('Claude Code changed images 3 and 5 after you removed them, so they’re still on the moodboard.');
     // No one known agent: the image is the subject.
-    expect(changedAfterRemoveLine([3], null)).toBe('#3 changed after you removed it, so it’s still on the board.');
-    expect(changedAfterRemoveLine([3, 5], ' ')).toBe('#3 and #5 changed after you removed them, so they’re still on the board.');
-    expect(changedAfterRemoveLine([1, 2, 3, 4], null)).toBe('4 images changed after you removed them, so they’re still on the board.');
+    expect(changedAfterRemoveLine([3], null)).toBe('Image 3 changed after you removed it, so it’s still on the moodboard.');
+    expect(changedAfterRemoveLine([3, 5], ' ')).toBe('Images 3 and 5 changed after you removed them, so they’re still on the moodboard.');
+    expect(changedAfterRemoveLine([1, 2, 3, 4], null)).toBe('4 images changed after you removed them, so they’re still on the moodboard.');
   });
 
   it('follows the confirmation it joins', () => {
     const stayed = changedAfterRemoveLine([3], 'Claude');
     expect(projectRestoredLine('Coast', ['Rivers'], stayed).text)
-      .toBe('Restored “Coast”. Your change to “Rivers” is saved. Claude changed #3 after you removed it, so it’s still on the board.');
-    expect(projectRestoredLine('Coast', [], stayed).text).toBe('Restored “Coast”. Claude changed #3 after you removed it, so it’s still on the board.');
+      .toBe('Restored “Coast”. Your change to “Rivers” is saved. Claude changed image 3 after you removed it, so it’s still on the moodboard.');
+    expect(projectRestoredLine('Coast', [], stayed).text).toBe('Restored “Coast”. Claude changed image 3 after you removed it, so it’s still on the moodboard.');
     expect(restoredBoardsLine(['Rivers'], 1, stayed).text)
-      .toBe('Restored “Rivers”. Your change is saved. Claude changed #3 after you removed it, so it’s still on the board.');
+      .toBe('Restored “Rivers”. Your change is saved. Claude changed image 3 after you removed it, so it’s still on the moodboard.');
   });
 });
 
@@ -393,63 +393,63 @@ describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
 
 describe('a dropped Undo (GM r21 Q1)', () => {
   it('has its own neutral line', () => {
-    expect(UNDO_DROPPED_LINE).toBe('Nebula couldn’t apply your Undo because the board changed after it.');
+    expect(UNDO_DROPPED_LINE).toBe('Nebula couldn’t apply your Undo because the moodboard changed after it.');
   });
 });
 
 describe('the "Kept …" line (round 6g, GM r16)', () => {
   it('names up to three fields joined with "and", then counts them', () => {
     expect(keptFromBoardLine([])).toBeNull();
-    expect(keptFromBoardLine(['name'], { name: 'Rivers' })).toEqual({ text: 'Kept the name “Rivers” from the board.', title: 'Rivers' });
-    expect(keptFromBoardLine(['notes'], { name: 'Rivers' })).toBe('Kept the notes from the board.');
-    expect(keptFromBoardLine(['name', 'notes'])).toBe('Kept the name and notes from the board.');
-    expect(keptFromBoardLine(['name', 'notes', 'mode'])).toBe('Kept the name, notes and mode from the board.');
-    expect(keptFromBoardLine(['name', 'notes', 'mode', 'strength'])).toBe('Kept 4 changes from the board.');
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' })).toEqual({ text: 'Kept the name “Rivers” from the moodboard.', title: 'Rivers' });
+    expect(keptFromBoardLine(['notes'], { name: 'Rivers' })).toBe('Kept the notes from the moodboard.');
+    expect(keptFromBoardLine(['name', 'notes'])).toBe('Kept the name and notes from the moodboard.');
+    expect(keptFromBoardLine(['name', 'notes', 'mode'])).toBe('Kept the name, notes and mode from the moodboard.');
+    expect(keptFromBoardLine(['name', 'notes', 'mode', 'strength'])).toBe('Kept 4 changes from the moodboard.');
   });
 
   it('shows only the name\'s value, trimmed, clipped past 40 characters with the full name in the title (GM r17 addendum)', () => {
     const long = 'An exceptionally long board name that keeps going well past forty';
     const line = keptFromBoardLine(['name'], { name: `  ${long} ` }) as { text: string; title: string };
     expect(line.title).toBe(long);
-    expect(line.text).toBe(`Kept the name “${long.slice(0, 39)}…” from the board.`);
+    expect(line.text).toBe(`Kept the name “${long.slice(0, 39)}…” from the moodboard.`);
     const forty = 'x'.repeat(40);
-    expect(keptFromBoardLine(['name'], { name: forty })).toEqual({ text: `Kept the name “${forty}” from the board.`, title: forty });
+    expect(keptFromBoardLine(['name'], { name: forty })).toEqual({ text: `Kept the name “${forty}” from the moodboard.`, title: forty });
     // No name to show: the field alone. Free text never shows its value.
-    expect(keptFromBoardLine(['name'], { name: '  ' })).toBe('Kept the name from the board.');
+    expect(keptFromBoardLine(['name'], { name: '  ' })).toBe('Kept the name from the moodboard.');
     for (const field of ['notes', 'briefOverride', 'direction', 'avoid']) {
       expect(typeof keptFromBoardLine([field], { name: 'Rivers', notes: 'secret words' } as { name: string })).toBe('string');
     }
-    expect(keptFromBoardLine(['name', 'notes'], { name: 'Rivers' })).toBe('Kept the name and notes from the board.');
+    expect(keptFromBoardLine(['name', 'notes'], { name: 'Rivers' })).toBe('Kept the name and notes from the moodboard.');
   });
 
   it('names every board field as a noun after its one "the"', () => {
-    expect(keptFromBoardLine(['direction', 'avoid', 'pinnedColors'])).toBe('Kept the direction, avoid list and pinned colors from the board.');
-    expect(keptFromBoardLine(['briefOverride', 'clashMode', 'colorChoices'])).toBe('Kept the brief, clash setting and color choices from the board.');
-    expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the notes setting and strength from the board.');
+    expect(keptFromBoardLine(['direction', 'avoid', 'pinnedColors'])).toBe('Kept the direction, avoid list and pinned colors from the moodboard.');
+    expect(keptFromBoardLine(['briefOverride', 'clashMode', 'colorChoices'])).toBe('Kept the brief, clash setting and color choices from the moodboard.');
+    expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the notes setting and strength from the moodboard.');
   });
 
   // Round 6l (GM r21 Q1): kept image changes, one item per image. Round 6m (GM r53): by the label the person sees.
-  it('names each image by its visible label, "Reference #N", and joins them with the board fields', () => {
-    expect(keptFromBoardLine([], {}, [{ n: 3 }])).toBe('Kept the changes to Reference #3 from the board.');
+  it('names each image by its number, "image N", and joins them with the board fields', () => {
+    expect(keptFromBoardLine([], {}, [{ n: 3 }])).toBe('Kept the changes to image 3 from the moodboard.');
     expect(keptFromBoardLine(['name'], { name: 'Tide' }, [{ n: 3 }])).toEqual({
-      text: 'Kept the name “Tide” and the changes to Reference #3 from the board.', title: 'Tide' });
+      text: 'Kept the name “Tide” and the changes to image 3 from the moodboard.', title: 'Tide' });
     expect(keptFromBoardLine(['name', 'notes'], { name: 'Rivers' }, [{ n: 2 }]))
-      .toBe('Kept the name, the notes and the changes to Reference #2 from the board.');
+      .toBe('Kept the name, the notes and the changes to image 2 from the moodboard.');
     expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }]))
-      .toBe('Kept the changes to Reference #1, the changes to Reference #2 and the changes to Reference #3 from the board.');
-    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ n: 1 }, { n: 2 }, { n: 3 }])).toBe('Kept 4 changes from the board.');
-    expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }])).toBe('Kept 4 changes from the board.');
+      .toBe('Kept the changes to image 1, the changes to image 2 and the changes to image 3 from the moodboard.');
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ n: 1 }, { n: 2 }, { n: 3 }])).toBe('Kept 4 changes from the moodboard.');
+    expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }])).toBe('Kept 4 changes from the moodboard.');
   });
 
   it('the cover is a board item, "the cover"; an image\'s label is never clipped and has no title', () => {
-    expect(keptFromBoardLine(['cover'])).toBe('Kept the cover from the board.');
-    expect(keptFromBoardLine(['name', 'cover'])).toBe('Kept the name and cover from the board.');
-    expect(keptFromBoardLine(['cover'], {}, [{ n: 1 }])).toBe('Kept the cover and the changes to Reference #1 from the board.');
-    expect(keptFromBoardLine([], {}, [{ n: 1234 }])).toBe('Kept the changes to Reference #1234 from the board.');
+    expect(keptFromBoardLine(['cover'])).toBe('Kept the cover from the moodboard.');
+    expect(keptFromBoardLine(['name', 'cover'])).toBe('Kept the name and cover from the moodboard.');
+    expect(keptFromBoardLine(['cover'], {}, [{ n: 1 }])).toBe('Kept the cover and the changes to image 1 from the moodboard.');
+    expect(keptFromBoardLine([], {}, [{ n: 1234 }])).toBe('Kept the changes to image 1234 from the moodboard.');
     // A long name keeps its clip and its title (GM r17), beside an image.
     const long = 'A board name for this reference set that keeps going well past forty';
     expect(keptFromBoardLine(['name'], { name: long }, [{ n: 2 }])).toEqual({
-      text: `Kept the name “${long.slice(0, 39)}…” and the changes to Reference #2 from the board.`, title: long });
+      text: `Kept the name “${long.slice(0, 39)}…” and the changes to image 2 from the moodboard.`, title: long });
   });
 
   // GM r53: a private note is the person's own text, and a status line can end up in a screen share.
@@ -460,7 +460,7 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
         const images = Array.from({ length: count }, (_, index) => ({ n: index + 1, privateNote: 'SENTINEL-NOTE', label: 'SENTINEL-LABEL' }));
         const line = keptFromBoardLine(fields, { name: 'Rivers' }, images);
         expect(JSON.stringify(line)).not.toMatch(/SENTINEL/);
-        if (fields.length + count <= 3) expect(typeof line === 'string' ? line : line?.text).toMatch(/Reference #\d/);
+        if (fields.length + count <= 3) expect(typeof line === 'string' ? line : line?.text).toMatch(/image \d/);
       }
     }
   });
@@ -496,8 +496,8 @@ describe('a replayed save that failed elsewhere (GM r113 2)', () => {
     expect(changeNotSavedLine(boardSaveFailure(failed(408)), long)?.title).toBe(`“${long}”`);
     expect(changeNotSavedLine(boardSaveFailure(failed(408)), long)?.text).toContain('…”');
     expect(changeNotSavedLine(boardSaveFailure(failed(404, { code: 'in_trash' }), 'Rivers'), 'Rivers')).toBeNull();
-    expect(changeNotSavedLine({ heading: "Couldn't save the board.", reason: 'x' }, 'Rivers')).toBeNull();
-    expect(changeNotSavedLine('Nebula couldn’t save the board because the server didn’t respond. Try again.', 'Rivers')).toBeNull();
+    expect(changeNotSavedLine({ heading: "Couldn't save the moodboard.", reason: 'x' }, 'Rivers')).toBeNull();
+    expect(changeNotSavedLine('Nebula couldn’t save the moodboard because the server didn’t respond. Try again.', 'Rivers')).toBeNull();
     expect(changeNotSavedLine(null, 'Rivers')).toBeNull();
   });
 });

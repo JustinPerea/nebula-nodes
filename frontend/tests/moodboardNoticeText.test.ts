@@ -26,8 +26,8 @@ describe('no Studio line mounts with empty text (GM r113 1)', () => {
     expect(failureText({ heading: ' ', reason: ' ' })).toBe('');
     expect(failureText('')).toBe('');
     expect(failureText(null)).toBe('');
-    expect(failureText({ heading: "Couldn't restore the board.", reason: 'Nebula didn’t respond. Try again.' }))
-      .toBe("Couldn't restore the board. Nebula didn’t respond. Try again.");
+    expect(failureText({ heading: "Couldn't restore the moodboard.", reason: 'Nebula didn’t respond. Try again.' }))
+      .toBe("Couldn't restore the moodboard. Nebula didn’t respond. Try again.");
   });
 
   it('the Studio renders FailureLines only inside FailureLine, which renders nothing for empty text', () => {

@@ -30,7 +30,7 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
 }) {
   const titleId = useId();
   const picked = images.flatMap((image, index) => (selected.includes(image.id) ? [{ image, number: index + 1 }] : []));
-  const title = picked.length === 0 ? 'Board' : picked.length === 1 ? `Reference #${picked[0].number}`
+  const title = picked.length === 0 ? 'Moodboard' : picked.length === 1 ? `Reference #${picked[0].number}`
     : `${picked.length} references`;
   // A tab stop while it scrolls (under the board in a narrow window), and its
   // scroll position kept across the size where it doesn't (#213 round 3).
@@ -109,7 +109,7 @@ function Reference({ image, analysis, onUpdate, onRemove, onTextDone }: {
           onChange={(event) => onUpdate(image.id, { privateNote: event.target.value })} onBlur={onTextDone} />
       </label>
       <span id={hintId} className="moodboard-board-panel__hint">Only for you. Not sent anywhere.</span>
-      <button type="button" className="moodboard-board-panel__remove" onClick={onRemove}>Remove from board</button>
+      <button type="button" className="moodboard-board-panel__remove" onClick={onRemove}>Remove from moodboard</button>
     </div>
   );
 }

@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
   moveStoredAsset: vi.fn(),
   updateMoodboard: vi.fn(),
 }));
-vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the board." }));
+vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the moodboard." }));
 vi.mock('../../lib/backend', () => ({ apiFetch: vi.fn(), backendAssetUrlSync: (url: string) => url }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} } }));
 vi.mock('../WorkspaceHeader', () => ({
@@ -134,17 +134,17 @@ describe('Moodboard Studio rail', () => {
 });
 
 describe('Moodboard Studio strength', () => {
-  it("says the strength is the total the board's images share on Krea 2 (Q21 b)", async () => {
+  it("says the strength is the total the moodboard's images share on Krea 2 (Q21 b)", async () => {
     await openStudio('g1', 'global', 'Global board');
-    expect(screen.getByText("Strength 0.70 · the total the board's images share on Krea 2")).toBeTruthy();
+    expect(screen.getByText("Strength 0.70 · the total the moodboard's images share on Krea 2")).toBeTruthy();
   });
 
   it('says the board is off at 0, and back on above it (Q36 a)', async () => {
     boards.g1 = board({ strength: 0 });
     await openStudio('g1', 'global', 'Global board');
-    expect(screen.getByText('Strength 0.00 · board off: connected nodes get none of it')).toBeTruthy();
+    expect(screen.getByText('Strength 0.00 · moodboard off: connected nodes get none of it')).toBeTruthy();
     fireEvent.change(screen.getByRole('slider', { name: /^Strength/ }), { target: { value: '0.05' } });
-    expect(screen.getByText("Strength 0.05 · the total the board's images share on Krea 2")).toBeTruthy();
+    expect(screen.getByText("Strength 0.05 · the total the moodboard's images share on Krea 2")).toBeTruthy();
   });
 });
 
@@ -437,21 +437,21 @@ describe('Moodboard Studio Move', () => {
   it("doesn't move when saving the edits fails, and a refused move keeps the draft", async () => {
     await openStudio('g1', 'global', 'Global board');
     // What the API throws (error-copy round 2): its heading and the reason.
-    api.updateMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 409, { detail: 'The disk is full.' }));
+    api.updateMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 409, { detail: 'The disk is full.' }));
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Unsaved' } });
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
     // A saved board's own failed save keeps the edit for Retry: the neutral line (round 6g, brief 7a), never the server's words (GM r16).
-    await waitFor(() => expect(document.body.textContent).toContain('Nebula couldn’t save the board because the server didn’t accept this save. Try again.'));
+    await waitFor(() => expect(document.body.textContent).toContain('Nebula couldn’t save the moodboard because the server didn’t accept this save. Try again.'));
     expect(document.body.textContent).not.toContain('The disk is full.');
     expect(api.moveStoredAsset).not.toHaveBeenCalled();
 
-    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move the board.", 404, { detail: 'No project has the id' }));
+    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move the moodboard.", 404, { detail: 'No project has the id' }));
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalledTimes(2));
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    await waitFor(() => expect(document.body.textContent).toContain("Couldn't move the board. No project has the id"));
+    await waitFor(() => expect(document.body.textContent).toContain("Couldn't move the moodboard. No project has the id"));
     expect(screen.getByDisplayValue('Unsaved')).toBeTruthy();
     expect(useUIStore.getState().moodboardEditorScope).toBe('global');
     const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'global', 'g1')];
@@ -490,7 +490,7 @@ describe('Moodboard Studio: what generators get', () => {
     const toggle = screen.getByRole('switch', { name: 'Send these notes to generators' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(screen.getByText('Off: notes are for you, your team and agents.')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Anything about the board, in your words.')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Anything about the moodboard, in your words.')).toBeTruthy();
     fireEvent.click(toggle);
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].sendNotes).toBe(true), { timeout: 3000 });
     // Sending notes or not doesn't change what the analysis read.

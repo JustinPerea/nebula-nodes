@@ -1096,7 +1096,7 @@ function skippedLines(edited: MoodboardEditResult): string[] {
   return [...new Set(edited.applied.flatMap((entry) => {
     const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
     return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? slice.message
-      : typeof slice.number === 'number' ? `#${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
+      : typeof slice.number === 'number' ? `Image ${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
   }))];
 }
 
@@ -1288,7 +1288,7 @@ export function MoodboardStudioView() {
             // In Recently deleted with a kept edit: the kept edit's line says it, with its Restore (GM r19), so not this one too.
             const kept = keptEditsWaiting().some((it) => it.board === moodboardEditorId);
             initialize(fresh, null, '', stored?.status === 'trashed'
-              ? (kept ? null : 'This board is in Recently deleted. Restore it from the list on the left.')
+              ? (kept ? null : 'This moodboard is in Recently deleted. Restore it from the list on the left.')
               : NOT_FOUND_LINE);
           });
           return;
@@ -1319,7 +1319,7 @@ export function MoodboardStudioView() {
           setRestoring((batch) => batch && batch.map((board) => (board.id === found.id ? { ...board, sent: sends } : board)));
         }
       }).catch((err) => {
-        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the moodboard." }) });
       });
     }
     return () => { cancelled = true; };
@@ -2275,7 +2275,7 @@ export function MoodboardStudioView() {
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
       if (ownsAnalysis()) {
-        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error',
+        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the moodboard." }), saveState: 'error',
           retry: 'analyze', retryStep: null });
       }
     } finally {
@@ -2669,7 +2669,7 @@ export function MoodboardStudioView() {
         } else recheckGone();
         return;
       }
-      setRestoreError(failureCopy(err, { heading: "Couldn't restore the board." }));
+      setRestoreError(failureCopy(err, { heading: "Couldn't restore the moodboard." }));
       return;
     }
     if (!mounted.current) return;
@@ -2938,7 +2938,7 @@ export function MoodboardStudioView() {
         </button>
       )}
       {savedId && !isDraftId && loaded && (
-        <AssetMoveMenu noun="board" buttonClassName="moodboard-studio-toolbar__button"
+        <AssetMoveMenu noun="moodboard" buttonClassName="moodboard-studio-toolbar__button"
           choices={moveChoices(draft.projectId, openProject)} onChoose={moveBoard} busy={moving.busy}
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
       )}
@@ -3005,7 +3005,7 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading Moodboard...'}
+      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
@@ -3170,8 +3170,8 @@ export function MoodboardStudioView() {
           {/* Q21 b: Krea 2's board references share out this strength.
               Q36 a: at 0 no node gets the board, text included. */}
           <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
-            ? 'board off: connected nodes get none of it'
-            : <>the total the board&apos;s images share on Krea 2</>}</span>
+            ? 'moodboard off: connected nodes get none of it'
+            : <>the total the moodboard&apos;s images share on Krea 2</>}</span>
           <input
             type="range"
             min={0}
@@ -3197,7 +3197,7 @@ export function MoodboardStudioView() {
           value={draft.notes}
           onChange={(event) => { const notes = event.target.value; beginField('notes'); setDraft((current) => ({ ...current, analysis: null, notes })); }}
           onBlur={() => endField('notes')}
-          placeholder="Anything about the board, in your words."
+          placeholder="Anything about the moodboard, in your words."
         />
       </label>
       <NotesSwitch on={draft.sendNotes === true}
@@ -3469,7 +3469,7 @@ function MoodboardRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(failureMessage(err, "Couldn't load the boards."));
+          setError(failureMessage(err, "Couldn't load the moodboards."));
           setListing({ for: listKey, items: [] });
         }
       })
@@ -3523,7 +3523,7 @@ function MoodboardRail({
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list" ref={rows}>
         {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
-        {busy && <div className="moodboard-rail__empty">Loading...</div>}
+        {busy && <div className="moodboard-rail__empty">Loading…</div>}
         {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} /></div>}
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>

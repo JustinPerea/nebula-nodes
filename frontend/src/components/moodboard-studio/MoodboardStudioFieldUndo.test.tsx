@@ -234,7 +234,7 @@ const press = (key: string, init: KeyboardEventInit = {}, target: Element = docu
 };
 const undo = (target?: Element) => press('z', { metaKey: true }, target);
 const redo = (target?: Element) => press('z', { metaKey: true, shiftKey: true }, target);
-const direction = () => screen.getByRole('textbox', { name: 'What the board is for' }) as HTMLTextAreaElement;
+const direction = () => screen.getByRole('textbox', { name: 'What the moodboard is for' }) as HTMLTextAreaElement;
 const strength = () => screen.getByRole('slider', { name: /^Strength/ }) as HTMLInputElement;
 const restores = () => server.edits.filter((ops) => ops.every((op) => op.op === 'restore'));
 const settled = () => waitFor(() => expect(Object.values(useAssetStudioDraftStore.getState().entries)
@@ -269,7 +269,7 @@ describe('a text field is one step when you leave it', () => {
       { part: 'fields', before: { direction: '' }, expect: { direction: 'warm dusk' } }] }]);
     await waitFor(() => expect(server.board.direction).toBe(''));
     await waitFor(() => expect(direction().value).toBe(''));
-    expect((await screen.findByRole('status', { name: 'Board undo' })).textContent).toMatch(/Undid:? Direction/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid:? Direction/);
   });
 
   it('typing then Cmd+Z inside the textarea is the textarea\'s own undo, not a Studio step', async () => {
@@ -380,7 +380,7 @@ describe('a control is one step when its change is done', () => {
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(server.board.strength).toBe(0.7));
     expect(restores()).toHaveLength(1);
-    expect((await screen.findByRole('status', { name: 'Board undo' })).textContent).toMatch(/Undid:? Strength/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid:? Strength/);
     await settled();
     undo();
     await pause(300);
@@ -418,7 +418,7 @@ describe('a control is one step when its change is done', () => {
 
     undo();
     await waitFor(() => expect(server.board.pinnedColors?.include).toEqual(['#112233']));
-    expect((await screen.findByRole('status', { name: 'Board undo' })).textContent).toMatch(/Undid:? Pinned colors/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid:? Pinned colors/);
     await settled();
     undo();
     await waitFor(() => expect(server.board.pinnedColors?.include).toEqual([]));
@@ -627,7 +627,7 @@ describe('review fixes', () => {
 
     undo();
     await waitFor(() => expect(name.value).toBe('Global board'));
-    expect((await screen.findByRole('status', { name: 'Board undo' })).textContent).toMatch(/Undid:? Name/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid:? Name/);
     expect(server.edits).toEqual([]);
     await settled();
     undo();

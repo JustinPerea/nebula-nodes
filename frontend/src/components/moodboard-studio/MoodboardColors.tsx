@@ -70,7 +70,7 @@ function BoardColor({ color, leftOut }: { color: MoodboardColor; leftOut?: strin
               <span key={source.number} className="moodboard-color__detail-row">
                 <span>Image #{source.number}</span>
                 <span>{formatShare(source.share)} of the image</span>
-                <span>{formatShare(source.contribution)} of the board</span>
+                <span>{formatShare(source.contribution)} of the moodboard</span>
               </span>
             ))}
           </span>

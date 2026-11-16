@@ -99,7 +99,7 @@ export function showLabel(note: Pick<AgentNote, 'refs'>, context: ShowContext): 
     const number = context.numberFor?.(note.refs[0]) ?? null;
     if (number) return `Show #${number}`;
   }
-  return 'Show on board';
+  return 'Show on moodboard';
 }
 
 export type NoteButton =

@@ -89,7 +89,7 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
               <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
               {isCover && (
                 <span className={`moodboard-tile__cover${cover.chosen ? '' : ' moodboard-tile__cover--first'}`}
-                  title={cover.chosen ? 'The board opens on this image' : 'The board opens on #1 until you choose a cover'}>
+                  title={cover.chosen ? 'The moodboard opens on this image' : 'The moodboard opens on image 1 until you choose a cover'}>
                   Cover
                 </span>
               )}
@@ -121,17 +121,17 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
               <div className="moodboard-tile__cover-row">
                 {!isCover ? (
                   <button type="button" className="moodboard-tile__cover-button" aria-label={`Use #${index + 1} as cover`}
-                    title="Open the board on this image. Nothing moves: no image changes number."
+                    title="Open the moodboard on this image. Nothing moves: no image changes number."
                     onClick={() => onSetCover(img.id)}>
                     Use as cover
                   </button>
                 ) : cover.chosen ? (
-                  <button type="button" className="moodboard-tile__cover-button" title="Open the board on #1 again"
+                  <button type="button" className="moodboard-tile__cover-button" title="Open the moodboard on image 1 again"
                     onClick={() => onSetCover(null)}>
                     Back to #1
                   </button>
                 ) : (
-                  <span className="moodboard-tile__cover-hint">The board opens on this image</span>
+                  <span className="moodboard-tile__cover-hint">The moodboard opens on this image</span>
                 )}
               </div>
               <label className="moodboard-tile__note" data-agent-anchor={agentAnchor(board, img.id, 'note')}>

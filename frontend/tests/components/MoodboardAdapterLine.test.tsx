@@ -36,7 +36,7 @@ beforeEach(() => {
 describe('the Moodboard line on a node card', () => {
   it('says what a wired board does there', async () => {
     renderCard('g', 'gpt-image-2-edit', [wire('g')]);
-    expect(await screen.findByText('Board images: off · the brief goes as text')).toBeInTheDocument();
+    expect(await screen.findByText('Moodboard images: off · the brief goes as text')).toBeInTheDocument();
   });
 
   it('says a text-only model takes the brief as text, and Krea 2 sends board images', async () => {
@@ -44,7 +44,7 @@ describe('the Moodboard line on a node card', () => {
     expect(await screen.findByText('This model takes the brief as text.')).toBeInTheDocument();
     unmount();
     renderCard('k', 'krea-2-generate', [wire('k')]);
-    expect(await screen.findByText('Board images: on · up to 10 to Image Style Refs')).toBeInTheDocument();
+    expect(await screen.findByText('Moodboard images: on · up to 10 to Image Style Refs')).toBeInTheDocument();
   });
 
   it('shows nothing until a board is wired into the Moodboard port', () => {
@@ -77,7 +77,7 @@ describe('the Moodboard line on a node card', () => {
       { id: 'e1', source: 'board', sourceHandle: 'moodboard', target: 'r', targetHandle: 'input' },
       { id: 'e2', source: 'r', sourceHandle: 'output', target: 'g', targetHandle: 'moodboard' }] });
     render(<ModelNode {...({ id: 'g', data: card.data, selected: false } as NodeProps)} />);
-    expect(await screen.findByText('Board images: off · the brief goes as text')).toBeInTheDocument();
+    expect(await screen.findByText('Moodboard images: off · the brief goes as text')).toBeInTheDocument();
   });
 
   it('holds the line\'s place while the table loads, then fills it in', async () => {
@@ -90,7 +90,7 @@ describe('the Moodboard line on a node card', () => {
     });
     expect(placeholder.textContent).toBe('');
     useMoodboardAdapterStore.setState({ entries: handTable.entries as unknown as AdapterTable, loading: false });
-    expect(await screen.findByText('Board images: off · the brief goes as text')).toBeInTheDocument();
+    expect(await screen.findByText('Moodboard images: off · the brief goes as text')).toBeInTheDocument();
   });
 
   it('draws no line when the table could not load', async () => {

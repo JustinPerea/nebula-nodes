@@ -43,7 +43,7 @@ describe('BriefPanel', () => {
       brief: brief({ styleBrief: 'Mine.', override: { active: true, stale: true } }),
       override: { text: 'Mine.' },
     });
-    expect(screen.getByRole('status').textContent).toContain('Board changed since you edited this.');
+    expect(screen.getByRole('status').textContent).toContain('Moodboard changed since you edited this.');
     fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
     expect(onKeep).toHaveBeenCalledTimes(1);
@@ -199,14 +199,14 @@ describe('BriefPanel: left out of the brief', () => {
 
   it('says the check is off and lists nothing when every color is sent', () => {
     clashPanel({ clashMode: 'keep-all' });
-    expect(screen.getByText('Clash check is off for this board.')).toBeTruthy();
+    expect(screen.getByText('Clash check is off for this moodboard.')).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Left out of the brief' })).toBeNull();
   });
 
   it('shows nothing extra for an older backend without the lists', () => {
     panel();
     expect(screen.queryByText(/Left out of the brief/)).toBeNull();
-    expect(screen.queryByText('Clash check is off for this board.')).toBeNull();
+    expect(screen.queryByText('Clash check is off for this moodboard.')).toBeNull();
   });
 });
 

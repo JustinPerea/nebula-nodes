@@ -51,7 +51,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
         <div className={`structured-preview__thumbs structured-preview__thumbs--${Math.min(shown.length, 4)}`}>
           {shown.map((url, index) => (
             <span key={url} className="structured-preview__thumb">
-              <OverviewImage src={url} alt={`Board image ${index + 1}`}
+              <OverviewImage src={url} alt={`Moodboard image ${index + 1}`}
                 loading={thumbnailLoading(variant)} draggable={false} />
               {more > 0 && index === shown.length - 1 && (
                 <span className="structured-preview__thumb-more" aria-label={`${more} more images`}>+{more}</span>
@@ -77,7 +77,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
           <p className="structured-preview__brief">{bundle.styleBrief}</p>
         </ExpandableBlock>
       ) : (
-        <p className="structured-preview__empty">Analyze the board to build its brief</p>
+        <p className="structured-preview__empty">Analyze the moodboard to build its brief</p>
       )}
 
       <p className="structured-preview__status" role="status">
