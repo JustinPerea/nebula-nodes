@@ -6107,7 +6107,8 @@ const nodeWrites = new Map<string, WireWrite>();
 /** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
 /** What markNodesErrored writes over: a refused start's clear puts these back. */
 const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
-  'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
+  'errorProvider', 'errorNotStarted', 'errorMissingKey', 'progress', 'streamingText', 'streamingPartials',
+  'streamingSvg'] as const;
 
 /** Each node as it last settled before a start queued it (review 3 NIT-2): what a refused start
  * puts back, since by the refusal the node reads 'queued'. Review 4 LOW-4 (round 6): only a

@@ -1,4 +1,5 @@
 import { nodeNameList } from './errorCopy';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * GM - Design, round 19 (PR #195, review 18 G-1), verbatim. A project switch
@@ -44,7 +45,7 @@ function ending(how: CutOffEnding): string {
   if (how.kind === 'reconnect') return '';
   if (how.kind === 'switch') return 'It was still saving when you switched.';
   if (how.kind === 'import') return 'It was still saving when the import replaced the canvas.';
-  return `It was still saving when ${how.agent || 'an agent'} switched projects.`;
+  return `It was still saving when ${how.agent ? agentNameInSentence(how.agent) : 'an agent'} switched projects.`;
 }
 
 export function savingCutOffLine(saves: CutOffSave[], project: string, how: CutOffEnding): string {
@@ -99,7 +100,7 @@ export function handoffFailedLine(saves: CutOffSave[], project: string, agent: s
     ? `Couldn’t save “${only.setting}” for “${only.node}” in “${left}”`
     : changes.length > 1 ? `Couldn’t save ${changes.length} changes in “${left}”`
       : `Couldn’t save your last change in “${left}”`;
-  return `${head} when ${agent || 'an agent'} switched projects. Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
+  return `${head} when ${agent ? agentNameInSentence(agent) : 'an agent'} switched projects. Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }
 
 /** A project name that wraps as one piece: its spaces non-breaking. */

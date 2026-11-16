@@ -129,13 +129,13 @@ describe('ChatModelPicker', () => {
     expect(dialog).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('status')).toHaveTextContent('Loading models…');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Try again loading models' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again to load models' })).not.toBeInTheDocument();
     expect(state.onRetry).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['not_installed', 'Claude Code is not installed.'],
-    ['not_authenticated', 'Sign in to Claude Code, then retry.'],
+    ['not_installed', 'Claude Code isn’t installed. Install it, then try again.'],
+    ['not_authenticated', 'Sign in to Claude Code, then try again.'],
     ['unavailable', 'Model catalog is unavailable.'],
   ] as const)('offers explicit retry for %s without fabricated models', (status, message) => {
     const state = props({ catalog: { ...catalog, status } });
@@ -143,7 +143,7 @@ describe('ChatModelPicker', () => {
     open();
     expect(screen.getByRole('status')).toHaveTextContent(message);
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Try again loading models' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again to load models' }));
     expect(state.onRetry).toHaveBeenCalledOnce();
     expect(state.onModelChange).not.toHaveBeenCalled();
   });

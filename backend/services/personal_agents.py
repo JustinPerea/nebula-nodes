@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from services import agent_binaries, agent_token_file, antigravity_agent, gemini_cli_setup
+from services.agent_name_in_sentence import in_sentence  # noqa: F401 (re-exported: the name inside a sentence)
 from services.agent_presence import clean_agent_name
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 
@@ -69,19 +70,6 @@ class PersonalAgentError(ValueError):
         super().__init__(message)
         self.code = code
         self.message = message
-
-
-def in_sentence(name: str) -> str:
-    """A personal agent's name inside a sentence, an aria-label or a title.
-
-    The presets are named "Your Claude", "Your Codex", "Your Gemini" and "Your
-    Antigravity", with the capital where the name starts a label or a sentence.
-    Mid-sentence the first word drops to lower case ("Use your Gemini in
-    chat"). Any other name, such as "Claude (your setup)" stored before the
-    change, "Hermes" or a custom agent, comes back unchanged. Twin of
-    ``agentNameInSentence`` in frontend/src/lib/personalAgentName.ts.
-    """
-    return f"your {name[5:]}" if name.startswith("Your ") and len(name) > 5 else name
 
 
 @dataclass(frozen=True)

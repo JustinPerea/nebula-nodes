@@ -410,7 +410,7 @@ def test_describe_node_says_what_a_wired_moodboard_does(nebula):
     """describe_node carries the node's adapter entry, resolved at its defaults
     on the route a run takes here: the facts behind the card's Moodboard line."""
     krea = _call_tool("describe_node", {"definition_id": "krea-2-generate"})["moodboardAdapter"]
-    assert krea["line"] == "Board images: on · up to 10 to Image Style Refs"
+    assert krea["line"] == "Moodboard images: on · up to 10 to Image Style Refs"
     assert krea["channel"] == "weighted-style" and krea["default"] == "images" and krea["handler"] == "reads-board"
     assert krea["slots"] == [{"port": "image_style_references", "label": "Image Style Refs", "max": 10,
                               "sharesLimitWith": ["style_images"]}]
@@ -422,7 +422,7 @@ def test_describe_node_says_what_a_wired_moodboard_does(nebula):
         assert internal not in krea
 
     edit = _call_tool("describe_node", {"definition_id": "gpt-image-2-edit"})["moodboardAdapter"]
-    assert edit["line"] == "Board images: off · the brief goes as text"
+    assert edit["line"] == "Moodboard images: off · the brief goes as text"
     assert edit["channel"] == "refs" and edit["default"] == "text"
     assert edit["slots"] == [{"port": "images", "label": "Images", "max": 16}]
     assert edit["needsWired"] == ["images"] and edit["never"] == ["mask"]
@@ -472,14 +472,14 @@ def test_nebula_info_prints_what_a_wired_moodboard_does(nebula, capsys):
     nodes.run_info(client, "krea-2-generate")
     out = capsys.readouterr().out
     board = [line for line in out.splitlines() if line.startswith("MOODBOARD")]
-    assert board == ["MOODBOARD: Board images: on · up to 10 to Image Style Refs"]
+    assert board == ["MOODBOARD: Moodboard images: on · up to 10 to Image Style Refs"]
     detail = out.splitlines()[out.splitlines().index(board[0]) + 1]
     assert "weighted-style" in detail and "weight native strength 0-1" in detail
     assert "never style_images, styles" in detail
 
     nodes.run_info(client, "nano-banana")
     out = capsys.readouterr().out
-    assert "MOODBOARD: Board images: off · the brief goes as text" in out
+    assert "MOODBOARD: Moodboard images: off · the brief goes as text" in out
     assert "model=gemini-2.5-flash-image: up to 3" in out
     assert "model=gemini-nano-banana-2.1: This model takes the brief as text." in out
 

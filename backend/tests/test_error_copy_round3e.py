@@ -375,6 +375,20 @@ def test_a_validation_event_serializes_its_person_line():
     assert camel["errors"][1].get("person") is None
 
 
+def test_a_validation_event_carries_missing_key_only_when_it_is_one():
+    import main
+
+    event = ValidationErrorEvent(run_id="r1", errors=[
+        ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY",
+                              person=KEY_LINE).keyed("OPENAI_API_KEY"),
+        ValidationErrorDetail(node_id="n2", port_id="prompt", message="Required input port prompt is not connected",
+                              person=PROMPT_LINE),
+    ])
+    camel = main._event_to_camel(event)
+    assert camel["errors"][0]["missingKey"] is True
+    assert "missingKey" not in camel["errors"][1]
+
+
 # -- node_errors: the card after a reload, agents unchanged -----------------
 
 

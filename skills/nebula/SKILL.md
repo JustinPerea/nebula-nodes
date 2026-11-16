@@ -672,8 +672,8 @@ provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
 the provider rather than the key. A run the pre-run check refuses (a missing
 key, an unconnected input, a Batch over its cap) prints the same specific text
-as before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add your
-OpenAI API key in Settings, then run the node again.") rides only on the
+as before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add an
+OpenAI API key in Settings to run this node.") rides only on the
 canvas's own answer, so nothing you read changed.
 
 ## Moodboards
@@ -730,7 +730,7 @@ nebula moodboard delete <board>
   `request_id_scope`): pick a new one. Ids are kept for 7 days.
 - Before connecting a board to a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
-  card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
+  card's ("Moodboard images: on · up to 10 to Image Style Refs", or the brief as
   text only), with `(on <route>)` after it on a node with more than one
   route, then the channel, weights, ports the board never fills, and the
   models or routes that change it.

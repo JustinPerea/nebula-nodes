@@ -1582,10 +1582,33 @@ def canvas_title(definition: Mapping[str, Any]) -> str:
     return str(definition.get("displayName") or "")
 
 
+# The Title Case default labels of six nodes before the copy sweep renamed them
+# to sentence case (definition id -> label). A node saved earlier carries the
+# old label, which no longer equals the definition's name; it is still the
+# default title, not a name the person chose. Stored labels are not rewritten.
+# frontend/src/lib/formerDefaultTitles.ts holds the same table;
+# contracts/fixtures/former-default-titles.json pins both.
+FORMER_DEFAULT_TITLES: dict[str, str] = {
+    "camera-rig": "Camera Rig",
+    "cinema-scene": "Cinema Scene",
+    "paper-source": "Paper Source",
+    "reference-set": "Reference Set",
+    "remotion-node": "Remotion Composition",
+    "video-edit": "Video Edit",
+}
+
+
 def is_default_title(definition: Mapping[str, Any], label: Any) -> bool:
-    """A label that is either form of the definition's default title (its
-    display name or :func:`canvas_title`): the node is unnamed."""
-    return isinstance(label, str) and label in {str(definition.get("displayName") or ""), canvas_title(definition)}
+    """A label that is any form of the definition's default title (its
+    display name, :func:`canvas_title`, or the Title Case name it had before
+    the copy sweep, FORMER_DEFAULT_TITLES): the node is unnamed."""
+    if not isinstance(label, str):
+        return False
+    names = {str(definition.get("displayName") or ""), canvas_title(definition)}
+    former = FORMER_DEFAULT_TITLES.get(str(definition.get("id") or ""))
+    if former:
+        names.add(former)
+    return label in names
 
 
 def node_name(definition: Mapping[str, Any] | None, label: Any, fallback: str = "") -> str:

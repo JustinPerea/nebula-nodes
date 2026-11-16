@@ -404,7 +404,7 @@
         },
         "model=gemini-nano-banana-2.1": {
           "channel": "text-only",
-          "reason": "Board images aren't sent to Nano Banana 2.1 yet: its limits aren't confirmed (plan section 5.7.11 A)."
+          "reason": "Moodboard images aren’t sent to Nano Banana 2.1 yet: its limits aren’t confirmed (plan section 5.7.11 A)."
         }
       },
       "sources": [

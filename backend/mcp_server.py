@@ -2901,7 +2901,7 @@ def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None,
     `frames`), `version`, `applied` (one entry per op: "applied" or
     "unchanged") and `undo`. To undo the change, call moodboard_edit again
     with `undo.ops` as `ops`: it puts back only what is still as you left it,
-    and `applied[0].skipped` names what changed since ("#12 changed since,
+    and `applied[0].skipped` names what changed since ("Image 12 changed since,
     left as is")."""
     import moodboard_client as boards
 

@@ -229,7 +229,7 @@ def _limit_text(daily_usd: float | None) -> str:
     if daily_usd is None:
         return "the shared budget for agents outside Nebula chats"
     amount = f"${daily_usd:.2f}" if daily_usd < 1 else f"${daily_usd:g}"
-    return f"its {amount} daily limit and the shared budget for agents outside Nebula chats"
+    return f"its {amount} daily limit, and never past the shared budget for agents outside Nebula chats"
 
 
 def warnings(c: Client, app_name: str, daily_usd: float | None, *, token_file: str | None = None) -> list[str]:

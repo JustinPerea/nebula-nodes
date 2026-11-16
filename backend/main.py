@@ -6021,6 +6021,9 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
                     "message": e.get("message", ""),
                     # The card's line (error copy round 3e); None: GM's general line.
                     "person": e.get("person"),
+                    # Only when true, as _validation_response has it: a missing
+                    # key draws neutral, so a socket client sees it too.
+                    **({"missingKey": True} if e.get("missing_key") else {}),
                 }
                 for e in value
             ]
@@ -28418,7 +28421,7 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
     if not estimate["count"]:
         raise HTTPException(status_code=422, detail=(
             "Nothing to read: none of these references is a file on this computer."
-            if targets else "Nothing to read: the board has no references."))
+            if targets else "Nothing to read: the moodboard has no references."))
     settings = load_settings()
     hold = _reader_spend_hold(source, estimate, settings, str(board.get("id")))
     requested_by = actor_record(actor_for_headers(current_request_headers()))

@@ -86,7 +86,7 @@ describe('Undo in the delete toast', () => {
     const { result } = renderHook(() => useAssetDelete('moodboard'));
     await act(async () => { await result.current.remove({ id: 'a', name: 'A', scope: 'global' }); });
     await act(async () => { await result.current.undo(); });
-    expect(result.current.undoError).toEqual({ heading: "Couldn't restore the moodboard.", reason: "Nebula didn't respond. Try again." });
+    expect(result.current.undoError).toBe('Nebula couldn’t restore the moodboard because the server didn’t respond. Try again.');
     expect(result.current.deleteError).toBeNull();
     const onUndo = vi.fn();
     render(<UndoDeleteToast name="A" error={result.current.undoError} onUndo={onUndo} onDismiss={() => {}} />);

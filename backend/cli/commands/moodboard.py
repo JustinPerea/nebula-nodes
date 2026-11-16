@@ -15,6 +15,7 @@ from typing import Any
 import moodboard_client as boards
 from nebula_api import NebulaAPIError
 from services.moodboard_brief import board_is_off
+from services.moodboard_reader_keys import key_settings_path
 
 from ..client import NebulaClient, connect_failure
 
@@ -420,7 +421,7 @@ def _print_estimate(est: dict[str, Any]) -> None:
             print(f"  The high end uses the rates from {high.get('from')} (${float(high['inputPerMTok']):.2f} in / "
                   f"${float(high['outputPerMTok']):.2f} out), in case the read runs past midnight.")
     if est.get("available") is False:
-        print("  Its key isn't set, so a read would be refused: add it in Settings > API keys.")
+        print(f"  Its key isn’t set, so a read would be refused: add it in {key_settings_path(reader.get('keyName'))}.")
     sys.stdout.flush()
 
 

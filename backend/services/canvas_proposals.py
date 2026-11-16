@@ -1032,7 +1032,7 @@ def plan_line(view: Mapping[str, Any]) -> str:
         # Design, round 4), counting the placeholders themselves (review 4, M2).
         count = int(pending.get("placeholders") or pending.get("count") or 0)
         agents = [str(agent) for agent in pending.get("agents") or []]
-        who = f"{agents[0]} finishes" if len(agents) == 1 and agents[0] else "agents finish"
+        who = f"{in_sentence(agents[0])} finishes" if len(agents) == 1 and agents[0] else "agents finish"
         segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
     else:
         # Runs by cost class (GM, PR #203 r11 item 2, r19 item 1): paid ones,

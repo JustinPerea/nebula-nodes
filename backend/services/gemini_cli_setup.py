@@ -351,7 +351,7 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
         return Readiness(False, "Nebula is still checking your Gemini CLI with `gemini --version` and `gemini --help`, which "
                          "can take a while on its first start. Open Settings again in a moment.", None, None, None)
     if not info.ran and info.timed_out:
-        return Readiness(False, f"Gemini CLI took too long to answer over {PROBE_TIMEOUT_S:g} seconds, which can "
+        return Readiness(False, f"Gemini CLI took more than {PROBE_TIMEOUT_S:g} seconds to answer, which can "
                          "happen on its first start or on a busy machine. Open Settings again to check again.",
                          None, None, None)
     if not info.ran:

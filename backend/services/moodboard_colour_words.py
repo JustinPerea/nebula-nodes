@@ -818,11 +818,11 @@ def _cast(term: Term, measured: list[_Colour], pinned: list[_Colour], add) -> No
     label = _label(term)
     in_arc = [c for c in (*measured, *pinned) if _in_arc(c.hue, term.gate.arc) and _lightness_ok(c, term.gate)]
     if mean_chroma >= CAST_MEAN_CHROMA and _in_arc(mean_hue, term.gate.arc):
-        add(None, "conflict", term.source, term.clause, "cast", f"{label}. The board's colors lean that way overall.")
+        add(None, "conflict", term.source, term.clause, "cast", f"{label}. The moodboard’s colors lean that way overall.")
         for colour in in_arc:
             if colour.chroma >= CAST_COLOUR_CHROMA:
                 add(colour, "conflict", term.source, term.clause, "cast",
-                    f"{label}. The board leans that way, and this color adds to it.")
+                    f"{label}. The moodboard leans that way, and this color adds to it.")
         return
     for colour in in_arc:
         if colour.chroma >= CAST_WARNING_CHROMA:

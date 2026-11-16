@@ -255,8 +255,8 @@ def card_line(entry: Mapping[str, Any] | None, definition: Mapping[str, Any] | N
         label = next((port.get("label") for port in ports
                       if isinstance(port, Mapping) and port.get("id") == slot.get("port") and port.get("label")),
                      slot.get("port"))
-        return f"Board images: on · up to {slot.get('max')} to {label}"
-    return "Board images: off · the brief goes as text"
+        return f"Moodboard images: on · up to {slot.get('max')} to {label}"
+    return "Moodboard images: off · the brief goes as text"
 
 
 def _plain(entry: Mapping[str, Any], definition: Mapping[str, Any]) -> dict[str, Any]:

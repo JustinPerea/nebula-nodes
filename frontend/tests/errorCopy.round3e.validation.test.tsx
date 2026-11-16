@@ -27,6 +27,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 import { ModelNode } from '../src/components/nodes/ModelNode';
 import { BatchNode } from '../src/components/nodes/BatchNode';
+import { OutputRenderer } from '../src/components/create-studio/OutputRenderer';
 
 const HEADING = "Couldn't run the node.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node
@@ -107,8 +108,48 @@ describe("the run call's own validation answer", () => {
   });
 });
 
+describe('a refused run for a missing key: the socket frame and the run call agree in either order', () => {
+  const keyed = [{ nodeId: 'n1', portId: '', message: KEY, person: KEY_LINE, missingKey: true }];
+
+  it('the frame first, then the run call', async () => {
+    send({ type: 'validationError', errors: keyed });
+    expect(data('n1').errorMissingKey).toBe(true);
+    vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'validation_error', errors: keyed } as never);
+    await useGraphStore.getState().executeNode('n1');
+    expect(data('n1')).toMatchObject({ state: 'error', errorPerson: KEY_LINE, errorMissingKey: true });
+  });
+
+  it('the run call first, then the frame', async () => {
+    vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'validation_error', errors: keyed } as never);
+    await useGraphStore.getState().executeNode('n1');
+    expect(data('n1').errorMissingKey).toBe(true);
+    send({ type: 'validationError', errors: keyed });
+    expect(data('n1')).toMatchObject({ state: 'error', errorPerson: KEY_LINE, errorMissingKey: true });
+  });
+
+  it('an unkeyed check on the same node reads as a failure in both', () => {
+    send({ type: 'validationError', errors: [{ nodeId: 'n1', portId: 'prompt', message: PORT, person: PORT_LINE }] });
+    expect(data('n1').errorMissingKey).toBeUndefined();
+  });
+});
+
+describe('the Create Studio result card (LOW-3)', () => {
+  const output = (missing: boolean) => render(<OutputRenderer outputs={{}} state="error" error={KEY} errorPerson={KEY_LINE}
+    errorNotStarted errorMissingKey={missing} />);
+
+  it('draws a missing key neutral, as the canvas card does', () => {
+    const { container } = output(true);
+    expect(container.querySelector('.create-output--error--key')).not.toBeNull();
+    expect(reason(container)).toBe(KEY_LINE);
+  });
+
+  it('draws any other refusal as a failure', () => {
+    expect(output(false).container.querySelector('.create-output--error--key')).toBeNull();
+  });
+});
+
 describe('the card', () => {
-  const card = (patch: Partial<NodeData>) => ({ id: 'n1', selected: false, data: { ...node('n1').data, state: 'error', ...patch } }) as unknown as NodeProps;
+  const card =(patch: Partial<NodeData>) => ({ id: 'n1', selected: false, data: { ...node('n1').data, state: 'error', ...patch } }) as unknown as NodeProps;
 
   it("shows the heading over the person's line and no keys", () => {
     const { container } = render(<ModelNode {...card({ error: KEY, errorPerson: KEY_LINE })} />);
@@ -134,6 +175,14 @@ describe('the Batch card over its cap', () => {
     expect(reason(container)).toBe(OVER_CAP_LINE);
     expect(container.textContent).not.toContain('exceed the cap');
     expect(container.textContent).not.toContain('batch_size_cap');
+  });
+
+  it('draws a missing key neutral, as the canvas card does (LOW-3)', () => {
+    const keyed = render(<BatchNode {...batch({ state: 'error', error: KEY, errorPerson: KEY_LINE, errorNotStarted: true, errorMissingKey: true })} />);
+    expect(keyed.container.querySelector('.batch-node__warning--key')).not.toBeNull();
+    keyed.unmount();
+    const plain = render(<BatchNode {...batch({ state: 'error', error: KEY, errorPerson: KEY_LINE, errorNotStarted: true })} />);
+    expect(plain.container.querySelector('.batch-node__warning--key')).toBeNull();
   });
 
   it('keeps its own cap warning while editing, before any run', () => {

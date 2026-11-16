@@ -144,6 +144,11 @@ def test_a_run_waiting_on_placeholders_keeps_its_words():
         "Adds and runs “Combine Text” · free")
 
 
+def test_a_personal_agents_name_lowers_inside_the_waiting_line():
+    assert plan_line(_waiting(pendingSkipped={"count": 2, "agents": ["Your Codex"]})) == (
+        "Adds “Combine Text” · runs nothing until your Codex finishes 2 nodes")
+
+
 def test_a_paid_run_no_provider_can_take_names_only_the_model():
     view = _view(run=["n4"], cost={"paidRuns": 1, "nodes": [_entry("n4", "Hero shot", billed=None, node_id="n4")]})
     assert plan_line(view) == "Runs “Hero shot” · Krea 2 · no list price"

@@ -538,6 +538,8 @@ def test_the_cli_prints_an_asset_proposal_as_what_it_changes(api):
     assert "on the Projects screen for the person" in created and "on the canvas" not in created
     accepted = {**view, "status": "accepted", "applied": {"cover": C}}
     assert format_proposal_outcome(accepted) == f"Accepted by the person: the cover is now {C}."
+    notes = {**view, "status": "accepted", "applied": {"sendNotes": True}}
+    assert format_proposal_outcome(notes) == "Accepted by the person: the moodboard’s notes now go to generators."
 
 
 def test_a_cover_proposal_for_the_open_project_reads_the_live_canvas_at_accept(api):

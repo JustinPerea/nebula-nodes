@@ -200,7 +200,8 @@ esac
     script.chmod(0o755)
     write_settings(home, "gemini-api-key")
     result = check(script, home, tmp_path)
-    assert not result.ready and "too long" in result.note and "--help" not in result.note
+    assert not result.ready and "--help" not in result.note
+    assert "Gemini CLI took more than 0.5 seconds to answer, which can happen" in result.note
     fast.write_text("")
     assert check(script, home, tmp_path).acp_flag == "--acp"
 

@@ -4,6 +4,7 @@ import type {
 } from '../types';
 import { usesKreaAccount } from './kreaConnection';
 import { universalSettingLabel } from './universalSettingLabel';
+import { isFormerDefaultTitle } from './formerDefaultTitles';
 
 /**
  * Which route one run of a node takes, and so which provider it bills.
@@ -1006,7 +1007,7 @@ export function isDefaultTitle(definition: (RoutedDefinition & Pick<ModelNodeDef
   label: string | null | undefined): boolean {
   if (!label) return true;
   if (!definition) return false;
-  return label === definition.displayName || label === canvasTitle(definition);
+  return label === definition.displayName || label === canvasTitle(definition) || isFormerDefaultTitle(definition.id, label);
 }
 
 /** A node's title as its card shows it: the person's name for it, else its

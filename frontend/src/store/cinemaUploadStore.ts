@@ -5,6 +5,10 @@ import type { CinemaSceneSpec } from '../types';
 
 export const CINEMA_UPLOAD_STORAGE_KEY = 'nebula:cinema:uploads:v1';
 export const INTERRUPTED_CINEMA_UPLOAD_MESSAGE = 'Upload was interrupted. Remove it, then attach the image again.';
+/** What a restored failed row offers where its saved line said Try again: its file is gone, so
+ * the next step is Remove, then the controls' own verb ("Attach ..."), naming the file as the line does. */
+const removeThenAttach = (name: string) => `Remove it, then attach “${name}” again.`;
+const TRY_AGAIN_ENDING = / Try again\.$/;
 /** A canvas import stopped it (GM PR #205 r13 item 3). */
 export const STOPPED_CINEMA_UPLOAD_MESSAGE = 'The upload stopped because a canvas import started.';
 /** A stopped upload after a reload (GM PR #205 r15 item 2): its file is gone
@@ -61,7 +65,10 @@ function load(storage: UploadStorage | null): CinemaReferenceUpload[] {
         status: 'error' as const, canRetry: false,
         error: value.status === 'uploading' ? INTERRUPTED_CINEMA_UPLOAD_MESSAGE
           : value.error === STOPPED_CINEMA_UPLOAD_MESSAGE ? RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE
-            : typeof value.error === 'string' ? value.error : 'Remove this upload, then attach the image again.' }];
+            // After a reload the file is gone, so a saved line that ends in "Try again." has no button
+            // to offer it: it ends as the interrupted row's line does (LOW-1).
+            : typeof value.error === 'string' ? value.error.replace(TRY_AGAIN_ENDING, ` ${removeThenAttach(value.name as string)}`)
+              : 'Remove this upload, then attach the image again.' }];
     });
   } catch { return []; }
 }
@@ -136,9 +143,10 @@ export function uploadOffersTryAgain(upload: CinemaReferenceUpload): boolean {
 }
 
 /** How an upload row's reason reads (GM PR #205 r14 item 4): a failure the
- * person must fix is an alert in the warning colour; one that destroyed
- * nothing (a canvas import stopped it) and the row's progress are a status,
- * in the row's neutral ink. */
+ * person must fix is an alert; one that destroyed nothing (a canvas import
+ * stopped it) and the row's progress are a status. Both draw in the row's
+ * neutral ink: the failed row's red rules are gone (GM, copy sweep item 19);
+ * the role is what a screen reader hears. */
 export function uploadReasonRole(upload: CinemaReferenceUpload): 'alert' | 'status' {
   return upload.status === 'error' && !upload.stopped ? 'alert' : 'status';
 }

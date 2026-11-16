@@ -1,4 +1,5 @@
 import { nodeNameList, quotedNames } from './errorCopy';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * What a Cinema scene says when the backend doesn't take its save (GM -
@@ -124,7 +125,7 @@ export function sceneOutpacedLine(scene: string, by: SceneOutpacedBy): string {
   if (by.kind === 'window') return `“${scene}” kept changing in another window, ${notYet} Nebula will try again when it stops.`;
   // GM r19 answer 3: an unknown writer, and nothing said about who.
   if (by.kind === 'unknown') return `“${scene}” kept changing, ${notYet} Nebula will try again when it stops.`;
-  if (by.name) return `${by.name} kept changing “${scene}”, ${notYet} Nebula will try again when ${by.name} stops.`;
+  if (by.name) return `${by.name} kept changing “${scene}”, ${notYet} Nebula will try again when ${agentNameInSentence(by.name)} stops.`;
   return `An agent kept changing “${scene}”, ${notYet} Nebula will try again when it stops.`;
 }
 export const TRY_AGAIN = 'Try again';

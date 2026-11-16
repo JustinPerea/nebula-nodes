@@ -515,8 +515,6 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
  *   new one fails, and a listed one that's gone fails too (drop it).
  */
 const BOARDS_REVIEWED: { file: string; text: string; why: string }[] = [
-  { file: 'components/asset-trash/AssetTrash.tsx', text: 'boards',
-    why: 'NOUNS.moodboard.many: "Recently deleted boards" and "Deleted boards stay here …" (GM\'s words), no count; the count reads `counted`' },
   { file: 'components/moodboard-studio/MoodboardStudioView.tsx', text: 'boards', why: 'a Restore confirmation\'s slot key, not copy' },
 ];
 

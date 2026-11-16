@@ -50,7 +50,7 @@ describe('the Moodboard line on a node card', () => {
   it('shows nothing until a board is wired into the Moodboard port', () => {
     const { container } = renderCard('g', 'gpt-image-2-edit', [wire('g', 'prompt')]);
     expect(container.querySelector('.model-node__board-line')).toBeNull();
-    expect(screen.queryByText(/Board images|takes the brief/)).toBeNull();
+    expect(screen.queryByText(/Moodboard images|takes the brief/)).toBeNull();
   });
 
   it('says nothing about board images when the wire into Krea 2 is a Krea moodboard, not a Nebula board', async () => {
@@ -101,7 +101,7 @@ describe('the Moodboard line on a node card', () => {
       await vi.waitFor(() => {
         if (container.querySelector('.model-node__board-line')) throw new Error('still the placeholder');
       });
-      expect(screen.queryByText(/Board images|takes the brief/)).toBeNull();
+      expect(screen.queryByText(/Moodboard images|takes the brief/)).toBeNull();
     } finally {
       // Unmount first: a card still mounted would load again with the real load.
       unmount();

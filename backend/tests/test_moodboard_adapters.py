@@ -924,9 +924,9 @@ def test_card_line_reads_as_the_card_says_it():
 
     assert line("gpt-image-2-generate") == "This model takes the brief as text."
     assert line("fast-sdxl") == "This model takes the brief as text."
-    assert line("gpt-image-2-edit") == "Board images: off · the brief goes as text"
-    assert line("nano-banana") == "Board images: off · the brief goes as text"
-    assert line("krea-2-generate") == "Board images: on · up to 10 to Image Style Refs"
+    assert line("gpt-image-2-edit") == "Moodboard images: off · the brief goes as text"
+    assert line("nano-banana") == "Moodboard images: off · the brief goes as text"
+    assert line("krea-2-generate") == "Moodboard images: on · up to 10 to Image Style Refs"
     assert adapters.card_line(None, DEFINITIONS["flux-2-pro"]) == "This model takes the brief as text."
 
 

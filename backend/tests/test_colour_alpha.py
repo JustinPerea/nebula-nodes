@@ -628,6 +628,19 @@ def test_the_cli_estimate_names_clear_references(capsys) -> None:
     assert "Too transparent, so not read" not in out
 
 
+def test_the_cli_estimate_names_the_section_a_missing_reader_key_is_saved_in(capsys) -> None:
+    from cli.commands import moodboard as moodboard_cmd
+
+    def said(key_name):
+        moodboard_cmd._print_estimate({"reader": {"name": "Argon", "keyName": key_name}, "thinkingLevel": "low",
+                                       "count": 2, "batches": 1, "low": 0.01, "high": 0.02, "available": False})
+        return capsys.readouterr().out
+
+    assert "add it in Settings > Providers > Google · Gemini API." in said("GOOGLE_API_KEY")
+    assert "add it in Settings > Providers." in said("OTHER_KEY")
+    assert "API keys" not in said("GOOGLE_API_KEY")
+
+
 # -- round 2, review 1 (affb9b25): each fails there ------------------------------------------
 
 def line_art_2048() -> Image.Image:

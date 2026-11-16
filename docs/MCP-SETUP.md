@@ -235,7 +235,7 @@ The server exposes these tools for building and running (see
   A node with a Moodboard input has `moodboardAdapter`: what a connected Nebula
   moodboard does there, from the adapter table (contract 07 section 1.16) at
   the node's defaults on the route a run takes here (`route`, when it has
-  more than one). `line` is the card's Moodboard line ("Board images: on ·
+  more than one). `line` is the card's Moodboard line ("Moodboard images: on ·
   up to 10 to Image Style Refs"). The rest are the entry's own fields as
   section 1.16 defines them, without its sources: `channel`, `default`,
   `handler`, `slots` (port, `label`, `max`, `sharesLimitWith`),
@@ -2352,7 +2352,7 @@ additive `person` on the execution event and `errorPerson` in the graph the
 canvas loads, and the card shows it. Since round 3c-2 every failure a
 handler words itself carries one (often the same text, when it names no id,
 path, parameter key or env var), and a plain "<KEY> is required" key check
-reads "Add your OpenAI API key in Settings, then run the node again." on the
+reads "Add an OpenAI API key in Settings to run this node." on the
 card. A provider's own text keeps no line: the card says "Couldn't run the
 node." with the classifier's line or the general one, and the raw text behind
 "Details". None of the texts you read changed. A Cinema shot that fails
@@ -2448,8 +2448,8 @@ prompt is not connected", "Batch has 3 items, exceeding its
 batch_size_cap of 2. ..."), and `look_at_canvas` / `nebula look` show it
 as the node's `error`. Only the canvas's own answer (`/api/execute`,
 `/api/execute-node`, a shot run) and the `validationError` socket event
-gain an additive `person` on each error ("Add your OpenAI API key in
-Settings, then run the node again.", "Connect a prompt, then run the node
+gain an additive `person` on each error ("Add an OpenAI API key in
+Settings to run this node.", "Connect a prompt, then run the node
 again."), which the card shows; a check only agents or a damaged saved
 graph reach has none, and the card reads the general line. The Paper source
 routes (`/api/paper/...`, the person's) work the same way: `detail.message`
@@ -2739,7 +2739,7 @@ it. A moodboard's (posted with `board` / `--board`) are saved beside the board
 has that board open in Moodboard Studio, the corner's list shows them first,
 under "This moodboard" ("kept with this moodboard"), then the project's, with one
 count for both; opening the list reads both, and with no board updates the
-list is just the project's. "Show #12" / "Show on board" selects and frames
+list is just the project's. "Show #12" / "Show on moodboard" selects and frames
 the images on the board. Every other screen shows only the project's list,
 so leave out `board` to reach the person anywhere. You read them back with
 `list_notes(board=...)` or `nebula notes --board <name>`.
@@ -3421,8 +3421,8 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   no field is named: the run is refused for the key or the sign-in first.
   Your `run_nodes` and `nebula run` get "Missing API key: KREA_API_TOKEN"
   (or every key a copy can use: "Missing API key: XAI_API_KEY or
-  KREA_API_TOKEN"), the card "Add your Krea API key in Settings, then
-  run the node again."; a run on the plan that isn't signed in gets
+  KREA_API_TOKEN"), the card "Add a Krea API key in Settings to
+  run this node."; a run on the plan that isn't signed in gets
   "Sign in to Krea in Settings before running this recipe".
   A run that would send one with nothing in it is refused before anything
   runs or is priced, on every run path, and before any dialog (the canvas

@@ -31,11 +31,11 @@ import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 type AssetKind = 'moodboard' | 'character' | 'style';
 
-/** `counted` is the noun after a number: a count of boards says "moodboards" in every person line (#210 round 6q,
- *  GM r95.5; PR #228's word), "Delete all 4 moodboards for good?". `many` stays for the lines that don't count
- *  ("Recently deleted boards", "Deleted boards stay here …", GM's own words). */
+/** The thing is a "moodboard" in every person line, counted or not (GM, copy sweep item 21, which overrides the
+ *  earlier "boards" for the lines that don't count): "Recently deleted moodboards", "Delete this moodboard for
+ *  good?", "Delete all 4 moodboards for good?". `counted` is the noun after a number (#210 round 6q). */
 const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> = {
-  moodboard: { one: 'board', many: 'boards', counted: 'moodboards' },
+  moodboard: { one: 'moodboard', many: 'moodboards', counted: 'moodboards' },
   character: { one: 'character', many: 'characters', counted: 'characters' },
   style: { one: 'style', many: 'styles', counted: 'styles' },
 };

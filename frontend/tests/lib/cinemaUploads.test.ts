@@ -10,7 +10,7 @@ vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscri
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload, uploadFailure } from '../../src/lib/cinemaUploads';
 import { ConnectionLostError, FailureNotice, RequestFailedError } from '../../src/lib/errorCopy';
 import { createCinemaUploadStore, getCinemaUploadIssue, useCinemaUploadStore,
-  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadReasonRole } from '../../src/store/cinemaUploadStore';
+  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadOffersTryAgain, uploadReasonRole } from '../../src/store/cinemaUploadStore';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import * as api from '../../src/lib/api';
 
@@ -162,6 +162,17 @@ describe('Cinema reference ownership', () => {
       restoredUploads.getState().clear();
       vi.resetModules();
     }
+  });
+  it('a failed row restored after a reload offers Remove, not a Try again it has no button for', () => {
+    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
+    const failure = uploadFailure('photo.png', new RequestFailedError("Couldn't upload photo.png.", 503, { detail: 'Unavailable' }));
+    expect(failure.line).toBe('Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.');
+    store.getState().setUploads(() => [{ id: 'f', attempt: 'a', nodeId, shotId: 'a', name: 'photo.png', status: 'error', canRetry: true, error: failure.line }]);
+    storage.getItem.mockReturnValue(storage.setItem.mock.calls[0][1]);
+    const [restored] = createCinemaUploadStore(storage).getState().uploads;
+    expect(restored).toMatchObject({ status: 'error', canRetry: false,
+      error: 'Nebula couldn’t upload “photo.png” because the server isn’t answering. Remove it, then attach “photo.png” again.' });
+    expect(uploadOffersTryAgain(restored)).toBe(false);
   });
   it('reloads interrupted metadata without automatic requests, File objects or graph recipe changes', () => {
     const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);

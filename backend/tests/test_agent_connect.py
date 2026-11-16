@@ -235,6 +235,7 @@ def test_shell_snippets_run_as_the_exact_argv(client_id):
 def test_the_warning_names_the_daily_limit():
     assert "its $5 daily limit" in setup("hermes", daily=5)["warnings"][0]
     assert "its $0.50 daily limit" in setup("hermes", daily=0.5)["warnings"][0]
+    assert "its $5 daily limit, and never past the shared budget for agents outside Nebula chats." in setup("hermes", daily=5)["warnings"][0]
     assert "up to the shared budget" in setup("hermes")["warnings"][0]
 
 

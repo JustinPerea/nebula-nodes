@@ -26,6 +26,7 @@ export function OutputRenderer({
   errorProviderText,
   errorProvider,
   errorNotStarted,
+  errorMissingKey,
   streamingText,
   streamingPartials,
   streamingSvg,
@@ -42,6 +43,8 @@ export function OutputRenderer({
   errorProvider?: string;
   /** Nebula refused the run before it started: the card's heading (round 17). */
   errorNotStarted?: boolean;
+  /** The stop is a missing key: something to do, drawn neutral as on the canvas card. */
+  errorMissingKey?: boolean;
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
   streamingSvg?: { index: number; svg: string; isFinal: boolean };
@@ -71,7 +74,7 @@ export function OutputRenderer({
     // line or GM's, the raw provider text only behind Details.
     return <NodeError className="create-output create-output--error" raw={error ?? 'Generation failed'}
       category={errorCategory} friendly={errorFriendly} person={errorPerson} providerText={errorProviderText}
-      provider={errorProvider} notStarted={errorNotStarted} />;
+      provider={errorProvider} notStarted={errorNotStarted} missingKey={errorMissingKey} />;
   }
 
   const isComplete = state === 'complete';

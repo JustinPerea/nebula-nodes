@@ -29,7 +29,8 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
    * beside the Undo that redoes it. The toast's Undo restores the asset
    * deleted last, so a later delete's failure must not sit beside it. */
   const [deleteError, setDeleteError] = useState<FailureCopy | null>(null);
-  const [undoError, setUndoError] = useState<FailureCopy | null>(null);
+  // A whole sentence when the restore's failure has one (actionFailedLine), else the heading and reason.
+  const [undoError, setUndoError] = useState<FailureCopy | string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const remove = useCallback(async (asset: DeletedAsset): Promise<boolean> => {
@@ -63,7 +64,7 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       // The line beside the toast's Undo is the whole sentence, "Nebula couldn’t restore the moodboard
       // because …. Try again." (a reason where trying again cannot help names the fix instead).
       const { line } = actionFailedLine(`restore the ${NOUN[kind]}`, err);
-      setUndoError(line ? { heading: '', reason: line } : failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
+      setUndoError(line || failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
       return null;
     } finally {
       setBusy(false);

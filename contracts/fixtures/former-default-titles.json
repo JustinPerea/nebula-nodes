@@ -1,0 +1,11 @@
+{
+  "comment": "The Title Case default labels (definition id -> label) that nodes saved before the copy sweep carry. They no longer equal the definition's name, but they are still the default title, not a name the person chose. backend/services/node_route.py FORMER_DEFAULT_TITLES and frontend/src/lib/formerDefaultTitles.ts both hold this table; backend/tests/test_former_default_titles.py and frontend/tests/lib/formerDefaultTitles.test.ts pin each to this file.",
+  "titles": {
+    "camera-rig": "Camera Rig",
+    "cinema-scene": "Cinema Scene",
+    "paper-source": "Paper Source",
+    "reference-set": "Reference Set",
+    "remotion-node": "Remotion Composition",
+    "video-edit": "Video Edit"
+  }
+}
