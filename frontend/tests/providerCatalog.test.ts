@@ -59,17 +59,17 @@ describe('provider catalog', () => {
       for (const name of unlockNames(spec)) expect(name, `${spec.key}: ${name}`).not.toMatch(/^\d/);
     }
     const fal = PROVIDER_KEYS.find((spec) => spec.key === 'FAL_KEY')!;
-    expect(unlockSummary(fal)).toMatch(new RegExp(`^${unlockCount(fal)} nodes, including Kling V3 and FLUX\\.2$`));
+    expect(unlockSummary(fal)).toMatch(new RegExp(`^${unlockCount(fal)} nodes, including Kling V3$`));
   });
 
-  it('lists the names alone up to three nodes, then the count and two names (design r161)', () => {
+  it('lists the names alone up to three nodes, then the count and one name (design r164)', () => {
     const names = ['Nano Banana', 'Veo 3.1', 'Lyria 3', 'Imagen 4', 'Gemini'];
     expect(summarizeUnlocked(names.slice(0, 1))).toBe('Nano Banana');
     expect(summarizeUnlocked(names.slice(0, 2))).toBe('Nano Banana and Veo 3.1');
     expect(summarizeUnlocked(names.slice(0, 3))).toBe('Nano Banana, Veo 3.1 and Lyria 3');
-    expect(summarizeUnlocked(names.slice(0, 4))).toBe('4 nodes, including Nano Banana and Veo 3.1');
+    expect(summarizeUnlocked(names.slice(0, 4))).toBe('4 nodes, including Nano Banana');
     const fifteen = Array.from({ length: 15 }, (_, i) => (i < 3 ? names[i] : `Node ${i}`));
-    expect(summarizeUnlocked(fifteen)).toBe('15 nodes, including Nano Banana and Veo 3.1');
+    expect(summarizeUnlocked(fifteen)).toBe('15 nodes, including Nano Banana');
     for (const count of [1, 2, 3, 4, 15]) {
       const said = summarizeUnlocked(Array.from({ length: count }, (_, i) => `Name ${i}`));
       expect(said).not.toMatch(/[:…]/);

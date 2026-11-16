@@ -12,12 +12,13 @@
 
 import { FIELD_STEP_LABELS } from './fieldSteps';
 
-/** How a kept field reads in "the ‹field› changed again after that": the field step's own label, lower-cased,
- * except where that would not read as a noun after "the" ("Your brief", "Send notes to generators"). The cover has no
- * field step of its own (it is an image step), so it is named here. */
+/** How a kept field reads in "because ‹the field› changed again after that": "the" and the field step's own label
+ * in lower case, except where design gave the noun (r164): the avoid field is "the avoid list" (the journal's
+ * word), and the switch is named as the control is, in quotes, with no "the". "Your brief" reads "the brief". The
+ * cover has no field step of its own (it is an image step), so it is named here. */
 const FIELD_IN_SENTENCE: Record<string, string> = {
-  ...Object.fromEntries(Object.entries(FIELD_STEP_LABELS).map(([key, label]) => [key, label.toLowerCase()])),
-  briefOverride: 'brief', sendNotes: 'send notes setting', coverImageId: 'cover',
+  ...Object.fromEntries(Object.entries(FIELD_STEP_LABELS).map(([key, label]) => [key, `the ${label.toLowerCase()}`])),
+  avoid: 'the avoid list', briefOverride: 'the brief', sendNotes: '“Moodboard notes to generators”', coverImageId: 'the cover',
 };
 
 /** "Undid “Made image 3 the cover”" or "Redid “…”". */
@@ -51,7 +52,7 @@ export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): s
       if (!name) return null;
       if (!fields.includes(name)) fields.push(name);
     }
-    return `Nebula couldn’t undo “${label}” because ${fields.map((name) => `the ${name}`).join(' and ')} changed again after that.`;
+    return `Nebula couldn’t undo “${label}” because ${fields.join(' and ')} changed again after that.`;
   }
   const changed: number[] = [];
   const removed: number[] = [];

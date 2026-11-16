@@ -177,11 +177,12 @@ function listNames(names: readonly string[]): string {
 /**
  * What a row says a key opens up, from the names of its nodes: with three
  * nodes or fewer, the names alone ("Nano Banana, Veo 3.1 and Lyria 3"); from four,
- * the count and two names ("15 nodes, including Nano Banana and Veo 3.1").
+ * the count and one name ("15 nodes, including Nano Banana"), so rows stay one
+ * line and even (design r164).
  */
 export function summarizeUnlocked(names: readonly string[]): string {
   if (names.length <= 3) return listNames(names);
-  return `${names.length} nodes, including ${listNames(names.slice(0, 2))}`;
+  return `${names.length} nodes, including ${names[0]}`;
 }
 
 /** The row's one-line summary of what the key opens up (connected and add rows read the same). */

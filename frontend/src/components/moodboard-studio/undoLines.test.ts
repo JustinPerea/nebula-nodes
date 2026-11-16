@@ -25,9 +25,9 @@ describe('the undo and redo toasts’ words (design r160 and r161)', () => {
   it('says a field step changed again, naming the field from its key (every step label and its sentence)', () => {
     const sentences: Record<string, [string, string]> = {
       name: ['Name', 'the name'], notes: ['Moodboard notes', 'the moodboard notes'], mode: ['Mode', 'the mode'],
-      strength: ['Strength', 'the strength'], direction: ['Direction', 'the direction'], avoid: ['Avoid', 'the avoid'],
+      strength: ['Strength', 'the strength'], direction: ['Direction', 'the direction'], avoid: ['Avoid', 'the avoid list'],
       pinnedColors: ['Pinned colors', 'the pinned colors'], clashMode: ['Clash mode', 'the clash mode'],
-      colorChoices: ['Color choices', 'the color choices'], sendNotes: ['Send notes to generators', 'the send notes setting'],
+      colorChoices: ['Color choices', 'the color choices'], sendNotes: ['Send notes to generators', '“Moodboard notes to generators”'],
       briefOverride: ['Your brief', 'the brief'], coverImageId: ['Made image 2 the cover', 'the cover'],
     };
     for (const [field, [label, said]] of Object.entries(sentences)) {
