@@ -1585,7 +1585,12 @@ def canvas_title(definition: Mapping[str, Any]) -> str:
 # The Title Case default labels of six nodes before the copy sweep renamed them
 # to sentence case (definition id -> label). A node saved earlier carries the
 # old label, which no longer equals the definition's name; it is still the
-# default title, not a name the person chose. Stored labels are not rewritten.
+# default title, not a name the person chose. A node saved with its former
+# default is shown under the definition's current name from the load on
+# (cli_graph._current_default_label here, withCurrentDefaultLabels on the
+# canvas), and the next ordinary save stores that name. Renaming one of these
+# nodes to its former default is treated as unnamed: is_default_title is true,
+# so no custom label is kept.
 # frontend/src/lib/formerDefaultTitles.ts holds the same table;
 # contracts/fixtures/former-default-titles.json pins both.
 FORMER_DEFAULT_TITLES: dict[str, str] = {

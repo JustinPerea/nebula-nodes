@@ -26,8 +26,11 @@ interface NodeErrorProps {
   /** The error itself is a missing-key one (node data `errorMissingKey`, which the
    * backend sets where it builds the missing-key line): something to do, not a
    * failure, so it draws in the neutral look of a waiting stop, with the error's
-   * own heading (copy sweep item 12). Colour only, and never the card's `keyStatus`:
-   * another failing check on a node whose key is missing stays a failure.
+   * own heading (copy sweep item 12). Colour only. The flag is the only input for most node
+   * kinds. For four kinds (worldlabs-environment, style-reference, speridlabs-idol, veo-3) the
+   * card's `keyStatus === 'missing'` also stands in, through `drawsAsMissingKey`
+   * (lib/missingKeyTone.ts), until the follow-up pull request; so on those four another
+   * failing check on a node whose key is missing draws neutral too.
    */
   missingKey?: boolean;
   raw?: string;

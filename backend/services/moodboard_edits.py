@@ -57,6 +57,22 @@ from uuid import uuid4
 from services import moodboard_layout as layout
 from services.text_cut import clean_name
 
+# Image keys Nebula derives for itself (the file's stat stamp and the alpha facts read
+# with it, moodboard_analysis.ALPHA_KEYS) and a client cannot send or round-trip: the
+# stamp holds 19-digit nanosecond integers, which a browser's JSON.parse rounds, so the
+# ``expect`` copy an undo sends back differs from the stored image in that key alone.
+# A restore leaves them out of its "did this image change" check. The person's own
+# fields (note, weight, set aside, name, url, cover, cards) still count.
+SERVER_DERIVED_IMAGE_KEYS = frozenset({"hasTransparency", "hasClearPixels", "alphaFileStat"})
+
+
+def _same_image(a: Any, b: Any) -> bool:
+    """Whether two image records agree on everything but the server-derived keys."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        strip = lambda img: {k: v for k, v in img.items() if k not in SERVER_DERIVED_IMAGE_KEYS}
+        return strip(a) == strip(b)
+    return a == b
+
 MAX_OPS = 500
 # Over this many ops the broadcast leaves ``undo`` out (the Studio refetches,
 # and only the tab that made the batch can undo it from its answer).
@@ -930,9 +946,9 @@ class _Batch:
             return "applied"
         if part == "image":
             current = self.find(str(item["image"]))
-            if current == before:
+            if _same_image(current, before):
                 return "unchanged"
-            if current != expect:
+            if not _same_image(current, expect):
                 return "skipped"
             if before is None:
                 self.board["images"] = [img for img in self.images if img is not current]

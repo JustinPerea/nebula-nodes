@@ -386,13 +386,14 @@ body.app-slava-restraint .settings-row__name {
   text-overflow: ellipsis;
 }
 
+/* A summary that doesn't fit on one line wraps to a second; it is never cut with "…" (design, copy sweep:
+   "15 nodes, including Nano Banana and Veo 3.1" is wider than the row's column). */
 body.app-slava-restraint .settings-row__summary {
-  overflow: hidden;
   margin-top: 1px;
   color: var(--sr-ink-meta);
   font-size: var(--sr-type-label);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 /* A sentence summary wraps rather than ending in "…" (GM, PR #203 r14 item 1). */

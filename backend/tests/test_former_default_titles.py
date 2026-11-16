@@ -85,3 +85,25 @@ def test_every_former_default_loads_as_its_definitions_name(definition_id, old, 
     graph = CLIGraph()
     graph.load(_saved(tmp_path, [{"id": "n1", "definitionId": definition_id, "label": old, "params": {}}]))
     assert graph.nodes["n1"]["label"] == NodeRegistry().get_all()[definition_id]["displayName"]
+
+
+def test_many_nodes_with_a_former_default_read_the_definitions_file_once(tmp_path, monkeypatch):
+    from services import cli_graph
+    from services import node_registry
+
+    cli_graph._current_default_labels.cache_clear()
+    built = []
+    real = node_registry.NodeRegistry
+
+    class Counting(real):
+        def __init__(self, *args, **kwargs):
+            built.append(1)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(node_registry, "NodeRegistry", Counting)
+    nodes = [{"id": f"n{i}", "definitionId": "remotion-node", "label": "Remotion Composition", "params": {}} for i in range(30)]
+    graph = cli_graph.CLIGraph()
+    graph.load(_saved(tmp_path, nodes))
+    assert {node["label"] for node in graph.nodes.values()} == {"Remotion composition"}
+    assert len(built) == 1
+    cli_graph._current_default_labels.cache_clear()

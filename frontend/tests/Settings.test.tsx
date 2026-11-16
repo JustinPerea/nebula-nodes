@@ -343,7 +343,7 @@ describe('Settings — providers list and search', () => {
     expect(toAdd.indexOf('Krea · API key')).toBeLessThan(toAdd.indexOf('fal.ai'));
     expect(toAdd.indexOf('fal.ai')).toBeLessThan(toAdd.indexOf('Ideogram'));
     expect(toAdd.indexOf('Ideogram')).toBeLessThan(toAdd.indexOf('Anthropic'));
-    expect(within(row('fal.ai')).getByText(/^\d+ nodes, including Kling V3, FLUX\.2 and /)).toBeInTheDocument();
+    expect(within(row('fal.ai')).getByText(/^\d+ nodes, including Kling V3 and FLUX\.2$/)).toBeInTheDocument();
     expect(within(row('Ideogram')).getByText(/Ideogram 4/)).toBeInTheDocument();
   });
 
@@ -536,15 +536,17 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
       expect(screen.getByLabelText('Hugging Face token')).toHaveValue(bad);
     });
 
-  it('wraps the Hugging Face helper instead of cutting it, and keeps a name list on one line (GM, PR #203 r14 item 1)', async () => {
+  it('wraps the Hugging Face helper and a long name list instead of cutting them (GM, PR #203 r14 item 1; design, copy sweep)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const summary = row('Hugging Face').querySelector('.settings-row__summary');
     expect(summary).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
     expect(summary).toHaveClass('settings-row__summary--wrap');
     expect(summary?.textContent).not.toMatch(/…$/);
-    // A list of node names is no sentence: it stays one line.
-    expect(row('OpenAI').querySelector('.settings-row__summary')).not.toHaveClass('settings-row__summary--wrap');
+    // A list of node names wraps too when it is wider than the column (design, copy sweep): no summary is cut with "…".
     const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
+    const base = css.match(/\.settings-row__summary\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(base).toMatch(/white-space:\s*normal/);
+    expect(base).not.toMatch(/text-overflow:\s*ellipsis|white-space:\s*nowrap|overflow:\s*hidden/);
     const rule = css.match(/\.settings-row__summary--wrap\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toMatch(/white-space:\s*normal/);
     expect(rule).toMatch(/text-overflow:\s*clip/);

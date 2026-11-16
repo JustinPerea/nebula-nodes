@@ -369,7 +369,7 @@ async def _discover(agent: str) -> dict[str, Any]:
             raise _DiscoveryError("catalog_cleanup_failed", "The local CLI model catalog cleanup failed.") from exc
         if isinstance(exc, FileNotFoundError):
             result["status"] = "not_installed"
-            result["error"] = {"code": "cli_not_installed", "message": f"The local {agent.title()} CLI is not installed."}
+            result["error"] = {"code": "cli_not_installed", "message": f"{agent.title()} isn\u2019t installed. Install it, then try again."}
         elif isinstance(exc, TimeoutError):
             result["error"] = {"code": "catalog_timeout", "message": "The local CLI model catalog timed out. Check the CLI connection and refresh."}
         elif isinstance(exc, _DiscoveryError):

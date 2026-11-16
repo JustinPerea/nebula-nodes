@@ -344,7 +344,7 @@ describe('the cover (#123) in undo', () => {
   it('a pick is one undo step: Cmd+Z opens the board on #1 again, Shift+Cmd+Z brings the pick back', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
-    expect(screen.getByText('Image 2 is the cover')).toBeTruthy();
+    expect(screen.getByText('Image 2 is the cover.')).toBeTruthy();
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
     // A pick keeps the analysis.
     expect(server.board.analysis).not.toBeNull();
@@ -357,7 +357,7 @@ describe('the cover (#123) in undo', () => {
 
     press('z', { metaKey: true, shiftKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
-    expect(await screen.findByText('Image 2 is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 2 is the cover.')).toBeTruthy();
   });
 
   it('picks made before the step is sent join it: one batch, and one undo goes back to before them', async () => {
@@ -384,7 +384,7 @@ describe('the cover (#123) in undo', () => {
 
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
-    expect(await screen.findByText('Image 2 is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 2 is the cover.')).toBeTruthy();
     expect(server.board.coverImageId).toBe('i2');
   });
 
@@ -393,7 +393,7 @@ describe('the cover (#123) in undo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
     outsideWrite((current) => ({ ...current, coverImageId: 'i1' }));
-    expect(await screen.findByText('Image 1 is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover.')).toBeTruthy();
     // The server's restore finds the cover changed since: it puts nothing
     // back, and its answer has no `undo` (nothing to redo).
     api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
@@ -404,7 +404,7 @@ describe('the cover (#123) in undo', () => {
         undo: { ops: [] } };
     });
     press('z', { metaKey: true });
-    expect(await screen.findByText('The cover changed since, left as is')).toBeTruthy();
+    expect(await screen.findByText('Nebula couldn’t undo “Made image 2 the cover” because the cover changed again after that.')).toBeTruthy();
     expect(server.edits).toHaveLength(2);
 
     press('z', { metaKey: true, shiftKey: true });

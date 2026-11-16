@@ -2,12 +2,17 @@ import { quotedNames } from '../lib/errorCopy';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { CinemaSceneSpec } from '../types';
+import { UPLOADED_FILE, shownFileName } from '../lib/fileName';
 
 export const CINEMA_UPLOAD_STORAGE_KEY = 'nebula:cinema:uploads:v1';
 export const INTERRUPTED_CINEMA_UPLOAD_MESSAGE = 'Upload was interrupted. Remove it, then attach the image again.';
 /** What a restored failed row offers where its saved line said Try again: its file is gone, so
- * the next step is Remove, then the controls' own verb ("Attach ..."), naming the file as the line does. */
-const removeThenAttach = (name: string) => `Remove it, then attach “${name}” again.`;
+ * the next step is Remove, then the controls' own verb ("Attach ..."), naming the file as the line's start does (`shownFileName`).
+ * A file shown as "Uploaded file" (a content-hash name) has no name to repeat, so it is "the file". */
+const removeThenAttach = (name: string) => {
+  const shown = shownFileName(name);
+  return shown === UPLOADED_FILE ? 'Remove it, then attach the file again.' : `Remove it, then attach “${shown}” again.`;
+};
 const TRY_AGAIN_ENDING = / Try again\.$/;
 /** A canvas import stopped it (GM PR #205 r13 item 3). */
 export const STOPPED_CINEMA_UPLOAD_MESSAGE = 'The upload stopped because a canvas import started.';

@@ -536,17 +536,22 @@ def _accept_refused(api, monkeypatch, body: dict, name: str = "Dusk board"):
         return JSONResponse(body, status_code=409)
 
     monkeypatch.setattr(api.main, "_update_moodboard", refuse)
-    return api.client.post(f"/api/asset-proposals/{view['id']}/accept",
-                           headers={**api.person, KEY: key, "X-Nebula-Tab": "tab-0123456789abcdef"})
+    response = api.client.post(f"/api/asset-proposals/{view['id']}/accept",
+                               headers={**api.person, KEY: key, "X-Nebula-Tab": "tab-0123456789abcdef"})
+    response.proposal_id = view["id"]
+    return response
 
 
 def test_a_refused_board_accept_with_no_readable_detail_says_what_is_known_and_what_to_do(api, monkeypatch):
-    """Design r161: the line names the moodboard, claims no cause, and tells the person to check and accept again."""
+    """Design r161: the line names the moodboard, claims no cause, and says Nebula closed the proposal (it did)."""
     refused = _accept_refused(api, monkeypatch, {})
     assert refused.status_code == 409
+    # Accept is not live after this refusal: accept_asset_proposal closes the proposal as invalidated.
+    assert api.book.get(refused.proposal_id).status == "invalidated"
+    assert api.book.open_list() == []
     assert refused.json()["detail"] == (
-        "Nebula couldn\u2019t accept this because \u201cDusk board\u201d didn\u2019t take the change. "
-        "It may have changed somewhere else. Check it, then accept again.")
+        "Nebula couldn\u2019t accept this because \u201cDusk board\u201d didn\u2019t take the change, and the proposal is closed. "
+        "\u201cDusk board\u201d may have changed somewhere else. Ask Claude Code to propose it again.")
 
 
 def test_a_refused_board_accept_names_the_moodboard_the_way_other_lines_clean_a_name(api, monkeypatch):
@@ -586,8 +591,8 @@ def test_the_moodboard_stands_in_when_no_name_is_to_hand(api, monkeypatch):
     refused = api.client.post(f"/api/asset-proposals/{view['id']}/accept",
                               headers={**api.person, KEY: _key(api, view["id"]), "X-Nebula-Tab": "tab-0123456789abcdef"})
     assert refused.json()["detail"] == (
-        "Nebula couldn\u2019t accept this because the moodboard didn\u2019t take the change. "
-        "It may have changed somewhere else. Check it, then accept again.")
+        "Nebula couldn\u2019t accept this because the moodboard didn\u2019t take the change, and the proposal is closed. "
+        "The moodboard may have changed somewhere else. Ask Claude Code to propose it again.")
 
 
 def test_the_cli_prints_an_asset_proposal_as_what_it_changes(api):

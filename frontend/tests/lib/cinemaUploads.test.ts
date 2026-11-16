@@ -176,6 +176,16 @@ describe('Cinema reference ownership', () => {
       error: 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Remove it, then attach “photo.png” again.' });
     expect(uploadOffersTryAgain(restored)).toBe(false);
   });
+  it('a restored row for a content-hash file name says “the file”, never the hash or “attach “Uploaded file” again”', () => {
+    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
+    const hashed = `${'3f9a'.repeat(8)}.png`;
+    const failure = uploadFailure(hashed, new RequestFailedError("Couldn't upload.", 503, { detail: 'Unavailable' }));
+    expect(failure.line).toBe('Nebula couldn’t upload “Uploaded file” because the server didn’t respond. Try again.');
+    store.getState().setUploads(() => [{ id: 'h', attempt: 'a', nodeId, shotId: 'a', name: hashed, status: 'error', canRetry: true, error: failure.line }]);
+    storage.getItem.mockReturnValue(storage.setItem.mock.calls[0][1]);
+    const [restored] = createCinemaUploadStore(storage).getState().uploads;
+    expect(restored.error).toBe('Nebula couldn’t upload “Uploaded file” because the server didn’t respond. Remove it, then attach the file again.');
+  });
   it('reloads interrupted metadata without automatic requests, File objects or graph recipe changes', () => {
     const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
     store.getState().setUploads(() => [{ id: 'reload', attempt: 'old', nodeId, shotId: 'a', name: 'draft.png', status: 'uploading', canRetry: true }]);

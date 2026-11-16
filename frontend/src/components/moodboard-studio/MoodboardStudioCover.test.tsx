@@ -142,12 +142,12 @@ describe('choosing the cover in Moodboard Studio', () => {
     expect(within(tiles()[1]).getByRole('button', { name: 'Use #2 as cover' })).toBeTruthy();
   });
 
-  it('says only "Image 1 is the cover" once the person chose image 1 themselves', async () => {
+  it('says only "Image 1 is the cover." once the person chose image 1 themselves', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
-    expect(caption()).toBe('Image 2 is the cover');
+    expect(caption()).toBe('Image 2 is the cover.');
     fireEvent.click(screen.getByRole('button', { name: 'Use #1 as cover' }));
-    expect(caption()).toBe('Image 1 is the cover');
+    expect(caption()).toBe('Image 1 is the cover.');
   });
 
   it('"Use as cover" sends one cover op and moves nothing', async () => {
@@ -156,7 +156,7 @@ describe('choosing the cover in Moodboard Studio', () => {
     // At once, before the save: the preview, the mark and the caption.
     expect(preview()).toBe('/api/outputs/i2.png');
     expect(coverMarks()).toEqual([null, 'Cover', null]);
-    expect(caption()).toContain('Image 2 is the cover');
+    expect(caption()).toContain('Image 2 is the cover.');
 
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 3000 });
     expect(api.editMoodboard.mock.calls[0][2]).toBe(1);

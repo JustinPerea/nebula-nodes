@@ -490,7 +490,7 @@ describe('a stale field step follows the card rule: left as is, and named', () =
     await waitFor(() => expect(direction().value).toBe('agent dawn'));
 
     undo();
-    expect(await screen.findByText('Direction changed since, left as is')).toBeTruthy();
+    expect(await screen.findByText('Nebula couldn’t undo “Direction” because the direction changed again after that.')).toBeTruthy();
     expect(server.board.direction).toBe('agent dawn');
     await settled();
     redo();

@@ -3339,7 +3339,7 @@ export function MoodboardStudioView() {
                 </div>
                 {cover && (
                   <p className="moodboard-def__cover-caption" aria-live="polite">
-                    {cover.chosen ? `Image ${cover.number} is the cover` : 'Image 1 is the cover until you choose another.'}
+                    {cover.chosen ? `Image ${cover.number} is the cover.` : 'Image 1 is the cover until you choose another.'}
                   </p>
                 )}
               </div>

@@ -13316,12 +13316,14 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass
         # A refusal with a readable detail keeps it. One with none says what is known and what to do (design
-        # r161): the moodboard declined, it may have changed somewhere else, and Accept is still live.
+        # r161): the moodboard declined and it may have changed somewhere else. The proposal is not kept open:
+        # accept_asset_proposal closes it as invalidated when this raises, so the line says Nebula closed it.
         shown = clean_name(proposal.target_name, 60, ellipsis=True)
         named = f"\u201c{shown}\u201d" if shown else "the moodboard"
+        agent = personal_agents.in_sentence(clean_name(proposal.agent.name, 60))
         raise HTTPException(status_code=409, detail=detail or (
-            f"Nebula couldn\u2019t accept this because {named} didn\u2019t take the change. "
-            "It may have changed somewhere else. Check it, then accept again."))
+            f"Nebula couldn\u2019t accept this because {named} didn\u2019t take the change, and the proposal is closed. "
+            f"{named[0].upper() + named[1:]} may have changed somewhere else. Ask {agent} to propose it again."))
     return {"applied": {"sendNotes": True}, "board": answer}
 
 
