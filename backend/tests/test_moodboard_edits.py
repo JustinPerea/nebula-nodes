@@ -295,7 +295,7 @@ def test_a_partial_restore_skips_what_changed_since(client, root):
     assert cards == {"pl-a": (0, 0), "pl-b": (1500, 500)}
     skipped = undone["applied"][0]["skipped"]
     assert len(skipped) == 1 and skipped[0]["image"] == "img-b" and skipped[0]["number"] == 2
-    assert skipped[0]["message"] == "#2 changed since, left as is"
+    assert skipped[0]["message"] == "Image 2 changed since, left as is"
 
 
 def test_a_move_keeps_the_analysis_and_a_resize_sets_weight_from_area(client, root):
@@ -1039,7 +1039,7 @@ def test_undoing_a_set_skips_an_image_setting_changed_since(app, client, root):
     board, _removed, _redo, skipped = _undo(app, previous)
     a, b = board["images"]
     assert a["weight"] == 0.3 and b["notes"] == ""
-    assert skipped == ["#1's weight changed since, left as is"]
+    assert skipped == ["Image 1\u2019s weight changed since, left as is"]
 
 
 def test_an_untouched_undo_of_a_set_puts_everything_back(app, client, root):

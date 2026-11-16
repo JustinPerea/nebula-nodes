@@ -34,6 +34,7 @@ from collections import deque
 from typing import Any, Callable, Iterable, Mapping
 
 from services.agent_presence import AgentIdentity
+from services.personal_agents import in_sentence
 from services.agent_status import STATUS_IDLE_SECONDS
 
 PENDING_KEY = "pending"
@@ -158,7 +159,7 @@ def downstream_reason(root_label: str, agent_name: str) -> str:
     2026-10-25, verbatim ("needs “Hero prompt”, which Codex is still setting
     up."), naming the placeholder by its name (its type's name when it has
     no label; the caller's ``label``), never its id."""
-    return f"needs “{root_label}”, which {agent_name} is still setting up."
+    return f"needs “{root_label}”, which {in_sentence(agent_name)} is still setting up."
 
 
 def run_skips(scope: Iterable[str], edges: Iterable[tuple[str, str]], nodes: Mapping[str, Mapping[str, Any]],
@@ -225,7 +226,7 @@ def skip_line(summary: Mapping[str, Any] | None) -> str | None:
     if count < 1:
         return None
     agents = [str(name) for name in (summary or {}).get("agents") or [] if name]
-    who = f"{agents[0]} is" if len(agents) == 1 else "the agents are"
+    who = f"{in_sentence(agents[0])} is" if len(agents) == 1 else "the agents are"
     return f"Skipped {count} node{'' if count == 1 else 's'} {who} still setting up."
 
 

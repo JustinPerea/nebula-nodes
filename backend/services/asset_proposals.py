@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from services.agent_presence import AgentIdentity
+from services.personal_agents import in_sentence
 from services.text_cut import clean_name
 from services.canvas_proposals import (
     OPEN,
@@ -296,7 +297,7 @@ def outcome_line(proposal: AssetProposal) -> str:
                     else "You kept this cover")
         return "You kept the notes here" if proposal.kind == "moodboard" else "You said no"
     if status == "withdrawn":
-        return f"Withdrawn by {proposal.agent.name}"
+        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
     if status == "expired":
         return "Expired"
     return "No longer fits"

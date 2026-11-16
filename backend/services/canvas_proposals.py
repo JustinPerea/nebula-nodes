@@ -42,6 +42,7 @@ from typing import Any, Callable, Iterable, Mapping
 from services import agent_words
 from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
+from services.personal_agents import in_sentence
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
 from services.selection_context import _safe_value as safe_value
@@ -1808,7 +1809,7 @@ def update_outcome(proposal: Proposal) -> str:
     deleted, the canvas was cleared or replaced, or what it changes was
     edited since)."""
     if proposal.status == "withdrawn":
-        return f"Withdrawn by {proposal.agent.name}"
+        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
     return _OUTCOMES.get(proposal.status, "No longer fits")
 
 

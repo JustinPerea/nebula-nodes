@@ -161,10 +161,10 @@ def parse_thresholds(raw: dict[str, Any] | None) -> Thresholds:
 # Said when no image steers: every one is set aside or has weight 0.
 ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes the board."
 # An image saved before board writes were checked that links to another site.
-OUTSIDE_IMAGE_WARNING = ("#{number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
+OUTSIDE_IMAGE_WARNING = ("Image {number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
                          "gets it. Replace it with an upload in Moodboard Studio.")
 # An image with no pixel at alpha 16 or above, clear or faint (GM r2 on #208).
-TRANSPARENT_IMAGE_LINE = "#{number} is too transparent to add colors."
+TRANSPARENT_IMAGE_LINE = "Image {number} is too transparent to add colors."
 # A saved analysis from before alpha counted, on a board with an image that
 # has transparency (``with_alpha_outdated``).
 ALPHA_OUTDATED = "These colors counted transparent areas as dark. Analyze again to update them."
