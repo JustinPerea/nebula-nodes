@@ -194,14 +194,14 @@ describe('RecentlyDeletedAssets', () => {
 
   it('keeps a refusal after the list reads itself again (round 6k: the reload used to wipe it at once)', async () => {
     trash.fetchTrash.mockResolvedValue([board()]);
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     const calls = trash.fetchTrash.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBeGreaterThan(calls));
     await new Promise((done) => setTimeout(done, 50));
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the moodboard.");
     // The next action starts clean.
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
@@ -286,7 +286,7 @@ describe('RecentlyDeletedAssets, round 6l', () => {
 
   it('a refusal goes with a scope or project switch (review 10 NIT-2)', async () => {
     trash.fetchTrash.mockResolvedValue([board()]);
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
@@ -295,7 +295,7 @@ describe('RecentlyDeletedAssets, round 6l', () => {
     await screen.findByRole('button', { name: /Recently deleted/ });
     expect(screen.queryByRole('alert')).toBeNull();
     // A project switch too.
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Restore Warm editorial' }));
     await screen.findByRole('alert');
     act(() => { publishOpenProject({ id: 'p2', name: 'Other project' }); });
@@ -304,13 +304,13 @@ describe('RecentlyDeletedAssets, round 6l', () => {
 
   it('an action\'s refusal shows over a later failed load (V16)', async () => {
     trash.fetchTrash.mockResolvedValueOnce([board()]).mockRejectedValue(new RequestFailedError("Couldn't load Recently deleted.", 500, { detail: 'x' }));
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2));
     await new Promise((done) => setTimeout(done, 30));
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the moodboard.");
     expect(screen.getByRole('alert').textContent).not.toContain('load');
   });
 });

@@ -157,7 +157,7 @@ export function parseMoodboardBundle(value: unknown): MoodboardBundleView | null
   const analysis = isRecord(value.analysis) ? value.analysis : {};
   const brief = str(value.styleBrief).trim();
   return {
-    name: str(value.name).trim() || 'Untitled board',
+    name: str(value.name).trim() || 'Untitled moodboard',
     mode: str(value.mode).trim() || null,
     strength,
     images,

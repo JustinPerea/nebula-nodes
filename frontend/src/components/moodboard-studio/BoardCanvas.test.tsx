@@ -385,7 +385,7 @@ describe('one view for every framing and placement (#213\'s shared insets)', () 
     // Every framing here frames the same 100 x 100 bounds, into 1000 x 650 at the column's top left.
     const framed = getViewportForBounds({ x: 0, y: 0, width: 100, height: 100 }, 1000, 650, 0.02, 1, 0.12);
     spring.calls = [];
-    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
     act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c2']));
     await vi.waitFor(() => expect(spring.calls).toHaveLength(2));
     act(() => { chip.props!.onShow(tiles.rects, false); });
@@ -428,7 +428,7 @@ describe('the chip\'s press and a notice line (GM r101, r105)', () => {
         stackHeight = height;
         for (const o of observers) if (o.on.has(stack)) o.cb();
       });
-      fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+      fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
       spring.calls = [];
       line(40);
       // The band ends at 12 + 40 + 12: the fit is made in 1000 x (650 - 64), 64 px down.
@@ -1157,13 +1157,13 @@ describe('an empty board while Nebula is offline (GM r12 2)', () => {
     flow.getNodesBounds.mockClear();
     const held = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
       placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
-    fireEvent.click(held.getByLabelText('Fit the board'));
+    fireEvent.click(held.getByLabelText('Fit the moodboard'));
     expect(spring.calls).toHaveLength(1);
     expect(flow.getNodesBounds).toHaveBeenCalledWith([expect.objectContaining({ position: { x: 40, y: 60 } })]);
     held.unmount();
     spring.calls.length = 0;
     const empty = render(board(false));
-    fireEvent.click(empty.getByLabelText('Fit the board'));
+    fireEvent.click(empty.getByLabelText('Fit the moodboard'));
     expect(spring.calls).toHaveLength(0);
   });
 
@@ -1180,7 +1180,7 @@ describe('the camera', () => {
   it('fits the board with Fit and with Shift+1, on a spring', () => {
     spring.calls = [];
     const view = mount();
-    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
     expect(spring.calls).toHaveLength(1);
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true })); });
     expect(spring.calls).toHaveLength(2);
@@ -1193,14 +1193,14 @@ describe('the camera', () => {
       placeholders={[{ id: 'placeholder-1', x: 4000, y: 100, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } },
         { id: 'placeholder-2', x: 0, y: 0, width: 0, height: 0, listOnly: true, source: { kind: 'file', name: 'b.png' } }]} />);
     flow.getNodesBounds.mockClear();
-    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
     expect((flow.getNodesBounds.mock.calls[0][0] as Node[]).map((node) => node.id)).toEqual(['c1', 'c2', 'c3', 'placeholder-1']);
   });
 
   it('a new move stops the one still running, so two springs never pull the view', () => {
     spring.calls = [];
     const view = mount();
-    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
     fireEvent.click(view.getByRole('button', { name: 'Zoom in' }));
     expect(spring.calls[0].cancel).toHaveBeenCalledTimes(1);
     expect(spring.calls[1].cancel).not.toHaveBeenCalled();
@@ -1234,7 +1234,7 @@ describe('the camera, kept for the visit', () => {
   it('a Fit or a zoom button is remembered, so List and back to Board shows the same view', () => {
     spring.calls = [];
     const view = mount();
-    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    fireEvent.click(view.getByRole('button', { name: 'Fit the moodboard' }));
     expect(useBoardCanvasStore.getState().viewports.k1).toEqual(spring.calls[0].to);
     fireEvent.click(view.getByRole('button', { name: 'Zoom in' }));
     expect(useBoardCanvasStore.getState().viewports.k1).toEqual(spring.calls[1].to);

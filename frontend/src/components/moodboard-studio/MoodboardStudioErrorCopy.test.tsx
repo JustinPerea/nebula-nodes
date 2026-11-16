@@ -16,7 +16,7 @@ import type { Moodboard } from '../../types';
 
 const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
-// Round 2 (GM): "Change 'Save failed: <reason>' to 'Couldn't save the board.
+// Round 2 (GM): "Change 'Save failed: <reason>' to 'Couldn't save the moodboard.
 // <reason>' so it matches everything else", heading on line 1, reason on
 // line 2; and the WRAP rule: with Retry shown, "the reason line drops its
 // 'try again'. The button is the retry."
@@ -117,7 +117,7 @@ const lines = (shown: Element) => [shown.querySelector('.failure-lines__heading'
 // and the toolbar's Retry sends it again, so it says what a new board's failed create says (GM r12, r14):
 // r12's neutral because-line, the "Not saved" chip. The cause names what happened; the backend's own
 // reason is in the console only.
-const saved = (cause: string) => `Nebula couldn’t save the board because ${cause}. Try again.`;
+const saved = (cause: string) => `Nebula couldn’t save the moodboard because ${cause}. Try again.`;
 const neutral = async () => {
   await waitFor(() => expect(document.querySelector('.moodboard-studio__notice--neutral')).not.toBeNull(), { timeout: 3000 });
   return document.querySelector('.moodboard-studio__notice--neutral')!;
@@ -156,10 +156,10 @@ describe('a board save that fails', () => {
     ['detail-409', saved('the server didn’t accept this save'), true],
     ['field-list', saved('the server didn’t accept this save'), true],
     ['bare-400', saved('the server didn’t accept this save'), true],
-    ['bare-403', 'Nebula couldn’t save the board because you’re signed out. Open the link Nebula printed when it started.', false],
-    ['bare-413', 'Nebula couldn’t save the board because it’s too large. Remove some images, then try again.', true],
-    ['disk-full', 'Nebula couldn’t save the board because the disk is full. Free up some space, then try again.', true],
-    ['conflict', 'Nebula couldn’t save the board because it changed somewhere else. Reload to get the latest version.', false],
+    ['bare-403', 'Nebula couldn’t save the moodboard because you’re signed out. Open the link Nebula printed when it started.', false],
+    ['bare-413', 'Nebula couldn’t save the moodboard because it’s too large. Remove some images, then try again.', true],
+    ['disk-full', 'Nebula couldn’t save the moodboard because the disk is full. Free up some space, then try again.', true],
+    ['conflict', 'Nebula couldn’t save the moodboard because it changed somewhere else. Reload to get the latest version.', false],
   ] as const)('a %s says its neutral line, no status code, no server words, and Retry only where trying again works', async (failure, line, retry) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     state.edits = failure;
@@ -172,13 +172,13 @@ describe('a board save that fails', () => {
     expect(screen.queryByRole('button', { name: 'Retry' }) !== null).toBe(retry);
   });
 
-  it('a board that fails to load says "Couldn\'t load the board." over GM\'s short line, beside Retry loading', async () => {
+  it('a board that fails to load says "Couldn\'t load the moodboard." over GM\'s short line, beside Retry loading', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     state.load = 503;
     act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
     render(<MoodboardStudioView />);
     const alert = await screen.findByRole('alert');
-    await waitFor(() => expect(lines(alert)).toEqual(["Couldn't load the board.", NO_ANSWER_SHORT]));
+    await waitFor(() => expect(lines(alert)).toEqual(["Couldn't load the moodboard.", NO_ANSWER_SHORT]));
     expect(screen.getByRole('button', { name: 'Retry loading' })).toBeTruthy();
   });
 
@@ -194,7 +194,7 @@ describe('an analyze that fails', () => {
     state.analyze = failure;
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
-    expect(lines(await notice())).toEqual(["Couldn't analyze the board.", short]);
+    expect(lines(await notice())).toEqual(["Couldn't analyze the moodboard.", short]);
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
@@ -203,7 +203,7 @@ describe('an analyze that fails', () => {
     state.analyze = 503;
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
-    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the board."));
+    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the moodboard."));
     const sent = () => vi.mocked(fetch).mock.calls.map(([input, init]) =>
       `${(init?.method ?? 'GET').toUpperCase()} ${new URL(String(input)).pathname}`);
     const before = sent().length;
@@ -220,7 +220,7 @@ describe('an analyze that fails', () => {
     state.analyze = 503;
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
-    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the board."));
+    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the moodboard."));
     state.edits = 503;
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
     expect((await neutral()).textContent).toBe(saved('the server isn’t answering'));
@@ -294,7 +294,7 @@ describe('a new board\'s save (its create) that fails', () => {
   it('with no answer: the neutral save line and the "Not saved" chip, as a background save says it', async () => {
     state.create = () => { throw new TypeError('Failed to fetch'); };
     await openNewWithName();
-    const line = await screen.findByText('Nebula couldn’t save the board because the server isn’t answering. Try again.');
+    const line = await screen.findByText('Nebula couldn’t save the moodboard because the server isn’t answering. Try again.');
     expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--neutral');
     expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Not saved');
     expect(document.body.textContent).not.toMatch(/Couldn.t create/);

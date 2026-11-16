@@ -84,8 +84,8 @@ describe('GM\'s general line under any other heading', () => {
     expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(ELSEWHERE);
     // GM's WRAP rule: beside a Try again button, the line drops its "try again".
     expect(errorCopy.shortReason(SERVER)).toBe("Nebula's server isn't answering. Make sure it's running.");
-    expect(errorCopy.shortLine(`Couldn't load the board. ${SERVER}`))
-      .toBe("Couldn't load the board. Nebula's server isn't answering. Make sure it's running.");
+    expect(errorCopy.shortLine(`Couldn't load the moodboard. ${SERVER}`))
+      .toBe("Couldn't load the moodboard. Nebula's server isn't answering. Make sure it's running.");
   });
 });
 

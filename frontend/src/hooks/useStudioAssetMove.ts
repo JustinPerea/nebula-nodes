@@ -77,7 +77,7 @@ export function useStudioAssetMove(kind: AssetStudioKind) {
         result = await moveStoredAsset(kind, id, target);
       } catch (err) {
         release();
-        setError(failureCopy(err, { heading: kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character." }));
+        setError(failureCopy(err, { heading: kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character." }));
         return false;
       }
       const latest = useAssetStudioDraftStore.getState();

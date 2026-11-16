@@ -767,7 +767,7 @@ type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
  * ("images.0.url: field required") is not a reason the person can read: it
  * says GM's fallback line, and the list stays in the error's `detail` and
  * the console. Never a status code. */
-export const SAVE_BOARD = "Couldn't save the board.";
+export const SAVE_BOARD = "Couldn't save the moodboard.";
 
 /** Why a write to a saved board failed: that it went to Recently deleted
  * meanwhile, else the reason for the answer. */
@@ -778,13 +778,13 @@ async function moodboardWriteError(response: Response, heading: string): Promise
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const response = await apiRequest("Couldn't load the boards.", `/api/moodboards?${params.toString()}`);
+  const response = await apiRequest("Couldn't load the moodboards.", `/api/moodboards?${params.toString()}`);
   return response.json();
 }
 
 /** One Moodboard by id, or null when there's none (deleted, or never existed). */
 export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
-  const response = await apiRequest("Couldn't load the board.", `/api/moodboards/${encodeURIComponent(id)}`,
+  const response = await apiRequest("Couldn't load the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`,
     undefined, { allow: [404] });
   if (response.status === 404) return null;
   return response.json();
@@ -849,7 +849,7 @@ export async function editMoodboard(id: string, ops: MoodboardOp[], baseVersion?
 }
 
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
-  const response = await apiRequest("Couldn't analyze the board.", `/api/moodboards/${id}/analyze`, { method: 'POST' });
+  const response = await apiRequest("Couldn't analyze the moodboard.", `/api/moodboards/${id}/analyze`, { method: 'POST' });
   return response.json();
 }
 
@@ -865,7 +865,7 @@ export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard>
 
 /** Moves the board to Recently deleted; the result is its trash record. */
 export async function deleteMoodboard(id: string): Promise<TrashedItem> {
-  const response = await apiRequest("Couldn't delete the board.", `/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const response = await apiRequest("Couldn't delete the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
@@ -887,7 +887,7 @@ export interface StoredAssetMove<T> {
 export async function moveStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string, projectId: string | null,
 ): Promise<StoredAssetMove<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiRequest(kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character.",
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character.",
     `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -910,7 +910,7 @@ export type StoredAssetLookup<T> =
 export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string,
 ): Promise<StoredAssetLookup<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiRequest(kind === 'moodboard' ? "Couldn't load the board." : "Couldn't load the character.",
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn't load the moodboard." : "Couldn't load the character.",
     `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}`, undefined, { allow: [404] });
   if (response.status === 404) {
     try {

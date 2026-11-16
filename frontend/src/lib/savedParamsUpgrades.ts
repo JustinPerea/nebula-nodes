@@ -114,7 +114,7 @@ export function upgradeRunSnapshot<T extends UpgradableSnapshot>(snapshot: T, ve
 export const RUN_BEHAVIOUR_VERSION = 1;
 const KREA2_BOARD_STRENGTHS_VERSION = 1;
 export const KREA2_BOARD_STRENGTHS_CHANGED = '2026-10-20';
-export const KREA2_BOARD_STRENGTHS_REPLAY_NOTE = 'Krea 2 board strengths now add up to the board\'s strength '
+export const KREA2_BOARD_STRENGTHS_REPLAY_NOTE = 'Krea 2 moodboard strengths now add up to the moodboard\'s strength '
   + `(changed ${KREA2_BOARD_STRENGTHS_CHANGED}), so this replay can differ from the original.`;
 
 /** The part of a run recipe the replay lines read. */

@@ -22,7 +22,7 @@ export type FieldStep = 'name' | 'notes' | 'mode' | 'strength' | 'direction' | '
 
 /** What the undo toast calls each field: "Undid: Direction". */
 export const FIELD_STEP_LABELS: Record<FieldStep, string> = {
-  name: 'Name', notes: 'Board notes', mode: 'Mode', strength: 'Strength', direction: 'Direction', avoid: 'Avoid',
+  name: 'Name', notes: 'Moodboard notes', mode: 'Mode', strength: 'Strength', direction: 'Direction', avoid: 'Avoid',
   pinnedColors: 'Pinned colors', clashMode: 'Clash mode', colorChoices: 'Color choices',
   sendNotes: 'Send notes to generators', briefOverride: 'Your brief',
 };

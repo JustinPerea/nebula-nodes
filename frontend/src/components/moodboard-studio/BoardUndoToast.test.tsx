@@ -15,7 +15,7 @@ describe('the board undo toast', () => {
     const run = vi.fn();
     const onDismiss = vi.fn();
     render(<BoardUndoToast toast={toast(run)} onDismiss={onDismiss} />);
-    const status = screen.getByRole('status', { name: 'Board undo' });
+    const status = screen.getByRole('status', { name: 'Moodboard undo' });
     expect(status.textContent).toContain('Removed #1');
     expect(status.textContent).toContain('#2 changed since, left as is');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));

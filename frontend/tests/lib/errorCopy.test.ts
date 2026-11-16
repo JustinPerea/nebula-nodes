@@ -105,7 +105,7 @@ describe('ConnectionLostError keeps the original for debugging', () => {
 
 /**
  * Round 2 (GM - Design, error-copy round 2): an error from a request carries
- * its parts. The heading names what failed ("Couldn't save the board."), the
+ * its parts. The heading names what failed ("Couldn't save the moodboard."), the
  * reason line says why (GM's lines, the backend's written reason, or GM's
  * fallback for the status), and its kind. `message` is the one-line form
  * "<heading> <reason>" for alerts, toasts and status text. GM's WRAP rule:
@@ -116,7 +116,7 @@ describe('round 2: heading + reason + kind', async () => {
   const copy = await import('../../src/lib/errorCopy');
   const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
   const NO_ANSWER_SHORT = "Nebula didn't respond.";
-  const HEADING = "Couldn't save the board.";
+  const HEADING = "Couldn't save the moodboard.";
 
   it('GM\'s short lines and the other round 2 lines, verbatim', () => {
     expect(copy.CONNECTION_LOST_SHORT_COPY).toBe(LOST_SHORT);
@@ -131,7 +131,7 @@ describe('round 2: heading + reason + kind', async () => {
     [429, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
     [500, 'Internal Server Error', NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
     [503, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
-    [409, 'This board changed in another window.', 'This board changed in another window.', 'This board changed in another window.', 'refused'],
+    [409, 'This moodboard changed in another window.', 'This moodboard changed in another window.', 'This moodboard changed in another window.', 'refused'],
     // GM's 4xx fallback keeps its "Try again" on a retry surface too (listed for GM).
     [400, undefined, REFUSED, REFUSED, 'refused'],
     [422, [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }], REFUSED, REFUSED, 'refused'],
@@ -188,13 +188,13 @@ describe('round 2: requestError reads the answer and keeps the status in the con
   it('reads the backend\'s detail; a FastAPI field list is no reason (GM\'s fallback), kept in detail', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const list = [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }];
-    const error = await copy.requestError("Couldn't save the board.",
+    const error = await copy.requestError("Couldn't save the moodboard.",
       new Response(JSON.stringify({ detail: list }), { status: 422, headers: { 'Content-Type': 'application/json' } }));
-    expect(error.message).toBe(`Couldn't save the board. ${REFUSED}`);
+    expect(error.message).toBe(`Couldn't save the moodboard. ${REFUSED}`);
     expect(error.detail).toEqual(list);
-    const reasoned = await copy.requestError("Couldn't move the board.",
+    const reasoned = await copy.requestError("Couldn't move the moodboard.",
       new Response(JSON.stringify({ detail: 'That project is gone.' }), { status: 404 }));
-    expect(reasoned.message).toBe("Couldn't move the board. That project is gone.");
+    expect(reasoned.message).toBe("Couldn't move the moodboard. That project is gone.");
   });
 
   it('warns once with the status and raw detail, not on every identical failure, and again after a success', async () => {

@@ -10,7 +10,7 @@ import { takeWaitingSend } from './boardAdds';
 const KEY = 'nebula:moodboard-unsaved-drafts';
 const newKey = JSON.stringify(['moodboard', 'global', 'new']);
 const river = '/api/outputs/chat-uploads/river.png';
-const LINE = { heading: '', reason: 'Nebula couldn’t save the board because the server hit an error. Try again.' };
+const LINE = { heading: '', reason: 'Nebula couldn’t save the moodboard because the server hit an error. Try again.' };
 
 const card = (id: string) => [{ id: `c-${id}`, frameId: null, x: 0, y: 0, w: 480, h: 270, weight: 1, placedBy: 'person', placedAt: '' }];
 const img = (id: string, url: string) => ({ id, url, weight: 1, notes: '', privateNote: '', excluded: false, placements: card(id) });

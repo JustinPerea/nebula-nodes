@@ -198,7 +198,7 @@ export function AssetsPanel() {
       useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
       setRelistKey((value) => value + 1);
     } catch (err) {
-      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character."));
+      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character."));
     }
     setMovingId(null);
   };
@@ -353,7 +353,7 @@ export function AssetsPanel() {
                     { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length,
                       setAsideCount: setAsideCount(m.images), mode: m.mode })}
                   keptAdd="add-moodboard"
-                  move={<AssetMoveMenu noun="board" buttonClassName="assets-item__action"
+                  move={<AssetMoveMenu noun="moodboard" buttonClassName="assets-item__action"
                     choices={moveChoices(m.projectId, project)} busy={movingId === m.id}
                     onChoose={(choice) => { void moveAsset('moodboard', m.id, choice.target); }} />}
                 />
