@@ -169,18 +169,26 @@ export function unlockNames(spec: ProviderKeySpec): string[] {
   return [...new Set(ordered.map((node) => shortName(node.displayName, spec.brand)))];
 }
 
+/** "A", "A and B", "A, B and C": the names a sentence lists. */
+function listNames(names: readonly string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /**
- * The row's one-line summary of what the key opens up.
- * Connected rows lead with names ("GPT Image 2, Whisper +8"); rows still to
- * add lead with the count, since reach is what you're choosing on.
+ * What a row says a key opens up, from the names of its nodes: with three
+ * nodes or fewer, the names alone ("Nano Banana and Veo 3.1"); from four, the
+ * count and three names ("15 nodes, including Nano Banana, Veo 3.1 and Lyria 3").
  */
-export function unlockSummary(spec: ProviderKeySpec, style: 'connected' | 'add'): string {
+export function summarizeUnlocked(names: readonly string[]): string {
+  if (names.length <= 3) return listNames(names);
+  return `${names.length} nodes, including ${listNames(names.slice(0, 3))}`;
+}
+
+/** The row's one-line summary of what the key opens up (connected and add rows read the same). */
+export function unlockSummary(spec: ProviderKeySpec): string {
   const names = unlockNames(spec);
   if (spec.note && names.length <= 3) return spec.note;
-  if (names.length === 0) return spec.note ?? '';
-  if (names.length <= 3) return names.join(', ');
-  if (style === 'connected') return `${names.slice(0, 3).join(', ')} +${names.length - 3}`;
-  return `${names.length} nodes: ${names.slice(0, 3).join(', ')}…`;
+  return summarizeUnlocked(names) || (spec.note ?? '');
 }
 
 /** How many nodes the key opens up; the add list sorts by it. */

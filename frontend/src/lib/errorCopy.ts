@@ -190,7 +190,7 @@ const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
 const NOT_ANSWERING_CLAUSE = 'the server isn’t answering. Check that Nebula is running, then try again.';
 /** The same two reasons beside a button of their own (an action's line): the standing rule is
  * that a failure line shown with Try again ends in "Try again." (GM r23 on #208). */
-const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try again.';
+export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try again.';
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';

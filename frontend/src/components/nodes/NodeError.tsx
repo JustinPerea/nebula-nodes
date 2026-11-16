@@ -3,6 +3,7 @@ import { ErrorDetails } from '../failure/ErrorDetails';
 import { WAITING_CATEGORY, nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
 import type { NodeData } from '../../types';
 import { LineText } from '../LineText';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 interface NodeErrorProps {
   category?: string;
@@ -69,13 +70,13 @@ export function NodeError({ category, friendly, person, providerText, provider, 
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'errorMissingKey' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
+  data: Pick<NodeData, 'state' | 'definitionId' | 'keyStatus' | 'error' | 'errorMissingKey' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
       friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText}
-      provider={data.errorProvider} notStarted={data.errorNotStarted} missingKey={data.errorMissingKey} />
+      provider={data.errorProvider} notStarted={data.errorNotStarted} missingKey={drawsAsMissingKey(data)} />
   );
 }

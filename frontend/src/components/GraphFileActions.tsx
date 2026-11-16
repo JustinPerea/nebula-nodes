@@ -166,7 +166,7 @@ export function GraphFileActions() {
       if (loadWarnings.length > 0) notes.push(loadWarnings.map((line) => `• ${line}`).join('\n'));
       if (providerWarnings.length > 0) {
         notes.push(`Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
-          + '\nAdd the key in Settings > Providers, or pick another provider on the node.');
+          + '\nAdd the key in Settings, or pick another provider on the node.');
       }
       if (notes.length > 0) showNotice(`Imported.\n${notes.join('\n')}`, 'info');
     } catch (error) {

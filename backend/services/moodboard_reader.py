@@ -79,7 +79,7 @@ from handlers.google_gemini import (
     GEMINI_CHAT_THINKING_LEVELS,
 )
 from services.http_errors import HTTP_ERRORS, describe
-from services.moodboard_reader_keys import key_settings_path
+from services.moodboard_reader_keys import add_key_sentence
 from services.moodboard_reader_stream import (
     GeminiStreamParser,
     StreamOutcome,
@@ -313,9 +313,9 @@ def thinking_level(entry: Mapping[str, Any], level: str | None) -> str:
 def check_key(entry: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str:
     key = api_keys.get(str(entry["keyName"])) if api_keys else None
     if not key:
-        where = key_settings_path(entry["keyName"])
-        raise NoReaderKeyError(f"Reading with {entry['name']} needs {entry['keyName']}. Add it in {where}; "
-                               "nothing was sent and nothing was charged.")
+        add = add_key_sentence(entry["keyName"])
+        raise NoReaderKeyError(f"Reading with {entry['name']} needs {entry['keyName']}. {add} "
+                               "Nothing was sent and nothing was charged.")
     return str(key)
 
 

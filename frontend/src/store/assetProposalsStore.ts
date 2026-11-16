@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  AssetProposalError,
   acceptAssetProposal,
   rejectAssetProposal,
   type AssetProposalKind,
@@ -54,6 +55,8 @@ interface AssetProposalsState {
   reject: (id: string, reason?: string) => Promise<void>;
 }
 
+/** How the backend's own sentence for a refused accept opens (main._apply_asset_proposal). */
+const ACCEPT_REFUSED_LEAD = 'Nebula couldn’t accept this because ';
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const KINDS: ReadonlySet<string> = new Set<AssetProposalKind>(['project', 'moodboard', 'commons']);
 const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -185,7 +188,11 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
     store.getState().close({ proposalId: id, status: verb === 'accept' ? 'accepted' : 'rejected' });
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
-    const message = failureMessage(error, `Couldn't ${verb} the proposal.`);
+    // A 409 whose reason is already Nebula's whole sentence about this accept (the moodboard that didn't
+    // take the change, design r161) is the line itself: no "Couldn't accept the proposal." over it.
+    const message = verb === 'accept' && error instanceof AssetProposalError && error.status === 409
+      && error.reason.startsWith(ACCEPT_REFUSED_LEAD)
+      ? error.reason : failureMessage(error, `Couldn't ${verb} the proposal.`);
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
     // Review 17 LOW-1, through GM's #204 round 3 mechanism: the person gate's
     // refusal goes when the server promotes the tab, while it is still this error.

@@ -5,8 +5,10 @@
  * sides. The codepoints were right (U+201C opens, U+201D closes, in every line
  * of the table); the face was not the cause alone: Inter draws both as
  * slanted ticks, the system face draws them apart. So the codepoints are
- * pinned here, and every surface that says a held-reopen line draws it in the
- * one notice face (:root --notice-font, the system face the notices use).
+ * pinned here. Copy sweep, design r160 (answer 1): the studio notices stay Inter
+ * and the held-reopen line is the one that was off, so every surface that says
+ * one draws it in the UI face the state chip uses (var(--sr-ui), Inter) and the
+ * --notice-font token that held the system face is gone.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -58,9 +60,12 @@ function rule(text: string, selector: string): string {
   return match[2];
 }
 
-describe('GM r24 (d): every surface that says a held-reopen line draws it in the notice face', () => {
-  it('the face is one :root token, the system face', () => {
-    expect(rule(css('App.css'), ':root')).toMatch(/--notice-font:\s*-apple-system,/);
+describe('design r160: every surface that says a held-reopen line draws it in the UI face the state chip uses', () => {
+  it('the face is the --sr-ui token, Inter, and the system-face token is gone', () => {
+    expect(rule(css('styles/slava-restraint.css'), 'body.app-slava-restraint')).toMatch(/--sr-ui:\s*'Inter',/);
+    for (const file of ['App.css', 'styles/run-history.css', 'styles/project-home.css']) {
+      expect(css(file), file).not.toContain('--notice-font');
+    }
   });
   it.each([
     ['App.css', '.provider-recovery-status'],
@@ -68,6 +73,6 @@ describe('GM r24 (d): every surface that says a held-reopen line draws it in the
     ['styles/run-history.css', '.run-history__safeguards p.run-history__reopen-line'],
     ['styles/project-home.css', 'body.app-slava-restraint .project-home__card-lock'],
   ])('%s %s uses it', (file, selector) => {
-    expect(rule(css(file), selector)).toMatch(/font-family:\s*var\(--notice-font\)/);
+    expect(rule(css(file), selector)).toMatch(/font-family:\s*var\(--sr-ui\)/);
   });
 });

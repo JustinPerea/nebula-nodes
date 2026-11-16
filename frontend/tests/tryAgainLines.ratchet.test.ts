@@ -48,6 +48,7 @@ const ROWS: [where: string, line: string][] = [
   ['the Cinema upload row, the server is busy', uploadFailure('photo.png', new RequestFailedError('', 429)).line],
   ['the Cinema upload row, the server returned an error', uploadFailure('photo.png', new RequestFailedError('', 500)).line],
   ["the Cinema upload row, the server timed out", uploadFailure('photo.png', new RequestFailedError('', 408)).line],
+  ['the Cinema upload row, a gateway that did not respond', uploadFailure('photo.png', new RequestFailedError('', 503)).line],
   // GM 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
   ['Project home, an open that the server did not answer', retryBecauseLine(`Couldn't open the project. ${CONNECTION_LOST_COPY}`)],
   ['Project home, a save that got no response', retryBecauseLine(`Couldn't save the project. ${NO_RESPONSE_COPY}`)],

@@ -127,7 +127,7 @@ def test_the_nebula_key_choice(tmp_path, home):
     binary = fake_gemini(tmp_path, "0.25.2", OLD_HELP)
     write_settings(home, "oauth-personal")
     missing = check(binary, home, tmp_path, use_key=True, key_saved=False)
-    assert not missing.ready and "Settings > Providers > Google · Gemini API" in missing.note
+    assert not missing.ready and "Add a Gemini API key on the Providers tab first" in missing.note
     on = check(binary, home, tmp_path, use_key=True, key_saved=True)
     assert on.ready and on.auth == "gemini-api-key" and "bills" in on.note
 

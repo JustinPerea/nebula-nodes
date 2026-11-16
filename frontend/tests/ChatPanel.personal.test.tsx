@@ -355,7 +355,7 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
     render(<PersonalAgentsSection />);
     const option = await screen.findByTestId('personal-agent-key-option');
     expect(within(option).getByRole('switch', { name: 'Use my Gemini API key from Nebula' })).toBeDisabled();
-    expect(within(option).getByText(/Save a Gemini API key in Settings > Providers > Google · Gemini API to use this\./)).toBeInTheDocument();
+    expect(within(option).getByText(/Add a Gemini API key on the Providers tab to use your Gemini\./)).toBeInTheDocument();
   });
 
   it('shows the terms note and walks download, sign-in and sign-out through the backend', async () => {

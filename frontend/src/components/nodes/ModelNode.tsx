@@ -58,6 +58,7 @@ import { NodeWaitSwap } from './NodeWaitSwap';
 import { nodeWaitHeaderProps, useNodeWait } from '../../lib/nodeWaitHeader';
 import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 // Input cards that name the file they hold, under the picture for an image.
 const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
@@ -932,7 +933,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
           notStarted={nodeData.errorNotStarted}
-          missingKey={nodeData.errorMissingKey}
+          missingKey={drawsAsMissingKey(nodeData)}
           raw={nodeData.error}
         />
       )}

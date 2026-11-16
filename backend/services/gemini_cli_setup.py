@@ -67,7 +67,7 @@ AUTH_GATEWAY = "gateway"
 _VERSION_RE = re.compile(r"\b(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\b")
 _ENV_NAME_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\S?)")
 
-KEY_BILLING = ("Nebula gives the CLI your Gemini API key from Settings > Providers > Google · Gemini API. Google bills that key "
+KEY_BILLING = ("Nebula gives the CLI the Gemini API key saved on the Providers tab. Google bills that key "
                "for every turn this agent runs, at Gemini API prices. Off until you turn it on.")
 
 
@@ -371,7 +371,7 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
         if key_blocked:
             return Readiness(False, key_blocked, info.acp_flag, info.version, selected, key_blocked)
         if not nebula_key_saved:
-            return Readiness(False, "Save a Gemini API key in Settings > Providers > Google · Gemini API first, or turn off "
+            return Readiness(False, "Add a Gemini API key on the Providers tab first, or turn off "
                              "\u201cUse my Gemini API key from Nebula\u201d.", info.acp_flag, info.version, selected)
         return Readiness(True, f"{flag_note} Uses your Gemini API key from Nebula, and Google bills that key.",
                          info.acp_flag, info.version, AUTH_API_KEY)

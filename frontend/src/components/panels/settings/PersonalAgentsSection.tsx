@@ -64,7 +64,7 @@ function KeyOption({ agent, busy, switching, run, lock }: { agent: PersonalAgent
   const option = agent.keyOption;
   if (!option) return null;
   const blocked = option.blocked ?? (!option.keySaved && !option.enabled
-    ? 'Save a Gemini API key in Settings > Providers > Google · Gemini API to use this.' : null);
+    ? 'Add a Gemini API key on the Providers tab to use your Gemini.' : null);
   return (
     <span className="personal-agents__option" data-testid="personal-agent-key-option">
       <label className="personal-agents__option-label">

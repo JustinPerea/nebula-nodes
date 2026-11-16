@@ -235,6 +235,27 @@ def test_the_inverse_round_trips(client, root):
     assert _layout(redone["board"]) == _layout(done["board"])
 
 
+def test_an_add_then_an_undo_with_nothing_else_changed_undoes_cleanly(client, root):
+    """Copy sweep r5: the Studio adds with a client-made image id and a drop point; an Undo straight after
+    takes it off, with no "changed since" (the add's own record is what the undo expects)."""
+    write_board(root, fixture_board())
+    new_url = _image_url("studio-add.png", (24, 24), (10, 10, 200))
+    added = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-studio", "url": new_url}], "at": {"x": 300, "y": 80}}],
+                      headers=PERSON))
+    assert [image["id"] for image in added["board"]["images"]][-1] == "img-studio"
+    undone = _ok(_edit(client, added["undo"]["ops"], headers=PERSON))
+    assert [image["id"] for image in undone["board"]["images"]] == ["img-a", "img-b"]
+    assert undone["applied"][0]["skipped"] == []
+    # An image changed after the add is what makes the undo refuse, and it refuses by naming that image.
+    again = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-two", "url": new_url}]}], headers=PERSON))
+    _ok(_edit(client, [{"op": "weight", "image": 3, "value": 0.4}], headers=PERSON))
+    refused = _ok(_edit(client, again["undo"]["ops"], headers=PERSON))
+    assert [image["id"] for image in refused["board"]["images"]][-1] == "img-two"
+    assert refused["undo"] == {"ops": []}
+    assert refused["applied"][0]["skipped"][0]["number"] == 3
+    assert refused["applied"][0]["skipped"][0]["reason"] == "changed since"
+
+
 def test_frame_ops_round_trip_and_keep_their_cards(client, root, person):
     write_board(root, fixture_board())
     original = _layout(client.get(f"/api/moodboards/{BOARD_ID}").json())

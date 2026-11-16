@@ -522,7 +522,7 @@ class CLIGraph:
         # Build everything first and assign together, so a file that fails
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
-        nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        nodes = {n["id"]: _current_default_label(_normalized_scene(_migrate_retired(n))) for n in migrated}
         # A node with an id that isn't Nebula's (PR #199 round 17, review 15
         # HIGH-1): a state.json saved before the live graph refused them (an
         # open loaded a duplicated or pasted node's tab-local id). Its typing
@@ -579,6 +579,26 @@ def _normalized_scene(node: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False,
                                         reserved=shot_port_ids(node.get("outputs")))
     return node if normalized is params else {**node, "params": normalized}
+
+
+def _current_default_label(node: dict[str, Any]) -> dict[str, Any]:
+    """A node whose saved label is exactly the Title Case default its own
+    definition had before the copy sweep ("Remotion Composition") gets the
+    definition's current name. A label the person changed, and another
+    definition's former default, stay. The file is not rewritten here: the
+    next ordinary save stores the new label. (frontend/src/lib/formerDefaultTitles.ts
+    does the same on the canvas.)"""
+    from services.node_route import FORMER_DEFAULT_TITLES
+
+    label = node.get("label")
+    former = FORMER_DEFAULT_TITLES.get(str(node.get("definitionId", "")))
+    if not former or label != former:
+        return node
+    from services.node_registry import NodeRegistry
+
+    definition = NodeRegistry().get_all().get(str(node.get("definitionId")))
+    current = definition.get("displayName") if definition else None
+    return {**node, "label": current} if current and current != label else node
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

@@ -67,7 +67,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
           <li>It keeps its own shell, network and file access, its memory, and its own model keys and billing.</li>
           <li>
             Nebula only limits what it does through Nebula&rsquo;s tools. Those runs count against the shared budget
-            for agents outside Nebula&rsquo;s chats, set in Settings &gt; Preferences.
+            for agents outside Nebula&rsquo;s chats, set in Settings.
           </li>
           <li>Approval cards appear only for what the agent chooses to ask about. Nebula can&rsquo;t ask for it.</li>
           <li>

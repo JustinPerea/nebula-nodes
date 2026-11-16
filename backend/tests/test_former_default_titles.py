@@ -50,3 +50,38 @@ def test_a_video_edit_node_labelled_video_edit_is_not_reported_as_renamed():
     # The run's refusal quotes the node by its type, as for an unnamed node.
     node = GraphNode(id="n1", definition_id="video-edit", params={})
     assert _renamed(node, definition, lambda _id: node_route.node_name(definition, "Video Edit", "n1")) is None
+
+
+# Design r160 flag D: a saved canvas read from disk shows the new default name where it holds the old default.
+def _saved(tmp_path, nodes):
+    path = tmp_path / "saved.json"
+    path.write_text(json.dumps({"nodes": nodes, "edges": [], "counter": len(nodes)}))
+    return path
+
+
+def test_a_saved_former_default_label_loads_as_the_new_default_and_the_file_is_not_rewritten(tmp_path):
+    from services.cli_graph import CLIGraph
+
+    path = _saved(tmp_path, [
+        {"id": "n1", "definitionId": "remotion-node", "label": "Remotion Composition", "params": {}},
+        {"id": "n2", "definitionId": "remotion-node", "label": "My comp", "params": {}},
+        {"id": "n3", "definitionId": "camera-rig", "label": "Video Edit", "params": {}},
+        {"id": "n4", "definitionId": "video-edit", "label": "Video Edit", "params": {}},
+    ])
+    before = path.read_text()
+    graph = CLIGraph()
+    graph.load(path)
+    labels = {node_id: node.get("label") for node_id, node in graph.nodes.items()}
+    assert labels == {"n1": "Remotion composition", "n2": "My comp", "n3": "Video Edit", "n4": "Video edit"}
+    assert path.read_text() == before, "the load itself never rewrites the file"
+    graph.save(tmp_path / "next.json")
+    assert json.loads((tmp_path / "next.json").read_text())["nodes"][0]["label"] == "Remotion composition"
+
+
+@pytest.mark.parametrize("definition_id,old", sorted(FIXTURE.items()))
+def test_every_former_default_loads_as_its_definitions_name(definition_id, old, tmp_path):
+    from services.cli_graph import CLIGraph
+
+    graph = CLIGraph()
+    graph.load(_saved(tmp_path, [{"id": "n1", "definitionId": definition_id, "label": old, "params": {}}]))
+    assert graph.nodes["n1"]["label"] == NodeRegistry().get_all()[definition_id]["displayName"]

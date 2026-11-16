@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { NodeError, NodeRunError } from '../../src/components/nodes/NodeError';
 import { validationReadings } from '../../src/lib/validationCopy';
+import { PLAIN_MISSING_KEY_STOP_NODES, drawsAsMissingKey } from '../../src/lib/missingKeyTone';
 
 // Copy sweep item 12: a missing key is something to do, not a failure, so its run error draws neutral.
 describe('a missing-key run error draws neutral', () => {
@@ -48,5 +49,33 @@ describe('a refused run’s reading is a missing-key one only when every check o
     const readings = validationReadings([key, { ...input, nodeId: 'n2' }]).byNode;
     expect(readings.get('n1')?.errorMissingKey).toBe(true);
     expect(readings.get('n2')?.errorMissingKey).toBeUndefined();
+  });
+});
+
+// The four handlers that still raise a plain error for their own missing-key stop keep drawing neutral
+// from the card's key state, until the follow-up pull request retires PLAIN_MISSING_KEY_STOP_NODES.
+describe('the four plain missing-key stops draw neutral from the card’s key state', () => {
+  const run = (definitionId: string) => ({
+    state: 'error', error: 'WORLDLABS_API_KEY is required', errorPerson: 'Add a key in Settings.', definitionId, keyStatus: 'missing',
+  }) as const;
+
+  it('names exactly World Labs, Style reference, Idol and Veo', () => {
+    expect([...PLAIN_MISSING_KEY_STOP_NODES]).toEqual(['worldlabs-environment', 'style-reference', 'speridlabs-idol', 'veo-3']);
+  });
+
+  it.each(PLAIN_MISSING_KEY_STOP_NODES)('%s draws neutral with keyStatus missing and no errorMissingKey flag', (id) => {
+    const { container } = render(<NodeRunError data={run(id)} className="x__run-error" />);
+    expect(container.firstElementChild?.className).toContain('model-node__error--key');
+  });
+
+  it('draws any other id with keyStatus missing and no flag as a failure', () => {
+    const { container } = render(<NodeRunError data={run('gpt-image-2')} className="x__run-error" />);
+    expect(container.firstElementChild?.className).not.toContain('model-node__error--key');
+  });
+
+  it('keeps a key that is not missing a failure on those four, and the flag neutral anywhere', () => {
+    expect(drawsAsMissingKey({ definitionId: 'veo-3', keyStatus: 'ok' })).toBe(false);
+    expect(drawsAsMissingKey({ definitionId: 'veo-3' })).toBe(false);
+    expect(drawsAsMissingKey({ definitionId: 'gpt-image-2', errorMissingKey: true })).toBe(true);
   });
 });

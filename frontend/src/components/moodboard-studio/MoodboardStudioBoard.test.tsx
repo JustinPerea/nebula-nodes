@@ -351,9 +351,9 @@ describe('the cover (#123) in undo', () => {
 
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
-    expect(await screen.findByText('Image 1, the first image, is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
     expect(server.board.coverImageId).toBeNull();
-    expect(await screen.findByText(/Undid: Made image 2 the cover/)).toBeTruthy();
+    expect(await screen.findByText(/Undid “Made image 2 the cover”/)).toBeTruthy();
 
     press('z', { metaKey: true, shiftKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
@@ -370,14 +370,14 @@ describe('the cover (#123) in undo', () => {
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits).toHaveLength(2));
     expect(server.board.coverImageId).toBeNull();
-    expect(await screen.findByText('Image 1, the first image, is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
   });
 
   it('a pick, then that image removed before the pick is sent: two batches, and Undo brings the image back as the cover', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
     fireEvent.click(document.querySelectorAll<HTMLButtonElement>('.moodboard-tile__remove')[1]);
-    expect(await screen.findByText('Image 1, the first image, is the cover')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
     // Never one batch: the server refuses a batch that picks an image and takes it off.
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }], [{ op: 'remove', images: ['i2'] }]]));
     expect(server.board.images.map((img) => img.id)).toEqual(['i1']);
@@ -412,6 +412,28 @@ describe('the cover (#123) in undo', () => {
     expect(server.edits).toHaveLength(2);
     expect(server.board.coverImageId).toBe('i1');
     expect(screen.queryByRole('button', { name: 'Redo' })).toBeNull();
+  });
+});
+
+describe('an undo kept because an image changed after the step (design r161)', () => {
+  it('says it could not undo, not "Undid", names the image, and offers no Redo', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
+    // The server's restore finds image 2 changed since the step: it puts nothing back and offers no redo.
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      server.edits.push(ops);
+      return { board: clone(server.board), version: server.board.version,
+        applied: [{ index: 0, op: 'restore', status: 'unchanged', removed: [],
+          skipped: [{ part: 'image', image: 'i2', number: 2, reason: 'changed since', message: 'Image 2 changed since, left as is' }] }],
+        undo: { ops: [] } };
+    });
+    press('z', { metaKey: true });
+    const line = await screen.findByText('Nebula couldn’t undo “Made image 2 the cover” because image 2 changed after that.');
+    const toast = line.closest('[role="status"]') as HTMLElement;
+    expect(toast.textContent).not.toMatch(/Undid/);
+    expect(toast.textContent).not.toContain('left as is');
+    expect(within(toast).queryByRole('button', { name: 'Redo' })).toBeNull();
   });
 });
 

@@ -791,14 +791,15 @@ def test_a_missing_key_is_refused_before_any_request():
         MoodboardRead(board(1), ARGON, api_keys={}, targets=targets_of(board(1)))
 
 
-def test_a_missing_key_names_the_providers_section_it_is_saved_in():
+def test_a_missing_key_says_add_it_in_settings_without_a_path():
     with pytest.raises(reader.NoReaderKeyError) as caught:
         reader.check_key({"name": "Gemini 4 Argon", "keyName": "GOOGLE_API_KEY"}, {})
-    assert "Add it in Settings > Providers > Google · Gemini API;" in str(caught.value)
+    assert str(caught.value).endswith("Add a Gemini API key in Settings. Nothing was sent and nothing was charged.")
+    assert "Providers" not in str(caught.value) and ";" not in str(caught.value)
     assert "API keys" not in str(caught.value)
     with pytest.raises(reader.NoReaderKeyError) as other:
         reader.check_key({"name": "Other", "keyName": "OTHER_KEY"}, {})
-    assert "Add it in Settings > Providers;" in str(other.value)
+    assert "Add OTHER_KEY in Settings. Nothing was sent" in str(other.value)
 
 
 def test_the_clear_image_lines_start_with_image_and_the_number():

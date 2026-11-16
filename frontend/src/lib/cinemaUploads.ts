@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { uploadReference } from './uploadReference';
-import { FailureNotice, RequestFailedError, actionFailedLine, isNoAnswer, NO_ANSWER_STATUS } from './errorCopy';
+import { FailureNotice, NOT_ANSWERING_RETRY_CLAUSE, RequestFailedError, actionFailedLine } from './errorCopy';
 import { quoted } from './quoted';
 import { shownFileName } from './fileName';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../store/cinemaUploadStore';
@@ -19,12 +19,13 @@ const NO_IMAGE_REASON = 'The upload sent back no image.';
 /**
  * A failed upload's line for the Cinema row, in the because form with Nebula
  * the subject ("Nebula couldn’t upload “photo.png” because the server isn’t
- * answering. Try again."), built from errorCopy's action helper (actionFailedLine) so
- * its reasons are the app's. The row's Try again sits beside the line, so the
- * line ends in "Try again." (the standing rule); a reason where trying again
- * cannot help (a file over the size limit, a wrong type, a refusal because
- * you're signed out) names the fix instead, ends without it, and the row
- * offers no Try again (`retryable` false).
+ * answering. Try again."). The status reasons come from errorCopy's own clauses
+ * (actionFailedLine), so a status reads here as it does everywhere else. The
+ * row's Try again sits beside the line, so the line ends in "Try again." (the
+ * standing rule); a reason where trying again cannot help (a file over the size
+ * limit, a wrong type, a file the server rejects, a refusal because you're
+ * signed out) names the fix instead, ends without it, and the row offers no
+ * Try again (`retryable` false).
  */
 export function uploadFailure(name: string, error: unknown): { line: string; retryable: boolean } {
   const lead = `Nebula couldn’t upload ${quoted(shownFileName(name))} because`;
@@ -36,25 +37,20 @@ export function uploadFailure(name: string, error: unknown): { line: string; ret
     return { line: `${lead} it isn’t a PNG, JPEG, GIF or WebP image. Choose one of those.`, retryable: false };
   }
   if (turnedAway === NO_IMAGE_REASON) return { line: `${lead} the server sent back no image. Try again.`, retryable: true };
-  if (isNoAnswer(error)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
   const status = error instanceof RequestFailedError ? error.status : null;
-  // Whether trying again can work decides the line and the button (GM, copy sweep last round): a server
-  // that is down or timing out is "isn’t answering", a file the server rejects needs another file,
-  // 429 is busy, and any other refusal says it didn’t accept the file. The signed-out and
-  // person-lock refusals (401 and 403) keep the shared helper's lines.
-  if (status === 429) return { line: `${lead} the server is busy. Try again.`, retryable: true };
-  if (status !== null && (status >= 500 || status === 408 || status === NO_ANSWER_STATUS)) {
-    return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
-  }
+  // A file the server rejects needs another file (400, 415 and 422), and any other refusal says it didn’t
+  // accept the file; neither has a Try again, because trying the same file again cannot help.
   if (status === 400 || status === 415 || status === 422) {
     return { line: `${lead} the server couldn’t read it as an image. Choose another image.`, retryable: false };
   }
-  if (status === 401 || status === 403) {
-    const failed = actionFailedLine(`upload ${quoted(shownFileName(name))}`, error);
-    if (failed.line) return failed;
-  }
-  if (status === null && !(error instanceof FailureNotice)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
-  return { line: `${lead} the server didn’t accept it.`, retryable: false };
+  const refused = (status !== null && status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status))
+    || (status === null && error instanceof FailureNotice);
+  if (refused) return { line: `${lead} the server didn’t accept it.`, retryable: false };
+  // Everything else (no answer, a timeout, 429, a server error, signed out) reads as it does everywhere
+  // else in the app: errorCopy's clauses for a line beside a button (actionFailedLine), so a given status
+  // never has a row-specific wording here.
+  const failed = actionFailedLine(`upload ${quoted(shownFileName(name))}`, error, `${lead} ${NOT_ANSWERING_RETRY_CLAUSE}`);
+  return failed;
 }
 
 function hasTarget(nodeId: string, shotId?: string) {

@@ -77,6 +77,7 @@ import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
+import { keptUndoLine, undoneLine } from './undoLines';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
@@ -2012,7 +2013,7 @@ export function MoodboardStudioView() {
         });
         fieldSteps.release(top.id);
         undoStore.forget(key, top.id);
-        showUndone({ text: `Undid: ${top.label}` }, top.id);
+        showUndone({ text: undoneLine('undo', top.label) }, top.id);
         return;
       }
     }
@@ -2039,8 +2040,13 @@ export function MoodboardStudioView() {
       else undoStore.reapplied(key, step.id, next);
       store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
       if (!isCurrent()) return;
-      const line = { text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
-        action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
+      // An undo that put nothing back because an image changed after the step is not an "Undid": it says so,
+      // draws as every other undo toast does (neutral), and offers no Redo.
+      const kept = direction === 'undo' && !next.length
+        ? keptUndoLine(step.label, edited.applied.flatMap((entry) => (Array.isArray(entry.skipped) ? entry.skipped : []))) : null;
+      const line = kept ? { text: kept }
+        : { text: undoneLine(direction, step.label), skipped: skippedLines(edited),
+          action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
       if (direction === 'undo') showUndone(line, step.id);
       else showToast(line);
     } catch (err) {
@@ -3333,7 +3339,7 @@ export function MoodboardStudioView() {
                 </div>
                 {cover && (
                   <p className="moodboard-def__cover-caption" aria-live="polite">
-                    {cover.chosen ? `Image ${cover.number} is the cover` : 'Image 1, the first image, is the cover'}
+                    {cover.chosen ? `Image ${cover.number} is the cover` : 'Image 1 is the cover until you choose another.'}
                   </p>
                 )}
               </div>

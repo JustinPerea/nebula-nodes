@@ -125,9 +125,9 @@ describe('Moodboard Studio rail', () => {
     delete boards.p1b;
     await openStudio('g1', 'global', 'Global board');
     fireEvent.click(tab('Project'));
-    expect(await screen.findByText('No project moodboards. This board is Global.')).toBeTruthy();
+    expect(await screen.findByText('No project moodboards. This moodboard is Global.')).toBeTruthy();
     expect(emptyRailMessage('moodboard', 'global', { scope: 'project', here: true }))
-      .toBe('No global moodboards. This board is in this project.');
+      .toBe('No global moodboards. This moodboard is in this project.');
     expect(emptyRailMessage('moodboard', 'project', null)).toBe('No project moodboards yet.');
     expect(emptyRailMessage('moodboard', 'project', null, false)).toBe('Open a project to see its moodboards.');
   });
@@ -259,7 +259,7 @@ describe('Moodboard Studio and the open canvas project', () => {
     await openStudio('pa1', 'global', 'Shoot A board');
 
     await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
-    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    expect(await screen.findByText('This moodboard is in Shoot A.')).toBeTruthy();
     // Its own project's list isn't this one: no "lost board" reading.
     expect(api.fetchMoodboards).toHaveBeenCalledWith('project', 'p1');
 
@@ -274,7 +274,7 @@ describe('Moodboard Studio and the open canvas project', () => {
   it('says "another project" when that project is not known here', async () => {
     boards.px = board({ id: 'px', name: 'Far board', projectId: 'pX' });
     await openStudio('px', 'project', 'Far board');
-    expect(await screen.findByText('This board is in another project.')).toBeTruthy();
+    expect(await screen.findByText('This moodboard is in another project.')).toBeTruthy();
   });
 
   it('with no project open, the Project tab says to open one and New is off', async () => {
@@ -370,12 +370,12 @@ describe('Moodboard Studio Move', () => {
   it("moves another project's board to Global: the notice goes and the Global tab shows it", async () => {
     boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
     await openStudio('pa1', 'project', 'Shoot A board');
-    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    expect(await screen.findByText('This moodboard is in Shoot A.')).toBeTruthy();
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
 
     await waitFor(() => expect(tab('Global').getAttribute('aria-selected')).toBe('true'));
-    expect(screen.queryByText('This board is in Shoot A.')).toBeNull();
+    expect(screen.queryByText('This moodboard is in Shoot A.')).toBeNull();
     expect(useUIStore.getState().moodboardEditorScope).toBe('global');
     expect(api.moveStoredAsset).toHaveBeenCalledWith('moodboard', 'pa1', null);
   });
@@ -383,10 +383,10 @@ describe('Moodboard Studio Move', () => {
   it('moving it into the open project from another keeps the scope and key, and drops the notice', async () => {
     boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
     await openStudio('pa1', 'project', 'Shoot A board');
-    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    expect(await screen.findByText('This moodboard is in Shoot A.')).toBeTruthy();
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    await waitFor(() => expect(screen.queryByText('This board is in Shoot A.')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('This moodboard is in Shoot A.')).toBeNull());
     const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'project', 'pa1', 'p1')];
     expect((entry?.draft as { projectId?: string }).projectId).toBe('p1');
   });

@@ -20,7 +20,7 @@ import type { BoardFieldKey } from '../../lib/moodboardEdits';
 export type FieldStep = 'name' | 'notes' | 'mode' | 'strength' | 'direction' | 'avoid' | 'pinnedColors'
   | 'clashMode' | 'colorChoices' | 'sendNotes' | 'briefOverride';
 
-/** What the undo toast calls each field: "Undid: Direction". */
+/** What the undo toast calls each field: "Undid “Direction”". */
 export const FIELD_STEP_LABELS: Record<FieldStep, string> = {
   name: 'Name', notes: 'Moodboard notes', mode: 'Mode', strength: 'Strength', direction: 'Direction', avoid: 'Avoid',
   pinnedColors: 'Pinned colors', clashMode: 'Clash mode', colorChoices: 'Color choices',

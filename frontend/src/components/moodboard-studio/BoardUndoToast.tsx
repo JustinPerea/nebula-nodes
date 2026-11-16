@@ -11,7 +11,7 @@ const deadlines = new WeakMap<BoardToast, number>();
 
 export interface BoardToast {
   id: number;
-  /** What happened: "Removed #1", "Undid: Moved #3". */
+  /** What happened: "Removed #1", "Undid “Moved #3”". */
   text: string;
   /** Slices an undo left as they are: "#12 changed since, left as is". */
   skipped?: string[];

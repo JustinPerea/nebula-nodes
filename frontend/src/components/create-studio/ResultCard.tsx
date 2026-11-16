@@ -12,6 +12,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
 import { isFormerDefaultTitle } from '../../lib/formerDefaultTitles';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -147,7 +148,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           errorProviderText={node.data.errorProviderText}
           errorProvider={node.data.errorProvider}
           errorNotStarted={node.data.errorNotStarted}
-          errorMissingKey={node.data.errorMissingKey}
+          errorMissingKey={drawsAsMissingKey(node.data)}
         />
         {canZoom && (
           <button

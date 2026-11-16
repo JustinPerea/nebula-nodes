@@ -101,7 +101,9 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
   const unavailable = error ?? current?.error?.message ?? (
     current?.status === 'not_installed' ? `${provider.label} isn’t installed. Install it, then try again.`
       : current?.status === 'not_authenticated' ? `Sign in to ${provider.label}, then try again.`
-        : ready && !models.length ? 'No models are available from this CLI.' : 'Model catalog is unavailable.'
+        : // A retry can help when the CLI listed nothing for a moment (a cold start), so the line sits beside
+        // the Try again button and ends in it (design r160 answer 5).
+        ready && !models.length ? `Nebula couldn’t find any models in ${provider.label}. Try again.` : 'Model catalog is unavailable.'
   );
   const connection = current?.auth.mode === 'chatgpt' ? 'Connected to ChatGPT'
     : chatAuthUsesProviderBilling(current?.auth.mode ?? null)

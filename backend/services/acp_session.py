@@ -329,7 +329,7 @@ class AcpHostSession:
             except AcpError as exc:
                 self._give_up_if_closing()
                 if exc.code == AUTH_REQUIRED:
-                    where = (f"Sign in in Settings > Preferences > Personal agents > {self.display_name}"
+                    where = (f"Sign in in Settings"
                              if self.spec.auth_method else "Open a terminal, sign in to it there")
                     raise PersonalSessionError(
                         "auth_required", f"{self.display_name} needs you to sign in. {where}, then try again.",
@@ -381,7 +381,7 @@ class AcpHostSession:
         if not any(isinstance(m, dict) and m.get("id") == method for m in offered):
             raise PersonalSessionError("personal_agent_start_failed",
                                        f"{self.display_name} no longer offers the sign-in Nebula used.")
-        again = f"Sign in again in Settings > Preferences > Personal agents > {self.display_name}."
+        again = f"Sign in again in Settings."
         try:
             await self.conn.request("authenticate", {"methodId": method}, timeout=AUTH_TIMEOUT_S)
         except asyncio.TimeoutError as exc:

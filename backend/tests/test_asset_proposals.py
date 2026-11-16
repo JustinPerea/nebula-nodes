@@ -524,6 +524,72 @@ def test_a_board_proposal_is_invalidated_when_the_person_turns_sending_on_first(
     assert "on" in read["reason"]
 
 
+def _accept_refused(api, monkeypatch, body: dict, name: str = "Dusk board"):
+    """Accept a Send notes proposal whose moodboard update answers with a refusal carrying ``body``."""
+    from fastapi.responses import JSONResponse
+
+    board = _board(api)
+    view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
+    key = _key(api, view["id"])
+
+    async def refuse(*_args, **_kwargs):
+        return JSONResponse(body, status_code=409)
+
+    monkeypatch.setattr(api.main, "_update_moodboard", refuse)
+    return api.client.post(f"/api/asset-proposals/{view['id']}/accept",
+                           headers={**api.person, KEY: key, "X-Nebula-Tab": "tab-0123456789abcdef"})
+
+
+def test_a_refused_board_accept_with_no_readable_detail_says_what_is_known_and_what_to_do(api, monkeypatch):
+    """Design r161: the line names the moodboard, claims no cause, and tells the person to check and accept again."""
+    refused = _accept_refused(api, monkeypatch, {})
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "Nebula couldn\u2019t accept this because \u201cDusk board\u201d didn\u2019t take the change. "
+        "It may have changed somewhere else. Check it, then accept again.")
+
+
+def test_a_refused_board_accept_names_the_moodboard_the_way_other_lines_clean_a_name(api, monkeypatch):
+    board = _board(api)
+    api.client.put(f"/api/moodboards/{board['id']}", json={"name": "Dusk\x1b[31m\nboard"}, headers=api.person)
+    view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
+    from fastapi.responses import JSONResponse
+
+    async def refuse(*_args, **_kwargs):
+        return JSONResponse({}, status_code=409)
+
+    monkeypatch.setattr(api.main, "_update_moodboard", refuse)
+    refused = api.client.post(f"/api/asset-proposals/{view['id']}/accept",
+                              headers={**api.person, KEY: _key(api, view["id"]), "X-Nebula-Tab": "tab-0123456789abcdef"})
+    detail = refused.json()["detail"]
+    assert "\x1b" not in detail and "\n" not in detail and "\u201cDusk board\u201d" in detail, detail
+
+
+def test_a_refused_board_accept_with_a_readable_detail_keeps_that_detail(api, monkeypatch):
+    refused = _accept_refused(api, monkeypatch, {"detail": "Send notes to generators is already on for board \"Dusk board\"."})
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "This proposal no longer fits: Send notes to generators is already on for board \"Dusk board\".")
+
+
+def test_the_moodboard_stands_in_when_no_name_is_to_hand(api, monkeypatch):
+    from fastapi.responses import JSONResponse
+
+    board = _board(api)
+    view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
+    api.book.get(view["id"]).target_name = ""
+
+    async def refuse(*_args, **_kwargs):
+        return JSONResponse({}, status_code=409)
+
+    monkeypatch.setattr(api.main, "_update_moodboard", refuse)
+    refused = api.client.post(f"/api/asset-proposals/{view['id']}/accept",
+                              headers={**api.person, KEY: _key(api, view["id"]), "X-Nebula-Tab": "tab-0123456789abcdef"})
+    assert refused.json()["detail"] == (
+        "Nebula couldn\u2019t accept this because the moodboard didn\u2019t take the change. "
+        "It may have changed somewhere else. Check it, then accept again.")
+
+
 def test_the_cli_prints_an_asset_proposal_as_what_it_changes(api):
     from cli.formatter import format_proposal, format_proposal_outcome
 

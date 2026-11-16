@@ -73,7 +73,7 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
     assert refused and refused[0]["runId"] == body["runId"]
     # Error copy round 3e: the event also carries the card's line, beside the agents' text.
     assert {"nodeId": image, "portId": "", "message": "Missing API key: OPENAI_API_KEY",
-            "person": "Add an OpenAI API key in Settings to run this node."} in refused[0]["errors"]
+            "person": "Add an OpenAI API key in Settings to run this node.", "missingKey": True} in refused[0]["errors"]
     # Agents read it too, and the journal says whose run failed where.
     assert _node(client, image)["error"] == "Missing API key: OPENAI_API_KEY"
     failed = [e for e in main.canvas_events.read(after=0)["events"] if e["kind"] == "run.failed"]

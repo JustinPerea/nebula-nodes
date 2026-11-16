@@ -30,6 +30,7 @@ import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './DeferredOutputViews';
 import { canvasTitle } from '../../lib/directRoute';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -285,7 +286,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
           notStarted={nodeData.errorNotStarted}
-          missingKey={nodeData.errorMissingKey}
+          missingKey={drawsAsMissingKey(nodeData)}
           raw={nodeData.error}
         />
       )}

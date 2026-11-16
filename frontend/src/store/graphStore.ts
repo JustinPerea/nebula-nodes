@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, PortValue, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag, NodeState } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { withCurrentDefaultLabels } from '../lib/formerDefaultTitles';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { isCanvasSelectionDragging, onCanvasSelectionDragEnd } from '../lib/canvasSelectionDrag';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
@@ -8306,6 +8307,11 @@ function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
  * with the same id, nor overwrites the ID that node holds. `owner` is the
  * run history that says whose a record is (the store's, or the one being
  * loaded with these nodes). */
+/** A definition's current default name, for a loaded node's former default label. */
+function currentDefaultName(definitionId: string): string | undefined {
+  return NODE_DEFINITIONS[definitionId]?.displayName;
+}
+
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
@@ -15171,7 +15177,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Hydration/import must never release a paid-run owner. Only terminal
     // execution events or status reconciliation may unlock the Run control.
     set({
-      nodes: nodesWithProviderRecoveries(nodes, get().providerRecoveries),
+      nodes: withCurrentDefaultLabels(nodesWithProviderRecoveries(nodes, get().providerRecoveries), currentDefaultName),
       edges,
       undoStack: [],
       redoStack: [],
@@ -15359,7 +15365,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return node.data.keyStatus === keyStatus ? node : { ...node, data: { ...node.data, keyStatus } };
     });
     set({
-      nodes: withKeyStatus, edges, runHistory: persistedRunHistory(restoredHistory),
+      nodes: withCurrentDefaultLabels(withKeyStatus, currentDefaultName), edges, runHistory: persistedRunHistory(restoredHistory),
       ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
       // The clipboard stays, so nodes copy across projects; the bumped load
       // makes it paste with its copy-time params (see CanvasClipboard).
