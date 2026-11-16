@@ -257,7 +257,8 @@ async def test_missing_cli_and_rpc_error_return_sanitized_metadata(tmp_path, mon
     monkeypatch.setattr(chat_models.asyncio, "create_subprocess_exec", AsyncMock(side_effect=FileNotFoundError("private/path")))
     result = await chat_models.get_chat_models("claude", refresh=True)
     assert result["status"] == "not_installed" and "private" not in json.dumps(result)
-    assert result["error"]["message"] == "Claude isn\u2019t installed. Install it, then try again."
+    # The picker calls this CLI "Claude Code"; the line uses the same name.
+    assert result["error"]["message"] == "Claude Code isn\u2019t installed. Install it, then try again."
     codex = await chat_models.get_chat_models("codex", refresh=True)
     assert codex["error"]["message"] == "Codex isn\u2019t installed. Install it, then try again."
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))

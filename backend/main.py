@@ -13320,7 +13320,7 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
         # accept_asset_proposal closes it as invalidated when this raises, so the line says Nebula closed it.
         shown = clean_name(proposal.target_name, 60, ellipsis=True)
         named = f"\u201c{shown}\u201d" if shown else "the moodboard"
-        agent = personal_agents.in_sentence(clean_name(proposal.agent.name, 60))
+        agent = personal_agents.in_sentence(clean_name(proposal.agent.name, 60, fallback="the agent"))
         raise HTTPException(status_code=409, detail=detail or (
             f"Nebula couldn\u2019t accept this because {named} didn\u2019t take the change, and the proposal is closed. "
             f"{named[0].upper() + named[1:]} may have changed somewhere else. Ask {agent} to propose it again."))
