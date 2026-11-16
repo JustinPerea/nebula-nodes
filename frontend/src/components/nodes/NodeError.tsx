@@ -22,10 +22,12 @@ interface NodeErrorProps {
   /** Nebula refused the run before it started (node data `errorNotStarted`):
    * "Nebula couldn’t start the run." (GM, PR #203 r32). */
   notStarted?: boolean;
-  /** The run stopped for want of an API key (the card's own key state, node
-   * data `keyStatus` 'missing'): something to do, not a failure, so it draws
-   * in the neutral look of a waiting stop, with the error's own heading
-   * (copy sweep item 12). Colour only. */
+  /** The error itself is a missing-key one (node data `errorMissingKey`, which the
+   * backend sets where it builds the missing-key line): something to do, not a
+   * failure, so it draws in the neutral look of a waiting stop, with the error's
+   * own heading (copy sweep item 12). Colour only, and never the card's `keyStatus`:
+   * another failing check on a node whose key is missing stays a failure.
+   */
   missingKey?: boolean;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
@@ -67,13 +69,13 @@ export function NodeError({ category, friendly, person, providerText, provider, 
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'keyStatus' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
+  data: Pick<NodeData, 'state' | 'error' | 'errorMissingKey' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
       friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText}
-      provider={data.errorProvider} notStarted={data.errorNotStarted} missingKey={data.keyStatus === 'missing'} />
+      provider={data.errorProvider} notStarted={data.errorNotStarted} missingKey={data.errorMissingKey} />
   );
 }

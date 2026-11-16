@@ -156,7 +156,7 @@ describe('Moodboard card', () => {
     await screen.findByText('Good Machines');
     delete boards.gm;
     emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
-    expect(await screen.findByText('Board not found')).toBeVisible();
+    expect(await screen.findByText('Moodboard not found')).toBeVisible();
     expect(screen.getByText('#gm was deleted for good or never existed')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Open Moodboard' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
@@ -164,7 +164,7 @@ describe('Moodboard card', () => {
 
   it('asks for a board when none is chosen', () => {
     card(MoodboardNode, {});
-    expect(screen.getByText('No board chosen')).toBeVisible();
+    expect(screen.getByText('No moodboard chosen')).toBeVisible();
     expect(screen.getByText('Choose one in the Inspector')).toBeVisible();
     expect(net.apiFetch).not.toHaveBeenCalled();
   });
@@ -253,6 +253,6 @@ describe('Inspector', () => {
     useUIStore.setState({ selectedNodeId: 'n2' });
     render(<Inspector embedded />);
     expect(await screen.findByRole('option', { name: 'Not found (#gone)' })).toBeInTheDocument();
-    expect(screen.getByText('This board was deleted for good or never existed. Pick another.')).toBeVisible();
+    expect(screen.getByText('This moodboard was deleted for good or never existed. Pick another.')).toBeVisible();
   });
 });

@@ -2341,8 +2341,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'moodboard', label: 'Moodboard', type: 'moodboard', required: true },
       // Board notes reach generators only on opt-in (gap 18): "board" follows
       // the board's own switch. Opening it is the person's call (agents propose).
-      { key: 'send_notes', label: 'Board notes to generators', type: 'enum', required: false, default: 'board', options: [
-        { label: 'As the board says', value: 'board' },
+      { key: 'send_notes', label: 'Moodboard notes to generators', type: 'enum', required: false, default: 'board', options: [
+        { label: 'As the moodboard says', value: 'board' },
         { label: 'Send', value: 'yes' },
         { label: "Don't send", value: 'no' },
       ] },
@@ -4515,7 +4515,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'Idol',
     // GM, PR #203 r12 item 4, word for word.
     description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. '
-      + 'Add your Hugging Face token to use your own allowance.',
+      + 'Add a Hugging Face token to use your own allowance.',
     category: '3d-gen',
     apiProvider: 'speridlabs',
     apiEndpoint: 'speridlabs/idol',

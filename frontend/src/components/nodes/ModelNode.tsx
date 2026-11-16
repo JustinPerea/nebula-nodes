@@ -932,7 +932,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
           notStarted={nodeData.errorNotStarted}
-          missingKey={nodeData.keyStatus === 'missing'}
+          missingKey={nodeData.errorMissingKey}
           raw={nodeData.error}
         />
       )}

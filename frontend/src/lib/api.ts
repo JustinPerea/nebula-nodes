@@ -19,6 +19,8 @@ export interface ExecutionValidationError {
   message: string;
   /** The card's line (error copy round 3e); null/absent: GM's general line, `message` behind Details. */
   person?: string | null;
+  /** This check is a missing key (or a Krea sign-in): the card draws its line neutral. */
+  missingKey?: boolean;
 }
 
 export interface ExecutionStartResult {
@@ -706,7 +708,7 @@ async function trashedFailure(response: Response, kind: 'moodboard' | 'character
     if (body?.code === 'in_trash') {
       const by = body.trashed?.deletedBy;
       const who = !by || by.kind === 'person' ? '' : ` by ${actorLabel(by)}`;
-      const noun = kind === 'moodboard' ? 'board' : 'Character';
+      const noun = kind === 'moodboard' ? 'moodboard' : 'Character';
       return requestError(heading, response, { detail: body, reason:
         `This ${noun} was moved to Recently deleted${who}. Restore it from the list on the left, then Retry to save your changes.` });
     }

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { uploadReference } from './uploadReference';
-import { FailureNotice, RequestFailedError, actionFailedLine, isNoAnswer } from './errorCopy';
+import { FailureNotice, RequestFailedError, actionFailedLine, isNoAnswer, NO_ANSWER_STATUS } from './errorCopy';
 import { quoted } from './quoted';
 import { shownFileName } from './fileName';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../store/cinemaUploadStore';
@@ -37,8 +37,24 @@ export function uploadFailure(name: string, error: unknown): { line: string; ret
   }
   if (turnedAway === NO_IMAGE_REASON) return { line: `${lead} the server sent back no image. Try again.`, retryable: true };
   if (isNoAnswer(error)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
-  const failed = actionFailedLine(`upload ${quoted(shownFileName(name))}`, error);
-  return failed.line ? failed : { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
+  const status = error instanceof RequestFailedError ? error.status : null;
+  // Whether trying again can work decides the line and the button (GM, copy sweep last round): a server
+  // that is down or timing out is "isn’t answering", a file the server rejects needs another file,
+  // 429 is busy, and any other refusal says it didn’t accept the file. The signed-out and
+  // person-lock refusals (401 and 403) keep the shared helper's lines.
+  if (status === 429) return { line: `${lead} the server is busy. Try again.`, retryable: true };
+  if (status !== null && (status >= 500 || status === 408 || status === NO_ANSWER_STATUS)) {
+    return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
+  }
+  if (status === 400 || status === 415 || status === 422) {
+    return { line: `${lead} the server couldn’t read it as an image. Choose another image.`, retryable: false };
+  }
+  if (status === 401 || status === 403) {
+    const failed = actionFailedLine(`upload ${quoted(shownFileName(name))}`, error);
+    if (failed.line) return failed;
+  }
+  if (status === null && !(error instanceof FailureNotice)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
+  return { line: `${lead} the server didn’t accept it.`, retryable: false };
 }
 
 function hasTarget(nodeId: string, shotId?: string) {

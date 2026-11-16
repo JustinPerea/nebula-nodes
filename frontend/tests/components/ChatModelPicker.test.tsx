@@ -129,7 +129,7 @@ describe('ChatModelPicker', () => {
     expect(dialog).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('status')).toHaveTextContent('Loading models…');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Retry model discovery' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again loading models' })).not.toBeInTheDocument();
     expect(state.onRetry).not.toHaveBeenCalled();
   });
 
@@ -143,7 +143,7 @@ describe('ChatModelPicker', () => {
     open();
     expect(screen.getByRole('status')).toHaveTextContent(message);
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry model discovery' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again loading models' }));
     expect(state.onRetry).toHaveBeenCalledOnce();
     expect(state.onModelChange).not.toHaveBeenCalled();
   });

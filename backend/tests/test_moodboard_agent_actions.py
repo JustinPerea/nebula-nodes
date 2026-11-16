@@ -174,15 +174,15 @@ def test_describe_change_is_the_journal_summary_with_the_fields_it_leaves_out():
     both["images"] = aside["images"]
     assert _describe(before, both) == "Set aside image 1 on “Dusk” and changed “Direction”"
     # The board's notes are a field, named as the board.fields event names them (Q91).
-    assert _describe(before, _board(notes="calm")) == "Changed “Board notes” on “Dusk”"
+    assert _describe(before, _board(notes="calm")) == "Changed “Moodboard notes” on “Dusk”"
     # ...and named after the journal's summary when it is about something else.
     added_and_noted = _board(notes="calm")
     added_and_noted["images"] = added["images"]
-    assert _describe(before, added_and_noted) == "Added image 3 to “Dusk” and changed “Board notes”"
+    assert _describe(before, added_and_noted) == "Added image 3 to “Dusk” and changed “Moodboard notes”"
     noted_image = _board(notes="calm")
     noted_image["images"] = [{**before["images"][0], "notes": "warm"}, before["images"][1]]
     assert _describe(before, noted_image) == (
-        "Changed the notes on image 1 on “Dusk” and changed “Board notes”")
+        "Changed the notes on image 1 on “Dusk” and changed “Moodboard notes”")
 
 
 def test_every_line_names_the_board_as_the_journal_does():

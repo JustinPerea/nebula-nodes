@@ -4905,13 +4905,13 @@
       },
       {
         "key": "send_notes",
-        "label": "Board notes to generators",
+        "label": "Moodboard notes to generators",
         "type": "enum",
         "required": false,
         "default": "board",
         "options": [
           {
-            "label": "As the board says",
+            "label": "As the moodboard says",
             "value": "board"
           },
           {
@@ -24059,7 +24059,7 @@
   "speridlabs-idol": {
     "id": "speridlabs-idol",
     "displayName": "Idol",
-    "description": "Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. Add your Hugging Face token to use your own allowance.",
+    "description": "Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. Add a Hugging Face token to use your own allowance.",
     "category": "3d-gen",
     "apiProvider": "speridlabs",
     "apiEndpoint": "speridlabs/idol",

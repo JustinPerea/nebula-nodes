@@ -10,6 +10,7 @@ import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasP
 import { useUIStore } from '../../store/uiStore';
 import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
 import '../../styles/canvasProposals.css';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 
 const ENTER_FROM = 0.92;
 const GHOST_PARAMS = 3;
@@ -275,7 +276,7 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
           proposalId={view.id}
           node={(liveCost.get(node.ref) ?? node.cost) === node.cost ? node : { ...node, cost: liveCost.get(node.ref)! }}
           exact={entry.values?.nodes[node.ref]}
-          agentName={view.agent.name}
+          agentName={agentNameInSentence(view.agent.name)}
           warning={ghostKeyWarning(NODE_DEFINITIONS[node.definitionId], entry.values?.nodes[node.ref] ?? node.params, cache)
             ?? notReadyWarning(notReady.find((row) => row.nodeId === null && row.ref === node.ref))}
           register={(ref, el) => {

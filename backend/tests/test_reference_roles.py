@@ -706,8 +706,8 @@ for _node_id in (
 # Moodboard node gains `send_notes` after `moodboard` ("board" follows the
 # board's own switch); nothing else about the node changes.
 APPROVED_INSERTED_PARAMS["nebula-moodboard"] = [("moodboard", {
-    "key": "send_notes", "label": "Board notes to generators", "type": "enum", "required": False,
-    "default": "board", "options": [{"label": "As the board says", "value": "board"},
+    "key": "send_notes", "label": "Moodboard notes to generators", "type": "enum", "required": False,
+    "default": "board", "options": [{"label": "As the moodboard says", "value": "board"},
                                     {"label": "Send", "value": "yes"}, {"label": "Don't send", "value": "no"}],
 })]
 

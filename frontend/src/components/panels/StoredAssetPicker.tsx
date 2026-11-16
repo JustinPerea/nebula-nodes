@@ -23,7 +23,7 @@ interface StoredAssetPickerProps {
   readOnly?: boolean;
 }
 
-const NOUN: Record<StoredAssetKind, string> = { moodboard: 'board', character: 'character' };
+const NOUN: Record<StoredAssetKind, string> = { moodboard: 'moodboard', character: 'character' };
 
 /** Global and the open canvas project's saved assets, by name. With no
  *  project open (or a scope that can't be read) that list is left out, not an

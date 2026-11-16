@@ -463,7 +463,7 @@ def test_the_moodboard_node_has_the_send_notes_param():
     param = next(p for p in nodes["nebula-moodboard"]["params"] if p["key"] == "send_notes")
     assert param["type"] == "enum" and param["default"] == "board"
     assert [o["value"] for o in param["options"]] == ["board", "yes", "no"]
-    assert param["label"] == "Board notes to generators"
+    assert param["label"] == "Moodboard notes to generators"
 
 
 # -- CLI and MCP ---------------------------------------------------------------------

@@ -30,7 +30,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(IDOL.inputPorts.map((port) => [port.id, port.dataType, port.required])).toEqual([['image', 'Image', true]]);
     // GM r12 item 4, word for word.
     expect(IDOL.description).toBe('Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs '
-      + 'free on Hugging Face. Add your Hugging Face token to use your own allowance.');
+      + 'free on Hugging Face. Add a Hugging Face token to use your own allowance.');
   });
 
   it('routes like the backend: anonymous without a token, on the token with one, never locked', () => {

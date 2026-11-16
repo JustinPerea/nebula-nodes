@@ -21,6 +21,8 @@ export interface ValidationReading {
   /** The pre-call check refused the run: the card's heading is "Nebula
    * couldn’t start the run." (GM, PR #203 r32; node_errors.record_validation). */
   errorNotStarted: true;
+  /** Every one of its checks is a missing key: the card draws the line neutral (ValidationErrorDetail.missing_key). */
+  errorMissingKey?: true;
 }
 
 /** A node in the run with nothing wrong of its own, while another has. */
@@ -29,7 +31,7 @@ export const OTHER_NODE_LINE = 'Nothing ran. Another node in this run needs a fi
 // Round 3f, GM's rule 8: "run again" → "then run the node again."
 export const NOTHING_RAN_LINE = 'Nothing ran. Check the inputs and API keys, then run the node again.';
 
-function reading(errors: Pick<ExecutionValidationError, 'message' | 'person'>[]): ValidationReading {
+function reading(errors: Pick<ExecutionValidationError, 'message' | 'person' | 'missingKey'>[]): ValidationReading {
   const messages: string[] = [];
   const lines: string[] = [];
   let unlined = false;
@@ -41,8 +43,10 @@ function reading(errors: Pick<ExecutionValidationError, 'message' | 'person'>[])
     else if (!lines.includes(line)) lines.push(line);
   }
   const error = messages.join('; ');
-  return unlined || !lines.length ? { error, errorCategory: 'unknown', errorNotStarted: true }
-    : { error, errorPerson: lines.join(' '), errorNotStarted: true };
+  // Neutral only when every check on the node is a missing key: a second failing check is a failure.
+  const missingKey = errors.length > 0 && errors.every((item) => item.missingKey === true) ? { errorMissingKey: true as const } : {};
+  return unlined || !lines.length ? { error, errorCategory: 'unknown', errorNotStarted: true, ...missingKey }
+    : { error, errorPerson: lines.join(' '), errorNotStarted: true, ...missingKey };
 }
 
 /** A Cinema shot whose run the check refused, with no node named. */

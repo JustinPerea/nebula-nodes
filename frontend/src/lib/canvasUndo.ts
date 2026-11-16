@@ -27,6 +27,7 @@ import type { RemovalRecord } from './deleteNotice';
 import { cleanPending, type PendingFlag } from './pendingNodes';
 import { canonicalBackendAssetUrls } from './backend';
 import { keepRenderingShots, settledParams } from './cinemaScene';
+import { agentNameInSentence } from './personalAgentName';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -782,7 +783,7 @@ export function editArrivedText(edit: ForeignEdit): string | null {
  * sentence, so it ends with its period (GM #198 r24 answer 2). */
 export function undoNoticeText(action: 'undo' | 'redo', edit: ForeignEdit): string {
   const verb = action === 'undo' ? 'Undid' : 'Redid';
-  if (edit.source === 'agent' && edit.agentName) return `${verb} ${edit.agentName}’s edit.`;
+  if (edit.source === 'agent' && edit.agentName) return `${verb} ${agentNameInSentence(edit.agentName)}’s edit.`;
   if (edit.source === 'window') return `${verb} an edit from another window.`;
   return `${verb} an edit made outside Nebula.`;
 }
@@ -897,7 +898,7 @@ export function diffCanvas(
 /** Runtime fields a node keeps from the live canvas when an undo restores its recipe. */
 export const RUNTIME_FIELDS = [
   'outputs', 'state', 'progress', 'runStartedAt', 'batchOutputs', 'batchVariants', 'batchRunId',
-  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorNotStarted', 'skipReason',
+  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorNotStarted', 'errorMissingKey', 'skipReason',
   'skipGateNodeId', 'withheldPorts', 'keyStatus', 'streamingText', 'streamingPartials', 'streamingSvg',
 ] as const;
 

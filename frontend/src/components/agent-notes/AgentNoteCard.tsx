@@ -6,6 +6,7 @@ import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { AuthorDot, NoteButtons, NoteText, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
 import { heldVerbFor } from './heldLock';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 
 interface HoldHandlers {
   onMouseEnter: () => void;
@@ -58,7 +59,7 @@ export function AgentNoteCard({
       data-outcome={note.run?.outcome}
       data-leaving={leaving ? 'true' : undefined}
       role="status"
-      aria-label={`Update from ${note.author.name}`}
+      aria-label={`Update from ${agentNameInSentence(note.author.name)}`}
       style={{ '--an-author': note.author.color } as CSSProperties}
       {...hold}
     >

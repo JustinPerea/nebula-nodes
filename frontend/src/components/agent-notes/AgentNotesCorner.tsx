@@ -1125,7 +1125,7 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
     const numbers = new Map((order ? order.split('\n') : []).map((id, index) => [id, index + 1] as const));
     const numberFor = (ref: string) => numbers.get(ref) ?? null;
     return {
-      keptWith: 'kept with this board',
+      keptWith: 'kept with this moodboard',
       numberFor,
       // The canvas's outline layer draws nodes; a board's refs are images.
       outlines: false,
@@ -1134,7 +1134,7 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
         const onBoard = note.refs.filter((ref) => numbers.has(ref));
         if (!boardId) return;
         if (onBoard.length === 0) {
-          useAgentNotesStore.setState({ error: 'What this update names is no longer on the board.' });
+          useAgentNotesStore.setState({ error: 'What this update names is no longer on the moodboard.' });
           return;
         }
         useBoardCanvasStore.getState().requestShow(boardId, onBoard);
@@ -1159,7 +1159,7 @@ const NO_IMAGES: string[] = [];
  * screen's header keeps for it.
  *
  * In Moodboard Studio on a saved board (Justin's Q113 c, 2026-10-21: "Two
- * sections in one list: "This board" first, then the project. One chip with
+ * sections in one list: "This moodboard" first, then the project. One chip with
  * one count (both added), opening it reads both, and an empty board section
  * is hidden.") the board's own Updates come first. Only there: every other
  * screen keeps the project's list alone. A board with Updates shows its list
@@ -1223,7 +1223,7 @@ export function AppAgentNotes() {
   const sections = useMemo(() => {
     const result: AgentNotesCornerSection[] = [];
     if (boardShown && boardId) {
-      result.push({ id: 'board', title: 'This board', surface: { kind: 'board', boardId },
+      result.push({ id: 'board', title: 'This moodboard', surface: { kind: 'board', boardId },
         listKey: surfaceKey({ kind: 'board', boardId }), list: boardList, notes: boardList.notes, adapter: boardAdapter });
     }
     if (projectShown) {

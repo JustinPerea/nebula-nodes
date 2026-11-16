@@ -119,7 +119,7 @@ def test_the_boards_notes_are_a_field_not_an_image_note(client, root, journal, p
     _put(client, PERSON, notes=NOTES)
     events = _board_events(journal)
     assert [(event["kind"], event["data"].get("fields")) for event in events] == [("board.fields", ["notes"])]
-    assert events[0]["summary"] == "changed “Board notes” on “Placed”"
+    assert events[0]["summary"] == "changed “Moodboard notes” on “Placed”"
     _assert_no_values(journal)
 
 

@@ -50,7 +50,7 @@ export function characterName(entry: StoredAssetEntry | null): string {
 /** A Moodboard card's name line: the board's own, else by status ('empty' is no board chosen). */
 export function moodboardName(boardId: string, entry: StoredAssetEntry | null): string {
   const status = boardId ? entry?.status ?? 'loading' : 'empty';
-  return entry?.summary?.name.trim() || (status === 'empty' ? 'No board chosen' : status === 'missing' ? 'Board not found' : 'Moodboard');
+  return entry?.summary?.name.trim() || (status === 'empty' ? 'No moodboard chosen' : status === 'missing' ? 'Moodboard not found' : 'Moodboard');
 }
 
 /** A Batch card's name: its display name, else "Batch". */

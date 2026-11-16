@@ -62,6 +62,38 @@ def test_errors_survive_a_restart_and_stay_with_their_project(tmp_path):
     assert NodeErrors(path).projects() == []
 
 
+def test_only_a_missing_key_error_is_kept_as_one_across_a_restart(tmp_path):
+    """The card draws a run error neutral only when the error itself is a missing key (copy sweep):
+    the kind is stored with the node's error, so a reload draws it the same, and an unrelated
+    failing check on a node whose key is missing stays a failure."""
+    from models.events import ValidationErrorDetail
+
+    path = tmp_path / "node-errors.json"
+    errors = NodeErrors(path)
+    errors.use_project("p1")
+    errors.observe(ErrorEvent(node_id="n1", error="OPENAI_API_KEY is required", missing_credential=True,
+                              person="Add an OpenAI API key in Settings to run this node."))
+    errors.observe(ErrorEvent(node_id="n2", error="HTTP 500", person="OpenAI had a problem."))
+    errors.record_validation([
+        ValidationErrorDetail(node_id="n3", port_id="", message=MISSING, person="Add an OpenAI API key in Settings to run this node.")
+        .marked("reason").keyed("an OpenAI API key"),
+        ValidationErrorDetail(node_id="n4", port_id="", message="Missing input: prompt", person="Connect a prompt to this node."),
+        # n5 has a missing key and a second failing check: a failure, not a thing to do.
+        ValidationErrorDetail(node_id="n5", port_id="", message=MISSING, person="Add an OpenAI API key in Settings to run this node.")
+        .marked("reason").keyed("an OpenAI API key"),
+        ValidationErrorDetail(node_id="n5", port_id="prompt", message="Missing input: prompt", person="Connect a prompt to this node."),
+    ])
+    restarted = NodeErrors(path)
+    restarted.use_project("p1")
+    assert restarted.card("n1")["errorMissingKey"] is True
+    assert "errorMissingKey" not in restarted.card("n2")
+    assert restarted.card("n3")["errorMissingKey"] is True
+    assert "errorMissingKey" not in restarted.card("n4")
+    assert "errorMissingKey" not in restarted.card("n5")
+    # Agents read the same text as before.
+    assert restarted.get("n1") == {"error": "OPENAI_API_KEY is required"}
+
+
 def test_an_unreadable_file_starts_empty_and_a_failed_write_never_breaks_a_run(tmp_path):
     path = tmp_path / "node-errors.json"
     path.write_text("{not json", encoding="utf-8")

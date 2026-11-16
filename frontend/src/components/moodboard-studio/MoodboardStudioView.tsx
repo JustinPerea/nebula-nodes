@@ -1084,10 +1084,10 @@ const STEERING_FIELDS = ['mode', 'strength', 'notes'] as const;
 
 /** A step's name for the undo toast: what changed on which reference. */
 function imagePatchLabel(patch: Partial<MoodboardImage>, number: number): string {
-  if ('excluded' in patch) return patch.excluded ? `Set aside #${number}` : `Used #${number} again`;
-  if ('weight' in patch) return `Weight of #${number}`;
-  if ('privateNote' in patch) return `Private note on #${number}`;
-  return `Note on #${number}`;
+  if ('excluded' in patch) return patch.excluded ? `Set aside image ${number}` : `Used image ${number} again`;
+  if ('weight' in patch) return `Changed the weight of image ${number}`;
+  if ('privateNote' in patch) return `Changed the private note on image ${number}`;
+  return `Changed the note on image ${number}`;
 }
 
 /** What an undo left as it was, in the server's words (contract 07, 1.12),
@@ -1797,7 +1797,7 @@ export function MoodboardStudioView() {
         if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, seen: target.seen, band: Boolean(target.band),
           size: [placed[index].holder.width, placed[index].holder.height] }));
         const count = images.length;
-        const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
+        const label = placed.length === 1 ? `Added image ${count + 1}` : `Added ${placed.length} references`;
         // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
         const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
         // Each uploaded image takes its spot: its placeholder stays under it
@@ -1932,7 +1932,7 @@ export function MoodboardStudioView() {
   const removeImages = (ids: string[]) => {
     if (ids.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
-    const label = ids.length === 1 ? `Removed #${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
+    const label = ids.length === 1 ? `Removed image ${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
     const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
     if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } }, undoOf: stepId });
   };
@@ -1943,7 +1943,7 @@ export function MoodboardStudioView() {
     if (moves.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
     const owner = images.findIndex((image) => image.placements?.some((card) => card.id === moves[0].placement));
-    const label = moves.length === 1 ? `Moved #${owner + 1}` : `Moved ${moves.length} references`;
+    const label = moves.length === 1 ? `Moved image ${owner + 1}` : `Moved ${moves.length} references`;
     commitOps(moves.map(({ placement, x, y }) => ({ op: 'place', placement, x, y })), label, { now: true });
   };
 
@@ -2234,7 +2234,7 @@ export function MoodboardStudioView() {
    *  change: its batch's `undo` restores the cover field. Picks made before
    *  the step is sent join it, so one undo goes back to the cover before them. */
   const setCover = (id: string | null) => {
-    const label = id ? `Made #${numberOf(draftNow()?.images ?? draft.images, id)} the cover` : 'Cover back to #1';
+    const label = id ? `Made image ${numberOf(draftNow()?.images ?? draft.images, id)} the cover` : 'Put the cover back on image 1';
     commitOps([{ op: 'cover', image: id }], label, { joinKey: 'cover' });
   };
 
@@ -3333,7 +3333,7 @@ export function MoodboardStudioView() {
                 </div>
                 {cover && (
                   <p className="moodboard-def__cover-caption" aria-live="polite">
-                    {cover.chosen ? `Cover: #${cover.number}` : 'Cover: #1, the first image'}
+                    {cover.chosen ? `Image ${cover.number} is the cover` : 'Image 1, the first image, is the cover'}
                   </p>
                 )}
               </div>
@@ -3370,7 +3370,7 @@ function ViewSwitch({ view, onChange }: { view: MoodboardView; onChange: (view: 
         <button key={option.id} ref={(node) => { refs.current[option.id] = node; }} type="button" role="radio"
           aria-checked={view === option.id} tabIndex={view === option.id ? 0 : -1}
           className="moodboard-view-switch__option"
-          title={option.id === 'board' ? 'The board as a canvas (preview)' : 'The board as a list'}
+          title={option.id === 'board' ? 'The moodboard as a canvas, in preview' : 'The moodboard as a list'}
           onClick={() => onChange(option.id)}
           onKeyDown={(event) => {
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;

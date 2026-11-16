@@ -1,0 +1,271 @@
+# Copy sweep: one wording for names, Settings, missing keys and Try again (2026-11-16)
+
+Branch copy/sweep-2026-11, from main 2cb8183d. The pull request changes wording, plus the two small pieces of behaviour the wording needed (the missing-key kind on the wire, and which Cinema upload failures offer Try again). It touches no high-tier file. The high-tier wording (spend refusals, four handlers' own missing-key lines, the Ideogram Character port label) is a separate pull request.
+
+## Rules the strings now follow
+
+- **Names:** card, node, port and setting names are in sentence case ("Remotion composition", "Input image"). A setting with no written label gets one from its key, split into words (`services/setting_labels.py`).
+- **Missing keys:** "Add an OpenAI API key in Settings to run this node." A set-up failure reads "Nebula couldn’t set up “X” because it needs an OpenAI API key. Add one in Settings." The badge reads "Needs an OpenAI API key". Hugging Face and Replicate keep "token".
+- **Failures beside a Try again button** end in "Try again." and take the form "Nebula couldn’t ‹do the thing› because ‹reason›. Try again." A failure that trying again cannot fix names the fix and has no Try again.
+- **Moodboard:** the thing is a "moodboard" in every sentence; "Board" stays only as the name of the Studio's canvas view. Inside a sentence "#3" is "image 3"; badges, chips and buttons keep "#3".
+- **Personal agents** are "Your Claude", "Your Codex", "Your Gemini" and "Your Antigravity" at the start of a line and "your Claude" inside a sentence (`personal_agents.in_sentence`, `agentNameInSentence`). A name saved under an older form is shown as saved.
+- **Apostrophes and quotes** in the sentences this sweep touched are curly.
+
+## Behaviour that changed with the wording
+
+- **A missing key draws neutral, and only a missing key does.** The backend marks the error where it is made: `ValidationErrorDetail.missing_key` for a pre-call check (set by `.keyed()`), `ErrorEvent.missing_credential` for a handler. `node_errors` stores the kind with the node's error, so a reload and a project switch draw it the same. The card reads `errorMissingKey` and no longer reads its own key state. A node draws neutral only when every one of its checks is a missing key; a second failing check on the same node is a failure.
+- **Agents' JSON:** each error in the WebSocket `validationError` event gains `missingKey`, and the canvas's REST validation answer gains `missingKey` when it is true. A refused run's `message`, `look_at_canvas`, `nebula look` and the journal are unchanged.
+- **Cinema upload row:** a 400, 415 or 422 reads "because the server couldn’t read it as an image. Choose another image." with no Try again. A 5xx, a 408 or no answer reads "because the server isn’t answering. Try again." A 429 reads "because the server is busy. Try again." Any other refusal reads "because the server didn’t accept it." with no Try again.
+
+## Known limits
+
+- Four handlers (`worldlabs.py`, `style_reference.py`, `speridlabs_idol.py`, `veo.py`) raise a plain error for their own missing-key stops, with the older wording. Those stops now draw as failures, where the card's key state used to draw them neutral. The handlers are high tier; raising `MissingCredentialError` there, with the new wording, is in the follow-up pull request.
+- A node saved on a canvas keeps the label it was saved with ("Remotion Composition"); only new nodes and the library take the new names.
+- A personal agent's name saved under an older form is not migrated.
+- `npm run check:ratchets` could run only its frontend half on the build machine; CI runs both.
+
+## Every string, old and new
+
+Old is the text at main 2cb8183d; new is this branch. Each row's fixed text was found in both places by search. Template slots are written as `{name}` or `‹reason›`. Where one rule changed many lines, the table gives the rule and a few examples.
+
+## 1. Card and node names (sentence case)
+
+| Old | New | Where |
+|---|---|---|
+| Reference Set | Reference set | Reference set card title, node library, search, Inspector title and output port `frontend/src/lib/cardTitles.ts`, `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Camera Rig | Camera rig | Camera rig card title, node library, Cinema input port and output port `frontend/src/lib/cardTitles.ts`, `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Cinema Scene | Cinema scene | Cinema scene card, node library, Cinema Studio header, Agent log fallback label `frontend/src/lib/cardTitles.ts`, `frontend/src/components/nodes/CameraRigNode.tsx`, `frontend/src/components/nodes/ReferenceSetNode.tsx`, `frontend/src/components/cinema-studio/CinemaStudioView.tsx`, `backend/main.py`, `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Video Edit | Video edit | Video edit card title, node library, label of a new edit node `frontend/src/lib/cardTitles.ts`, `frontend/src/store/graphStore.ts`, `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Remotion Composition | Remotion composition | Remotion card title and node library `frontend/src/lib/cardTitles.ts`, `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Paper Source | Paper source | Paper source node library name `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Character Refs | Character refs | Cinema scene input port (Ideogram Character's own port is unchanged) `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Camera Rig adds ... Reference Set sends ... | Camera rig adds ... Reference set sends ... | Cinema scene capability note in the node library and MCP catalogue `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Input Image (a port label such as "Input Image", "Style Ref"; Title Case, snake_case keys only) | Input image ("Style ref"); sentence case, and camelCase keys split into words ("filePath" gives "File path") | Port labels and labels for unlabelled node settings: Inspector, direct-route lines, Agent log, MCP catalogue (rule; code in `universalSettingLabel` and `setting_label`) `docs/MCP-SETUP.md`, `frontend/src/lib/universalSettingLabel.ts`, `backend/services/universal_ports.py` |
+
+## 2. Settings wording
+
+| Old | New | Where |
+|---|---|---|
+| ...for any node without a published price | ...for any node without a list price | Settings, Preferences tab, spend limit help `frontend/src/components/panels/settings/PreferencesTab.tsx` |
+| The per-run limit above (${usd}) applies to agents too. | The ${usd} per-run limit above applies to agents too. | Settings, Agent spending section `frontend/src/components/panels/settings/AgentSpendSection.tsx` |
+| “You” means this canvas, opened from the link the backend printed at launch (or the desktop app). ... That holds against Nebula’s own chats (Codex’s shell has no network) and any agent that reaches Nebula only through its MCP server or API. | “You” means this canvas, opened from the link the backend printed at launch or from the desktop app. ... That holds against Nebula’s own chats, including Codex, whose shell has no network, and against any agent that reaches Nebula only through its MCP server or API. | Settings, Agent spending section, "who can change these" help `frontend/src/components/panels/settings/AgentSpendSection.tsx` |
+| Shared by every agent that isn't a Nebula chat: Claude Desktop, terminal tools, scripts. Counts the last 24 hours; restarting Nebula doesn't reset it. | Shared by every agent that isn't a Nebula chat, such as Claude Desktop, terminal tools and scripts. It counts the last 24 hours, and restarting Nebula doesn't reset it. | Settings, Agent spending section, outside agents help `frontend/src/components/panels/settings/AgentSpendSection.tsx` |
+| ...your Krea plan; agents have to ask. | ...your Krea plan. Agents have to ask. | Settings, Agent spending section, Krea plan runs help `frontend/src/components/panels/settings/AgentSpendSection.tsx` |
+| Or let Nebula's CLI do it (it checks the token first and asks before changing anything) | Or let Nebula’s CLI do it. It checks the token first and asks before changing anything. | Settings, Connect your agent `frontend/src/components/panels/settings/ConnectedApps.tsx` |
+| Chat with your own agent (your login, settings, memory and MCP servers) in the chat panel. ... files; Nebula doesn't sandbox it. | Chat with your own agent in the chat panel, with your login, settings, memory and MCP servers. ... files, and Nebula doesn't sandbox it. | Settings, Personal agents section help `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| Save a Gemini API key in Settings > API keys (Google) to use this. | Save a Gemini API key in Settings > Providers > Google · Gemini API to use this. | Settings, Personal agents row for Your Gemini when no key is saved `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| Download {version} ({n} MB) | Download {version}, {n} MB | Settings, Personal agents, Your Antigravity download button `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| Any agent that speaks the Agent Client Protocol over stdio: an absolute path or a command name, plus its arguments | Any agent that speaks the Agent Client Protocol over stdio. Give an absolute path or a command name, plus its arguments. | Settings, Personal agents, custom agent help `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| Install npx (Node.js) first; Nebula doesn't install it. | Install Node.js first to get npx. Nebula doesn’t install it. (for the `gemini` command: "Install `gemini` first. Nebula doesn’t install it.") | Settings, Personal agents row note when the tool is missing `backend/services/personal_agents.py` |
+| Nebula gives the CLI your Gemini API key from Settings > API keys (Google). Google bills that key ... | Nebula gives the CLI your Gemini API key from Settings > Providers > Google · Gemini API. Google bills that key ... | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Nebula is still checking your Gemini CLI (`gemini --version` and `--help`), which can take ... | Nebula is still checking your Gemini CLI with `gemini --version` and `gemini --help`, which can take ... | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Gemini CLI took too long to answer (over 30 seconds), which can ... | Gemini CLI took too long to answer over 30 seconds, which can ... | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Gemini CLI {version} has no ACP mode (`--acp`). Update it, then check again. | Gemini CLI {version} has no ACP mode, the `--acp` flag. Update it, then check again. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Save a Gemini API key in Settings > API keys (Google) first, or turn off "Use my Gemini API key from Nebula". | Save a Gemini API key in Settings > Providers > Google · Gemini API first, or turn off “Use my Gemini API key from Nebula”. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Uses your Gemini API key from Nebula; Google bills that key. | Uses your Gemini API key from Nebula, and Google bills that key. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Fix that in a terminal (`gemini`, then /auth). | Fix that in a terminal by running `gemini`, then /auth. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Turn on "Use my Gemini API key from Nebula" below (Google bills that key), or switch the CLI to a Gemini API key: run `gemini` in a terminal, then /auth. | Turn on “Use my Gemini API key from Nebula” below, and Google bills that key. Or switch the CLI to a Gemini API key by running `gemini` in a terminal, then /auth. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| It isn't signed in yet. | It isn’t signed in yet. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Signs in with your Google account on your Google Cloud project; Google serves that only with a Gemini Code Assist Standard or Enterprise license; a free or Google AI Pro/Ultra login no longer works. | Signs in with your Google account on your Google Cloud project. Google serves that only with a Gemini Code Assist Standard or Enterprise license. A free or Google AI Pro/Ultra login no longer works. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Uses the Gemini API key in your Gemini CLI setup; Google bills it. | Uses the Gemini API key in your Gemini CLI setup, and Google bills it. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| It's set to a Gemini API key, but none reaches it from Nebula: put GEMINI_API_KEY in ~/.gemini/.env, or turn on "Use my Gemini API key from Nebula" below. Nebula doesn't pass on a key your shell exported. | It’s set to a Gemini API key, but none reaches it from Nebula. Put GEMINI_API_KEY in ~/.gemini/.env, or turn on “Use my Gemini API key from Nebula” below. Nebula doesn’t pass on a key your shell exported. | Settings, Personal agents row note for Your Gemini `backend/services/gemini_cli_setup.py` |
+| Nebula has Google's Antigravity ACP server for macOS only (Apple silicon and Intel). | Nebula has Google’s Antigravity ACP server for macOS only, on Apple silicon and Intel. | Settings, Personal agents, Your Antigravity row `backend/services/antigravity_agent.py` |
+| Download Google's Antigravity ACP server {VERSION} ({n} MB) first. | Download Google’s Antigravity ACP server {VERSION}, {n} MB, first. | Settings, Personal agents, Your Antigravity row `backend/services/antigravity_agent.py` |
+| ... ; nothing was installed. (6 lines, for example "The download held an unsafe entry; nothing was installed.") | ... , so nothing was installed. (for example "The download held an unsafe entry, so nothing was installed.") | Settings, Personal agents, Your Antigravity install errors (6 sites, one rule) `backend/services/antigravity_agent.py` |
+| Installed {VERSION}; SHA-256 checked. | Installed {VERSION} and checked its SHA-256. | Settings, Personal agents, Your Antigravity install result `backend/services/antigravity_agent.py` |
+| Google sign-in didn't finish: {why} | Google sign-in didn’t finish. {why} | Settings, Personal agents, Your Antigravity sign-in error `backend/services/antigravity_agent.py` |
+| The server isn't downloaded, so its stored Google login (if any) stays. | The server isn’t downloaded, so any stored Google login stays. | Settings, Personal agents, Your Antigravity sign out `backend/services/antigravity_agent.py` |
+| Connect your agent from a source checkout for now (it's planned for the desktop pass). | Connect your agent from a source checkout for now. It’s planned for the desktop pass. | Settings, Connect your agent; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Create it first (see the README). | Create it first. The README says how. | Settings, Connect your agent; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| need Nebula's address (a URL or its backend-url file) | need Nebula’s address, a URL or its backend-url file | Settings, Connect your agent; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| its {amount} daily limit (and the shared budget for agents outside Nebula chats) | its {amount} daily limit and the shared budget for agents outside Nebula chats | Settings, Connect your agent; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| ...which only your macOS user can read; the config holds just that path. | ...which only your macOS user can read. The config holds just that path. | Settings, Connect your agent warning; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Add this under mcp_servers in ~/.hermes/config.yaml (keep any servers already there). | Add this under mcp_servers in ~/.hermes/config.yaml. Keep any servers already there. | Settings, Connect your agent, Hermes steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Stop the local OpenClaw Gateway first: openclaw mcp set refuses while it runs. | Stop the local OpenClaw Gateway first, because openclaw mcp set refuses while it runs. | Settings, Connect your agent, OpenClaw steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Or, with the Gateway running: Control UI > Settings > MCP > Add server, ... | Or, with the Gateway running, open Control UI > Settings > MCP > Add server, ... | Settings, Connect your agent, OpenClaw steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| openclaw mcp doctor will flag the token as a literal env value; that is expected. | openclaw mcp doctor will flag the token as a literal env value, which is expected. | Settings, Connect your agent, OpenClaw steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Check it's enabled in Cursor's MCP settings (restart Cursor if it doesn't show up). | Check it’s enabled in Cursor’s MCP settings. Restart Cursor if it doesn’t show up. | Settings, Connect your agent, Cursor steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Check with: claude mcp get nebula | Check it with claude mcp get nebula. | Settings, Connect your agent, Claude Code steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Run this once, or paste the config.toml block (the second block) instead. | Run this once, or paste the config.toml block, the second one, instead. | Settings, Connect your agent, Codex steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+| Runs can take longer than Codex's 60-second tool timeout: add tool_timeout_sec = ... | Runs can take longer than Codex’s 60-second tool timeout, so add tool_timeout_sec = ... | Settings, Connect your agent, Codex steps; also CLI `nebula mcp connect` `backend/services/agent_connect.py` |
+
+## 3. Missing-key lines and badges
+
+| Old | New | Where |
+|---|---|---|
+| Add your OpenAI API key in Settings, then run the node again. | Add an OpenAI API key in Settings to run this node. (article by sound; "token" kept for Replicate and Hugging Face) | Card error line, run refusal, `nebula run` person line, MCP run result for a missing key `backend/execution/person_line.py` |
+| Add your {provider} {credential} in Settings, then run the node again. | Add {a/an provider} {credential} in Settings to run this node. | Provider status line for a missing key `backend/execution/person_line.py` |
+| Add this node's API key in Settings, then run the node again. | Add an API key in Settings to run this node. | Card error line when the key is not known `backend/execution/person_line.py` |
+| Add your QuiverAI API key in Settings, then run the node again. | Add a QuiverAI API key in Settings to run this node. | Quiver node error line `backend/services/quiver_client.py` |
+| Add an Anthropic, OpenAI or Gemini API key in Settings, then run the node again. | Add an Anthropic, OpenAI or Gemini API key in Settings to run this node. | Vision node error line `backend/services/vision_llm.py` |
+| Add your Replicate token in Settings. / ... in Settings, then run the node again. / Add this node's API key... | Add a Replicate token in Settings to run this node. (unknown key: Add an API key in Settings to run this node.) | Direct-route missing-key line on a card `frontend/src/lib/directRoute.ts` |
+| Couldn't set up “X”. Add your OpenAI API key in Settings. | Nebula couldn’t set up “X” because it needs an OpenAI API key. Add one in Settings. (unknown key: "an API key") | Model setup failure line `frontend/src/lib/failureLines.ts` |
+| Add your Replicate token in Settings. / Add your {label} key in Settings. | Add a Replicate token in Settings to run this node. / Add a {label} key in Settings to run this node. | Provider switcher, Add key button description `frontend/src/lib/providerSwitch.ts` |
+| Add your OpenAI API credential in Settings. You can browse and add models before connecting. | Add an OpenAI API key in Settings. You can browse and add models before connecting. ("token" for Replicate and Hugging Face) | Provider readiness badge `frontend/src/lib/providerReadiness.ts` |
+| Add your {name} token in Settings to run Idol. / ...to use your own allowance. | Add {a/an} {name} token in Settings to run Idol. / ...to use your own allowance. (for example "Add a Hugging Face token ...") | Idol node, Hugging Face route `frontend/src/lib/providerReadiness.ts` |
+| Needs OPENAI_API_KEY | Needs an OpenAI API key | Missing-key badge title on a card and in the proposal bar `frontend/src/lib/nodeKeys.ts` |
+| Needs BYTEPLUS_API_KEY or FAL_KEY for base seedream-4-5 | Needs a BytePlus or fal.ai API key for base seedream-4-5 | Missing-key badge title on a card `frontend/src/lib/nodeKeys.ts` |
+| API Key Missing | Needs an API key | Missing-key badge title on a card (also on the dynamic node card) `frontend/src/lib/nodeKeys.ts`, `frontend/src/components/nodes/DynamicNode.tsx` |
+| Missing API key: OPENAI_API_KEY | Add an OpenAI API key in Settings to run this node. | Inspector, missing-key notice `frontend/src/components/panels/Inspector.tsx` |
+| Add it in Settings > API keys; nothing was sent and nothing was charged. | Add it in Settings > Providers > Google · Gemini API; nothing was sent and nothing was charged. (a reader key with no section says "Settings > Providers") | Moodboard reader, missing Gemini key; also CLI and MCP `backend/services/moodboard_reader.py` |
+
+## 4. Try again lines and buttons
+
+| Old | New | Where |
+|---|---|---|
+| Couldn't open the project. Nebula didn't respond. | Nebula couldn’t open the project because the server didn’t respond. Try again. | Project Home, project open failure `frontend/src/store/projectFlows.ts`, `frontend/src/lib/errorCopy.ts` |
+| <Couldn't X.> <connection or no-response reason> (shortLine), at 4 sites: project workspace save tooltip, asset trash restore toast beside Undo, chat model picker line, project flows (rename, save) | Nebula couldn’t X because the server …. Try again. (rule; `retryBecauseLine` and `actionFailedLine`; a refusal the same request would get again keeps its own words with no Try again) | Project workspace controls tooltip, Asset trash toast, Chat model picker, Project Home `frontend/src/lib/errorCopy.ts`, `frontend/src/components/project/ProjectWorkspaceControls.tsx`, `frontend/src/hooks/useAssetDelete.ts`, `frontend/src/components/panels/ChatPanel.tsx` |
+| Retry model discovery | Try again (accessible name "Try again loading models") | Chat model picker, retry button `frontend/src/components/panels/ChatModelPicker.tsx` |
+| Couldn't upload photo.png. Nebula's server isn't answering. (also "...didn't respond", "...hit an error") | Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again. (5xx, 408, no answer) | Cinema Studio upload row, server down or timing out `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because the server is busy. Try again. (429) | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image. (400, 415, 422; no Try again button) | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because the server didn’t accept it. (any other refusal; no Try again button) | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because the server sent back no image. Try again. | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because it’s over the 20 MB limit. Choose a smaller image. (no Try again button) | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+| Couldn't upload photo.png. <the old reason, such as Nebula's server isn't answering.> | Nebula couldn’t upload “photo.png” because it isn’t a PNG, JPEG, GIF or WebP image. Choose one of those. (no Try again button) | Cinema Studio upload row `frontend/src/lib/cinemaUploads.ts` |
+
+## 5. Moodboard wording
+
+| Old | New | Where |
+|---|---|---|
+| the board / this board / a board / boards (a moodboard named in a line a person reads; rule, about 115 changed occurrences in 33 source files) | the moodboard / this moodboard / a moodboard / moodboards (the Board/List toggle label stays "Board") | Moodboard Studio, Moodboards list, Moodboard nodes, Assets panel, save and load error lines, Agent log, journal, CLI `nebula notes` (rule; examples below) `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx`, `frontend/src/lib/api.ts`, `frontend/src/components/moodboard-studio/boardSaveLine.ts` |
+| Fit the board (Shift+1) | Fit the moodboard (Shift+1) | Moodboard Studio, canvas fit button `frontend/src/components/moodboard-studio/BoardCanvas.tsx` |
+| Remove from board | Remove from moodboard | Moodboard Studio, side panel `frontend/src/components/moodboard-studio/BoardSidePanel.tsx` |
+| Couldn't restore the board. | Couldn't restore the moodboard. | Moodboard Studio and trashed moodboard node `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx`, `frontend/src/components/nodes/RestoreTrashedAsset.tsx` |
+| Board (side panel title with nothing selected) | Moodboard | Moodboard Studio, side panel title `frontend/src/components/moodboard-studio/BoardSidePanel.tsx` |
+| Board notes | Moodboard notes | Moodboard Studio, notes control, Agent log and journal `frontend/src/components/moodboard-studio/fieldSteps.ts`, `backend/services/moodboard_edits.py` |
+| Board undo | Moodboard undo | Moodboard Studio, undo toast (accessible name) `frontend/src/components/moodboard-studio/BoardUndoToast.tsx` |
+| Board changed since an agent wrote this. | Moodboard changed since an agent wrote this. | Moodboard Studio, brief `frontend/src/components/moodboard-studio/MoodboardBrief.tsx` |
+| Show on board | Show on moodboard | Agent notes, update card `frontend/src/lib/agentNotesView.ts` |
+| Board image N (image alt text) | Moodboard image N | Moodboard node preview, image alt text `frontend/src/components/nodes/MoodboardBundlePreview.tsx` |
+| Untitled board | Untitled moodboard | Moodboard node fallback name; journal and Agent log fallback `frontend/src/lib/moodboardBundle.ts`, `backend/services/moodboard_edits.py` |
+| Loading Moodboard... | Loading moodboard… | Moodboard Studio, loading `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Loading... | Loading… | Moodboard Studio, rail `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Move this board to Global or to a project (noun "board") | Move this moodboard to Global or to a project (noun "moodboard") | Assets panel and Moodboard Studio, move menu `frontend/src/components/panels/AssetsPanel.tsx` |
+| Choose a board… / No saved boards yet. / This board is in Recently deleted. / Couldn't delete the board for good. | Choose a moodboard… / No saved moodboards yet. / This moodboard is in Recently deleted. / Couldn't delete the moodboard for good. / This moodboard was moved to Recently deleted by ... (the NOUN maps) | Stored asset picker and asset trash `frontend/src/components/panels/StoredAssetPicker.tsx`, `frontend/src/hooks/useAssetDelete.ts`, `frontend/src/lib/trash.ts` |
+| kept with this board / What this update names is no longer on the board. / This board | kept with this moodboard / What this update names is no longer on the moodboard. / This moodboard | Agent notes corner in Moodboard Studio `frontend/src/components/agent-notes/AgentNotesCorner.tsx` |
+| No board chosen / Board not found | No moodboard chosen / Moodboard not found | Moodboard node card status `frontend/src/lib/cardTitles.ts` |
+| Board notes to generators / As the board says | Moodboard notes to generators / As the moodboard says | Moodboard node settings (send notes option and its note) `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| The board opens on #1 until you choose a cover / Open the board on #1 again / The board opens on this image / Open the board on this image. | The moodboard opens on image 1 until you choose a cover / Open the moodboard on image 1 again / The moodboard opens on this image / Open the moodboard on this image. | Moodboards list, cover tooltips `frontend/src/components/moodboard-studio/MoodboardListView.tsx` |
+| The board as a canvas (preview) / The board as a list | The moodboard as a canvas, in preview / The moodboard as a list | Moodboard Studio, Board/List toggle tooltips (the labels "Board" and "List" are unchanged) `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| #N inside a sentence (rule; badges and chips keep "#N") | image N inside a sentence ("Image N" at the start) | Moodboard Studio notices, tooltips, Kept lines, CLI and backend skipped and estimate lines (rule; examples below) `frontend/src/components/moodboard-studio/boardSaveLine.ts` |
+| Claude changed #3 after you removed it / #3 and #5 / #3, #5 and #7 | Claude changed image 3 after you removed it / images 3 and 5 / images 3, 5 and 7 (four or more, or across moodboards: "4 images") | Moodboard Studio, line after removing an image an agent changed `frontend/src/components/moodboard-studio/boardSaveLine.ts` |
+| #3 changed after you removed it / #3 and #5 changed after ... (no agent named) | Image 3 changed after you removed it / Images 3 and 5 changed after ... | Moodboard Studio, line after removing an image that changed `frontend/src/components/moodboard-studio/boardSaveLine.ts` |
+| the changes to Reference #3 | the changes to image 3 | Moodboard Studio, Kept line `frontend/src/components/moodboard-studio/boardSaveLine.ts` |
+| #2 changed since, left as is | Image 2 changed since, left as is | Moodboard Studio fallback skipped line; also backend skipped line from agent edits `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx`, `backend/services/moodboard_edits.py` |
+| #2's weight changed since, left as is | Image 2’s weight changed since, left as is | Skipped line after restoring a moodboard setting (agent-written edits) `backend/services/moodboard_edits.py` |
+| #1 is an image link from outside Nebula, left as is | Image 1 is an image link from outside Nebula, left as is | Skipped line, moodboard edits `backend/services/moodboard_edits.py` |
+| #2 wasn’t read because it’s too transparent. | Image 2 wasn’t read because it’s too transparent. | CLI `nebula moodboard` estimate line `backend/cli/commands/moodboard.py` |
+| #{number} is an image link from outside Nebula, ... | Image {number} is an image link from outside Nebula, ... | Moodboard analysis warning `backend/services/moodboard_analysis.py` |
+| #{number} is too transparent to add colors. | Image {number} is too transparent to add colors. | Moodboard analysis and reader lines `backend/services/moodboard_analysis.py`, `backend/services/moodboard_reader.py` |
+| #{number} is unsorted because it’s too transparent. | Image {number} is unsorted because it’s too transparent. | Moodboard reader result line `backend/services/moodboard_reader.py` |
+| the board was deleted / the board can't take it now | the moodboard was deleted / the moodboard can't take it now | Proposal closing reasons and accept refusal for moodboard proposals `backend/main.py` |
+| the board has no cover now | the moodboard has no cover now | Agent log and journal, moodboard cover line `backend/services/moodboard_edits.py` |
+| The board's notes | The moodboard’s notes | Skipped-field line for moodboard notes `backend/services/moodboard_edits.py` |
+| Set aside #N | Set aside image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Used #N again | Used image N again | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Weight of #N | Changed the weight of image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Private note on #N | Changed the private note on image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Note on #N | Changed the note on image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Added #N | Added image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Removed #N | Removed image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Moved #N | Moved image N | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Made #N the cover | Made image N the cover | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Cover back to #1 | Put the cover back on image 1 | Moodboard Studio, undo step label `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+| Cover: #N (caption under the preview), for example "Cover: #1, the first image" | Image N is the cover, for example "Image 1, the first image, is the cover" | Moodboard Studio, cover caption `frontend/src/components/moodboard-studio/MoodboardStudioView.tsx` |
+
+## 6. Personal agent names inside sentences
+
+| Old | New | Where |
+|---|---|---|
+| Claude (your setup) / Codex (your setup) / Gemini (your setup) / Antigravity (your setup) | Your Claude / Your Codex / Your Gemini / Your Antigravity | Settings Personal agents rows, chat model picker, Agent log source, spend rows, moodboard reader name, MCP and CLI listings of personal agents `backend/services/personal_agents.py` |
+| (a name that is not in sentence form: "Claude (your setup)" at the start of a line or label) | the first word drops to lower case inside a sentence: "your Claude", "your Codex", "your Gemini", "your Antigravity" (rule: `in_sentence` in 26 backend call sites across 7 files, `agentNameInSentence` in 19 frontend call sites across 12 files; "Claude Code" and any other name pass through; a name that starts a line or label keeps "Your") | Settings, chat panel, proposal bar, undo notice, Agent log, journal, refusals, pending-node lines (rule; examples below) `backend/services/personal_agents.py`, `frontend/src/lib/personalAgentName.ts` |
+| Use {name} in chat (aria-label, with the name as "Gemini (your setup)") | Use your Gemini in chat | Settings, Personal agents switch `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| {name}: save a Gemini API key in Settings > API keys first. | Add a Gemini API key in Settings to use {in_sentence(name)}. | Chat panel, refusal when a personal agent needs a Gemini key (422 detail) `backend/services/personal_agents.py` |
+| Commons is on, so Nebula stopped {name}. | Commons is on, so Nebula stopped {in_sentence(name)}. | Chat panel, personal agent stopped while Commons is on `backend/services/acp_session.py` |
+| changed since you accepted {agent_name}'s proposal | changed since you accepted {in_sentence}’s proposal (apostrophe curly) | Canvas, run-approval refusal (409) `backend/main.py` |
+| accepted {name}'s proposal ... / reopened {name}'s proposal ... / {status} {name}'s proposal ... | accepted {in_sentence}’s proposal ... / reopened {in_sentence}’s proposal ... / {status} {in_sentence}’s proposal ... | Journal, canvas and asset proposal decisions `backend/main.py` |
+| Accepted {name}'s proposal (...) | Accepted {in_sentence}’s proposal (...) | Agent log, canvas and asset proposal accepted `backend/main.py` |
+| The person's Accept of {name}'s proposal ... | The person’s Accept of {in_sentence}’s proposal ... | Refusal and journal when the person's Accept could not apply `backend/main.py` |
+| (accepted from {name}) | (accepted from {in_sentence}) | Notes on added nodes and curation journal note `backend/main.py` |
+| answered/dismissed {name}'s {noun} | answered/dismissed {in_sentence}’s {noun} | Journal, agent question closed `backend/main.py` |
+| Claude Code's edit | {in_sentence}’s edit (journal "undid X’s edit") | Journal, undo of an agent edit `backend/main.py` |
+| already undone by {who} (who built from the actor label) | already undone by {who} (who built through in_sentence) | Undo refusal message `backend/main.py` |
+| {owners[0]} is (still setting up) | {in_sentence(owners[0])} is (still setting up) | Refusal for paid placeholder nodes `backend/main.py` |
+| Withdrawn by {agent.name} | Withdrawn by {in_sentence(agent.name)} | Proposal and question outcome lines `backend/services/canvas_proposals.py`, `backend/services/asset_proposals.py`, `backend/services/agent_questions.py` |
+| needs “{root_label}”, which {agent} is still setting up. / Skipped 2 nodes {agent} is still setting up. | which {in_sentence} is still setting up. / Skipped 2 nodes {in_sentence} is still setting up. | Pending placeholder nodes, backend lines `backend/services/pending_nodes.py` |
+| {verb} {name}’s edit. | {verb} {your Claude}’s edit. (lower-cased after the first word) | Canvas undo notice `frontend/src/lib/canvasUndo.ts` |
+| Run N nodes {name} is still setting up? / Run with {name}'s changes? / Run without the node(s) {name} was setting up? | (same wording, name through agentNameInSentence) | Placeholder run confirmation dialog `frontend/src/lib/placeholderRunConfirm.ts` |
+| agentName={view.agent.name} | agentName={agentNameInSentence(view.agent.name)} | Canvas proposal layer `frontend/src/components/canvas/ProposalLayer.tsx` |
+| Before you start {agentName} (dialog heading); Downloading ${agent.displayName} / Remove ${agent.displayName} (aria-labels) | Before you start {your Claude}; Downloading {your Claude} / Remove {your Claude} | Personal agent warning dialog; Settings, Personal agents `frontend/src/components/panels/PersonalAgentWarning.tsx`, `frontend/src/components/panels/settings/PersonalAgentsSection.tsx` |
+| Skipped 2 nodes {name} is still setting up. | Skipped 2 nodes {your Claude} is still setting up. | Canvas, placeholder count line `frontend/src/lib/pendingNodes.ts` `frontend/src/lib/pendingNodes.ts` |
+
+## 7. Refusals and other lines agents read (CLI, MCP, journal)
+
+| Old | New | Where |
+|---|---|---|
+| Character “Mara” has no view “5”. Use its number (1-3). | Nebula couldn’t point at view 5 because “Mara” has 3 views. Use a number from 1 to 3. | API detail, MCP `point_at` and CLI `nebula point`, view out of range `backend/services/agent_presence.py` |
+| (none, one view) | Nebula couldn’t point at view 1 because “Mara” has 1 view. Use view 1. | API detail, MCP `point_at` and CLI `nebula point`, one view `backend/services/agent_presence.py` |
+| Character “Odd” has no reference views, so there is no view “1”. | Nebula couldn’t point at view 1 because “Odd” has no views. | API detail, MCP `point_at` and CLI `nebula point`, no views `backend/services/agent_presence.py` |
+| has no view “two” | Nebula couldn’t point at view “two” because ... (a number, `5` or `#5`, is said as `view 5`; anything else is quoted) | API detail, MCP `point_at` and CLI `nebula point`, text that is not a number `backend/services/agent_presence.py` |
+| Board “Dusk” has no image “13”. Use its number (1-12) or its id. | Nebula couldn’t point at image 14 because “Dusk” has 12 images. Use a number from 1 to 12, or the image’s id. | API detail, MCP `point_at` and CLI `nebula point`, image out of range `backend/services/agent_presence.py` |
+| (none, one image) | Nebula couldn’t point at image 1 because “Dusk” has 1 image. Use image 1, or the image’s id. | API detail, MCP `point_at` and CLI `nebula point`, one image `backend/services/agent_presence.py` |
+| Board “Dusk” has no images, so there is no image “1”. | Nebula couldn’t point at image 1 because “Dusk” has no images. | API detail, MCP `point_at` and CLI `nebula point`, no images `backend/services/agent_presence.py` |
+| has no image “img-zz” | Nebula couldn’t point at image “img-zz” because ... | API detail, MCP `point_at` and CLI `nebula point`, an id that matches nothing `backend/services/agent_presence.py` |
+| Changed “Name” on “Dusk” | Renamed “Desert light” to “Dusk” | Agent log, moodboard rename by an agent; also journal summary `backend/services/moodboard_actions.py`, `backend/services/moodboard_edits.py` |
+| Changed “Name” and “Direction” on “Dusk” | Renamed “Desert light” to “Dusk” and changed its direction (journal: "renamed ... and changed its direction and avoid list"; Send notes: "changed its send notes setting") | Agent log and journal, moodboard rename plus other fields `backend/services/moodboard_edits.py` |
+| the person sees it in Moodboard Studio's corner under "This board" | the person sees it in Moodboard Studio's corner under "This moodboard" | MCP tool descriptions `post_note` and `list_notes` `backend/mcp_server.py` |
+| under This board (CLI `--board` help); under \"This board\" (CLI notes help) | under This moodboard; under \"This moodboard\" | CLI `nebula notes` help `backend/cli/__main__.py` |
+| the person reads it in Moodboard Studio on that board, under This board; kept = "this board" | under This moodboard; "this moodboard" | CLI `nebula notes` output `backend/cli/commands/notes.py` |
+| Studio's corner under "This board" | Studio's corner under "This moodboard" | Agent guide, posting notes `docs/MCP-SETUP.md`, `skills/nebula/SKILL.md` |
+| (Cinema Scene's `scene.base.model`) | (Cinema scene's `scene.base.model`) | Agent guide, MCP setup `docs/MCP-SETUP.md` |
+| label stays in Title Case ("Input Image"). | label is sentence case too ("Input image"), and a camelCase key splits into words ("filePath" gives "File path"). | Agent guide, MCP setup, port labels `docs/MCP-SETUP.md` |
+| nebula run refused-run JSON `errors[].person` and MCP run results: Add your OpenAI API key in Settings, then run the node again. (the agent `message` "Missing API key: OPENAI_API_KEY" is unchanged) | Add an OpenAI API key in Settings to run this node. | CLI `nebula run` and MCP run results `backend/execution/person_line.py` |
+| Reference Set / Camera Rig / Cinema Scene (prose in the Cinema art direction doc) | Reference set / Camera rig / Cinema scene | Agent guide, Cinema art direction `docs/cinema-art-direction.md` |
+| (no field) | missingKey: true added to each validation error on the WebSocket (`missing_key`) and to the canvas REST validation answer (only when set) | Agent-visible JSON, validation errors `backend/main.py` |
+
+## 8. Other
+
+| Old | New | Where |
+|---|---|---|
+| Loading models... | Loading models… | OpenRouter node, model list placeholder `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| auto, bfl, fal, replicate, openrouter, krea (the `_provider` option labels on 12 nodes; values unchanged) | Auto, Black Forest Labs, fal.ai, Replicate, OpenRouter, Krea | Node settings, Provider dropdown on 12 nodes `frontend/src/constants/nodeDefinitions.ts`, `backend/data/node_definitions.json` |
+| Open Editor | Open editor | Remotion card and Video edit card button `frontend/src/components/nodes/RemotionNode.tsx`, `frontend/src/components/nodes/EditNode.tsx` |
+| no layers yet | No layers yet. | Remotion card status line `frontend/src/components/nodes/RemotionNode.tsx` |
+| no shots yet | No shots yet. (with references and no shots: "No shots yet. 2 refs.") | Cinema scene card status line `frontend/src/components/nodes/CinemaSceneNode.tsx` |
+| Fetch Schema / Refresh Schema | Fetch schema / Refresh schema | Inspector, schema button `frontend/src/components/panels/Inspector.tsx` |
+| a raw setting key (for example guidance_scale) in the Agent log, direct-route lines and the asset proposal strip | the setting's label (for example "Guidance scale") | Agent log for an unlabelled setting, direct-route lines, create studio result details, proposal strip `frontend/src/store/graphStore.ts`, `frontend/src/lib/directRoute.ts`, `frontend/src/components/proposals/AssetProposalStrip.tsx`, `backend/services/node_route.py` |
+
+## Kept on purpose
+
+These were looked at and left as they are.
+
+- The "Board" label of the Board/List toggle in Moodboard Studio stays: it names a view (a canvas), not the moodboard.
+- The "Reference #N" badge and its aria-label on cards and the side panel, the "Back to #1" button, the aria-label "Use #N as cover" and the toast `skipped` lines stay: badges, chips and buttons keep "#N"; only "#N" inside a sentence became "image N".
+- The "Show #37" button on an agent's Update stays: it is a button label, not an undo step.
+- Agent notes text (`agentNotesView.noteText`) keeps the agent's own "#37": the agent writes the noun around it, and "image 37" would risk "image image 37".
+- Agent-only edit errors keep "#N" and "board": `no image #9 on this board (it has 3)`, `#N has no card in ...`, `a board has at most ...`, `no image '7' on this board: use its number (1-3) or id`; they echo the `#N` form agents send.
+- `moodboard_client.py`, CLI and MCP help text, the `Cover: #3` CLI column, `Not on this computer, so not read: #2, #3` (a list) and cover docstrings keep their wording: agent-only or a list, not a sentence a person reads.
+- `Changed “Name” on “Dusk”` stays for a rename with an unknown or empty old name, an empty new name, or the same name after whitespace folds: it still reads right and nothing is lost.
+- The quoted Title Case labels for non-rename lines (`SENTENCE_LABELS`) stay as they were, except "Moodboard notes".
+- "Cinema Camera Rig" and "Cinema Reference Set" in `backend/cinema/art_direction.py` error texts stay: agent-only errors, not in the brief.
+- "Character Refs" on Ideogram Character's own port stays: only the Cinema scene port was in the brief.
+- "Paper source" in the card title was already right.
+- "The upload stopped because a canvas import started." stays: a neutral status with a Try again button beside it, not a failure.
+- "Upload was interrupted. Remove it, then attach the image again." stays: it names the fix already.
+- The 401 and 403 Cinema upload line ("because you don’t have access to this anymore. Reload to sign in again.") and the size, type and no-image lines are unchanged.
+- "Add the key in Settings > Providers, or pick another provider on the node." in `GraphFileActions.tsx` stays: it covers several nodes at once and names no key.
+- `maker_routes.py` `_blocked_key_line` ("These settings need your {phrase}. Add it in Settings, then run the node again.") and the route-key lines stay in the node-named "needs your" form.
+- Route `missingKeyLine` strings for Idol in the node definitions stay: they are the route's own words.
+- `veo.py` `VERTEX_ONLY_MESSAGE` stays: agent text with an env name.
+- Handler-local missing-key lines in high-tier handlers (`worldlabs.py`, `style_reference.py`, `speridlabs_idol.py`, `veo.py`) still read "Add your ... in Settings, then run the node again.": high-tier files not edited.
+- The agent `message` "Missing API key: OPENAI_API_KEY" and the catalogue text stay unchanged; only the person line changed.
+- The Try again button label on Project Home stays "Try again"; button labels were untouched.
+- The chat picker button still shows for lines without "Try again." (for example "No models are available from this CLI.").
+- Lines that start with the agent's name keep the capital ("Your Claude"): Settings rows, picker entries, spend rows, Agent log, "{name} asks permission", "Message {label}", `pending_reason`, `run_done_cards` lines, `publish_action`, other `acp_session` lines.
+- The agent-only `PendingError` "{name}'s placeholder: only {name} makes it ready" stays.
+- Settings item 10: no "..." in person-facing strings, and "Choose…" already used the ellipsis character; nothing changed.
+- The "{DEFAULT_PLAN_RUNS} (default)" select option stays: an option label, not a sentence.
+- `ConnectError("client must be one of: ...")`, `Unknown fields: [...]`, "OpenClaw's config (mcp.servers)", "Login: `x`." and "trust: untrusted makes Hermes..." stay: label-style lines or config keys.
+- `docs/notes/` and the dated `docs/moodboard-canvas-plan.md` quotes of "This board" stay: dated notes and a plan; `test_board_updates_in_studio` still pins the plan quote.
+- The typeface of Moodboard Studio's notices is unchanged. The header's state chip and the notices already draw in the same face (Inter), so matching one to the other changes nothing; which face should draw quoted names is an open design question.

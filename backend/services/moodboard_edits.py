@@ -1384,7 +1384,7 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
 # ways. Send notes is the Studio's full label (GM, slice 3b): "turned off
 # “Send notes to generators”".
 SENTENCE_LABELS = {
-    "name": "Name", "notes": "Board notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "name": "Name", "notes": "Moodboard notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
     "avoid": "Avoid", "pinnedColors": "Pinned colors", "clashMode": "Clash mode", "colorChoices": "Color choices",
     "sendNotes": "Send notes to generators", "coverImageId": "Cover", "briefOverride": "Your brief",
 }

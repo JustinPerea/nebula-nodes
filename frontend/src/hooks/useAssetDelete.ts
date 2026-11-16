@@ -3,9 +3,9 @@ import { deleteCharacter, deleteMoodboard } from '../lib/api';
 import { deletePreset } from '../lib/createPresets';
 import { restoreTrashed } from '../lib/trash';
 import type { AssetScope } from '../store/uiStore';
-import { failureCopy, type FailureCopy } from '../lib/errorCopy';
+import { actionFailedLine, failureCopy, type FailureCopy } from '../lib/errorCopy';
 
-const NOUN = { moodboard: 'board', character: 'character', style: 'style' } as const;
+const NOUN = { moodboard: 'moodboard', character: 'character', style: 'style' } as const;
 
 export interface DeletedAsset {
   id: string;
@@ -60,7 +60,10 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       setLastDeleted(null);
       return asset;
     } catch (err) {
-      setUndoError(failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
+      // The line beside the toast's Undo is the whole sentence, "Nebula couldn’t restore the moodboard
+      // because …. Try again." (a reason where trying again cannot help names the fix instead).
+      const { line } = actionFailedLine(`restore the ${NOUN[kind]}`, err);
+      setUndoError(line ? { heading: '', reason: line } : failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
       return null;
     } finally {
       setBusy(false);

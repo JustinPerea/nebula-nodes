@@ -9,6 +9,8 @@
  * Copy is GM - Design's, 2026-10-25, verbatim.
  */
 
+import { agentNameInSentence } from './personalAgentName';
+
 export interface PendingAgent {
   id: string;
   name: string;
@@ -67,7 +69,7 @@ function placeholderCountLine(prefix: string, summary: PendingSkipSummary | null
   if (!summary || !Number.isFinite(summary.count) || summary.count < 1) return null;
   const nodes = `${summary.count} ${summary.count === 1 ? 'node' : 'nodes'}`;
   // GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
-  const who = summary.agents.length === 1 && summary.agents[0] ? `${summary.agents[0]} is` : 'the agents are';
+  const who = summary.agents.length === 1 && summary.agents[0] ? `${agentNameInSentence(summary.agents[0])} is` : 'the agents are';
   return `${prefix} ${nodes} ${who} still setting up.`;
 }
 

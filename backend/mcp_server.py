@@ -574,7 +574,7 @@ def post_note(
       refused.
     - `board`: a moodboard id or exact name to keep the update with that
       board instead of the main canvas. A board's updates show in Moodboard
-      Studio's corner, under "This board" above the project's, while the
+      Studio's corner, under "This moodboard" above the project's, while the
       person has that board open; every other screen shows only the
       project's list. To reach the person wherever they are, post without
       `board`. You read a board's back with list_notes(board=...). On a board
@@ -616,7 +616,7 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     The main canvas's list is kept with the open project (the person sees it
     in the Updates corner on every screen); pass `board` (an id or exact
     name) for a moodboard's, which the person sees in Moodboard Studio's
-    corner under "This board" while that board is open. `unread=True` lists
+    corner under "This moodboard" while that board is open. `unread=True` lists
     only those.
     Only the person marks them read or dismisses them. Your proposals
     (propose_change and propose_asset_change) post their own Update (`about:

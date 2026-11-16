@@ -6043,6 +6043,7 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
                 "portId": error.port_id,
                 "message": error.message,
                 "person": error.person,
+                **({"missingKey": True} if error.missing_key else {}),
             }
             for error in errors
         ],
@@ -12071,7 +12072,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     if too_complex is not None:
         # The limit comes with the measure that found it, never from its words.
         _status, why, limit = too_complex
-        detail = (f"The person's Accept of {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id} was refused: "
+        detail = (f"The person’s Accept of {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id} was refused: "
                   f"{why} The proposal is still open.")
         _journal(
             "proposal.accept_refused",
@@ -25781,7 +25782,8 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
         if data.get("error"):
             node_errors.record(node_id, str(data["error"]), friendly=data.get("errorFriendly"),
                                category=data.get("errorCategory"), person=data.get("errorPerson"),
-                               provider_text=bool(data.get("errorProviderText")), provider=data.get("errorProvider"))
+                               provider_text=bool(data.get("errorProviderText")), provider=data.get("errorProvider"),
+                               missing_key=bool(data.get("errorMissingKey")))
         else:
             node_errors.forget(node_id)
         changed = True

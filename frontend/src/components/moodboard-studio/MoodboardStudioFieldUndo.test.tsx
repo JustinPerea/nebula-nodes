@@ -529,7 +529,7 @@ describe('one timeline with the card steps', () => {
     await waitFor(() => expect(server.board.images[0].weight).toBe(0.5), { timeout: 3000 });
     await settled();
     const history = Object.values(useBoardUndoStore.getState().histories)[0];
-    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Weight of #1']);
+    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Changed the weight of image 1']);
 
     undo();
     await waitFor(() => expect(server.board.images[0].weight).toBe(1));
@@ -555,7 +555,7 @@ describe("an image's note is one step when you leave it too", () => {
     undo();
     await waitFor(() => expect(server.board.images[0].notes).toBe(''));
     expect(restores()).toHaveLength(1);
-    expect(await screen.findByText(/Undid:? Note on #1/)).toBeTruthy();
+    expect(await screen.findByText(/Undid:? Changed the note on image 1/)).toBeTruthy();
     await settled();
     undo();
     await pause(300);
@@ -604,12 +604,12 @@ describe('review fixes', () => {
     await settled();
     expect(server.edits).toHaveLength(2);
     const history = Object.values(useBoardUndoStore.getState().histories)[0];
-    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Note on #1']);
+    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Changed the note on image 1']);
 
     undo();
     await waitFor(() => expect(server.board.images[0].notes).toBe(''));
     expect(server.board.direction).toBe('warm dusk');
-    expect(await screen.findByText(/Undid:? Note on #1/)).toBeTruthy();
+    expect(await screen.findByText(/Undid:? Changed the note on image 1/)).toBeTruthy();
   });
 
   it('a cleared name (nothing can save) is undone on the page, and Cmd+Z then reaches the step under it', async () => {

@@ -10,6 +10,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { missingKeyTitle } from './nodeKeys';
 import { runsNothing } from './canvasProposals';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * A ghost's ⚠, as a real node's card shows it (ModelNode): the key check
@@ -486,6 +487,6 @@ export function changeTag(changes: Record<string, { from: unknown; to: unknown }
  * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
  * is (ProposalBar). */
 export function decisionLine(kind: 'accept' | 'reject', agent: string): string {
-  return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agent}.`;
+  return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agentNameInSentence(agent)}.`;
 }
 

@@ -1,5 +1,6 @@
 import { apiRequest } from './apiRequest';
 import { resolveProjectId } from './currentProject';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * Recently deleted (backend main.py `/api/trash`, services/asset_trash.py).
@@ -49,7 +50,7 @@ async function query(filter: TrashFilter): Promise<string> {
  * answer, 408, 429 and 5xx, else the backend's reason, else GM's line for
  * the status. Never a status code. Objects are named as the UI names them,
  * lowercase mid-sentence. */
-const NOUN: Record<TrashKind, string> = { moodboard: 'board', character: 'character', style: 'style', project: 'project' };
+const NOUN: Record<TrashKind, string> = { moodboard: 'moodboard', character: 'character', style: 'style', project: 'project' };
 
 export async function fetchTrash(filter: TrashFilter = {}): Promise<TrashedItem[]> {
   const response = await apiRequest("Couldn't load Recently deleted.", `/api/trash${await query(filter)}`);
@@ -86,7 +87,7 @@ export async function emptyTrash(filter: TrashFilter, shown: Array<Pick<TrashedI
 export function actorLabel(by: { kind?: string; name?: string } | null | undefined): string | null {
   if (!by) return null;
   if (by.kind === 'person') return 'you';
-  if (by.kind === 'agent') return `${by.name?.trim() || 'Agent'} (agent)`;
+  if (by.kind === 'agent') return `${agentNameInSentence(by.name?.trim() || 'Agent')} (agent)`;
   if (by.kind === 'system') return 'Nebula';
   return 'an unnamed client';
 }

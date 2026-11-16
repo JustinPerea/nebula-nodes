@@ -27,6 +27,7 @@ import { backendText } from './backendText';
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
+import { agentNameInSentence } from './personalAgentName';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -1111,7 +1112,7 @@ export function nodeNameList(names: string[]): string {
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
   if (countsInstead(agents.length)) return `${agents.length} agents`;
-  return joinedList(agents);
+  return joinedList(agents.map((name, at) => (at === 0 ? name : agentNameInSentence(name))));
 }
 
 /** "A", "A and B", "A, B and C": the lists' shared join (also the kept

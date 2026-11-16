@@ -200,7 +200,7 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
           {/* The line ends in "Try again." beside the retry button (retryBecauseLine). */}
           <p role="status"><LineText text={retryBecauseLine(unavailable)} /></p>
-          <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
+          <button type="button" className="chat-model-picker__retry" aria-label="Try again loading models" onClick={onRetry}>Try again</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}
           <fieldset className="chat-model-picker__options"><legend>Chat model</legend>

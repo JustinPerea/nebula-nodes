@@ -399,9 +399,12 @@ def _out_of_range(noun: str, text: str, where: str, count: int) -> str:
     head = f"Nebula couldn\u2019t point at {noun} {target} because {where} has"
     if count == 0:
         return f"{head} no {noun}s."
+    # An image is also found by its id; a view has no id an agent can send (_find_view), so its
+    # forms name the number alone.
+    by_id = ", or the image\u2019s id" if noun == "image" else ""
     if count == 1:
-        return f"{head} 1 {noun}. Use {noun} 1."
-    return f"{head} {count} {noun}s. Use a number from 1 to {count}."
+        return f"{head} 1 {noun}. Use {noun} 1{by_id}."
+    return f"{head} {count} {noun}s. Use a number from 1 to {count}{by_id}."
 
 
 def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, int]:

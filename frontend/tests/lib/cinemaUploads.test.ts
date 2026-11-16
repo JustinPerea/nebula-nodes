@@ -106,9 +106,9 @@ describe('Cinema reference ownership', () => {
     expect(api.generateCinemaShot).not.toHaveBeenCalled();
   });
   it('keeps per-file HTTP errors actionable, retains successful references and retries explicitly', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) }).mockResolvedValueOnce(response());
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Unavailable' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
-    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server didn’t accept it. Try again.', canRetry: true }); // GM 2026-11 copy sweep: the because form, ending as its Try again does
+    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server isn’t answering. Try again.', canRetry: true }); // GM 2026-11 copy sweep: the because form, ending as its Try again does
     expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “bad.png” again or remove it.');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);
@@ -129,9 +129,9 @@ describe('Cinema reference ownership', () => {
     expect(useGraphStore.getState().reserveGraphImport()).toBe(true);
     expect(uploadReasonRole(uploads()[0])).toBe('status');
     pending.resolve(response('old.png')); await drain(); useGraphStore.getState().releaseGraphImport();
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Unavailable' }) });
     retryCinemaReferenceUpload(id);
-    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: 'Nebula couldn’t upload “reference.png” because the server didn’t accept it. Try again.' }));
+    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: 'Nebula couldn’t upload “reference.png” because the server isn’t answering. Try again.' }));
     expect(uploadReasonRole(uploads()[0])).toBe('alert');
   });
   it('keeps restored interruption metadata through persisted-owner terminal settlement before graph hydration', async () => {
@@ -217,10 +217,15 @@ describe('GM 2026-11 copy sweep item 20: the upload row\'s failure lines, in the
   it.each([
     ['the server is not answering', new ConnectionLostError(new TypeError('Failed to fetch')),
       'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
-    ['a 503 from a gateway', failed(503), 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Try again.', true],
-    ['a 500', failed(500), 'Nebula couldn’t upload “photo.png” because the server hit an error. Try again.', true],
+    ['a 503 from a gateway', failed(503), 'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
+    ['a 500', failed(500), 'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
+    ['a 408 timeout', failed(408), 'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
+    ['a 400 about the file', failed(400, 'Invalid image bytes'),
+      'Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image.', false],
+    ['a 422 about the file', failed(422), 'Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image.', false],
     ['a 429', failed(429), 'Nebula couldn’t upload “photo.png” because the server is busy. Try again.', true],
-    ['a refusal with no listed reason', failed(415, 'Invalid image bytes'), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it. Try again.', true],
+    ['a refusal with no listed reason', failed(409), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it.', false],
+    ['a 404', failed(404, 'Not found'), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it.', false],
     ['a reply with no image', new FailureNotice("Couldn't upload photo.png.", 'The upload sent back no image.'),
       'Nebula couldn’t upload “photo.png” because the server sent back no image. Try again.', true],
     ['a file over the size limit', new FailureNotice("Couldn't upload photo.png.", 'Image exceeds the 20 MB limit.'),

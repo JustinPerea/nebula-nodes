@@ -419,6 +419,7 @@ function markNodesErrored(
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
         errorNotStarted: undefined,
+        errorMissingKey: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -455,6 +456,7 @@ function markNodesWithValidationErrors(
         errorProviderText: undefined,
         errorProvider: undefined,
         errorNotStarted: reading.errorNotStarted,
+        errorMissingKey: reading.errorMissingKey,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -11181,6 +11183,7 @@ function mergeSyncedNode(incoming: Node<NodeData>, existing: Node<NodeData> | un
           errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
           errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
           errorProvider: cliNode.data.errorProvider, errorNotStarted: cliNode.data.errorNotStarted,
+          errorMissingKey: cliNode.data.errorMissingKey,
         } : {}),
         keyStatus,
         ...(changedOutput ? clearBatchPreview() : {}),
@@ -15819,6 +15822,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           errorProviderText: event.providerText || undefined,
           errorProvider: event.provider || undefined,
           errorNotStarted: undefined,
+          errorMissingKey: event.missingCredential || undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -15836,7 +15840,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
               errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
-              errorNotStarted: reading.errorNotStarted,
+              errorNotStarted: reading.errorNotStarted, errorMissingKey: reading.errorMissingKey,
             });
           }
         }

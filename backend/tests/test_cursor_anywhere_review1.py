@@ -22,7 +22,7 @@ DIGITS = ["\u00b2", "#\u00b2", "\u2460", "\u0663", "#\u0663", "\uff11"]  # super
 def test_a_unicode_digit_is_not_an_image_number(ref):
     with pytest.raises(PresenceError) as refused:
         _parse({"surface": "moodboard", "board": "b1", "image": ref})
-    assert "because “Desert light” has 12 images." in str(refused.value) and "Use a number from 1 to 12." in str(refused.value)
+    assert "because “Desert light” has 12 images." in str(refused.value) and "Use a number from 1 to 12, or the image’s id." in str(refused.value)
     assert str(refused.value).startswith("Nebula couldn’t point at image ")
 
 

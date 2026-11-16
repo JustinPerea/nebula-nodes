@@ -1016,13 +1016,13 @@ describe('info lines in the toast slot', () => {
     await waitFor(() => expect(screen.queryByText('Uploading')).toBeNull());
     // Cmd+Z takes the paste back: the removal's toast stays, the line is announced.
     press('z', { metaKey: true });
-    await waitFor(() => expect(spokenLines()).toContain('Undid: Added #2'));
-    expect(screen.getByText('Removed #1')).toBeTruthy();
+    await waitFor(() => expect(spokenLines()).toContain('Undid: Added image 2'));
+    expect(screen.getByText('Removed image 1')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     // Cmd+Z again takes the removal back: its toast's offer is used up, so the line replaces it.
     press('z', { metaKey: true });
-    await screen.findByText('Undid: Removed #1');
-    expect(screen.queryByText('Removed #1')).toBeNull();
+    await screen.findByText('Undid: Removed image 1');
+    expect(screen.queryByText('Removed image 1')).toBeNull();
     raf.mockRestore();
   });
 
@@ -1030,7 +1030,7 @@ describe('info lines in the toast slot', () => {
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
     act(() => { screen.getByRole('button', { name: 'Undo' }).click(); });
-    await screen.findByText('Undid: Removed #1');
+    await screen.findByText('Undid: Removed image 1');
   });
 });
 
@@ -1543,7 +1543,7 @@ describe('review 3 test gaps', () => {
     await waitFor(() => expect(draftUrls()).toHaveLength(2));
     await waitFor(() => expect(screen.queryByText('Uploading')).toBeNull());
     press('z', { metaKey: true });
-    const lines = await screen.findAllByText('Undid: Added #2');
+    const lines = await screen.findAllByText('Undid: Added image 2');
     expect(lines.some((el) => !el.classList.contains('moodboard-board__sr-only'))).toBe(true);
     raf.mockRestore();
   });
@@ -5046,10 +5046,10 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     await screen.findByRole('button', { name: 'Undo' });
     act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
     await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
-    expect(screen.queryByText('Removed #1')).toBeNull();
+    expect(screen.queryByText('Removed image 1')).toBeNull();
     act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
     await screen.findByDisplayValue('Global board');
-    expect(screen.getByText('Removed #1')).toBeTruthy();
+    expect(screen.getByText('Removed image 1')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     raf.mockRestore();
   });
@@ -5079,7 +5079,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     useUIStore.getState().enterMoodboardEditor('g1', 'global');
     await act(async () => { await Promise.resolve(); });
     await screen.findByDisplayValue('Global board');
-    expect(screen.getByText('Undid: Added #3')).toBeTruthy();
+    expect(screen.getByText('Undid: Added image 3')).toBeTruthy();
   });
 
   it('GM r12 1: the neutral line\'s look is #204\'s neutral tokens, not the error colour', () => {

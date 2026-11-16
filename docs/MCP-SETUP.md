@@ -928,7 +928,7 @@ And these canvas tools:
   **Updates** in the top right of every screen (the canvas, Projects, the
   studios, the Commons), saved with the project. Updates posted with
   `board` are kept with that board: the person sees them in Moodboard
-  Studio's corner under "This board" (above the project's) while that board
+  Studio's corner under "This moodboard" (above the project's) while that board
   is open, and on no other screen, so post without `board` to reach the
   person anywhere. See [Updates](#updates).
 - `wait_for_canvas_change`: blocks until the person (or another agent)
@@ -2737,7 +2737,7 @@ canvas snapshot, like pins, so autosave never touches them) and switch with
 it. A moodboard's (posted with `board` / `--board`) are saved beside the board
 (`<moodboards>/.notes/<id>.json`, never in the board file). While the person
 has that board open in Moodboard Studio, the corner's list shows them first,
-under "This board" ("kept with this board"), then the project's, with one
+under "This moodboard" ("kept with this moodboard"), then the project's, with one
 count for both; opening the list reads both, and with no board updates the
 list is just the project's. "Show #12" / "Show on board" selects and frames
 the images on the board. Every other screen shows only the project's list,
@@ -2746,7 +2746,7 @@ so leave out `board` to reach the person anywhere. You read them back with
 
 ```bash
 nebula note "The two portrait branches use different seeds; I'll match them" --node n4 --node n7
-nebula note "#12 reads painterly and dither" --board Dusk --ref 12   # shown in Moodboard Studio on Dusk, under This board
+nebula note "#12 reads painterly and dither" --board Dusk --ref 12   # shown in Moodboard Studio on Dusk, under This moodboard
 nebula note "You moved the lake into Painterly" --board Dusk --since-last-turn
 nebula notes --unread                                   # the list, newest first
 ```
