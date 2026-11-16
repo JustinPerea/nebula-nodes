@@ -94,7 +94,7 @@ def test_the_cursor_still_points_at_the_first_node_with_its_own_line(monkeypatch
     _, ids, _ = _refused(monkeypatch, [GPT, TTS], MCP, [])
     [event] = [e for e in sent if e.get("type") == "agentPresence"]
     assert event["target"] == {"nodeId": ids[0]}
-    assert event["say"] == "“GPT Image 2” can’t run. Add your OpenAI API key in Settings, then run the node again."
+    assert event["say"] == "“GPT Image 2” can’t run. Add an OpenAI API key in Settings to run this node."
     assert event["log"] == (f"{HEADING} “GPT Image 2” and “OpenAI TTS” need your OpenAI API key. "
                             "Add it in Settings, then run the nodes again.")
 

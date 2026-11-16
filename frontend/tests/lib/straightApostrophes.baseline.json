@@ -70,7 +70,7 @@
   "lib/createUploads.ts": 1,
   "lib/deleteCopy.ts": 5,
   "lib/deleteNotice.ts": 7,
-  "lib/directRoute.ts": 6,
+  "lib/directRoute.ts": 5,
   "lib/editor/api.ts": 1,
   "lib/enhancePrompt.ts": 2,
   "lib/errorCopy.ts": 9,

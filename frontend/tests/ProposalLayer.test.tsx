@@ -128,7 +128,7 @@ describe('ProposalLayer', () => {
     const { container } = render(<ProposalLayer />);
     const badge = container.querySelector<HTMLElement>('.proposal-ghost .model-node__badge--warning')!;
     expect(badge.textContent).toBe('\u26A0');
-    expect(badge.title).toBe('Needs OPENAI_API_KEY');
+    expect(badge.title).toBe('Needs an OpenAI API key');
 
     // Adding the key clears it, while the proposal is still open.
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'set' }, loaded: true } }));

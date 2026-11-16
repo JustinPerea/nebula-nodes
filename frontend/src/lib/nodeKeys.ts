@@ -1,6 +1,6 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition, ProviderVia } from '../types';
-import { allParamDefinitions } from './directRoute';
+import { allParamDefinitions, keyPhrase, withArticle } from './directRoute';
 
 /**
  * What a node needs to run, for the utility nodes that still call a provider
@@ -101,13 +101,17 @@ function keyNames(def: ModelNodeDefinition): string[] {
   return (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
 }
 
-/** The missing-key badge's title: which keys, and for what. */
+/** The missing-key badge's title: which keys, and for what ("Needs an
+ * OpenAI API key"; by provider and in its own noun, never an env-var name). */
 export function missingKeyTitle(def: ModelNodeDefinition, params: Params | undefined, defs: Definitions = NODE_DEFINITIONS): string {
   const needs = keysNeeded(def, params, defs);
   if (needs === null) return 'Scene base model unavailable: choose a supported one in the Studio';
   const parts = needs.filter((need) => keyNames(need.definition).length)
-    .map((need) => `${keyNames(need.definition).join(' or ')}${need.reason ? ` for ${need.reason}` : ''}`);
-  return parts.length ? `Needs ${parts.join('; ')}` : 'API Key Missing';
+    .map((need) => {
+      const phrase = keyPhrase(keyNames(need.definition));
+      return `${phrase ? withArticle(phrase) : 'an API key'}${need.reason ? ` for ${need.reason}` : ''}`;
+    });
+  return parts.length ? `Needs ${parts.join('; ')}` : 'Needs an API key';
 }
 
 /** The model a cinema scene's run calls, the params it sends, and its shot

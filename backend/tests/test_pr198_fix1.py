@@ -232,3 +232,14 @@ RAW_KEY_LABELS = [
 def test_a_raw_key_gets_one_sentence_case_label_on_both_sides(key, label):
     assert universal_ports.setting_label(key) == label
     assert universal_ports._title(key) == label
+
+
+@pytest.mark.parametrize(("key", "label"), RAW_KEY_LABELS)
+def test_a_setting_with_no_label_reads_as_its_key_in_words_in_the_route_lines(key, label):
+    """node_route._param_label is the Python twin of directRoute's `param?.label || universalSettingLabel(key)`
+    (copy sweep, cards follow-up): the same rows, so a route line never shows a raw key."""
+    from services import node_route
+
+    assert node_route._param_label(None, key) == label
+    assert node_route._param_label({}, key) == label
+    assert node_route._param_label({"label": "Own label"}, key) == "Own label"

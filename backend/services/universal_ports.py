@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from services.setting_labels import setting_label  # noqa: F401 - callers import it from here too
 from services.media_types import MEDIA_PORT_IDS, media_named_in_text, media_of_extension, media_of_mime, media_of_value
 
 MODEL_PARAM: dict[str, str] = {
@@ -110,26 +111,6 @@ def modality_ports(row: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[d
     if "image" in outputs_in:
         outputs.append({"id": "image", "label": "Image", "dataType": "Image", "required": False})
     return inputs, outputs
-
-
-def setting_label(key: str) -> str:
-    """A raw provider key as a person reads it (GM, PR #198 r1 item 7, then
-    the 2026-11 copy sweep item 17): split into words and set in sentence
-    case. Snake case, camelCase and PascalCase all split, and an acronym stays
-    in capitals: "guidance_scale" gives "Guidance scale", "filePath" gives
-    "File path", "numInferenceSteps" gives "Num inference steps", "imageURL"
-    gives "Image URL". The frontend's twin is lib/universalSettingLabel.ts;
-    both are held to the same table of cases."""
-    spaced = key.replace("_", " ")
-    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", spaced, flags=re.ASCII)
-    spaced = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", spaced, flags=re.ASCII)
-    words = [
-        word if re.fullmatch(r"[A-Z]{2,}", word, flags=re.ASCII) else word.lower()
-        for word in spaced.split(" ")
-        if word != ""
-    ]
-    joined = " ".join(words)
-    return joined[:1].upper() + joined[1:]
 
 
 def _title(key: str) -> str:

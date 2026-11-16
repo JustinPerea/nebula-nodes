@@ -21,7 +21,7 @@ describe('ProviderReadinessBadge on Idol (GM, PR #203 r12)', () => {
     const label = screen.getByText('Free').closest('.provider-readiness__label');
     expect(label).toHaveTextContent(/^Hugging Face · Free$/);
     expect(label).toHaveAttribute('title', 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. '
-      + 'Add your Hugging Face token in Settings to use your own allowance.');
+      + 'Add a Hugging Face token in Settings to use your own allowance.');
   });
 
   it('reads "Hugging Face token · Saved" with the token, and only "Idol uses your Hugging Face allowance."', () => {

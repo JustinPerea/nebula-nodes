@@ -376,16 +376,16 @@ describe('ProjectHome', () => {
     expect(actions.onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('error-copy round 2 (GM\'s WRAP rule): beside "Try again" the reason drops its own "try again"', () => {
+  it('error-copy round 2: beside "Try again" the line is in the because form and ends in "Try again."', () => {
     render(<ProjectHome {...props({ projects: [], error: "Couldn't load your projects. Nebula didn't respond. Try again." })} />);
     expect(screen.getByRole('alert').querySelector('span')?.textContent)
-      .toBe("Couldn't load your projects. Nebula didn't respond.");
+      .toBe('Nebula couldn’t load your projects because the server didn’t respond. Try again.');
   });
 
   it('error-copy round 3b: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
     const line = "Couldn't open the project. Nebula didn't respond. Try again.";
     const { rerender } = render(<ProjectHome {...props({ error: line, retry: 'redo' })} />);
-    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't open the project. Nebula didn't respond.");
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe('Nebula couldn’t open the project because the server didn’t respond. Try again.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     // A refusal the same request would get again: no Try again, the whole line.
     const refusal = "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.";

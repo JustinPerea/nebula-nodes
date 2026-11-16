@@ -23,7 +23,7 @@ const CLOSE_ROWS: [where: string, line: string][] = [
 import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { projectRestoreFailedLine } from '../src/components/moodboard-studio/boardSaveLine';
 import { uploadFailure } from '../src/lib/cinemaUploads';
-import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, RequestFailedError, retryBecauseLine } from '../src/lib/errorCopy';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
 // GM r23 on #208: a line shown with a [Try again] button ends in "Try
@@ -42,6 +42,12 @@ const ROWS: [where: string, line: string][] = [
   ['the Cinema upload row, the server hit an error', uploadFailure('photo.png', new RequestFailedError('', 500)).line],
   ["the Cinema upload row, the server didn't respond", uploadFailure('photo.png', new RequestFailedError('', 503)).line],
   ["the Cinema upload row, the server didn't accept it", uploadFailure('photo.png', new RequestFailedError('', 415, { detail: 'Invalid image bytes' })).line],
+  // GM 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
+  ['Project home, an open that the server did not answer', retryBecauseLine(`Couldn't open the project. ${CONNECTION_LOST_COPY}`)],
+  ['Project home, a save that got no response', retryBecauseLine(`Couldn't save the project. ${NO_RESPONSE_COPY}`)],
+  ['the workspace Save failed tooltip, no answer', retryBecauseLine(`Couldn't save the project. ${CONNECTION_LOST_COPY}`)],
+  ['the asset trash toast beside Undo, no response', retryBecauseLine(`Couldn't restore “Shore”. ${NO_RESPONSE_COPY}`)],
+  ['the chat model picker, no answer', retryBecauseLine(`Couldn't load the models. ${CONNECTION_LOST_COPY}`)],
 ];
 
 describe('every line shown with Try again ends in "Try again."', () => {

@@ -58,7 +58,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
     expect(anonymous).toEqual({ label: 'Free', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',
-      detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add your Hugging Face token in Settings '
+      detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add a Hugging Face token in Settings '
         + 'to use your own allowance.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',

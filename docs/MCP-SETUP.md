@@ -219,7 +219,7 @@ The server exposes these tools for building and running (see
   (Moodboard)?". (Before, `nebula create` stored a node of any type it was
   given and `nebula quick` tried to run it.) A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
-  picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
+  picks the provider (Cinema scene's `scene.base.model`, a QC node's `mode`),
   and a note when another value would run with the keys set here. A QC
   node's `pricedWhen` lists the price rows of its paid modes (Jev). A
   multi-provider node (FLUX.2, FLUX 3, Krea 3) has `providerChoice` and
@@ -5446,7 +5446,7 @@ type in one call. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
 `apiProvider: utility` only means "no top-level key". A local node that still
 calls a provider says how in its definition's `providerVia` (`kind: model`
-for Cinema Scene's base model, `kind: param` for the QC nodes' mode, with
+for Cinema scene's base model, `kind: param` for the QC nodes' mode, with
 `byValue` for a mode that needs its own key, like QC `jev` and
 `TYPESAFE_API_KEY`), and readiness, the canvas badge, the run estimate and proposals all read it.
 `backend/tests/test_node_readiness.py` fails when a utility handler that can

@@ -24,7 +24,7 @@ import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { isKeyLocked, runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
-import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
+import { allParamDefinitions, missingKeyLine, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
@@ -1418,8 +1418,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
       )}
 
       {missingApiKeys.length > 0 && (
-        <div className="inspector__notice inspector__notice--warning" role="status">
-          Missing API key: {missingApiKeys.join(', ')}
+        // A missing key is something to do, not a failure: the run error's
+        // line, in the neutral notice (copy sweep item 12).
+        <div className="inspector__notice inspector__notice--key" role="status">
+          {missingKeyLine([...new Set(missingApiKeys)])}
         </div>
       )}
       {usesKreaMcp && activeNodeData.keyStatus === 'missing' && !switchable && (

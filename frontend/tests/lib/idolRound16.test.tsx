@@ -57,9 +57,9 @@ describe('every provider\'s setup button words (GM r30 item 3)', () => {
 
   it('pins the lines GM named', () => {
     const words = (key: string) => setupButtonWords({ keyState: 'missing', setup: { kind: 'api-key', key }, label: 'Row' });
-    expect(words('REPLICATE_API_TOKEN')).toEqual({ label: 'Add token', description: 'Add your Replicate token in Settings.' });
-    expect(words('HF_TOKEN')).toEqual({ label: 'Add token', description: 'Add your Hugging Face token in Settings.' });
-    expect(words('FAL_KEY')).toEqual({ label: 'Add key', description: 'Add your fal.ai API key in Settings.' });
+    expect(words('REPLICATE_API_TOKEN')).toEqual({ label: 'Add token', description: 'Add a Replicate token in Settings to run this node.' });
+    expect(words('HF_TOKEN')).toEqual({ label: 'Add token', description: 'Add a Hugging Face token in Settings to run this node.' });
+    expect(words('FAL_KEY')).toEqual({ label: 'Add key', description: 'Add a fal.ai API key in Settings to run this node.' });
     expect(words('GOOGLE_VERTEX_CREDENTIALS').label).toBe('Add key');
   });
 
@@ -76,7 +76,7 @@ describe('the rendered setup buttons (GM r30 item 3)', () => {
     const button = within(replicate).getByRole('menuitem', { name: 'Add token' });
     expect(button).toHaveTextContent('Add token →');
     expect(button).toHaveAccessibleName('Add token');
-    expect(button).toHaveAccessibleDescription('Add your Replicate token in Settings.');
+    expect(button).toHaveAccessibleDescription('Add a Replicate token in Settings to run this node.');
     // No switcher says "Add key" for a token.
     expect(within(replicate).queryByRole('menuitem', { name: /Add key/ })).toBeNull();
   });

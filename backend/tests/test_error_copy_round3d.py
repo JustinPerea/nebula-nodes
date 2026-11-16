@@ -456,7 +456,7 @@ async def test_a_route_table_run_with_no_key_for_its_route_says_add_it() -> None
     exc = await _araised(router, _node("flux-3-video", {"_provider": "replicate"}), {"prompt": _port("p")}, {})
     assert str(exc) == ("FLUX 3 Video is set to Replicate, which needs REPLICATE_API_TOKEN. "
                         "Add it in Settings > Providers, or choose another provider.")
-    assert person_line(exc) == "Add your Replicate token in Settings, then run the node again."
+    assert person_line(exc) == "Add a Replicate token in Settings to run this node."
 
 
 def _settings_label(key: str) -> str:
@@ -483,7 +483,7 @@ def test_jev_modes_key_line_is_gms() -> None:
 
     exc = _raised(setup, {}, {})
     assert str(exc) == "TYPESAFE_API_KEY is required for Jev mode"
-    assert person_line(exc) == "Add your TypeSafe API key in Settings, then run the node again."
+    assert person_line(exc) == "Add a TypeSafe API key in Settings to run this node."
 
 
 # -- 6. GM's Krea lines --------------------------------------------------------

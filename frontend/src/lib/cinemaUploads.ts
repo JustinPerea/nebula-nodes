@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { uploadReference } from './uploadReference';
-import { FailureNotice, RequestFailedError, isNoAnswer, loadFailedLine } from './errorCopy';
+import { FailureNotice, RequestFailedError, actionFailedLine, isNoAnswer } from './errorCopy';
 import { quoted } from './quoted';
 import { shownFileName } from './fileName';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../store/cinemaUploadStore';
@@ -19,8 +19,8 @@ const NO_IMAGE_REASON = 'The upload sent back no image.';
 /**
  * A failed upload's line for the Cinema row, in the because form with Nebula
  * the subject ("Nebula couldn’t upload “photo.png” because the server isn’t
- * answering. Try again."), built from the shared load-failure helper so its
- * reasons are the app's. The row's Try again sits beside the line, so the
+ * answering. Try again."), built from errorCopy's action helper (actionFailedLine) so
+ * its reasons are the app's. The row's Try again sits beside the line, so the
  * line ends in "Try again." (the standing rule); a reason where trying again
  * cannot help (a file over the size limit, a wrong type, a refusal because
  * you're signed out) names the fix instead, ends without it, and the row
@@ -37,12 +37,8 @@ export function uploadFailure(name: string, error: unknown): { line: string; ret
   }
   if (turnedAway === NO_IMAGE_REASON) return { line: `${lead} the server sent back no image. Try again.`, retryable: true };
   if (isNoAnswer(error)) return { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
-  const shared = loadFailedLine(`upload ${quoted(shownFileName(name))}`, error)
-    // The shared lines end in a step that fits a page load ("Try again in a moment.", "Check that Nebula is
-    // running, then try again."); beside the row's own button they end in "Try again.".
-    .replace(/(?:Try again in a moment\.|Check that Nebula is running, then try again\.)$/, 'Try again.');
-  const line = shared || `${lead} the server isn’t answering. Try again.`;
-  return { line, retryable: line.endsWith('Try again.') };
+  const failed = actionFailedLine(`upload ${quoted(shownFileName(name))}`, error);
+  return failed.line ? failed : { line: `${lead} the server isn’t answering. Try again.`, retryable: true };
 }
 
 function hasTarget(nodeId: string, shotId?: string) {

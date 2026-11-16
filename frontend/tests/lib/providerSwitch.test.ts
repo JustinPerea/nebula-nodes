@@ -69,7 +69,7 @@ describe('providerSwitchState', () => {
     const unknown = providerSwitchState(flux2, { _provider: 'xyz' }, context({ BFL_API_KEY: KEY }));
     expect(unknown.message).toBe('“FLUX.2” is set to a provider that isn’t in its list. Choose one in its provider switcher.');
     const auto = providerSwitchState(flux2, {}, context({}));
-    expect(auto.message).toMatch(/^Add your .* in Settings, then run the node again\.$/);
+    expect(auto.message).toMatch(/^Add an? .* in Settings to run this node\.$/);
     for (const state of [chosen, unknown, auto]) {
       expect(state.message).not.toMatch(env);
       expect(state.message).not.toMatch(/Settings > Providers|'xyz'|\bauto\b|\(/);

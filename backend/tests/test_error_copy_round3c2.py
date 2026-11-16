@@ -216,13 +216,13 @@ async def test_a_character_node_with_no_character_names_the_field_not_the_api() 
 
 
 @pytest.mark.parametrize(("text", "line"), [
-    ("OPENAI_API_KEY is required", "Add your OpenAI API key in Settings, then run the node again."),
-    ("FAL_KEY is required", "Add your fal.ai API key in Settings, then run the node again."),
-    ("REPLICATE_API_TOKEN is required", "Add your Replicate token in Settings, then run the node again."),
+    ("OPENAI_API_KEY is required", "Add an OpenAI API key in Settings to run this node."),
+    ("FAL_KEY is required", "Add a fal.ai API key in Settings to run this node."),
+    ("REPLICATE_API_TOKEN is required", "Add a Replicate token in Settings to run this node."),
     ("ELEVENLABS_API_KEY or RUNWAY_API_KEY is required",
-     "Add your ElevenLabs or Runway API key in Settings, then run the node again."),
+     "Add an ElevenLabs or Runway API key in Settings to run this node."),
     ("GOOGLE_VERTEX_CREDENTIALS is required",
-     "Add your Vertex AI service account key in Settings, then run the node again."),
+     "Add a Vertex AI service account key in Settings to run this node."),
 ])
 def test_a_missing_key_says_add_it_in_settings(text: str, line: str) -> None:
     from execution.missing_credential import MissingCredentialError
@@ -639,7 +639,7 @@ def test_quivers_own_credits_and_key_lines_reach_the_card() -> None:
     assert person_line(credits) == "Your QuiverAI account is out of credits. Add credits, then run the node again."
     auth = _wrap_provider_error(QuiverAuthError("401 from QuiverAI", status_code=401))
     assert str(auth) == "QuiverAI auth failed — check QUIVER_API_KEY"
-    assert person_line(auth) == "Add your QuiverAI API key in Settings, then run the node again."
+    assert person_line(auth) == "Add a QuiverAI API key in Settings to run this node."
     # The classifier's own line for a rate limit, and provider text, keep GM's design.
     assert person_line(_wrap_provider_error(QuiverRateLimitError("429", status_code=429))) is None
     assert person_line(_wrap_provider_error(QuiverServerError("upstream exploded", status_code=502))) is None

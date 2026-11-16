@@ -34,7 +34,7 @@ const HEADING = "Couldn't run the node.";
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const KEY = 'Missing API key: OPENAI_API_KEY';
-const KEY_LINE = 'Add your OpenAI API key in Settings, then run the node again.';
+const KEY_LINE = 'Add an OpenAI API key in Settings to run this node.';
 const PORT = "Required input port 'prompt' is not connected";
 const PORT_LINE = 'Connect a prompt, then run the node again.';
 const OVER_CAP = 'Batch has 3 items, exceeding its batch_size_cap of 2. Reduce the list or raise the cap before running; '

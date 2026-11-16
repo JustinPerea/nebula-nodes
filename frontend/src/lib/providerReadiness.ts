@@ -2,9 +2,10 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import {
-  directBlock, directKeyNames, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
+  directBlock, directKeyNames, withArticle, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
   type DirectBlock, type NodeRoute,
 } from './directRoute';
+import { credentialNounFor } from './credentialNoun';
 import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -79,19 +80,14 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
   }
 }
 
-/** "an OpenAI", "a fal.ai", "an xAI": a name with its article, for a line
- * that puts one before a provider (review 10 of PR #203: "Add a Anthropic
- * …"). A name read letter by letter from an x ("xAI") takes "an". */
-export function withArticle(name: string): string {
-  return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
-}
+export { withArticle };
 
 export function keyReadiness(key: string, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
   const target: ProviderSetupTarget = { kind: 'api-key', key };
   const provider = PROVIDER_KEY_LABELS[key] ?? key;
   if (!cache.loaded) return { label: 'Connection not loaded', detail: 'Saved connection settings have not loaded yet.', tone: 'neutral', setupTarget: target };
   if (!cache.apiKeys[key]?.trim()) return { label: 'Setup required',
-    detail: `Add your ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
+    detail: `Add ${withArticle(`${provider} ${credentialNounFor(key) === 'token' ? 'token' : 'API key'}`)} in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
   if (health.loading) return { label: 'Checking connection', tone: 'neutral', setupTarget: target,
     detail: `${provider} saved credential is being checked without generating.` };
   const checked = checkedReadiness(provider, target, health);
@@ -217,7 +213,7 @@ function spaceReadiness(
     // says what is needed, the status only that it is.
     return {
       label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
-      detail: `Add your ${name} token in Settings to run ${def.displayName}.`,
+      detail: `Add ${withArticle(`${name} token`)} in Settings to run ${def.displayName}.`,
     };
   }
   // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
@@ -227,7 +223,7 @@ function spaceReadiness(
     ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const } : {}),
     ...(name ? { connectionLabel: name } : {}),
     detail: name
-      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add your ${name} token in Settings to use your own allowance.`
+      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add ${withArticle(`${name} token`)} in Settings to use your own allowance.`
       : `${def.displayName} runs free on shared GPUs, which can be busy.`,
   };
 }

@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  addKeyLine, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
+  addKeyLine, withArticle, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routesThatCanTake, routeTakesValue, orList,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -531,11 +531,11 @@ export function providerKeyWarnings(
  * Replicate and Hugging Face, "Add key" for the rest), with a decorative
  * "→" after it; the button's accessible name is `label`, so it holds what
  * sighted people read (WCAG 2.5.3). `description` is the one add-key line
- * (directRoute.addKeyLine, "Add your Replicate token in Settings."), given
+ * (directRoute.addKeyLine, "Add a Replicate token in Settings to run this node."), given
  * through aria-describedby, by the provider the key belongs to (Idol's row
  * is Speridlabs, its key Hugging Face's token). A Krea plan row signs in. */
 export function setupButtonWords(row: Pick<ProviderRow, 'keyState' | 'setup' | 'label'>): { label: string; description: string } {
   if (row.keyState === 'sign-in') return { label: 'Sign in', description: 'Sign in to Krea in Settings.' };
   const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
-  return { label: `Add ${credentialNounFor(key)}`, description: (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.` };
+  return { label: `Add ${credentialNounFor(key)}`, description: (key && addKeyLine([key])) || `Add ${withArticle(`${row.label} key`)} in Settings to run this node.` };
 }

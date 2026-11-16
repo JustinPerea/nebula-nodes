@@ -105,7 +105,7 @@ describe('the node card\'s general line', () => {
   });
 
   it('keeps a line the person can act on', () => {
-    const person = 'Add your fal.ai API key in Settings, then run the node again.';
+    const person = 'Add a fal.ai API key in Settings to run this node.';
     expect(nodeErrorCopy({ raw: RAW, category: 'auth', person, provider: 'fal.ai' }).reason).toBe(person);
     const friendly = 'fal.ai is having trouble right now. Try again in a few minutes.';
     expect(nodeErrorCopy({ raw: RAW, category: 'network', friendly, provider: 'fal.ai' }).reason).toBe(friendly);

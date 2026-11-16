@@ -250,9 +250,9 @@ def test_every_settings_refusal_carries_a_code_beside_its_line(home_file):
 
 def test_vertex_is_a_service_account_key_in_every_line():
     assert person_line.key_line(["GOOGLE_VERTEX_CREDENTIALS"]) == \
-        "Add your Vertex AI service account key in Settings, then run the node again."
+        "Add a Vertex AI service account key in Settings to run this node."
     assert person_line.key_line(["GOOGLE_VERTEX_CREDENTIALS", "GOOGLE_API_KEY"]) == \
-        "Add your Vertex AI service account key or Gemini API key in Settings, then run the node again."
+        "Add a Vertex AI service account key or Gemini API key in Settings to run this node."
     # Only the Settings row says "Google ·" in front (providerCatalog).
     assert not person_line.key_phrase(["GOOGLE_VERTEX_CREDENTIALS"]).startswith("Google")
 
@@ -462,7 +462,7 @@ def test_route_table_auto_with_no_key_names_the_node():
     assert node_readiness.instance_missing_line(flux, {}, [], False, definitions, name="FLUX.2") == \
         "“FLUX.2” needs your Black Forest Labs or fal.ai API key. Add one in Settings."
     assert node_route.route_unavailable_line(flux, {}, {}) == \
-        "Add your Black Forest Labs or fal.ai API key in Settings, then run the node again."
+        "Add a Black Forest Labs or fal.ai API key in Settings to run this node."
 
 
 def test_merged_not_ready_lines_and_the_run_again_ending():

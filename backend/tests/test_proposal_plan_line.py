@@ -367,7 +367,7 @@ def test_a_name_is_quoted_only_where_the_line_starts_with_the_model():
     import main
 
     gpt = {"displayName": "GPT Image 2"}
-    line = "Add your OpenAI API key in Settings, then run the node again."
+    line = "Add an OpenAI API key in Settings to run this node."
     assert main._quoted_name_line(line, "Add", gpt) == line
     assert main._quoted_name_line("This node is set to OpenAI.", "This", {"displayName": ""}) == (
         "This node is set to OpenAI.")

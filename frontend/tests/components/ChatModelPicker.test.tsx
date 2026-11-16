@@ -159,10 +159,10 @@ describe('ChatModelPicker', () => {
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 
-  it('error-copy round 2 (GM\'s WRAP rule): beside its Retry the reason drops its own "try again"', () => {
+  it('error-copy round 2: beside its Retry the line is in the because form and ends in "Try again."', () => {
     render(<ChatModelPicker {...props({ error: "Couldn't load the models. Nebula didn't respond. Try again." })} />);
     open();
-    expect(screen.getByRole('status').textContent).toBe("Couldn't load the models. Nebula didn't respond.");
+    expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t load the models because the server didn’t respond. Try again.');
   });
 
   it('requires explicit replacement of a removed saved model or unsupported saved effort', () => {

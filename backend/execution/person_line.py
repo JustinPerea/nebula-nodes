@@ -254,6 +254,14 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
 }
 
 
+def with_article(name: str) -> str:
+    """"an OpenAI", "a fal.ai", "an xAI": a name with its article, chosen by
+    sound (frontend providerReadiness.withArticle is the twin; both are pinned
+    by one shared table of cases). A name read letter by letter from an x
+    ("xAI") takes "an"."""
+    return f"{'an' if re.match(r'[aeiou]', name, re.I) or re.match(r'x[A-Z]', name) else 'a'} {name}"
+
+
 def _or_list(items: list[str]) -> str:
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"
 
@@ -300,9 +308,12 @@ def _add_need(key: str) -> str:
 
 
 def key_line(keys: Iterable[str]) -> str | None:
-    """The line for a run that stopped at its own key check."""
+    """The line for a run that stopped at its own key check (GM, copy sweep
+    item 12): "Add an OpenAI API key in Settings to run this node." The
+    article goes by the first name; a provider whose own term is "token"
+    keeps it."""
     phrase = key_phrase(keys)
-    return f"Add your {phrase} in Settings, then run the node again." if phrase else None
+    return f"Add {with_article(phrase)} in Settings to run this node." if phrase else None
 
 
 def key_name(key: str) -> tuple[str, str] | None:
@@ -321,14 +332,15 @@ STATUS_LINES: dict[str, str] = {
     "busy": "{provider} is busy. Wait a moment, then run the node again.",
     "trouble": "{provider} is having trouble right now. Try again in a few minutes.",
     "no_result": "{provider} didn't return a result. Run the node again.",
-    "missing": "Add your {provider} {credential} in Settings, then run the node again.",
+    "missing": "Add {a_provider} {credential} in Settings to run this node.",
 }
 
 
 def status_line(kind: str, provider: str, credential: str = "API key") -> str:
     """GM's line for ``kind`` (STATUS_LINES), naming ``provider``."""
     it = "them" if credential.endswith("s") else "it"
-    return STATUS_LINES[kind].format(provider=provider, credential=credential, it=it)
+    return STATUS_LINES[kind].format(provider=provider, a_provider=with_article(provider),
+                                     credential=credential, it=it)
 
 
 def slow_job_line(provider: str) -> str:
@@ -452,7 +464,7 @@ def model_name(model: object, definition_id: str | None = None, default: str = "
 def missing_key_line(keys: Iterable[str]) -> str:
     """The pre-run check's missing key (error copy round 3e): key_line, or,
     for a key Settings doesn't list by name, the same line without one."""
-    return key_line(keys) or "Add this node's API key in Settings, then run the node again."
+    return key_line(keys) or "Add an API key in Settings to run this node."
 
 
 # An input said in words (GM's rule 6, round 3f: "Connect {a/an X in words} to

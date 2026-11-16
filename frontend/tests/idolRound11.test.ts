@@ -125,7 +125,7 @@ describe('articles and the key notices (review 10, copy MEDIUM-2; GM r21 item 4)
     expect(withArticle('Replicate')).toBe('a Replicate');
   });
 
-  it('a missing key reads "Add your …", never "Add a Anthropic"', () => {
+  it('a missing key reads "Add an …" by sound, never "Add a Anthropic"', () => {
     const def = Object.values(NODE_DEFINITIONS).find((entry) => entry.apiProvider === 'anthropic' && !('routes' in entry))!;
     const ready = modelReadiness(def, {}, { loaded: true, apiKeys: {} } as never, { loading: false } as never);
     expect(ready.detail ?? '').not.toMatch(/\ba [AEIOU]/);
