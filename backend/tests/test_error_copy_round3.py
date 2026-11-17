@@ -37,10 +37,10 @@ DESKTOP = {"Sec-Fetch-Site": "same-site", **CANVAS_PARAMS_VERSION}
 
 
 def gone(thing: str, things: str) -> str:
-    return f"That {thing} isn't there anymore. Reload to get the latest {things}."
+    return f"That {thing} isn’t there anymore. Reload to get the latest {things}."
 
 
-NODE_GONE = "That node isn't on the canvas anymore."
+NODE_GONE = "That node isn’t on the canvas anymore."
 WAITING = "This node is still waiting on World Labs."  # before round 13 of PR #114
 # GM - Design's World Labs lines for round 13 of PR #114, verbatim (each under
 # the screen's own "Couldn't <action>." heading; node names are card titles).
@@ -382,9 +382,9 @@ MAIN_404S = [
     ("POST", "/api/moodboards/mb_missing/move", {"projectId": None}, gone("board", "boards"), "Moodboard mb_missing"),
     ("DELETE", "/api/presets/st_missing", None, gone("style", "styles"), "Style st_missing"),
     ("POST", "/api/trash/moodboard/mb_missing/restore", None,
-     "That board isn't in Recently deleted anymore. Reload to get the latest list.", "Moodboard mb_missing"),
+     "That board isn’t in Recently deleted anymore. Reload to get the latest list.", "Moodboard mb_missing"),
     ("POST", "/api/trash/character/ch_missing/restore", None,
-     "That character isn't in Recently deleted anymore. Reload to get the latest list.", "Character ch_missing"),
+     "That character isn’t in Recently deleted anymore. Reload to get the latest list.", "Character ch_missing"),
     ("GET", f"/api/projects/{MISSING_PROJECT}", None, gone("project", "projects"), "Project not found"),
     ("PUT", f"/api/projects/{MISSING_PROJECT}", {"name": "x"}, gone("project", "projects"), "Project not found"),
     ("GET", "/api/executions/run_missing", None, gone("run", "runs"), "run run_missing"),
@@ -418,13 +418,13 @@ def test_an_agent_keeps_the_specific_404_text(app_client, method, path, body, pe
 # written line is the only text.
 PERSON_ONLY_404S = [
     ("DELETE", "/api/trash/moodboard/mb_missing", None,
-     "That board isn't in Recently deleted anymore. Reload to get the latest list."),
+     "That board isn’t in Recently deleted anymore. Reload to get the latest list."),
     ("DELETE", "/api/trash/style/st_missing", None,
-     "That style isn't in Recently deleted anymore. Reload to get the latest list."),
+     "That style isn’t in Recently deleted anymore. Reload to get the latest list."),
     ("POST", f"/api/projects/{MISSING_PROJECT}/restore", None,
-     "That project isn't in Recently deleted anymore. Reload to get the latest list."),
+     "That project isn’t in Recently deleted anymore. Reload to get the latest list."),
     ("DELETE", f"/api/projects/trash/{MISSING_PROJECT}", None,
-     "That project isn't in Recently deleted anymore. Reload to get the latest list."),
+     "That project isn’t in Recently deleted anymore. Reload to get the latest list."),
     ("PUT", "/api/personal-agents/custom-missing", {"enabled": False}, gone("agent", "agents")),
     ("DELETE", "/api/personal-agents/custom-missing", None, gone("agent", "agents")),
     ("PUT", "/api/agent/spend/apps/app_missing", {"dailyUsd": None}, gone("app", "apps")),

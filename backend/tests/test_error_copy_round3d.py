@@ -390,14 +390,14 @@ def test_a_missing_file_says_image_audio_or_video_in_words(what, value, kind) ->
     from execution.person_line import missing_file_line
 
     assert missing_file_line(what, value) == (
-        f"A connected {kind} file can't be found. Connect it again, then run the node again.")
+        f"A connected {kind} file can’t be found. Connect it again, then run the node again.")
 
 
 def test_a_missing_file_of_another_kind_uses_the_inputs_own_name() -> None:
     from execution.person_line import missing_file_line
 
     assert missing_file_line("Mesh", "/x/a.glb") == (
-        "A connected mesh file can't be found. Connect it again, then run the node again.")
+        "A connected mesh file can’t be found. Connect it again, then run the node again.")
 
 
 @pytest.mark.asyncio
@@ -406,7 +406,7 @@ async def test_gemini_omnis_missing_media_names_its_kind() -> None:
 
     exc = await _araised(_load_bytes, "/no/such/take.mp4")
     assert str(exc) == "Media not found: /no/such/take.mp4"
-    assert person_line(exc) == "A connected video file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
 def test_the_frame_extractors_missing_source_uses_gms_line() -> None:
@@ -432,7 +432,7 @@ def test_a_checked_media_file_names_its_kind(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))
     exc = _raised(media_input.checked_local_file, str(tmp_path / "gone.mp3"), label="Dubbing audio", max_bytes=10)
     assert str(exc) == f"Dubbing audio not found: {tmp_path / 'gone.mp3'}"
-    assert person_line(exc) == "A connected audio file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected audio file can’t be found. Connect it again, then run the node again."
 
 
 # -- 5. every missing-key shape that reaches the card ------------------------
@@ -774,7 +774,7 @@ def test_hailuo_and_grok_lines_name_the_model_not_its_id() -> None:
     exc = _raised(translate, _node("krea-video-minimax-hailuo-2-3", {"prompt": "a", "start_image": "https://e.com/a.png",
                                                                       "end_image": "https://e.com/b.png", "duration": 6}), {})
     assert "MiniMax-Hailuo-2.3 can't take" in str(exc)
-    assert person_line(exc).startswith("MiniMax's first-and-last-frame mode is Hailuo 02 only, so Hailuo 2.3 can't take")
+    assert person_line(exc).startswith("MiniMax’s first-and-last-frame mode is Hailuo 02 only, so Hailuo 2.3 can’t take")
 
     translate = krea_grok_video_to_xai("grok-imagine-video-1.5")
     refs = [f"https://e.com/{n}.png" for n in range(GROK_VIDEO_MAX_REFERENCES + 1)]
@@ -875,9 +875,9 @@ def test_every_route_table_nodes_missing_file_uses_gms_line(tmp_path, monkeypatc
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))
     exc = _raised(local_media_path, str(tmp_path / "gone.png"))
     assert str(exc) == "A connected input isn't a readable file: gone.png"
-    assert person_line(exc) == "A connected image file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected image file can’t be found. Connect it again, then run the node again."
     exc = _raised(local_media_path, str(tmp_path / "take.mp4"))
-    assert person_line(exc) == "A connected video file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
 def test_save_to_krea_files_missing_file_uses_gms_line(tmp_path, monkeypatch) -> None:
@@ -887,13 +887,13 @@ def test_save_to_krea_files_missing_file_uses_gms_line(tmp_path, monkeypatch) ->
     # A deleted local output, not a remote URL.
     exc = _raised(_local_path, str(tmp_path / "gone.png"))
     assert str(exc) == "Save to Krea Files input is not a readable file"
-    assert person_line(exc) == "A connected image file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected image file can’t be found. Connect it again, then run the node again."
     # A path that is there but isn't a file.
     folder = tmp_path / "folder"
     folder.mkdir()
     exc = _raised(_local_path, str(folder))
     assert str(exc) == "Save to Krea Files input is not a readable file"
-    assert person_line(exc) == "A connected file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected file can’t be found. Connect it again, then run the node again."
     # A remote URL keeps its own line.
     exc = _raised(_local_path, "https://example.com/a.png")
     assert person_line(exc) == "Save to Krea Files takes media made or uploaded in Nebula, not links. Connect one of those."
@@ -904,7 +904,7 @@ def test_krea_media_input_missing_file_uses_gms_line(tmp_path) -> None:
 
     exc = _raised(_asset_data, str(tmp_path / "gone.mp4"))
     assert str(exc) == "Krea media input is not a readable local file"
-    assert person_line(exc) == "A connected video file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
 def test_a_chat_nodes_missing_image_uses_gms_line(tmp_path, monkeypatch) -> None:
@@ -915,10 +915,10 @@ def test_a_chat_nodes_missing_image_uses_gms_line(tmp_path, monkeypatch) -> None
     exc = _raised(load_local_image, gone)
     assert str(exc) == (f"Image input not found: {gone!r}. The file does not exist, so it was NOT sent to the "
                         "model. Check the path — a wrong working directory is the usual cause.")
-    assert person_line(exc) == "A connected image file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected image file can’t be found. Connect it again, then run the node again."
     exc = _raised(load_local_image, str(tmp_path))
     assert str(exc) == f"Image input is not a file: {str(tmp_path)!r}. It was NOT sent to the model."
-    assert person_line(exc) == "A connected image file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected image file can’t be found. Connect it again, then run the node again."
 
 
 @pytest.mark.parametrize("text, definition_id, params, keys", [

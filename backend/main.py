@@ -18612,7 +18612,7 @@ async def acknowledge_provider_start_ambiguity(
 # holds the node; an ID in its params names that node's own fields by their
 # labels (round 3 review: a World export node has only "Resume Export
 # Operation ID"). Agents keep the detail with the id, unchanged.
-NODE_GONE_PERSON = "That node isn't on the canvas anymore."
+NODE_GONE_PERSON = "That node isn’t on the canvas anymore."
 
 
 def _node_refusal(status: int, specific: str, person: str) -> HTTPException:

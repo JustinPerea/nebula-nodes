@@ -255,7 +255,7 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
                 fetch_public_media(raw, label=label, max_bytes=MAX_SOURCE_BYTES, timeout=60.0),
                 URL_FETCH_DEADLINE)
         except asyncio.TimeoutError:
-            raise with_person_line(ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download"), f"Couldn't download {label}. It took longer than {URL_FETCH_DEADLINE:.0f} seconds.") from None
+            raise with_person_line(ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download"), f"Nebula couldn’t download {label} because it took longer than {URL_FETCH_DEADLINE:.0f} seconds. Run the node again.") from None
         return content
     # The allowed-path policy runs before anything about the file is looked
     # at, so a protected path can't even be sized.
@@ -290,7 +290,7 @@ def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, i
         if width <= 0 or height <= 0 or width * height > MAX_SOURCE_PIXELS:
             raise with_person_line(ValueError(
                 f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel "
-                "input limit; downscale it first"), f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel limit for an "
+                "input limit; downscale it first"), f"{label} is {width}x{height}, over Nebula’s {MAX_SOURCE_PIXELS // 1_000_000} megapixel limit for an "
                 "input. Downscale it, then run the node again.")
         source_format = (image.format or "unknown").upper()
         frames = int(getattr(image, "n_frames", 1) or 1)
@@ -305,7 +305,7 @@ def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, i
     except Image.DecompressionBombError as exc:
         raise with_person_line(ValueError(f"{label} is too large to decode safely"), f"{label} is too large to decode safely. Connect a smaller image.") from exc
     except UnidentifiedImageError as exc:
-        raise with_person_line(ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)"), f"{label} isn't an image Nebula can read. Use a PNG, JPEG, WebP or GIF, then run the node again.") from exc
+        raise with_person_line(ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)"), f"{label} isn’t an image Nebula can read. Use a PNG, JPEG, WebP or GIF, then run the node again.") from exc
     except OSError as exc:
         raise with_provider_line(
             ValueError(f"{label} is damaged or incomplete: {exc}"),
@@ -418,7 +418,7 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
                 break
             if steps[index] + 1 >= len(ladders[index]):
                 raise with_person_line(ValueError(f"{label} {index + 1} is over TypeSafe's 16 MiB per-image limit even as a "
-                                 "small JPEG"), f"{label} {index + 1} is over TypeSafe's 16 MB limit for one image, even as a small JPEG. Connect a "
+                                 "small JPEG"), f"{label} {index + 1} is over TypeSafe’s 16 MB limit for one image, even as a small JPEG. Connect a "
                                  "smaller image.")
             steps[index] += 1
         encoded.append(data)
@@ -430,7 +430,7 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
             total = sum(len(data) for data in encoded) / (1024 * 1024)
             raise with_person_line(ValueError(
                 f"The {len(encoded)} images come to {total:.1f} MiB even as small JPEGs, over TypeSafe's "
-                "32 MiB request limit. Send fewer images or split the work across nodes."), f"The {len(encoded)} images come to {total:.1f} MB even as small JPEGs, over TypeSafe's 32 MB "
+                "32 MiB request limit. Send fewer images or split the work across nodes."), f"The {len(encoded)} images come to {total:.1f} MB even as small JPEGs, over TypeSafe’s 32 MB "
                 "request limit. Send fewer images or split the work across nodes.")
         index = max(candidates, key=lambda i: len(encoded[i]))
         steps[index] += 1
@@ -752,7 +752,7 @@ def build_request(*, model: str, state: Any, questions: Mapping[str, Mapping[str
     if total > MAX_REQUEST_BYTES:
         raise with_person_line(ValueError(
             f"The request is {total / (1024 * 1024):.1f} MiB, over TypeSafe's 32 MiB limit. "
-            "Shorten the context or send fewer images."), f"The request is {total / (1024 * 1024):.1f} MB, over TypeSafe's 32 MB limit. "
+            "Shorten the context or send fewer images."), f"The request is {total / (1024 * 1024):.1f} MB, over TypeSafe’s 32 MB limit. "
             "Shorten the context or send fewer images.")
     if not images:
         headers["Content-Type"] = "application/json"
@@ -911,7 +911,7 @@ async def system_one(api_key: str, *, model: str, state: Any, questions: Mapping
         # rides into an encoding error.
         raise with_person_line(TypeSafeError(f"{CREDENTIAL} has a character a key can't have (a space, line break or "
                             "non-ASCII letter). Paste it again in Settings → TypeSafe."),
-            "Your TypeSafe API key has a character a key can't have, like a space or a line break. Paste it again in Settings.")
+            "Your TypeSafe API key has a character a key can’t have, like a space or a line break. Paste it again in Settings.")
     headers, kwargs = build_request(model=model, state=state, questions=questions, images=images,
                                     long_context=long_context)
     headers["Authorization"] = f"Bearer {api_key}"
@@ -926,7 +926,7 @@ async def system_one(api_key: str, *, model: str, state: Any, questions: Mapping
                     kind = "timed out" if isinstance(exc, httpx.TimeoutException) else "connection failed"
                     raise with_person_line(TypeSafeError(f"Couldn't reach TypeSafe ({kind}) after {attempt} tries. "
                                         "Check your connection and try again."),
-                        "Couldn't reach TypeSafe. Check your connection and try again.") from None
+                        "TypeSafe isn’t answering. Check your connection, then try again.") from None
                 await _sleep(_retry_delay(None, attempt))
                 continue
             if response.status_code in RETRY_STATUSES and attempt <= MAX_RETRIES:

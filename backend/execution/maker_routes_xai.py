@@ -234,8 +234,7 @@ def krea_grok_video_to_xai(model: str) -> Translate:
         out: dict[str, Any] = {"model": model}
         if _present(edit_video):
             if model != GROK_VIDEO:
-                raise with_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"), f"xAI edits videos only on {model_name(GROK_VIDEO)}. Pick it in the node's Model field, or disconnect the video "
-                    "to edit.")
+                raise with_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"), f"xAI edits videos only on {model_name(GROK_VIDEO)}. Pick it in the node’s “Model” setting, or disconnect the video.")
             extra = [name for name, value in (("start_image", start_image), ("reference_images", references))
                      if _present(value)]
             if extra:

@@ -99,7 +99,7 @@ def _limits(definition_id: str) -> dict[str, Any]:
 def _wxh(width: Any, height: Any, limits: dict[str, Any], what: str) -> str:
     if not node_route.size_fits(width, height, limits):
         raise as_person_line(ValueError(
-            f"BytePlus can't render {what} {width!r}x{height!r} exactly: it takes whole-pixel sizes with "
+            f"BytePlus can’t render {what} at {width!r}×{height!r} exactly. It takes whole-pixel sizes from "
             f"{limits.get('minPixels', 0):,} to {limits.get('maxPixels', 0):,} pixels and a ratio up to "
             f"1:{limits.get('maxAspect', 16)}. Choose a size in that range, or run it on the copy."
         ))
@@ -145,7 +145,7 @@ def seedream_fal_to_byteplus(
     elif size_value == "auto_3K" and model_choice != "5.0-lite":
         raise with_person_line(
             ValueError("Seedream 4.5 does not support image_size auto_3K; choose a supported size or Seedream 5.0 Lite"),
-            "Seedream 4.5 can't make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
+            "Seedream 4.5 can’t make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
     elif size_value in _TIERS:
         size = _TIERS[str(size_value)]
     elif size_value in _SHAPED:
@@ -188,7 +188,7 @@ def krea_seedream_to_byteplus(model: str):
         if _port_values(inputs, "style_images"):
             raise with_person_line(ValueError(
                 "Krea's style images (with their strength) have no BytePlus equivalent. Remove the style "
-                "images, or remove the BytePlus key to run this on Krea."), "Krea's style images and their strength have no BytePlus equivalent. Remove the style images, or "
+                "images, or remove the BytePlus key to run this on Krea."), "Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or "
                 "remove the BytePlus key to run this on Krea.")
         width, height = params.get("width"), params.get("height")
         if width in (None, "") or height in (None, ""):

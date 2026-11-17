@@ -41,7 +41,7 @@ def test_codex_deleted_the_scene_a_save_after_names_codex(api):  # noqa: F811
     body = _gone(_put(api, node, _tab(api, _canvas(api)), _scene("typed after", "b")))
     assert body["deletedBy"] == {"kind": "agent", "name": "Codex"}
     # The person reads GM's line (approved round 3), never the id.
-    assert body["detail"] == "That node isn't on the canvas anymore."
+    assert body["detail"] == "That node isn’t on the canvas anymore."
 
 
 def test_the_persons_own_delete_in_another_window(api):  # noqa: F811

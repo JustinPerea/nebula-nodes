@@ -57,7 +57,7 @@ def test_bad_filters_person_gets_gms_line_agent_keeps_detail(client, caplog):
     with caplog.at_level(logging.INFO, logger="routes.commons"):
         person = client.post("/api/commons/search", json={"filters": {"axes": []}}, headers=h)
     assert person.status_code == 422
-    assert person.json()["detail"] == "Those filters didn't work. Clear them and try again."
+    assert person.json()["detail"] == "Those filters didn’t work. Clear them and try again."
     assert "axes must be an object" in caplog.text  # str(exc) is logged
     agent = client.post("/api/commons/search", json={"filters": {"axes": []}}, headers=AGENT)
     assert agent.status_code == 422
@@ -69,11 +69,11 @@ def test_settings_unknown_and_bad_value(client, caplog):
     with caplog.at_level(logging.INFO, logger="routes.commons"):
         unknown = client.patch("/api/commons/settings", json={"no_such_setting": 1}, headers=h)
     assert unknown.status_code == 422
-    assert unknown.json()["detail"] == "That setting isn't available. Reload to get the latest settings."
+    assert unknown.json()["detail"] == "That setting isn’t available. Reload to get the latest settings."
     assert "no_such_setting" in caplog.text
     bad = client.patch("/api/commons/settings", json={"load_threshold": "loud"}, headers=h)
     assert bad.status_code == 422
-    assert bad.json()["detail"] == "That value doesn't work for this setting. Reload to get the latest settings."
+    assert bad.json()["detail"] == "That value doesn’t work for this setting. Reload to get the latest settings."
     assert "load_threshold" not in bad.json()["detail"]
 
 
@@ -95,9 +95,9 @@ def test_upload_results_carry_a_reason_code_and_keep_error(client, monkeypatch):
     assert results["broken.png"]["ok"] is False and results["broken.png"]["reason"] == "unreadable"
     # The person's line for each refused file comes from here, the one table
     # (person_copy.INTAKE); the frontend shows it under "Couldn't upload {filename}.".
-    assert results["dusk.png"]["person"] == "That's too large to save."
+    assert results["dusk.png"]["person"] == "That’s too large to save."
     assert results["notes.txt"]["person"] == person_copy.INTAKE["unsupported_type"]
-    assert results["broken.png"]["person"] == "That file couldn't be read. It may be damaged."
+    assert results["broken.png"]["person"] == "That file couldn’t be read. It may be damaged."
     # The raw text stays for agents and the console (additive change).
     assert "25 MB" in results["dusk.png"]["error"] or "cap" in results["dusk.png"]["error"]
     assert results["notes.txt"]["error"].startswith("unsupported file type")
@@ -109,7 +109,7 @@ def test_upload_to_a_missing_collection_says_its_code(client):
                     files=[("files", ("a.png", png(3), "image/png"))])
     row = r.json()["results"][0]
     assert row["ok"] is False and row["reason"] == "unknown_collection"
-    assert row["person"] == "That collection isn't there anymore. Reload to get the latest collections."
+    assert row["person"] == "That collection isn’t there anymore. Reload to get the latest collections."
 
 
 def test_the_frontend_says_the_same_words_for_the_lines_both_sides_use():
@@ -135,7 +135,7 @@ def test_add_url_that_cant_be_fetched_says_written_copy_to_the_person(client, mo
     with caplog.at_level(logging.INFO, logger="routes.commons"):
         r = client.post("/api/commons/intake/url", json={"url": "https://example.com/a.png", "collection_id": col}, headers=h)
     assert r.status_code == 422
-    assert r.json()["detail"] == "Nebula couldn't get that URL. Check the address, or save the image and upload it."
+    assert r.json()["detail"] == "Nebula couldn’t get the image at that URL. Check the address, or save the image and upload it."
     assert "203.0.113.9" not in r.json()["detail"]
     assert "203.0.113.9" in caplog.text
 
@@ -196,7 +196,7 @@ def test_evaluation_prepare_raw_errors_become_written_copy(client, tmp_path, mon
     with caplog.at_level(logging.INFO, logger="routes.commons"):
         r = client.post("/api/commons/evaluation/prepare", json={"path": str(folder)}, headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == "A file in that folder couldn't be read. Check that it opens, then scan again."
+    assert r.json()["detail"] == "A file in that folder couldn’t be read. Check that it opens, then scan again."
     assert "a.png" in caplog.text
 
     from commons import evaluation
@@ -207,7 +207,7 @@ def test_evaluation_prepare_raw_errors_become_written_copy(client, tmp_path, mon
     monkeypatch.setattr(evaluation, "_inventory", boom)
     r = client.post("/api/commons/evaluation/prepare", json={"path": str(folder)}, headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == "Nebula can't read that folder. Check that it exists and that Nebula can open it."
+    assert r.json()["detail"] == "Nebula can’t read that folder. Check that it exists and that Nebula can open it."
     assert "Permission denied" not in r.json()["detail"]
 
 
@@ -231,7 +231,7 @@ def _logged(caplog, needle: str) -> list[logging.LogRecord]:
 def test_a_refusal_the_person_reads_as_copy_logs_its_specific_text_at_a_level_that_prints(client, caplog):
     assert not logging.getLogger("routes.commons").isEnabledFor(logging.INFO)  # as uvicorn leaves it
     r = client.post("/api/commons/search", json={"filters": {"axes": []}}, headers=human())
-    assert r.json()["detail"] == "Those filters didn't work. Clear them and try again."
+    assert r.json()["detail"] == "Those filters didn’t work. Clear them and try again."
     records = _logged(caplog, "axes must be an object")
     assert records and all(record.levelno >= logging.WARNING for record in records)
 

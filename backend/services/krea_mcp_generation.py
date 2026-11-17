@@ -204,7 +204,7 @@ async def prepare_generation(tools, model, preview_body, validate):
                and isinstance(entry.get('id'), str)
                and entry['id'] in {endpoint, endpoint.removeprefix(category + '/')}}
     if len(matches) != 1:
-        raise with_person_line(RuntimeError('The saved Krea model is unavailable or ambiguous in this account; no job was submitted'), "The saved Krea model isn't in this Krea account, or matches more than one, so pick another model. "
+        raise with_person_line(RuntimeError('The saved Krea model is unavailable or ambiguous in this account; no job was submitted'), "The saved Krea model isn’t in this Krea account, or matches more than one. Pick another model. "
                              "Nothing was sent to Krea.")
     model_id = matches.pop()
     schema_value = await tools.call('get_model_schema', [(MODEL_KEYS, model_id)])

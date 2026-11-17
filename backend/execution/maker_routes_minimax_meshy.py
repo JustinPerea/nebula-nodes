@@ -111,7 +111,7 @@ def krea_hailuo_to_minimax(model: str) -> Translate:
         last = _one(inputs, params, "end_image")
         resolution = HAILUO_RESOLUTIONS.get(str(params.get("resolution") or "768p"))
         if resolution is None:
-            raise with_person_line(ValueError(f"MiniMax has no resolution {params.get('resolution')!r}"), "MiniMax doesn't offer this resolution. Pick another in “Resolution”, then run the node again.")
+            raise with_person_line(ValueError(f"MiniMax has no resolution {params.get('resolution')!r}"), "MiniMax doesn’t offer this resolution. Pick another in “Resolution”, then run the node again.")
         duration = _whole(params.get("duration", 6), "Duration")
         if duration not in (6, 10):
             raise with_person_line(ValueError(f"MiniMax makes 6 or 10 second clips (received {params.get('duration')!r})."), f"MiniMax makes 6 or 10 second clips. Set “Duration” to 6 or 10. {it_was(params.get('duration'))}")
@@ -119,11 +119,11 @@ def krea_hailuo_to_minimax(model: str) -> Translate:
             raise with_person_line(ValueError("MiniMax makes 1080P clips at 6 seconds only."), "MiniMax makes 1080p clips at 6 seconds only.")
         if last and model not in FIRST_LAST_FRAME_MODELS:
             raise with_person_line(ValueError(f"MiniMax's first-and-last-frame mode is Hailuo 02 only, so {model} can't take an "
-                             f"end image on your MiniMax key. Disconnect End image. {KREA_ONLY_HINT}"), f"MiniMax's first-and-last-frame mode is Hailuo 02 only, so {model_name(model)} can't take an end "
+                             f"end image on your MiniMax key. Disconnect End image. {KREA_ONLY_HINT}"), f"MiniMax’s first-and-last-frame mode is Hailuo 02 only, so {model_name(model)} can’t take an end "
                              f"image on your MiniMax key. Disconnect “End image”. {KREA_ONLY_HINT}")
         if model in IMAGE_ONLY_MODELS and not first:
             raise with_person_line(ValueError(f"{model} is image-to-video only on MiniMax's API. Connect a start image. "
-                             f"{KREA_ONLY_HINT}"), f"{model_name(model)} is image-to-video only on MiniMax's API. Connect a start image. {KREA_ONLY_HINT}")
+                             f"{KREA_ONLY_HINT}"), f"{model_name(model)} is image-to-video only on MiniMax’s API. Connect a start image. {KREA_ONLY_HINT}")
         if resolution == "512P" and (not first or last):
             raise with_person_line(ValueError("MiniMax renders 512P only from a start image, without an end image. Connect a start "
                              f"image or pick 768p. {KREA_ONLY_HINT}"), "MiniMax renders 512p only from a start image, without an "
@@ -248,7 +248,7 @@ def krea_meshy_to_meshy(model: str) -> Translate:
             raise with_person_line(ValueError("Meshy image-to-3D needs an image. Connect one, or set Input mode to text."), "Meshy image-to-3D needs an image. Connect one, or set “Input mode” to text.")
         if len(images) > MESHY_MAX_IMAGES:
             raise with_person_line(ValueError(f"Meshy's own API takes 1 to {MESHY_MAX_IMAGES} images of one object "
-                             f"(got {len(images)}). {MESHY_KREA_HINT}"), f"Meshy's own API takes 1 to {MESHY_MAX_IMAGES} images of one object, and {len(images)} are "
+                             f"(got {len(images)}). {MESHY_KREA_HINT}"), f"Meshy’s own API takes 1 to {MESHY_MAX_IMAGES} images of one object, and {len(images)} are "
                              f"connected. Disconnect the extra ones. {MESHY_KREA_HINT}")
         out["should_texture"] = texture
         if len(images) == 1:

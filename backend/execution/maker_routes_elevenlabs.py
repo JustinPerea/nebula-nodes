@@ -171,7 +171,7 @@ def _voice_id(node: GraphNode) -> str:
         # the guard if a caller skips it.
         raise with_person_line(
             ValueError("The ElevenLabs route needs an ElevenLabs voice_id; Runway voice presets don't carry over"),
-            "To run this on ElevenLabs, fill in “ElevenLabs voice ID”. Runway voice presets don't carry over.")
+            "“ElevenLabs voice ID” is empty, and Runway voice presets don’t carry over. Fill it in to run this on ElevenLabs.")
     return voice.strip()
 
 

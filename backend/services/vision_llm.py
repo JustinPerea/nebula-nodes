@@ -65,7 +65,7 @@ def _encoded_images(paths: Sequence[Path]) -> list[tuple[str, str]]:
     for path in paths:
         mime = mimetypes.guess_type(path.name)[0] or "image/png"
         if mime not in {"image/png", "image/jpeg", "image/webp", "image/gif"}:
-            raise with_person_line(ValueError(f"Unsupported vision image type: {path.suffix}"), "A connected image isn't a PNG, JPEG, WebP or GIF. Connect one of those, then run the node again.")
+            raise with_person_line(ValueError(f"Unsupported vision image type: {path.suffix}"), "A connected image isn’t a PNG, JPEG, WebP or GIF. Connect one of those, then run the node again.")
         # Provider limits apply to the JSON request after base64 expansion, not
         # to the source file. Normalize every advisory frame to a bounded JPEG
         # in memory; the source artifact remains untouched on disk.

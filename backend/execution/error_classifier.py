@@ -113,19 +113,19 @@ _STATUS_CODES = {
 
 _FRIENDLY = {
     "blocked": (
-        "This request was blocked by the provider's safety filter. "
+        "This request was blocked by the provider’s safety filter. "
         "Try rephrasing your prompt or removing flagged content."
     ),
     "auth": "The API key was rejected. Check your key for this provider in Settings.",
     "quota": (
-        "The provider's quota or credits are exhausted. "
+        "The provider’s quota or credits are exhausted. "
         "Check your plan or billing with the provider."
     ),
     "rate_limit": "Rate limited by the provider. Wait a moment and run again.",
     "timeout": "The provider took too long to respond. Try again.",
-    "network": "Couldn't reach the provider. Check your connection and try again.",
+    "network": "Couldn’t reach the provider. Check your connection and try again.",
     "invalid_input": (
-        "The request was rejected as invalid. Check the node's inputs and parameters."
+        "The request was rejected as invalid. Check the node’s inputs and parameters."
     ),
 }
 

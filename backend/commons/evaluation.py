@@ -37,11 +37,11 @@ class EvaluationError(ValueError):
 
 
 # Written to GM's patterns for the scan's technical failures (listed for GM).
-SCAN_FILE_UNREADABLE = "A file in that folder couldn't be read. Check that it opens, then scan again."
+SCAN_FILE_UNREADABLE = "A file in that folder couldn’t be read. Check that it opens, then scan again."
 # GM, error-copy round 3 (folders.py:96, verbatim): the folder's own line.
 FOLDER_SHORTCUT = "Choose the folder itself, not a shortcut to it."
-REFERENCE_GONE = "That reference isn't in this held-out set. Reload to get the latest references."
-INTEGRITY = "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."
+REFERENCE_GONE = "That reference isn’t in this held-out set. Reload to get the latest references."
+INTEGRITY = "The held-out set doesn’t match what was saved, so Nebula stopped and changed nothing."
 
 
 def canonical(value):
@@ -195,7 +195,7 @@ async def prepare(store, path, *, downloader=None):
         try:
             if is_dataless(path.stat()) and not await downloader.download(path):
                 raise EvaluationError(f'iCloud download failed: {path.relative_to(root)}',
-                                      "A file in that folder didn't download from iCloud. Check your connection, then scan again.")
+                                      "A file in that folder didn’t download from iCloud. Check your connection, then scan again.")
             row = await asyncio.to_thread(_snapshot, path, root)
         except (OSError, media.MediaError) as exc:
             raise EvaluationError(f'Cannot read {path.relative_to(root)}: {exc}', SCAN_FILE_UNREADABLE) from exc
@@ -246,11 +246,11 @@ def _persist(store, root, rows, excluded):
 def _batch(conn, revision=None, *, mutable=False):
     row = conn.execute('SELECT * FROM evaluation_batch WHERE id=1').fetchone()
     if row is None:
-        raise EvaluationError("There's no held-out set yet. Prepare a folder first.")
+        raise EvaluationError("There’s no held-out set yet. Prepare a folder first.")
     if mutable and row['sealed']:
-        raise EvaluationError("These labels are sealed, so they can't change.")
+        raise EvaluationError("These labels are sealed, so they can’t change.")
     if mutable and row['closed']:
-        raise EvaluationError("This held-out set was closed as assisted review, so its blind labels can't change.")
+        raise EvaluationError("This held-out set was closed as assisted review, so its blind labels can’t change.")
     if revision is not None and (type(revision) is not int or revision != row['revision']):
         raise EvaluationError('Labels changed in another window. Reload before saving.')
     return row
@@ -336,7 +336,7 @@ def lock_accents(store, position, revision, points, no_accents):
         _batch(conn, revision, mutable=True)
         row = _item(conn, position)
         if row['accents'] is not None:
-            raise EvaluationError("This reference's accents are already saved, so they can't change.")
+            raise EvaluationError("This reference’s accents are already saved, so they can’t change.")
         image = media.load_image(row['image'], 'image/png')
         accents = []
         for point in points:
@@ -387,7 +387,7 @@ def save_labels(store, position, revision, labels):
         row = _item(conn, position)
         if row['accents'] is None:
             raise EvaluationError('Save blind accent observations before labeling the palette.',
-                                  "Save this reference's accents before you label its palette.")
+                                  "Save this reference’s accents before you label its palette.")
         validate_labels(labels, json.loads(row['palette']), vocabulary=json.loads(batch['manifest'])['vocabulary_terms'])
         conn.execute('UPDATE evaluation_items SET labels=? WHERE position=?', (canonical(labels),position))
         _bump(conn)
@@ -400,9 +400,9 @@ def seal(store, revision):
         if batch['sealed']:
             return _view(conn)
         if batch['closed']:
-            raise EvaluationError("This held-out set was closed as assisted review, so it can't be sealed.")
+            raise EvaluationError("This held-out set was closed as assisted review, so it can’t be sealed.")
         if conn.execute('SELECT 1 FROM assisted_reviews').fetchone():
-            raise EvaluationError("The agent graded some of these references, so they can't be sealed as blind labels. "
+            raise EvaluationError("The agent graded some of these references, so they can’t be sealed as blind labels. "
                                   'Close them as assisted review instead.')
         _verify(conn, batch)
         rows = conn.execute('SELECT * FROM evaluation_items ORDER BY position').fetchall()
@@ -445,7 +445,7 @@ def close(store, revision, *, actor, acknowledge):
         if batch['closed']:
             return _view(conn)  # a double click or a stale window gets the same record
         if batch['sealed']:
-            raise EvaluationError("These labels are sealed as blind ground truth, so there's nothing to close.")
+            raise EvaluationError("These labels are sealed as blind ground truth, so there’s nothing to close.")
         _batch(conn, revision)
         if conn.execute("SELECT 1 FROM assisted_reviews WHERE status='running'").fetchone():
             raise EvaluationError('A grading attempt is still running. Close after it finishes.')

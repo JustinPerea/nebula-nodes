@@ -21,7 +21,7 @@ from services.output import OUTPUT_ROOT, get_run_dir, seal_run_dir
 from services import refusal_copy
 
 # GM's 404 pattern (error-copy round 3): the video the edit cuts from is gone.
-SOURCE_GONE = "That video isn't there anymore. Reload to get the latest outputs."
+SOURCE_GONE = "That video isn’t there anymore. Reload to get the latest outputs."
 
 router = APIRouter(prefix="/api/video-edit", tags=["video-edit"])
 

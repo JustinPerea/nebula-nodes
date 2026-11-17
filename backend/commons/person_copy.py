@@ -15,12 +15,12 @@ from __future__ import annotations
 FALLBACK = "Try again, or reload if it keeps happening."
 
 # GM's lines, verbatim.
-BAD_FILTERS = "Those filters didn't work. Clear them and try again."
-UNKNOWN_SETTING = "That setting isn't available. Reload to get the latest settings."
+BAD_FILTERS = "Those filters didn’t work. Clear them and try again."
+UNKNOWN_SETTING = "That setting isn’t available. Reload to get the latest settings."
 
 # Written to GM's patterns; listed in docs/notes/2026-10-22-fix-error-copy.md for GM.
-BAD_SETTING_VALUE = "That value doesn't work for this setting. Reload to get the latest settings."
-FOLDER_UNREADABLE = "Nebula can't read that folder. Check that it exists and that Nebula can open it."
+BAD_SETTING_VALUE = "That value doesn’t work for this setting. Reload to get the latest settings."
+FOLDER_UNREADABLE = "Nebula can’t read that folder. Check that it exists and that Nebula can open it."
 
 # Intake refusals by their machine code (IntakeError.code): the URL route's
 # 422, and each refused file in an upload (its `person` field, which the
@@ -28,12 +28,12 @@ FOLDER_UNREADABLE = "Nebula can't read that folder. Check that it exists and tha
 # words; FALLBACK and "too_large" match the frontend's lib/errorCopy.ts
 # (pinned by test_commons_person_copy).
 INTAKE = {
-    "too_large": "That's too large to save.",
-    "unsupported_type": "Nebula can't read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.",
-    "unreadable": "That file couldn't be read. It may be damaged.",
-    "unknown_collection": "That collection isn't there anymore. Reload to get the latest collections.",
-    "fetch_failed": "Nebula couldn't get that URL. Check the address, or save the image and upload it.",
-    "blocked": "Nebula can't fetch that address. Use a public image URL.",
+    "too_large": "That’s too large to save.",
+    "unsupported_type": "Nebula can’t read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.",
+    "unreadable": "That file couldn’t be read. It may be damaged.",
+    "unknown_collection": "That collection isn’t there anymore. Reload to get the latest collections.",
+    "fetch_failed": "Nebula couldn’t get the image at that URL. Check the address, or save the image and upload it.",
+    "blocked": "Nebula couldn’t get the image because that address isn’t public. Use a public image URL.",
 }
 
 

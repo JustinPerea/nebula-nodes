@@ -58,7 +58,7 @@ def media_ref(value: Any, what: str) -> str:
         parts = urlsplit(value)
         hostname = parts.hostname or ""
     except ValueError as exc:
-        raise with_person_line(ValueError(f"{what} is not a valid URL"), f"{what} isn't a valid link. Connect another one.") from exc
+        raise with_person_line(ValueError(f"{what} is not a valid URL"), f"{what} isn’t a valid link. Connect another one.") from exc
     if parts.scheme in {"http", "https"} and is_loopback_host(hostname):
         if not parts.path.startswith("/api/outputs/") or parts.query or parts.fragment:
             raise with_person_line(ValueError(f"{what} points at this machine; connect the output itself or use a public URL"), f"{what} points at this computer. Connect the output itself, or use a public link.")
@@ -223,14 +223,14 @@ def ideogram_3_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], list[st
             "Ideogram's own API has no per-image style strength, so Krea's style images can't run on your "
             "Ideogram key. Disconnect them, or choose the Krea connection (or remove the Ideogram key) to "
             "run this node on Krea."
-        ), "Ideogram's own API has no per-image style strength, so Krea's style images can't run on your "
+        ), "Ideogram’s own API has no per-image style strength, so Krea’s style images can’t run on your "
             "Ideogram key. Disconnect them, or choose the Krea connection or remove the Ideogram key to "
             "run this node on Krea.")
     characters = [str(item) for item in _as_list(body.get("character_reference_images"))]
     if len(characters) > 1:
         raise with_person_line(ValueError(
             f"Ideogram's API takes one character reference image per request ({len(characters)} connected)."
-        ), f"Ideogram's API takes one character reference image per request, and {len(characters)} are "
+        ), f"Ideogram’s API takes one character reference image per request, and {len(characters)} are "
             "connected. Disconnect all but one, then run the node again.")
     fields: dict[str, Any] = {
         "prompt": _required_prompt(body),
@@ -417,7 +417,7 @@ def runway_ruby_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
         raise with_person_line(ValueError("Video is required for Runway Ruby"), "Connect a video to this node, then run it again.")
     output_format = str(body.get("output_format") or "hdr10")
     if output_format not in RUBY_OUTPUT_FORMATS:
-        raise with_person_line(ValueError(f"Output format must be one of {', '.join(RUBY_OUTPUT_FORMATS)} (received {output_format!r})"), "Pick one of the node's output formats, then run the node again.")
+        raise with_person_line(ValueError(f"Output format must be one of {', '.join(RUBY_OUTPUT_FORMATS)} (received {output_format!r})"), "Pick one of the node’s output formats, then run the node again.")
     request: dict[str, Any] = {"model": "ruby", "outputFormat": output_format}
     profile = body.get("prores_profile")
     if output_format == "hdr_prores" and profile:

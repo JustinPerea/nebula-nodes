@@ -8,6 +8,9 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(__dirname, '../../src');
 const BACKEND = join(__dirname, '../../../backend');
 
+// The backend writes curly apostrophes and the keys may use either, so both sides are folded before they are compared.
+const fold = (text: string) => text.replace(/\u2019/g, "'");
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);
@@ -58,10 +61,11 @@ describe('backendText stays a match-string marker', () => {
 
   it('every wrapped key is the backend\'s own text, verbatim', () => {
     const backend = ['routes/commons.py', 'commons/actors.py', 'commons/evaluation.py', 'commons/person_copy.py', 'services/refusal_copy.py']
-      .map((f) => readFileSync(join(BACKEND, f), 'utf8')).join('\n');
+      .map((f) => fold(readFileSync(join(BACKEND, f), 'utf8'))).join('\n');
     const all = sites();
     expect(all.length).toBeGreaterThan(0);
-    for (const { text } of all) {
+    for (const { text: raw } of all) {
+      const text = fold(raw);
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
       if (text.startsWith("That reference isn't there anymore")) {
         expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}.");

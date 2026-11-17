@@ -200,7 +200,7 @@ async def test_a_missing_file_says_which_input_in_words_not_its_path() -> None:
 
     exc = await _araised(_local_media_uri, "/no/such/clip.mp4", "video/mp4", None, "Video file")
     assert str(exc) == "Video file not found: /no/such/clip.mp4"
-    assert person_line(exc) == "A connected video file can't be found. Connect it again, then run the node again."
+    assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
 @pytest.mark.asyncio
@@ -231,7 +231,7 @@ def test_a_missing_key_says_add_it_in_settings(text: str, line: str) -> None:
     assert str(exc) == text
     assert person_line(exc) == line
     # Before this round the card read the classifier's line for it, the wrong fix.
-    assert classify_error(text)[1] == "The request was rejected as invalid. Check the node's inputs and parameters."
+    assert classify_error(text)[1] == "The request was rejected as invalid. Check the node’s inputs and parameters."
 
 
 def test_every_key_settings_stores_has_a_name_for_the_line() -> None:
@@ -650,14 +650,15 @@ def test_the_edit_mask_lines_are_the_persons_lines(tmp_path, monkeypatch) -> Non
 
     exc = _raised(edit_masks._open, b"not an image", "The mask")
     assert str(exc) == "The mask isn't a PNG, JPEG, WebP or GIF image Nebula can read"
-    assert person_line(exc) == "The mask isn't a PNG, JPEG, WebP or GIF image Nebula can read."
+    assert person_line(exc) == "The mask isn’t a PNG, JPEG, WebP or GIF image Nebula can read."
     monkeypatch.setattr(edit_masks, "require_allowed_path", lambda path: Path(path))
     not_an_image = tmp_path / "edit.png"
     not_an_image.write_bytes(b"not an image")
     exc = _raised(edit_masks.image_size, not_an_image)
     assert str(exc) == ("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
                         "so its mask can't be sized to it")
-    assert person_line(exc) == str(exc) + "."
+    assert person_line(exc) == ("The image to edit isn’t a PNG, JPEG, WebP or GIF file Nebula can read, "
+                                "so its mask can’t be sized to it.")
 
 
 def test_the_guard_reads_the_edit_mask_service() -> None:
@@ -841,7 +842,7 @@ def test_a_krea_connection_without_the_tool_says_so_without_its_name() -> None:
     tools = AccountTools(SimpleNamespace(tools={}), None)
     exc = _raised(tools.check, "generate_image", {})
     assert str(exc) == "Your Krea connection does not offer generate_image; nothing was sent"
-    assert person_line(exc) == ("Your Krea connection doesn't offer what this node needs. Nothing was sent to Krea. "
+    assert person_line(exc) == ("Your Krea connection doesn’t offer what this node needs. Nothing was sent to Krea. "
                                 "Choose another provider, or check the connection in Settings.")
 
 

@@ -223,7 +223,7 @@ def missing_file_line(what: str = "file", value: object = None) -> str:
     "Veo clip", "Dubbing audio"); ``value`` (the missing path) tells the kind
     by its extension when ``what`` doesn't."""
     kind = _file_kind(what, value)
-    return f"A connected {kind + ' ' if kind else ''}file can't be found. Connect it again, then run the node again."
+    return f"A connected {kind + ' ' if kind else ''}file can’t be found. Connect it again, then run the node again."
 
 
 # How a person knows each key Settings stores: the provider's own spelling
@@ -353,12 +353,12 @@ def slow_job_line(provider: str) -> str:
 
 def download_line(provider: str) -> str:
     """A provider's result Nebula couldn't download (GM's rule 11, round 3f)."""
-    return f"Couldn't download the result from {provider}. Its download link may have expired. Run the node again."
+    return f"Nebula couldn’t download the result from {provider} because its download link may have expired. Run the node again."
 
 
 def unknown_model_line(provider: str, field: str = "Model") -> str:
     """The node's model isn't one the provider lists (GM's rule 10, round 3f)."""
-    return f"This node's model isn't one {provider} offers. Pick one in “{field}”, then run the node again."
+    return f"This node’s model isn’t one {provider} offers. Pick one in “{field}”, then run the node again."
 
 
 def no_result_line(provider: str) -> str:
@@ -511,7 +511,7 @@ def input_words(label: object) -> str:
         return known
     name = re.sub(r"\s+(URL|URLs|uri)$", lambda m: "s" if m.group(1) == "URLs" else "", port_name(raw)).strip()
     if not name:
-        return "the node's inputs"
+        return "the node’s inputs"
     phrase = re.sub(r"\bRefs\b", "references", _words(name), flags=re.IGNORECASE)
     last = phrase.split()[-1].lower()
     if last in _PORT_NOUNS:

@@ -273,7 +273,7 @@ def fal_to_byteplus(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[
     aspect = str(_setting(node, "aspect_ratio") or "auto")
     ratio = "adaptive" if aspect == "auto" else aspect
     if ratio != "adaptive" and ratio not in RATIOS:
-        raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio"), "BytePlus doesn't offer this aspect ratio. Pick another one, then run the node again.")
+        raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio"), "BytePlus doesn’t offer this aspect ratio. Pick another one, then run the node again.")
     raw_duration = _setting(node, "duration")
     duration = -1 if raw_duration in (None, "", "auto") else _whole_seconds(raw_duration, model)
     task = _task(model, ratio=ratio, duration=duration, resolution=_resolution(_setting(node, "resolution"), model),
@@ -311,7 +311,7 @@ def krea_to_byteplus(model: str):
             if _port_values(inputs, port):
                 raise with_person_line(ValueError(
                     f"Krea's {port.replace('_', ' ')} has no BytePlus equivalent. Remove it, or remove the "
-                    "BytePlus key (or choose the Krea plan) to run this on Krea."), f"Krea's {port.replace('_', ' ')} has no BytePlus equivalent. Remove it, or remove the BytePlus key or "
+                    "BytePlus key (or choose the Krea plan) to run this on Krea."), f"Krea’s {port.replace('_', ' ')} has no BytePlus equivalent. Remove it, or remove the BytePlus key or "
                     "choose the Krea plan to run this on Krea.")
         images = _port_or_param(inputs, params, "reference_images")
         videos = _port_or_param(inputs, params, "reference_videos")
@@ -326,7 +326,7 @@ def krea_to_byteplus(model: str):
         if (first or last) and (images or videos or audios):
             raise with_person_line(ValueError(
                 "BytePlus can't mix start/end frames with reference images, videos or audio (they are "
-                "\"mutually exclusive scenarios\"). Use one or the other, or run this on Krea."), "BytePlus can't mix start and end frames with reference images, videos or audio. Use one or the "
+                "\"mutually exclusive scenarios\"). Use one or the other, or run this on Krea."), "BytePlus can’t mix start and end frames with reference images, videos or audio. Use one or the "
                 "other, or run this on Krea.")
         if model in _REFERENCE_LIMITS:
             max_images, max_videos, max_audios = _REFERENCE_LIMITS[model]
@@ -342,7 +342,7 @@ def krea_to_byteplus(model: str):
                 "a Seedance 2.5 feature.")
         aspect = str(_setting(node, "aspect_ratio") or "16:9")
         if aspect not in RATIOS:
-            raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea"), "BytePlus doesn't offer this aspect ratio, so run this node on Krea.")
+            raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea"), "BytePlus doesn’t offer this aspect ratio. Run this node on Krea.")
         ratio = "adaptive" if model == SEEDANCE_2_5 and first else aspect
         if ratio == "adaptive" and model in maker_sizes.START_SHAPES:
             # The aspect ratio the node shows isn't used: say so beside the

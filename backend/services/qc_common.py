@@ -105,7 +105,7 @@ async def extract_frames(
         try:
             normalized = float(point)
         except (TypeError, ValueError):
-            raise with_person_line(ValueError(f"Invalid sample point: {point!r}"), "A frame to sample isn't valid. Check the sampling settings, then run the node again.") from None
+            raise with_person_line(ValueError(f"Invalid sample point: {point!r}"), "A frame to sample isn’t valid. Check the sampling settings, then run the node again.") from None
         normalized = min(1.0, max(0.0, normalized))
         # Seeking exactly to EOF commonly yields no frame. Keep the final sample
         # inside the media timeline while preserving a true boundary comparison.

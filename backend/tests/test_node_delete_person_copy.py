@@ -37,7 +37,7 @@ DESKTOP = {"Sec-Fetch-Site": "same-site", **CANVAS_PARAMS_VERSION}
 # still in flight (has_active_node), so the line says to let the run finish;
 # tests/test_error_copy_round3.py has the line for each other record.
 PAID_PERSON = "A World Labs run is still starting. Try again in a moment."  # GM, round 13 of PR #114
-GONE_PERSON = "That node isn't on the canvas anymore."
+GONE_PERSON = "That node isn’t on the canvas anymore."
 
 
 @pytest.fixture
