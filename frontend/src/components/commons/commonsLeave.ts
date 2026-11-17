@@ -35,7 +35,7 @@ export function saveFailure(error: unknown): SaveFailure {
   const copy = failureCopy(error, { heading: "Couldn’t save your labels." });
   // The popover offers Save and leave whenever saving again could work, so
   // its reason is the short form; a refusal's reason has no short form.
-  return { ok: false, reason: failureCopy(error, { short: retry }).reason, message: oneLine(copy), retry };
+  return { ok: false, reason: failureCopy(error, { short: retry }).cause ?? '', message: oneLine(copy), retry };
 }
 
 /**

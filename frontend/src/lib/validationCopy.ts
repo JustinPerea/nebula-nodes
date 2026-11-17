@@ -50,7 +50,7 @@ function reading(errors: Pick<ExecutionValidationError, 'message' | 'person' | '
 }
 
 /** A Cinema shot whose run the check refused, with no node named. */
-export const SHOT_NOT_STARTED_LINE = "Nothing ran. Check the scene's inputs and API keys, then generate the shot again.";
+export const SHOT_NOT_STARTED_LINE = 'Nothing ran. Check the scene’s inputs and API keys, then generate the shot again.';
 
 /** A written line Nebula's canvas says itself: the heading over it, no Details. */
 export function writtenReading(line: string): ValidationReading {

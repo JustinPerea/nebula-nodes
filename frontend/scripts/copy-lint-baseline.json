@@ -3464,148 +3464,16 @@
       "text": "a moodboard’s Direction"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/canvasSelection.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't download the outputs."
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/lib/cinemaArtDirection.ts",
       "rule": "title-case",
       "text": "Teal & Orange"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't analyze this reference."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
-      "rule": "straight-quote",
-      "text": "The analysis service didn't respond."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
-      "rule": "straight-quote",
-      "text": "The analyzer couldn't read this image."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteCopy.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete {}. {}"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteCopy.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete {}. Nebula ran into an error, so {}. Try again, and if it keeps happening, restart Nebula."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteCopy.ts",
-      "rule": "straight-quote",
-      "text": "it's back on the canvas"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula isn't answering. Make sure it's running, then try again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteCopy.ts",
-      "rule": "straight-quote",
-      "text": "they're back on the canvas"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "{} and {} couldn't be restored."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "{} couldn't be re-attached."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "{} proposals couldn't be reopened."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "1 proposal couldn't be reopened."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "After the restore, {} and {} couldn't be restored."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "After the restore, {} couldn't be re-attached."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/deleteNotice.ts",
-      "rule": "straight-quote",
-      "text": "After the restore, {} couldn't be reopened."
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/lib/errorCopy.ts",
       "rule": "sentence-punctuation",
       "text": "no UI session: open Nebula from the desktop app or use the dev link"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula didn't respond."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula didn't respond. Try again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula isn't answering. Make sure it's running, then try again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula's backend isn't running. Start it, then reload."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula's server isn't answering. Make sure it's running, then try again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nebula's server isn't answering. Make sure it's running."
     },
     {
       "family": "straight-quotes",
@@ -3618,12 +3486,6 @@
       "file": "frontend/src/lib/errorCopy.ts",
       "rule": "straight-quote",
       "text": "That reference isn't there anymore. Reload to get the latest references."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "That's too large to save."
     },
     {
       "family": "straight-quotes",
@@ -3650,60 +3512,6 @@
       "text": "Those filters didn't work. Clear them and try again."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "You don't have access to this anymore. Reload to sign in again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/failureLines.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't clear the canvas."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/failureLines.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't clear the canvas. Nothing was removed."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/failureLines.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't load the model settings for “{}”."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/failureLines.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't set up “{}”."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/nodeErrorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't generate the shot."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/nodeErrorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't run the node."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/paletteNotice.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't find colors in {}."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/paletteNotice.ts",
-      "rule": "straight-quote",
-      "text": "Nebula can't read this image. Try a PNG or JPEG."
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/lib/referenceRoles.ts",
       "rule": "sentence-punctuation",
@@ -3714,90 +3522,6 @@
       "file": "frontend/src/lib/reopenHoldLines.ts",
       "rule": "title-case",
       "text": "Resume Operation ID"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/savePausedCopy.ts",
-      "rule": "straight-quote",
-      "text": "Opened {}. It's {} MB, over the save limit."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/savePausedCopy.ts",
-      "rule": "straight-quote",
-      "text": "Opened as a new project. It's over the save limit."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/savePausedCopy.ts",
-      "rule": "straight-quote",
-      "text": "See what's large"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/savePausedCopy.ts",
-      "rule": "straight-quote",
-      "text": "This project is over the 16 MB save limit. Click to see what's large."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/validationCopy.ts",
-      "rule": "straight-quote",
-      "text": "Nothing ran. Check the scene's inputs and API keys, then generate the shot again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Check the run in Marble first. Once the ID is gone, Nebula won't block a new paid run."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete {}."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete the node."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete them. {} waiting on World Labs. Check Marble, then {}"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Nebula can't tell if this World Labs run started."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldLabsWaiting.ts",
-      "rule": "straight-quote",
-      "text": "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/worldSplat.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't load the world."
     },
     {
       "family": "sentence-punctuation",

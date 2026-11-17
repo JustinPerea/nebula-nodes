@@ -46,14 +46,14 @@ export interface MoodboardEditResult {
 /** A write sent with `baseVersion` after someone else saved the board (409).
  *  `board` is the board as it is now, to rebase on. The Studio rebases and
  *  sends again; after three in a row its notice says this (GM, error-copy
- *  round 2: "Couldn't save the board. This board changed in another window.
+ *  round 2: "Couldn’t save the board. This board changed in another window.
  *  Reload to get the latest version."), with no version number. The version
  *  stays on the error (`detail`) for debugging. */
 export class MoodboardVersionConflict extends RequestFailedError {
   readonly board: Moodboard;
 
   constructor(board: Moodboard) {
-    super("Couldn't save the moodboard.", 409, { reason: 'This moodboard changed in another window. Reload to get the latest version.',
+    super("Couldn’t save the moodboard.", 409, { reason: 'This moodboard changed in another window. Reload to get the latest version.',
       detail: { code: 'version_conflict', version: board.version } });
     this.name = 'MoodboardVersionConflict';
     this.board = board;

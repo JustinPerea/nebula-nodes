@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
-import { retryBecauseLine } from '../../lib/errorCopy';
+import { besideButton } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
@@ -139,7 +139,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         : status === 'error'
         // Round 3b: this Retry saves, so its tooltip is the save's own failure
         // (in the because form, ending in "Try again."), never another action's.
-        ? <button type="button" className="project-workspace-controls__retry" title={saveError ? retryBecauseLine(saveError) : 'Retry saving'}
+        ? <button type="button" className="project-workspace-controls__retry" title={saveError ? besideButton(saveError) : 'Retry saving'}
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
         : <span className={`project-workspace-controls__status${settled ? ' project-workspace-controls__status--settled' : ''}`}
             style={settledDelay ? { animationDelay: settledDelay } : undefined} role="status">{label}</span>}

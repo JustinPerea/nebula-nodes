@@ -23,7 +23,7 @@ const CLOSE_ROWS: [where: string, line: string][] = [
 import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { projectRestoreFailedLine } from '../src/components/moodboard-studio/boardSaveLine';
 import { uploadFailure } from '../src/lib/cinemaUploads';
-import { CONNECTION_LOST_COPY, ConnectionLostError, actionFailedLine, NO_RESPONSE_COPY, RequestFailedError, retryBecauseLine } from '../src/lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, actionFailedLine, NO_RESPONSE_COPY, RequestFailedError, becauseLine } from '../src/lib/errorCopy';
 import { showError } from '../src/store/projectFlows';
 import { useProjectStore } from '../src/store/projectStore';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
@@ -50,10 +50,10 @@ const ROWS: [where: string, line: string][] = [
   ["the Cinema upload row, the server timed out", uploadFailure('photo.png', new RequestFailedError('', 408)).line],
   ['the Cinema upload row, a gateway that did not respond', uploadFailure('photo.png', new RequestFailedError('', 503)).line],
   // GM 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
-  ['Project home, an open that the server did not answer', retryBecauseLine(`Couldn't open the project. ${CONNECTION_LOST_COPY}`)],
-  ['Project home, a save that got no response', retryBecauseLine(`Couldn't save the project. ${NO_RESPONSE_COPY}`)],
-  ['the workspace Save failed tooltip, no answer', retryBecauseLine(`Couldn't save the project. ${CONNECTION_LOST_COPY}`)],
-  ['the asset trash toast beside Undo, no response', retryBecauseLine(`Couldn't restore “Shore”. ${NO_RESPONSE_COPY}`)],
+  ['Project home, an open that the server did not answer', becauseLine({ heading: "Couldn't open the project.", reason: CONNECTION_LOST_COPY }, 'button')],
+  ['Project home, a save that got no response', becauseLine({ heading: "Couldn't save the project.", reason: NO_RESPONSE_COPY }, 'button')],
+  ['the workspace Save failed tooltip, no answer', becauseLine({ heading: "Couldn't save the project.", reason: CONNECTION_LOST_COPY }, 'button')],
+  ['the asset trash toast beside Undo, no response', becauseLine({ heading: "Couldn't restore “Shore”.", reason: NO_RESPONSE_COPY }, 'button')],
   ['Project home, an open that the server answered with an error', projectLine('open', new RequestFailedError("Couldn't open the project.", 500))],
   ['Project home, a rename the server found busy', projectLine('rename', new RequestFailedError("Couldn't rename the project.", 429))],
   ['Project home, a save with no answer', projectLine('save', new ConnectionLostError(new TypeError('Failed to fetch')))],
@@ -61,7 +61,7 @@ const ROWS: [where: string, line: string][] = [
   ['the asset trash toast beside Undo, busy', actionFailedLine('restore the moodboard', new RequestFailedError('', 429)).line],
   ['the chat model picker, a server error', actionFailedLine('load the models', new RequestFailedError('', 500)).line],
   ['the chat model picker, busy', actionFailedLine('load the models', new RequestFailedError('', 429)).line],
-  ['the chat model picker, no answer', retryBecauseLine(`Couldn't load the models. ${CONNECTION_LOST_COPY}`)],
+  ['the chat model picker, no answer', becauseLine({ heading: "Couldn't load the models.", reason: CONNECTION_LOST_COPY }, 'button')],
 ];
 
 describe('every line shown with Try again ends in "Try again."', () => {

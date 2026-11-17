@@ -52,10 +52,10 @@ function sites(): Site[] {
 }
 
 describe('backendText stays a match-string marker', () => {
-  it('is used only as a key of LOAD_BECAUSE or CLOSE_BECAUSE in lib/errorCopy.ts', () => {
+  it('is used only as a key of REASON_CLAUSES or CLOSE_BECAUSE in lib/errorCopy.ts', () => {
     const all = sites();
     expect(all.length).toBeGreaterThan(0);
-    const bad = all.filter((s) => s.file !== 'lib/errorCopy.ts' || !s.isKey || !['LOAD_BECAUSE', 'CLOSE_BECAUSE'].includes(s.table ?? ''));
+    const bad = all.filter((s) => s.file !== 'lib/errorCopy.ts' || !s.isKey || !['REASON_CLAUSES', 'CLOSE_BECAUSE'].includes(s.table ?? ''));
     expect(bad.map((s) => `${s.file}: ${s.text}`)).toEqual([]);
   });
 
@@ -80,9 +80,9 @@ describe('backendText stays a match-string marker', () => {
     }
   });
 
-  it('every LOAD_BECAUSE and CLOSE_BECAUSE key is wrapped, so each is checked against the backend', async () => {
-    const { CLOSE_BECAUSE, LOAD_BECAUSE } = await import('../../src/lib/errorCopy');
-    for (const [name, table] of [['LOAD_BECAUSE', LOAD_BECAUSE], ['CLOSE_BECAUSE', CLOSE_BECAUSE]] as const) {
+  it('every REASON_CLAUSES and CLOSE_BECAUSE key is wrapped, so each is checked against the backend', async () => {
+    const { CLOSE_BECAUSE, REASON_CLAUSES } = await import('../../src/lib/errorCopy');
+    for (const [name, table] of [['REASON_CLAUSES', REASON_CLAUSES], ['CLOSE_BECAUSE', CLOSE_BECAUSE]] as const) {
       const wrapped = new Set(sites().filter((s) => s.table === name).map((s) => s.text));
       expect([...table.keys()].filter((k) => !wrapped.has(k)), name).toEqual([]);
     }

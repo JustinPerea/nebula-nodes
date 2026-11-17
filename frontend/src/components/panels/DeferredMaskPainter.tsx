@@ -1,7 +1,7 @@
 import { Suspense, type ComponentProps, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
-import { CONNECTION_LOST_SHORT_COPY } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, becauseLine } from '../../lib/errorCopy';
 import { DeferredBoundary } from '../DeferredBoundary';
 import { ModalPortal } from '../ModalPortal';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -52,7 +52,7 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
         <MaskPainterShell onClose={props.onClose} busy={retrying}>
           {/* GM's WRAP rule (round 3b): Try again is beside it and loads it again.
               Round 3f: the server is on this computer, not "your connection". */}
-          <div className="mask-painter__empty" role="alert">Couldn't load the mask painter. {CONNECTION_LOST_SHORT_COPY}</div>
+          <div className="mask-painter__empty" role="alert">{becauseLine({ heading: "Couldn't load the mask painter.", reason: CONNECTION_LOST_COPY })}</div>
           <div className="mask-painter__toolbar">
             <div className="mask-painter__spacer" />
             <button type="button" className="mask-painter__cancel" onClick={props.onClose}>Close</button>

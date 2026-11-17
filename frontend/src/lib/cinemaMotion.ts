@@ -10,7 +10,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { NO_RESPONSE_SHORT_COPY, copyForAnswer, headedLine, isNoAnswer, readRefusal, shortReason } from './errorCopy';
+import { becauseLine, copyForAnswer, isNoAnswer, readRefusal } from './errorCopy';
 
 /** A refused handoff's reason: a person-only refusal says GM's line, by its
  * code (Q116 a); else the backend's reason or GM's line for the status. */
@@ -93,7 +93,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
           ? 'The shot changed before it could be connected. Retry with the current result.'
           // headedLine (review 5, L4): a backend line that already says what
           // couldn't be done shows once, never under a second heading.
-          : headedLine("Couldn’t connect the video node.", shortReason(await refusalReason(response))));
+          : becauseLine({ heading: "Couldn’t connect the video node.", reason: await refusalReason(response), status: response.status }, 'button'));
       }
       const result = validatedResponse(await response.json(), handoff);
       if (!owns(handoff)) return;
@@ -139,7 +139,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
     replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
       // GM, round 3f: "don't stack two "Couldn't"s, and Nebula is local, so →
       // "Couldn't confirm the video connection. Nebula didn't respond."".
-      : isNoAnswer(error, controller.signal) ? `${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}` : UNCONFIRMED });
+      : isNoAnswer(error, controller.signal) ? `${UNCONFIRMED} Nebula didn’t respond.` : UNCONFIRMED });
   } finally { controllers.delete(handoff.attempt); }
 }
 

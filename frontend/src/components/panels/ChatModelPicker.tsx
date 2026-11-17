@@ -7,7 +7,7 @@ import {
 } from '../../lib/api';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
-import { retryBecauseLine } from '../../lib/errorCopy';
+import { besideButton } from '../../lib/errorCopy';
 import '../../styles/chat-model-picker.css';
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
@@ -200,8 +200,8 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
           offers a choice, it shows under its name once the conversation starts; otherwise change those in the
           agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
-          {/* The line ends in "Try again." beside the retry button (retryBecauseLine). */}
-          <p role="status"><LineText text={retryBecauseLine(unavailable)} /></p>
+          {/* The line ends in "Try again." beside the retry button (besideButton). */}
+          <p role="status"><LineText text={besideButton(unavailable)} /></p>
           <button type="button" className="chat-model-picker__retry" aria-label="Try again to load models" onClick={onRetry}>Try again</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}

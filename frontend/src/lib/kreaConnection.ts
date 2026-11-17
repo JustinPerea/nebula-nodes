@@ -139,7 +139,7 @@ async function kreaJson<T>(heading: string, path: string, init?: RequestInit): P
   }
 }
 
-const KREA_CONNECTION_HEADING = "Couldn't update the Krea connection.";
+const KREA_CONNECTION_HEADING = "Couldn’t update the Krea connection.";
 
 function requestConnection(method: 'GET' | 'POST' | 'DELETE', suffix = ''): Promise<KreaConnectionState> {
   return kreaJson(KREA_CONNECTION_HEADING, `/api/krea/connection${suffix}`, { method });
@@ -186,7 +186,7 @@ export function isSafeKreaBillingUrl(value: unknown, trial = false): value is st
 }
 
 export async function getKreaPlans(): Promise<KreaPlans> {
-  const body = await kreaJson<KreaPlans>("Couldn't load the Krea plans.", '/api/krea/plans');
+  const body = await kreaJson<KreaPlans>("Couldn’t load the Krea plans.", '/api/krea/plans');
   const link = (value: unknown) => (isSafeKreaBillingUrl(value) ? value : null);
   return {
     plans: (Array.isArray(body.plans) ? body.plans : []).map((plan) => ({
@@ -200,10 +200,10 @@ export async function getKreaPlans(): Promise<KreaPlans> {
 
 /** Starts Krea's trial checkout; payment details are entered on that page, never in Nebula. */
 export async function startKreaTrial(): Promise<string> {
-  const heading = "Couldn't start the Krea trial.";
+  const heading = "Couldn’t start the Krea trial.";
   const url = (await kreaJson<{ url?: unknown }>(heading, '/api/krea/trial', { method: 'POST' }))?.url;
   if (!isSafeKreaBillingUrl(url, true)) {
-    throw new FailureNotice(heading, "Krea sent back an unexpected trial link, so Nebula didn't open it.");
+    throw new FailureNotice(heading, 'Krea sent back a trial link Nebula didn’t expect.');
   }
   return url;
 }

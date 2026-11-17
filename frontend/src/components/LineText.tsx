@@ -1,10 +1,14 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
+import { isBecauseFailure } from '../lib/errorCopy';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
 const ANCHOR_STYLE = { display: 'none' } as const;
 export const BECAUSE_ATTR = 'data-line-because';
+
+/** `failure` keeps the warning colour on a line that is a failure to run or a loss (a node card's run failure, "deleted somewhere else"); the default draws a because failure neutral. */
+export type LineTone = 'failure';
 
 /**
  * A line's words, registered while they are mounted (lib/notConnectedLine, PR #204 round 9): a
@@ -28,7 +32,7 @@ export const BECAUSE_ATTR = 'data-line-because';
  * surface's element is hidden too when the line is all it holds (a `role="alert"` paragraph, a
  * toast's span), so no empty box is left; with one, the span is. Any other line is unchanged.
  */
-export function LineText({ text, className, children }: { text: string | null | undefined; className?: string; children?: ReactNode }) {
+export function LineText({ text, className, children, tone }: { text: string | null | undefined; className?: string; children?: ReactNode; tone?: LineTone }) {
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
@@ -57,9 +61,9 @@ export function LineText({ text, className, children }: { text: string | null | 
     const element = own ? ref.current : ref.current?.parentElement;
     if (!element || words === null) return;
     registration.current?.update(words);
-    if (isBecauseLine(words)) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
+    if (isBecauseLine(words) || (tone !== 'failure' && isBecauseFailure(words))) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
     else element.removeAttribute(BECAUSE_ATTR);
-  }, [own, words]);
+  }, [own, words, tone]);
   // Offline first, bare: the surface's element goes too when the line is all it holds.
   useLayoutEffect(() => {
     const anchor = ref.current;

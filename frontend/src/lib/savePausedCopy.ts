@@ -5,11 +5,11 @@
  */
 import { displaySize, overBy } from './projectSize';
 
-export const SEE_WHATS_LARGE = "See what's large";
+export const SEE_WHATS_LARGE = 'See what’s large';
 export const SAVING_PAUSED = 'Saving paused';
 export const DOWNLOAD_A_COPY = 'Download a copy';
 export const LARGEST_FIRST = 'Largest first';
-export const HEADER_TOOLTIP = "This project is over the 16 MB save limit. Click to see what's large.";
+export const HEADER_TOOLTIP = 'This project is over the 16 MB save limit. Click to see what’s large.';
 
 /** The header's save status while paused. */
 export const headerLine = (bytes: number) => `Saving paused · ${displaySize(bytes)} MB`;
@@ -20,8 +20,8 @@ export const pausedNotice = (bytes: number) => `Saving paused. This project is $
  * name, taken from the file, and its size, so one line fits beside the
  * button. */
 export const loadedNotice = (fileName: string, bytes: number, asNewProject = false) => (asNewProject
-  ? "Opened as a new project. It's over the save limit."
-  : `Opened ${fileName}. It's ${displaySize(bytes)} MB, over the save limit.`);
+  ? 'Opened as a new project. It’s over the save limit.'
+  : `Opened ${fileName}. It’s ${displaySize(bytes)} MB, over the save limit.`);
 /** The panel's live line. */
 export const panelLine = (bytes: number) =>
   `This project is ${displaySize(bytes)} MB. Make it ${overBy(bytes)} MB smaller and it saves again by itself. Until then, changes stay only in this tab.`;

@@ -1,10 +1,10 @@
-import { headedLine, isNamedLine } from './errorCopy';
+import { becauseLine, isNamedLine } from './errorCopy';
 import { lastNodeLabel } from './lastNodeLabels';
 
 /**
  * The backend's words when it refuses because a node holds World Labs state
  * (backend/main.py _paid_state_person), GM - Design's wording for round 13
- * of PR #114, verbatim, each under the screen's own "Couldn't <action>."
+ * of PR #114, verbatim, each under the screen's own "Couldn’t <action>."
  * heading. Pinned equal to the backend by
  * backend/tests/test_error_copy_round3b.py. The canvas reads the
  * needs-check line and the recovery line's tail to know a delete refusal is
@@ -143,7 +143,7 @@ export function forgetAriaLabel(name: string): string {
 export function recoveryIdLabel(existingWorldId: string | null): string {
   return existingWorldId ? 'World ID' : 'Operation ID';
 }
-export const FORGET_BODY = "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.";
+export const FORGET_BODY = 'Only do this after you’ve checked the run in Marble. Without the ID, Nebula can’t stop you from paying for the same run twice.';
 
 /** A node's card title, as the canvas shows it (its label), for GM's lines;
  * its id when it isn't on the canvas. */
@@ -155,25 +155,25 @@ export function cardTitle(nodes: readonly { id: string; data?: { label?: unknown
 /** The recovery line as the canvas's held-delete notice says it (GM, round
  * 15 of PR #114: "Name the button if the line points to one (e.g. 'Forget
  * ID')"). The backend's own line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
-export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then use \u201cForget ID\u201d in Run History.";
+export const RECOVERY_ID_FORGET_CLAUSE = 'it has a saved World Labs recovery ID. Check the run in Marble, then use \u201cForget ID\u201d in run history.';
 
 /**
  * What the canvas notice says when it keeps nodes because one holds World
  * Labs state.
  *
  * One node (GM - Design, round 15 of PR #114, restoring what round 4's trim
- * dropped): "Couldn't delete “<node>”. <reason line>", the reason being the
+ * dropped): "Couldn’t delete “<node>”. <reason line>", the reason being the
  * shared World Labs line:
- * - unlock: "Couldn't delete “<node>”. A World Labs run needs your check
+ * - unlock: "Couldn’t delete “<node>”. A World Labs run needs your check
  *   first. Use the notice at the top of the screen."
  * - forget (GM, round 16: "It" when the node holding the ID is the one
  *   being deleted, its name when it's another; curly quotes on the button):
- *   "Couldn't delete “<node>”. It has a saved World Labs recovery ID. Check
+ *   "Couldn’t delete “<node>”. It has a saved World Labs recovery ID. Check
  *   the run in Marble, then use “Forget ID” in Run History."
- * With no name known it reads "Couldn't delete the node." and "It has a
+ * With no name known it reads "Couldn’t delete the node." and "It has a
  * saved …".
  *
- * Several nodes (round 4b, unchanged), every line headed "Couldn't delete
+ * Several nodes (round 4b, unchanged), every line headed "Couldn’t delete
  * them.":
  * - every one held: "They're waiting on World Labs. Check Marble, then unlock
  *   them."
@@ -183,7 +183,7 @@ export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Che
  *   unlock it."
  * - the forget forms with some held end "Check Marble, then use Run
  *   History."
- * - every one held, forget (GM, 2026-10-24): "Couldn't delete them. They're
+ * - every one held, forget (GM, 2026-10-24): "Couldn’t delete them. They're
  *   waiting on World Labs. Check Marble and Run History."
  *
  * `unlock`: a held node has an unconfirmed start (the status bar's "I've
@@ -193,19 +193,21 @@ export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Che
  */
 export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: string): string {
   if (count === 1) {
-    const heading = name ? `Couldn't delete ${name}.` : "Couldn't delete the node.";
-    // GM, round 16: the reason says "It": a single node's delete is only ever
+    const lead = `Nebula couldn’t delete ${name ?? 'the node'}`;
+    // GM, round 16: the reason says "it": a single node's delete is only ever
     // refused for that node's own World Labs state (round 17 removed the
     // never-passed parameter for naming another node).
-    return unlock ? `${heading} ${WORLD_LABS_NEEDS_CHECK}` : `${heading} It${RECOVERY_ID_FORGET_TAIL}`;
+    return `${lead} because ${unlock ? lowerFirst(WORLD_LABS_NEEDS_CHECK) : RECOVERY_ID_FORGET_CLAUSE}`;
   }
-  if (!unlock && held >= count) {
-    return "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.";
-  }
-  const waiting = held <= 1 ? 'One is' : held >= count ? "They're" : `${held} are`;
-  const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use Run History.';
-  return `Couldn't delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`;
+  // Design (error-copy round 5): the line names the nodes, never a bare "them".
+  const lead = `Nebula couldn’t delete these ${count} nodes`;
+  if (!unlock && held >= count) return `${lead} because they’re waiting on World Labs. Check Marble and run history.`;
+  const waiting = held <= 1 ? 'one is' : held >= count ? 'they’re' : `${held} are`;
+  const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use run history.';
+  return `${lead} because ${waiting} waiting on World Labs. Check Marble, then ${then}`;
 }
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
 const isUnlockReason = (reason: string) => reason === WORLD_LABS_NEEDS_CHECK;
 const isForgetReason = (reason: string) => reason.startsWith('\u201c') && reason.endsWith(RECOVERY_ID_SAVED_TAIL);
@@ -213,12 +215,12 @@ const isHeldReason = (reason: string) => isUnlockReason(reason) || isForgetReaso
 
 /**
  * The canvas notice for deletes the backend refused, from the reasons it gave
- * (one per refused node) under `heading` ("Couldn't delete the node." /
- * "Couldn't delete {n} nodes."). The backend's two World Labs lines are the
+ * (one per refused node) under `heading` ("Couldn’t delete the node." /
+ * "Couldn’t delete {n} nodes."). The backend's two World Labs lines are the
  * ones GM trimmed: when any reason is one, the person reads GM's line
  * (heldDeleteText), the same words the canvas's own refusal uses, and any
  * other reasons follow it, each once, word for word. So a held node among
- * other reasons also reads "Couldn't delete them. One is waiting …" (round
+ * other reasons also reads "Couldn’t delete them. One is waiting …" (round
  * 4b: GM's lines for several nodes all drop the count; one heading for the
  * held sentence wherever it shows). With no held node, `heading` and the
  * backend's reasons as given. An unconfirmed start wins over a recovery
@@ -234,7 +236,8 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
     // A reason that is a line of its own shows alone (GM, PR #198 r5 item 3).
     const named = unique.filter(isNamedLine);
     const plain = unique.filter((reason) => !isNamedLine(reason));
-    return [...named, ...(plain.length > 0 || named.length === 0 ? [headedLine(heading, plain.join(' '))] : [])].join(' ');
+    return [...named.map((line) => becauseLine({ heading: '', reason: line })),
+      ...(plain.length > 0 || named.length === 0 ? [becauseLine({ heading, reason: plain.join(' ') })] : [])].join(' ');
   }
   const unlock = held.some(isUnlockReason);
   const others = unique.filter((reason) => !isHeldReason(reason));
@@ -255,7 +258,7 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
  * "paid start". Keep the rest of each line.").
  */
 export const WORLD_LABS_RUN_NEEDS_CHECK = 'A World Labs run needs your check.';
-export const WORLD_LABS_RUN_STATUS_UNKNOWN = "Nebula can't tell if this World Labs run started.";
+export const WORLD_LABS_RUN_STATUS_UNKNOWN = 'Nebula can’t tell if this World Labs run started.';
 /** "N more node(s) also need your check.", after the first hold's line. */
 export function moreNodesNeedCheck(more: number): string {
   return more === 1 ? '1 more node also needs your check.' : `${more} more nodes also need your check.`;
@@ -263,10 +266,10 @@ export function moreNodesNeedCheck(more: number): string {
 /** The warning under WORLD_LABS_RUN_STATUS_UNKNOWN: Nebula lost track of a
  * World Labs run it started, so Run stays locked until someone checks Marble. */
 export const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
-  "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.";
+  "Nebula couldn’t confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.";
 
 /** GM, round 15 of PR #114: the status bar unlock's tooltip, and Forget ID's.
  * The unlock's words are GM r36 on PR #199 (4): they name what the person
  * does first, and say nothing built from the button's own label. */
 export const UNLOCK_TITLE = "Press this only after you’ve checked the run in Marble.";
-export const FORGET_TITLE = "Check the run in Marble first. Once the ID is gone, Nebula won't block a new paid run.";
+export const FORGET_TITLE = 'Check the run in Marble first. Once the ID is gone, Nebula won’t block a new paid run.';

@@ -57,7 +57,7 @@ export function NodeError({ category, friendly, person, providerText, provider, 
   return (
     <div className={tone ? `${className} ${modifier}` : className} data-line-box="">
       <span className="model-node__error-message">
-        {copy.heading ? <FailureLines failure={copy} /> : <LineText text={copy.reason} />}
+        {copy.heading ? <FailureLines failure={copy} tone="failure" /> : <LineText text={copy.reason} tone="failure" />}
       </span>
       {copy.details && <ErrorDetails raw={copy.details} className="model-node__error-details nodrag nowheel" />}
     </div>

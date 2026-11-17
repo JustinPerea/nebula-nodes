@@ -416,7 +416,7 @@ function markNodesErrored(
         // A line Nebula wrote (a refused start): no older run's reading beside it.
         errorCategory: undefined,
         errorFriendly: undefined,
-        errorPerson: hidden ? failureCopy(failure).reason : undefined,
+        errorPerson: hidden ? failureCopy(failure).cause : undefined,
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
         errorNotStarted: undefined,
@@ -7047,7 +7047,7 @@ function changeCanvasNodes(
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
       } else {
-        const reason = failureCopy(result.reason).reason;
+        const reason = failureCopy(result.reason).cause ?? '';
         const shots = result.reason && typeof result.reason === 'object' ? renderingRefusals.get(result.reason) : undefined;
         const node = onCanvas.find((candidate) => candidate.id === cliRemovedIds[index]);
         if (shots && node?.data.definitionId === 'cinema-scene') {
@@ -8762,7 +8762,7 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
     return null;
   }
   // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
-  return reportNodeCreationFailure(displayName, failureCopy(err).reason, err);
+  return reportNodeCreationFailure(displayName, failureCopy(err).cause ?? '', err);
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown): null {

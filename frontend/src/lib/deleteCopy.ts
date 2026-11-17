@@ -1,5 +1,8 @@
 import { nodeNameList } from './errorCopy';
 
+/** The clause after "because" when Nebula didn’t answer (the shared one, lib/errorCopy). */
+const NOT_ANSWERING = 'the server isn’t answering. Check that Nebula is running, then try again.';
+
 /**
  * GM - Design, round 20 (item 1, 2026-10-27), verbatim: a failed delete
  * whose cause really is no answer from Nebula (isBackendUnreachable: no
@@ -10,13 +13,17 @@ import { nodeNameList } from './errorCopy';
  *   4 up, "Couldn't delete <N> nodes." Named by errorCopy nodeNameList, so
  *   same-titled nodes are grouped ("2 “Text” nodes", the PR #198 merge).
  * Other causes keep their reason under the old heading.
+ *
+ * Error-copy round 5 (design): the line is one sentence in the because form,
+ *   "Nebula couldn’t delete “Brief” because the server isn’t answering. Check
+ *    that Nebula is running, then try again."
  */
-export const DELETE_NO_ANSWER_REASON = "Nebula isn't answering. Make sure it's running, then try again.";
+export const DELETE_NO_ANSWER_REASON = NOT_ANSWERING;
 
 export function deleteNoAnswerLine(names: string[]): string {
   // The shared name list (errorCopy nodeNameList, GM 2026-10-27): same
   // titles grouped with a count, "4 nodes" from 4.
-  return `Couldn't delete ${nodeNameList(names)}. ${DELETE_NO_ANSWER_REASON}`;
+  return `Nebula couldn’t delete ${nodeNameList(names)} because ${DELETE_NO_ANSWER_REASON}`;
 }
 
 /**
@@ -26,12 +33,15 @@ export function deleteNoAnswerLine(names: string[]): string {
  *   "Couldn't delete “<node>”. Nebula ran into an error, so it's back on the
  *    canvas. Try again, and if it keeps happening, restart Nebula."
  *   Several nodes: the same counting as deleteNoAnswerLine (up to 3 names,
- *   then "<N> nodes"), ending "…so they're back on the canvas."
+ *   then "<N> nodes"), ending "…so they’re back on the canvas."
+ * Error-copy round 5 (design): "Nebula couldn’t delete “<node>” because the
+ *   server hit an error, so it’s back on the canvas. Try again, and if it
+ *   keeps happening, restart Nebula."
  * The status (and an error id, when Nebula gives one) goes in the Agent log,
  * never in the line.
  */
 export function deleteServerErrorLine(names: string[]): string {
   const what = nodeNameList(names);
-  const back = names.length === 1 ? "it's back on the canvas" : "they're back on the canvas";
-  return `Couldn't delete ${what}. Nebula ran into an error, so ${back}. Try again, and if it keeps happening, restart Nebula.`;
+  const back = names.length === 1 ? "it’s back on the canvas" : "they’re back on the canvas";
+  return `Nebula couldn’t delete ${what} because the server hit an error, so ${back}. Try again, and if it keeps happening, restart Nebula.`;
 }

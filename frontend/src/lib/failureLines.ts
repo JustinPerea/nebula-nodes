@@ -8,13 +8,13 @@ import { keyPhrase, withArticle } from './directRoute';
 
 /** Chat /clear refused before the backend removed anything (a 4xx answer:
  * every refusal of DELETE /api/graph comes before its clear). */
-export const CLEAR_REFUSED_TEXT = "Couldn't clear the canvas. Nothing was removed.";
+export const CLEAR_REFUSED_TEXT = 'Nebula couldn’t clear the canvas because the server didn’t accept it. Nothing was removed.';
 
 /** Chat /clear failed any other way (a 5xx, no answer). The backend clears
  * its graph before saving it, so such a failure can come after the clear:
  * "Nothing was removed" would not be sure to be true (GM: "Use the second
  * sentence only if it is true"). */
-export const CLEAR_FAILED_TEXT = "Couldn't clear the canvas.";
+export const CLEAR_FAILED_TEXT = 'Nebula couldn’t clear the canvas.';
 
 /** What chat /clear's request did to the canvas (lib/chatCanvasClear.ts):
  * cleared, refused (nothing was removed), or not confirmed (a server error
@@ -27,13 +27,13 @@ export type ChatClearOutcome = 'cleared' | 'refused' | 'unconfirmed';
  * provider's settings for the model failed (the backend marks that answer
  * with MODEL_SETTINGS_FAILURE_HEADER). The node keeps its settings. */
 export function modelSettingsFailedText(name: string): string {
-  return `Couldn't load the model settings for “${name}”.`;
+  return `Nebula couldn’t load the model settings for “${name}”.`;
 }
 
 /** The model pickers, any other failure (a refusal, no answer). The node
  * keeps its settings. */
 export function modelSetupFailedText(name: string): string {
-  return `Couldn't set up “${name}”.`;
+  return `Nebula couldn’t set up “${name}”.`;
 }
 
 /** The model pickers, the provider's key isn't set (review 13, L-5; GM -

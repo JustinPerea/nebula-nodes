@@ -40,7 +40,7 @@ export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLine
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
-const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personLockLine|connectAgentLockCopy|heldProposalLine|heldQuestionsLine|generateStartFailedCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|retryBecauseLine|shortReason|noticeText)$/;
+const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personLockLine|connectAgentLockCopy|heldProposalLine|heldQuestionsLine|generateStartFailedCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|besideButton|shortReason|noticeText)$/;
 
 /** The parts of a child expression whose value lands as text: through `&&`, `||`, `??`, `? :` and parentheses. */
 function textLeaves(expression: ts.Expression): ts.Expression[] {
@@ -196,7 +196,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'canvas-proposals.accept': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],
   'canvas-proposals.reject': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],
   'project.error': [
-    { file: 'components/projects/ProjectHome.tsx', expr: 'retryBecauseLine(error!)' },
+    { file: 'components/projects/ProjectHome.tsx', expr: 'besideButton(error!)' },
     { file: 'components/projects/ProjectHome.tsx', expr: 'error' },
   ],
   'project.load-retry': { none: 'a retry: its line is project.error' },

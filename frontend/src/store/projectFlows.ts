@@ -19,7 +19,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, shortReason, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, oneLine, CONNECTION_LOST_COPY, NO_RESPONSE_COPY } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -919,9 +919,11 @@ export const runStillGoing = (heading: string) => new FailureNotice(heading, RUN
  * with no reason of its own says none: GM's general line says "reload",
  * which these lines warn would lose the unsaved edits. */
 export function reasonSentence(error: unknown, short: boolean): string {
-  const { reason } = failureCopy(error);
+  const { cause: reason = '' } = failureCopy(error);
   if (reason === REFUSED_FALLBACK_COPY) return '';
-  return short ? shortReason(reason) : reason;
+  if (!short) return reason;
+  if (reason === CONNECTION_LOST_COPY) return 'Nebula’s server isn’t answering. Make sure it’s running.';
+  return reason === NO_RESPONSE_COPY ? 'Nebula didn’t respond.' : reason;
 }
 
 export const sentences = (...parts: string[]) => parts.filter(Boolean).join(' ');

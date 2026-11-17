@@ -219,7 +219,7 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),
-        reason: failureCopy(error, { heading }).reason });
+        reason: failureCopy(error, { heading }).cause ?? '' });
     } finally {
       // An undo pressed while the upload was on its way acts once its node is
       // on the canvas (review 10, L-2; review 11, L-2).
