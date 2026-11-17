@@ -3883,7 +3883,7 @@
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node."
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node."
     },
     {
       "name": "routes: a missing _provider reads as Auto",
@@ -5176,7 +5176,7 @@
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node.",
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -5986,7 +5986,7 @@
         "fixes": [],
         "message": "FLUX 3 Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or OPENROUTER_API_KEY in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node."
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node."
     },
     {
       "name": "flux-3-image-klein: bfl chosen runs there with its key",
@@ -6856,7 +6856,7 @@
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node."
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node."
     },
     {
       "name": "flux-video-edit: bfl chosen runs there with its key",
@@ -7316,7 +7316,7 @@
         "fixes": [],
         "message": "FLUX Video Upscale needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node."
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node."
     },
     {
       "name": "krea-3: krea chosen runs there with its key",
@@ -7948,7 +7948,7 @@
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add a key for one of the providers above in Settings to run this node."
+      "unavailableLine": "Add a key for one of its providers in Settings to run this node."
     },
     {
       "name": "flux-3-video: under Auto a BFL key runs on BFL with the plan connected",

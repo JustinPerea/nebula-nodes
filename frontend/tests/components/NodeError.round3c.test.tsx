@@ -212,8 +212,8 @@ describe('review: the Details toggle on the canvas, and a named failure after a 
     const live = nodeErrorCopy({ raw, category: 'invalid_input', friendly: raw });
     // Reload: node_errors dropped the hint that equalled the error, so graphSync has no friendly line.
     const reloaded = nodeErrorCopy({ raw, category: 'invalid_input', friendly: undefined });
-    // The line is the raw text itself, so no category clause replaces it: the guardrail's fix is kept.
-    const guardrail = `Nebula couldn’t run the node. ${raw}`;
+    // The raw text is for agents; the card says the guardrail as a reason.
+    const guardrail = 'Nebula couldn’t run the node because Gemini Omni can’t make a video longer. Use Veo 3.1 to extend it.';
     expect(live).toEqual({ heading: '', reason: guardrail, details: null });
     expect(reloaded).toEqual(live);
     const { container } = render(<NodeError raw={raw} category="invalid_input" />);

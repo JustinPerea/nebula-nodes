@@ -266,7 +266,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
 
     expect(useGraphStore.getState().nodes).toEqual([]);
     // GM - Design, round 4: the duplicate refusal in one line.
-    expect(alert).toHaveBeenCalledWith("Couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
+    expect(alert).toHaveBeenCalledWith("Nebula couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
   });
 
   it("B's checkpoint for its own node with the same id never lands on A's pasted node", () => {

@@ -210,7 +210,7 @@ const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status
 
 
 const GATE = { status: 403, body: { detail: 'Only the person can change a scene.', code: 'person_required' } };
-const BECAUSE = (name: string) => `Nebula couldn’t save your changes to ${name} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
+const BECAUSE = (name: string) => `Nebula couldn’t save your changes to ${name} because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.`;
 
 describe('review 5 MEDIUM-1: a scene save refused by the gate', () => {
   beforeEach(() => session.resetPersonSessionForTests());

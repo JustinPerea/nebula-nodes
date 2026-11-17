@@ -201,7 +201,7 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     [error] = _for(validate_graph(auto, [_edge("t", "text", "n1", "prompt")], {}), "n1")
     assert "Settings > Providers" in error.message
     # Four or more providers are not listed by name: the card lists them above the line.
-    assert _clean(error.person) == "Add a key for one of the providers above in Settings to run this node."
+    assert _clean(error.person) == "Add a key for one of its providers in Settings to run this node."
 
 
 def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch):

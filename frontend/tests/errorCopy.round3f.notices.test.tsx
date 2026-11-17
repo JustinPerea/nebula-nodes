@@ -62,7 +62,7 @@ describe('a canvas notice for an error', () => {
 
 describe('GM\'s size and "saved without" lines', () => {
   it('names the graph\'s size and what Nebula opens', () => {
-    expect(graphSizeLine(300 * 1024 * 1024, 250 * 1024 * 1024)).toBe('This canvas is 300.0 MB. Nebula opens canvases up to 250 MB.');
+    expect(graphSizeLine(300 * 1024 * 1024, 250 * 1024 * 1024)).toBe('This canvas is 300 MB. Nebula opens canvases up to 250 MB.');
   });
 
   it('says how many files a saved graph left out, singular and plural', () => {

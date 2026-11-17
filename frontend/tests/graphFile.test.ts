@@ -510,7 +510,7 @@ describe('portable graph asset bounds', () => {
     await expect(saveToFile([node], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because this canvas is 528.0 MB. Nebula opens canvases up to 528 MB.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because it’s over the 528 MB Nebula can save.");
   });
 
   // GM - Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
@@ -579,7 +579,7 @@ describe('portable graph asset bounds', () => {
 
     await expect(saveToFile([], [])).resolves.toBeNull();
     expect(createUrl).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t save the canvas because this canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because it’s over the 528 MB Nebula can save.");
   });
 
   it('stores generated members without creating a restore-rejected compression ratio', async () => {
@@ -693,7 +693,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas because this canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas because this canvas is over the 528 MB Nebula opens\.$/));
     delete (window as Window & { showOpenFilePicker?: unknown }).showOpenFilePicker;
   });
 
@@ -707,7 +707,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadViaInput()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas because this canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas because this canvas is over the 528 MB Nebula opens\.$/));
   });
 
   // Q118 (Justin, 2026-10-23): "Let Load graph open bigger .nebula files (up
@@ -735,7 +735,7 @@ describe('graph import memory ceiling', () => {
       slice: vi.fn().mockReturnValue(new Blob([new Uint8Array([0x7b, 0x22, 0x76, 0x65])])),
       arrayBuffer: fullRead,
     } as unknown as File;
-    await expect(inspectGraphFileWithinLimit(file)).rejects.toThrow(/Nebula opens canvases up to 528 MB\./);
+    await expect(inspectGraphFileWithinLimit(file)).rejects.toThrow(/This canvas is over the 528 MB Nebula opens\./);
     expect(fullRead).not.toHaveBeenCalled();
   });
 

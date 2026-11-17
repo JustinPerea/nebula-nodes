@@ -1995,14 +1995,15 @@ export function deleteServerErrorLogLine(node: string, nodeId: string, status: n
 export function paramSaveFailedLine(params: string | (string | null)[], node: string, reverted: boolean): string {
   const names = typeof params === 'string' ? [params] : params;
   if (names.length <= 1) {
-    if (names[0] === null) return `Couldn’t save a setting on \u201c${node}\u201d.${reverted ? " It’s back to its last saved value." : ''}`;
-    return `Couldn’t save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.${reverted ? " It’s back to its last saved value." : ''}`;
+    const back = reverted ? " It’s back to its last saved value." : '';
+    if (names[0] === null) return `${becauseLine({ heading: `Couldn’t save a setting on \u201c${node}\u201d.`, reason: '' })}${back}`;
+    return `${becauseLine({ heading: `Couldn’t save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.`, reason: '' })}${back}`;
   }
   const what = names.includes(null) ? `${names.length} settings` : settingsOnOneNode(names as string[]);
-  return `Couldn’t save ${what} for “${node}”.${reverted ? " They’re back to their last saved values." : ''}`;
+  return `${becauseLine({ heading: `Couldn’t save ${what} for “${node}”.`, reason: '' })}${reverted ? " They’re back to their last saved values." : ''}`;
 }
 export function modelChangeFailedLine(node: string, currentModel: string): string {
-  return `Couldn’t change the model for \u201c${node}\u201d.${currentModel ? ` It’s still on ${currentModel}.` : ''}`;
+  return `${becauseLine({ heading: `Couldn’t change the model for \u201c${node}\u201d.`, reason: '' })}${currentModel ? ` It’s still on ${currentModel}.` : ''}`;
 }
 
 /** A param save the backend didn't take (no answer, or a refusal): its own
@@ -7580,7 +7581,7 @@ async function requestTrackedCancellation(
 }
 
 /** GM - Design, round 16 of PR #114: a Stop that failed while offline. */
-export const STOP_FAILED_OFFLINE_LINE = "Couldn’t stop the run. Nebula isn’t answering, so it may still be going.";
+export const STOP_FAILED_OFFLINE_LINE = becauseLine({ heading: 'Couldn’t stop the run.', reason: 'The server isn’t answering, so the run may still be going.' });
 const stopFailureNoted = new Set<string>();
 
 async function honorCancellationAfterStart(
@@ -8263,8 +8264,7 @@ function providerSafeCloneParams(
 
 /** GM - Design, round 4 (one line at 560 px). Only the person reads it: the
  * canvas refuses the copy itself, and agents add nodes, never duplicate. */
-const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
-  "Couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
+const WORLD_LABS_UNSAFE_CLONE_MESSAGE = becauseLine({ heading: 'Couldn’t duplicate a paid World Labs node.', reason: 'Add a new one from the Nodes rail instead.' });
 
 function warnUnsafeProviderClone(): void {
   console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
@@ -8574,7 +8574,7 @@ class TabSyncFailure extends Error {
  * (refuseEditWhileOffline), and one whose sync finds the backend gone reads
  * the add heading, as any failed sync does. */
 export function addNotConnectedLine(label: string): string {
-  return `Couldn’t add \u201c${label}\u201d. Nebula isn’t connected yet. Try again once it is.`;
+  return becauseLine({ heading: addHeading(label), reason: 'The server isn’t connected yet. Try again once it is.' });
 }
 /** Every add path's heading (GM's quoted form; round 13 made the refused
  * create's unquoted "Couldn’t add <label>." match it). */

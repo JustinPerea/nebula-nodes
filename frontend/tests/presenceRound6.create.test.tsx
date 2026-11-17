@@ -64,7 +64,7 @@ afterEach(() => {
 const gate = { status: 403, body: { detail: 'Only the person can do this.', code: 'person_required' } };
 const alerts = () => screen.queryAllByRole('alert').map((node) => node.textContent ?? '');
 
-const BECAUSE = 'Nebula couldn’t save the style because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const BECAUSE = 'Nebula couldn’t save the style because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
 const notice = () => { const state = useGraphStore.getState(); return state.messageNotice?.text ?? state.undoNotice?.text ?? ''; };
 const presets = () => sent.filter((entry) => entry.path === '/api/presets');
 
@@ -80,7 +80,7 @@ describe('GM r6 (1): Save style retries on the promote, and says so in the notic
     session.reportPersonRequired();
     await saveStyle();
     await waitFor(() => expect(notice()).toBe(BECAUSE));
-    expect(notice()).not.toMatch(/try again|needs your OK/i);
+    expect(notice()).not.toMatch(/needs your OK/i);
     expect(document.querySelector('.create-view__topbar [role="alert"]')).toBeNull();
     expect(alerts().join(' ')).not.toContain('isn’t connected');
   });

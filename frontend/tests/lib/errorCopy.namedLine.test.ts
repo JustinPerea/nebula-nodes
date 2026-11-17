@@ -61,6 +61,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: 'the action, then a reason that is already a sentence of its own with its fix (an instruction, not a cause)' },
   { file: 'lib/nodeErrorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(named)}`',
     why: "the action, then the provider's own unclassified line, kept whole so its fix is not lost" },
+  { file: 'lib/providerReadiness.ts', text: "`${becauseLine({ heading: `Couldn’t check ${provider}.`, reason: '' })} The saved connection is unchanged. Use Check connections to try again.`",
+    why: 'the action from the builder, then two fixed sentences: what stays as it was, and the fix (neither is a cause)' },
   { file: 'lib/errorCopy.ts', text: '`${heading} ${reason}`', why: 'headedLine itself: the one place the rule is applied' },
   { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`',
     why: "GM's because form (PR #204 r6) in the desktop window: the tail is one of its two fixed sentences" },
@@ -71,16 +73,10 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // GM r39 item 2's "Couldn’t …. You can …" run-lock lines are gone: PR #205 r1 answer 2 made
   // the key-press refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',
-    why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
   { file: 'components/canvas/PinComposer.tsx', text: '`${headingText} ${targetNode}`',
     why: 'PR #200\'s note composer: an accessible name (the heading and the node id when two cards share a title), never a failure line' },
-  { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn’t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
-    why: 'the tail is one of two fixed sentences' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
     why: 'Agent log: the tail is a field sentence ("scene.base is missing.")' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t draw ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${errorText(error)}`',

@@ -332,7 +332,7 @@ describe('every path that sends the held copy', () => {
 });
 
 // GM r9 (2), #204 round 7: refused while the load saves the recovered edits, the verb says so.
-const NOT_CONNECTED_SAVE = 'Nebula couldn’t save your unsaved edits because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const NOT_CONNECTED_SAVE = 'Nebula couldn’t save your unsaved edits because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
 
 describe("review: refusals reconnecting can fix, and files Load graph can't open", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";

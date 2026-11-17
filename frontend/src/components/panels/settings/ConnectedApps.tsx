@@ -9,7 +9,7 @@ import {
   type ConnectedApp,
   type OutsideSpend,
 } from '../../../lib/api';
-import { failureMessage } from '../../../lib/errorCopy';
+import { becauseLine, failureMessage } from '../../../lib/errorCopy';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { formatSpentUsd } from '../../../lib/pricing';
@@ -92,7 +92,7 @@ function CopyBlock({ label, where, text, onError }: {
       await navigator.clipboard.writeText(text);
       setCopied(true);
     } catch {
-      onError('Couldn’t copy. Select the text and copy it yourself.');
+      onError(becauseLine({ heading: 'Couldn’t copy.', reason: 'Select the text and copy it yourself.' }));
     }
   };
   return (
@@ -222,7 +222,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
       await navigator.clipboard.writeText(made.token);
       setCopied(true);
     } catch {
-      setError('Couldn’t copy. Select the token and copy it yourself.');
+      setError(becauseLine({ heading: 'Couldn’t copy.', reason: 'Select the token and copy it yourself.' }));
     }
   };
 

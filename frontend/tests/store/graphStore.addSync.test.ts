@@ -153,7 +153,7 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual(["Couldn’t add “Text Input”. Nebula isn’t connected yet. Try again once it is."]);
+    expect(alerted()).toEqual(["Nebula couldn’t add “Text Input” because the server isn’t connected yet. Try again once it is."]);
     // The next add on the tab asks again.
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
@@ -163,7 +163,7 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual([`Couldn’t add “${label(definitionId)}”. Nebula isn’t connected yet. Try again once it is.`]);
+    expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}” because the server isn’t connected yet. Try again once it is.`]);
   });
 
   it('a dynamic node with no backend found at all: its card comes off again', async () => {
@@ -171,7 +171,7 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([
-      `Couldn’t add “${label('openrouter-universal')}”. Nebula isn’t connected yet. Try again once it is.`]));
+      `Nebula couldn’t add “${label('openrouter-universal')}” because the server isn’t connected yet. Try again once it is.`]));
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(useGraphStore.getState().undoStack).toEqual([]);
   });

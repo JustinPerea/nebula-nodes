@@ -6,7 +6,7 @@
  * other way) still opens instead of blanking the studio.
  */
 import type { ActiveRun } from './runHistory';
-import { nodeNameList } from './errorCopy';
+import { becauseLine, nodeNameList } from './errorCopy';
 import { RUN_LOCK_VERBS, lockLine, runFinishesLine } from './runLock';
 import type { CinemaSceneSpec, CinemaShot, NodeState } from '../types';
 
@@ -214,7 +214,7 @@ export function sceneDeleteBlockTitle(scene: string, shots: RenderingShots): str
  * "“Shot 2” and “Shot 3” are still running."; "4 shots are still running." */
 export function sceneDeleteRefusedLine(scene: string, shots: RenderingShots): string {
   const { text, several } = shotList(shots.numbers);
-  return `Couldn’t delete “${scene}”. ${text} ${several ? 'are' : 'is'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`;
+  return becauseLine({ heading: `Couldn’t delete “${scene}”.`, reason: `${text} ${several ? 'are' : 'is'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}` });
 }
 
 /** GM, PR #198 r3 item 1, a multi-select delete that keeps the scene: the

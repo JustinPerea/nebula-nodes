@@ -1220,7 +1220,7 @@ export function addKeyLine(keys: readonly string[]): string | null {
   const phrase = keyPhrase(keys);
   if (!phrase) return null;
   // A list of names stops at three (design's names rule); four or more are the providers the card lists above.
-  if (keys.length > MAX_KEY_NAMES) return "Add a key for one of the providers above in Settings to run this node.";
+  if (keys.length > MAX_KEY_NAMES) return "Add a key for one of its providers in Settings to run this node.";
   return `Add ${withArticle(phrase)} in Settings to run this node.`;
 }
 

@@ -42,7 +42,7 @@ import { enhancePrompt } from '../src/lib/enhancePrompt';
 
 const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
 // Each as the one because line a heading's action makes of it (the reason itself stays GM_LINE/APP_LINE).
-const because = (what: string, tab: boolean) => `Nebula couldn’t ${what} because ${tab ? 'this tab isn’t connected as you. Open the link Nebula printed when it started.' : 'this window isn’t connected as you. Quit Nebula and open it again.'}`;
+const because = (what: string, tab: boolean) => `Nebula couldn’t ${what} because ${tab ? 'this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.' : 'this window isn’t connected as you. Quit Nebula and open it again, then try again.'}`;
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 // GM, round 4 (2026-10-23), verbatim: the banners stay up, so each fits one line.
 const APP_BANNER = "This window isn’t connected as you. Quit Nebula and open it again.";

@@ -133,6 +133,7 @@ class Context:
         self.gated = [({n.lower() for n in g["names"]}, [v.lower().split() for v in g["after"]],
                        bool(g.get("inParens")), bool(g.get("beforeLowerCase"))) for g in rules["gatedNames"]]
         self.retry = re.compile(rules["retryPattern"])
+        self.british = re.compile(rules["britishSpellingPattern"])
         self.units = set(rules["units"])
 
 
@@ -279,6 +280,8 @@ def _check_line(text: str, kind: str, ctx: Context) -> list[str]:
         hits.append("three-dots")
     if "—" in no_code:
         hits.append("em-dash")
+    if ctx.british.search(no_code):
+        hits.append("us-spelling")
     if is_sentence(t, ctx.rules):
         plain = _strip_unit_parens(
             RATIO_RE.sub(" ", TIME_RE.sub(" ", CURLY_SPAN_RE.sub(" ", no_url))), ctx.units)

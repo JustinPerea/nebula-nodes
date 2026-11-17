@@ -43,7 +43,7 @@ const node = (id: string, params: Record<string, unknown>, label = id, definitio
 const sent = () => fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`);
 const notices: string[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const STOP_LINE = "Couldn’t stop the run. Nebula isn’t answering, so it may still be going.";
+const STOP_LINE = "Nebula couldn’t stop the run because the server isn’t answering, so the run may still be going.";
 
 beforeEach(async () => {
   fetchMock.mockReset();
@@ -303,7 +303,7 @@ describe('L5: the run-safety line only for the run-safety store\'s 507', () => {
     refuseWith({ detail: 'Nebula cannot verify durable paid-start safety storage; no World Labs request was sent', code: 'run_safeguards' });
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([
-      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards, so nothing was started. Restart Nebula, then try again.",
+      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards. Restart Nebula, then try again.",
     ]);
   });
   it('project_store: not the run-safety line (a restart does not clear it), and nothing is started', async () => {

@@ -116,7 +116,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     expect(brief()).toEqual(['s1:other canvas', 's2:other s2']);
     expect(h.puts).toHaveLength(1);
     expect(unsaved()).toBeNull();
-    expect(notice()).toBe("Couldn’t save “Scene” for “Opening”.");
+    expect(notice()).toBe("Nebula couldn’t save “Scene” for “Opening”.");
   });
 
   it('1e: kept edits (500), then an agent clear that re-adds n1: the typing line, no retry onto the new n1', async () => {

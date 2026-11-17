@@ -41,7 +41,7 @@ describe('provider readiness', () => {
       providers: { OpenAI: { status: 'error', last_checked: new Date().toISOString() } },
       checkedAt: Date.now(), loading: false, error: null,
     } as never);
-    expect(errored.detail).toBe("Couldn't check OpenAI. The saved connection is unchanged. Use Check connections to try again.");
+    expect(errored.detail).toBe("Nebula couldn’t check OpenAI. The saved connection is unchanged. Use Check connections to try again.");
   });
 });
 

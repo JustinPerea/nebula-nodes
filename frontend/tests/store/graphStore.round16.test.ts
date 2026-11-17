@@ -53,7 +53,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let blocked = 0;
 subscribeBlockedEdits(() => { blocked += 1; });
 
-const STOP_LINE = "Couldn’t stop the run. Nebula isn’t answering, so it may still be going.";
+const STOP_LINE = "Nebula couldn’t stop the run because the server isn’t answering, so the run may still be going.";
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -181,7 +181,7 @@ describe('L2 (probe X4): a param push refused just after the offline flip', () =
     noteBackendConnection('offline');
     await sleep(400);
     expect(sent().filter((line) => line.startsWith('PUT'))).toEqual([]);
-    expect(notices).toEqual(["Couldn’t save “Text” for “Brief”. It’s back to its last saved value."]);
+    expect(notices).toEqual(["Nebula couldn’t save “Text” for “Brief”. It’s back to its last saved value."]);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('saved');
   });
 });
@@ -336,7 +336,7 @@ describe('M4 (probe X6): the boot id is learned with no project open', () => {
 });
 
 describe('the 507 run line (GM, locked)', () => {
-  it('names the node and says nothing was started', async () => {
+  it('names the node and says why', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST' && String(url).includes('/api/execute-node')) {
         // The agents' words; the person reads GM's line for a run-safety
@@ -348,7 +348,7 @@ describe('the 507 run line (GM, locked)', () => {
     });
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([
-      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards, so nothing was started. Restart Nebula, then try again.",
+      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards. Restart Nebula, then try again.",
     ]);
     expect(useGraphStore.getState().isExecuting).toBe(false);
   });

@@ -93,7 +93,7 @@ describe('the model picker names the failure (L-5)', () => {
         await settle();
         // Round 21 (the #114 merge): #114's GM line for a failed model change
         // (channel round 14) where neither of #195's two lines applies.
-        expect(shown().join('\n')).toContain("Couldn’t change the model for “Writer”.");
+        expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
       });
       it(`${name} (${id}): a failed read: "Couldn't load the model settings"`, async () => {
         set(id, definitionId, params);

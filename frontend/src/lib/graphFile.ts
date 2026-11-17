@@ -6,7 +6,8 @@ import { shotPortId } from '../constants/ports';
 import { backendAssetUrlSync, canonicalBackendAssetUrls, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
-import { FailureNotice, PERSON_REQUIRED_CODE, failureMessage, oneLine, requestError } from './errorCopy';
+import { FailureNotice, PERSON_REQUIRED_CODE, becauseLine, failureMessage, oneLine, requestError } from './errorCopy';
+import { sizeAndLimit, sizeText } from './sizeText';
 import { showNotice } from './canvasNotice';
 import {
   hasRepresentationViewer,
@@ -115,9 +116,12 @@ export function skippedFilesLine(skipped: number): string {
 /** GM PR #205 r9 item 2: "This canvas is {n} MB. Nebula opens canvases up to
  * {m} MB." (the same pattern for the JSON and the finished bundle). */
 export function graphSizeLine(bytes: number, limitBytes: number): string {
-  return `This canvas is ${(bytes / (1024 * 1024)).toFixed(1)} MB. `
-    + `Nebula opens canvases up to ${Math.floor(limitBytes / (1024 * 1024))} MB.`;
+  const { size, limit } = sizeAndLimit(bytes, limitBytes);
+  return size ? `This canvas is ${size}. Nebula opens canvases up to ${limit}.` : `This canvas is over the ${limit} Nebula opens.`;
 }
+
+/** The reason a canvas too large to save gives: "it’s over the 528 MB Nebula can save." */
+export const graphSaveTooLargeReason = (limitBytes: number) => `It’s over the ${sizeText(limitBytes)} Nebula can save.`;
 
 // GM PR #205 r9 item 2: the file pickers' labels live beside the downloads.
 export { GRAPH_PICKER_LABEL, GRAPH_BUNDLE_PICKER_LABEL } from './graphFileShared';
@@ -147,21 +151,22 @@ const BUNDLE_FILES_NOT_COPIED_COPY = 'Its files couldn’t be copied. Try again.
 /** GM PR #205 r16 item 3: a node type, a port or a param this version of
  * Nebula doesn't have (mostly version drift: one line). */
 const GRAPH_FILE_UNKNOWN_NODE_COPY = 'This file uses a node this version of Nebula doesn’t have.';
-const MIB = 1024 * 1024;
 /** GM PR #205 r16 item 3: a bundle's file over the member limit, and a bundle
  * over the upload limit, in the size lines' MB (graphSizeLine). */
-export const bundleMemberSizeLine = (bytes: number, limitBytes: number) =>
-  `One of its files is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
-export const bundleUploadSizeLine = (bytes: number, limitBytes: number) =>
-  `This file is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
+const sizedLine = (subject: string, bytes: number, limitBytes: number, opens: string) => {
+  const { size, limit } = sizeAndLimit(bytes, limitBytes);
+  return size ? `${subject} is ${size}. Nebula opens ${opens} up to ${limit}.` : `${subject} is over the ${limit} Nebula opens.`;
+};
+export const bundleMemberSizeLine = (bytes: number, limitBytes: number) => sizedLine('One of its files', bytes, limitBytes, 'files');
+export const bundleUploadSizeLine = (bytes: number, limitBytes: number) => sizedLine('This file', bytes, limitBytes, 'files');
 /** GM PR #205 r17 item 3: with no size (a streamed upload with no
  * Content-Length is refused before its end arrives), the limit is still
  * known, so the line names it. A member's size always comes with its
  * refusal; its form is the same, for a refusal that leaves it out. */
 export const bundleMemberOverLine = (limitBytes: number) =>
-  `One of its files is larger than ${Math.floor(limitBytes / MIB)} MB, the most Nebula opens.`;
+  `One of its files is larger than ${sizeText(limitBytes)}, the most Nebula opens.`;
 export const bundleUploadOverLine = (limitBytes: number) =>
-  `This file is larger than ${Math.floor(limitBytes / MIB)} MB, the most Nebula opens.`;
+  `This file is larger than ${sizeText(limitBytes)}, the most Nebula opens.`;
 
 export class GraphFileInvalidError extends FailureNotice {
   readonly detail: string;
@@ -684,7 +689,7 @@ export async function saveToFile(
     // is fetched.
     const graphBytes = new TextEncoder().encode(graphJson).byteLength;
     if (graphBytes > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
-      throw new GraphStructureLimitError(graphSizeLine(graphBytes, GRAPH_BUNDLE_MAX_IMPORT_BYTES));
+      throw new GraphStructureLimitError(graphSaveTooLargeReason(GRAPH_BUNDLE_MAX_IMPORT_BYTES));
     }
   } catch (error) {
     // The log keeps the engine's exact reason (GM PR #205 r10 item 4).
@@ -717,7 +722,7 @@ export async function saveToFile(
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
-    showNotice(oneLine({ heading: SAVE_GRAPH, reason: graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES) }));
+    showNotice(becauseLine({ heading: SAVE_GRAPH, reason: graphSaveTooLargeReason(GRAPH_BUNDLE_MAX_IMPORT_BYTES) }));
     return null;
   }
   // Named after the open project, as "Download a copy" is, so Load graph

@@ -1,4 +1,5 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { becauseLine } from './errorCopy';
 
 /**
  * What a studio or a canvas card that can't render says (GM's follow-up for
@@ -29,12 +30,12 @@ const SUBJECT: Record<StudioScreen, string> = {
   'brand-showcase': 'the showcase',
 };
 
-const STUDIO_DAMAGED = "Some of its data is missing or damaged, so Nebula can’t show it.";
+const STUDIO_DAMAGED = 'Some of its data is missing or damaged.';
 /** GM r4: a card's line has no "so Nebula can't show it." */
 const CARD_DAMAGED = 'Some of its data is missing or damaged.';
 /** GM r5: the data checks out, so the fault is Nebula's drawing. */
-const CARD_NEUTRAL = 'Nebula ran into a problem drawing it, but its data is fine. Reload Nebula to try again.';
-const STUDIO_NEUTRAL = 'Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.';
+const CARD_NEUTRAL = 'Something went wrong drawing it, but its data is fine. Reload Nebula to try again.';
+const STUDIO_NEUTRAL = 'Something went wrong showing it, but its data is fine. Reload Nebula to try again.';
 
 /** GM: "Couldn't open “<node>”. Some of its data is missing or damaged, so
  * Nebula can't show it." when `damaged`, else GM r5's "Couldn't open
@@ -42,7 +43,7 @@ const STUDIO_NEUTRAL = 'Nebula ran into a problem showing it, but its data is fi
  * Reload Nebula to try again."; the studio's noun with no name. */
 export function studioBoundaryLine(studio: StudioScreen, label: string | null, damaged: boolean): string {
   const subject = label ? `“${label}”` : SUBJECT[studio];
-  return `Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`;
+  return becauseLine({ heading: `Couldn’t open ${subject}.`, reason: damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL });
 }
 
 /** A canvas card's line (GM r4 and r5): "Couldn't show “<node>”. Some of
@@ -50,7 +51,7 @@ export function studioBoundaryLine(studio: StudioScreen, label: string | null, d
  * “<node>”. Nebula ran into a problem drawing it, but its data is fine.
  * Reload Nebula to try again."; "this node" with no name. */
 export function nodeCardBoundaryLine(label: string | null, damaged: boolean): string {
-  return `Couldn’t show ${label ? `“${label}”` : 'this node'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`;
+  return becauseLine({ heading: `Couldn’t show ${label ? `“${label}”` : 'this node'}.`, reason: damaged ? CARD_DAMAGED : CARD_NEUTRAL });
 }
 
 /** What the data check knows about the field it names (GM r6 item 4):

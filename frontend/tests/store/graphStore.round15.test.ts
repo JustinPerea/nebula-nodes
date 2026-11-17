@@ -98,19 +98,19 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
   // failed-save line (lib/savingCutOff, tests/round23Lines).
   it('the exact one, two-or-three and four-or-more lines', () => {
     expect(graphStore.paramSaveFailedLine('Seed', 'Banana', true))
-      .toBe("Couldn’t save “Seed” for “Banana”. It’s back to its last saved value.");
+      .toBe("Nebula couldn’t save “Seed” for “Banana”. It’s back to its last saved value.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', true))
-      .toBe("Couldn’t save “Prompt” and “Seed” for “Banana”. They’re back to their last saved values.");
+      .toBe("Nebula couldn’t save “Prompt” and “Seed” for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', true))
-      .toBe("Couldn’t save “Prompt”, “Seed” and “Size” for “Banana”. They’re back to their last saved values.");
+      .toBe("Nebula couldn’t save “Prompt”, “Seed” and “Size” for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', true))
-      .toBe("Couldn’t save 4 settings for “Banana”. They’re back to their last saved values.");
+      .toBe("Nebula couldn’t save 4 settings for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', false))
-      .toBe("Couldn’t save “Prompt” and “Seed” for “Banana”.");
+      .toBe("Nebula couldn’t save “Prompt” and “Seed” for “Banana”.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', false))
-      .toBe("Couldn’t save “Prompt”, “Seed” and “Size” for “Banana”.");
+      .toBe("Nebula couldn’t save “Prompt”, “Seed” and “Size” for “Banana”.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', false))
-      .toBe("Couldn’t save 4 settings for “Banana”.");
+      .toBe("Nebula couldn’t save 4 settings for “Banana”.");
   });
 
   it('probe P1: two requests, the first saved and the second refused, names only the second\'s key and reverts only it', async () => {
@@ -129,7 +129,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     firstAnswer.resolve?.(json({}));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn’t save a setting on “Banana”. It’s back to its last saved value."]);
+      ["Nebula couldn’t save a setting on “Banana”. It’s back to its last saved value."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'new prompt', seed: 1 });
   });
 
@@ -139,7 +139,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7 } });
     await settle(PUSH_WAIT + 50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn’t save 2 settings for “Banana”. They’re back to their last saved values."]);
+      ["Nebula couldn’t save 2 settings for “Banana”. They’re back to their last saved values."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'old', seed: 1 });
   });
 
@@ -152,7 +152,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7, aspect_ratio: '16:9' } });
     await settle(PUSH_WAIT + 50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn’t save 3 settings for “Banana”. They’re back to their last saved values."]);
+      ["Nebula couldn’t save 3 settings for “Banana”. They’re back to their last saved values."]);
   });
 
   it('a key edited again while its save was out keeps the newer value, and the second sentence goes', async () => {
@@ -166,7 +166,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     answer.resolve?.(json({ detail: 'refused' }, 409));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn’t save 2 settings for “Banana”."]);
+      ["Nebula couldn’t save 2 settings for “Banana”."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'newer', seed: 1 });
   });
 });
@@ -178,7 +178,7 @@ describe('L3 (probe P2): a failed model change names the model the node is on, i
         params: { model: 'anthropic/claude-opus', _model_ports: { model: 'anthropic/claude-opus' } } } }] } as never);
     fetchMock.mockImplementation(async () => json({ detail: 'refused' }, 409));
     await useGraphStore.getState().configureOpenRouterModel('n6', 'openai/gpt-5');
-    expect(notices).toEqual([{ line: "Couldn’t change the model for “Router”. It’s still on anthropic/claude-opus.",
+    expect(notices).toEqual([{ line: "Nebula couldn’t change the model for “Router”. It’s still on anthropic/claude-opus.",
       mono: 'anthropic/claude-opus' }]);
   });
 
@@ -188,7 +188,7 @@ describe('L3 (probe P2): a failed model change names the model the node is on, i
         params: { model_id: 'new/model', _model_ports: { model: 'old/model' } } } }] } as never);
     fetchMock.mockImplementation(async () => json({ detail: 'no such model' }, 404));
     await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n7', 'new', 'model');
-    expect(notices).toEqual([{ line: "Couldn’t change the model for “Replicate”. It’s still on old/model.", mono: 'old/model' }]);
+    expect(notices).toEqual([{ line: "Nebula couldn’t change the model for “Replicate”. It’s still on old/model.", mono: 'old/model' }]);
   });
 });
 

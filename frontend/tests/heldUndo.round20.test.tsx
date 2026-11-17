@@ -284,7 +284,7 @@ describe('round 20 (review 19)', () => {
       // That canvas is gone: its typing never reaches a node that takes its id.
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       // Round 22 (review 21, L-a): and it is never lost with no line.
-      expect(lines()).toEqual(["Couldn’t save “Text” for “n2”."]);
+      expect(lines()).toEqual(["Nebula couldn’t save “Text” for “n2”."]);
     });
   });
 

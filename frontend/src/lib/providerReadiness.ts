@@ -1,4 +1,5 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { becauseLine } from './errorCopy';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import {
@@ -80,7 +81,7 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
     case 'rate_limited': return { ...base, label: 'Check rate limited', tone: 'warning',
       detail: `${provider} limited the ${word} check. Try Check connections again later.` };
     case 'error': return { ...base, label: 'Check unavailable', tone: 'warning',
-      detail: `Couldn't check ${provider}. The saved connection is unchanged. Use Check connections to try again.` };
+      detail: `${becauseLine({ heading: `Couldn’t check ${provider}.`, reason: '' })} The saved connection is unchanged. Use Check connections to try again.` };
   }
 }
 

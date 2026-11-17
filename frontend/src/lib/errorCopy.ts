@@ -136,8 +136,8 @@ export const MARK_READ_REFUSED_DEV_COPY =
  */
 export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
-  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
-  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again.';
+  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.`;
+  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again, then try again.';
   return `Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`;
 }
 
@@ -179,6 +179,7 @@ export interface ReasonClause {
  * edit here and its line in tests/becauseClause.test.ts. A reason that is no row falls to the
  * pattern rows, then the sentence rule (clauseFor).
  */
+const SESSION_ENDED = 'this tab’s session ended. Reload to sign in again.';
 export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string, ReasonClause>([
   // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
   [backendText("That reference isn't there anymore. Reload to get the latest references."),
@@ -191,8 +192,8 @@ export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string,
   // A reference's image or video the blob route can't find (backend routes/commons get_blob).
   [backendText('not found'), { alone: 'the file isn’t there anymore.' }],
   // The UI session's 401s (backend commons/actors.py resolve_actor): design says "tab".
-  [backendText('invalid UI session token'), { alone: 'this tab’s session ended. Reload to sign in again.' }],
-  [backendText('no UI session: open Nebula from the desktop app or use the dev link'), { alone: 'this tab’s session ended. Reload to sign in again.' }],
+  [backendText('invalid UI session token'), { alone: SESSION_ENDED }],
+  [backendText('no UI session: open Nebula from the desktop app or use the dev link'), { alone: SESSION_ENDED }],
   // A route only the person's own tab may call (backend routes/commons human_dep): not the person-gate check.
   [backendText('only the human UI session can do this'), { alone: 'this tab isn’t signed in as you. Reload to sign in again.' }],
   // The Commons intake's refusals (backend commons/person_copy INTAKE and the settings lines).
@@ -214,8 +215,6 @@ const FOLDED_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map(
 /** The load failures' view of the table (a load shows only these, never a backend sentence of its own). */
 export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map(
   [...REASON_CLAUSES].map(([reason, row]) => [reason, row.alone] as const));
-/** 401 or 403 with no reason (GM's line, kept by GM r30). */
-const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to sign in again.';
 /** GM r30 3: a server error (500) isn't "didn't respond". GM r31: "the server", not "Nebula's server". */
 const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
 /** GM r30: no answer at all (GM r31's wording). */
@@ -226,6 +225,7 @@ export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try aga
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
+const NOT_ACCEPTED_ALONE = 'the server didn’t accept it. Try again, or reload if it keeps happening.';
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
  * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
  * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
@@ -276,7 +276,7 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
   }
   const folded = foldApostrophes(detail);
   const listed = [...because].find(([key]) => foldApostrophes(key) === folded)?.[1];
-  const clause = listed ?? (reason === ACCESS_LOST_COPY ? ACCESS_LOST_CLAUSE : undefined);
+  const clause = listed ?? (reason === ACCESS_LOST_COPY ? sentenceClause(reason) ?? undefined : undefined);
   if (clause) return clause;
   if (detail) console.warn(`[nebula] Couldn’t ${what}: the backend said "${detail}" (not shown).`);
   return LOAD_NOT_ACCEPTED;
@@ -684,9 +684,8 @@ function statusClause(reason: string, status: number | undefined, beside: 'alone
     if (status === 429) return button ? SERVER_BUSY_RETRY_CLAUSE : SERVER_BUSY_CLAUSE;
     return status !== undefined && status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
-  if (reason === ACCESS_LOST_COPY) return ACCESS_LOST_CLAUSE;
   // A refusal with no readable reason: "it" is the request, as the Cinema line says.
-  if (reason === REFUSED_FALLBACK_COPY) return button ? LOAD_NOT_ACCEPTED : 'the server didn’t accept it. Try again, or reload if it keeps happening.';
+  if (reason === REFUSED_FALLBACK_COPY) return button ? LOAD_NOT_ACCEPTED : NOT_ACCEPTED_ALONE;
   if (reason === TOO_LARGE_COPY) return 'it’s too large.';
   return null;
 }
@@ -1150,7 +1149,7 @@ export function besideButton(line: string): string {
   const endings: readonly (readonly [string, string])[] = [
     [NOT_ANSWERING_CLAUSE, NOT_ANSWERING_RETRY_CLAUSE],
     [SERVER_BUSY_CLAUSE, SERVER_BUSY_RETRY_CLAUSE],
-    ['the server didn’t accept it. Try again, or reload if it keeps happening.', LOAD_NOT_ACCEPTED],
+    [NOT_ACCEPTED_ALONE, LOAD_NOT_ACCEPTED],
   ];
   for (const [page, button] of endings) {
     if (line.endsWith(page)) return line.slice(0, line.length - page.length) + button;

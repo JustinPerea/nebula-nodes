@@ -60,7 +60,7 @@ const { noteBackendConnection, resetBackendConnectionForTests } = await import('
 const { lockPlacementProblems } = await import('../src/lib/lockPlacement');
 const { CommonsErrorLine } = await import('../src/components/commons/CommonsErrorLine');
 
-const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
 const ADD_LINE = 'You can add references when this tab is connected as you.';
 const CREATE_LINE = 'You can create collections when this tab is connected as you.';
 const TOKEN = 'a'.repeat(43);
@@ -314,7 +314,7 @@ describe('offline comes first (GM r23 3)', () => {
 
 describe('a Commons pane\'s because line, offline (GM r23 3)', () => {
   it('hides while offline and comes back online; another failure\'s line stays offline', () => {
-    const because = 'Nebula couldn’t load this reference because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+    const because = 'Nebula couldn’t load this reference because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
     const other = 'Couldn’t load this reference. The file is missing.';
     render(<><CommonsErrorLine line={because} /><CommonsErrorLine line={other} /></>);
     expect(screen.getByText(because)).toBeTruthy();

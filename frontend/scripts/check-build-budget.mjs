@@ -63,8 +63,14 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // kept notice, the bottom bar's kept state). Its round 28 notes measured lazy
 // splits of these; a kept edit that waits for a chunk is refused for good when
 // that chunk can't load, which is when a canvas is kept, so they stay.
-const MAX_STARTUP_BYTES = 1_862_000;
-const MAX_STARTUP_GZIP_BYTES = 488_900;
+// The failure-lines PR (every failure line is one sentence, "Nebula couldn’t ‹do X› because ‹reason›.") cost
+// +7,545 raw / +2,445 gzip over main (1,860,086 / 487,696): 1,867,631 / 490,141, still 45 chunks. The limits are the
+// ones above plus that cost, rounded up to the next 1,000 raw and 100 gzip. The cost is the clause table design's
+// wording needs (errorCopy.ts), the provider-named node lines (nodeErrorCopy.ts) and the lines that moved to the
+// shared builder. Failure copy loads with the app on purpose: a failure line that waits for a chunk cannot be
+// shown when the server or the network is what failed, so it is not split out.
+const MAX_STARTUP_BYTES = 1_870_000;
+const MAX_STARTUP_GZIP_BYTES = 491_400;
 const startup = await startupSet(distDir);
 const biggest = startup.members.slice(0, 5).map((m) => `${chunkLabel(m.name)} ${m.raw}`).join(', ');
 

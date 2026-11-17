@@ -1,6 +1,10 @@
 import { becauseLine, curlApostrophes, failedWhat } from './errorCopy';
 
 
+/** The Gemini Omni guardrail's text, which agents read word for word, and the reason the card says instead. */
+const GEMINI_OMNI_GUARDRAIL = /^Gemini Omni capability guardrail:/;
+const GEMINI_OMNI_REASON = 'Gemini Omni can’t make a video longer. Use Veo 3.1 to extend it.';
+
 /**
  * What a node's card says when its run failed (error copy round 3c, GM -
  * Design). GM: "the person reads these on the node, so their lines shouldn't
@@ -123,14 +127,6 @@ export interface NodeErrorCopy {
   details: string | null;
 }
 
-/** A failure to run as one line: the category's clause with the provider named, or the written line under the heading. */
-function runLine(heading: string, reason: string, category: string | undefined, provider: string | undefined): string {
-  const clause = category ? categoryClause(category, provider) : null;
-  const what = failedWhat(heading);
-  if (clause !== null && what !== null) return `Nebula couldn’t ${what} because ${clause}`;
-  return becauseLine({ heading, reason });
-}
-
 export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface = 'node', notStarted = false,
   heading = category === WAITING_CATEGORY ? WAITING_HEADING
     : surface === 'shot' ? GENERATE_SHOT_HEADING : notStarted ? RUN_NOT_STARTED_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
@@ -155,8 +151,10 @@ export function nodeErrorCopy({ raw, category, friendly, person, providerText, p
     if (waiting) return failure(named, details);
     // Such a text is the provider's or the check's own words, not a clause: it follows the action as its own sentence.
     const what = failedWhat(heading);
+    // The Gemini Omni guardrail's raw text is for agents; the card says it as a reason.
+    if (!classified && GEMINI_OMNI_GUARDRAIL.test(named)) return { heading: '', reason: becauseLine({ heading, reason: GEMINI_OMNI_REASON }), details };
     if (!classified && what !== null) return { heading: '', reason: `Nebula couldn’t ${what}. ${curlApostrophes(named)}`, details };
-    return { heading: '', reason: runLine(heading, named, classified ? category : undefined, provider), details };
+    return { heading: '', reason: becauseLine({ heading, reason: (classified && categoryClause(category, provider)) || named }), details };
   }
   return failure(cardGeneralLine(provider, Boolean(text), surface), text || null);
 }

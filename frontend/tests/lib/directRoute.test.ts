@@ -285,8 +285,8 @@ describe('addKeyLine names at most three providers', () => {
     expect(addKeyLine(FOUR.slice(0, 3))).toBe('Add a Black Forest Labs API key, fal.ai API key or Replicate token in Settings to run this node.');
   });
   it('sends four to the providers listed above', () => {
-    expect(addKeyLine(FOUR)).toBe('Add a key for one of the providers above in Settings to run this node.');
-    expect(missingKeyLine(FOUR)).toBe('Add a key for one of the providers above in Settings to run this node.');
+    expect(addKeyLine(FOUR)).toBe('Add a key for one of its providers in Settings to run this node.');
+    expect(missingKeyLine(FOUR)).toBe('Add a key for one of its providers in Settings to run this node.');
   });
   it('still returns null for a key Settings does not store', () => {
     expect(addKeyLine(['NOT_A_KEY'])).toBeNull();

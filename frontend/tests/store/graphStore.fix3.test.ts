@@ -269,24 +269,24 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     await sleep(20);
     expect(deletesSent()).toBe(0);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n4');
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.");
     // The same through React Flow's own removal.
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange([{ id: 'n4', type: 'remove' }]);
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.");
   });
 
   it('no Stop here: "…Wait for it to finish."', () => {
     renderingScene(false);
     useGraphStore.getState().deleteNode('n4');
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Wait for it to finish.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Wait for it to finish.");
   });
 
   it('several shots: named, and counted from four', () => {
     expect(sceneDeleteRefusedLine('Opening', { numbers: [2, 3], stoppable: true }))
-      .toBe("Couldn’t delete “Opening”. “Shot 2” and “Shot 3” are still running. Stop the run first.");
+      .toBe("Nebula couldn’t delete “Opening” because “Shot 2” and “Shot 3” are still running. Stop the run first.");
     expect(sceneDeleteRefusedLine('Opening', { numbers: [1, 2, 3, 4], stoppable: false }))
-      .toBe("Couldn’t delete “Opening”. 4 shots are still running. Wait for it to finish.");
+      .toBe("Nebula couldn’t delete “Opening” because 4 shots are still running. Wait for it to finish.");
   });
 
   it('multi-select: the rest is deleted, the scene stays, and the line says why', async () => {

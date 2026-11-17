@@ -40,7 +40,7 @@ import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from services.http_errors import TRANSPORT_ERRORS
-from execution.person_line import with_person_line, with_provider_line
+from execution.person_line import size_text, with_person_line, with_provider_line
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 CREDENTIAL = "TYPESAFE_API_KEY"
@@ -204,6 +204,20 @@ class PreparedImage:
     @property
     def mime(self) -> str:
         return "image/png" if self.format == "png" else "image/jpeg"
+
+
+def _images_over_line(count: int, size: float) -> str:
+    shown = size_text(size)
+    over = "are over" if shown == "32 MB" else f"come to {shown} even as small JPEGs, over"
+    tail = " even as small JPEGs." if shown == "32 MB" else ""
+    return (f"The {count} images {over} TypeSafe’s 32 MB request limit{tail or '.'} "
+            "Send fewer images or split the work across nodes.")
+
+
+def _request_over_line(size: float) -> str:
+    shown = size_text(size)
+    lead = "The request is over" if shown == "32 MB" else f"The request is {shown}, over"
+    return f"{lead} TypeSafe’s 32 MB limit. Shorten the context or send fewer images."
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
@@ -430,8 +444,7 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
             total = sum(len(data) for data in encoded) / (1024 * 1024)
             raise with_person_line(ValueError(
                 f"The {len(encoded)} images come to {total:.1f} MiB even as small JPEGs, over TypeSafe's "
-                "32 MiB request limit. Send fewer images or split the work across nodes."), f"The {len(encoded)} images come to {total:.1f} MB even as small JPEGs, over TypeSafe’s 32 MB "
-                "request limit. Send fewer images or split the work across nodes.")
+                "32 MiB request limit. Send fewer images or split the work across nodes."), _images_over_line(len(encoded), total * 1024 * 1024))
         index = max(candidates, key=lambda i: len(encoded[i]))
         steps[index] += 1
         fmt, quality = ladders[index][steps[index]]
@@ -752,8 +765,7 @@ def build_request(*, model: str, state: Any, questions: Mapping[str, Mapping[str
     if total > MAX_REQUEST_BYTES:
         raise with_person_line(ValueError(
             f"The request is {total / (1024 * 1024):.1f} MiB, over TypeSafe's 32 MiB limit. "
-            "Shorten the context or send fewer images."), f"The request is {total / (1024 * 1024):.1f} MB, over TypeSafe’s 32 MB limit. "
-            "Shorten the context or send fewer images.")
+            "Shorten the context or send fewer images."), _request_over_line(total))
     if not images:
         headers["Content-Type"] = "application/json"
         return headers, {"content": encoded}

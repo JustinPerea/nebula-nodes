@@ -67,7 +67,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
       'Nebula couldn’t open this file because it has more than 50,000 connections, the most Nebula opens.'],
     ['too large', 413, { detail: 'graph.json is too large', code: 'graph_too_large',
       sizeBytes: 600 * 1024 * 1024, limitBytes: 528 * 1024 * 1024 },
-      'This canvas is 600.0 MB. Nebula opens canvases up to 528 MB.'],
+      'This canvas is 600 MB. Nebula opens canvases up to 528 MB.'],
   ])('%s: the plain file’s line under the load heading; the backend’s words go to the log', async (_case, status, body, line) => {
     const { result, said, errors } = await loadBundleAnswering(answer(status, body));
     expect(result).toBeNull();
@@ -104,7 +104,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['bundle_restore_failed', 500, 'Could not restore zip bundle assets', {}, 'Its files couldn’t be copied. Try again.'],
     // GM PR #205 r16 item 3: the sizes in the size lines' MB.
     ['bundle_member_too_large', 413, 'Zip bundle member is too large',
-      { sizeBytes: 3 * 1024 ** 3, limitBytes: 256 * 1024 * 1024 }, 'One of its files is 3072.0 MB. Nebula opens files up to 256 MB.'],
+      { sizeBytes: 3 * 1024 ** 3, limitBytes: 256 * 1024 * 1024 }, 'One of its files is 3 GB. Nebula opens files up to 256 MB.'],
     ['bundle_upload_too_large', 413, 'Zip bundle exceeds the compressed upload limit',
       { sizeBytes: 600 * 1024 * 1024 + 52_429, limitBytes: 528 * 1024 * 1024 }, 'This file is 600.1 MB. Nebula opens files up to 528 MB.'],
   ])('%s (%s): the line under the load heading', async (code, status, detail, fields, line) => {

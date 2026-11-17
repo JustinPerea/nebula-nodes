@@ -74,7 +74,7 @@ describe('PR #204 round 9: a Commons not-connected line clears on the promote, a
     act(() => reportPersonRequired());
     expect(personGateHeld()).toBe(true);
     render(<CommonsView />);
-    await waitFor(() => expect(notConnected()?.textContent).toMatch(/^Nebula couldn’t .+ because this tab isn’t connected as you\. Open the link Nebula printed when it started\.$/));
+    await waitFor(() => expect(notConnected()?.textContent).toMatch(/^Nebula couldn’t .+ because this tab isn’t connected as you\. Open the link Nebula printed when it started, then try again\.$/));
     expect(document.querySelector('[data-commons-tile]')).toBeNull();
     expect(transport.fetch).not.toHaveBeenCalled();
     expect(pendingPromoteRetries()).toBeGreaterThan(0);

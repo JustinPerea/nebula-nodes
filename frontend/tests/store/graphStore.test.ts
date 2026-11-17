@@ -696,7 +696,7 @@ describe('graphStore', () => {
     expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    expect(alertMock).toHaveBeenCalledWith("Couldn’t add “Text Input”. Nebula isn’t connected yet. Try again once it is.");
+    expect(alertMock).toHaveBeenCalledWith("Nebula couldn’t add “Text Input” because the server isn’t connected yet. Try again once it is.");
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
 

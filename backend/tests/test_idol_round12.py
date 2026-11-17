@@ -444,7 +444,7 @@ def test_a_missing_key_line_names_at_most_three_providers():
     assert key_line(keys[:1]) == "Add a Black Forest Labs API key in Settings to run this node."
     assert key_line(keys[:2]) == "Add a Black Forest Labs or fal.ai API key in Settings to run this node."
     assert key_line(keys[:3]) == "Add a Black Forest Labs API key, fal.ai API key or Replicate token in Settings to run this node."
-    four = "Add a key for one of the providers above in Settings to run this node."
+    four = "Add a key for one of its providers in Settings to run this node."
     assert key_line(keys) == four
     from execution.person_line import missing_key_line
     assert missing_key_line(keys) == four

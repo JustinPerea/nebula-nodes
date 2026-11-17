@@ -1701,7 +1701,7 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
     fireEvent.change(screen.getByRole('combobox', { name: 'Ask before costly runs' }), { target: { value: '10' } });
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Nebula couldn’t save");
     expect(useUIStore.getState().runCostConfirmUsd).toBe(2);
     useUIStore.getState().setRunCostConfirmUsd(1);
   });
@@ -1876,7 +1876,7 @@ describe('Settings — preferences', () => {
       { reason: 'Only the person can do this.', code: 'person_required' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
-    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started.')).toBeInTheDocument();
+    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.')).toBeInTheDocument();
     const calls = getOutsideSpendMock.mock.calls.length;
     act(() => { session.notePersonPromoted(); });
     await waitFor(() => expect(getOutsideSpendMock.mock.calls.length).toBe(calls + 1));
@@ -1924,7 +1924,7 @@ describe('Settings — storage', () => {
     const exports = screen.getByRole('textbox', { name: 'Exports' });
     fireEvent.change(exports, { target: { value: '/exports' } });
     fireEvent.blur(exports);
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Nebula couldn’t save. Try again.");
     expect(exports).toHaveValue('/exports');
   });
 

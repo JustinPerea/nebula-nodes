@@ -164,9 +164,9 @@ describe('the pattern rows and the sentence rule', () => {
   it('shows a person refusal in the not-connected form', () => {
     const heading = "Couldn't delete the project for good.";
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_COPY }))
-      .toBe('Nebula couldn’t delete the project for good because this tab isn’t connected as you. Open the link Nebula printed when it started.');
+      .toBe('Nebula couldn’t delete the project for good because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_APP_COPY }))
-      .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. Quit Nebula and open it again.');
+      .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. Quit Nebula and open it again, then try again.');
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_DEV_COPY }))
       .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. The notice below says why.');
   });
@@ -200,7 +200,7 @@ describe('curlApostrophes', () => {
 describe('failedWhat', () => {
   it('reads the action from a heading, with either apostrophe', () => {
     expect(failedWhat("Couldn't load the character.")).toBe('load the character');
-    expect(failedWhat('Couldn’t save “a.b”.')).toBe('save “a.b”');
+    expect(failedWhat('Nebula couldn’t save “a.b”.')).toBe('save “a.b”');
     expect(failedWhat('Nebula couldn’t start the run.')).toBe('start the run');
     expect(failedWhat("Couldn't clear the canvas. Nothing was removed.")).toBeNull();
     expect(failedWhat("Couldn't load this moodboard")).toBeNull();

@@ -6975,7 +6975,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
 | Job ID | string | — | — |
-| Status | enum | any | Any, Completed, Failed, Cancelled, Processing, Queued |
+| Status | enum | any | Any, Completed, Failed, Canceled, Processing, Queued |
 | Job types | string | — | — |
 | Limit | int | 20 | 1–1000 |
 | Before | string | — | — |

@@ -6,13 +6,15 @@
     "sentence-punctuation": "Rewrite the sentence without a semicolon, colon or parenthesis (units on a label, times, ratios, URLs and key-value chips are fine).",
     "title-case": "Use sentence case: only the first word and proper names start with a capital.",
     "raw-key-label": "Show a plain-words label, not a raw key (camelCase, PascalCase or snake_case).",
-    "retry-button": "The action is “Try again”, not “Retry”."
+    "retry-button": "The action is “Try again”, not “Retry”.",
+    "us-spelling": "Use the US spelling: canceled and canceling (cancellation keeps its double l)."
   },
   "sentence": {
     "minLength": 40,
     "endings": ".?!"
   },
   "retryPattern": "^Retry(?![A-Za-z])|\\sRetry(?:…|\\.\\.\\.)?$",
+  "britishSpellingPattern": "\\b[Cc]ancell(?:ed|ing)\\b",
   "units": [
     "px",
     "mm",

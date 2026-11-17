@@ -161,7 +161,7 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         await settle();
         // Round 21 (the #114 merge): #114's GM line for a failed model change
         // (channel round 14) where neither of #195's two lines applies.
-        expect(shown().join('\n')).toContain("Couldn’t change the model for “Writer”.");
+        expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
 
@@ -175,7 +175,7 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         await settle();
         // Round 21 (the #114 merge): #114's GM line for a failed model change
         // (channel round 14) where neither of #195's two lines applies.
-        expect(shown().join('\n')).toContain("Couldn’t change the model for “Writer”.");
+        expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
     }

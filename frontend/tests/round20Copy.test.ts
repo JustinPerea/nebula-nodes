@@ -53,23 +53,23 @@ describe('GM follow-up 2: the failed handoff, one line (round 21: non-breaking s
   it('one setting', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered)'))
-      .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Nebula couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('several settings: the undo counting', () => {
     expect(handoffFailedLine([{ node: 'A', setting: 'Text' }, { node: 'B', setting: 'Text' }, { node: 'B', setting: 'Name' }],
       'Glass campaign', 'Claude Code', 'Glass campaign (recovered)'))
-      .toBe("Couldn’t save 3 changes in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Nebula couldn’t save 3 changes in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('one change it can\'t name', () => {
     expect(handoffFailedLine([{ node: null, setting: null }], 'Glass campaign', 'Claude Code', 'Glass campaign (recovered)'))
-      .toBe("Couldn’t save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Nebula couldn’t save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('the agent unknown', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', null, 'Glass campaign (recovered)'))
-      .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
+      .toBe("Nebula couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
 });

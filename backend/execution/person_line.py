@@ -321,7 +321,7 @@ def key_line(keys: Iterable[str]) -> str | None:
     if not phrase:
         return None
     if len(keys) > MAX_KEY_NAMES:  # four or more: the providers the card lists above
-        return "Add a key for one of the providers above in Settings to run this node."
+        return "Add a key for one of its providers in Settings to run this node."
     return f"Add {with_article(phrase)} in Settings to run this node."
 
 
@@ -897,3 +897,12 @@ def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool 
         else:
             lines.append((f"{not_ready_subject(names)} {many}", len(names)))
     return lines
+
+
+def size_text(size: int | float) -> str:
+    """A size as a person line says it: MB to one decimal, GB from 1,024 MB, no trailing ".0".
+
+    Mirrors frontend/src/lib/sizeText.ts."""
+    mb = size / (1024 * 1024)
+    value, unit = (mb / 1024, "GB") if mb >= 1024 else (mb, "MB")
+    return f"{round(value + 1e-9, 1):g} {unit}"
