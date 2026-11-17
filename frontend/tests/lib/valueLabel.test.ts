@@ -28,9 +28,9 @@ describe('the Inspector State row', () => {
     expect(NODE_STATES.map((state) => [state, nodeStateWord(state)])).toEqual([
       ['idle', 'Idle'],
       ['queued', 'Queued'],
-      ['executing', 'Executing'],
+      ['executing', 'Running'],
       ['complete', 'Complete'],
-      ['error', 'Error'],
+      ['error', 'Failed'],
       ['skipped', 'Skipped'],
     ]);
   });

@@ -13,7 +13,7 @@ export const VALUE_INITIALISMS: Readonly<Record<string, string>> = {
   csv: 'CSV', srt: 'SRT', lut: 'LUT', vfx: 'VFX', fps: 'FPS', tts: 'TTS', stt: 'STT', asr: 'ASR', '4k': '4K', '8k': '8K',
   glb: 'GLB', fbx: 'FBX', obj: 'OBJ', usdz: 'USDZ', ply: 'PLY',
 };
-const LEVEL_WORDS: Readonly<Record<string, string>> = { xhigh: 'extra high' };
+const LEVEL_WORDS: Readonly<Record<string, string>> = { xhigh: 'extra high', std: 'standard' };
 
 export function valueLabel(value: string): string {
   const words = value.split(/[_\s]+/).filter(Boolean).map((word) => {
@@ -24,6 +24,10 @@ export function valueLabel(value: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-// The word the Inspector's State row shows for a node's stored state.
+// The word the Inspector's State row shows for a node's stored state: the words the
+// card (NodeRunStatus: Queued, Running) and run history (Complete, Failed) already use.
 export const NODE_STATES: readonly NodeState[] = ['idle', 'queued', 'executing', 'complete', 'error', 'skipped'];
-export const nodeStateWord = (state: NodeState): string => valueLabel(state);
+const STATE_WORDS: Readonly<Record<NodeState, string>> = {
+  idle: 'Idle', queued: 'Queued', executing: 'Running', complete: 'Complete', error: 'Failed', skipped: 'Skipped',
+};
+export const nodeStateWord = (state: NodeState): string => STATE_WORDS[state] ?? valueLabel(state);

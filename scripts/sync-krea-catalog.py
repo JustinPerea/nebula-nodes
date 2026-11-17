@@ -1097,7 +1097,7 @@ INITIALISMS = {
     "glb": "GLB", "fbx": "FBX", "obj": "OBJ", "usdz": "USDZ", "ply": "PLY",
     "vfx": "VFX", "fps": "FPS", "tts": "TTS", "stt": "STT", "asr": "ASR", "4k": "4K", "8k": "8K",
 }
-LEVEL_WORDS = {"xhigh": "extra high"}
+LEVEL_WORDS = {"xhigh": "extra high", "std": "standard"}
 
 
 def label(field):

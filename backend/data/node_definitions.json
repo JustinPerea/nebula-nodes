@@ -3162,7 +3162,7 @@
         "label": "Language Code",
         "type": "string",
         "required": false,
-        "placeholder": "Auto (such as en, es)"
+        "placeholder": "Auto, or a code such as en"
       },
       {
         "key": "output_format",
@@ -3854,7 +3854,7 @@
         "label": "Language",
         "type": "string",
         "required": false,
-        "placeholder": "Auto-detect (ISO code, such as en)"
+        "placeholder": "Auto-detect, or an ISO code such as en"
       },
       {
         "key": "diarize",
@@ -6119,7 +6119,7 @@
         "type": "string",
         "required": true,
         "default": "",
-        "placeholder": "owner/name (such as stability-ai/sdxl)"
+        "placeholder": "owner/name, such as stability-ai/sdxl"
       }
     ]
   },
@@ -36382,7 +36382,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "Std",
+            "label": "Standard",
             "value": "std"
           },
           {

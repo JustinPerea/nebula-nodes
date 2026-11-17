@@ -1110,7 +1110,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
-      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (such as en, es)' },
+      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto, or a code such as en' },
       {
         key: 'output_format',
         label: 'Output format',
@@ -1617,7 +1617,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Language',
         type: 'string',
         required: false,
-        placeholder: 'Auto-detect (ISO code, such as en)',
+        placeholder: 'Auto-detect, or an ISO code such as en',
       },
       {
         key: 'diarize',
@@ -2781,7 +2781,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: true,
         default: '',
-        placeholder: 'owner/name (such as stability-ai/sdxl)',
+        placeholder: 'owner/name, such as stability-ai/sdxl',
       },
     ],
   },
@@ -24084,7 +24084,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "Std",
+            "label": "Standard",
             "value": "std"
           },
           {

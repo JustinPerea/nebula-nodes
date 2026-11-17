@@ -3188,7 +3188,7 @@ No settings.
 | Duration | float | 5 | 3–15 |
 | End image | string | — | — |
 | Generate audio | bool | false | — |
-| Mode | enum | std | Std, Pro, 4K |
+| Mode | enum | std | Standard, Pro, 4K |
 | Multi prompt · JSON | textarea | — | — |
 
 ---
