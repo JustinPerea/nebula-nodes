@@ -6198,14 +6198,14 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
     done(response.ok);
     if (response.ok) return;
     const heading = `Couldn’t ${want ? 'make' : 'remove'} that connection.`;
-    const { reason, error } = await backendRejectionReason(response, heading);
+    const { reason, error, status } = await backendRejectionReason(response, heading);
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
     }));
     // Beside an agent's Undo, never over it (review 8, L-d), through notify, which registers a
     // refusal's line on the promote by the answer's own stamp (review 5 MEDIUM-1, round 7).
-    useGraphStore.getState().notify(becauseLine({ heading, reason }), 'error', { error });
+    useGraphStore.getState().notify(becauseLine({ heading, reason, status }), 'error', { error });
   }, (err) => {
     done(false);
     console.warn('[nebula] Wire sync failed:', err);
@@ -8671,11 +8671,13 @@ function notStartedMessage(heading: string, status: string | undefined): string 
  * itself goes to the console under `heading`, once per call site. A
  * person-only refusal says GM's line for it, by its code (Q116 a); its own
  * words, written for agents, go to the console only. */
-async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown }> {
+async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown; status: number }> {
   const read = await readRefusal(response);
   warnFailure(heading, response.status, read.detail);
   // Review 5 LOW-4 (round 7): the line carries this answer's own refusal and stamp.
-  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read) };
+  // The status goes with the reason: becauseLine words a 500 ("the server hit an error") apart from a
+  // gateway's 502 to 504 ("the server didn’t respond"), and the reason alone can't tell them apart.
+  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read), status: response.status };
 }
 
 type NodeCreationAttempt = {
@@ -8765,8 +8767,8 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
   return reportNodeCreationFailure(displayName, failureCopy(err).cause ?? '', err);
 }
 
-function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown): null {
-  const message = becauseLine({ heading: addHeading(displayName), reason });
+function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown, status?: number): null {
+  const message = becauseLine({ heading: addHeading(displayName), reason, status });
   console.warn(`[nebula] ${message}`);
   // A refusal's line carries the refusal (review 5 LOW-4): it clears by its own stamp.
   useGraphStore.getState().notify(message, 'error', { error });
@@ -8905,8 +8907,8 @@ async function createNodeOnBackend(
 
     if (!res.ok) {
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
-      return reportNodeCreationFailure(definition.displayName, reason, error);
+      const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
+      return reportNodeCreationFailure(definition.displayName, reason, error, status);
     }
 
     let node: { id?: unknown };
@@ -10880,7 +10882,7 @@ function sendRestore(
   /** Review 17, W5 and L-2: Nebula refused it, or it never answered within
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
-  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown } = {}) => {
+  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown; status?: number } = {}) => {
     // An Undo held on a Delete (GM r39 item 3, r40 item 2): one neutral line
     // for a refused or failed restore, naming what it couldn't bring back as
     // the cards read now, in place of "Couldn’t undo that." or the timeout's.
@@ -10893,7 +10895,7 @@ function sendRestore(
     set((state) => {
       // A refusal written for the person already says what couldn't be
       // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
-      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? becauseLine({ heading: `Couldn’t ${action} that.`, reason }), offer: null,
+      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? becauseLine({ heading: `Couldn’t ${action} that.`, reason, status: how.status }), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -11070,9 +11072,9 @@ function sendRestore(
         });
         return;
       }
-      const { reason, error } = await backendRejectionReason(response, `Couldn’t ${action} that.`);
+      const { reason, error, status } = await backendRejectionReason(response, `Couldn’t ${action} that.`);
       console.warn(`[nebula] ${action} refused: ${reason}`);
-      refused(reason, { error });
+      refused(reason, { error, status });
     } finally {
       // After its line, as before: a held change landing first would be a
       // newer step, and keep the line away (answerNotice).
@@ -12911,7 +12913,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   addNodeAndConnect: async (definitionId, position, connect) => {
     const definition = NODE_DEFINITIONS[definitionId];
-    const fail = (reason: string, error?: unknown) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error);
+    const fail = (reason: string, error?: unknown, status?: number) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error, status);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
     // GM PR #205 r4 item 3: a run going doesn't lock it (the add and the
@@ -12974,8 +12976,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
-        return fail(reason, error);
+        const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
+        return fail(reason, error, status);
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -13113,9 +13115,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
       }
       if (!res.ok) {
-        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+        const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
         takeBack();
-        return reportNodeCreationFailure(definition.displayName, reason, error);
+        return reportNodeCreationFailure(definition.displayName, reason, error, status);
       }
       let body: { id?: unknown };
       try {

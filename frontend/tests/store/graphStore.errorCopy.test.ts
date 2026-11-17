@@ -54,6 +54,13 @@ describe('adding a node', () => {
     expect(warn.mock.calls.flat().join(' ')).toMatch(/HTTP 400/);
   });
 
+  it('a 500 says the server hit an error, as the project save does; a gateway status keeps "didn’t respond"', async () => {
+    useGraphStore.setState({ nodes: [textNode('n7')] as never });
+    fetchMock.mockResolvedValueOnce(json({ detail: 'boom' }, 500));
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toBe('Nebula couldn’t add “Text Input” because the server hit an error. Try again.');
+  });
+
   it('a 503 says Nebula didn\'t respond, whatever its body said', async () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(json({ detail: 'Paid-start safety journal unavailable' }, 503));
