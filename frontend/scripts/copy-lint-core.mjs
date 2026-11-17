@@ -21,6 +21,8 @@ export function loadRules() {
 // Names: the proper names a Title Case check lets through. The explicit list is in the rules
 // file; the catalogue adds every model and provider name the app already knows.
 
+const BRAND_SHAPE = /[A-Z].*[A-Z]|\d/;
+
 /** Display names and brand words from the node catalogue and the provider list. */
 export function catalogueNames(rules, repo = REPO) {
   const phrases = new Set();
@@ -32,8 +34,9 @@ export function catalogueNames(rules, repo = REPO) {
     if (c.includes(' ')) phrases.add(c);
     return c;
   };
-  // A node's first word is a brand when two nodes share it or it has a hump or a digit
-  // (ElevenLabs, MiniMax, Hunyuan3D); a lone "Style" or "Save" is just a word.
+  // A node's first word is a brand when it has a hump, a digit or is all capitals (ElevenLabs,
+  // MiniMax, Hunyuan3D, FLUX). A plain word ("World", "Black", "Style") never stands for a name
+  // alone; its whole phrase ("World Labs Marble") is matched instead.
   const countFirst = (name) => {
     const c = addPhrase(name);
     if (c) firstWords.set(c.split(/\s+/)[0], (firstWords.get(c.split(/\s+/)[0]) ?? 0) + 1);
@@ -50,15 +53,16 @@ export function catalogueNames(rules, repo = REPO) {
       }
     }
   }
-  for (const [word, count] of firstWords) if (count >= 2 || /[A-Z].*[A-Z]|\d/.test(word)) words.add(word);
+  for (const word of firstWords.keys()) if (BRAND_SHAPE.test(word)) words.add(word);
   // The provider list: every label part and brand word is a name.
   for (const rel of rules.frontend.catalogueFiles) {
     const file = path.join(repo, 'frontend', rel);
     if (!existsSync(file)) continue;
     const text = readFileSync(file, 'utf8');
+    // A one-word provider name is a name; the first word of a longer one ("World Labs") is not.
     const name = (n) => {
       const c = addPhrase(n);
-      if (c) words.add(c.split(/\s+/)[0]);
+      if (c && (!c.includes(' ') || BRAND_SHAPE.test(c.split(/\s+/)[0]))) words.add(c.split(/\s+/)[0]);
     };
     for (const m of text.matchAll(/\blabel: '([^']+)'/g)) for (const part of m[1].split('\u00b7')) name(part.trim());
     for (const m of text.matchAll(/\bbrand: \[([^\]]*)\]/g)) for (const b of m[1].matchAll(/'([^']+)'/g)) name(b[1]);
@@ -69,7 +73,7 @@ export function catalogueNames(rules, repo = REPO) {
 export function buildContext(rules, repo = REPO) {
   const names = catalogueNames(rules, repo);
   const proper = new Set();
-  for (const name of [...rules.properNames, ...rules.initialisms, ...rules.keyNames, ...rules.modelWords, ...rules.calendarWords]) {
+  for (const name of [...rules.properNames, ...rules.initialisms, ...rules.modelWords, ...rules.calendarWords]) {
     // A name of several words is stripped whole; only a one-word name lets its word through anywhere.
     if (/[\s-]/.test(name)) names.phrases.add(name);
     else proper.add(name.toLowerCase());
@@ -79,7 +83,16 @@ export function buildContext(rules, repo = REPO) {
   const phrases = [...names.phrases].sort((a, b) => b.length - a.length);
   const retry = new RegExp(rules.retryPattern);
   const units = new Set(rules.units);
-  return { rules, proper, phrases, retry, units };
+  // Key names count as names only as a key reference; some place and product names only after a verb.
+  const keys = new Set(rules.keyNames.map((k) => k.toLowerCase()));
+  const keyVerbs = new Set(rules.keyVerbs.map((v) => v.toLowerCase()));
+  const gated = rules.gatedNames.map((g) => ({
+    names: new Set(g.names.map((n) => n.toLowerCase())),
+    verbs: g.after.map((v) => v.toLowerCase().split(' ')),
+    paren: !!g.inParens,
+    beforeLower: !!g.beforeLowerCase,
+  }));
+  return { rules, proper, phrases, retry, units, keys, keyVerbs, gated };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -93,14 +106,30 @@ const TIME_RE = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
 const RATIO_RE = /\b\d+(?::\d+)+\b/g;
 const WORD_RE = /[A-Za-z]/;
 
+/** Two lower-case words in a row: the shape of a sentence, never of a Title Case label. */
+function hasLowerRun(t) {
+  return /(?:^|[\s(])[a-z][a-z'\u2019]*\s+[a-z][a-z'\u2019]*(?:\s|$|[.,!?)])/.test(t);
+}
+
+/** A sentence ends in . ? or !, has a comma, or is long and runs lower-case words together; length alone doesn't make one. */
 export function isSentence(text, rules) {
   const t = text.trim();
   if (!/\s/.test(t)) return false;
-  return rules.sentence.endings.includes(t.slice(-1)) || t.length > rules.sentence.minLength;
+  // A comma inside parentheses ("Jev (TypeSafe, experimental)") does not make a sentence.
+  if (rules.sentence.endings.includes(t.slice(-1)) || t.replace(/\([^)]*\)/g, '').includes(',')) return true;
+  return t.length > rules.sentence.minLength && hasLowerRun(t);
 }
 
 function stripUnitParens(text, units) {
   return text.replace(/\(([^()\s]{1,5})\)/g, (all, unit) => (units.has(unit) ? '' : all));
+}
+
+/** Is this capitalised word a name where it stands? Key names and gated place or product names depend on context. */
+function namedHere(low, prev, keyRef, plus, keycaps, paren, nextLower, ctx) {
+  if (ctx.keys.has(low) && (keyRef || plus || keycaps || paren)) return true;
+  return ctx.gated.some((g) => g.names.has(low)
+    && ((g.paren && paren) || (g.beforeLower && nextLower)
+      || g.verbs.some((v) => v.length <= prev.length && v.every((w, k) => prev[prev.length - v.length + k] === w))));
 }
 
 function titleCaseBreaks(text, ctx) {
@@ -108,24 +137,36 @@ function titleCaseBreaks(text, ctx) {
   let rest = text;
   for (const phrase of ctx.phrases) rest = rest.split(phrase).join(' ');
   rest = rest.replace(CURLY_SPAN_RE, ' ').replace(CODE_RE, ' ').replace(URL_RE, ' ');
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  const stripEdges = (t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+  const bares = tokens.filter((t) => /[A-Za-z]/.test(t) && !/[/~]/.test(t)).map((t) => stripEdges(t).toLowerCase());
+  const keycaps = bares.length > 0 && bares.every((b) => ctx.keys.has(b) || ctx.keyVerbs.has(b));
   let pending = true;
   let letterWords = 0;
   let hit = false;
-  for (const token of rest.split(/\s+/).filter(Boolean)) {
+  const prev = [];
+  let keyRef = false;
+  tokens.forEach((token, i) => {
     const endsSentence = /[.?!:]$/.test(token);
     if (!/[A-Za-z]/.test(token) || /[/~]/.test(token)) {
       if (endsSentence) pending = true;
-      continue;
+      return;
     }
     letterWords += 1;
+    const bare = stripEdges(token);
     if (!pending) {
-      const bare = token.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+      const plus = (i > 0 && tokens[i - 1] === '+') || (i + 1 < tokens.length && tokens[i + 1] === '+');
+      const paren = /^\(|\)$/.test(token);
+      const nextLower = i + 1 < tokens.length && /^[a-z]/.test(tokens[i + 1]);
       for (const part of bare.split(/[-\u2011]/)) {
-        if (/^[A-Z][a-z]+$/.test(part) && !ctx.proper.has(part.toLowerCase())) hit = true;
+        if (/^[A-Z][a-z]+$/.test(part) && !ctx.proper.has(part.toLowerCase()) && !namedHere(part.toLowerCase(), prev, keyRef, plus, keycaps, paren, nextLower, ctx)) hit = true;
       }
     }
+    const low = bare.toLowerCase();
+    keyRef = ctx.keyVerbs.has(low) || (keyRef && (ctx.keys.has(low) || low === 'or' || low === 'and'));
+    prev.push(low);
     pending = endsSentence;
-  }
+  });
   return letterWords >= 2 && hit;
 }
 
@@ -141,13 +182,17 @@ function rawKey(text, ctx) {
 
 /** Selectors, JSON samples and other code that sits in a copy file but isn't read as words. */
 function codeLike(t) {
+  // A string that opens with a value reads as "{} ..." and is a sentence, not an object literal.
+  if (/^\{\}(?![}\]])/.test(t)) return /\[(?:aria|data|role|hidden|inert)[-\w]*[\]=]|:not\(|:scope|=>/.test(t);
   return /^[[{]/.test(t) || /^[:.#][\w-]/.test(t) || /\[(?:aria|data|role|hidden|inert)[-\w]*[\]=]|:not\(|:scope|=>/.test(t);
 }
 
-/** "sk-...", "AIza...": the shape of a key, not a sentence cut short. */
+/** "sk-...", "r8_...", "AIza...": a short key prefix before the dots, no English word in it. */
 function keyShape(t) {
   const m = /^(\S+?)\.\.\.$/.exec(t);
-  return !!m && /[_\-\d]|[a-z][A-Z]|[A-Z]{2}[a-z]/.test(m[1]);
+  if (!m) return false;
+  // A prefix that ends in "-" or "_" ("sk-", "r8_", "ideogram_") is a key; a hump ("AIza") needs no English word in it.
+  return /[_-]$/.test(m[1]) || (!/[a-z]{5,}/.test(m[1]) && /[a-z][A-Z]|[A-Z]{2}[a-z]/.test(m[1]));
 }
 
 export function check(text, kind, ctx) {
@@ -171,7 +216,8 @@ export function check(text, kind, ctx) {
     hits.push('title-case');
   }
   if (kind === 'label' && rawKey(t, ctx)) hits.push('raw-key-label');
-  if (ctx.retry.test(t)) hits.push('retry-button');
+  // A button or action label, not a finished sentence that happens to start with the word.
+  if (ctx.retry.test(t) && !rules.sentence.endings.includes(t.slice(-1))) hits.push('retry-button');
   return hits;
 }
 
@@ -240,12 +286,41 @@ function inSkippedContext(node) {
   return false;
 }
 
-/** The text of a string, template, concatenation or choice; `{}` stands for a value. */
-export function textsOf(expr) {
+/** Names declared `const NAME = <expression>` anywhere in the file: Map of name to initializers. */
+export function constantsOf(sf) {
+  const consts = new Map();
+  const visit = (n) => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && (n.parent.flags & ts.NodeFlags.Const)) {
+      consts.set(n.name.text, [...(consts.get(n.name.text) ?? []), n.initializer]);
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return consts;
+}
+
+/**
+ * The text of a string, template, concatenation or choice; `{}` stands for a value. With `consts`, an
+ * identifier is read through the `const` of that name in the same file, and a call (`t("...")`) through
+ * its string arguments. Imports are not followed.
+ */
+export function textsOf(expr, consts = null) {
   const out = [];
+  const resolving = new Set();
   const walk = (e) => {
     if (!e) return;
-    if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) out.push({ text: e.text, node: e });
+    if (consts && ts.isIdentifier(e)) {
+      const inits = consts.get(e.text);
+      if (inits && !resolving.has(e.text)) {
+        resolving.add(e.text);
+        inits.forEach(walk);
+        resolving.delete(e.text);
+      }
+    } else if (consts && ts.isCallExpression(e)) {
+      if (!SKIP_CALLEES.has(calleeName(e))) {
+        for (const arg of e.arguments) if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg) || ts.isTemplateExpression(arg)) walk(arg);
+      }
+    } else if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) out.push({ text: e.text, node: e });
     else if (ts.isTemplateExpression(e)) {
       out.push({ text: e.head.text + e.templateSpans.map((s) => `{}${s.literal.text}`).join(''), node: e });
     } else if (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isNonNullExpression(e)) walk(e.expression);
@@ -306,10 +381,14 @@ const PROSE_RE = /\s/;
 /** Every person-facing string in one file: [{text, kind, line, source}]. */
 export function extractStrings(source, relPath, rules) {
   const sf = ts.createSourceFile(relPath, source, ts.ScriptTarget.Latest, true, relPath.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  // A file the lint cannot parse is a failure, never a silent skip.
+  if (sf.parseDiagnostics?.length) throw new Error(`copy lint could not parse ${relPath}: ${ts.flattenDiagnosticMessageText(sf.parseDiagnostics[0].messageText, ' ')}`);
+  const consts = constantsOf(sf);
   const props = new Set(rules.frontend.propertyNames);
   const labelProps = new Set(rules.frontend.labelPropertyNames);
   const attrs = new Set(rules.frontend.jsxAttributes);
   const labelAttrs = new Set(rules.frontend.labelJsxAttributes);
+  const literalAttrs = new Set(rules.frontend.jsxLiteralAttributes ?? []);
   const isCopyModule = rules.frontend.copyModules.includes(relPath);
   const found = [];
   const seen = new Set();
@@ -343,11 +422,19 @@ export function extractStrings(source, relPath, rules) {
     } else if (ts.isJsxAttribute(node) && node.initializer && attrs.has(node.name.text)) {
       const kind = labelAttrs.has(node.name.text) ? 'label' : 'text';
       const init = ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;
-      for (const item of textsOf(init)) push({ ...item, text: ts.isStringLiteral(node.initializer) ? decodeEntities(item.text) : item.text }, kind, `jsx-attr:${node.name.text}`);
+      for (const item of textsOf(init, consts)) push({ ...item, text: ts.isStringLiteral(node.initializer) ? decodeEntities(item.text) : item.text }, kind, `jsx-attr:${node.name.text}`);
       mark(node.initializer);
+    } else if (ts.isJsxAttribute(node) && node.initializer && literalAttrs.has(node.name.text)) {
+      // A component's message prop: read it when the value is a literal or a template.
+      const init = ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;
+      if (init && (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init) || ts.isTemplateExpression(init))) {
+        for (const item of textsOf(init)) push({ ...item, text: ts.isStringLiteral(init) ? decodeEntities(item.text) : item.text }, 'text', `jsx-attr:${node.name.text}`);
+      }
+    } else if (ts.isJsxExpression(node) && node.expression && (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))) {
+      for (const item of textsOf(node.expression, consts)) push(item, 'text', 'jsx-expression');
     } else if (ts.isPropertyAssignment(node) && props.has(propName(node.name))) {
       const name = propName(node.name);
-      for (const item of textsOf(node.initializer)) push(item, labelProps.has(name) ? 'label' : 'text', `property:${name}`);
+      for (const item of textsOf(node.initializer, consts)) push(item, labelProps.has(name) ? 'label' : 'text', `property:${name}`);
       mark(node.initializer);
     } else if (isCopyModule && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node))) {
       const parentIsKey = node.parent && (ts.isPropertyAssignment(node.parent) && node.parent.name === node);

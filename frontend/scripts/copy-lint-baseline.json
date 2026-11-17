@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/canvas/ProposalBar.tsx",
+      "rule": "title-case",
+      "text": "What Accept writes"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/CanvasTabs.tsx",
+      "rule": "title-case",
+      "text": "Creator Studio"
+    },
+    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/character-studio/CharacterDefinitionPanel.tsx",
       "rule": "sentence-punctuation",
@@ -17,6 +29,12 @@
       "file": "frontend/src/components/character-studio/CharacterStudioToolbar.tsx",
       "rule": "retry-button",
       "text": "Retry"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/character-studio/CharacterStudioToolbar.tsx",
+      "rule": "retry-button",
+      "text": "Retry save"
     },
     {
       "family": "retry-buttons",
@@ -49,6 +67,12 @@
       "text": "A Character needs at least"
     },
     {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "title-case",
+      "text": "Loading Character…"
+    },
+    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/character-studio/CharacterTestPanel.tsx",
       "rule": "sentence-punctuation",
@@ -59,6 +83,12 @@
       "file": "frontend/src/components/cinema-studio/CinemaSharedControls.tsx",
       "rule": "em-dash",
       "text": "Connected from the canvas — disconnect on the canvas to remove"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/cinema-studio/CinemaShotPanel.tsx",
+      "rule": "retry-button",
+      "text": "Retry connection"
     },
     {
       "family": "sentence-punctuation",
@@ -109,6 +139,12 @@
       "text": "Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here."
     },
     {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/commons/CommonsLeavePopover.tsx",
+      "rule": "straight-quote",
+      "text": "Your labels aren't saved."
+    },
+    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/commons/CommonsView.tsx",
       "rule": "sentence-punctuation",
@@ -134,9 +170,27 @@
     },
     {
       "family": "title-case-labels",
+      "file": "frontend/src/components/commons/CommonsView.tsx",
+      "rule": "title-case",
+      "text": "More Commons sections"
+    },
+    {
+      "family": "title-case-labels",
       "file": "frontend/src/components/ContextMenu.tsx",
       "rule": "title-case",
       "text": "Run This Node"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/create-studio/CreateView.tsx",
+      "rule": "title-case",
+      "text": "Creator Studio"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/create-studio/ReferenceTray.tsx",
+      "rule": "retry-button",
+      "text": "Retry"
     },
     {
       "family": "sentence-punctuation",
@@ -146,21 +200,39 @@
     },
     {
       "family": "title-case-labels",
-      "file": "frontend/src/components/moodboard-studio/BoardSidePanel.tsx",
+      "file": "frontend/src/components/create-studio/ResultsGallery.tsx",
       "rule": "title-case",
-      "text": "A label for you, like Liked"
+      "text": "Selected ({}) · Show all"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/editor/EditorTransport.tsx",
+      "rule": "title-case",
+      "text": "Render Preview"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
+      "rule": "straight-quote",
+      "text": "An agent's brief"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
+      "rule": "straight-quote",
+      "text": "Generators don't get these."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
+      "rule": "straight-quote",
+      "text": "You kept these. They aren't pinned."
     },
     {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
       "rule": "sentence-punctuation",
       "text": "Open the moodboard on this image. Nothing moves: no image changes number."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
-      "rule": "title-case",
-      "text": "A label for you, like Liked"
     },
     {
       "family": "title-case-labels",
@@ -180,6 +252,24 @@
       "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
       "rule": "retry-button",
       "text": "Retry loading"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "moodboard off: connected nodes get none of it"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Off: notes are for you, your team and agents."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "On: generators get these notes with the brief."
     },
     {
       "family": "straight-quotes",
@@ -236,6 +326,18 @@
       "text": "+ New Moodboard"
     },
     {
+      "family": "em-dashes",
+      "file": "frontend/src/components/nodes/BatchCarousel.tsx",
+      "rule": "em-dash",
+      "text": "{} of {} — {}"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/nodes/BatchCarousel.tsx",
+      "rule": "title-case",
+      "text": "{} result{} · Running"
+    },
+    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/nodes/BatchNode.tsx",
       "rule": "sentence-punctuation",
@@ -275,6 +377,12 @@
       "family": "em-dashes",
       "file": "frontend/src/components/nodes/ModelNode.tsx",
       "rule": "em-dash",
+      "text": "{} reference — {}"
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/nodes/ModelNode.tsx",
+      "rule": "em-dash",
       "text": "Out of date — source updated"
     },
     {
@@ -290,10 +398,28 @@
       "text": "Couldn't download the output."
     },
     {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load this moodboard"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
+      "rule": "title-case",
+      "text": "Choose one in the Inspector"
+    },
+    {
       "family": "title-case-labels",
       "file": "frontend/src/components/nodes/MoodboardNode.tsx",
       "rule": "title-case",
       "text": "Open Moodboard"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/PaperSourceNode.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't refresh the source."
     },
     {
       "family": "sentence-punctuation",
@@ -312,6 +438,12 @@
       "file": "frontend/src/components/nodes/StructuredValuePreview.tsx",
       "rule": "straight-quote",
       "text": ": open the node's settings to read them"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/nodes/WorldPreview.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Drag to look. Use W A S D or arrow keys to move; on touch, use two fingers to move and pinch."
     },
     {
       "family": "straight-quotes",
@@ -353,13 +485,20 @@
       "family": "sentence-punctuation",
       "file": "frontend/src/components/panels/ChatPanel.tsx",
       "rule": "sentence-punctuation",
+      "text": "{}: {} offers these for this conversation"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/panels/ChatPanel.tsx",
+      "rule": "sentence-punctuation",
       "text": "Private reference chats: Claude or Codex."
     },
     {
       "family": "title-case-labels",
       "file": "frontend/src/components/panels/ChatPanel.tsx",
       "rule": "title-case",
-      "text": "Connect ChatGPT Account"
+      "text": "Connect ChatGPT Account",
+      "count": 2
     },
     {
       "family": "title-case-labels",
@@ -404,6 +543,24 @@
       "text": "Couldn't load the models."
     },
     {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "title-case",
+      "text": "Choose File"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "title-case",
+      "text": "Edit Mask"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "title-case",
+      "text": "Paint Mask"
+    },
+    {
       "family": "em-dashes",
       "file": "frontend/src/components/panels/MaskPainterModal.tsx",
       "rule": "em-dash",
@@ -438,6 +595,18 @@
       "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
       "rule": "em-dash",
       "text": "Recovery ID unavailable — check Marble and the live World node"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "retry-button",
+      "text": "Retry failed"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "retry-button",
+      "text": "Retry failed {} run"
     },
     {
       "family": "straight-quotes",
@@ -476,6 +645,12 @@
       "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
     },
     {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/settings/PreferencesTab.tsx",
+      "rule": "straight-quote",
+      "text": "Every agent's actions, bottom right"
+    },
+    {
       "family": "title-case-labels",
       "file": "frontend/src/components/panels/settings/ServiceAccountInput.tsx",
       "rule": "title-case",
@@ -486,6 +661,12 @@
       "file": "frontend/src/components/panels/Toolbar.tsx",
       "rule": "em-dash",
       "text": "Clear canvas — asks for confirmation"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
+      "rule": "retry-button",
+      "text": "Retry saving"
     },
     {
       "family": "retry-buttons",
@@ -504,6 +685,12 @@
       "file": "frontend/src/components/ProviderRecoveryStatus.tsx",
       "rule": "straight-quote",
       "text": "Nebula couldn't save the hold, so keep Nebula running until this run finishes."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/video-editor/components/TextRenderer.tsx",
+      "rule": "title-case",
+      "text": "Hello World"
     },
     {
       "family": "em-dashes",
@@ -970,18 +1157,6 @@
       "family": "sentence-punctuation-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "sentence-punctuation",
-      "text": "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"
-    },
-    {
-      "family": "sentence-punctuation-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "sentence-punctuation",
-      "text": "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"
-    },
-    {
-      "family": "sentence-punctuation-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "sentence-punctuation",
       "text": "GPT Image 1 Mini (shuts down Dec 1, 2026)",
       "count": 2
     },
@@ -991,24 +1166,6 @@
       "rule": "sentence-punctuation",
       "text": "GPT Image 2.5 Sunburst (most precise edits)",
       "count": 2
-    },
-    {
-      "family": "sentence-punctuation-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "sentence-punctuation",
-      "text": "GPT-4.1 Mini (legacy, retiring 2027-01-14)"
-    },
-    {
-      "family": "sentence-punctuation-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "sentence-punctuation",
-      "text": "GPT-4.1 nano (legacy, retiring 2026-10-23)"
-    },
-    {
-      "family": "sentence-punctuation-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "sentence-punctuation",
-      "text": "GPT-4o Mini (legacy, retiring 2027-01-14)"
     },
     {
       "family": "sentence-punctuation-node-definitions",
@@ -1027,6 +1184,12 @@
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "sentence-punctuation",
       "text": "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Levels, Low to High (one per line)"
     },
     {
       "family": "sentence-punctuation-node-definitions",
@@ -1623,6 +1786,12 @@
       "family": "title-case-labels-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
+      "text": "Existing World ID"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
       "text": "Expand Prompt"
     },
     {
@@ -2069,12 +2238,6 @@
       "family": "title-case-labels-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
-      "text": "Levels, Low to High (one per line)"
-    },
-    {
-      "family": "title-case-labels-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "title-case",
       "text": "Lighting Priority"
     },
     {
@@ -2443,6 +2606,12 @@
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
       "text": "Pro Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Product photo Lifestyle shot Illustration"
     },
     {
       "family": "title-case-labels-node-definitions",
@@ -3312,6 +3481,12 @@
       "text": "a moodboard’s Direction"
     },
     {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/canvasSelection.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't download the outputs."
+    },
+    {
       "family": "title-case-labels",
       "file": "frontend/src/lib/cinemaArtDirection.ts",
       "rule": "title-case",
@@ -3370,6 +3545,24 @@
       "file": "frontend/src/lib/deleteCopy.ts",
       "rule": "straight-quote",
       "text": "they're back on the canvas"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "{} and {} couldn't be restored."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "{} couldn't be re-attached."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "{} proposals couldn't be reopened."
     },
     {
       "family": "straight-quotes",
@@ -3534,6 +3727,12 @@
       "text": "Nebula can't read this image. Try a PNG or JPEG."
     },
     {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/lib/referenceRoles.ts",
+      "rule": "sentence-punctuation",
+      "text": "What to generate: object, person, scene"
+    },
+    {
       "family": "title-case-labels",
       "file": "frontend/src/lib/reopenHoldLines.ts",
       "rule": "title-case",
@@ -3568,6 +3767,12 @@
       "file": "frontend/src/lib/validationCopy.ts",
       "rule": "straight-quote",
       "text": "Nothing ran. Check the scene's inputs and API keys, then generate the shot again."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/workspaceLabel.ts",
+      "rule": "title-case",
+      "text": "Creator Studio"
     },
     {
       "family": "straight-quotes",
@@ -3616,6 +3821,12 @@
       "file": "frontend/src/lib/worldLabsWaiting.ts",
       "rule": "straight-quote",
       "text": "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldSplat.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't load the world."
     },
     {
       "family": "sentence-punctuation",

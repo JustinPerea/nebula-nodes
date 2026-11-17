@@ -12,7 +12,7 @@
     "minLength": 40,
     "endings": ".?!"
   },
-  "retryPattern": "(?:^|\\s)Retry(?: loading| connection)?(?:…|\\.\\.\\.)?$",
+  "retryPattern": "^Retry(?![A-Za-z])|\\sRetry(?:…|\\.\\.\\.)?$",
   "units": [
     "px",
     "mm",
@@ -124,7 +124,6 @@
     "Nebula Nodes",
     "Nebula",
     "Krea",
-    "Paper",
     "Obsidian",
     "Figma",
     "Black Forest Labs",
@@ -158,15 +157,11 @@
     "Hunyuan",
     "Wan",
     "Jev",
-    "Idol",
     "Speridlabs",
     "Quiver",
     "QuiverAI",
-    "Arrow",
     "Nous",
     "Hermes",
-    "Finder",
-    "Settings",
     "macOS",
     "iOS",
     "iPad",
@@ -179,36 +174,28 @@
     "Opus",
     "Sonnet",
     "Haiku",
-    "Studio",
     "Cinema Studio",
     "Character Studio",
-    "Create Studio",
     "Moodboard Studio",
     "Agent Log",
     "ChatGPT",
-    "Marble",
     "Lottie",
     "Kodak Portra",
     "Tri-X",
     "Claude Desktop",
     "OpenClaw",
-    "Canvas",
-    "Commons",
-    "Updates",
-    "Global",
     "Recently deleted",
-    "Cursor",
     "Tripo",
     "Rodin",
     "Qwen",
     "Pika",
     "Vidu",
-    "Muse",
     "Topaz",
     "Magnific",
     "Hailuo",
-    "Wan",
-    "Luma"
+    "Marble",
+    "Finder",
+    "Vertex"
   ],
   "frontend": {
     "roots": [
@@ -296,16 +283,30 @@
     "jsxAttributes": [
       "title",
       "aria-label",
+      "ariaLabel",
       "placeholder",
       "alt",
-      "label"
+      "label",
+      "description",
+      "hint",
+      "tooltip",
+      "helperText",
+      "helpText",
+      "subtitle",
+      "caption",
+      "heading",
+      "emptyText"
     ],
     "labelJsxAttributes": [
       "label",
-      "aria-label"
+      "aria-label",
+      "ariaLabel"
     ],
     "catalogueFiles": [
       "src/lib/providerCatalog.ts"
+    ],
+    "jsxLiteralAttributes": [
+      "message"
     ]
   },
   "backend": {
@@ -425,5 +426,60 @@
     "Friday",
     "Saturday",
     "Sunday"
+  ],
+  "keyVerbs": [
+    "Press",
+    "Hold",
+    "Hit"
+  ],
+  "gatedNames": [
+    {
+      "after": [
+        "Open",
+        "Go to",
+        "Back to",
+        "Switch to",
+        "Return to",
+        "in",
+        "on",
+        "from",
+        "to",
+        "into"
+      ],
+      "names": [
+        "Settings",
+        "Canvas",
+        "Commons",
+        "Updates",
+        "Global",
+        "Studio"
+      ],
+      "inParens": true
+    },
+    {
+      "after": [
+        "Open",
+        "Go to",
+        "Switch to",
+        "Connect",
+        "Use",
+        "Install",
+        "Add to",
+        "Send to",
+        "Export to",
+        "in",
+        "on",
+        "from",
+        "to",
+        "with"
+      ],
+      "inParens": true,
+      "beforeLowerCase": true,
+      "names": [
+        "Cursor",
+        "Arrow",
+        "Paper"
+      ]
+    }
   ]
 }

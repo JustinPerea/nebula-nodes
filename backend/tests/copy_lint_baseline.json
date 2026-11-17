@@ -85,6 +85,12 @@
       "text": "This node takes items from two separate Batch or iterator nodes. Nebula won't combine them, because that would multiply the paid runs. Feed it from one of them, then run it again."
     },
     {
+      "family": "straight-quotes",
+      "file": "backend/execution/maker_routes.py",
+      "rule": "straight-quote",
+      "text": "{} can't run on {} in this version of Nebula yet. Choose another provider."
+    },
+    {
       "family": "sentence-punctuation",
       "file": "backend/execution/maker_routes_byteplus.py",
       "rule": "sentence-punctuation",
@@ -170,6 +176,12 @@
     },
     {
       "family": "straight-quotes",
+      "file": "backend/execution/maker_routes_ideogram_runway.py",
+      "rule": "straight-quote",
+      "text": "{} isn't a valid link. Connect another one."
+    },
+    {
+      "family": "straight-quotes",
       "file": "backend/execution/maker_routes_minimax_meshy.py",
       "rule": "straight-quote",
       "text": "Meshy's own API takes 1 to {} images of one object, and {} are connected. Disconnect the extra ones. {}"
@@ -185,6 +197,12 @@
       "file": "backend/execution/maker_routes_minimax_meshy.py",
       "rule": "straight-quote",
       "text": "MiniMax's first-and-last-frame mode is Hailuo 02 only, so {} can't take an end image on your MiniMax key. Disconnect “End image”. {}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/execution/maker_routes_minimax_meshy.py",
+      "rule": "straight-quote",
+      "text": "{} is image-to-video only on MiniMax's API. Connect a start image. {}"
     },
     {
       "family": "straight-quotes",
@@ -279,6 +297,12 @@
     },
     {
       "family": "straight-quotes",
+      "file": "backend/handlers/google_gemini.py",
+      "rule": "straight-quote",
+      "text": "{} doesn't offer {} for “{}”. Pick {}, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
       "file": "backend/handlers/ideogram.py",
       "rule": "straight-quote",
       "text": "Pick one of the node's “{}” options, then run the node again."
@@ -351,6 +375,18 @@
     },
     {
       "family": "straight-quotes",
+      "file": "backend/handlers/openai_chat.py",
+      "rule": "straight-quote",
+      "text": "{} doesn't offer {} for “{}”. Pick another level, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/openai_chat.py",
+      "rule": "straight-quote",
+      "text": "{} doesn't offer {} for “{}”. Pick {}, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
       "file": "backend/handlers/openai_image_v2.py",
       "rule": "straight-quote",
       "text": "OpenAI needs your organization verified to use {}. Verify it in OpenAI's organization settings, then run the node again."
@@ -402,6 +438,12 @@
       "file": "backend/handlers/runway.py",
       "rule": "sentence-punctuation",
       "text": "Ratio '{}' isn't available for {}. Pick one of: {}."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "backend/handlers/runway.py",
+      "rule": "sentence-punctuation",
+      "text": "{} has no text-to-video, so it needs an image. Connect one, or pick a text-to-video model: {}. Nodes saved with the retired Gen-3a Turbo now use Gen-4 Turbo."
     },
     {
       "family": "straight-quotes",
@@ -474,6 +516,48 @@
       "family": "straight-quotes",
       "file": "backend/handlers/worldlabs.py",
       "rule": "straight-quote",
+      "text": "A connected image file can't be found. Connect it again, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "A connected image is over World Labs' 1 GB limit. Connect a smaller one."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "A connected video file can't be found. Connect it again, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "The connected video is over World Labs' 100 MB limit. Connect a shorter or smaller one."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "World Labs didn't accept your API key. Check it in Settings, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "World Labs didn't answer this export. PLY exports are free, so you can run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
+      "text": "World Labs didn't answer this run, so Nebula locked the node to avoid paying twice. Check the job in Marble, then use {} before you run it again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/handlers/worldlabs.py",
+      "rule": "straight-quote",
       "text": "World Labs may have accepted this run, and it may be billed, but Nebula couldn't finish it here. Check the job in Marble before you run the node again."
     },
     {
@@ -481,6 +565,12 @@
       "file": "backend/services/edit_masks.py",
       "rule": "straight-quote",
       "text": "The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, so its mask can't be sized to it."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/services/edit_masks.py",
+      "rule": "straight-quote",
+      "text": "{} isn't a PNG, JPEG, WebP or GIF image Nebula can read."
     },
     {
       "family": "straight-quotes",
@@ -574,6 +664,12 @@
     },
     {
       "family": "straight-quotes",
+      "file": "backend/services/provider_capabilities.py",
+      "rule": "straight-quote",
+      "text": "Gemini Omni can edit a video but can't make it longer. Describe the change as an edit, like “Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video."
+    },
+    {
+      "family": "straight-quotes",
       "file": "backend/services/qc_common.py",
       "rule": "straight-quote",
       "text": "A frame to sample isn't valid. Check the sampling settings, then run the node again."
@@ -607,6 +703,24 @@
       "file": "backend/services/typesafe_client.py",
       "rule": "straight-quote",
       "text": "Your TypeSafe API key has a character a key can't have, like a space or a line break. Paste it again in Settings."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/services/typesafe_client.py",
+      "rule": "straight-quote",
+      "text": "{} is {}x{}, over Nebula's {} megapixel limit for an input. Downscale it, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/services/typesafe_client.py",
+      "rule": "straight-quote",
+      "text": "{} isn't an image Nebula can read. Use a PNG, JPEG, WebP or GIF, then run the node again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "backend/services/typesafe_client.py",
+      "rule": "straight-quote",
+      "text": "{} {} is over TypeSafe's 16 MB limit for one image, even as a small JPEG. Connect a smaller image."
     },
     {
       "family": "straight-quotes",

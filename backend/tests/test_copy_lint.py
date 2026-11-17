@@ -69,8 +69,9 @@ def catalogue_names(rules: dict[str, Any], repo: Path = REPO) -> tuple[set[str],
         return c
 
     def count_first(name: str) -> None:
-        # A node's first word is a brand when two nodes share it or it has a hump or a digit
-        # (ElevenLabs, MiniMax, Hunyuan3D); a lone "Style" or "Save" is just a word.
+        # A node's first word is a brand when it has a hump, a digit or is all capitals
+        # (ElevenLabs, MiniMax, Hunyuan3D, FLUX). A plain word ("World", "Black", "Style") never
+        # stands for a name alone; its whole phrase ("World Labs Marble") is matched instead.
         c = add_phrase(name)
         if c:
             first_words[c.split()[0]] = first_words.get(c.split()[0], 0) + 1
@@ -88,13 +89,14 @@ def catalogue_names(rules: dict[str, Any], repo: Path = REPO) -> tuple[set[str],
                 for option in param.get("options") or []:
                     if isinstance(option.get("label"), str):
                         add_phrase(option["label"])
-    for word, count in first_words.items():
-        if count >= 2 or re.search(r"[A-Z].*[A-Z]|\d", word):
+    for word in first_words:
+        if re.search(r"[A-Z].*[A-Z]|\d", word):
             words.add(word)
 
     def name(n: str) -> None:
+        # A one-word provider name is a name; the first word of a longer one ("World Labs") is not.
         c = add_phrase(n)
-        if c:
+        if c and (" " not in c or re.search(r"[A-Z].*[A-Z]|\d", c.split()[0])):
             words.add(c.split()[0])
 
     for rel in rules["frontend"]["catalogueFiles"]:
@@ -116,8 +118,7 @@ class Context:
         self.rules = rules
         phrases, words = catalogue_names(rules, repo)
         self.proper: set[str] = set()
-        for name in [*rules["properNames"], *rules["initialisms"], *rules["keyNames"], *rules["modelWords"],
-                     *rules["calendarWords"]]:
+        for name in [*rules["properNames"], *rules["initialisms"], *rules["modelWords"], *rules["calendarWords"]]:
             # A name of several words is stripped whole; only a one-word name lets its word through anywhere.
             if re.search(r"[\s-]", name):
                 phrases.add(name)
@@ -126,6 +127,11 @@ class Context:
         for word in words:
             self.proper.add(word.lower())
         self.phrases = sorted(phrases, key=len, reverse=True)
+        # Key names count as names only as a key reference; some place and product names only after a verb.
+        self.keys = {k.lower() for k in rules["keyNames"]}
+        self.key_verbs = {v.lower() for v in rules["keyVerbs"]}
+        self.gated = [({n.lower() for n in g["names"]}, [v.lower().split() for v in g["after"]],
+                       bool(g.get("inParens")), bool(g.get("beforeLowerCase"))) for g in rules["gatedNames"]]
         self.retry = re.compile(rules["retryPattern"])
         self.units = set(rules["units"])
 
@@ -140,15 +146,34 @@ RATIO_RE = re.compile(r"\b\d+(?::\d+)+\b")
 WORD_RE = re.compile(r"[A-Za-z]")
 
 
+def _has_lower_run(t: str) -> bool:
+    """Two lower-case words in a row: the shape of a sentence, never of a Title Case label."""
+    return bool(re.search(r"(?:^|[\s(])[a-z][a-z'\u2019]*\s+[a-z][a-z'\u2019]*(?:\s|$|[.,!?)])", t))
+
+
 def is_sentence(text: str, rules: dict[str, Any]) -> bool:
+    """A sentence ends in . ? or !, has a comma, or is long and runs lower-case words together; length alone doesn't make one."""
     t = text.strip()
     if not re.search(r"\s", t):
         return False
-    return t[-1] in rules["sentence"]["endings"] or len(t) > rules["sentence"]["minLength"]
+    # A comma inside parentheses ("Jev (TypeSafe, experimental)") does not make a sentence.
+    if t[-1] in rules["sentence"]["endings"] or "," in re.sub(r"\([^)]*\)", "", t):
+        return True
+    return len(t) > rules["sentence"]["minLength"] and _has_lower_run(t)
 
 
 def _strip_unit_parens(text: str, units: set[str]) -> str:
     return re.sub(r"\(([^()\s]{1,5})\)", lambda m: "" if m.group(1) in units else m.group(0), text)
+
+
+def _named_here(low: str, prev: list[str], key_ref: bool, plus: bool, keycaps: bool, paren: bool,
+                next_lower: bool, ctx: Context) -> bool:
+    """Is this capitalised word a name where it stands? Key names and gated place or product names depend on context."""
+    if low in ctx.keys and (key_ref or plus or keycaps or paren):
+        return True
+    return any(low in names and ((in_parens and paren) or (before_lower and next_lower)
+                                 or any(prev[-len(v):] == v for v in verbs))
+               for names, verbs, in_parens, before_lower in ctx.gated)
 
 
 def _title_case_breaks(text: str, ctx: Context) -> bool:
@@ -158,21 +183,33 @@ def _title_case_breaks(text: str, ctx: Context) -> bool:
     for phrase in ctx.phrases:
         rest = rest.replace(phrase, " ")
     rest = URL_RE.sub(" ", CODE_RE.sub(" ", CURLY_SPAN_RE.sub(" ", rest)))
+    tokens = rest.split()
+    bares = [re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", t).lower() for t in tokens if re.search(r"[A-Za-z]", t) and not re.search(r"[/~]", t)]
+    keycaps = bool(bares) and all(b in ctx.keys or b in ctx.key_verbs for b in bares)
     pending = True
     letter_words = 0
     hit = False
-    for token in rest.split():
+    prev: list[str] = []
+    key_ref = False
+    for i, token in enumerate(tokens):
         ends_sentence = bool(re.search(r"[.?!:]$", token))
         if not re.search(r"[A-Za-z]", token) or re.search(r"[/~]", token):
             if ends_sentence:
                 pending = True
             continue
         letter_words += 1
+        bare = re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", token)
         if not pending:
-            bare = re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", token)
+            plus = (i > 0 and tokens[i - 1] == "+") or (i + 1 < len(tokens) and tokens[i + 1] == "+")
+            paren = bool(re.search(r"^\(|\)$", token))
+            next_lower = i + 1 < len(tokens) and bool(re.match(r"[a-z]", tokens[i + 1]))
             for part in re.split("[-‑]", bare):
-                if re.fullmatch(r"[A-Z][a-z]+", part) and part.lower() not in ctx.proper:
+                if (re.fullmatch(r"[A-Z][a-z]+", part) and part.lower() not in ctx.proper
+                        and not _named_here(part.lower(), prev, key_ref, plus, keycaps, paren, next_lower, ctx)):
                     hit = True
+        low = bare.lower()
+        key_ref = low in ctx.key_verbs or (key_ref and (low in ctx.keys or low in ("or", "and")))
+        prev.append(low)
         pending = ends_sentence
     return letter_words >= 2 and hit
 
@@ -191,13 +228,22 @@ def _raw_key(text: str, ctx: Context) -> bool:
 
 
 def _code_like(t: str) -> bool:
+    # A string that opens with a value reads as "{} ..." and is a sentence, not an object literal.
+    if re.match(r"\{\}(?![}\]])", t):
+        return bool(re.search(r"\[(?:aria|data|role|hidden|inert)[-\w]*[\]=]|:not\(|:scope|=>", t))
     return bool(re.match(r"[\[{]", t) or re.match(r"[:.#][\w-]", t)
                 or re.search(r"\[(?:aria|data|role|hidden|inert)[-\w]*[\]=]|:not\(|:scope|=>", t))
 
 
 def _key_shape(t: str) -> bool:
+    """"sk-...", "r8_...", "AIza...": a short key prefix before the dots, no English word in it."""
     m = re.fullmatch(r"(\S+?)\.\.\.", t)
-    return bool(m and re.search(r"[_\-\d]|[a-z][A-Z]|[A-Z]{2}[a-z]", m.group(1)))
+    if not m:
+        return False
+    prefix = m.group(1)
+    # A prefix that ends in "-" or "_" ("sk-", "r8_", "ideogram_") is a key; a hump ("AIza") needs no English word in it.
+    return bool(re.search(r"[_-]$", prefix)
+                or (not re.search(r"[a-z]{5,}", prefix) and re.search(r"[a-z][A-Z]|[A-Z]{2}[a-z]", prefix)))
 
 
 def check(text: str, kind: str, ctx: Context) -> list[str]:
@@ -223,7 +269,8 @@ def check(text: str, kind: str, ctx: Context) -> list[str]:
         hits.append("title-case")
     if kind == "label" and _raw_key(t, ctx):
         hits.append("raw-key-label")
-    if ctx.retry.search(t):
+    # A button or action label, not a finished sentence that happens to start with the word.
+    if ctx.retry.search(t) and t[-1] not in ctx.rules["sentence"]["endings"]:
         hits.append("retry-button")
     return hits
 
@@ -274,30 +321,69 @@ def _callee(call: ast.Call) -> str:
     return f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
 
 
-def template(node: ast.AST | None, scope: ast.AST | None = None, depth: int = 0) -> list[str]:
-    """The text(s) of a string, f-string, concatenation, choice or name assigned a string; {} stands for a value."""
+def _named_values(scope: ast.AST, name: str, module: bool) -> list[ast.AST]:
+    """Values assigned to `name` (plain and annotated assignments): anywhere in a function, or at the top level of the module."""
+    if module:
+        body = getattr(scope, "body", [])
+        nodes: list[ast.AST] = [n for n in body if isinstance(n, (ast.Assign, ast.AnnAssign))]
+    else:
+        nodes = [n for n in ast.walk(scope) if isinstance(n, (ast.Assign, ast.AnnAssign))]
+    out: list[ast.AST] = []
+    for sub in nodes:
+        targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
+        if sub.value is not None and any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            out.append(sub.value)
+    return out
+
+
+def texts_of(node: ast.AST | None, scope: ast.AST | None = None, depth: int = 0, module: ast.AST | None = None) -> list[tuple[str, ast.AST]]:
+    """[(text, origin node)] for a string, f-string, concatenation, choice, `.format()` call or name assigned a string.
+
+    {} stands for a value. A name is looked up in the enclosing function first, then at the top level of
+    the module; its origin is the assigned value, so a constant read from two places counts once."""
     if node is None or depth > 3:
         return []
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return [node.value]
+        return [(node.value, node)]
     if isinstance(node, ast.JoinedStr):
-        return ["".join(p.value if isinstance(p, ast.Constant) else "{}" for p in node.values)]
+        return [("".join(p.value if isinstance(p, ast.Constant) else "{}" for p in node.values), node)]
     if isinstance(node, ast.IfExp):
-        return template(node.body, scope, depth) + template(node.orelse, scope, depth)
+        return texts_of(node.body, scope, depth, module) + texts_of(node.orelse, scope, depth, module)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        left, right = template(node.left, scope, depth), template(node.right, scope, depth)
+        left, right = texts_of(node.left, scope, depth, module), texts_of(node.right, scope, depth, module)
         if len(left) == 1 and len(right) == 1:
-            return [left[0] + right[0]]
+            return [(left[0][0] + right[0][0], node)]
         return left + right
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-        return [re.sub(r"%[sdrf]", "{}", t) for t in template(node.left, scope, depth)]
-    if isinstance(node, ast.Name) and scope is not None:
-        out: list[str] = []
-        for sub in ast.walk(scope):
-            if isinstance(sub, ast.Assign) and any(isinstance(t, ast.Name) and t.id == node.id for t in sub.targets):
-                out += template(sub.value, scope, depth + 1)
+        return [(re.sub(r"%[sdrf]", "{}", t), n) for t, n in texts_of(node.left, scope, depth, module)]
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format":
+        return [(re.sub(r"\{[^{}]*\}", "{}", t), n) for t, n in texts_of(node.func.value, scope, depth, module)]
+    if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
+        # LINES["key"]: the dict's lines (the one for a constant key, else every value).
+        out: list[tuple[str, ast.AST]] = []
+        for where, is_module in ((scope, False), (module, True)):
+            for table in ([] if where is None else _named_values(where, node.value.id, is_module)):
+                if not isinstance(table, ast.Dict):
+                    continue
+                key = node.slice.value if isinstance(node.slice, ast.Constant) else None
+                for k, v in zip(table.keys, table.values):
+                    if key is None or (isinstance(k, ast.Constant) and k.value == key):
+                        out += texts_of(v, scope, depth + 1, module)
+            if out:
+                return out
         return out
+    if isinstance(node, ast.Name):
+        for where, is_module in ((scope, False), (module, True)):
+            if where is None:
+                continue
+            found = _named_values(where, node.id, is_module)
+            if found:
+                return [pair for value in found for pair in texts_of(value, scope, depth + 1, module)]
     return []
+
+
+def template(node: ast.AST | None, scope: ast.AST | None = None, depth: int = 0, module: ast.AST | None = None) -> list[str]:
+    return [t for t, _ in texts_of(node, scope, depth, module)]
 
 
 def _docstring_ids(tree: ast.AST) -> set[int]:
@@ -319,8 +405,11 @@ def _enclosing_function(tree: ast.AST, line: int) -> ast.AST:
     return best
 
 
-def extract_strings(source: str, rel: str, rules: dict[str, Any]) -> list[dict[str, Any]]:
-    """Every person-facing string in one file: [{text, kind, line, source}]."""
+def extract_strings(source: str, rel: str, rules: dict[str, Any],
+                    unresolved: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Every person-facing string in one file: [{text, kind, line, source}].
+
+    `unresolved`, when given, collects the person-line arguments that resolved to no text."""
     tree = ast.parse(source)
     cfg = rules["backend"]
     parents: dict[int, ast.AST] = {}
@@ -359,13 +448,18 @@ def extract_strings(source: str, rel: str, rules: dict[str, Any]) -> list[dict[s
         for keyword in node.keywords:
             if keyword.arg in cfg["personKeywords"] and keyword.value is not None:
                 values.append(keyword.value)
+            elif keyword.arg == "line" and name in line_calls:
+                values.append(keyword.value)
         if not values:
             continue
         scope = _enclosing_function(tree, node.lineno)
         for value in values:
-            for text in template(value, scope):
-                if text.replace("{}", "").strip():
-                    push(text, value, "person-line")
+            resolved = [(t, n) for t, n in texts_of(value, None if scope is tree else scope, module=tree)
+                        if t.replace("{}", "").strip()]
+            for text, origin in resolved:
+                push(text, origin, "person-line")
+            if not resolved and unresolved is not None:
+                unresolved.append({"file": rel, "line": value.lineno, "code": ast.unparse(value)})
             mark(value)
 
     if rel in cfg["copyModules"]:
@@ -420,7 +514,9 @@ def source_files(rules: dict[str, Any], backend: Path = BACKEND) -> list[str]:
     return sorted(out)
 
 
-def scan(backend: Path = BACKEND, repo: Path = REPO, rules: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def scan(backend: Path = BACKEND, repo: Path = REPO, rules: dict[str, Any] | None = None,
+         unresolved: list[dict[str, Any]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(violations, markers). `unresolved`, when given, collects person-line arguments that resolved to no text."""
     rules = rules or load_rules()
     ctx = Context(rules, repo)
     violations: list[dict[str, Any]] = []
@@ -430,9 +526,10 @@ def scan(backend: Path = BACKEND, repo: Path = REPO, rules: dict[str, Any] | Non
         exempt, markers = read_markers(source)
         markers_seen += [{"file": f"backend/{rel}", **m} for m in markers]
         try:
-            strings = extract_strings(source, rel, rules)
-        except SyntaxError:
-            continue
+            strings = extract_strings(source, rel, rules, unresolved)
+        except SyntaxError as exc:
+            # A file the lint cannot read is a failure, never a silent skip.
+            raise RuntimeError(f"copy lint could not parse backend/{rel}: {exc}") from exc
         for s in strings:
             if s["line"] in exempt:
                 continue
@@ -589,6 +686,44 @@ def test_a_copy_module_is_read_apart_from_logs_errors_comparisons_regexes_and_do
     )
     assert _read(source, "commons/x.py", ("commons/x.py",)) == ["Nothing ran here.", "Value words here.", "Reloaded {}."]
     assert _read(source, "commons/x.py") == []
+
+
+def test_a_line_kept_in_a_constant_a_format_call_or_a_table_is_read():
+    source = (
+        "GEMINI_LINE = 'Gemini can\\'t make it longer.'\n"
+        "TYPED: str = 'Nebula can\\'t read {name}.'\n"
+        "TABLE = {'a': 'Nebula can\\'t do a.', 'b': 'Nebula can\\'t do b.'}\n"
+        "def f(exc):\n"
+        "    raise with_person_line(exc, GEMINI_LINE)\n"
+        "def g(exc):\n"
+        "    raise with_person_line(exc, TYPED.format(name='x'))\n"
+        "def h(exc):\n"
+        "    raise with_person_line(exc, line=TABLE['a'])\n"
+        "def i(exc, other):\n"
+        "    raise with_person_line(exc, other)\n"
+    )
+    assert _read(source) == ["Gemini can't make it longer.", "Nebula can't read {}.", "Nebula can't do a."]
+    unresolved: list[dict] = []
+    extract_strings(source, "services/sample.py", RULES, unresolved)
+    assert [u["code"] for u in unresolved] == ["other"]
+
+
+def test_a_constant_read_from_two_places_counts_once():
+    source = (
+        "LINE = 'Nebula can\\'t do it.'\n"
+        "def f(exc):\n"
+        "    raise with_person_line(exc, LINE)\n"
+        "def g(exc):\n"
+        "    raise with_person_line(exc, LINE)\n"
+    )
+    assert _read(source, "commons/x.py", ("commons/x.py",)) == ["Nebula can't do it."]
+
+
+def test_a_file_that_does_not_parse_fails_the_scan_with_its_name(tmp_path):
+    (tmp_path / "services").mkdir()
+    (tmp_path / "services" / "broken.py").write_text("def f(:\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="services/broken.py"):
+        scan(backend=tmp_path)
 
 
 def test_tests_scripts_the_cli_and_agent_files_are_not_scanned():

@@ -66,6 +66,43 @@ describe('which strings are read', () => {
     ]);
   });
 
+  it('reads string, template and choice expressions that are JSX children', () => {
+    const out = read(`
+      export const A = () => <div>
+        <p>{"Can't one"}</p>
+        <p>{ok ? "Can't two" : "x y"}</p>
+        <p>{\`\${n} couldn't three\`}</p>
+        <p>{a || "Can't four"}{b ?? "Can't five"}{c && "Can't six"}{"Can't " + seven}</p>
+      </div>;`);
+    expect(out.map((r) => r[0])).toEqual([
+      "Can't one", "Can't two", 'x y', "{} couldn't three", "Can't four", "Can't five", "Can't six", "Can't {}",
+    ]);
+  });
+
+  it('reads the label-like names as JSX attributes, and a message prop only when it is a literal or template', () => {
+    const out = read(`
+      export const A = () => <div>
+        <Empty description="Can't a" hint="Can't b" tooltip={\`Can't \${c}\`} emptyText="Can't d" message="Can't e" />
+        <Empty message={text} />
+        <Empty message={ok ? "Can't f" : "g h"} />
+      </div>;
+      export const O = { message: "Can't as a property" };`);
+    expect(out.map((r) => r[0])).toEqual(["Can't a", "Can't b", "Can't {}", "Can't d", "Can't e"]);
+  });
+
+  it('resolves an identifier to a const string in the same file and reads the string argument of a call', () => {
+    const out = read(`
+      const MSG = "Can't one";
+      const OTHER = cond ? "Can't two" : "x y";
+      export const A = () => <div><p>{MSG}</p><Field label={OTHER} hint={t("Can't three")} /></div>;
+      export const O = { label: t("Can't four"), title: MSG, hint: imported };`);
+    expect(out.map((r) => r[0]).sort()).toEqual(["Can't four", "Can't one", "Can't three", "Can't two", 'x y']);
+  });
+
+  it('fails on a file it cannot parse, naming the file', () => {
+    expect(() => extractStrings('export const = ;', 'src/Broken.tsx', rules)).toThrow(/src\/Broken\.tsx/);
+  });
+
   it('reads every prose string in a copy module and skips comparisons, errors, logs, regexes and imports', () => {
     const modules = { ...rules, frontend: { ...rules.frontend, copyModules: ['src/lib/fakeCopy.ts'] } };
     const source = `
