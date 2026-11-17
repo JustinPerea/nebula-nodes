@@ -250,7 +250,7 @@ describe('an agent’s edit saves at once', () => {
     window.dispatchEvent(whileSaving);
     expect(whileSaving.defaultPrevented).toBe(true);
     await vi.advanceTimersByTimeAsync(0);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project because Disk full.' });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project. Disk full.' });
     const afterFailure = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(afterFailure);
     expect(afterFailure.defaultPrevented).toBe(true);

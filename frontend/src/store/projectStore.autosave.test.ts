@@ -190,7 +190,7 @@ describe('project autosave', () => {
 
     expect(savedPrompts()).toEqual(['b']);
     expect(flushCalls).toBe(1);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project because Disk full.' });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project. Disk full.' });
 
     vi.mocked(api.listProjects).mockResolvedValueOnce({ projects: [summary], activeProjectId: 'p1', workspaceRevision: 'r1' });
     await useProjectStore.getState().retry();

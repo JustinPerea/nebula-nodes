@@ -286,7 +286,7 @@ describe('Assets panel Styles', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
-    expect((await screen.findByRole('alert')).textContent).toBe("Nebula couldn’t delete the style because Style 's1' not found");
+    expect((await screen.findByRole('alert')).textContent).toBe("Nebula couldn’t delete the style. Style 's1' not found.");
     expect(screen.queryByText(/to Recently deleted/)).toBeNull();
   });
 

@@ -439,7 +439,7 @@ describe('a paste in the List view', () => {
     await openStudio('list');
     refuse = { status: 413, body: { detail: 'File exceeds 20 MB limit' } };
     paste(clipboard({ files: [png('huge.png')] }));
-    expect(await screen.findByText(/^Nebula couldn’t upload huge\.png/)).toBeTruthy();
+    expect(await screen.findByText(/^Nebula couldn’t upload “huge\.png”/)).toBeTruthy();
     expect(server.board.images).toHaveLength(2);
   });
 
@@ -451,7 +451,7 @@ describe('a paste in the List view', () => {
       code: 'person_required' } };
     await openStudio('list');
     paste(clipboard({ files: [png('p.png')] }));
-    const pasted = await screen.findByText(/^Nebula couldn’t upload p\.png/);
+    const pasted = await screen.findByText(/^Nebula couldn’t upload “p\.png”/);
     const pastedLines = pasted.closest('.moodboard-studio__notice')!.textContent;
     cleanup();
     useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
@@ -461,7 +461,7 @@ describe('a paste in the List view', () => {
       Object.defineProperty(input, 'files', { value: [png('p.png')], configurable: true });
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const dropped = await screen.findByText(/^Nebula couldn’t upload p\.png/);
+    const dropped = await screen.findByText(/^Nebula couldn’t upload “p\.png”/);
     expect(dropped.closest('.moodboard-studio__notice')!.textContent).toBe(pastedLines);
     expect(server.edits).toHaveLength(0);
   });
@@ -985,7 +985,7 @@ describe('the backstop takes turns (review 2, the race)', () => {
     paste(clipboard({ files: [same()] }));
     await waitFor(() => expect(server.uploads).toHaveLength(0));
     await uploads.fail();
-    await screen.findByText(/^Nebula couldn’t upload same\.png/);
+    await screen.findByText(/^Nebula couldn’t upload “same\.png”/);
     refuse = null;
     backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => uploadResponse(path, init));
     paste(clipboard({ files: [same()] }));
@@ -1499,7 +1499,7 @@ describe('review 3 test gaps', () => {
     // The refusal has come back; the shape read is still out.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     await act(async () => { open(); await Promise.resolve(); });
-    await screen.findByText(/^Nebula couldn’t upload early\.png/);
+    await screen.findByText(/^Nebula couldn’t upload “early\.png”/);
     expect(board.placeholders).toEqual([]);
     expect(addOps()).toHaveLength(0);
   });
@@ -1581,7 +1581,7 @@ describe('review 3 test gaps', () => {
     await waitFor(() => expect(board.outside).not.toBeNull());
     const secondChip = board.outside!.id;
     await uploads.settle('first.png', false);
-    await screen.findByText(/^Nebula couldn’t upload first\.png/);
+    await screen.findByText(/^Nebula couldn’t upload “first\.png”/);
     expect(board.outside?.id).toBe(secondChip);
     await uploads.settle('second.png', true);
     await waitFor(() => expect(addOps()).toHaveLength(1));

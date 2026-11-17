@@ -28,6 +28,6 @@ describe('saving an asset someone moved to Recently deleted', () => {
       'Nebula couldn’t save the character because it was moved to Recently deleted. Restore it');
     backend.apiFetch.mockResolvedValueOnce(json(404, { detail: "Character 'c1' not found" }));
     await expect(updateCharacter('c1', { name: 'Edited' })).rejects.toThrow(
-      "Nebula couldn’t save the character because Character 'c1' not found"); // error-copy round 2: heading + the backend's reason
+      "Nebula couldn’t save the character. Character 'c1' not found."); // error-copy round 2: heading + the backend's reason
   });
 });

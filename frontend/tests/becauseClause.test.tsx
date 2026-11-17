@@ -245,7 +245,8 @@ describe('failedWhat', () => {
     expect(sites.length).toBeGreaterThan(200);
     const misses = [...new Set(sites.filter((site) => failedWhat(site.heading) === null).map((site) => `${site.file} | ${site.heading}`))].sort();
     expect(misses).toEqual(KNOWN_MISSES);
-  });
+  // The scan parses every source file; CI shares its cores, so the default 5 s is too short.
+  }, 60_000);
 });
 
 describe('colour', () => {

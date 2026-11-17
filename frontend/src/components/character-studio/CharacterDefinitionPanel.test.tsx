@@ -42,8 +42,8 @@ describe('Character Studio reference upload failures', () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   it.each([
-    [async () => new Response('', { status: 503 }), 'Nebula couldn’t upload side.png because the server didn’t respond. Try again.'],
-    [async () => { throw new TypeError('Failed to fetch'); }, 'Nebula couldn’t upload side.png because the server isn’t answering. Check that Nebula is running, then try again.'],
+    [async () => new Response('', { status: 503 }), 'Nebula couldn’t upload “side.png” because the server didn’t respond. Try again.'],
+    [async () => { throw new TypeError('Failed to fetch'); }, 'Nebula couldn’t upload “side.png” because the server isn’t answering. Check that Nebula is running, then try again.'],
   ])('names the file and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});

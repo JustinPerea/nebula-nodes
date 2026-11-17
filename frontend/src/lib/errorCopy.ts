@@ -736,15 +736,15 @@ function opensAClause(text: string): boolean {
 
 /** The sentence rule: a written sentence as the clause after "because". Its first word is lower-cased only when
  * it is one of the lead words above (a name, a quoted name and a {} slot stay); apostrophes are curled between
- * letters. Null for a reason that is an instruction, a line that names its own failure, nothing, or not a
- * clause: one that doesn't end in a full stop, a question mark or an exclamation mark ("File exceeds 500 MB
- * limit"), or whose first word is a plain capitalised word (opensAClause). The line then keeps the reason as
- * its own sentence. */
+ * letters, and a reason written with no closing mark gets its full stop. Null for a reason that is an
+ * instruction, a line that names its own failure, nothing, or not a clause: one whose first word is a plain
+ * capitalised word ("File exceeds 500 MB limit"; opensAClause). The line then keeps the reason as its own
+ * sentence. */
 function sentenceClause(reason: string): string | null {
   const text = reason.trim();
   if (!text || NOT_A_REASON.test(text) || isNamedLine(text)) return null;
-  if (!ENDS_A_SENTENCE.test(text) || !opensAClause(text)) return null;
-  return curlApostrophes(LEADS_A_CLAUSE.test(text) ? text[0].toLowerCase() + text.slice(1) : text);
+  if (!opensAClause(text)) return null;
+  return endedSentence(curlApostrophes(LEADS_A_CLAUSE.test(text) ? text[0].toLowerCase() + text.slice(1) : text));
 }
 
 /**
@@ -785,7 +785,9 @@ function namedLine(reason: string, beside: 'alone' | 'button'): string {
 }
 
 /** A sentence with its closing punctuation: a reason with none ("File exceeds 500 MB limit") gets a full stop. */
-const endedSentence = (text: string) => (ENDS_A_SENTENCE.test(text) ? text : `${text}.`);
+function endedSentence(text: string): string {
+  return ENDS_A_SENTENCE.test(text) ? text : `${text}.`;
+}
 
 /** The action a reason's first sentence says Nebula could not do, or its whole because line ("Nebula couldn’t save
  * the project because …" says "save the project"); null when it names none. */

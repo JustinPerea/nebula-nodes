@@ -191,7 +191,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
     // Round 3e: the action's heading leads a reason the request carried without one.
-    expect(useProjectStore.getState().error).toBe("Nebula couldn’t restore the project because that project is no longer in Recently deleted");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t restore the project because that project is no longer in Recently deleted.");
   });
   it('purges one trashed project or empties the trash', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
