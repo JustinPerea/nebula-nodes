@@ -129,7 +129,7 @@ sampling params ("On older models, the restriction applies only while thinking
 is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
 
 - sends `output_config.effort` when Effort is set (low / medium / high / max; a
-  saved `xhigh` is refused before the request, and the card hides X-High);
+  saved `xhigh` is refused before the request, and the card hides Extra high);
 - sends `thinking: {"type": "adaptive"}` when Extended Thinking is on, never a
   `budget_tokens` budget, and forces `temperature` to 1 then, as it did with
   budget thinking, and drops `top_p` (the handler never sends both, and while

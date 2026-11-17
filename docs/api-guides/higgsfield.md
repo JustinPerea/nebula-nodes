@@ -39,7 +39,7 @@ The node submits the job, then polls until the clip is ready (it can take a minu
 
 1. **Pure text-to-video (one node).** Drop a `higgsfield` node, leave `model` on DoP Standard, type a prompt like *"slow dolly-in on a neon-lit Tokyo alley at night, rain, cinematic"*, set `duration` to 5 and `aspect_ratio` to 16:9. Run it — you get a clip with no image input needed.
 
-2. **Image → motion (animate a generated still).** Use an image generator node (e.g. a `gemini` or `gpt-image-2` image node) that produces a hosted image URL, wire its image output into the `higgsfield` node's `image` port, switch `model` to **Kling v2.1 Pro · I2V** or **Seedance v1 Pro · I2V**, and prompt the motion (*"camera orbits the subject, hair blowing in the wind"*). Set `aspect_ratio` to 9:16 for a vertical Reel.
+2. **Image → motion (animate a generated still).** Use an image generator node (e.g. a `gemini` or `gpt-image-2` image node) that produces a hosted image URL, wire its image output into the `higgsfield` node's `image` port, switch `model` to **Kling v2.1 Pro · image to video** or **Seedance v1 Pro · image to video**, and prompt the motion (*"camera orbits the subject, hair blowing in the wind"*). Set `aspect_ratio` to 9:16 for a vertical Reel.
 
 3. **Prompt-driven shot from a Text node.** Feed a `prompt` from an upstream Text/LLM node (so you can template or batch the scene description), keep `image` empty, use DoP Preview to iterate quickly, then swap to DoP Standard for the final, higher-fidelity render.
 

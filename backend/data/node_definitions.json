@@ -406,7 +406,7 @@
             "value": "high"
           },
           {
-            "label": "X-High",
+            "label": "Extra high",
             "value": "xhigh",
             "visibleWhen": {
               "model": [
@@ -1191,7 +1191,7 @@
       },
       {
         "key": "resolution",
-        "label": "Resolution (with image)",
+        "label": "Resolution · with image",
         "type": "enum",
         "required": false,
         "default": "720p",
@@ -3162,7 +3162,7 @@
         "label": "Language Code",
         "type": "string",
         "required": false,
-        "placeholder": "Auto (e.g. en, es)"
+        "placeholder": "Auto (such as en, es)"
       },
       {
         "key": "output_format",
@@ -3428,7 +3428,7 @@
         "label": "Prompt",
         "type": "string",
         "required": false,
-        "placeholder": "Guide the model. Must be in English."
+        "placeholder": "Guide the model in English"
       }
     ]
   },
@@ -3584,10 +3584,10 @@
       },
       {
         "key": "instructions",
-        "label": "Voice instructions",
+        "label": "Voice instructions · gpt-4o-mini-tts only",
         "type": "string",
         "required": false,
-        "placeholder": "e.g. “Speak slowly with warmth” · gpt-4o-mini-tts only"
+        "placeholder": "Speak slowly with warmth"
       }
     ]
   },
@@ -3854,11 +3854,11 @@
         "label": "Language",
         "type": "string",
         "required": false,
-        "placeholder": "Auto-detect (ISO code, e.g. en)"
+        "placeholder": "Auto-detect (ISO code, such as en)"
       },
       {
         "key": "diarize",
-        "label": "Diarize (label speakers)",
+        "label": "Diarize · label speakers",
         "type": "boolean",
         "required": false,
         "default": false
@@ -4301,7 +4301,7 @@
     "params": [
       {
         "key": "filePath",
-        "label": "Document (PDF / text)",
+        "label": "Document · PDF or text",
         "type": "file",
         "required": true,
         "default": ""
@@ -4366,7 +4366,7 @@
         "type": "textarea",
         "required": false,
         "default": "",
-        "placeholder": "e.g. wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film",
+        "placeholder": "wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film",
         "visibleWhen": {
           "mode": [
             "manual"
@@ -4386,7 +4386,7 @@
         },
         "options": [
           {
-            "label": "All · palette + lighting + medium + mood",
+            "label": "All · palette, lighting, medium and mood",
             "value": "all"
           },
           {
@@ -4726,7 +4726,7 @@
       },
       {
         "key": "lut",
-        "label": "LUT (.cube)",
+        "label": "LUT · .cube",
         "type": "file",
         "required": false,
         "default": ""
@@ -5613,7 +5613,7 @@
             "value": "depth"
           },
           {
-            "label": "RGB + depth",
+            "label": "RGB and depth",
             "value": "rgbd"
           },
           {
@@ -6119,7 +6119,7 @@
         "type": "string",
         "required": true,
         "default": "",
-        "placeholder": "owner/name (e.g. stability-ai/sdxl)"
+        "placeholder": "owner/name (such as stability-ai/sdxl)"
       }
     ]
   },
@@ -6262,27 +6262,27 @@
             "value": "gpt-5.4-mini"
           },
           {
-            "label": "GPT-5.4 nano · retiring 2027-04-01",
+            "label": "GPT-5.4 nano · shuts down April 1, 2027",
             "value": "gpt-5.4-nano"
           },
           {
-            "label": "GPT-4o · legacy, retiring 2027-01-14",
+            "label": "GPT-4o · legacy, shuts down January 14, 2027",
             "value": "gpt-4o"
           },
           {
-            "label": "GPT-4o Mini · legacy, retiring 2027-01-14",
+            "label": "GPT-4o Mini · legacy, shuts down January 14, 2027",
             "value": "gpt-4o-mini"
           },
           {
-            "label": "GPT-4.1 · legacy, retiring 2027-01-14",
+            "label": "GPT-4.1 · legacy, shuts down January 14, 2027",
             "value": "gpt-4.1"
           },
           {
-            "label": "GPT-4.1 Mini · legacy, retiring 2027-01-14",
+            "label": "GPT-4.1 Mini · legacy, shuts down January 14, 2027",
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 nano · legacy, retiring 2026-10-23",
+            "label": "GPT-4.1 nano · legacy, shuts down October 23, 2026",
             "value": "gpt-4.1-nano"
           }
         ]
@@ -6324,7 +6324,7 @@
             "value": "high"
           },
           {
-            "label": "X-High",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
@@ -6544,7 +6544,7 @@
             "value": "gemini-3-flash-preview"
           },
           {
-            "label": "Gemini 3.1 Flash-Lite · retiring 2027-05-07",
+            "label": "Gemini 3.1 Flash-Lite · shuts down May 7, 2027",
             "value": "gemini-3.1-flash-lite"
           },
           {
@@ -8545,7 +8545,7 @@
       },
       {
         "key": "shifts",
-        "label": "Quality (shifts)",
+        "label": "Quality · shifts",
         "type": "integer",
         "required": false,
         "default": 1,
@@ -8606,7 +8606,7 @@
     "outputPorts": [
       {
         "id": "video",
-        "label": "Video (with audio)",
+        "label": "Video · with audio",
         "dataType": "Video",
         "required": false
       }
@@ -8617,7 +8617,7 @@
         "label": "Negative prompt",
         "type": "string",
         "required": false,
-        "placeholder": "e.g. music, talking, static"
+        "placeholder": "music, talking, static"
       },
       {
         "key": "duration",
@@ -8639,7 +8639,7 @@
       },
       {
         "key": "cfg_strength",
-        "label": "Guidance (CFG)",
+        "label": "Guidance · CFG",
         "type": "float",
         "required": false,
         "default": 4.5,
@@ -8686,7 +8686,7 @@
         "label": "Style tags",
         "type": "string",
         "required": true,
-        "placeholder": "e.g. lofi hiphop, chill, jazzy piano, 90 BPM"
+        "placeholder": "lofi hiphop, chill, jazzy piano, 90 BPM"
       },
       {
         "key": "lyrics",
@@ -8818,7 +8818,7 @@
       },
       {
         "id": "mask",
-        "label": "Mask (white = edit)",
+        "label": "Mask · white means edit",
         "dataType": "Image",
         "required": true
       }
@@ -8984,7 +8984,7 @@
       },
       {
         "key": "loras",
-        "label": "LoRAs (JSON)",
+        "label": "LoRAs · JSON",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -8992,7 +8992,7 @@
       },
       {
         "key": "embeddings",
-        "label": "Embeddings (JSON)",
+        "label": "Embeddings · JSON",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -9477,7 +9477,7 @@
             "value": "standard"
           },
           {
-            "label": "Low poly · retires October 30, 2026",
+            "label": "Low poly · shuts down October 30, 2026",
             "value": "lowpoly"
           },
           {
@@ -9597,7 +9597,7 @@
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 · needs Meshy entitlement",
+            "label": "Meshy 7.1 · needs access from Meshy",
             "value": "meshy-7.1"
           }
         ]
@@ -9803,7 +9803,7 @@
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 · needs Meshy entitlement",
+            "label": "Meshy 7.1 · needs access from Meshy",
             "value": "meshy-7.1"
           }
         ]
@@ -9820,7 +9820,7 @@
             "value": "standard"
           },
           {
-            "label": "Low poly · retires October 30, 2026",
+            "label": "Low poly · shuts down October 30, 2026",
             "value": "lowpoly"
           },
           {
@@ -9922,7 +9922,7 @@
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 · needs Meshy entitlement",
+            "label": "Meshy 7.1 · needs access from Meshy",
             "value": "meshy-7.1"
           }
         ]
@@ -9962,7 +9962,7 @@
       },
       {
         "key": "symmetry_mode",
-        "label": "Symmetry (deprecated)",
+        "label": "Symmetry · deprecated",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -10091,7 +10091,7 @@
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7 · needs Meshy entitlement",
+            "label": "Meshy 7 · needs access from Meshy",
             "value": "meshy-7"
           }
         ]
@@ -11054,7 +11054,7 @@
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID · Recraft style reference"
+        "placeholder": "Custom style ID · Recraft style reference"
       },
       {
         "key": "colors",
@@ -11142,7 +11142,7 @@
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID · Recraft style reference"
+        "placeholder": "Custom style ID · Recraft style reference"
       },
       {
         "key": "colors",
@@ -11236,7 +11236,7 @@
         "label": "Instructions",
         "type": "textarea",
         "required": false,
-        "placeholder": "Optional style/formatting guidance, e.g. “thin uniform stroke, no fill”"
+        "placeholder": "Optional style or formatting guidance, such as “thin uniform stroke, no fill”"
       },
       {
         "key": "temperature",
@@ -11727,7 +11727,7 @@
       },
       {
         "key": "multi_prompt",
-        "label": "Multi-Shot (JSON)",
+        "label": "Multi-Shot · JSON",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -13332,7 +13332,7 @@
         "default": "higgsfield-ai/dop/standard",
         "options": [
           {
-            "label": "DoP Standard · T2V + I2V",
+            "label": "DoP Standard · text and image to video",
             "value": "higgsfield-ai/dop/standard"
           },
           {
@@ -13340,11 +13340,11 @@
             "value": "higgsfield-ai/dop/preview"
           },
           {
-            "label": "Kling v2.1 Pro · I2V",
+            "label": "Kling v2.1 Pro · image to video",
             "value": "kling-video/v2.1/pro/image-to-video"
           },
           {
-            "label": "Seedance v1 Pro · I2V",
+            "label": "Seedance v1 Pro · image to video",
             "value": "bytedance/seedance/v1/pro/image-to-video"
           }
         ]
@@ -14531,7 +14531,7 @@
       },
       {
         "key": "num_inference_steps",
-        "label": "Steps (flex)",
+        "label": "Steps · flex only",
         "type": "integer",
         "required": false,
         "min": 1,
@@ -14546,7 +14546,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance (flex)",
+        "label": "Guidance · flex only",
         "type": "float",
         "required": false,
         "min": 1.5,
@@ -15470,7 +15470,7 @@
             "value": "opaque"
           },
           {
-            "label": "Transparent (PNG/WebP)",
+            "label": "Transparent · PNG or WebP",
             "value": "transparent"
           }
         ]
@@ -15680,7 +15680,7 @@
             "value": "opaque"
           },
           {
-            "label": "Transparent (PNG/WebP)",
+            "label": "Transparent · PNG or WebP",
             "value": "transparent"
           }
         ]
@@ -17181,7 +17181,7 @@
         "label": "Job types",
         "type": "string",
         "required": false,
-        "placeholder": "e.g. flux,k1,externalImage"
+        "placeholder": "flux,k1,externalImage"
       },
       {
         "key": "limit",
@@ -17319,11 +17319,11 @@
         "label": "Node app version ID",
         "type": "string",
         "required": true,
-        "placeholder": "From Krea or the agent’s get_node_apps"
+        "placeholder": "From Krea, or ask your agent to list node apps"
       },
       {
         "key": "input",
-        "label": "Input (JSON)",
+        "label": "Input · JSON",
         "type": "textarea",
         "required": false,
         "placeholder": "{\"idea\": \"...\"}"
@@ -17470,7 +17470,7 @@
       },
       {
         "key": "tags",
-        "label": "Tags (all of)",
+        "label": "Tags · all of",
         "type": "string",
         "required": false,
         "placeholder": "comma,separated"
@@ -17677,7 +17677,7 @@
       },
       {
         "key": "spec",
-        "label": "Nodes and edges (JSON)",
+        "label": "Nodes and edges · JSON",
         "type": "textarea",
         "required": false,
         "placeholder": "{\"nodes\": [...], \"edges\": [...]}",
@@ -17988,7 +17988,7 @@
         "label": "Tool",
         "type": "string",
         "required": false,
-        "placeholder": "e.g. ae.addLayer",
+        "placeholder": "ae.addLayer",
         "visibleWhen": {
           "action": [
             "call-tool"
@@ -17997,7 +17997,7 @@
       },
       {
         "key": "input",
-        "label": "Tool input (JSON)",
+        "label": "Tool input · JSON",
         "type": "textarea",
         "required": false,
         "visibleWhen": {
@@ -18113,7 +18113,7 @@
       },
       {
         "key": "creativity",
-        "label": "Creativity (added detail)",
+        "label": "Creativity · added detail",
         "type": "float",
         "required": false,
         "default": 0.35,
@@ -18123,7 +18123,7 @@
       },
       {
         "key": "resemblance",
-        "label": "Resemblance (fidelity)",
+        "label": "Resemblance · fidelity",
         "type": "float",
         "required": false,
         "default": 0.6,
@@ -18675,7 +18675,7 @@
             "value": "by_line"
           },
           {
-            "label": "None · entire text is one item",
+            "label": "None · the whole text is one item",
             "value": "none"
           }
         ]
@@ -19202,7 +19202,7 @@
       },
       {
         "id": "mask",
-        "label": "Mask (black = edit)",
+        "label": "Mask · black means edit",
         "dataType": "Image",
         "required": true
       },
@@ -20323,7 +20323,7 @@
       },
       {
         "id": "prompt",
-        "label": "Guidance (optional)",
+        "label": "Guidance · optional",
         "dataType": "Text",
         "required": false
       }
@@ -20459,7 +20459,7 @@
       },
       {
         "id": "json_prompt",
-        "label": "JSON prompt (v4)",
+        "label": "JSON prompt · v4",
         "dataType": "Text",
         "required": false
       }
@@ -20467,7 +20467,7 @@
     "params": [
       {
         "key": "include_bbox",
-        "label": "Include layout (bbox)",
+        "label": "Include layout · bbox",
         "type": "boolean",
         "required": false,
         "default": true
@@ -20499,7 +20499,7 @@
       },
       {
         "id": "json_prompt",
-        "label": "JSON prompt (v4)",
+        "label": "JSON prompt · v4",
         "dataType": "Text",
         "required": false
       }
@@ -20607,7 +20607,7 @@
     "outputPorts": [
       {
         "id": "image",
-        "label": "Image (alpha)",
+        "label": "Image · alpha",
         "dataType": "Image",
         "required": false
       }
@@ -20789,7 +20789,7 @@
     "outputPorts": [
       {
         "id": "image",
-        "label": "Image (alpha)",
+        "label": "Image · alpha",
         "dataType": "Image",
         "required": false
       }
@@ -20813,7 +20813,7 @@
       },
       {
         "id": "prompt",
-        "label": "Guidance (optional)",
+        "label": "Guidance · optional",
         "dataType": "Text",
         "required": false
       }
@@ -20821,7 +20821,7 @@
     "outputPorts": [
       {
         "id": "image",
-        "label": "Base plate (text removed)",
+        "label": "Base plate · text removed",
         "dataType": "Image",
         "required": false
       }
@@ -21134,7 +21134,7 @@
       },
       {
         "id": "prompt",
-        "label": "Prompt (Redefine only)",
+        "label": "Prompt · Redefine only",
         "dataType": "Text",
         "required": false
       }
@@ -22203,7 +22203,7 @@
       },
       {
         "key": "tile",
-        "label": "Tile size (0=none)",
+        "label": "Tile size · 0 means none",
         "type": "integer",
         "required": false,
         "default": 0,
@@ -23301,11 +23301,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ],
@@ -23443,11 +23443,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ],
@@ -23578,11 +23578,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ],
@@ -23700,7 +23700,7 @@
         "type": "string",
         "required": false,
         "default": "",
-        "placeholder": "e.g. low-angle push-in"
+        "placeholder": "low-angle push-in"
       },
       {
         "key": "model",
@@ -23718,11 +23718,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ],
@@ -23911,7 +23911,7 @@
         "type": "string",
         "required": false,
         "default": "",
-        "placeholder": "Optional, e.g. 0, 90, 180, 270"
+        "placeholder": "Optional, such as 0, 90, 180, 270"
       },
       {
         "key": "disable_recaption",
@@ -23985,11 +23985,11 @@
         "default": "ply",
         "options": [
           {
-            "label": "Gaussian splat (PLY)",
+            "label": "Gaussian splat · PLY",
             "value": "ply"
           },
           {
-            "label": "High-quality mesh (GLB)",
+            "label": "High-quality mesh · GLB",
             "value": "glb"
           }
         ]
@@ -24251,7 +24251,7 @@
       },
       {
         "id": "mask",
-        "label": "Mask (unavailable)",
+        "label": "Mask · unavailable",
         "dataType": "Mask",
         "required": false
       }
@@ -24380,7 +24380,7 @@
       },
       {
         "id": "probabilities",
-        "label": "Probabilities (JSON)",
+        "label": "Probabilities · JSON",
         "dataType": "Text",
         "required": false
       },
@@ -24422,11 +24422,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ]
@@ -24461,7 +24461,7 @@
       },
       {
         "key": "yes_means",
-        "label": "Yes means (optional)",
+        "label": "Yes means · optional",
         "type": "string",
         "required": false,
         "default": "",
@@ -24473,7 +24473,7 @@
       },
       {
         "key": "no_means",
-        "label": "No means (optional)",
+        "label": "No means · optional",
         "type": "string",
         "required": false,
         "default": "",
@@ -24485,7 +24485,7 @@
       },
       {
         "key": "options",
-        "label": "Options (one per line)",
+        "label": "Options · one per line",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -24498,7 +24498,7 @@
       },
       {
         "key": "pass_when",
-        "label": "Passing options (one per line)",
+        "label": "Passing options · one per line",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -24570,7 +24570,7 @@
       },
       {
         "key": "long_context",
-        "label": "Long context (slower, less accurate)",
+        "label": "Long context · slower, less accurate",
         "type": "boolean",
         "required": false,
         "default": false
@@ -24619,7 +24619,7 @@
       },
       {
         "id": "probabilities",
-        "label": "Probabilities (JSON)",
+        "label": "Probabilities · JSON",
         "dataType": "Text",
         "required": false
       },
@@ -24653,11 +24653,11 @@
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest · moves, re-check thresholds",
+            "label": "jev-latest · updates itself, so check thresholds again",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ]
@@ -24716,7 +24716,7 @@
       },
       {
         "id": "box",
-        "label": "Box (JSON)",
+        "label": "Box · JSON",
         "dataType": "Text",
         "required": false
       },
@@ -24769,7 +24769,7 @@
             "value": "jev-1.14.0"
           },
           {
-            "label": "jev-preview · moves",
+            "label": "jev-preview · updates itself",
             "value": "jev-preview"
           }
         ]
@@ -24796,7 +24796,7 @@
       },
       {
         "key": "pad",
-        "label": "Crop padding (fraction of image)",
+        "label": "Crop padding · fraction of image",
         "type": "float",
         "required": false,
         "default": 0.05,
@@ -25006,7 +25006,7 @@
         "params": [
           {
             "key": "grounding",
-            "label": "Grounding (web + image search)",
+            "label": "Grounding · web and image search",
             "type": "boolean",
             "required": false,
             "default": true
@@ -25090,7 +25090,7 @@
         "params": [
           {
             "key": "grounding",
-            "label": "Grounding (web + image search)",
+            "label": "Grounding · web and image search",
             "type": "boolean",
             "required": false,
             "default": true
@@ -25769,7 +25769,7 @@
         "params": [
           {
             "key": "draft",
-            "label": "Draft (fast preview)",
+            "label": "Draft · fast preview",
             "type": "boolean",
             "required": false,
             "default": false
@@ -25853,7 +25853,7 @@
                 "keyframes",
                 "end_image"
               ],
-              "label": "images (start + keyframes + end)"
+              "label": "images (start, keyframes and end)"
             }
           }
         },
@@ -25936,7 +25936,7 @@
         "params": [
           {
             "key": "draft",
-            "label": "Draft (fast preview)",
+            "label": "Draft · fast preview",
             "type": "boolean",
             "required": false,
             "default": false
@@ -26007,7 +26007,7 @@
                 "keyframes",
                 "end_image"
               ],
-              "label": "images (start + keyframes + end)"
+              "label": "images (start, keyframes and end)"
             }
           }
         },
@@ -26030,7 +26030,7 @@
         "params": [
           {
             "key": "draft",
-            "label": "Draft (fast preview)",
+            "label": "Draft · fast preview",
             "type": "boolean",
             "required": false,
             "default": false
@@ -26117,7 +26117,7 @@
                 "keyframes",
                 "end_image"
               ],
-              "label": "images (start + keyframes + end)"
+              "label": "images (start, keyframes and end)"
             }
           }
         },
@@ -27088,7 +27088,7 @@
             "default": "auto",
             "options": [
               {
-                "label": "auto",
+                "label": "Auto",
                 "value": "auto"
               },
               {
@@ -27096,7 +27096,7 @@
                 "value": "square_hd"
               },
               {
-                "label": "square",
+                "label": "Square",
                 "value": "square"
               },
               {
@@ -27137,11 +27137,11 @@
             "default": "png",
             "options": [
               {
-                "label": "png",
+                "label": "PNG",
                 "value": "png"
               },
               {
-                "label": "jpeg",
+                "label": "JPEG",
                 "value": "jpeg"
               }
             ]
@@ -27159,7 +27159,7 @@
                 "reasoning_level": "high",
                 "images": "(unset)"
               },
-              "label": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
+              "label": "high reasoning without a reference image · fal.ai runs it only for edits"
             }
           ]
         }
@@ -27270,14 +27270,14 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27345,19 +27345,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -27395,7 +27395,7 @@
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27523,14 +27523,14 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27598,19 +27598,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -27648,7 +27648,7 @@
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27776,14 +27776,14 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27851,19 +27851,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -27901,7 +27901,7 @@
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28019,15 +28019,15 @@
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -28103,7 +28103,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28250,7 +28250,7 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28277,14 +28277,14 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28428,7 +28428,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28538,7 +28538,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28641,7 +28641,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28834,7 +28834,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28949,7 +28949,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29154,7 +29154,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29247,15 +29247,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -29290,7 +29290,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29383,15 +29383,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -29517,7 +29517,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29599,7 +29599,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29771,7 +29771,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29853,7 +29853,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30430,14 +30430,14 @@
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30499,7 +30499,7 @@
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30508,7 +30508,7 @@
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30709,7 +30709,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30771,7 +30771,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30919,19 +30919,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -30939,14 +30939,14 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31038,19 +31038,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -31058,7 +31058,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31175,19 +31175,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -31195,7 +31195,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31375,23 +31375,23 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -31399,7 +31399,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31475,15 +31475,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -31522,23 +31522,23 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -31546,7 +31546,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31622,15 +31622,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -31727,23 +31727,23 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -31751,7 +31751,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -31854,23 +31854,23 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -31878,7 +31878,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32039,11 +32039,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -32127,7 +32127,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32166,11 +32166,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -32256,7 +32256,7 @@
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32355,11 +32355,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -32384,7 +32384,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32423,11 +32423,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -32452,7 +32452,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32585,7 +32585,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32697,7 +32697,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32809,7 +32809,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32821,15 +32821,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -32938,11 +32938,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -32955,11 +32955,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "manga",
+            "label": "Manga",
             "value": "manga"
           }
         ],
@@ -32972,11 +32972,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpeg",
+            "label": "JPEG",
             "value": "jpeg"
           }
         ]
@@ -32990,7 +32990,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33217,7 +33217,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33277,7 +33277,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33410,7 +33410,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33470,7 +33470,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33603,7 +33603,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33663,7 +33663,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33822,7 +33822,7 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33938,7 +33938,7 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -33998,7 +33998,7 @@
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -34110,7 +34110,7 @@
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -34255,7 +34255,7 @@
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -34292,7 +34292,7 @@
       },
       {
         "key": "scene_image_url",
-        "label": "Scene image URL (JSON)",
+        "label": "Scene image URL · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34478,15 +34478,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -34761,15 +34761,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35002,15 +35002,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35185,15 +35185,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35251,15 +35251,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -35420,15 +35420,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35448,15 +35448,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -35476,15 +35476,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -35652,15 +35652,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35673,7 +35673,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
@@ -35689,7 +35689,7 @@
             "value": "art_n_illustration"
           },
           {
-            "label": "Videogame assets",
+            "label": "Video game assets",
             "value": "videogame_assets"
           },
           {
@@ -35701,7 +35701,7 @@
             "value": "films_n_photography"
           },
           {
-            "label": "3d_renders",
+            "label": "3D renders",
             "value": "3d_renders"
           },
           {
@@ -35723,7 +35723,7 @@
       },
       {
         "key": "hdr",
-        "label": "Hdr",
+        "label": "HDR",
         "required": false,
         "type": "integer",
         "min": -10,
@@ -35758,7 +35758,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "automatic",
+            "label": "Automatic",
             "value": "automatic"
           },
           {
@@ -35895,15 +35895,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -35946,11 +35946,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "sublime",
+            "label": "Sublime",
             "value": "sublime"
           },
           {
-            "label": "photo",
+            "label": "Photo",
             "value": "photo"
           },
           {
@@ -36382,15 +36382,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "std",
+            "label": "Std",
             "value": "std"
           },
           {
-            "label": "pro",
+            "label": "Pro",
             "value": "pro"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -36398,7 +36398,7 @@
       },
       {
         "key": "multi_prompt",
-        "label": "Multi prompt (JSON)",
+        "label": "Multi prompt · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -36549,21 +36549,21 @@
       },
       {
         "key": "style_references",
-        "label": "Style references (JSON)",
+        "label": "Style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "element_references",
-        "label": "Element references (JSON)",
+        "label": "Element references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "video_reference",
-        "label": "Video reference (JSON)",
+        "label": "Video reference · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -37480,7 +37480,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -37518,14 +37518,14 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -37541,7 +37541,7 @@
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -37596,7 +37596,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -37634,21 +37634,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -37896,19 +37896,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "disabled",
+            "label": "Disabled",
             "value": "disabled"
           },
           {
-            "label": "fast",
+            "label": "Fast",
             "value": "fast"
           },
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -37916,14 +37916,14 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -37939,7 +37939,7 @@
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -38117,11 +38117,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -38263,11 +38263,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -38275,7 +38275,7 @@
       },
       {
         "key": "camera_trajectory",
-        "label": "Camera trajectory (JSON)",
+        "label": "Camera trajectory · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -38414,7 +38414,7 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -38815,7 +38815,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -38903,21 +38903,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -39507,7 +39507,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -39619,7 +39619,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -39800,7 +39800,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -39912,7 +39912,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -40303,14 +40303,14 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -40444,14 +40444,14 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -40518,14 +40518,14 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -40690,7 +40690,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -40831,7 +40831,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41323,21 +41323,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41371,7 +41371,7 @@
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -41394,7 +41394,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41487,21 +41487,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41535,7 +41535,7 @@
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -41560,7 +41560,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41768,21 +41768,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41831,7 +41831,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41924,21 +41924,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -41989,7 +41989,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42189,21 +42189,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42324,21 +42324,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42565,21 +42565,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42632,7 +42632,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42725,21 +42725,21 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -42794,7 +42794,7 @@
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -43014,7 +43014,7 @@
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -43199,7 +43199,7 @@
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
@@ -43378,7 +43378,7 @@
             "value": "1440p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -43422,7 +43422,7 @@
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
@@ -43587,19 +43587,19 @@
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "small",
+            "label": "Small",
             "value": "small"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "large",
+            "label": "Large",
             "value": "large"
           }
         ],
@@ -44312,7 +44312,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -44421,7 +44421,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -45062,7 +45062,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -45305,7 +45305,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -45521,7 +45521,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -45729,11 +45729,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -45754,7 +45754,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -45968,15 +45968,15 @@
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "middle",
+            "label": "Middle",
             "value": "middle"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -46022,7 +46022,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -46238,7 +46238,7 @@
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -46521,11 +46521,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
@@ -46589,11 +46589,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
@@ -46766,11 +46766,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -46842,7 +46842,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -46938,11 +46938,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47006,7 +47006,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47103,11 +47103,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47122,7 +47122,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47218,11 +47218,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47237,7 +47237,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47333,11 +47333,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47361,7 +47361,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47458,11 +47458,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47477,7 +47477,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47574,11 +47574,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47593,7 +47593,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47682,11 +47682,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47701,7 +47701,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47800,11 +47800,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47834,7 +47834,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -47881,11 +47881,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -47915,7 +47915,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -48016,11 +48016,11 @@
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -48042,7 +48042,7 @@
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -48160,15 +48160,15 @@
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -48188,7 +48188,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -48241,15 +48241,15 @@
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -48269,7 +48269,7 @@
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -48512,14 +48512,14 @@
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"
@@ -48553,14 +48553,14 @@
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"

@@ -31,7 +31,7 @@ flowchart LR
 | Node | Krea surface | Billing paths | Notes |
 |---|---|---|---|
 | Krea Job History | `GET /jobs`, `GET /jobs/{id}`, MCP `get_job` | List: API token. One job: both | **Save media** copies completed results into the run. |
-| Krea Node App | `GET /node-apps/{id}`, `POST /node-apps/{id}/execute`, MCP `get_node_apps`, `execute_node_app` | Both | Inputs are checked against the app's schema first. Wired images fill the app's image fields in order, wired text fills its first text field, and **Input (JSON)** or the Inputs port set fields by name. The account path runs public and workspace-shared apps only. |
+| Krea Node App | `GET /node-apps/{id}`, `POST /node-apps/{id}/execute`, MCP `get_node_apps`, `execute_node_app` | Both | Inputs are checked against the app's schema first. Wired images fill the app's image fields in order, wired text fills its first text field, and **Input · JSON** or the Inputs port set fields by name. The account path runs public and workspace-shared apps only. |
 | Krea Files | MCP `list_files`, `read_files` | Account | Text comes in as text, SVG as SVG, other media as files in the run. |
 | Save to Krea Files | MCP `create_folders`, `write_files_upload`, `write_files_inline`, `tag_files` | Account | Raw-byte upload as Krea asks (never multipart). Files over 20 MB use Krea's direct grant; a multipart grant is refused. |
 | Krea Nodes Workflow | MCP `create_node_workflow`, `read_node_workflow`, `update_node_workflow` | Account | Creating returns a krea.ai link; nothing runs until you open it in Krea. Read and edit take a typed workflow ID, never a wired one. |

@@ -7741,7 +7741,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "missing": []
       },
@@ -7752,7 +7752,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "alternatives": [
           "fal"
@@ -7763,9 +7763,9 @@
             "value": false
           }
         ],
-        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. fal.ai can take it."
+        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft. Turn Draft off, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -8084,7 +8084,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 connected images (start, keyframes and end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "“FLUX 3 Video” can’t run on Black Forest Labs with more than 10 images connected. Disconnect the extra inputs."
     },
@@ -8147,7 +8147,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 connected images (start, keyframes and end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "“FLUX 3 Video” can’t run on fal.ai with more than 10 images connected. Disconnect the extra inputs."
     },
@@ -8186,7 +8186,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 connected images (start, keyframes and end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "“FLUX 3 Video” can’t run on Replicate with more than 10 images connected. Disconnect the extra inputs."
     },
@@ -8234,7 +8234,7 @@
         "block": {
           "reason": "unsupported",
           "param": "reasoning_level",
-          "detail": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
+          "detail": "high reasoning without a reference image · fal.ai runs it only for edits"
         },
         "missing": []
       },
@@ -8244,13 +8244,13 @@
         "block": {
           "reason": "unsupported",
           "param": "reasoning_level",
-          "detail": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
+          "detail": "high reasoning without a reference image · fal.ai runs it only for edits"
         },
         "alternatives": [
           "krea"
         ],
         "fixes": [],
-        "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image · fal.ai takes it on krea/v3/edit only. Change that setting, or switch provider. Krea can take it."
+        "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image · fal.ai runs it only for edits. Change that setting, or switch provider. Krea can take it."
       },
       "unavailableLine": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
       "paramKeys": [
@@ -10577,7 +10577,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "missing": []
       },
@@ -10588,7 +10588,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "alternatives": [
           "bfl",
@@ -10601,9 +10601,9 @@
             "value": false
           }
         ],
-        "message": "FLUX 3 Video can't run on Krea: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
+        "message": "FLUX 3 Video can't run on Krea: it doesn't offer Draft. Turn Draft off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -10839,7 +10839,7 @@
           "reason": "hidden",
           "param": "grounding",
           "on": "bfl",
-          "detail": "Grounding (web + image search) off"
+          "detail": "Grounding off"
         },
         "missing": []
       },
@@ -10850,7 +10850,7 @@
           "reason": "hidden",
           "param": "grounding",
           "on": "bfl",
-          "detail": "Grounding (web + image search) off"
+          "detail": "Grounding off"
         },
         "alternatives": [
           "bfl",
@@ -10862,9 +10862,9 @@
             "value": true
           }
         ],
-        "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider. Black Forest Labs or Replicate can take it."
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding off. Turn Grounding on, or switch provider. Black Forest Labs or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
+      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -11007,7 +11007,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "missing": []
       },
@@ -11018,7 +11018,7 @@
           "reason": "hidden",
           "param": "draft",
           "on": "bfl",
-          "detail": "Draft (fast preview)"
+          "detail": "Draft"
         },
         "alternatives": [
           "bfl",
@@ -11031,9 +11031,9 @@
             "value": false
           }
         ],
-        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
+        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft. Turn Draft off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
       "shownRoute": "openrouter",
       "routeParams": [
         {
@@ -11440,7 +11440,7 @@
           "reason": "hidden",
           "param": "grounding",
           "on": "bfl",
-          "detail": "Grounding (web + image search) off"
+          "detail": "Grounding off"
         },
         "missing": []
       },
@@ -11451,7 +11451,7 @@
           "reason": "hidden",
           "param": "grounding",
           "on": "bfl",
-          "detail": "Grounding (web + image search) off"
+          "detail": "Grounding off"
         },
         "alternatives": [],
         "fixes": [
@@ -11460,9 +11460,9 @@
             "value": true
           }
         ],
-        "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider."
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding off. Turn Grounding on, or switch provider."
       },
-      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on.",
+      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding” off. Turn “Grounding” on.",
       "shownRoute": "fal",
       "routeParams": [
         {

@@ -13,8 +13,8 @@ const QC_JEV_PARAMS: ParamDefinition[] = [
   { key: 'model', label: 'Jev model', type: 'enum', required: false, default: 'jev-1.14.0', options: [
     { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
     { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
-    { label: 'jev-latest · moves, re-check thresholds', value: 'jev-latest' },
-    { label: 'jev-preview · moves', value: 'jev-preview' },
+    { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+    { label: 'jev-preview · updates itself', value: 'jev-preview' },
   ], visibleWhen: { mode: ['jev'] } },
   { key: 'min_confidence', label: 'Jev minimum confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { mode: ['jev'] } },
 ];
@@ -247,7 +247,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'X-High', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
+          { label: 'Extra high', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
           { label: 'Max', value: 'max' },
         ],
       },
@@ -388,7 +388,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'resolution',
-        label: 'Resolution (with image)',
+        label: 'Resolution · with image',
         type: 'enum',
         required: false,
         default: '720p',
@@ -1110,7 +1110,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
-      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (e.g. en, es)' },
+      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (such as en, es)' },
       {
         key: 'output_format',
         label: 'Output format',
@@ -1256,7 +1256,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Prompt',
         type: 'string',
         required: false,
-        placeholder: 'Guide the model. Must be in English.',
+        placeholder: 'Guide the model in English',
       },
     ],
   },
@@ -1337,10 +1337,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'instructions',
-        label: 'Voice instructions',
+        label: 'Voice instructions · gpt-4o-mini-tts only',
         type: 'string',
         required: false,
-        placeholder: 'e.g. “Speak slowly with warmth” · gpt-4o-mini-tts only',
+        placeholder: 'Speak slowly with warmth',
       },
     ],
   },
@@ -1617,11 +1617,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Language',
         type: 'string',
         required: false,
-        placeholder: 'Auto-detect (ISO code, e.g. en)',
+        placeholder: 'Auto-detect (ISO code, such as en)',
       },
       {
         key: 'diarize',
-        label: 'Diarize (label speakers)',
+        label: 'Diarize · label speakers',
         type: 'boolean',
         required: false,
         default: false,
@@ -1691,7 +1691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'shifts',
-        label: 'Quality (shifts)',
+        label: 'Quality · shifts',
         type: 'integer',
         required: false,
         default: 1,
@@ -1735,7 +1735,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Audio prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'video', label: 'Video (with audio)', dataType: 'Video', required: false },
+      { id: 'video', label: 'Video · with audio', dataType: 'Video', required: false },
     ],
     params: [
       {
@@ -1743,7 +1743,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Negative prompt',
         type: 'string',
         required: false,
-        placeholder: 'e.g. music, talking, static',
+        placeholder: 'music, talking, static',
       },
       {
         key: 'duration',
@@ -1765,7 +1765,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'cfg_strength',
-        label: 'Guidance (CFG)',
+        label: 'Guidance · CFG',
         type: 'float',
         required: false,
         default: 4.5,
@@ -1808,7 +1808,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Style tags',
         type: 'string',
         required: true,
-        placeholder: 'e.g. lofi hiphop, chill, jazzy piano, 90 BPM',
+        placeholder: 'lofi hiphop, chill, jazzy piano, 90 BPM',
       },
       {
         key: 'lyrics',
@@ -2070,7 +2070,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'filePath',
-        label: 'Document (PDF / text)',
+        label: 'Document · PDF or text',
         type: 'file',
         required: true,
         default: '',
@@ -2111,7 +2111,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'e.g. wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film',
+        placeholder: 'wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film',
         visibleWhen: { mode: ['manual'] },
       },
       {
@@ -2122,7 +2122,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'all',
         visibleWhen: { mode: ['auto'] },
         options: [
-          { label: 'All · palette + lighting + medium + mood', value: 'all' },
+          { label: 'All · palette, lighting, medium and mood', value: 'all' },
           { label: 'Palette only', value: 'palette' },
           { label: 'Lighting only', value: 'lighting' },
           { label: 'Medium / texture only', value: 'medium' },
@@ -2245,7 +2245,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'contrast', label: 'Contrast', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
       { key: 'saturation', label: 'Saturation', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
       { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
-      { key: 'lut', label: 'LUT (.cube)', type: 'file', required: false, default: '' },
+      { key: 'lut', label: 'LUT · .cube', type: 'file', required: false, default: '' },
     ],
   },
 
@@ -2514,7 +2514,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'rig_id', label: 'Rig ID', type: 'string', required: false, default: '', placeholder: 'Defaults to node ID' },
       { key: 'modality', label: 'Sensor modality', type: 'enum', required: false, default: 'rgb', options: [
-        { label: 'RGB', value: 'rgb' }, { label: 'Depth', value: 'depth' }, { label: 'RGB + depth', value: 'rgbd' },
+        { label: 'RGB', value: 'rgb' }, { label: 'Depth', value: 'depth' }, { label: 'RGB and depth', value: 'rgbd' },
         { label: 'LiDAR', value: 'lidar' }, { label: 'IMU', value: 'imu' },
       ] },
     ],
@@ -2781,7 +2781,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: true,
         default: '',
-        placeholder: 'owner/name (e.g. stability-ai/sdxl)',
+        placeholder: 'owner/name (such as stability-ai/sdxl)',
       },
     ],
   },
@@ -2852,12 +2852,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'GPT-5.5', value: 'gpt-5.5' },
           { label: 'GPT-5.4', value: 'gpt-5.4' },
           { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-          { label: 'GPT-5.4 nano · retiring 2027-04-01', value: 'gpt-5.4-nano' },
-          { label: 'GPT-4o · legacy, retiring 2027-01-14', value: 'gpt-4o' },
-          { label: 'GPT-4o Mini · legacy, retiring 2027-01-14', value: 'gpt-4o-mini' },
-          { label: 'GPT-4.1 · legacy, retiring 2027-01-14', value: 'gpt-4.1' },
-          { label: 'GPT-4.1 Mini · legacy, retiring 2027-01-14', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 nano · legacy, retiring 2026-10-23', value: 'gpt-4.1-nano' },
+          { label: 'GPT-5.4 nano · shuts down April 1, 2027', value: 'gpt-5.4-nano' },
+          { label: 'GPT-4o · legacy, shuts down January 14, 2027', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini · legacy, shuts down January 14, 2027', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1 · legacy, shuts down January 14, 2027', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini · legacy, shuts down January 14, 2027', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 nano · legacy, shuts down October 23, 2026', value: 'gpt-4.1-nano' },
         ],
       },
       {
@@ -2872,7 +2872,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'X-High', value: 'xhigh' },
+          { label: 'Extra high', value: 'xhigh' },
           // GPT-5.5 and older list no "max" (OpenAI's gpt-5.5 page).
           { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] } },
         ],
@@ -2981,7 +2981,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash', value: 'gemini-3.5-flash' },
           { label: 'Gemini 3.1 Pro · preview', value: 'gemini-3.1-pro-preview' },
           { label: 'Gemini 3 Flash · preview', value: 'gemini-3-flash-preview' },
-          { label: 'Gemini 3.1 Flash-Lite · retiring 2027-05-07', value: 'gemini-3.1-flash-lite' },
+          { label: 'Gemini 3.1 Flash-Lite · shuts down May 7, 2027', value: 'gemini-3.1-flash-lite' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
           { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
@@ -3936,7 +3936,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Base image', dataType: 'Image', required: true },
-      { id: 'mask', label: 'Mask (white = edit)', dataType: 'Image', required: true },
+      { id: 'mask', label: 'Mask · white means edit', dataType: 'Image', required: true },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -4035,7 +4035,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'loras',
-        label: 'LoRAs (JSON)',
+        label: 'LoRAs · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -4043,7 +4043,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'embeddings',
-        label: 'Embeddings (JSON)',
+        label: 'Embeddings · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -4399,7 +4399,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '',
-        placeholder: 'Optional, e.g. 0, 90, 180, 270',
+        placeholder: 'Optional, such as 0, 90, 180, 270',
       },
       {
         key: 'disable_recaption',
@@ -4458,8 +4458,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'ply',
         options: [
-          { label: 'Gaussian splat (PLY)', value: 'ply' },
-          { label: 'High-quality mesh (GLB)', value: 'glb' },
+          { label: 'Gaussian splat · PLY', value: 'ply' },
+          { label: 'High-quality mesh · GLB', value: 'glb' },
         ],
       },
       {
@@ -4665,7 +4665,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low poly · retires October 30, 2026', value: 'lowpoly' },
+          { label: 'Low poly · shuts down October 30, 2026', value: 'lowpoly' },
           { label: 'Smart topology · Meshy T2', value: 'smart-topology' },
         ],
       },
@@ -4746,7 +4746,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
           { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 · needs Meshy entitlement', value: 'meshy-7.1' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4899,7 +4899,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
           { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 · needs Meshy entitlement', value: 'meshy-7.1' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4910,7 +4910,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low poly · retires October 30, 2026', value: 'lowpoly' },
+          { label: 'Low poly · shuts down October 30, 2026', value: 'lowpoly' },
           { label: 'Smart topology · Meshy T2', value: 'smart-topology' },
         ],
       },
@@ -4987,7 +4987,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
           { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 · needs Meshy entitlement', value: 'meshy-7.1' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
@@ -5019,7 +5019,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'symmetry_mode',
-        label: 'Symmetry (deprecated)',
+        label: 'Symmetry · deprecated',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -5106,7 +5106,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Latest · Meshy 7', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
           { label: 'Meshy 6 Lite', value: 'meshy-6-lite' },
-          { label: 'Meshy 7 · needs Meshy entitlement', value: 'meshy-7' },
+          { label: 'Meshy 7 · needs access from Meshy', value: 'meshy-7' },
         ],
       },
       {
@@ -5692,7 +5692,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Style ID',
         type: 'string',
         required: false,
-        placeholder: 'Custom style UUID · Recraft style reference',
+        placeholder: 'Custom style ID · Recraft style reference',
       },
       {
         key: 'colors',
@@ -5753,7 +5753,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Style ID',
         type: 'string',
         required: false,
-        placeholder: 'Custom style UUID · Recraft style reference',
+        placeholder: 'Custom style ID · Recraft style reference',
       },
       {
         key: 'colors',
@@ -5814,7 +5814,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Instructions',
         type: 'textarea',
         required: false,
-        placeholder: 'Optional style/formatting guidance, e.g. “thin uniform stroke, no fill”',
+        placeholder: 'Optional style or formatting guidance, such as “thin uniform stroke, no fill”',
       },
       { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 1.0, min: 0, max: 2, step: 0.1 },
       { key: 'top_p', label: 'Top P', type: 'float', required: false, default: 1.0, min: 0, max: 1, step: 0.05 },
@@ -6066,7 +6066,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'multi_prompt',
-        label: 'Multi-Shot (JSON)',
+        label: 'Multi-Shot · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -7019,10 +7019,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'higgsfield-ai/dop/standard',
         options: [
-          { label: 'DoP Standard · T2V + I2V', value: 'higgsfield-ai/dop/standard' },
+          { label: 'DoP Standard · text and image to video', value: 'higgsfield-ai/dop/standard' },
           { label: 'DoP Preview', value: 'higgsfield-ai/dop/preview' },
-          { label: 'Kling v2.1 Pro · I2V', value: 'kling-video/v2.1/pro/image-to-video' },
-          { label: 'Seedance v1 Pro · I2V', value: 'bytedance/seedance/v1/pro/image-to-video' },
+          { label: 'Kling v2.1 Pro · image to video', value: 'kling-video/v2.1/pro/image-to-video' },
+          { label: 'Seedance v1 Pro · image to video', value: 'bytedance/seedance/v1/pro/image-to-video' },
         ],
       },
       {
@@ -7689,7 +7689,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_inference_steps',
-        label: 'Steps (flex)',
+        label: 'Steps · flex only',
         type: 'integer',
         required: false,
         min: 1,
@@ -7700,7 +7700,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance (flex)',
+        label: 'Guidance · flex only',
         type: 'float',
         required: false,
         min: 1.5,
@@ -8184,7 +8184,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Auto', value: 'auto' },
           { label: 'Opaque', value: 'opaque' },
-          { label: 'Transparent (PNG/WebP)', value: 'transparent' },
+          { label: 'Transparent · PNG or WebP', value: 'transparent' },
         ],
       },
       {
@@ -8314,7 +8314,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Auto', value: 'auto' },
           { label: 'Opaque', value: 'opaque' },
-          { label: 'Transparent (PNG/WebP)', value: 'transparent' },
+          { label: 'Transparent · PNG or WebP', value: 'transparent' },
         ],
       },
       {
@@ -9444,7 +9444,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Job types',
         type: 'string',
         required: false,
-        placeholder: 'e.g. flux,k1,externalImage',
+        placeholder: 'flux,k1,externalImage',
       },
       {
         key: 'limit',
@@ -9583,11 +9583,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Node app version ID',
         type: 'string',
         required: true,
-        placeholder: 'From Krea or the agent’s get_node_apps',
+        placeholder: 'From Krea, or ask your agent to list node apps',
       },
       {
         key: 'input',
-        label: 'Input (JSON)',
+        label: 'Input · JSON',
         type: 'textarea',
         required: false,
         placeholder: '{"idea": "..."}',
@@ -9735,7 +9735,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'tags',
-        label: 'Tags (all of)',
+        label: 'Tags · all of',
         type: 'string',
         required: false,
         placeholder: 'comma,separated',
@@ -9944,7 +9944,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'spec',
-        label: 'Nodes and edges (JSON)',
+        label: 'Nodes and edges · JSON',
         type: 'textarea',
         required: false,
         placeholder: '{"nodes": [...], "edges": [...]}',
@@ -10257,7 +10257,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Tool',
         type: 'string',
         required: false,
-        placeholder: 'e.g. ae.addLayer',
+        placeholder: 'ae.addLayer',
         visibleWhen: {
           action: [
             'call-tool',
@@ -10266,7 +10266,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'input',
-        label: 'Tool input (JSON)',
+        label: 'Tool input · JSON',
         type: 'textarea',
         required: false,
         visibleWhen: {
@@ -10374,7 +10374,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'creativity',
-        label: 'Creativity (added detail)',
+        label: 'Creativity · added detail',
         type: 'float',
         required: false,
         default: 0.35,
@@ -10384,7 +10384,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'resemblance',
-        label: 'Resemblance (fidelity)',
+        label: 'Resemblance · fidelity',
         type: 'float',
         required: false,
         default: 0.6,
@@ -10847,7 +10847,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Base Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'mask', label: 'Mask (black = edit)', dataType: 'Image', required: true },
+      { id: 'mask', label: 'Mask · black means edit', dataType: 'Image', required: true },
       { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
@@ -11471,7 +11471,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Guidance (optional)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Guidance · optional', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11542,12 +11542,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'description', label: 'Description', dataType: 'Text', required: false },
-      { id: 'json_prompt', label: 'JSON prompt (v4)', dataType: 'Text', required: false },
+      { id: 'json_prompt', label: 'JSON prompt · v4', dataType: 'Text', required: false },
     ],
     params: [
       {
         key: 'include_bbox',
-        label: 'Include layout (bbox)',
+        label: 'Include layout · bbox',
         type: 'boolean',
         required: false,
         default: true,
@@ -11568,7 +11568,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'description', label: 'Expanded prompt', dataType: 'Text', required: false },
-      { id: 'json_prompt', label: 'JSON prompt (v4)', dataType: 'Text', required: false },
+      { id: 'json_prompt', label: 'JSON prompt · v4', dataType: 'Text', required: false },
     ],
     params: [
       {
@@ -11613,7 +11613,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'image', label: 'Image (alpha)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image · alpha', dataType: 'Image', required: false },
     ],
     params: [
       {
@@ -11714,7 +11714,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
     ],
     outputPorts: [
-      { id: 'image', label: 'Image (alpha)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image · alpha', dataType: 'Image', required: false },
     ],
     params: [],
   },
@@ -11729,10 +11729,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Guidance (optional)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Guidance · optional', dataType: 'Text', required: false },
     ],
     outputPorts: [
-      { id: 'image', label: 'Base plate (text removed)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Base plate · text removed', dataType: 'Image', required: false },
     ],
     params: [
       {
@@ -11947,7 +11947,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         key: 'split_mode', label: 'Split mode', type: 'enum', required: false, default: 'by_line',
         options: [
           { label: 'By line · one item per line', value: 'by_line' },
-          { label: 'None · entire text is one item', value: 'none' },
+          { label: 'None · the whole text is one item', value: 'none' },
         ],
       },
       { key: 'batch_size_cap', label: 'Item cap', type: 'integer', required: false, default: 10, min: 1, max: 25 },
@@ -12062,7 +12062,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Prompt (Redefine only)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Prompt · Redefine only', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -12705,7 +12705,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'tile',
-        label: 'Tile size (0=none)',
+        label: 'Tile size · 0 means none',
         type: 'integer',
         required: false,
         default: 0,
@@ -13433,7 +13433,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
         { label: 'Jev · TypeSafe, experimental', value: 'jev' },
       ] },
-      { key: 'expected_angle', label: 'Expected angle', type: 'string', required: false, default: '', placeholder: 'e.g. low-angle push-in' },
+      { key: 'expected_angle', label: 'Expected angle', type: 'string', required: false, default: '', placeholder: 'low-angle push-in' },
       ...QC_JEV_PARAMS,
     ],
     providerVia: QC_PROVIDER_VIA,
@@ -13463,7 +13463,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'pass', label: 'Pass', dataType: 'Text', required: false },
       { id: 'probability', label: 'Probability', dataType: 'Text', required: false },
       { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
-      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities · JSON', dataType: 'Text', required: false },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
       // Exactly one carries a value; nodes wired to the other are skipped
       // (backend/execution/gating.py).
@@ -13480,8 +13480,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
           { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
-          { label: 'jev-latest · moves, re-check thresholds', value: 'jev-latest' },
-          { label: 'jev-preview · moves', value: 'jev-preview' },
+          { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       {
@@ -13497,10 +13497,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       { key: 'question', label: 'Question', type: 'textarea', required: true, placeholder: 'Is the product on a plain white background?' },
-      { key: 'yes_means', label: 'Yes means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
-      { key: 'no_means', label: 'No means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
-      { key: 'options', label: 'Options (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Product photo\nLifestyle shot\nIllustration', visibleWhen: { answer_type: ['choice'] } },
-      { key: 'pass_when', label: 'Passing options (one per line)', type: 'textarea', required: false, default: '', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'yes_means', label: 'Yes means · optional', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'no_means', label: 'No means · optional', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'options', label: 'Options · one per line', type: 'textarea', required: false, default: '', placeholder: 'Product photo\nLifestyle shot\nIllustration', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'pass_when', label: 'Passing options · one per line', type: 'textarea', required: false, default: '', visibleWhen: { answer_type: ['choice'] } },
       { key: 'levels', label: 'Levels, low to high · one per line', type: 'textarea', required: false, default: '', placeholder: 'Off brief\nPartly on brief\nOn brief', visibleWhen: { answer_type: ['score'] } },
       { key: 'threshold', label: 'Pass Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { answer_type: ['yes_no', 'score'] } },
       { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
@@ -13516,7 +13516,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Take neither branch', value: 'neither' },
         ],
       },
-      { key: 'long_context', label: 'Long context (slower, less accurate)', type: 'boolean', required: false, default: false },
+      { key: 'long_context', label: 'Long context · slower, less accurate', type: 'boolean', required: false, default: false },
     ],
   },
 
@@ -13539,7 +13539,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'winner', label: 'Winner', dataType: 'Image', required: false },
       { id: 'index', label: 'Index', dataType: 'Text', required: false },
-      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities · JSON', dataType: 'Text', required: false },
       { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
     ],
@@ -13553,8 +13553,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
           { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
-          { label: 'jev-latest · moves, re-check thresholds', value: 'jev-latest' },
-          { label: 'jev-preview · moves', value: 'jev-preview' },
+          { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       { key: 'question', label: 'Question', type: 'textarea', required: false, default: 'Which image best matches the brief?', placeholder: 'Which image best matches the brief?' },
@@ -13580,7 +13580,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'found', label: 'Found', dataType: 'Text', required: false },
-      { id: 'box', label: 'Box (JSON)', dataType: 'Text', required: false },
+      { id: 'box', label: 'Box · JSON', dataType: 'Text', required: false },
       { id: 'crop', label: 'Crop', dataType: 'Image', required: false, conditional: true },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false, conditional: true },
       { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false, conditional: true },
@@ -13596,12 +13596,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'jev-1.14.0',
         options: [
           { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
-          { label: 'jev-preview · moves', value: 'jev-preview' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       { key: 'presence_threshold', label: 'Presence Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
-      { key: 'pad', label: 'Crop padding (fraction of image)', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
+      { key: 'pad', label: 'Crop padding · fraction of image', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
     ],
   },
 
@@ -13624,7 +13624,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
-      { id: 'mask', label: 'Mask (unavailable)', dataType: 'Mask', required: false },
+      { id: 'mask', label: 'Mask · unavailable', dataType: 'Mask', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -13774,7 +13774,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [
           {
             key: 'grounding',
-            label: 'Grounding (web + image search)',
+            label: 'Grounding · web and image search',
             type: 'boolean',
             required: false,
             default: true,
@@ -13830,7 +13830,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [
           {
             key: 'grounding',
-            label: 'Grounding (web + image search)',
+            label: 'Grounding · web and image search',
             type: 'boolean',
             required: false,
             default: true,
@@ -14179,7 +14179,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         keys: ['BFL_API_KEY'],
         handler: 'bfl',
         endpoint: '/v1/flux-3-video',
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
           rejectsWhen: [
@@ -14210,7 +14210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           // start image, keyframes and end image together; all read 2026-10-15.
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14243,7 +14243,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { when: { start_image: '(set)' }, endpoint: 'blackforestlabs/flux-3/image-to-video' },
           { when: { draft: true }, endpoint: 'blackforestlabs/flux-3/text-to-video/draft' },
         ],
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         valueMap: { resolution: { hd: '720p', fhd: '1080p', qhd: '1440p', uhd: '2160p' } },
         paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
@@ -14268,7 +14268,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           ],
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14278,7 +14278,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         keys: ['REPLICATE_API_TOKEN'],
         handler: 'replicate-model',
         endpoint: 'black-forest-labs/flux-3',
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         valueMap: {
           resolution: { hd: '720p', fhd: '1080p' },
           duration: {
@@ -14323,7 +14323,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           ],
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14829,9 +14829,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             required: false,
             default: 'auto',
             options: [
-              { label: 'auto', value: 'auto' },
+              { label: 'Auto', value: 'auto' },
               { label: 'Square HD', value: 'square_hd' },
-              { label: 'square', value: 'square' },
+              { label: 'Square', value: 'square' },
               { label: 'Portrait 4:3', value: 'portrait_4_3' },
               { label: 'Portrait 16:9', value: 'portrait_16_9' },
               { label: 'Landscape 4:3', value: 'landscape_4_3' },
@@ -14852,7 +14852,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             type: 'enum',
             required: false,
             default: 'png',
-            options: [{ label: 'png', value: 'png' }, { label: 'jpeg', value: 'jpeg' }],
+            options: [{ label: 'PNG', value: 'png' }, { label: 'JPEG', value: 'jpeg' }],
           },
         ],
         rules: {
@@ -14860,7 +14860,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           rejectsWhen: [
             {
               match: { reasoning_level: 'high', images: '(unset)' },
-              label: 'high reasoning without a reference image · fal.ai takes it on krea/v3/edit only',
+              label: 'high reasoning without a reference image · fal.ai runs it only for edits',
             },
           ],
         },
@@ -14972,14 +14972,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15047,19 +15047,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15097,7 +15097,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15225,14 +15225,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15300,19 +15300,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15350,7 +15350,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15478,14 +15478,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15553,19 +15553,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15603,7 +15603,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15721,15 +15721,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15805,7 +15805,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15952,7 +15952,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15979,14 +15979,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16130,7 +16130,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16240,7 +16240,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16343,7 +16343,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16536,7 +16536,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16651,7 +16651,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16856,7 +16856,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16949,15 +16949,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -16992,7 +16992,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17085,15 +17085,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -17219,7 +17219,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17301,7 +17301,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17473,7 +17473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17555,7 +17555,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18132,14 +18132,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18201,7 +18201,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18210,7 +18210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18411,7 +18411,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18473,7 +18473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18621,19 +18621,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18641,14 +18641,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18740,19 +18740,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18760,7 +18760,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18877,19 +18877,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18897,7 +18897,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19077,23 +19077,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19101,7 +19101,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19177,15 +19177,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -19224,23 +19224,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19248,7 +19248,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19324,15 +19324,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -19429,23 +19429,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19453,7 +19453,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19556,23 +19556,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19580,7 +19580,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19741,11 +19741,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -19829,7 +19829,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19868,11 +19868,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -19958,7 +19958,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20057,11 +20057,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -20086,7 +20086,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20125,11 +20125,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -20154,7 +20154,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20287,7 +20287,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20399,7 +20399,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20511,7 +20511,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20523,15 +20523,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -20640,11 +20640,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -20657,11 +20657,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "manga",
+            "label": "Manga",
             "value": "manga"
           }
         ],
@@ -20674,11 +20674,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpeg",
+            "label": "JPEG",
             "value": "jpeg"
           }
         ]
@@ -20692,7 +20692,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20919,7 +20919,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20979,7 +20979,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21112,7 +21112,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21172,7 +21172,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21305,7 +21305,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21365,7 +21365,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21524,7 +21524,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21640,7 +21640,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21700,7 +21700,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21812,7 +21812,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -21957,7 +21957,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -21994,7 +21994,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "scene_image_url",
-        "label": "Scene image URL (JSON)",
+        "label": "Scene image URL · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -22180,15 +22180,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22463,15 +22463,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22704,15 +22704,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22887,15 +22887,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22953,15 +22953,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -23122,15 +23122,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23150,15 +23150,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -23178,15 +23178,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -23354,15 +23354,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23375,7 +23375,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
@@ -23391,7 +23391,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "art_n_illustration"
           },
           {
-            "label": "Videogame assets",
+            "label": "Video game assets",
             "value": "videogame_assets"
           },
           {
@@ -23403,7 +23403,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "films_n_photography"
           },
           {
-            "label": "3d_renders",
+            "label": "3D renders",
             "value": "3d_renders"
           },
           {
@@ -23425,7 +23425,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "hdr",
-        "label": "Hdr",
+        "label": "HDR",
         "required": false,
         "type": "integer",
         "min": -10,
@@ -23460,7 +23460,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "automatic",
+            "label": "Automatic",
             "value": "automatic"
           },
           {
@@ -23597,15 +23597,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23648,11 +23648,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "sublime",
+            "label": "Sublime",
             "value": "sublime"
           },
           {
-            "label": "photo",
+            "label": "Photo",
             "value": "photo"
           },
           {
@@ -24084,15 +24084,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "std",
+            "label": "Std",
             "value": "std"
           },
           {
-            "label": "pro",
+            "label": "Pro",
             "value": "pro"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -24100,7 +24100,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "multi_prompt",
-        "label": "Multi prompt (JSON)",
+        "label": "Multi prompt · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -24251,21 +24251,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_references",
-        "label": "Style references (JSON)",
+        "label": "Style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "element_references",
-        "label": "Element references (JSON)",
+        "label": "Element references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "video_reference",
-        "label": "Video reference (JSON)",
+        "label": "Video reference · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25182,7 +25182,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -25220,14 +25220,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25243,7 +25243,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25298,7 +25298,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -25336,21 +25336,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25598,19 +25598,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "disabled",
+            "label": "Disabled",
             "value": "disabled"
           },
           {
-            "label": "fast",
+            "label": "Fast",
             "value": "fast"
           },
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25618,14 +25618,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25641,7 +25641,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25819,11 +25819,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25965,11 +25965,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25977,7 +25977,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "camera_trajectory",
-        "label": "Camera trajectory (JSON)",
+        "label": "Camera trajectory · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -26116,7 +26116,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -26517,7 +26517,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -26605,21 +26605,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27209,7 +27209,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27321,7 +27321,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27502,7 +27502,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27614,7 +27614,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28005,14 +28005,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28146,14 +28146,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28220,14 +28220,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28392,7 +28392,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28533,7 +28533,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29025,21 +29025,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29073,7 +29073,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -29096,7 +29096,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29189,21 +29189,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29237,7 +29237,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -29262,7 +29262,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29470,21 +29470,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29533,7 +29533,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29626,21 +29626,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29691,7 +29691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29891,21 +29891,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30026,21 +30026,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30267,21 +30267,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30334,7 +30334,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30427,21 +30427,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30496,7 +30496,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30716,7 +30716,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30901,7 +30901,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
@@ -31080,7 +31080,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1440p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -31124,7 +31124,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
@@ -31289,19 +31289,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "small",
+            "label": "Small",
             "value": "small"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "large",
+            "label": "Large",
             "value": "large"
           }
         ],
@@ -32014,7 +32014,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32123,7 +32123,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32764,7 +32764,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33007,7 +33007,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33223,7 +33223,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33431,11 +33431,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -33456,7 +33456,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33670,15 +33670,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "middle",
+            "label": "Middle",
             "value": "middle"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -33724,7 +33724,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33940,7 +33940,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -34223,11 +34223,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
@@ -34291,11 +34291,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
@@ -34468,11 +34468,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34544,7 +34544,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34640,11 +34640,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34708,7 +34708,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34805,11 +34805,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34824,7 +34824,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34920,11 +34920,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34939,7 +34939,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35035,11 +35035,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35063,7 +35063,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35160,11 +35160,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35179,7 +35179,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35276,11 +35276,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35295,7 +35295,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35384,11 +35384,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35403,7 +35403,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35502,11 +35502,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35536,7 +35536,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35583,11 +35583,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35617,7 +35617,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35718,11 +35718,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35744,7 +35744,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35862,15 +35862,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -35890,7 +35890,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35943,15 +35943,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -35971,7 +35971,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -36214,14 +36214,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"
@@ -36255,14 +36255,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"

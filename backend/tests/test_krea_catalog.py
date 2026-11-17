@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -339,3 +340,25 @@ def test_the_krea_2_guide_pricing_is_parsed_and_pinned():
 def test_a_krea_2_guide_change_stops_the_refresh(change, message):
     with pytest.raises(ValueError, match=message):
         SYNC.parse_k2_guide(change(K2_GUIDE_PRICING), "2026-10-19")
+
+
+def test_a_raw_value_or_field_name_is_shown_as_words_with_initialisms_in_capitals():
+    shown = {value: SYNC.option_label(value) for value in
+             ("glb", "png", "3d_renders", "automatic", "xhigh", "hdr", "dolly_in", "landscape_16_9", "1080p", "2K")}
+    assert shown == {"glb": "GLB", "png": "PNG", "3d_renders": "3D renders", "automatic": "Automatic",
+                     "xhigh": "Extra high", "hdr": "HDR", "dolly_in": "Dolly in", "landscape_16_9": "Landscape 16:9",
+                     "1080p": "1080p", "2K": "2K"}
+    assert SYNC.label("hdr") == "HDR" and SYNC.label("image_urls") == "Image URLs"
+
+
+def test_no_generated_krea_option_label_is_a_raw_lower_case_value():
+    raw = []
+    for node_id, node in REGISTRY.items():
+        if not node_id.startswith("krea-"):
+            continue
+        for param in node.get("params") or []:
+            for option in param.get("options") or []:
+                label = option.get("label")
+                if isinstance(label, str) and label == option.get("value") and re.fullmatch(r"[a-z][a-z0-9_]*", label):
+                    raw.append((node_id, param["key"], label))
+    assert raw == []

@@ -115,8 +115,8 @@ describe('GM round 11, items 4 and 5: rows name the settings that choose which m
     placeholderRunConfirm([node('k', 'Up', codex, definitionId, params)], [], 'k', unpriced)!.rows[0];
 
   it('item 4: "Grain model" when grain is on (it picks a model that runs)', () => {
-    expect(krea('krea-enhance-topaz-bloom-2-enhance', { grain: true, grain_model: 'gaussian' }).setting).toBe('Grain model: gaussian');
-    expect(krea('krea-enhance-topaz-wonder-35-enhance', { grain: true }).setting).toBe('Grain model: silver');
+    expect(krea('krea-enhance-topaz-bloom-2-enhance', { grain: true, grain_model: 'gaussian' }).setting).toBe('Grain model: Gaussian');
+    expect(krea('krea-enhance-topaz-wonder-35-enhance', { grain: true }).setting).toBe('Grain model: Silver');
   });
 
   it('item 4: no grain model runs with grain off, so none is named', () => {

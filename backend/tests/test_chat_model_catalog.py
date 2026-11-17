@@ -178,10 +178,10 @@ def test_openai_menu_lists_gpt6_first_with_retirement_notes():
     assert labels["gpt-5.6-sol"] == "GPT-5.6 Sol"
     assert labels["gpt-5.6-terra"] == "GPT-5.6 Terra"
     assert labels["gpt-5.6-luna"] == "GPT-5.6 Luna"
-    assert labels["gpt-4.1-nano"].endswith("retiring 2026-10-23")
+    assert labels["gpt-4.1-nano"].endswith("shuts down October 23, 2026")
     for value in ("gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"):
-        assert labels[value].endswith("retiring 2027-01-14")
-    assert labels["gpt-5.4-nano"].endswith("retiring 2027-04-01")
+        assert labels[value].endswith("shuts down January 14, 2027")
+    assert labels["gpt-5.4-nano"].endswith("shuts down April 1, 2027")
     assert _param("gpt-4o-chat", "model")["default"] == "gpt-6.1-sol"
 
 
@@ -206,7 +206,7 @@ def test_gemini_menu_lists_new_models_first():
     assert labels["gemini-4-argon"] == "Gemini 4 Argon"
     assert labels["gemini-3.5-flash-lite"] == "Gemini 3.5 Flash-Lite"
     assert "deprecated" in labels["gemini-3.5-flash"]
-    assert labels["gemini-3.1-flash-lite"].endswith("retiring 2027-05-07")
+    assert labels["gemini-3.1-flash-lite"].endswith("shuts down May 7, 2027")
     assert _param("gemini-chat", "model")["default"] == "gemini-4-argon"
 
 
@@ -579,10 +579,10 @@ def test_openai_labels_use_openai_spelling():
     # OpenAI's model pages: "GPT-5.4 Mini", "GPT-4o Mini", "GPT-4.1 Mini", but
     # "GPT-5.4 nano" and "GPT-4.1 nano" (checked 2026-10-16).
     assert labels["gpt-5.4-mini"] == "GPT-5.4 Mini"
-    assert labels["gpt-5.4-nano"] == "GPT-5.4 nano · retiring 2027-04-01"
-    assert labels["gpt-4o-mini"] == "GPT-4o Mini · legacy, retiring 2027-01-14"
-    assert labels["gpt-4.1-mini"] == "GPT-4.1 Mini · legacy, retiring 2027-01-14"
-    assert labels["gpt-4.1-nano"] == "GPT-4.1 nano · legacy, retiring 2026-10-23"
+    assert labels["gpt-5.4-nano"] == "GPT-5.4 nano · shuts down April 1, 2027"
+    assert labels["gpt-4o-mini"] == "GPT-4o Mini · legacy, shuts down January 14, 2027"
+    assert labels["gpt-4.1-mini"] == "GPT-4.1 Mini · legacy, shuts down January 14, 2027"
+    assert labels["gpt-4.1-nano"] == "GPT-4.1 nano · legacy, shuts down October 23, 2026"
 
 
 @pytest.mark.asyncio

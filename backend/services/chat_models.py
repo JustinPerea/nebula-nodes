@@ -172,7 +172,7 @@ def _efforts(values: Any, codex: bool = False) -> list[dict[str, str]]:
         if not isinstance(value, str) or not EFFORT_ID.fullmatch(value) or value in seen:
             continue
         seen.add(value)
-        item = {"id": value, "label": value.replace("xhigh", "X-High").replace("_", " ").title()}
+        item = {"id": value, "label": "Extra high" if value == "xhigh" else value.replace("_", " ").title()}
         description = _text(raw.get("description")) if isinstance(raw, dict) else None
         if description:
             item["description"] = description

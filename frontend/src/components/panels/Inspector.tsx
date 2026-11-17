@@ -34,6 +34,7 @@ import { FilePreviewFrame } from './FilePreviewFrame';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
+import { nodeStateWord } from '../../lib/valueLabel';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 import { failureMessage, notConnectedBecause } from '../../lib/errorCopy';
@@ -1612,7 +1613,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
         <div className="inspector__section inspector__section--separated">
           <div className="inspector__label">State</div>
-          <div className="inspector__state-value">{nodeData.state}</div>
+          <div className="inspector__state-value">{nodeStateWord(nodeData.state)}</div>
           {nodeData.state === 'skipped' && (
             <div className="inspector__state-value inspector__state-reason">{skippedLabel(nodeData.skipReason)}</div>
           )}

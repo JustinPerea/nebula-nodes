@@ -266,7 +266,7 @@ def test_nebula_info_names_what_each_route_hides():
     flux2 = format_node_detail(REGISTRY["flux-2-pro"])
     assert "Safety only with Model FLUX.2 [pro], FLUX.2 [max] or FLUX.2 [flex]" in flux2
     video = format_node_detail(REGISTRY["flux-3-video"])
-    assert video.count("Resolution only with Draft (fast preview) off") == 3
+    assert video.count("Resolution only with Draft off") == 3
 
 
 REPO = Path(__file__).resolve().parents[2]

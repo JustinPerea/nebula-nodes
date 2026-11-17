@@ -45,7 +45,7 @@
   "components/proposals/AssetProposalStrip.tsx": 1,
   "components/ProviderRecoveryStatus.tsx": 1,
   "components/SelectionToolbar.tsx": 1,
-  "constants/nodeDefinitions.ts": 14,
+  "constants/nodeDefinitions.ts": 3,
   "hooks/useAssetDelete.ts": 2,
   "hooks/useRenderJob.ts": 3,
   "hooks/useStudioAssetMove.ts": 2,

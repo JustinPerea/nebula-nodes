@@ -1,6 +1,6 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
-  allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
+  allParamDefinitions, AUTO, blockedSetting, paramName, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
   addKeyLine, withArticle, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routesThatCanTake, routeTakesValue, orList,
@@ -340,11 +340,11 @@ function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRou
   return `“${context.name || definition.displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or ${switchTo}.`;
 }
 
-/** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)
+/** A fix row's label: "Set Safety back to 2", "Turn Draft
  * off", "Clear Seed" (the sentence routeUnavailable's message ends with). */
 export function fixLabel(definition: ModelNodeDefinition, fix: RouteFix): string {
   const param = allParamDefinitions(definition).find((candidate) => candidate.key === fix.param);
-  const label = param?.label || fix.param;
+  const label = paramName(param, fix.param);
   if (fix.value === null || fix.value === undefined) return `Clear ${label}`;
   if (typeof fix.value === 'boolean') return `Turn ${label} ${fix.value ? 'on' : 'off'}`;
   return `Set ${label} back to ${optionLabel(param, fix.value)}`;
@@ -420,7 +420,7 @@ function snapStops(definition: ModelNodeDefinition, route: RouteSpec, values: Pa
       const hides = stop.controllers.map((ctrl) => optionLabel(whole.get(ctrl), effective[ctrl])).join(' and ');
       notes.push(`${settingText(param, stop.param, values[stop.param])} isn't on ${label} with ${hides}: ${defaultNote(param)}`);
     } else {
-      notes.push(`${param?.label || stop.param} isn't on ${label}: ${defaultNote(param)}`);
+      notes.push(`${paramName(param, stop.param)} isn't on ${label}: ${defaultNote(param)}`);
     }
     if (param?.default === undefined || param.default === null) delete values[stop.param];
     else values[stop.param] = param.default;
@@ -432,8 +432,8 @@ function snapStops(definition: ModelNodeDefinition, route: RouteSpec, values: Pa
  * for the card ("1.5k isn't on fal.ai: set to 2k"). Then every value rule H
  * would stop the run on (hiddenStops: a setting the route doesn't show,
  * that another route would honor) goes back to its default, or is cleared,
- * with one note each ("Seed isn't on OpenRouter: cleared", "Draft (fast
- * preview) isn't on Krea: turned off"). Only an explicit click calls this;
+ * with one note each ("Seed isn't on OpenRouter: cleared", "Draft
+ * isn't on Krea: turned off"). Only an explicit click calls this;
  * a route change without one (keys, a shared graph, an import) keeps every
  * value, and the switcher shows the stop instead
  * (node_route.snap_for_route). */

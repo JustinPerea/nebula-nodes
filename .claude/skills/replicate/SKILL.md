@@ -67,7 +67,7 @@ Declared params (from `backend/data/node_definitions.json`):
 
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `model_id` | string | **yes** | `""` | Format `owner/name`. Placeholder: `owner/name (e.g. stability-ai/sdxl)`. Must contain a `/`. Do not include a `:version`. |
+| `model_id` | string | **yes** | `""` | Format `owner/name`. Placeholder: `owner/name (such as stability-ai/sdxl)`. Must contain a `/`. Do not include a `:version`. |
 
 There are **no other declared params and no input ports**. Everything else a model needs is supplied dynamically:
 

@@ -85,7 +85,7 @@ APPROVED_PARAM_LABEL_CHANGES = {
     },
 }
 APPROVED_PORT_LABEL_CHANGES = {
-    "identity-edit": {"mask": ("Mask", "Mask (unavailable)")},
+    "identity-edit": {"mask": ("Mask", "Mask · unavailable")},
     # Sentence case for the names a card shows (GM, 2026-11 copy sweep items 13 and 15).
     "cinema-scene": {"character_refs": ("Character Refs", "Character refs")},
 }
@@ -419,9 +419,9 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
                                           for v in ("auto", "bfl", "fal")],
                               "hidden": True}]},
         "addedShared": [
-            {"key": "num_inference_steps", "label": "Steps (flex)", "type": "integer", "required": False, "min": 1,
+            {"key": "num_inference_steps", "label": "Steps · flex only", "type": "integer", "required": False, "min": 1,
              "max": 50, "step": 1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
-            {"key": "guidance_scale", "label": "Guidance (flex)", "type": "float", "required": False, "min": 1.5,
+            {"key": "guidance_scale", "label": "Guidance · flex only", "type": "float", "required": False, "min": 1.5,
              "max": 10, "step": 0.1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
         ],
         "routeParams": {"fal": ["enable_safety_checker"]},
@@ -473,7 +473,7 @@ _CLAUDE_SAMPLING = [m for m in _CLAUDE_OLD if m not in _OPUS_47_48]
 _CLAUDE_BUDGET_BASELINE = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
                            "claude-opus-4-7", "claude-opus-4-6"]
 # Justin's answers 2026-10-16, items 2-6: Opus 4.6 and Sonnet 4.6 move to
-# Effort (no X-High, which Anthropic's effort page doesn't list for them) and
+# Effort (no Extra high, which Anthropic's effort page doesn't list for them) and
 # leave Thinking Budget; Opus 4.6-4.8 and Sonnet 4.6 leave the 4096 Max Tokens
 # list for the 64,000 default; deprecated Gemini 3.5 Flash (routed to 3.6 Flash)
 # leaves the temperature/top_p/top_k lists.
@@ -521,16 +521,16 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
     "gpt-4o-chat": {"model": {
         "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
-        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano · retiring 2027-04-01"),
-        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o · legacy, retiring 2027-01-14"),
-        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini · legacy, retiring 2027-01-14"),
-        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 · legacy, retiring 2027-01-14"),
-        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini · legacy, retiring 2027-01-14"),
-        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano · legacy, retiring 2026-10-23"),
+        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano · shuts down April 1, 2027"),
+        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o · legacy, shuts down January 14, 2027"),
+        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini · legacy, shuts down January 14, 2027"),
+        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 · legacy, shuts down January 14, 2027"),
+        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini · legacy, shuts down January 14, 2027"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano · legacy, shuts down October 23, 2026"),
     }},
     "gemini-chat": {"model": {
         "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash"),
-        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite · retiring 2027-05-07"),
+        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite · shuts down May 7, 2027"),
     }},
 })
 APPROVED_PARAM_FIELD_CHANGES = {
@@ -588,7 +588,7 @@ APPROVED_INSERTED_PARAMS = {
         "visibleWhen": {"model": _CLAUDE_EFFORT},
         "options": [{"label": "Default", "value": ""}, {"label": "Low", "value": "low"},
                     {"label": "Medium", "value": "medium"}, {"label": "High", "value": "high"},
-                    {"label": "X-High", "value": "xhigh", "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48}},
+                    {"label": "Extra high", "value": "xhigh", "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48}},
                     {"label": "Max", "value": "max"}],
     })],
 }

@@ -763,7 +763,7 @@ def test_a_reasoning_effort_line_names_the_model_and_levels_as_the_node_shows_th
     assert str(exc) == "Reasoning effort 'none' isn't available for gpt-6-astra. Pick one of: low, medium, high, xhigh, max."
     # Round 3f review (GM's rule 5): the field's label in quotes.
     assert person_line(exc) == ("GPT-6 Astra doesn't offer None for “Reasoning Effort”. "
-                                "Pick Low, Medium, High, X-High or Max, then run the node again.")
+                                "Pick Low, Medium, High, Extra high or Max, then run the node again.")
 
 
 def test_hailuo_and_grok_lines_name_the_model_not_its_id() -> None:

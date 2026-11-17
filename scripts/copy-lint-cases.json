@@ -556,7 +556,7 @@
    "rules": []
   },
   {
-   "text": "Prompt (Redefine only)",
+   "text": "Prompt · Redefine only",
    "kind": "label",
    "rules": []
   },
@@ -578,6 +578,11 @@
   {
    "text": "Gemini 3 Pro Image",
    "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Guide the model in English",
+   "kind": "text",
    "rules": []
   },
   {

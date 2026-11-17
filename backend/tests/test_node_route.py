@@ -258,11 +258,11 @@ def test_routes_problems_checks_a_ports_group():
 
 
 def test_a_ports_group_counts_its_ports_together():
-    limit = {"max": 10, "of": ["start_image", "keyframes", "end_image"], "label": "images (start + keyframes + end)"}
+    limit = {"max": 10, "of": ["start_image", "keyframes", "end_image"], "label": "images (start, keyframes and end)"}
     counts = {"start_image": 1, "keyframes": 10, "end_image": 1, "prompt": 1}
     assert node_route.port_limit_count("frames", limit, counts) == 12
     assert node_route.port_limit_count("keyframes", {"max": 10}, counts) == 10
-    assert node_route.port_limit_name("frames", limit) == "images (start + keyframes + end)"
+    assert node_route.port_limit_name("frames", limit) == "images (start, keyframes and end)"
     assert node_route.port_limit_name("keyframes", {"max": 10}) == "keyframes"
 
 

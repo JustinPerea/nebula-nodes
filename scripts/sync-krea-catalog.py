@@ -1085,24 +1085,40 @@ def simple_schema(schema):
     return schema
 
 
+# Words that are initialisms, from "initialisms" in scripts/copy-lint-rules.json
+# (the plain-word ones: "pro", "us", "os" and the like are left out because they
+# are also ordinary words). A value or field name shown as words writes them in capitals.
+INITIALISMS = {
+    "api": "API", "cli": "CLI", "mcp": "MCP", "url": "URL", "urls": "URLs", "id": "ID", "ids": "IDs", "ui": "UI", "ux": "UX",
+    "hd": "HD", "hdr": "HDR", "hdr10": "HDR10", "hlg": "HLG", "gpu": "GPU", "cpu": "CPU", "json": "JSON", "png": "PNG", "jpg": "JPG",
+    "jpeg": "JPEG", "webp": "WebP", "gif": "GIF", "mp3": "MP3", "mp4": "MP4", "wav": "WAV", "pdf": "PDF",
+    "svg": "SVG", "css": "CSS", "html": "HTML", "http": "HTTP", "https": "HTTPS", "llm": "LLM", "ai": "AI",
+    "3d": "3D", "2d": "2D", "rgb": "RGB", "rgba": "RGBA", "csv": "CSV", "srt": "SRT", "lut": "LUT",
+    "glb": "GLB", "fbx": "FBX", "obj": "OBJ", "usdz": "USDZ", "ply": "PLY",
+    "vfx": "VFX", "fps": "FPS", "tts": "TTS", "stt": "STT", "asr": "ASR", "4k": "4K", "8k": "8K",
+}
+LEVEL_WORDS = {"xhigh": "extra high"}
+
+
 def label(field):
-    return field.replace("_", " ").capitalize().replace(" url", " URL")
+    text = " ".join(INITIALISMS.get(word, word) for word in field.split("_"))
+    return text[:1].upper() + text[1:]
 
 
 # An enum value that reads as a raw key (snake_case, camelCase, PascalCase) gets
 # a plain-words label in sentence case: "dolly_in" is "Dolly in", "landscape_16_9"
 # is "Landscape 16:9". Other values (png, 2K, 1080p, auto) are their own label.
 RAW_KEY = re.compile(r"^(?:[a-z]+(?:[A-Z][a-z0-9]*)+|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)$")
-OPTION_LABELS = {"hdr_prores": "HDR ProRes", "magnific_illusio": "Magnific Illusio",
+OPTION_LABELS = {"hdr_prores": "HDR ProRes", "videogame_assets": "Video game assets", "magnific_illusio": "Magnific Illusio",
                  "magnific_sharpy": "Magnific Sharpy", "magnific_sparkle": "Magnific Sparkle"}
-LABEL_CAPS = {"hd": "HD", "hdr": "HDR"}
+LOWER_KEY = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 
 
 def option_label(item):
     text = str(item)
     if text in OPTION_LABELS:
         return OPTION_LABELS[text]
-    if not isinstance(item, str) or not RAW_KEY.match(text):
+    if not isinstance(item, str) or not (RAW_KEY.match(text) or (LOWER_KEY.match(text) and re.search("[a-z]", text))):
         return text
     words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", text).split("_")
     joined = []
@@ -1113,7 +1129,7 @@ def option_label(item):
             joined[-1] += ":" + word
         else:
             joined.append(word)
-    shown = [LABEL_CAPS.get(word.lower(), word.lower()) for word in joined]
+    shown = [INITIALISMS.get(word.lower(), LEVEL_WORDS.get(word.lower(), word.lower())) for word in joined]
     return shown[0][:1].upper() + shown[0][1:] + "".join(" " + word for word in shown[1:])
 
 
@@ -1155,7 +1171,7 @@ def fields_for(schema):
         elif kind == "string":
             param["type"] = "textarea" if field == "prompt" else "string"
         else:
-            param.update(type="textarea", label=label(field) + " (JSON)",
+            param.update(type="textarea", label=label(field) + " · JSON",
                          placeholder="JSON array or object matching this model")
             json_params.append(field)
         if "default" in simple and simple["default"] is not None:

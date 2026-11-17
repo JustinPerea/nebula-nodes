@@ -848,7 +848,7 @@ def test_review_rule_5_reasoning_effort_and_thinking_level_are_quoted() -> None:
     exc = _raised(_listed_effort, "gpt-6-astra", "none")
     assert str(exc) == "Reasoning effort 'none' isn't available for gpt-6-astra. Pick one of: low, medium, high, xhigh, max."
     assert person_line(exc) == ("GPT-6 Astra doesn't offer None for “Reasoning Effort”. "
-                                "Pick Low, Medium, High, X-High or Max, then run the node again.")
+                                "Pick Low, Medium, High, Extra high or Max, then run the node again.")
     assert _line_beside("handlers/openai_chat.py", "Reasoning effort 'max' isn't available") == (
         "{} doesn't offer {} for “{}”. Pick another level, then run the node again.")
     assert _line_beside("handlers/google_gemini.py", "Thinking level '{}' isn't available") == (

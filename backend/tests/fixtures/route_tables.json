@@ -1475,7 +1475,7 @@
          "keyframes",
          "end_image"
         ],
-        "label": "images (start + keyframes + end)"
+        "label": "images (start, keyframes and end)"
        }
       }
      },
@@ -1554,7 +1554,7 @@
          "keyframes",
          "end_image"
         ],
-        "label": "images (start + keyframes + end)"
+        "label": "images (start, keyframes and end)"
        }
       }
      },
@@ -1633,7 +1633,7 @@
          "keyframes",
          "end_image"
         ],
-        "label": "images (start + keyframes + end)"
+        "label": "images (start, keyframes and end)"
        }
       }
      },
@@ -4472,7 +4472,7 @@
          "reasoning_level": "high",
          "images": "(unset)"
         },
-        "label": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
+        "label": "high reasoning without a reference image · fal.ai runs it only for edits"
        }
       ]
      }

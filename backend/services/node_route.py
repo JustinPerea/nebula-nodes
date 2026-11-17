@@ -1228,9 +1228,11 @@ def _option_label(param: Mapping[str, Any] | None, value: Any) -> str:
 
 
 def _param_label(param: Mapping[str, Any] | None, key: str) -> str:
-    """The setting's label, else its key in words (setting_labels.setting_label;
-    directRoute.ts falls back to universalSettingLabel the same way)."""
-    return str((param or {}).get("label") or setting_label(key))
+    """The setting's label as a line names it, else its key in words
+    (setting_labels.setting_label; directRoute.ts falls back to
+    universalSettingLabel the same way). A note after " · " is left out:
+    "Draft · fast preview" reads "Draft"."""
+    return str((param or {}).get("label") or setting_label(key)).split(" · ")[0].strip()
 
 
 def _setting_text(param: Mapping[str, Any] | None, key: str, value: Any) -> str:
